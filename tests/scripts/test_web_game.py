@@ -3,12 +3,12 @@
 a link that somebody shared) has the look of web/lobby.html, which is the look of the 1998 game's own menus: the clay, the thin green frame,
 the teal bevelled buttons with their red shadow, the black inset boxes, the game's own font and the small "ants!" logo (web/front/). What needs no browser is read from the two files:
 
-  - the colours are the front page's, token for token, and the rules of the buttons, the two-state buttons, the frame, the black boxes, the progress bar and the footer are the front page's own
+  - the colors are the front page's, token for token, and the rules of the buttons, the two-state buttons, the frame, the black boxes, the progress bar and the footer are the front page's own
     text, where the front page (the lobby, drawn as the approved pictures draw it) has the same piece; the buttons' corners are one rounded radius, their face is lit from above (the
     sheen) and their edges are bevelled on all four sides (the bevel tokens), on the front page, this page, the changelog pages' style sheet and Sprites and sounds
   - the header: the logo (a link back to the menu that asks as Menu does, with the same code), the eight controls in their order, and "More" for a narrow window (a <details>, no script) with
     the other six
-  - the loading screen (the logo, the same ids and messages, a teal bar), the failure cards (classes, not colours written into the script), the bottom controls (the same buttons and ids), the footer
+  - the loading screen (the logo, the same ids and messages, a teal bar), the failure cards (classes, not colors written into the script), the bottom controls (the same buttons and ids), the footer
     (the version and the build where the Dockerfile and the CI look for them), the embed mode (only the game) and the pictures that the page names
   - every text is at least 4.5:1 against its background, in every state of the buttons and boxes (the browser check, tests/scripts/web_home_check.py part game, measures the page itself)
 The same things in a real browser at widths from 320 to 1600 px: tests/scripts/web_home_check.py --only game (opt-in, against a running page).
@@ -81,7 +81,7 @@ class PageCase(unittest.TestCase):
 class TheLookIsTheFrontPages(PageCase):
     TOKENS = ("clay", "ink", "teal", "teal-hi", "teal-lo", "edge", "cream", "inset", "frame", "frame-hi", "frame-lo", "shadow", "gold", "bad-bg", "bad-ink", "bad-edge", "sheen", "bevel", "bevel-sm")
 
-    def test_the_colours_are_the_front_pages_token_for_token(self):
+    def test_the_colors_are_the_front_pages_token_for_token(self):
         ours = rule(self.style, ":root")
         theirs = rule(self.lobby_style, ":root")
         for name in self.TOKENS:
@@ -122,7 +122,7 @@ class TheLookIsTheFrontPages(PageCase):
         self.assertRegex(self.style, r"a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible \{")
 
     def test_the_banner_is_the_front_pages(self):
-        # The game page's .banner is a teal heading banner, cut like the teal button: it shares the face (the colour with the sheen, the frame, the corners, the bevel and the red shadow, the cream words)
+        # The game page's .banner is a teal heading banner, cut like the teal button: it shares the face (the color with the sheen, the frame, the corners, the bevel and the red shadow, the cream words)
         # with the front page's .btn (the front page's own .banner is another thing, the picture's black message strip). The front page's teal heading banner, .name-step-title (the same card as the
         # game page's own, which is this page's .name-step-title.banner), has that face too; the gold words of the title are the game page's .name-step-title.
         banner, theirs = rule(self.style, ".banner"), rule(self.lobby_style, ".btn")
@@ -192,7 +192,7 @@ class TheLookIsTheFrontPages(PageCase):
 
     def test_nothing_wipes_the_face_of_a_button_of_the_family(self):
         # The review of v0.8.2 found `background: #1e3a8a;` in the style attribute of one button of Sprites and sounds: a background shorthand resets the background image, so that button alone was flat.
-        # A rule that names a button of the family says its face (the colour with the sheen over it), the flat plate of a chosen one, or only a colour (background-color); and no style attribute of such a
+        # A rule that names a button of the family says its face (the color with the sheen over it), the flat plate of a chosen one, or only a color (background-color); and no style attribute of such a
         # button says a background or corners of its own.
         faces = {"var(--teal) var(--sheen)", "var(--teal) var(--sheen, none)", "#102b25", "var(--pressed)", "var(--gold)"}
         seen = 0
@@ -216,8 +216,8 @@ class TheLookIsTheFrontPages(PageCase):
         self.assertGreaterEqual(tags, 1, "the style attributes of the family's buttons: found %d" % tags)
 
     def test_the_teal_buttons_are_lit_from_above_on_every_page(self):
-        # Requested on 2026-10-05: the buttons appear a little less flat. The face of every teal button is its colour with the sheen over it: a light edge at the top and shade toward the bottom.
-        # The same sheen on every page; a chosen (pressed in) button is a flat dark plate, and the hover changes only the colour and keeps the sheen.
+        # Requested on 2026-10-05: the buttons appear a little less flat. The face of every teal button is its color with the sheen over it: a light edge at the top and shade toward the bottom.
+        # The same sheen on every page; a chosen (pressed in) button is a flat dark plate, and the hover changes only the color and keeps the sheen.
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         catalogue = style_of(read("asset_catalog", "index.html"))
         sheen = rule(self.lobby_style, ":root")["--sheen"]
@@ -226,7 +226,7 @@ class TheLookIsTheFrontPages(PageCase):
         for where, declarations in self.faces_and_corners().items():
             # (Sprites and sounds takes the token from the changelog pages' style sheet: with an older style sheet its buttons are flat teal, not transparent)
             self.assertEqual(declarations["background"], "var(--teal) var(--sheen, none)" if where == "the small buttons of Sprites and sounds" else "var(--teal) var(--sheen)", where)
-        colour_only = {
+        color_only = {
             "the front page's hovered button": rule(self.lobby_style, ".btn:hover"),
             "the front page's hovered two-state button": rule(self.lobby_style, ".shape .seg label:hover"),
             # (the front page's teal match banner, `.card.match > .banner`, is gone: its .banner is the picture's black message strip, which has no teal face to keep the sheen of)
@@ -235,23 +235,23 @@ class TheLookIsTheFrontPages(PageCase):
             "the changelog pages' hovered button": rule(classic, ".btn:hover"),
             "the hovered small buttons of Sprites and sounds": next(d for s, d in blocks(catalogue) if s.startswith(".sort-btn:hover, .copy-btn:hover,")),
         }
-        for where, declarations in colour_only.items():
+        for where, declarations in color_only.items():
             self.assertNotIn("background", declarations, where + " (the shorthand would wipe the sheen)")
             self.assertRegex(declarations["background-color"], r"^(?:var\(--teal(?:-hi)?\)|#[0-9a-f]{6})$", where)
         for where, declarations in (("the front page's chosen two-state button", rule(self.lobby_style, ".shape .seg input:checked + label")), ("the game page's chosen pair", rule(self.style, '.seg button[aria-checked="true"]'))):
             self.assertEqual(declarations["background"], "#102b25", where)                           # (flat and dark: pressed in)
         # The light of the sheen sits at the very top and is gone by 4 px, above the words (the gradient starts inside the border, so 4 px of it is 6 px below the outer edge; the 12 px words of the smallest
-        # buttons, the chips of Sprites and sounds and the release plates, begin about 7 px down), so every text is still at least 4.5:1 on its face (the pairs of the tests above are the colours without
+        # buttons, the chips of Sprites and sounds and the release plates, begin about 7 px down), so every text is still at least 4.5:1 on its face (the pairs of the tests above are the colors without
         # the sheen; everything else of the sheen is shade, which only makes the words stand out more). The review of v0.8.2 measured 8 px taking those words down to 4.1:1.
         stops = [((int(m.group(1)), int(m.group(2)), int(m.group(3))), float(m.group(4)), m.group(5))
                  for m in re.finditer(r"rgba\((\d+), (\d+), (\d+), ([\d.]+)\) ([\d.]+(?:px|%)?)", sheen)]
         self.assertTrue(sheen.startswith("linear-gradient(180deg, "), sheen)
         self.assertEqual(len(stops), len(re.findall(r"rgba\(", sheen)), sheen)
-        light = [(alpha, position) for colour, alpha, position in stops if colour == (255, 255, 255)]
+        light = [(alpha, position) for color, alpha, position in stops if color == (255, 255, 255)]
         self.assertEqual([position for alpha, position in light if alpha > 0], ["0"], sheen)           # (the light starts at the top edge ...)
         self.assertLessEqual(max(alpha for alpha, position in light), 0.3, sheen)
         self.assertTrue(all(re.fullmatch(r"[\d.]+px", position) and float(position[:-2]) <= 4 for alpha, position in light if alpha == 0), sheen)   # (... and is gone by 4 px)
-        shade = [alpha for colour, alpha, position in stops if colour == (0, 0, 0)]
+        shade = [alpha for color, alpha, position in stops if color == (0, 0, 0)]
         self.assertTrue(shade and max(shade) <= 0.4, sheen)
         self.assertEqual(stops[-1][0], (0, 0, 0), sheen)                                               # (the bottom is the darkest part)
 
@@ -266,15 +266,15 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertEqual(len(set(values.values())), 1, values)
             shadows = re.findall(r"inset (-?\d+)px (-?\d+)px (\d+)(?:px)? (#[0-9a-f]{6}|rgba\([^)]*\)|var\(--[\w-]+\))", values["the front page"])
             self.assertEqual(len(shadows), values["the front page"].count("inset "), values["the front page"])         # (every part of the bevel was read)
-            lit = [(int(x), int(y)) for x, y, blur, colour in shadows if int(x) > 0 and int(y) > 0]
-            shaded = [(int(x), int(y)) for x, y, blur, colour in shadows if int(x) < 0 and int(y) < 0]
+            lit = [(int(x), int(y)) for x, y, blur, color in shadows if int(x) > 0 and int(y) > 0]
+            shaded = [(int(x), int(y)) for x, y, blur, color in shadows if int(x) < 0 and int(y) < 0]
             self.assertEqual(len(lit) + len(shaded), len(shadows), name + ": every part lights the top and the left together, or shades the bottom and the right together")
             self.assertGreaterEqual(len(lit), 2, name)                                                # (a bright line and a facet ...)
             self.assertGreaterEqual(len(shaded), 2, name)                                             # (... and a thin dark line and a facet)
             self.assertTrue(all(x == y for x, y in lit), name + ": the left edge is lit as thickly as the top")
             self.assertTrue(all(-y >= -x for x, y in shaded), name + ": the shade is at least as thick at the bottom as at the right")
             self.assertEqual(values["the front page"].count("#3d9a7d"), 1, name)
-        # no rule draws a bevel of its own: the pages' own text has the colour of the lit facet only in the two tokens
+        # no rule draws a bevel of its own: the pages' own text has the color of the lit facet only in the two tokens
         for where, style in (("the front page", self.lobby_style), ("the game page", self.style), ("the style sheet of the changelog pages", classic)):
             self.assertEqual(style.count("#3d9a7d"), 2, where)
         for where, declarations in self.faces_and_corners().items():
@@ -287,7 +287,7 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertTrue(roots["the style sheet of the changelog pages"][token].startswith(bevel + ", "), token)
 
     def test_the_two_state_buttons_are_the_front_pages_with_the_chosen_one_pressed_in(self):
-        # The front page's two-state buttons are the labels of the footer's Screen radio buttons (`.shape .seg label`). They have the face of this page's `.seg button` (the colours, the frame, the corners,
+        # The front page's two-state buttons are the labels of the footer's Screen radio buttons (`.shape .seg label`). They have the face of this page's `.seg button` (the colors, the frame, the corners,
         # the bevel and the red shadow) but not its size: the picture's footer buttons are smaller (min-height 30px, padding 3px 10px, font 14px), while this page's are the 42 px pair of the game's
         # menus, so only the face is compared, and the line height, which is the same.
         button, label = rule(self.style, ".seg button"), rule(self.lobby_style, ".shape .seg label")
@@ -331,7 +331,7 @@ class TheLookIsTheFrontPages(PageCase):
         for token in ("var(--edge)", "var(--frame)", "var(--shadow)"):
             self.assertIn(token, ring)
         shadows = re.findall(r"(\S+) (\S+) (\S+) (\S+) var\(--(\w+)\)", ring)
-        self.assertEqual([(spread, colour) for _, _, _, spread, colour in shadows], [("3px", "edge"), ("6px", "frame"), ("8px", "edge"), ("8px", "shadow")])     # (black, green, black, and the red shadow)
+        self.assertEqual([(spread, color) for _, _, _, spread, color in shadows], [("3px", "edge"), ("6px", "frame"), ("8px", "edge"), ("8px", "shadow")])     # (black, green, black, and the red shadow)
         self.assertEqual(shadows[3][:2], ("4px", "6px"))
         # a shadow, not a border: the box has no frame inside it (the canvas fills it exactly)
         self.assertNotIn("border", rule(self.style, "#game-container"))
@@ -540,8 +540,8 @@ class ThePicturesAndTheFont(PageCase):
         self.assertNotIn("&#x26F6;", self.page)
 
 
-class TheColours(PageCase):
-    """The text of the page is at least 4.5:1 against its background, in every state of the buttons and boxes (the browser check measures the whole page; this reads the colours)."""
+class TheColors(PageCase):
+    """The text of the page is at least 4.5:1 against its background, in every state of the buttons and boxes (the browser check measures the whole page; this reads the colors)."""
 
     CLAY_ENDS = ("#d84710", "#e95e24")                      # the two ends of the clay tile (its deepest and its lightest broad shade) that the front page's check measures against
     BAR_ENDS = ("#2b685f", "#2b6b4f")                       # the ends of the footer's gradient
@@ -550,11 +550,11 @@ class TheColours(PageCase):
         return rule(self.style, ":root")["--" + name]
 
     @staticmethod
-    def luminance(colour):
+    def luminance(color):
         def channel(v):
             v /= 255.0
             return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
-        r, g, b = (int(colour[i:i + 2], 16) for i in (1, 3, 5))
+        r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
         return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 
     def ratio(self, one, other):
@@ -575,7 +575,7 @@ class TheColours(PageCase):
         for end in self.BAR_ENDS:
             self.assertGreaterEqual(self.ratio(cream, end), 4.5, "cream on the footer %s" % end)
 
-    def test_the_colours_written_in_the_rules_are_the_ones_tested(self):
+    def test_the_colors_written_in_the_rules_are_the_ones_tested(self):
         for selector, value in ((".info-col li strong", "#a6e8c6"), (".info-col li em", "#fff"), (".info-col li.note", "#b9cfc5")):
             self.assertIn(value, [d.get("color") for s, d in blocks(self.style) if s == selector])
         self.assertEqual(rule(self.style, "kbd")["background"], "#0e1a17")

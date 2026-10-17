@@ -106,7 +106,7 @@ Rematch rematch_of(const std::array<PlanKind, sim::MAX_PLAYERS>& plan, uint8_t t
 void run_lobby_rematch_tests() {
     using K = PlanKind;
 
-    TEST_CASE("N4.41 The Rematch (A Lobby Room Opened Again After Its Match): A Lobby Room Whose Match Has Begun Gives Its Plan (The Map, What Each Colour Is, The Teams, The Mode) And Every Person Of Its Start (Seat, Name, Key, Place In The Order, Platform); A Fresh Lobby Room Takes It: The Same Colours And Names, Each Seat Reserved (A Game In The Room Message, Nobody Present, Nobody Leads); What Does Not Fit Changes Nothing") {
+    TEST_CASE("N4.41 The Rematch (A Lobby Room Opened Again After Its Match): A Lobby Room Whose Match Has Begun Gives Its Plan (The Map, What Each Color Is, The Teams, The Mode) And Every Person Of Its Start (Seat, Name, Key, Place In The Order, Platform); A Fresh Lobby Room Takes It: The Same Colors And Names, Each Seat Reserved (A Game In The Room Message, Nobody Present, Nobody Leads); What Does Not Fit Changes Nothing") {
         {   // what a match gives
             Room room(lobby_room_config(140));
             ASSERT_TRUE(room.host.rematch().people.empty());                                         // (no match yet)
@@ -207,7 +207,7 @@ void run_lobby_rematch_tests() {
         ASSERT_TRUE(ap.phase() == ClientLobby::Phase::InRoom && ap.my_seat() == 0 && ap.is_leader() && !bp.is_leader());
         ASSERT_TRUE(!room.host.any_reserved() && room.host.returns() == 2u && room.host.present() == 2u);
         ASSERT_EQ(games_text(ap.room()), std::string("0000"));
-        // somebody of the match is back: a newcomer is let in (the open colour 3; the Easy colour 2 is never a joiner's), after every person of the match in the order
+        // somebody of the match is back: a newcomer is let in (the open color 3; the Easy color 2 is never a joiner's), after every person of the match in the order
         const size_t cat = join_with(room, page_config("Cat"));
         room.run(200);
         ASSERT_TRUE(room.guests[cat].lobby->phase() == ClientLobby::Phase::InRoom && room.guests[cat].lobby->my_seat() == 3);
@@ -269,7 +269,7 @@ void run_lobby_rematch_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.44 The Life Of A Reservation: A Results Screen That Goes Leaves The Seat Reserved (No Hold, No Minute: It Waits For Its Person), A Quiet One Is Closed And Leaves It Reserved Too; The Reservation Runs Out After reserve_ms (A Results Screen That Holds It Is Told); A Person Who Is Back Is An Ordinary Guest (Held For A Minute When The Link Ends, Then Gone); The Leader Can Move A Reserved Person, Whose Key Finds The New Colour") {
+    TEST_CASE("N4.44 The Life Of A Reservation: A Results Screen That Goes Leaves The Seat Reserved (No Hold, No Minute: It Waits For Its Person), A Quiet One Is Closed And Leaves It Reserved Too; The Reservation Runs Out After reserve_ms (A Results Screen That Holds It Is Told); A Person Who Is Back Is An Ordinary Guest (Held For A Minute When The Link Ends, Then Gone); The Leader Can Move A Reserved Person, Whose Key Finds The New Color") {
         HostLobby::Config hc = lobby_room_config(153);
         hc.reserve_ms = 600000;
         hc.hold_ms = 5000;
@@ -297,14 +297,14 @@ void run_lobby_rematch_tests() {
         room.run(4000);
         ASSERT_FALSE(room.guests[bob_asleep].host_end->is_open());
         ASSERT_TRUE(room.host.reserved(1) && room.host.present() == 1u && room.host.silences() >= 1u);
-        // the leader moves Bob, who is not back, to the open colour 3: his key finds him there
+        // the leader moves Bob, who is not back, to the open color 3: his key finds him there
         ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));
         room.run(200);
         ASSERT_TRUE(room.host.reserved(3) && !room.host.occupied(1));
         const size_t bob_again = join_keyed(room, "Bob", key_with(2));
         room.run(200);
         ASSERT_TRUE(room.guests[bob_again].lobby->my_seat() == 3 && room.host.reserved(3));
-        // the reservation runs out: the results screen that holds it is told (Kicked), the colour is free
+        // the reservation runs out: the results screen that holds it is told (Kicked), the color is free
         room.run(600000);
         ASSERT_TRUE(!room.host.occupied(3) && !room.host.any_reserved() && room.host.reserve_expiries() == 1u);
         ASSERT_TRUE(room.guests[bob_again].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[bob_again].lobby->reject_reason() == RejectReason::Kicked);
@@ -316,7 +316,7 @@ void run_lobby_rematch_tests() {
         ASSERT_TRUE(!room.host.occupied(0) && room.host.hold_expiries() == 1u && !room.host.any_reserved());
     } TEST_END();
 
-    TEST_CASE("N4.45 Whose Seat Is Kept: A Game In A Browser And A Game That Did Not Say What It Runs On Keep Their Seats, A Game Of The Desktop Or A Phone's App (No \"Back To The Lobby\" There) Keeps None: Its Colour Is Open In The Lobby That Follows And It Joins By The Code Like Anybody Once Somebody Is Back; A Stranger Never Takes A Kept Colour (Asked For, Or The Last Open One: Full), A Key Of Another Room Is A Stranger's; Two Tabs With One Key: The Later Takes The Seat (The Other Is Superseded), The Person Stays Back And Leads; A Reservation Lasts Three Hours On The Room's Clock; A Results Screen That Says Leave Gives The Seat Up") {
+    TEST_CASE("N4.45 Whose Seat Is Kept: A Game In A Browser And A Game That Did Not Say What It Runs On Keep Their Seats, A Game Of The Desktop Or A Phone's App (No \"Back To The Lobby\" There) Keeps None: Its Color Is Open In The Lobby That Follows And It Joins By The Code Like Anybody Once Somebody Is Back; A Stranger Never Takes A Kept Color (Asked For, Or The Last Open One: Full), A Key Of Another Room Is A Stranger's; Two Tabs With One Key: The Later Takes The Seat (The Other Is Superseded), The Person Stays Back And Leads; A Reservation Lasts Three Hours On The Room's Clock; A Results Screen That Says Leave Gives The Seat Up") {
         {   // the match of Ann (a game in a browser), Bob (a game of the desktop) and Cat (a game that did not say)
             Room room(lobby_room_config(154));
             const auto keys = play_three_to_begun(room, plan_of({K::Open, K::Open, K::Open, K::Hard}), {static_cast<uint8_t>(kPlatformBrowser | kOsOther), kOsWindows, kPlatformUnknown});
@@ -325,8 +325,8 @@ void run_lobby_rematch_tests() {
             const Rematch r = room.host.rematch();
             ASSERT_EQ(r.people.size(), size_t{2});
             ASSERT_TRUE(r.people[0].seat == 0 && key_matches(r.people[0].key, keys[0]) && r.people[1].seat == 2 && key_matches(r.people[1].key, keys[2]));
-            ASSERT_TRUE(r.plan == (std::array<K, 4>{K::Open, K::Open, K::Open, K::Hard}));                // (Bob's colour is an open colour of the plan)
-            // the lobby that follows: Ann's and Cat's colours are kept, Bob's is open
+            ASSERT_TRUE(r.plan == (std::array<K, 4>{K::Open, K::Open, K::Open, K::Hard}));                // (Bob's color is an open color of the plan)
+            // the lobby that follows: Ann's and Cat's colors are kept, Bob's is open
             Room next(lobby_room_config(155), false);
             ASSERT_TRUE(reopened(next, r));
             ASSERT_EQ(layout(next.host.room()), std::string("Ann@0 Cat@2"));
@@ -339,14 +339,14 @@ void run_lobby_rematch_tests() {
             const size_t early = join_with(next, desktop);
             next.run(200);
             ASSERT_TRUE(next.guests[early].lobby->phase() == ClientLobby::Phase::Rejected && next.guests[early].lobby->reject_reason() == RejectReason::MatchRunning);
-            // Ann is back: Bob comes in like anybody, at the lowest open colour (his own)
+            // Ann is back: Bob comes in like anybody, at the lowest open color (his own)
             const size_t ann = join_with(next, page_with_key("Ann", keys[0]));
             next.run(200);
             const size_t bob = join_with(next, desktop);
             next.run(200);
             ASSERT_TRUE(next.guests[bob].lobby->phase() == ClientLobby::Phase::InRoom && next.guests[bob].lobby->my_seat() == 1);
             ASSERT_EQ(layout(next.host.room()), std::string("Ann@0 Bob@1 Cat@2"));
-            ASSERT_EQ(games_text(next.host.room()), std::string("0110"));                              // (a game of the desktop is a game in the room; Cat's colour is kept)
+            ASSERT_EQ(games_text(next.host.room()), std::string("0110"));                              // (a game of the desktop is a game in the room; Cat's color is kept)
             ASSERT_TRUE(next.guests[ann].lobby->is_leader() && !next.host.reserved(1) && next.host.reserved(2));
             // START waits for Cat only
             ASSERT_TRUE(next.guests[ann].lobby->request_start());
@@ -373,17 +373,17 @@ void run_lobby_rematch_tests() {
             ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
             ASSERT_TRUE(room.host.rematch().people.empty());
         }
-        {   // a stranger never takes a kept colour; a key of another room is a stranger's
+        {   // a stranger never takes a kept color; a key of another room is a stranger's
             Room room(lobby_room_config(157), false);
             ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Open, K::Nobody})));
             const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
             room.run(200);
             ClientLobby::Config sid = page_config("Sid");
-            sid.want_seat = 1;                                                                              // (Bob's colour, which is kept)
+            sid.want_seat = 1;                                                                              // (Bob's color, which is kept)
             const size_t s1 = join_with(room, sid);
             room.run(200);
             ASSERT_TRUE(room.guests[s1].lobby->phase() == ClientLobby::Phase::InRoom && room.guests[s1].lobby->my_seat() == 2 && room.host.reserved(1));
-            const size_t other = join_with(room, page_with_key("Ola", key_with(77)));                      // (no open colour is left: the kept one is not one)
+            const size_t other = join_with(room, page_with_key("Ola", key_with(77)));                      // (no open color is left: the kept one is not one)
             room.run(200);
             ASSERT_TRUE(room.guests[other].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[other].lobby->reject_reason() == RejectReason::Full);
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@1 Sid@2"));
@@ -405,7 +405,7 @@ void run_lobby_rematch_tests() {
             ASSERT_TRUE(room.guests[bob_tab2].lobby->my_seat() == 1 && !room.host.any_reserved() && room.host.returns() == 2u);
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@1 Sid@2"));
         }
-        {   // three hours on the room's clock (the default reservation): Ann is back and keeps the room, Bob's colour waits for him to the millisecond
+        {   // three hours on the room's clock (the default reservation): Ann is back and keeps the room, Bob's color waits for him to the millisecond
             ASSERT_EQ(kLobbyReserveMs, 3u * 3600u * 1000u);
             ASSERT_EQ(lobby_room_config(158).reserve_ms, kLobbyReserveMs);
             Room room(lobby_room_config(158), false);
@@ -421,7 +421,7 @@ void run_lobby_rematch_tests() {
             ASSERT_TRUE(!room.host.occupied(1) && room.host.reserve_expiries() == 1u && room.guests[ann].lobby->is_leader());
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0"));
         }
-        {   // a results screen that says Leave (its page went another way: the game's Leave Game, a closed tab, a reload) gives the seat up: the colour is open and START does not wait for it
+        {   // a results screen that says Leave (its page went another way: the game's Leave Game, a closed tab, a reload) gives the seat up: the color is open and START does not wait for it
             Room room(lobby_room_config(159), false);
             ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Easy, K::Nobody})));          // (Ann and the Easy bot of the plan can play without Bob)
             const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
@@ -437,14 +437,14 @@ void run_lobby_rematch_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.46 A Game That Asks For Its Colour With The Key Is The Person Back, As A Game (The Game Page That The Front Page's \"Rejoin\" Opens With A Key That The Match Left Behind): The Seat Is Not Kept Any More, The Person Leads When First In The Order And The START Takes Them As A Game; A Results Screen Asks For No Colour (255) And Only Holds The Seat") {
+    TEST_CASE("N4.46 A Game That Asks For Its Color With The Key Is The Person Back, As A Game (The Game Page That The Front Page's \"Rejoin\" Opens With A Key That The Match Left Behind): The Seat Is Not Kept Any More, The Person Leads When First In The Order And The START Takes Them As A Game; A Results Screen Asks For No Color (255) And Only Holds The Seat") {
         Room room(lobby_room_config(160), false);
         ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Nobody, K::Nobody})));
-        // Bob's results screen asks for no colour: it holds his seat, which stays kept
+        // Bob's results screen asks for no color: it holds his seat, which stays kept
         const size_t bob_results = join_keyed(room, "Bob", key_with(2));
         room.run(200);
         ASSERT_TRUE(room.guests[bob_results].lobby->my_seat() == 1 && room.host.reserved(1) && room.host.leader() == kNoLeader);
-        // Ann's game page asks for her colour with her key: she is back, as a game, and leads (first in the order)
+        // Ann's game page asks for her color with her key: she is back, as a game, and leads (first in the order)
         const size_t ann_game = join_keyed(room, "Ann", key_with(1), 0);
         room.run(200);
         ClientLobby& ag = *room.guests[ann_game].lobby;
@@ -456,7 +456,7 @@ void run_lobby_rematch_tests() {
         room.run(200);
         ASSERT_FALSE(room.host.starting());
         ASSERT_EQ(notices_of(ag), (std::vector<std::string>{"Bob is not back from the match yet."}));
-        // Bob's game page too, asking for any colour of the two (here his own): it takes the seat from his results screen and he is back; the START is taken with the two games
+        // Bob's game page too, asking for any color of the two (here his own): it takes the seat from his results screen and he is back; the START is taken with the two games
         const size_t bob_game = join_keyed(room, "Bob", key_with(2), 1);
         room.run(200);
         ASSERT_TRUE(room.guests[bob_results].lobby->reject_reason() == RejectReason::Superseded && room.guests[bob_game].lobby->my_seat() == 1);
@@ -495,18 +495,18 @@ void run_lobby_rematch_tests() {
         ASSERT_TRUE(e.is_leader());
     } TEST_END();
 
-    TEST_CASE("N4.49a A Kept Seat That The Leader Moved: The Person's Game That Asks For The Colour It Had Before The Move (The Rejoin Of The Front Page Does) Is Back, As A Game, In The Seat It Has Now (The Key Finds It; The Colour Asked For Is Not The Seat)") {
+    TEST_CASE("N4.49a A Kept Seat That The Leader Moved: The Person's Game That Asks For The Color It Had Before The Move (The Rejoin Of The Front Page Does) Is Back, As A Game, In The Seat It Has Now (The Key Finds It; The Color Asked For Is Not The Seat)") {
         Room room(lobby_room_config(163), false);
         ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Open, K::Open})));
         const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
         room.run(200);
-        ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));                                   // Bob, who is not back, is moved to the open colour 3
+        ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));                                   // Bob, who is not back, is moved to the open color 3
         room.run(200);
         ASSERT_TRUE(room.host.reserved(3) && !room.host.occupied(1));
-        const size_t bob = join_keyed(room, "Bob", key_with(2), 1);                                      // his game page asks for colour 1, which it had (and which is open now)
+        const size_t bob = join_keyed(room, "Bob", key_with(2), 1);                                      // his game page asks for color 1, which it had (and which is open now)
         room.run(200);
         ClientLobby& b = *room.guests[bob].lobby;
-        ASSERT_TRUE(b.phase() == ClientLobby::Phase::InRoom && b.my_seat() == 3);                        // (the key finds the seat; the wish for a colour decides nothing)
+        ASSERT_TRUE(b.phase() == ClientLobby::Phase::InRoom && b.my_seat() == 3);                        // (the key finds the seat; the wish for a color decides nothing)
         ASSERT_TRUE(!room.host.any_reserved() && room.host.returns() == 2u && room.host.in_game(3) && !room.host.occupied(1));
         ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@3"));
     } TEST_END();

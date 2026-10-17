@@ -471,7 +471,7 @@ public:
     void propose_alliance(uint8_t from_player, uint8_t to_player);
     /// The proposer takes the offer back (Ants.exe FUN_0100c5fa): the invitee reads "%s withdrew offer to team up".
     void withdraw_alliance_offer(uint8_t from_player, uint8_t to_player);
-    /// Player names as the alliance texts print them (Ants.exe W+0x5220 + team * 0x3c); by default the colour of the team.
+    /// Player names as the alliance texts print them (Ants.exe W+0x5220 + team * 0x3c); by default the color of the team.
     void set_player_name(uint8_t player_id, const std::string& name);
     std::string get_player_name(uint8_t player_id) const;
     void accept_alliance(uint8_t responding_player, uint8_t proposing_player);

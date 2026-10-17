@@ -1,5 +1,5 @@
 // The drawing of the start menu (start_menu.hpp). Everything on the screen comes from what the game already has: the `sm_screen` background of the original's Single / Multi
-// screen (the orange tiles and the green frame), the ants of the setup screen's portraits, the game's TrueType face, and boxes and buttons that are made of the colours of
+// screen (the orange tiles and the green frame), the ants of the setup screen's portraits, the game's TrueType face, and boxes and buttons that are made of the colors of
 // the original's own button and box pictures (the pictures themselves carry their labels, so a button with a label of its own is built from the same palette: a one pixel
 // outline, a face of the button's green, a light edge on the top and the left, a dark one on the bottom and the right, and the dark red drop shadow).
 
@@ -29,7 +29,7 @@ const ColorRGBA kShadow{183, 11, 27, 255};
 const ColorRGBA kBoxFrame{43, 95, 67, 255};
 const ColorRGBA kBoxFrameDark{35, 71, 47, 255};
 const ColorRGBA kOrange{219, 75, 19, 255};
-const ColorRGBA kCream{239, 231, 223, 255};                // the colour of every label of the original's screens (0xdfe7ef)
+const ColorRGBA kCream{239, 231, 223, 255};                // the color of every label of the original's screens (0xdfe7ef)
 const ColorRGBA kWhite{251, 251, 255, 255};
 const ColorRGBA kBad{255, 112, 100, 255};
 const ColorRGBA kDimOnBox{170, 182, 190, 255};
@@ -38,7 +38,7 @@ const ColorRGBA kInkDim{70, 24, 10, 255};
 
 constexpr int32_t kPad = 8;
 
-ColorRGBA ink_colour(MenuTone tone) {
+ColorRGBA ink_color(MenuTone tone) {
     switch (tone) {
         case MenuTone::Dim: return kInkDim;
         case MenuTone::Bad: return ColorRGBA{119, 0, 0, 255};
@@ -47,7 +47,7 @@ ColorRGBA ink_colour(MenuTone tone) {
     return kInk;
 }
 
-ColorRGBA box_text_colour(MenuTone tone) {
+ColorRGBA box_text_color(MenuTone tone) {
     switch (tone) {
         case MenuTone::Dim: return kDimOnBox;
         case MenuTone::Bad: return kBad;
@@ -88,20 +88,20 @@ void draw_inset(IRenderer& r, const ButtonRect& b, bool focused) {
 }
 
 // A text as the original's one-line labels cut it: cut at the right edge of the box
-void draw_cut(IRenderer& r, const std::string& text, int32_t x, int32_t y, int32_t width, const ColorRGBA& colour, FontSize size, bool centered) {
+void draw_cut(IRenderer& r, const std::string& text, int32_t x, int32_t y, int32_t width, const ColorRGBA& color, FontSize size, bool centered) {
     const std::string shown = fit_text(r, text, width, size);
     const int32_t w = r.get_text_width(shown, size);
-    r.draw_text(shown, centered ? x + (width - w) / 2 : x, y, colour, size);
+    r.draw_text(shown, centered ? x + (width - w) / 2 : x, y, color, size);
 }
 
 // A text centred in a box of its own height both ways
-void draw_centered_line(IRenderer& r, const std::string& text, const ButtonRect& box, const ColorRGBA& colour, FontSize size, int32_t dy = 0) {
+void draw_centered_line(IRenderer& r, const std::string& text, const ButtonRect& box, const ColorRGBA& color, FontSize size, int32_t dy = 0) {
     const int32_t cell = font_cell_height(size);
-    draw_cut(r, text, box.x + kPad, box.y + (box.h - cell) / 2 + dy, box.w - 2 * kPad, colour, size, true);
+    draw_cut(r, text, box.x + kPad, box.y + (box.h - cell) / 2 + dy, box.w - 2 * kPad, color, size, true);
 }
 
 // A wrapped text in a box: lines of the original's wrap, as many as the box holds; what does not fit is cut (the last line that fits ends with "...")
-void draw_wrapped(IRenderer& r, const std::string& text, const ButtonRect& box, const ColorRGBA& colour, FontSize size, bool centered, bool vcenter = false) {
+void draw_wrapped(IRenderer& r, const std::string& text, const ButtonRect& box, const ColorRGBA& color, FontSize size, bool centered, bool vcenter = false) {
     const int32_t pitch = font_cell_height(size);
     const int32_t max_lines = std::max(1, box.h / pitch);
     std::vector<std::string> lines = wrap_label_text(r, text, box.w, size);
@@ -115,17 +115,17 @@ void draw_wrapped(IRenderer& r, const std::string& text, const ButtonRect& box, 
     for (const std::string& line : lines) {
         const std::string shown = fit_text(r, line, box.w, size);
         const int32_t w = r.get_text_width(shown, size);
-        r.draw_text(shown, centered ? box.x + (box.w - w) / 2 : box.x, y, colour, size);
+        r.draw_text(shown, centered ? box.x + (box.w - w) / 2 : box.x, y, color, size);
         y += pitch;
     }
 }
 
 // A small arrow of one pixel rows, pointing left or right (the cycler's, in the style of the original's arrow buttons)
-void draw_arrow(IRenderer& r, bool left, int32_t cx, int32_t cy, const ColorRGBA& colour) {
+void draw_arrow(IRenderer& r, bool left, int32_t cx, int32_t cy, const ColorRGBA& color) {
     for (int32_t i = 0; i < 6; ++i) {
         const int32_t half = i;                                                    // the arrow is 6 wide and 11 high
         const int32_t x = left ? cx - 3 + i : cx + 2 - i;
-        r.fill_rect(x, cy - half, 1, 2 * half + 1, colour);
+        r.fill_rect(x, cy - half, 1, 2 * half + 1, color);
     }
 }
 
@@ -139,7 +139,7 @@ void draw_background(IRenderer& r, const assets::AssetArchive& archive) {
     }
 }
 
-// The ant of a seat: the animation of the setup screen's portrait (agst301, the colour of the seat), its feet at the bottom of the box
+// The ant of a seat: the animation of the setup screen's portrait (agst301, the color of the seat), its feet at the bottom of the box
 void draw_portrait(IRenderer& r, const assets::AssetArchive& archive, const MenuElement& e, uint32_t now_ms) {
     const auto* anim = archive.find_animation("agst301");
     if (anim == nullptr || anim->subitems.empty()) return;
@@ -193,7 +193,7 @@ void draw_field(IRenderer& r, const MenuElement& e) {
 void draw_notice(IRenderer& r, const MenuElement& e) {
     draw_inset(r, e.rect, false);
     ButtonRect inner{e.rect.x + 10, e.rect.y + 7, e.rect.w - 20, e.rect.h - 14};
-    draw_wrapped(r, e.text, inner, box_text_colour(e.tone), e.font, true, true);
+    draw_wrapped(r, e.text, inner, box_text_color(e.tone), e.font, true, true);
 }
 
 void draw_code(IRenderer& r, const MenuElement& e) {
@@ -218,7 +218,7 @@ void render_start_menu(IRenderer& renderer, const assets::AssetArchive& archive,
     for (const MenuElement& e : menu.elements()) {
         switch (e.kind) {
             case MenuKind::Title: draw_title(renderer, e); break;
-            case MenuKind::Text: draw_wrapped(renderer, e.text, e.rect, ink_colour(e.tone), e.font, e.centered); break;
+            case MenuKind::Text: draw_wrapped(renderer, e.text, e.rect, ink_color(e.tone), e.font, e.centered); break;
             case MenuKind::Notice: draw_notice(renderer, e); break;
             case MenuKind::Code: draw_code(renderer, e); break;
             case MenuKind::Button: draw_button(renderer, e); break;

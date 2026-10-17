@@ -26,8 +26,8 @@ constexpr uint16_t LVL_RULES_ORIGINAL = 0;                   // `rules` 0: the o
 constexpr uint16_t LVL_RULES_EXTENDED = 1;                   // `rules` 1: extended rules (the simulation does not read the word yet)
 constexpr uint16_t LVL_BOMB_TILE_FIRST = 129;                // the original's bomb tiles 129 .. 132: the third word of their layer-2 cell is the owner, not an anchor
 constexpr uint16_t LVL_BOMB_TILE_LAST = 132;
-// Hills and start markers are TILE IDS, never dictionary names (Ants.exe FUN_0100ecac, the table at 0x1002468): the colour ids are 0 black, 1 blue, 2 red, 3 green, the hill of a colour is
-// the layer-2 id 245 + colour (245 black, 246 blue, 247 red, 248 green) and its start marker the block-1 id 152 + colour (152 black, 153 blue, 154 green, 155 red). The remake numbers its teams
+// Hills and start markers are TILE IDS, never dictionary names (Ants.exe FUN_0100ecac, the table at 0x1002468): the color ids are 0 black, 1 blue, 2 red, 3 green, the hill of a color is
+// the layer-2 id 245 + color (245 black, 246 blue, 247 red, 248 green) and its start marker the block-1 id 152 + color (152 black, 153 blue, 154 green, 155 red). The remake numbers its teams
 // 0 green, 1 red, 2 blue, 3 black. Both functions answer -1 for any other id.
 constexpr uint16_t LVL_HILL_FIRST = 245;
 constexpr uint16_t LVL_HILL_LAST = 248;
@@ -374,7 +374,7 @@ public:
 
     /// The level as it is played by the teams of `roster_mask` (bit t = team t takes part): a team without a player has no hill, no start marker
     /// (so no starting ant) and no eggs. The original keeps a NULL entry in its team table for such a team (CHECKGO skips it), so nothing of it exists.
-    /// Team t is the colour of the hill tile 248 (green, 0), 247 (red, 1), 246 (blue, 2), 245 (black, 3) and of the start marker 154, 155, 153, 152 (by tile id, not by name).
+    /// Team t is the color of the hill tile 248 (green, 0), 247 (red, 1), 246 (blue, 2), 245 (black, 3) and of the start marker 154, 155, 153, 152 (by tile id, not by name).
     LevelData for_roster(uint8_t roster_mask) const;
 
     /// Is this level playable by the teams of `roster_mask`, and what is odd about it? The loader's own notes (load_notes) plus the checks that need the whole level:

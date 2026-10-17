@@ -1,4 +1,4 @@
-// The chat box of the front page's lobby (web/lobby.html, docs/PLAY_IN_BROWSER.md "Chat in the lobby"): the people in a room talk before START, in the box under the colours. The room's own chat is the game's
+// The chat box of the front page's lobby (web/lobby.html, docs/PLAY_IN_BROWSER.md "Chat in the lobby"): the people in a room talk before START, in the box under the colors. The room's own chat is the game's
 // (docs/NETWORK_PORT.md "Chat in the waiting room": a line of 100 printable ASCII characters, relayed by the room to everybody in it, the sender too, with the seat of the connection stamped); a lobby page
 // already hears those lines (web/front/lobby_net.js, the 'chat' event) and now says them (LobbyClient.say, at the server's pace). Nothing of the server or of the protocol changed.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyChat, node gets module.exports (tests/scripts/web_lobby_chat_check.js runs it with a small fake of the DOM).
@@ -19,7 +19,7 @@
 
     var MAX_LINE = 100;                          // the match's chat entry (the server's kMaxChatChars, lobby_net.js MAX_CHAT)
     var MAX_LINES = 200;                         // the room's own log keeps the last 200 (ChatLog::kMaxLines)
-    var HOST = 1, CLIENT = 2;                    // lobby_net.js SLOT.Host and SLOT.Client: the states of a colour that a person holds
+    var HOST = 1, CLIENT = 2;                    // lobby_net.js SLOT.Host and SLOT.Client: the states of a color that a person holds
     var FOLLOW = 40;                             // a box within this many pixels of its end follows the newest line
     var STICKY = 140;                            // the page's START bar (sticky at the bottom of a phone's screen) covers this much of the window: a box under it is off screen
     var TOAST_CHARS = 60;                        // a line is cut to this many characters in the toast (a stranger's line of 100 must not fill a phone's screen)
@@ -58,7 +58,7 @@
     }
 
     // ---- what the box shows in each state of the room ----------------------------------------------------------------------------------------------------------------------------------------------
-    // How many people are in a Room message (a computer player reads nothing, an empty colour is nobody)
+    // How many people are in a Room message (a computer player reads nothing, an empty color is nobody)
     function peopleIn(room) {
         var n = 0;
         if (room && room.slots) for (var s = 0; s < room.slots.length; s++) if (room.slots[s].state === HOST || room.slots[s].state === CLIENT) n++;
@@ -80,17 +80,17 @@
         return room && room.slots && room.slots[seat] && room.slots[seat].name ? room.slots[seat].name : 'Seat ' + (seat + 1);
     }
     // The small lines of the system: the words of the page's toast for a person who comes ("Sam joined as Red."), and one for a person who goes
-    function joinedText(name, seat, colours) { return name + ' joined as ' + colours[seat].name + '.'; }
+    function joinedText(name, seat, colors) { return name + ' joined as ' + colors[seat].name + '.'; }
     function leftText(name) { return name + ' left.'; }
     function toastText(who, text) { return who + ': ' + (text.length > TOAST_CHARS ? text.slice(0, TOAST_CHARS - 1) + '\u2026' : text); }
 
     // ---- the box ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // mount({ doc, host (the section of the page), colours (the lobby's four colours by seat: { id, name }), say (text -> true when the client took the line), toast (text), onScreen (optional: is the box in view),
+    // mount({ doc, host (the section of the page), colors (the lobby's four colors by seat: { id, name }), say (text -> true when the client took the line), toast (text), onScreen (optional: is the box in view),
     //         now / setTimeout / clearTimeout (optional: the clock and the timers, which the checks drive; the page's own by default) })
     // builds the box into `host` and returns { attach(client), clear(), lines() }. attach(client) is for every client that the page makes (a page that joins another room, takes its room back, or is made again
     // after a removal makes a new one): the box follows the last one, keeps its lines while the room is the same, and lets them go when the room is another or was made again.
     function mount(opts) {
-        var doc = opts.doc, host = opts.host, colours = opts.colours;
+        var doc = opts.doc, host = opts.host, colors = opts.colors;
         var current = null;
         var now = opts.now || function () { return Date.now(); };
         var setT = opts.setTimeout || function (fn, ms) { return setTimeout(fn, ms); };
@@ -168,7 +168,7 @@
             var follow = own || nearBottom();
             var li = el('div', kind === 'sys' ? 'sys' : '');
             if (kind === 'chat') {
-                if (colours[seat]) li.setAttribute('data-c', colours[seat].id);
+                if (colors[seat]) li.setAttribute('data-c', colors[seat].id);
                 li.appendChild(el('span', 'who', who + ': '));          // (the blank is in the text, so that a copy of the log reads "Sam: hello")
                 li.appendChild(el('span', 'say', text));
             } else li.textContent = text;
@@ -278,7 +278,7 @@
             c.on('status', function () { if (c === current) { paint(); if (c.status !== 'online') loseAll(); } });
             c.on('gone', function () { if (c === current) { loseAll(); clear(); } });        // (the room was lost and made again: the lines were a dead room's, and a line on its way is lost with it)
             c.on('chat', function (e) { if (c === current) hear(c, e); });
-            c.on('joined', function (e) { if (c === current && e.seat !== c.seat) add('sys', -1, '', joinedText(e.name, e.seat, colours), false); });
+            c.on('joined', function (e) { if (c === current && e.seat !== c.seat) add('sys', -1, '', joinedText(e.name, e.seat, colors), false); });
             c.on('left', function (e) { if (c === current) add('sys', -1, '', leftText(e.name), false); });
             paint();
         }

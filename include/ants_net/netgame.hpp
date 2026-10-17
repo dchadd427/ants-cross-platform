@@ -150,7 +150,7 @@ public:
     /// used or there is no transport.
     bool host(uint16_t port, const std::string& name, bool loopback_only = false);
     /// Starts joining the room at address:port. False when the address cannot be used or there is no transport; the outcome arrives as events.
-    /// `want_seat` (0 .. 3) asks the host for that seat (the colour: 0 green, 1 red, 2 blue, 3 black); a seat that is taken gives the first free one; 255 = any.
+    /// `want_seat` (0 .. 3) asks the host for that seat (the color: 0 green, 1 red, 2 blue, 3 black); a seat that is taken gives the first free one; 255 = any.
     /// `key` (all zero: a new player, as it always was) is the key of a seat of a dedicated server's room that this machine had (a game that was started again, a page that was reloaded: the place
     /// that keeps it gave it back): the Hello shows it, and a room whose match runs gives the machine its seat and the match from the server's log (the event StartRequested, then Begun, both with
     /// `rejoin`). A room that is over, that does not hold the seat or that has dropped it refuses, with the reasons of the way back (status_text()).
@@ -251,22 +251,22 @@ public:
     /// The leader asks the server to start the match now with the players who are in the room (StartRequest). False (nothing is sent) when this machine is not the leader, the
     /// room is not open, or fewer than two players are in it: the same answer as the host's START gives when `start_match` refuses (the application plays the can't-go cue).
     /// True means the request was sent, not that the server will start: it starts at once when it can, otherwise nothing happens. It is also false while a SeatMove of this machine has not been
-    /// answered (a second at most): the plan of bots follows the room's answer, so a START that went out before it would be for the colours as they were, with the player already moved.
+    /// answered (a second at most): the plan of bots follows the room's answer, so a START that went out before it would be for the colors as they were, with the player already moved.
     bool request_start();
     /// The leader of a server's room puts the player of seat `from` in seat `to` (protocol 14, SeatMove; the swap is protocol 15's): an empty seat takes the player, and the guest that holds the seat
     /// changes places with it (the room acts only when it still seats its people as this machine shows them: the request carries the seating's guard). The leader may move itself. One request goes
     /// out and the next waits: half a second at least (a double click is one press; its second one would act on the rows as the first left them), and until the room shows the change or a second
-    /// has passed. The plan of bots of set_fill_bots follows what the room shows (follow_moved_player): when a person has taken a free colour the levels of the two seats trade places, so the match
+    /// has passed. The plan of bots of set_fill_bots follows what the room shows (follow_moved_player): when a person has taken a free color the levels of the two seats trade places, so the match
     /// that START makes has the same people and the same bots as the leader saw (request_start waits for the room's answer); a swap leaves the plan alone. False (nothing is sent) unless this machine
     /// leads an open room, `from` holds a guest (a person that is not the host: the host's seat and a bot's do not move), `to` is another seat that is empty or holds a guest, no request went out less
     /// than half a second ago and none is still waiting for the room's answer.
     bool request_move_seat(uint8_t from, uint8_t to);
-    /// The tap on a player's row: the player of `seat` goes to the next colour (green, red, blue, black, round again): the next colour that nobody holds, else the next guest's, so that the two change
-    /// places; a person goes on round with every press, so every arrangement of the people can be had, in a full room too. The same conditions as request_move_seat(from, to) for the colour that
+    /// The tap on a player's row: the player of `seat` goes to the next color (green, red, blue, black, round again): the next color that nobody holds, else the next guest's, so that the two change
+    /// places; a person goes on round with every press, so every arrangement of the people can be had, in a full room too. The same conditions as request_move_seat(from, to) for the color that
     /// seat_move_target names.
     bool request_move_seat(uint8_t seat);
-    /// The colour that request_move_seat(seat) asks for: the first seat after `seat` (3 is followed by 0) that nobody holds, else the first after it that a guest holds; 255 when `seat` holds no
-    /// person (a guest) or there is neither a free colour nor another guest (the others are bots and the host)
+    /// The color that request_move_seat(seat) asks for: the first seat after `seat` (3 is followed by 0) that nobody holds, else the first after it that a guest holds; 255 when `seat` holds no
+    /// person (a guest) or there is neither a free color nor another guest (the others are bots and the host)
     static uint8_t seat_move_target(const RoomMsg& room, uint8_t seat) noexcept;
     /// The bots that this machine's START asks for when it leads a server's room: a level for each seat (protocol 13; one level for all in protocol 11). None everywhere (the default) is the START
     /// of protocol 7. With a level somewhere, request_start() also works with one player in the room (the server seats a bot of the seat's level in each empty seat that has one, and starts);
@@ -483,7 +483,7 @@ private:
     /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
     void collect_room_chat();
     /// The leader's plan of bots follows a player that the room moved: given the room as it was (room_ is the room as it is now: one Room message later), the levels of the two seats trade places when
-    /// a person's colour is empty now and an empty colour is a person's, and nothing else changed (two guests that changed places leave the same colours empty: nothing trades)
+    /// a person's color is empty now and an empty color is a person's, and nothing else changed (two guests that changed places leave the same colors empty: nothing trades)
     void follow_moved_player(const RoomMsg& before);
     /// A SeatMove went out less than a second ago and the room still seats its people as it did
     bool move_unanswered() const noexcept;

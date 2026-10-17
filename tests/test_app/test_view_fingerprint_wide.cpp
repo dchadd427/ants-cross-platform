@@ -30,7 +30,7 @@ void hud_wide_scenarios(const assets::AssetArchive& arc) {
     constexpr int32_t kMaxY = static_cast<int32_t>(kMap) * 32 - kWViewH;
     const auto make = [&](uint8_t local = 0, uint32_t w = kMap, uint32_t h = kMap) { return std::make_unique<Scene>(arc, local, w, h, &kWide); };
 
-    for (uint8_t p = 0; p < 4; ++p) {                                           // the "Get ready" dialog over the wide frame, for each local colour
+    for (uint8_t p = 0; p < 4; ++p) {                                           // the "Get ready" dialog over the wide frame, for each local color
         auto s = make(p);
         s->hud.start_match_modal();
         s->look(100, 80);
@@ -677,7 +677,7 @@ const std::vector<MaskRect> kWMaskQuit = {{265, 237, 529, 401}};
 
 /// The setup screen's labels in the wide screen (the setup screen of a 960 x 540 canvas is the whole canvas, no page: tests/test_app/test_wide_setup.cpp pins the screen in detail): the map's name,
 /// its description and the prompt, the four players' names, the caption under the map preview. The preview itself is NOT masked: it is the game's own render of the map (map_preview.hpp), so the
-/// three px.wide.app.setup.* fingerprints that show it (refreshed, hover_start, cursor) were regenerated when the preview changed from minimap colour blocks to that render (before_refresh has none)
+/// three px.wide.app.setup.* fingerprints that show it (refreshed, hover_start, cursor) were regenerated when the preview changed from minimap color blocks to that render (before_refresh has none)
 const std::vector<MaskRect> kWMaskSetup = {{35, 370, 287, 392}, {35, 438, 401, 460}, {34, 505, 402, 529}, {733, 93, 857, 115}, {733, 143, 857, 165}, {733, 193, 857, 215}, {733, 243, 857, 265}, {349, 359, 657, 381}};
 
 /// The options screen's edit fields and the results rows are text too: the whole page's text boxes are not known one by one, so the pages that carry TrueType text are masked as a
@@ -721,7 +721,7 @@ void world_pixel_wide_scenarios(const assets::AssetArchive& arc) {
             rig.shoot(name);
         }
     }
-    // the maps that are smaller than the view (a synthetic world: flat colours): centred, black around it; 16 x 16 is 12 px taller than the view, 12 x 12 is smaller on both axes
+    // the maps that are smaller than the view (a synthetic world: flat colors): centred, black around it; 16 x 16 is 12 px taller than the view, 12 x 12 is smaller on both axes
     for (const uint32_t tiles : {16u, 12u}) {
         const std::string name = "px.wide.world.small" + std::to_string(tiles);
         if (!wanted(name)) continue;

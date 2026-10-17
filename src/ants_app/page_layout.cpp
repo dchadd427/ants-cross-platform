@@ -71,7 +71,7 @@ void draw_loading_screen(IRenderer& renderer, const ants::assets::AssetArchive& 
 
     // 6. the progress bar inside its slot, in the original's dark purple
     const int32_t fill_w = l.bar_fill(ticks);
-    if (fill_w > 0) renderer.fill_rect(l.bar.x, l.bar.y, fill_w, l.bar.h, kLoadingBarColour);
+    if (fill_w > 0) renderer.fill_rect(l.bar.x, l.bar.y, fill_w, l.bar.h, kLoadingBarColor);
 }
 
 std::string catch_up_text(int32_t percent) { return "Catching up " + std::to_string(std::clamp(percent, 0, 100)) + "%"; }
@@ -93,7 +93,7 @@ void draw_catch_up_screen(IRenderer& renderer, const ants::assets::AssetArchive&
     const std::string text = catch_up_text(percent);
     const std::string hint = kCatchUpHint;
     const CatchUpLayout where = catch_up_layout(wide, percent, renderer.get_text_width(text, FontSize::Px24), renderer.get_text_width(hint, FontSize::Px14));
-    if (where.bar_fill.w > 0) renderer.fill_rect(where.bar_fill.x, where.bar_fill.y, where.bar_fill.w, where.bar_fill.h, kLoadingBarColour);
+    if (where.bar_fill.w > 0) renderer.fill_rect(where.bar_fill.x, where.bar_fill.y, where.bar_fill.w, where.bar_fill.h, kLoadingBarColor);
     const ants::assets::ColorRGBA ink{7, 11, 15, 255};                            // (the black of the original's labels on the orange)
     renderer.draw_text(text, where.text_x, where.text_y, ink, FontSize::Px24);
     renderer.draw_text(hint, where.hint_x, where.hint_y, ink, FontSize::Px14);

@@ -46,7 +46,7 @@ void MapSelectScreen::set_wide_layout(bool wide) {
 
 // The picture of a map for a box of inner x inner pixels: made once and kept (the last few; a map that is shown again is not drawn again); a file that cannot be read is remembered too, so
 // that it is not read again every frame. The picture is the game's own drawing of the map's world, made when the map is first shown (render_map_preview_world); when the renderer cannot
-// draw offscreen (or the level cannot be played by any team) the older minimap-colour picture is used instead, and the first time that happens the reason is logged (once per screen).
+// draw offscreen (or the level cannot be played by any team) the older minimap-color picture is used instead, and the first time that happens the reason is logged (once per screen).
 const MapPreview* MapSelectScreen::preview_of(const MapSelectEntry& entry, int32_t inner, IRenderer& renderer, const ants::assets::AssetArchive& archive) {
     for (const PreviewSlot& slot : previews_) {
         if (slot.inner == inner && slot.path == entry.full_path) return slot.preview.valid() ? &slot.preview : nullptr;
@@ -61,7 +61,7 @@ const MapPreview* MapSelectScreen::preview_of(const MapSelectEntry& entry, int32
         if (!slot.preview.valid()) {
             if (!fallback_logged_) {
                 fallback_logged_ = true;
-                std::cerr << "[MapSelect] The map preview is not drawn from the game's own renderer (" << why << "): the minimap colours are shown instead." << std::endl;
+                std::cerr << "[MapSelect] The map preview is not drawn from the game's own renderer (" << why << "): the minimap colors are shown instead." << std::endl;
             }
             slot.preview = render_map_preview_in_box(level, archive.get_palette(), inner);
         }
@@ -211,7 +211,7 @@ void MapSelectScreen::render_wide(IRenderer& renderer, const ants::assets::Asset
         const SetupChatLayout& chat = layout.chat;
         renderer.draw_text("Chat", chat.label_x + 1, chat.label_y + 1, kChatInk, FontSize::Px20);
         renderer.draw_text("Chat", chat.label_x, chat.label_y, kChatTeal, FontSize::Px20);
-        // the lines: the newest at the bottom, as many as fit; a notice is a status text (14 px), a message has the players' names' size (18 px); all in their colour
+        // the lines: the newest at the bottom, as many as fit; a notice is a status text (14 px), a message has the players' names' size (18 px); all in their color
         struct Row {
             std::string text;
             FontSize size;

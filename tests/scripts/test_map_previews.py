@@ -24,7 +24,7 @@ FOLDER = os.path.join(REPO, "Community-Maps")
 
 
 class FakeRenderer:
-    """Stands in for the game: a 300 x 300 picture whose colour depends on the map's bytes; remembers what it was asked."""
+    """Stands in for the game: a 300 x 300 picture whose color depends on the map's bytes; remembers what it was asked."""
     def __init__(self, fail_on=None):
         self.calls = []
         self.fail_on = fail_on

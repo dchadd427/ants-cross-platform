@@ -83,12 +83,12 @@ same('map key of nothing', R.mapKey(null), '');
 same('map title of nothing', R.mapTitle(undefined), '');
 
 // ---- the players
-same('a person', R.parsePlayer('Green (Mika)'), { colour: 'Green', name: 'Mika' });
-same('a computer player', R.parsePlayer('Red (Bot (Medium))'), { colour: 'Red', name: 'Bot (Medium)' });
-same('nobody typed anything', R.parsePlayer('Blue'), { colour: 'Blue', name: '' });
-same('a name with a bracket and a space', R.parsePlayer('Black (a (b) c)'), { colour: 'Black', name: 'a (b) c' });
-same('an empty name in brackets', R.parsePlayer('Green ()'), { colour: 'Green', name: '' });
-same('junk', R.parsePlayer(42), { colour: '', name: '' });
+same('a person', R.parsePlayer('Green (Mika)'), { color: 'Green', name: 'Mika' });
+same('a computer player', R.parsePlayer('Red (Bot (Medium))'), { color: 'Red', name: 'Bot (Medium)' });
+same('nobody typed anything', R.parsePlayer('Blue'), { color: 'Blue', name: '' });
+same('a name with a bracket and a space', R.parsePlayer('Black (a (b) c)'), { color: 'Black', name: 'a (b) c' });
+same('an empty name in brackets', R.parsePlayer('Green ()'), { color: 'Green', name: '' });
+same('junk', R.parsePlayer(42), { color: '', name: '' });
 same('the roster 0b0101 with names', R.playersOf(5, ['Mika', '', 'Bot (Easy)', '']), ['Green (Mika)', 'Blue (Bot (Easy))']);
 same('the roster 0b1111 without names', R.playersOf(15, []), ['Green', 'Red', 'Blue', 'Black']);
 same('the roster 0b1010', R.playersOf(10, ['x', 'Pia', 'y', 'Bot (Hard)']), ['Red (Pia)', 'Black (Bot (Hard))']);
@@ -110,14 +110,14 @@ const list = R.chipsOf(doc, ['Green (Mika)', 'Red (Bot (Medium))', 'Blue', 'Blac
 same('a list of five chips', list.children.length, 5);
 same('the list is labelled', list.attrs['aria-label'], 'Who played');
 const chip = (i) => list.children[i];
-same('colour of the first', chip(0).attrs['data-c'], 'Green');
+same('color of the first', chip(0).attrs['data-c'], 'Green');
 same('name of the first', chip(0).children[1]._text, 'Mika');
 same('tip of the first', chip(0).title, 'Green: Mika');
 same('name of the second', chip(1).children[1]._text, 'Bot (Medium)');
-same('a chip with no name shows the colour word', chip(2).children[1]._text, 'Blue');
-same('... and its tip is the colour word', chip(2).title, 'Blue');
+same('a chip with no name shows the color word', chip(2).children[1]._text, 'Blue');
+same('... and its tip is the color word', chip(2).title, 'Blue');
 same('a nasty name is text, as it is', chip(3).children[1]._text, nasty);
-same('an unknown colour has no colour', chip(4).attrs['data-c'], '');
+same('an unknown color has no color', chip(4).attrs['data-c'], '');
 let html = 0;
 (function walk(n) { html += n._html || 0; (n.children || []).forEach(walk); })(list);
 same('no markup was made from any text', html, 0);

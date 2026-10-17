@@ -161,20 +161,20 @@ public:
     void send_chat(bool to_team);
     /// A network match: called with the text and the team flag of every message the player sends (the entry is also added to the own log at once)
     void set_on_chat_send(std::function<void(const std::string&, bool)> fn) { on_chat_send_ = std::move(fn); }
-    /// AddLine (Ants.exe 0x10120e9): an entry is a header ("Name:" or "Name (To Teammate):", in the colour of the sender's team, `colour_index` 0 black, 1 blue,
+    /// AddLine (Ants.exe 0x10120e9): an entry is a header ("Name:" or "Name (To Teammate):", in the color of the sender's team, `color_index` 0 black, 1 blue,
     /// 2 red, 3 green; -1 = the local player's; a 138 px label that does not wrap) and a body of at most 100 characters (a 126 px label that wraps by pixels, 10 px
-    /// right of the header, colour (7, 11, 15)). The entries are stacked with one pixel between them and the log follows the newest (docs 5.56).
-    void add_chat_entry(const std::string& sender, const std::string& message, bool team_only = false, int colour_index = -1);
-    /// AddNewsFlash (0x100e9bb): the header "[m:ss] News Flash:" in colour (79, 0, 143) and the text as body.
+    /// right of the header, color (7, 11, 15)). The entries are stacked with one pixel between them and the log follows the newest (docs 5.56).
+    void add_chat_entry(const std::string& sender, const std::string& message, bool team_only = false, int color_index = -1);
+    /// AddNewsFlash (0x100e9bb): the header "[m:ss] News Flash:" in color (79, 0, 143) and the text as body.
     void add_news_flash(uint32_t elapsed_ms, const std::string& text);
     /// A chat message that arrives from another player (0x102411a): dropped when the option "Participate In Chat" is off; a team
     /// message is shown only to its sender and to the players whose ally the sender is.
     void receive_chat_message(uint8_t sender, const std::string& name, const std::string& text, bool to_team, const sim::WorldState& world);
     void trigger_quick_chat(size_t index);
-    /// The display lines of the chat log (an entry's header line, then its body lines); the colour of a line is in get_chat_line_colour.
+    /// The display lines of the chat log (an entry's header line, then its body lines); the color of a line is in get_chat_line_color.
     const std::deque<std::string>& get_chat_log() const noexcept { return chat_log_; }
-    /// Colour index of a display line: 0..3 header of that team colour, 4 news flash header, 5 body text.
-    uint8_t get_chat_line_colour(size_t line) const noexcept { return line < chat_line_colour_.size() ? chat_line_colour_[line] : uint8_t{5}; }
+    /// Color index of a display line: 0..3 header of that team color, 4 news flash header, 5 body text.
+    uint8_t get_chat_line_color(size_t line) const noexcept { return line < chat_line_color_.size() ? chat_line_color_[line] : uint8_t{5}; }
     static constexpr size_t kChatInputMax = 100;         // the input box holds 100 characters (0x100dd85)
 
     /// The text is measured with this renderer (the original measures a label with GDI when it is made); without one every character is 6 px wide. The entries are laid
@@ -207,7 +207,7 @@ public:
     bool is_on_team() const noexcept { return is_on_team_; }
     void set_on_team(bool on_team) noexcept { is_on_team_ = on_team; }
     void set_player_name(std::string name) { player_name_ = std::move(name); }
-    /// The names of the four teams (the labels of the other players' scores); an empty name shows the colour word. The roster says which teams exist.
+    /// The names of the four teams (the labels of the other players' scores); an empty name shows the color word. The roster says which teams exist.
     void set_team_names(const std::array<std::string, 4>& names) { team_names_ = names; }
     void set_roster_mask(uint8_t mask) noexcept { roster_mask_ = static_cast<uint8_t>(mask & 0x0Fu); }
     const std::array<std::string, 4>& team_names() const noexcept { return team_names_; }
@@ -422,7 +422,7 @@ public:
         show_match_start_modal_ = false;
         match_countdown_ = false;
     }
-    /// Protocol 21: the dialog of a match of a room with two or more people is a COUNTDOWN CARD (countdown_card.hpp): the count of the seconds that the host still holds the first turn, the colours with who
+    /// Protocol 21: the dialog of a match of a room with two or more people is a COUNTDOWN CARD (countdown_card.hpp): the count of the seconds that the host still holds the first turn, the colors with who
     /// plays them, and a Fullscreen button, in the middle of the map view. The dialog is up as ever (until dismiss_match_start_modal: the match's first turn), and every click and key stays out of the match, but
     /// the chat is the player's now: typing, Enter, F9 - F12, the All and Team buttons, and the Quit button (Ctrl+Q) work, because the people in the room are there to talk. `ms_left` is what the application
     /// reckons from its clock; it calls set_match_countdown_left_ms every frame.
@@ -454,7 +454,7 @@ private:
     void render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     /// One team's label and score box (Ants.exe FUN_0100dbe2 labels, FUN_01021e36 boxes; docs 5.53): the slot follows the team index (the local team has the top bar's,
     /// the others the three bottom slots in index order, absent teams leave theirs), a team that is absent or has dropped out has its box covered (scorcovr), an allied team's
-    /// box is half its colour and half its ally's and shows the two scores added
+    /// box is half its color and half its ally's and shows the two scores added
     void render_score_team(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, uint8_t team);
     void render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_alliance_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
@@ -464,7 +464,7 @@ private:
     /// The answer of the open dialog: Accept / Withdraw / Yes (`yes` true) or Decline / No; sends the commands of the original's callbacks
     void answer_alliance_dialog(sim::SimulationEngine& sim, bool yes);
     std::string alliance_name(uint8_t team) const;
-    std::string alliance_colour_word(uint8_t team) const;
+    std::string alliance_color_word(uint8_t team) const;
     /// The ally pedestal of another player's hill (FUN_01027f07 mode 2, 0x1028188): more than two live players (FUN_0100c58a counts the teams whose +0x64 is
     /// clear) and the local team has not dropped out itself
     bool ally_pedestal_possible(const sim::WorldState& world) const;
@@ -492,7 +492,7 @@ private:
     struct ChatEntry {
         std::string header;                    // "Name:" ...
         std::string body;                      // the message, at most 100 characters
-        uint8_t colour{5};                     // 0 .. 3 the team colours, 4 a news flash
+        uint8_t color{5};                     // 0 .. 3 the team colors, 4 a news flash
         int32_t top{0};                        // the top in the log: the bottom of the entry before plus one
         int32_t header_h{0};                   // the header label's height (one line)
         int32_t body_h{0};                     // the body label's height (its wrapped lines)
@@ -501,7 +501,7 @@ private:
     };
     std::vector<ChatEntry> chat_entries_{};
     std::deque<std::string> chat_log_{};       // the display lines: a header line, then the body lines, of every entry
-    std::deque<uint8_t> chat_line_colour_{};   // parallel to chat_log_ (see get_chat_line_colour)
+    std::deque<uint8_t> chat_line_color_{};   // parallel to chat_log_ (see get_chat_line_color)
     const IRenderer* text_metrics_{nullptr};
     int32_t chat_content_end_{0};              // +0x2c
     int32_t chat_follow_pos_{0};               // +0x24
@@ -604,7 +604,7 @@ private:
     void voice_attack(sim::AntType type);                              // attack order: "Attack!"
     void voice_special(sim::AntType type, size_t ants_ordered);        // special order: text only for exactly one thief or fire ant
     void render_status_line(IRenderer& renderer) const;
-    void push_chat_entry(std::string header, const std::string& message, uint8_t header_colour);
+    void push_chat_entry(std::string header, const std::string& message, uint8_t header_color);
     void layout_chat_entry(ChatEntry& entry, int32_t top) const;
     void append_chat_display_lines(const ChatEntry& entry);
     void relayout_chat(int32_t old_view_h = -1);

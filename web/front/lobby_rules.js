@@ -1,5 +1,5 @@
 // The rules and the words of the front page's lobby (web/lobby.html): everything that decides what the page shows and sends, with no browser in it, so that node can run it
-// (tests/scripts/web_lobby_rules_check.js). The page reads a Room message of network protocol 17 (web/front/lobby_net.js) through modelOf(), asks viewOf() what each colour card
+// (tests/scripts/web_lobby_rules_check.js). The page reads a Room message of network protocol 17 (web/front/lobby_net.js) through modelOf(), asks viewOf() what each color card
 // and the map side show, and asks planWith(), moveOf() and the team functions what to send. The pictures that these words and rules belong to are the lobby's (the approved cards).
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyRules, node gets module.exports.
 //   * Seats are the server's: Green 0, Red 1, Blue 2, Black 3. The cards lie Black, Green, Red, Blue (GRID: the four hills of the maps, top left to bottom right) and are built in that
@@ -12,7 +12,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var COLOURS = [{ id: 'green', name: 'Green' }, { id: 'red', name: 'Red' }, { id: 'blue', name: 'Blue' }, { id: 'black', name: 'Black' }];
+    var COLORS = [{ id: 'green', name: 'Green' }, { id: 'red', name: 'Red' }, { id: 'blue', name: 'Blue' }, { id: 'black', name: 'Black' }];
     var GRID = [3, 0, 1, 2];
     var PLAYERS = 4;
     var NO_TEAM = 255;
@@ -106,7 +106,7 @@
         return out;
     }
     // The room as the page shows it: { you, leader (-1: none), guest, starting, map (key or ''), mapFile, slots: [{ kind: person | open | bot | nobody, ... }], sides }.
-    // A colour that a person holds shows the person; any other shows what the leader's plan says (the plan of a colour that a person holds is what comes back when the person leaves).
+    // A color that a person holds shows the person; any other shows what the leader's plan says (the plan of a color that a person holds is what comes back when the person leaves).
     // A person whom the room counts as a game before any START, whose game runs in a browser (or did not say), is on the results screen of the match: the seat that the server keeps for them in the rematch
     // (docs/SERVER.md "Lobby rooms"; a game of the desktop gets no seat kept, it joins like anybody): `results: true`, only then.
     function modelOf(room) {
@@ -135,18 +135,18 @@
     function hostName(model) { return model.leader >= 0 && model.slots[model.leader].kind === 'person' ? model.slots[model.leader].name : 'The host'; }
     function nameOf(model, i) {
         var s = model.slots[i];
-        return s.kind === 'person' ? s.name : s.kind === 'bot' ? (s.name || levelWord(s.level) + ' bot') : s.kind === 'open' ? 'the open ' + COLOURS[i].name : 'the unused ' + COLOURS[i].name;
+        return s.kind === 'person' ? s.name : s.kind === 'bot' ? (s.name || levelWord(s.level) + ' bot') : s.kind === 'open' ? 'the open ' + COLORS[i].name : 'the unused ' + COLORS[i].name;
     }
     // What a card says of a person who sits in it (the toast of a move)
     function nameAt(model, i, you) {
         var s = model.slots[i];
-        return s.kind === 'person' ? (you ? 'You' : s.name) : s.kind === 'bot' ? 'The ' + levelWord(s.level) + ' bot' : 'The ' + (s.kind === 'open' ? 'open ' : 'unused ') + COLOURS[i].name;
+        return s.kind === 'person' ? (you ? 'You' : s.name) : s.kind === 'bot' ? 'The ' + levelWord(s.level) + ' bot' : 'The ' + (s.kind === 'open' ? 'open ' : 'unused ') + COLORS[i].name;
     }
 
     // ---- Team 1 and Team 2 (the rules of the live match card, PR #27, which this page replaced) ---------------------------------------------------------------------------------------
-    // Every colour held by a person or a computer player has the two buttons when three or four play. A team is two colours on the same button; with four playing the other two colours are the other
+    // Every color held by a person or a computer player has the two buttons when three or four play. A team is two colors on the same button; with four playing the other two colors are the other
     // team and show their button lit although nobody pressed it; with three the third plays alone. The team goes with the player: a move or a swap carries it along (the room does that).
-    // `sides` is four numbers (0 for neither, 1 or 2), `play` the colours that play.
+    // `sides` is four numbers (0 for neither, 1 or 2), `play` the colors that play.
     function sidesFix(sides, play) {
         var out = [0, 0, 0, 0];
         if (play.length < 3 || !Array.isArray(sides)) return out;
@@ -161,44 +161,44 @@
         }
         return null;
     }
-    // What the buttons show: each colour's own, and with four playing and two on one button the other two on the other one
+    // What the buttons show: each color's own, and with four playing and two on one button the other two on the other one
     function shownOf(sides, play) {
         var shown = sides.slice(), pair = play.length === 4 ? pairOf(sides, play) : null;
         if (pair) play.forEach(function (s) { if (pair.indexOf(s) === -1) shown[s] = sides[pair[0]] === 1 ? 2 : 1; });
         return shown;
     }
-    // May `seat` have button `side` on? It may when that button is lit for it already, or when fewer than two other colours have it lit
+    // May `seat` have button `side` on? It may when that button is lit for it already, or when fewer than two other colors have it lit
     function sideOpen(sides, play, seat, side) {
         if (play.length < 3 || play.indexOf(seat) === -1 || (side !== 1 && side !== 2)) return false;
         var shown = shownOf(sides, play);
         return shown[seat] === side || play.filter(function (s) { return s !== seat && shown[s] === side; }).length < 2;
     }
-    // A press of button `side` of `seat`: one that is off goes on if the colour may have it, else the press is refused and `refusal` says why; one that is lit goes off, unless the others keep it lit
+    // A press of button `side` of `seat`: one that is off goes on if the color may have it, else the press is refused and `refusal` says why; one that is lit goes off, unless the others keep it lit
     // (the other team of a pair, or a press that a pair has made useless): then the teams go away. What is lit is what a person sees, so a press that is accepted always shows.
     function pressSide(sides, play, seat, side) {
         var fixed = sidesFix(sides, play), shown = shownOf(fixed, play);
         if (!sideOpen(fixed, play, seat, side)) {
             var pressed = play.filter(function (s) { return fixed[s] === side; }).length;
-            return { sides: fixed, refusal: play.length < 3 || play.indexOf(seat) === -1 ? '' : pressed === 2 ? 'Team ' + side + ' has two colours already. Press one of them to take it off first.' : 'Team ' + side + ' is the other two colours already. Press a lit button to clear the teams first.' };
+            return { sides: fixed, refusal: play.length < 3 || play.indexOf(seat) === -1 ? '' : pressed === 2 ? 'Team ' + side + ' has two colors already. Press one of them to take it off first.' : 'Team ' + side + ' is the other two colors already. Press a lit button to clear the teams first.' };
         }
         var out = fixed.slice();
         if (shown[seat] !== side) out[seat] = side;
         else { out[seat] = 0; if (shownOf(sidesFix(out, play), play)[seat] === side) out = [0, 0, 0, 0]; }      // a lit button that the others keep lit: the teams go away
         return { sides: sidesFix(out, play), refusal: '' };
     }
-    // The two colours of the team that the room is told of, lower colour first: { teamA, teamB }, 255 twice for none
+    // The two colors of the team that the room is told of, lower color first: { teamA, teamB }, 255 twice for none
     function teamBytes(sides, play) {
         var pair = pairOf(sidesFix(sides, play), play);
         return pair ? { teamA: Math.min(pair[0], pair[1]), teamB: Math.max(pair[0], pair[1]) } : { teamA: NO_TEAM, teamB: NO_TEAM };
     }
-    // The line under the colours: what the match will be
+    // The line under the colors: what the match will be
     function teamsText(sides, play, guest) {
         if (play.length < 3) return guest || play.length < 2 ? '' : 'Teams need three or four players.';
         var pair = pairOf(sides, play);
-        if (!pair) return guest ? '' : 'Free for all. For a team, put two colours on the same team.';
+        if (!pair) return guest ? '' : 'Free for all. For a team, put two colors on the same team.';
         if (play.length === 4 && pair[0] !== 0) pair = play.filter(function (s) { return pair.indexOf(s) === -1; });
         var rest = play.filter(function (s) { return pair.indexOf(s) === -1; });
-        function nm(s) { return COLOURS[s].name; }
+        function nm(s) { return COLORS[s].name; }
         return 'Teams: ' + pair.map(nm).join(' + ') + ' against ' + rest.map(nm).join(' + ') + '.';
     }
     // The leader's own switches (`local`) and what the room says: a pair that the room holds is the truth; without one, the buttons that were pressed alone stay (the room cannot hold them)
@@ -221,7 +221,7 @@
             var t = teamBytes(change.sides, playingAfter(model, kinds));
             teamA = t.teamA; teamB = t.teamB;
         } else {
-            // a colour that stops playing takes its team with it: the room's pair must be two colours that play
+            // a color that stops playing takes its team with it: the room's pair must be two colors that play
             var t2 = teamBytes(sidesOfPair(teamA, teamB), playingAfter(model, kinds));
             teamA = t2.teamA; teamB = t2.teamB;
         }
@@ -230,19 +230,19 @@
         return plan;
     }
     function sidesOfPair(a, b) { var out = [0, 0, 0, 0]; if (a !== NO_TEAM && b !== NO_TEAM && a < PLAYERS && b < PLAYERS) { out[a] = 1; out[b] = 1; } return out; }
-    // The colours that would play if the plan were `kinds`: every colour that a person holds, and every other colour whose plan is a bot
+    // The colors that would play if the plan were `kinds`: every color that a person holds, and every other color whose plan is a bot
     function playingAfter(model, kinds) {
         var out = [];
         for (var s = 0; s < PLAYERS; s++) if (model.slots[s].kind === 'person' || (kinds[s] >= 1 && kinds[s] <= 3)) out.push(s);
         return out;
     }
-    // Does the room's team need a correction (it names a colour that does not play, or the colours are fewer than three)? The leader's page then sends the plan again with the teams cleared
+    // Does the room's team need a correction (it names a color that does not play, or the colors are fewer than three)? The leader's page then sends the plan again with the teams cleared
     function teamNeedsFix(room, model) {
         if (room.teamA === NO_TEAM && room.teamB === NO_TEAM) return false;
         var play = playing(model);
         return play.length < 3 || play.indexOf(room.teamA) === -1 || play.indexOf(room.teamB) === -1;
     }
-    // A colour dragged (or tapped) onto another colour. The room exchanges two colours completely when a person is in the move (SeatMove: the person, the plan and the team follow); two colours that no person
+    // A color dragged (or tapped) onto another color. The room exchanges two colors completely when a person is in the move (SeatMove: the person, the plan and the team follow); two colors that no person
     // holds exchange their plans (the page sends the plan with the two exchanged, the team pair following). Returns { op: 'move', from, to } (from is the person), { op: 'plan', plan } or null.
     function moveOf(room, model, from, to) {
         if (from === to || from < 0 || to < 0 || from >= PLAYERS || to >= PLAYERS) return null;
@@ -273,13 +273,13 @@
     }
     // What the leader is told under START while somebody is not back ('' when nobody is missing): START waits for them, or for a Remove
     function startNote(names) {
-        return names.length ? 'START waits for ' + listOf(names) + '. You can wait, or press Remove on their colour' + (names.length > 1 ? 's' : '') + ' to start without them.' : '';
+        return names.length ? 'START waits for ' + listOf(names) + '. You can wait, or press Remove on their color' + (names.length > 1 ? 's' : '') + ' to start without them.' : '';
     }
 
     // ---- what each card and the side show -------------------------------------------------------------------------------------------------------------------------------------------
-    // ctx: { sides (the leader's own switches), picked (the colour that was tapped to be moved, -1), removing (the colour of the open question, -1), offline (false, 'lost', 'none' or 'join'), refusal, back (the rematch, above) }.
-    // The cards come back in seat order; the page builds them in GRID order. A card: { seat, colour, kind, who: [{ text, cls }], mode (the plan word of a colour that the leader can set, else ''), stat, statCls,
-    // pencil, remove (a Remove button), ask (the question is open), grip, tab (read-only team tab), teams: [{ side, pressed, disabled }] or null, label, drop (what a tap on it does while a colour is picked) }.
+    // ctx: { sides (the leader's own switches), picked (the color that was tapped to be moved, -1), removing (the color of the open question, -1), offline (false, 'lost', 'none' or 'join'), refusal, back (the rematch, above) }.
+    // The cards come back in seat order; the page builds them in GRID order. A card: { seat, color, kind, who: [{ text, cls }], mode (the plan word of a color that the leader can set, else ''), stat, statCls,
+    // pencil, remove (a Remove button), ask (the question is open), grip, tab (read-only team tab), teams: [{ side, pressed, disabled }] or null, label, drop (what a tap on it does while a color is picked) }.
     function viewOf(model, ctx) {
         var g = model.guest, busy = model.starting, off = ctx.offline || false, ro = g || busy || !!off, away = notBack(model, ctx);
         var play = playing(model), sides = sidesFix(g ? model.sides : ctx.sides, play), shown = shownOf(sides, play), can = play.length >= 3;
@@ -287,8 +287,8 @@
         if (removing >= 0 && (ro || !model.slots[removing] || model.slots[removing].kind !== 'person' || model.slots[removing].me)) removing = -1;
         var cards = [];
         for (var i = 0; i < PLAYERS; i++) {
-            var s = model.slots[i], c = COLOURS[i], human = s.kind === 'person';
-            var card = { seat: i, colour: c, kind: s.kind, who: [], mode: '', stat: '', statCls: 'pstat', pencil: false, remove: false, ask: false, grip: !ro, tab: '', teams: null, label: '', drop: '' };
+            var s = model.slots[i], c = COLORS[i], human = s.kind === 'person';
+            var card = { seat: i, color: c, kind: s.kind, who: [], mode: '', stat: '', statCls: 'pstat', pencil: false, remove: false, ask: false, grip: !ro, tab: '', teams: null, label: '', drop: '' };
             if (human) {
                 card.pencil = !!s.me && !busy && !off;
                 card.who.push({ text: s.name, cls: 'nm' });
@@ -319,17 +319,17 @@
         }
         var others = model.slots.some(function (x) { return x.kind === 'person' && !x.me; });
         var notes = {
-            invite: busy ? 'New players cannot join while the game opens.' : 'Players who open this link take the next free colour.',
-            slots: busy ? 'The match begins as soon as all of you are in the game.' : off === 'lost' ? 'Your colour is kept for a minute while the page gets you back in.' : off ? ''
-                : g ? hostName(model) + ' arranges the colours and starts the match.'
-                : picked >= 0 ? 'Now tap the colour where ' + nameOf(model, picked) + ' goes (tap the same player again to let go).'
-                : others ? 'Drag a player onto another colour to move them. A colour that is taken swaps places.' : 'Waiting for players. Drag a player onto another colour to move them.',
+            invite: busy ? 'New players cannot join while the game opens.' : 'Players who open this link take the next free color.',
+            slots: busy ? 'The match begins as soon as all of you are in the game.' : off === 'lost' ? 'Your color is kept for a minute while the page gets you back in.' : off ? ''
+                : g ? hostName(model) + ' arranges the colors and starts the match.'
+                : picked >= 0 ? 'Now tap the color where ' + nameOf(model, picked) + ' goes (tap the same player again to let go).'
+                : others ? 'Drag a player onto another color to move them. A color that is taken swaps places.' : 'Waiting for players. Drag a player onto another color to move them.',
             teams: ctx.refusal || teamsText(sides, play, g),
             teamsWarn: !!ctx.refusal
         };
         return { guest: g, busy: busy, ro: ro, offline: off, heading: off === 'join' ? 'Joining a room' : g ? hostName(model) + '’s room' : 'Your room', cards: cards, notes: notes, removing: removing, sides: sides, play: play, side: sideView(model, ctx, play) };
     }
-    // The map's side: the map, START and the line under it (who plays, and what an open colour does)
+    // The map's side: the map, START and the line under it (who plays, and what an open color does)
     function sideView(model, ctx, play) {
         var g = model.guest, busy = model.starting, away = ctx.offline || false;
         var o = mapByKey(model.map), file = !o && model.mapFile ? model.mapFile : '';
@@ -342,7 +342,7 @@
                 var me = s.me;
                 names.push(me ? 'you' : s.name); short.push(me ? 'You' : s.name);
             } else if (s.kind === 'bot') { names.push(s.name || article(s.level) + levelWord(s.level) + ' bot'); short.push(s.name || levelWord(s.level) + ' bot'); }      // (protocol 20: a bot the room has named is told by its name)
-            else if (s.kind === 'open') open.push(COLOURS[i].name);
+            else if (s.kind === 'open') open.push(COLORS[i].name);
         });
         var list = listOf(names); list = list.charAt(0).toUpperCase() + list.slice(1);
         var text = names.length === 1 ? 'A game for one' + (open.length ? '.' : ': only your colony is on the map.') : list + ' play on ' + m.name + '.';
@@ -367,14 +367,14 @@
         old: function (a) { return 'That room is gone, because everybody left, so this one is yours now' + (a && a.sameMap === false ? '' : ', with the same map') + '. Send the link on if you like.'; },
         host: function (a) {        // (a.back: the one who led is still here, the host of the match came back from the results screen and leads again: the rematch; the page that comes back is never told, it leads from its first Room)
             if (a.guest) return a.back ? a.host + ' is back, and is the host again.' : a.leaver + ' left. ' + a.host + ' is the host now.';
-            return a.leaver + ' left, so you are the host now. The map, the colours and START are yours.';
+            return a.leaver + ' left, so you are the host now. The map, the colors and START are yours.';
         },
         late: function (a) { return a.server + ' Everybody is back in the room, as you left it. Press START to try again.'; },
         lateplayer: function (a) { return 'The match did not start, so everybody is back in the room. ' + a.host + ' can press START to try again.'; },
         noplace: function (a) { return a.server + ' Everybody is back in the room.'; },
         startsfailed: function (a) { return a.server + ' Everybody is back in the room.'; },
         maplost: function (a) { return a.server; },
-        mapcolours: function (a) { return a.server; },
+        mapcolors: function (a) { return a.server; },
         removed: function () { return 'The host removed you from the room, so this one is yours now. Send the link on if you like.'; },
         full: function () { return 'That room is full, so this one is yours now. Send the link on if you like.'; },
         running: function () { return 'The match in that room has already started, so this room is yours instead. Send the link on if you like.'; },
@@ -384,7 +384,7 @@
         away: function () { return 'This room was opened in another window, so it is closed here.'; },
         version: function () { return 'A newer version of Ants is out. Reload the page to update.'; },
         noroom: function () { return 'There is no room with that code. Check it, or ask the host to send the link again.'; },
-        notback: function (a) { return a.server + ' START waits for them: wait, or press Remove on their colour to start without them.'; },
+        notback: function (a) { return a.server + ' START waits for them: wait, or press Remove on their color to start without them.'; },
         notice: function (a) { return a.server; }
     };
     // The lines under the "Have a code?" field when the code that was typed does not lead into a room (the first two are the page's own room and one that it is in already)
@@ -396,7 +396,7 @@
     };
     var META = {
         host: { tone: '', btn: 'OK' }, old: { tone: '', btn: 'OK' }, notback: { tone: 'warn', btn: 'OK' }, late: { tone: 'warn', btn: 'OK' }, lateplayer: { tone: 'warn', btn: 'OK' }, noplace: { tone: 'warn', btn: 'OK' },
-        startsfailed: { tone: 'warn', btn: 'OK' }, maplost: { tone: 'warn', btn: 'OK' }, mapcolours: { tone: 'warn', btn: 'OK' }, full: { tone: '', btn: 'OK' }, running: { tone: '', btn: 'OK' },
+        startsfailed: { tone: 'warn', btn: 'OK' }, maplost: { tone: 'warn', btn: 'OK' }, mapcolors: { tone: 'warn', btn: 'OK' }, full: { tone: '', btn: 'OK' }, running: { tone: '', btn: 'OK' },
         removed: { tone: '', btn: 'OK' }, lost: { tone: 'warn', btn: '' }, unreachable: { tone: 'warn', btn: '' }, busy: { tone: 'warn', btn: 'Try again' }, away: { tone: 'warn', btn: 'Use this window' },
         version: { tone: 'warn', btn: 'Reload' }, notice: { tone: 'warn', btn: 'OK' }
     };
@@ -410,9 +410,9 @@
         if (t.indexOf('The server has no place for another match right now') === 0) return { kind: 'noplace', server: t };
         if (t.indexOf('The match could not start a few times in a row') === 0) return { kind: 'startsfailed', server: t };
         if (t === 'This map could not be loaded: choose another map.') return { kind: 'maplost', server: t };
-        if (t === 'This map cannot be played with these colours.') return { kind: 'mapcolours', server: t };
+        if (t === 'This map cannot be played with these colours.') return { kind: 'mapcolors', server: t };
         if (/^.+ is not back from the match yet\.$/.test(t) || t.indexOf('These players are not back from the match yet: ') === 0) return { kind: 'notback', server: t };      // (the rematch: START waits for them)
-        if (/^.+ moved you to [A-Za-z]+\.$/.test(t)) return { kind: 'moved', server: t };                                   // the leader moved this player: the colour and the toast say so already, there is no strip
+        if (/^.+ moved you to [A-Za-z]+\.$/.test(t)) return { kind: 'moved', server: t };                                   // the leader moved this player: the color and the toast say so already, there is no strip
         return { kind: 'notice', server: t };
     }
     // The banner for a kind: { kind, text, tone, btn }
@@ -422,7 +422,7 @@
     }
 
     return {
-        COLOURS: COLOURS, GRID: GRID, MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, NAMES: NAMES, KINDS: KINDS, CODE_CHARS: CODE_CHARS, TEXT: TEXT, HINT: HINT, META: META, ACTS: ACTS,
+        COLORS: COLORS, GRID: GRID, MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, NAMES: NAMES, KINDS: KINDS, CODE_CHARS: CODE_CHARS, TEXT: TEXT, HINT: HINT, META: META, ACTS: ACTS,
         mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, pickName: pickName, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,

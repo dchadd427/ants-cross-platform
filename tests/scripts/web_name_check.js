@@ -655,7 +655,7 @@ function runLobby(search, stored, options) {
         s.receive(roomMessage(o.seats || [[C, 'Maya'], [E, ''], [E, ''], [E, '']], Object.assign({ you: seat, leader: 0 }, o.room || {})));
         return s;
     };
-    // a person presses a button of the page by its id; the card of a colour by its seat; the buttons inside it
+    // a person presses a button of the page by its id; the card of a color by its seat; the buttons inside it
     env.card = (seat) => env.$('slots').children.find((li) => li.getAttribute('data-i') === String(seat));
     env.inCard = (seat, attr) => env.card(seat).findAll((e) => e.hasAttribute(attr))[0] || null;
     env.press = (el) => env.$('slots').fire('click', { target: el, detail: 1 });
@@ -721,10 +721,10 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const evil = '<img src=x onerror=alert(1)>';
     const env = runLobby('', { 'ants.name': 'Maya' });
     const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, evil], [E, ''], [E, '']] });
-    same('the four cards are built in the reading order of the colours on the map: Black, Green, Red, Blue (seats 3, 0, 1, 2)', env.$('slots').children.map((li) => li.getAttribute('data-i')), ['3', '0', '1', '2']);
-    check('a card shows the colour and the name of the player who has it, as text', env.card(0).textContent.indexOf('Maya') !== -1 && env.card(0).textContent.indexOf('Green') !== -1 && env.card(1).textContent.indexOf(evil) !== -1);
+    same('the four cards are built in the reading order of the colors on the map: Black, Green, Red, Blue (seats 3, 0, 1, 2)', env.$('slots').children.map((li) => li.getAttribute('data-i')), ['3', '0', '1', '2']);
+    check('a card shows the color and the name of the player who has it, as text', env.card(0).textContent.indexOf('Maya') !== -1 && env.card(0).textContent.indexOf('Green') !== -1 && env.card(1).textContent.indexOf(evil) !== -1);
     check('... a name with < > & makes no element and no markup: the page made no markup at all', env.innerHTMLWrites.length === 0 && env.$('slots').findAll((e) => e.tagName === 'img').length === 0);
-    check('... the text of the card of the players, to a screen reader, is an attribute (never markup): the colour and the name', env.card(1).getAttribute('aria-label') === 'Red: ' + evil);
+    check('... the text of the card of the players, to a screen reader, is an attribute (never markup): the color and the name', env.card(1).getAttribute('aria-label') === 'Red: ' + evil);
     const pencil = env.inCard(0, 'data-edit');
     check('the host\'s own card has the pencil (named "Change your name"); no other card has one', !!pencil && pencil.textContent === '✎' && pencil.getAttribute('aria-label') === 'Change your name' && [1, 2, 3].every((i) => env.inCard(i, 'data-edit') === null));
     const field = () => env.card(0).findAll((e) => e.tagName === 'input')[0];
@@ -849,14 +849,14 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const plans = () => s.sent.filter((b) => b[0] === 32);
     const button = (seat, side) => env.$('slots').querySelector('[data-seat="' + seat + '"][data-side="' + side + '"]');
     const lit = (seat, side) => button(seat, side).getAttribute('aria-pressed') === 'true';
-    check('the leader of three has the two team buttons on every colour, and the room has no teams', button(0, 1) !== null && button(1, 1) !== null && button(2, 2) !== null && !lit(0, 1) && !lit(1, 1) && /Free for all/.test(env.$('teams-note').textContent));
+    check('the leader of three has the two team buttons on every color, and the room has no teams', button(0, 1) !== null && button(1, 1) !== null && button(2, 2) !== null && !lit(0, 1) && !lit(1, 1) && /Free for all/.test(env.$('teams-note').textContent));
     for (let i = 0; i < 8; i++) env.$('next').click();
     check('the map arrow held down (8 presses) sends 5 plans: the plan budget of the page is empty', plans().length === 5, String(plans().length));
     env.press(button(0, 1));
     check('a team button pressed alone is the page\'s own (a pair is what the room holds): lit, nothing sent', lit(0, 1) && plans().length === 5);
     env.press(button(1, 1));
     check('the second button makes a pair, which the page\'s pace refuses: no plan goes out', plans().length === 5);
-    check('... and the screen shows the ROOM\'s teams (none), not a pair that the room never got: Sam\'s button is not lit and the line under the colours does not name a team', !lit(1, 1) && !/^Teams:/.test(env.$('teams-note').textContent), 'Sam lit: ' + lit(1, 1) + ', "' + env.$('teams-note').textContent + '"');
+    check('... and the screen shows the ROOM\'s teams (none), not a pair that the room never got: Sam\'s button is not lit and the line under the colors does not name a team', !lit(1, 1) && !/^Teams:/.test(env.$('teams-note').textContent), 'Sam lit: ' + lit(1, 1) + ', "' + env.$('teams-note').textContent + '"');
     check('... the button that was pressed alone before stays as it was (the page\'s own)', lit(0, 1));
     // the room's teams are the truth: a room that has a pair shows it, also after a press that the pace refused (a press that clears the teams)
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [C, 'Tess'], [E, '']], { you: 0, leader: 0, teamA: 0, teamB: 1 }));
@@ -873,7 +873,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     same('... the field\'s placeholder and the hint say the name that an empty field gets; the way out is a button', [env.$('name-step-input').placeholder, env.$('name-step-hint').textContent, env.$('name-step-own').textContent],
          [SUGGESTION, 'The name the other players see. Leave it empty to be called ' + SUGGESTION + '.', 'Start a room of my own instead']);
     check('... the notice that online matches are recorded is shown, and there is no message yet', !env.$('who-notice').hidden && env.$('name-step-msg').textContent === '');
-    check('nothing connects before the button: no socket, the address is not rewritten, and the page behind the card is "Joining a room" with START off and the colours greyed', env.sockets.length === 0 && env.replaced.length === 0 && env.$('room-h').textContent === 'Joining a room' && env.$('start').disabled === true && env.body.classList.contains('offline') && env.body.classList.contains('joining'));
+    check('nothing connects before the button: no socket, the address is not rewritten, and the page behind the card is "Joining a room" with START off and the colors greyed', env.sockets.length === 0 && env.replaced.length === 0 && env.$('room-h').textContent === 'Joining a room' && env.$('start').disabled === true && env.body.classList.contains('offline') && env.body.classList.contains('joining'));
     env.type('name-step-input', 'Bot (x)');
     env.$('name-step-go').click();
     check('a name that is a computer player\'s is explained under the field, and nothing happens: the card stays, no socket, nothing remembered', /computer players/.test(env.$('name-step-msg').textContent) && !env.$('name-step').hidden && env.sockets.length === 0 && env.storage.data['ants.name'] === 'Maya');
@@ -1098,7 +1098,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
 }
 
 // ---- 5.5c the rematch (front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the tab comes back from its match with the room's code and the key of its seat (the game page's hand-over in the
-// tab's session storage); the strip "Back from the match." at the top, the colours' words, the note under START, START that the room answers, the host who comes back
+// tab's session storage); the strip "Back from the match." at the top, the colors' words, the note under START, START that the room answers, the host who comes back
 {
     const roomChat = (text) => { const w = [9, 255, 0]; str8(w, text); return Uint8Array.from(w); };
     const statOf = (env, seat) => { const p = env.card(seat).findAll((e) => /\bpstat\b/.test(e.className))[0]; return p ? [p.textContent, p.className] : null; };
@@ -1109,16 +1109,16 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const s = env.last().open();
     check('the tab comes back from its match: no name card, the seat is taken back with the key', env.$('name-step').hidden && hex(s.sent[0]) === hex(helloBytes('Maya', 'k7m2xq', { key: KEY })));
     check('... and the strip "Back from the match." is at the top of the page, beside the frame (not in it), with the winner and the link to the matches', !!bar && !bar.hidden && bar.parentNode === env.$('screen').parentNode && bar.getAttribute('role') === 'status'
-          && bar.textContent === 'Back from the match. Maya won with 2,040. Same room, same colours, same map.Stats and replay');
+          && bar.textContent === 'Back from the match. Maya won with 2,040. Same room, same colors, same map.Stats and replay');
     s.receive(welcome(0, KEY, 0));
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, inGame: 2 }));
-    same('Sam is still on the results screen: his colour says so (picture R2)', statOf(env, 1), ['Still on the results screen…', 'pstat away']);
-    check('... and the note under START says that START waits for him', !env.$('start-note').hidden && env.$('start-note').textContent === 'START waits for Sam. You can wait, or press Remove on their colour to start without them.');
+    same('Sam is still on the results screen: his color says so (picture R2)', statOf(env, 1), ['Still on the results screen…', 'pstat away']);
+    check('... and the note under START says that START waits for him', !env.$('start-note').hidden && env.$('start-note').textContent === 'START waits for Sam. You can wait, or press Remove on their color to start without them.');
     env.$('start').click();
     check('START goes to the room as ever (the room decides)', s.sent[s.sent.length - 1][0] === NET0.MSG.StartRequest);
     s.receive(roomChat('Sam is not back from the match yet.'));
     check('the room\'s answer is the gold strip of a START that waits', !env.$('banner').hidden && /\bwarn\b/.test(env.$('banner').className)
-          && env.$('banner-text').textContent === 'Sam is not back from the match yet. START waits for them: wait, or press Remove on their colour to start without them.');
+          && env.$('banner-text').textContent === 'Sam is not back from the match yet. START waits for them: wait, or press Remove on their color to start without them.');
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, inGame: 0 }));
     same('Sam is back: "Back in the room", and nothing is waited for', [statOf(env, 1), env.$('start-note').hidden], [['Back in the room', 'pstat back'], true]);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
@@ -1129,8 +1129,8 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const s = env.last().open();
     s.receive(welcome(1, KEY, 0));
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 1, inGame: 1 }));
-    check('the first one back leads while the host of the match is on the results screen (no winner: the strip says the rest)', env.$('start').disabled === false && env.$('start-note').textContent === 'START waits for Maya. You can wait, or press Remove on their colour to start without them.'
-          && env.root.children.find((c) => c.className === 'backbar').textContent === 'Back from the match. Same room, same colours, same map.Stats and replay');
+    check('the first one back leads while the host of the match is on the results screen (no winner: the strip says the rest)', env.$('start').disabled === false && env.$('start-note').textContent === 'START waits for Maya. You can wait, or press Remove on their color to start without them.'
+          && env.root.children.find((c) => c.className === 'backbar').textContent === 'Back from the match. Same room, same colors, same map.Stats and replay');
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, inGame: 0 }));
     check('Maya is back and leads again: Sam reads so (not that somebody left)', env.$('banner-text').textContent === 'Maya is back, and is the host again.' && env.$('start').disabled === true);
 }
@@ -1171,7 +1171,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const env = runLobby('', { 'ants.name': 'Sam' });
     const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     s.receive(chatFromRoom('Maya moved you to Blue.'));
-    check('"Maya moved you to Blue." shows no strip (the colour and the toast say it)', env.$('banner').hidden);
+    check('"Maya moved you to Blue." shows no strip (the color and the toast say it)', env.$('banner').hidden);
     s.receive(chatFromRoom('No teams: the teams need a pair.'));
     check('... another line of the room is a strip of its own, with the server\'s words', !env.$('banner').hidden && env.$('banner-text').textContent === 'No teams: the teams need a pair.');
 }

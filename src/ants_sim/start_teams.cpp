@@ -9,8 +9,8 @@ namespace {
 
 bool is_seat_digit(char c) noexcept { return c >= '0' && c <= '3'; }
 
-// "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering)
-std::string seat_word(uint8_t seat) { return seat < MAX_PLAYERS ? std::string(strings::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
+// "Green", "Red", "Blue", "Black": the color word of a seat (seat 0 is green, the engine's own numbering)
+std::string seat_word(uint8_t seat) { return seat < MAX_PLAYERS ? std::string(strings::color_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
 
 }  // namespace
 
@@ -51,7 +51,7 @@ StartTeamsPlan plan_start_teams(const StartTeams& teams, uint8_t roster) {
         if (!plays(seat)) {
             const std::string digit = "seat " + std::to_string(static_cast<unsigned>(seat));                 // (the command line's word: --teams takes digits)
             plan.why = digit + " does not play in this match.";
-            plan.short_why = (seat < MAX_PLAYERS ? seat_word(seat) : digit) + " does not play in this match.";      // (the pages show colours: a seat that no match has has none)
+            plan.short_why = (seat < MAX_PLAYERS ? seat_word(seat) : digit) + " does not play in this match.";      // (the pages show colors: a seat that no match has has none)
             return plan;
         }
     }

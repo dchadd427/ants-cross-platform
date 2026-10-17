@@ -437,7 +437,7 @@ int main() {
     });
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------
-    // Fix 2: the hill of a colour is the layer-2 id 245 .. 248 and its start marker the block-1 id 152 .. 155, never a dictionary name (FUN_0100ecac, table 0x1002468)
+    // Fix 2: the hill of a color is the layer-2 id 245 .. 248 and its start marker the block-1 id 152 .. 155, never a dictionary name (FUN_0100ecac, table 0x1002468)
     // ---------------------------------------------------------------------------------------------------------------------------------------------
 
     run_case("LF2.1 The Ids: Hills 245 Black, 246 Blue, 247 Red, 248 Green; Start Markers 152 Black, 153 Blue, 154 Green, 155 Red (The Remake's Teams: 0 Green, 1 Red, 2 Blue, 3 Black)", [] {
@@ -497,7 +497,7 @@ int main() {
         CHECK(sim.grid().anthills().size() == 2 && sim.grid().find_anthill(0) != nullptr && sim.grid().find_anthill(3) != nullptr);
     });
 
-    run_case("LF2.4 The Community Library: 7 Maps Had A Hill Found By A Damaged Or Permuted Name (4 Lost A Hill, 3 Swapped Colours), 6 Had A Start Marker Read By Name Differently; None Is A Difference Now", [] {
+    run_case("LF2.4 The Community Library: 7 Maps Had A Hill Found By A Damaged Or Permuted Name (4 Lost A Hill, 3 Swapped Colors), 6 Had A Start Marker Read By Name Differently; None Is A Difference Now", [] {
         // the loader's rule before this change, by name: the hill tile names of lvl_parser / grid, the substrings of the start markers
         const auto old_hill_team = [](std::string n) {
             for (char& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -528,7 +528,7 @@ int main() {
         std::cout << "\n    hills differ in " << hill_maps.size() << " maps, start markers in " << start_maps.size() << "\n";
         CHECK((hill_maps == std::vector<std::string>{"CRISS CROSS.lvl", "Conquer.lvl", "LIFELESS.lvl", "NO LIMIT.lvl", "TREZ OF COMBAT.lvl", "TREZ OF LIFE.lvl", "X-pRtfight.lvl"}));
         CHECK((start_maps == std::vector<std::string>{"BOMBERWORLD.lvl", "CRISS CROSS.lvl", "Conquer.lvl", "NO LIMIT.lvl", "TREZ OF COMBAT.lvl", "TREZ OF LIFE.lvl"}));
-        // every map of the library that holds hills has them all, found by id: each present colour has 16 cells and a hill in the grid
+        // every map of the library that holds hills has them all, found by id: each present color has 16 cells and a hill in the grid
         int maps_with_hills = 0, wrong = 0;
         for_each_community_map([&](const std::string&, const LevelData& level) {
             int cells[4] = {0, 0, 0, 0};

@@ -34,7 +34,7 @@ constexpr uint16_t kSrgbToLinear[256] = {
 };
 
 // the linear values (16 bit) at which the sRGB byte k becomes k + 1: round(65535 * s2l((k + 0.5) / 255)), k = 0 .. 254. A linear value v is the sRGB byte that counts the thresholds <= v:
-// the byte whose sRGB value is nearest (rounding in the encoded values, as every converter does), and kSrgbToLinear[b] maps back to b for every b (a flat colour stays exact)
+// the byte whose sRGB value is nearest (rounding in the encoded values, as every converter does), and kSrgbToLinear[b] maps back to b for every b (a flat color stays exact)
 constexpr uint16_t kLinearThreshold[255] = {
     10, 30, 50, 70, 90, 109, 129, 149, 169, 189, 209, 230, 252, 276, 300, 326,
     353, 382, 411, 442, 475, 508, 543, 580, 618, 657, 697, 739, 783, 828, 874, 922,
@@ -242,20 +242,20 @@ MapPreview render_map_preview(const assets::LevelData& level, const std::array<a
     out.rows = static_cast<uint32_t>(rows);
     out.players = static_cast<uint32_t>(grid.anthills().size());
 
-    // the colour of every cell: an object of the minimap's table shows its colour (a tile id without a record: colour 0), every other cell the flat colour of its terrain class
-    std::vector<assets::ColorRGBA> cell_colour(static_cast<size_t>(cols * rows));
+    // the color of every cell: an object of the minimap's table shows its color (a tile id without a record: color 0), every other cell the flat color of its terrain class
+    std::vector<assets::ColorRGBA> cell_color(static_cast<size_t>(cols * rows));
     for (int64_t y = 0; y < rows; ++y) {
         for (int64_t x = 0; x < cols; ++x) {
             const sim::TileCell& cell = grid.get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
-            const uint16_t id = minimap_object_id(cell);          // (a bomb of the grid, planted or from the file, is the original's 129: terrain colour, as in the minimap)
+            const uint16_t id = minimap_object_id(cell);          // (a bomb of the grid, planted or from the file, is the original's 129: terrain color, as in the minimap)
             uint8_t index;
             if (id != kMinimapNoObject && !minimap_is_bomb(id)) {
                 index = static_cast<uint8_t>(minimap_object_entry(id) & 0xffu);
             } else {
                 const uint8_t cls = minimap_class(cell);
-                index = kMinimapClassColours[cls < 6 ? cls : 5][0];
+                index = kMinimapClassColors[cls < 6 ? cls : 5][0];
             }
-            cell_colour[static_cast<size_t>(y * cols + x)] = palette[index];
+            cell_color[static_cast<size_t>(y * cols + x)] = palette[index];
         }
     }
 
@@ -266,7 +266,7 @@ MapPreview render_map_preview(const assets::LevelData& level, const std::array<a
         const int64_t cy = py * rows / h;
         for (int64_t px = 0; px < w; ++px) {
             const int64_t cx = px * cols / w;
-            const assets::ColorRGBA& c = cell_colour[static_cast<size_t>(cy * cols + cx)];
+            const assets::ColorRGBA& c = cell_color[static_cast<size_t>(cy * cols + cx)];
             uint8_t* dst = &out.rgba[static_cast<size_t>(py * w + px) * 4u];
             dst[0] = c.r;
             dst[1] = c.g;
@@ -274,7 +274,7 @@ MapPreview render_map_preview(const assets::LevelData& level, const std::array<a
         }
     }
 
-    // the dots of the plants (flowers, clover): a square of `size flag` cells centred on the plant's cell, in the colour of the minimap's table (a size flag of 0 draws nothing)
+    // the dots of the plants (flowers, clover): a square of `size flag` cells centred on the plant's cell, in the color of the minimap's table (a size flag of 0 draws nothing)
     for (const auto& plant : grid.plants()) {
         const uint16_t entry = minimap_object_entry(plant.tile_id);
         const int64_t flag = entry >> 8;

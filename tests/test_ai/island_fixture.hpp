@@ -76,7 +76,7 @@ struct Match {
     uint8_t roster{0};
     std::vector<uint8_t> prev_bridge;                    // the finished bridge tiles of the tick before
     std::set<uint32_t> drowning;                         // the ants that have been seen to drown
-    std::vector<uint8_t> prev_bomb;                      // the colour (1 + the owner's seat) of the bomb on each tile in the tick before, 0: none
+    std::vector<uint8_t> prev_bomb;                      // the color (1 + the owner's seat) of the bomb on each tile in the tick before, 0: none
     std::map<size_t, std::pair<uint64_t, int>> blasts;   // tile -> (tick, seat) of the last bomb that left it (a mine that went off: the ant that stepped on it is thrown four tiles, into a lake too)
     int collapsed[4] = {0, 0, 0, 0};                     // per team: ants that started to drown on a tile that was a finished bridge a tick before
     int other_drowned[4] = {0, 0, 0, 0};                 // per team: ants that drowned elsewhere (a blow of an enemy that flung the ant into the water included: fought)

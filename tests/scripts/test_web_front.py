@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The front page's pictures, its font and the way they get into the web image (run by ./run_tests.sh --fast and by the CI).
 
-The front page (web/lobby.html, served at "/") is the lobby: four colour cards, the map and START, in the look of the 1998 game's own menus. Its pictures and its font are in web/front/ (served at
+The front page (web/lobby.html, served at "/") is the lobby: four color cards, the map and START, in the look of the 1998 game's own menus. Its pictures and its font are in web/front/ (served at
 /front/): cut out of the game's own sprites and screenshots by tools/front_page_art/make_art.py (a developer's tool, not part of any build or test), and the game's own font, Libre Franklin, with its
 licence text. The page's rules and its client of the game server are two scripts of the same folder (lobby_rules.js, lobby_net.js: tests of their own).
 
@@ -11,7 +11,7 @@ licence text. The page's rules and its client of the game server are two scripts
   - the Dockerfile, the local web build and the CI's check of the image carry the folder (a page whose pictures are not in the image would be bare on the real site), and nginx revalidates
     the stylesheet like every page
   - the shared stylesheet (classic.css, linked by the changelog pages and Sprites and sounds): the font and the clay tile it names are in the folder, it loads nothing from another site, and
-    the text colours that its components pair are readable
+    the text colors that its components pair are readable
   - the tool's files say that they are a developer's tool, and its list of the ant's pictures is the game's own animation
   - the ants: all four teams are ONE sheet (ants.png) that the page draws from CSS offsets; every pixel of it is what the game draws for each team, and the page's sizes, rows, columns and timing
     address the right cells of it, at the game's own pace
@@ -92,7 +92,7 @@ def read_png_pixels(path, alpha=False):
             idat += body
         elif kind == b"IEND":
             break
-    assert not alpha or ctype == 3 or not transparency, "a PNG with a colour key (tRNS), which this reader does not apply: " + path
+    assert not alpha or ctype == 3 or not transparency, "a PNG with a color key (tRNS), which this reader does not apply: " + path
     bits = depth * {3: 1, 2: 3, 6: 4}[ctype]                              # bits of a pixel
     stride = (bits * width + 7) // 8
     step = max(1, bits // 8)                                              # the bytes that a filter looks back (a palette of any depth: one)
@@ -126,7 +126,7 @@ def read_png_pixels(path, alpha=False):
 
 
 def visible(pixel):
-    """A pixel as the eye gets it: what is see-through is nothing, whatever colour it was saved with."""
+    """A pixel as the eye gets it: what is see-through is nothing, whatever color it was saved with."""
     return pixel if pixel[3] else (0, 0, 0, 0)
 
 
@@ -179,7 +179,7 @@ def media(css, query):
 
 
 class Sheet:
-    """The rules of a style that are outside every @-rule (so a colour is the one that the page has before any narrower window changes the layout), by selector and property."""
+    """The rules of a style that are outside every @-rule (so a color is the one that the page has before any narrower window changes the layout), by selector and property."""
 
     def __init__(self, css):
         self.rules = []
@@ -202,8 +202,8 @@ class Sheet:
                 found = declarations[prop]
         return found
 
-    def colours(self, selector, prop):
-        """The colours of a declaration as '#rrggbb': a literal, a var(--token) that is a colour, each stop of a gradient (a var that is a picture or a gradient says nothing)."""
+    def colors(self, selector, prop):
+        """The colors of a declaration as '#rrggbb': a literal, a var(--token) that is a color, each stop of a gradient (a var that is a picture or a gradient says nothing)."""
         value = self.value(selector, prop) or ""
         out = []
         for found in re.finditer(r"var\(--([\w-]+)\)|#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b", value):
@@ -273,7 +273,7 @@ class TheWayIntoTheImage(unittest.TestCase):
 
 
 class TheSharedStylesheet(unittest.TestCase):
-    """web/front/classic.css is the look of the changelog pages and of Sprites and sounds (the front page keeps its own inline copy of the colours)."""
+    """web/front/classic.css is the look of the changelog pages and of Sprites and sounds (the front page keeps its own inline copy of the colors)."""
 
     def setUp(self):
         self.css = read("web", "front", "classic.css")
@@ -283,7 +283,7 @@ class TheSharedStylesheet(unittest.TestCase):
 
     @staticmethod
     def ratio(one, other):
-        high, low = sorted((TheColours.luminance(one), TheColours.luminance(other)), reverse=True)
+        high, low = sorted((TheColors.luminance(one), TheColors.luminance(other)), reverse=True)
         return (high + 0.05) / (low + 0.05)
 
     def test_the_font_and_the_clay_tile_it_names_are_in_the_folder_beside_it(self):
@@ -329,8 +329,8 @@ class TheClay(unittest.TestCase):
         css = read("web", "front", "classic.css")
         cls.flat = tuple(int(re.search(r"--clay: (#[0-9a-f]{6});", css).group(1)[i:i + 2], 16) for i in (1, 3, 5))
         cls.ink = re.search(r"--ink: (#[0-9a-f]{6});", css).group(1)
-        cls.light = {c: TheColours.luminance("#%02x%02x%02x" % c) for row in cls.rows for c in row}
-        cls.ink_light = TheColours.luminance(cls.ink)
+        cls.light = {c: TheColors.luminance("#%02x%02x%02x" % c) for row in cls.rows for c in row}
+        cls.ink_light = TheColors.luminance(cls.ink)
 
     def test_every_page_names_the_tile_by_its_content(self):
         # docker/nginx.conf lets a browser keep a .png for a week without asking again, so a tile that changes under the same address stays the clean one for everybody who has been here: its address ends in
@@ -343,9 +343,9 @@ class TheClay(unittest.TestCase):
 
     def test_it_has_noise_and_dirt_and_is_no_flat_orange(self):
         pixels = [c for row in self.rows for c in row]
-        self.assertGreaterEqual(len(set(pixels)), 20, "the original's tile is two colours: a flat orange")
+        self.assertGreaterEqual(len(set(pixels)), 20, "the original's tile is two colors: a flat orange")
         commonest = max(pixels.count(c) for c in set(pixels))
-        self.assertLess(commonest / len(pixels), 0.25, "no one colour fills the tile (the original's fills 96 percent of it)")
+        self.assertLess(commonest / len(pixels), 0.25, "no one color fills the tile (the original's fills 96 percent of it)")
         deepest, lightest = min(self.light.values()), max(self.light.values())
         self.assertGreater(lightest / deepest, 1.7, "the tile has dirt that is much deeper than its lightest grit")
 
@@ -353,7 +353,7 @@ class TheClay(unittest.TestCase):
         pixels = [c for row in self.rows for c in row]
         for channel, name in enumerate("rgb"):
             mean = sum(c[channel] for c in pixels) / len(pixels)
-            self.assertLess(abs(mean - self.flat[channel]), 4, "the %s of the tile's average and of --clay: no seam where the flat colour shows" % name)
+            self.assertLess(abs(mean - self.flat[channel]), 4, "the %s of the tile's average and of --clay: no seam where the flat color shows" % name)
 
     def test_the_ink_stays_readable_on_it(self):
         def ratio(luminance):
@@ -419,17 +419,17 @@ class TheTool(unittest.TestCase):
         self.assertIn("a cell of %d x %d pixels" % (width // columns, height // rows), doc)
         self.assertIn("%d x %d in all" % (width, height), doc)
         self.assertIn("sprites %d - %d" % (min(animation["order"]), max(animation["order"])), doc)
-        self.assertIn("one row for each colour (green, red, blue, black)", doc)
+        self.assertIn("one row for each color (green, red, blue, black)", doc)
 
 
 class TheRosterAnts(unittest.TestCase):
-    """web/front/ants.png is the standing ant of the lobby's colour cards (the game's animation agst301: sprites 1481 - 1487 of Original-Ants/ants.chd) in the colours that the game gives each team: a row
+    """web/front/ants.png is the standing ant of the lobby's color cards (the game's animation agst301: sprites 1481 - 1487 of Original-Ants/ants.chd) in the colors that the game gives each team: a row
     for each team, a column for each of the seven pictures. The game does not tint an ant: it adds a team's offset to every palette index of the sprite (src/ants_app/renderer.cpp,
-    TextureCache::compose_palette), so each team shows another stretch of the same 256 colours. The archive is read here by a reader of this file's own (the tool's is artlib.chd_sprite) and every pixel
+    TextureCache::compose_palette), so each team shows another stretch of the same 256 colors. The archive is read here by a reader of this file's own (the tool's is artlib.chd_sprite) and every pixel
     of the sheet is compared with what the game draws. The page shows a cell by CSS (a box the size of a cell, the sheet as its background, moved by whole cells), so the style's numbers are compared too:
-    the sizes of the cell and of the sheet, the row of each colour, the column of each step and the time of each step are the game's."""
+    the sizes of the cell and of the sheet, the row of each color, the column of each step and the time of each step are the game's."""
 
-    SHIFT = {"green": 60, "red": 40, "blue": 20, "black": 0}      # the order is the order of the sheet's rows, of the lobby's colours (seats 0 - 3) and of the renderer's table
+    SHIFT = {"green": 60, "red": 40, "blue": 20, "black": 0}      # the order is the order of the sheet's rows, of the lobby's colors (seats 0 - 3) and of the renderer's table
     KEY = 254                                   # the palette index that is left transparent
 
     @classmethod
@@ -488,7 +488,7 @@ class TheRosterAnts(unittest.TestCase):
         for table in ("kOffset", "kRampOffset"):                                  # (the ant branch of compose_palette, and the HUD branch that the setup screen's portrait of a seat takes)
             found = re.search(table + r"\[4\]\s*=\s*\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}", text)
             self.assertIsNotNone(found, "the renderer no longer says its %s as this test reads it" % table)
-            self.assertEqual([int(n) for n in found.groups()], [self.SHIFT[t] for t in ("green", "red", "blue", "black")], "%s: green, red, blue, black, the order of the players' colours" % table)
+            self.assertEqual([int(n) for n in found.groups()], [self.SHIFT[t] for t in ("green", "red", "blue", "black")], "%s: green, red, blue, black, the order of the players' colors" % table)
         tool = read("tools", "front_page_art", "artlib.py")                      # (the tool, which this test does not run, says the same numbers)
         self.assertIn("TEAMS = {%s}" % ", ".join('"%s": %d' % (t, n) for t, n in self.SHIFT.items()), tool)
 
@@ -498,14 +498,14 @@ class TheRosterAnts(unittest.TestCase):
         self.assertEqual([number for number, _ms in self.animation["steps"]], [1481, 1482, 1483, 1484, 1485, 1486, 1481, 1482, 1487, 1483, 1484, 1486])
         self.assertEqual(sum(ms for _number, ms in self.animation["steps"]), self.animation["total"])
         self.assertEqual(self.order, [1481, 1482, 1483, 1484, 1485, 1486, 1487])
-        self.assertEqual([self.sprites[n][0] for n in self.order], ["agst30%d.bmp" % (i + 1) for i in range(7)])             # (the standing ant of the start screen: not a name that a team's colours skip)
+        self.assertEqual([self.sprites[n][0] for n in self.order], ["agst30%d.bmp" % (i + 1) for i in range(7)])             # (the standing ant of the start screen: not a name that a team's colors skip)
         self.assertEqual(self.sprites[1481][1:3], (23, 40))
         used = set()
         for number in self.order:
             indices = set(i for row in self.sprites[number][3] for i in row) - {self.KEY}
-            self.assertTrue(indices <= set(range(80, 94)), "sprite %d draws outside the ant's ramp of 14 colours, the indices that each team shifts" % number)
+            self.assertTrue(indices <= set(range(80, 94)), "sprite %d draws outside the ant's ramp of 14 colors, the indices that each team shifts" % number)
             used |= indices
-        self.assertEqual(sorted(used), list(range(80, 94)), "the ant is one ramp of 14 colours")
+        self.assertEqual(sorted(used), list(range(80, 94)), "the ant is one ramp of 14 colors")
         self.assertEqual((self.cell_w, self.cell_h), (24, 41))                      # (what the page's style says, below, and what the tool says: the pictures together are as big as this)
         self.assertEqual((-self.left, -self.top), (11, 29))                           # (the ant's origin lies in the same place of every cell)
 
@@ -527,16 +527,16 @@ class TheRosterAnts(unittest.TestCase):
                           % (team, number, x, y, got_row[x], want_row[x]))
         self.assertEqual(rows, want)
 
-    def test_the_teams_differ_in_their_colours_and_not_in_their_shape(self):
+    def test_the_teams_differ_in_their_colors_and_not_in_their_shape(self):
         rows = [[visible(p) for p in row] for row in read_png_pixels(os.path.join(FRONT, "ants.png"), alpha=True)[2]]
         teams = {team: [row[:] for row in rows[i * self.cell_h:(i + 1) * self.cell_h]] for i, team in enumerate(self.SHIFT)}
         shapes = {team: [[p[3] for p in row] for row in cells] for team, cells in teams.items()}
         self.assertEqual(len({str(s) for s in shapes.values()}), 1, "the same pixels are transparent for every team")
-        colours = {team: {p[:3] for row in cells for p in row if p[3]} for team, cells in teams.items()}
+        colors = {team: {p[:3] for row in cells for p in row if p[3]} for team, cells in teams.items()}
         for one in self.SHIFT:
             for other in self.SHIFT:
                 if one < other:
-                    self.assertEqual(colours[one] & colours[other], set(), "%s and %s share no colour of their body" % (one, other))
+                    self.assertEqual(colors[one] & colors[other], set(), "%s and %s share no color of their body" % (one, other))
 
     def test_the_black_row_is_the_catalogs_pictures_of_the_sprites_as_they_are(self):
         # the catalog's pictures are converted from the archive's paletted bitmaps (docs/PLAY_IN_BROWSER.md, "Interactive Asset Catalog"): they show that the reader above, and the tool's, read the right indices and the right palette
@@ -573,15 +573,15 @@ class TheRosterAnts(unittest.TestCase):
         for step in steps:
             self.assertRegex(step.strip(), r"^[1-9]$", "--k is a whole number")
 
-    def test_the_style_moves_the_sheet_to_the_row_of_each_colour(self):
-        ids = re.findall(r"\{ id: '(\w+)', name: '\w+' \}", re.search(r"var COLOURS = \[(.*?)\];", read("web", "front", "lobby_rules.js"), re.S).group(1))
-        self.assertEqual(ids, list(self.SHIFT), "the lobby's colours are the sheet's rows in this order")
-        for row, colour in enumerate(ids):
+    def test_the_style_moves_the_sheet_to_the_row_of_each_color(self):
+        ids = re.findall(r"\{ id: '(\w+)', name: '\w+' \}", re.search(r"var COLORS = \[(.*?)\];", read("web", "front", "lobby_rules.js"), re.S).group(1))
+        self.assertEqual(ids, list(self.SHIFT), "the lobby's colors are the sheet's rows in this order")
+        for row, color in enumerate(ids):
             if row == 0:
-                self.assertIsNone(self.sheet.value(".ant-" + colour, "background-position-y"), "the first row is where the background starts")
+                self.assertIsNone(self.sheet.value(".ant-" + color, "background-position-y"), "the first row is where the background starts")
             else:
-                self.assertEqual(self.px(self.sheet.value(".ant-" + colour, "background-position-y")), -row * self.cell_h, colour)       # (the sheet moves up by whole rows)
-        self.assertEqual(read("web", "lobby.html").count("el('span', 'ant ant-' + c.id)"), 2)                 # (the card's ant and the token that follows the pointer: the class is the colour's id)
+                self.assertEqual(self.px(self.sheet.value(".ant-" + color, "background-position-y")), -row * self.cell_h, color)       # (the sheet moves up by whole rows)
+        self.assertEqual(read("web", "lobby.html").count("el('span', 'ant ant-' + c.id)"), 2)                 # (the card's ant and the token that follows the pointer: the class is the color's id)
 
     def test_the_style_plays_the_steps_of_the_games_animation_in_the_games_time(self):
         animation = re.fullmatch(r"ant-stand (\d+)ms step-end infinite", self.sheet.value(".ant", "animation") or "")
@@ -746,14 +746,14 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
         self.assertIn('<button type="button" id="name-step-go" class="btn">Join</button>', self.page)
         self.assertIn('<div class="name-step-msg" id="name-step-msg" role="alert"></div>', self.page)                                    # (a name that is refused is said aloud, in the red line under the field)
         self.assertIn('id="name-step-own"', self.page)
-        self.assertEqual(self.sheet.colours(".name-step-title", "color"), [self.sheet.tokens["gold"]])                                      # (the banner of the game's pages: gold on teal, with the bevel)
-        self.assertEqual(self.sheet.colours(".name-step-title", "background"), [self.sheet.tokens["teal"]])
+        self.assertEqual(self.sheet.colors(".name-step-title", "color"), [self.sheet.tokens["gold"]])                                      # (the banner of the game's pages: gold on teal, with the bevel)
+        self.assertEqual(self.sheet.colors(".name-step-title", "background"), [self.sheet.tokens["teal"]])
         self.assertIn("var(--sheen)", self.sheet.value(".name-step-title", "background"))
         self.assertIn("var(--bevel)", self.sheet.value(".name-step-title", "box-shadow"))
-        self.assertEqual(self.sheet.colours(".name-step", "background"), [self.sheet.tokens["clay"]])                                       # (the card lies on the same clay as the page, as the game page's own does)
+        self.assertEqual(self.sheet.colors(".name-step", "background"), [self.sheet.tokens["clay"]])                                       # (the card lies on the same clay as the page, as the game page's own does)
         self.assertIn("var(--tile)", self.sheet.value(".name-step", "background"))
         for prop, token in (("color", "bad-ink"), ("background", "bad-bg"), ("border-left", "bad-edge")):                                   # (a refused name is the page's refusal red: the tokens of every refusal of the pages)
-            self.assertEqual(self.sheet.colours(".name-step-msg", prop), [self.sheet.tokens[token]], prop)
+            self.assertEqual(self.sheet.colors(".name-step-msg", prop), [self.sheet.tokens[token]], prop)
         self.assertEqual(self.sheet.value(".name-step-msg:empty", "display"), "none")                                                       # (and takes no room when there is nothing to say)
         self.assertIn("NAME_MAX = 32;", self.page)
 
@@ -766,7 +766,7 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
 
 
 class TheCardsAtManyWidths(unittest.TestCase):
-    """What the style says for the windows from a 320 px phone to a wide screen, read without a browser: the columns of the room, the colour cards, the map's side and START, the lines that wrap, and the
+    """What the style says for the windows from a 320 px phone to a wide screen, read without a browser: the columns of the room, the color cards, the map's side and START, the lines that wrap, and the
     order of the rules that lets the narrower ones win."""
 
     def setUp(self):
@@ -784,7 +784,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn(":root { --k: 4; }", media(self.style, "(min-width: 1041px) and (min-height: 880px)"))        # (the ants 4 times their size instead of 3, only where both the width and the height have room)
         self.assertEqual(self.sheet.value(".wrap", "max-width"), self.sheet.value(".bar-in", "max-width"))          # (the footer lines up with the page)
 
-    def test_the_four_colours_lie_black_green_red_blue_in_two_columns_and_one_on_a_phone(self):
+    def test_the_four_colors_lie_black_green_red_blue_in_two_columns_and_one_on_a_phone(self):
         rules = read("web", "front", "lobby_rules.js")
         self.assertIn("var GRID = [3, 0, 1, 2];", rules)                                                      # (seats are Green 0, Red 1, Blue 2, Black 3: the cards lie as the four hills lie)
         self.assertIn("GRID.forEach(function (seat) { paintCard(v.cards[seat], m); });", self.page)             # (built in this reading order, so that Tab and a screen reader follow what is on screen)
@@ -851,9 +851,9 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertGreater(int(re.search(r"\.tv \{[^}]*(?<![-\w])width: (\d+)px;", self.phone).group(1)), 96)           # (a phone of 375 px or more keeps the bigger one)
 
 
-class TheColours(unittest.TestCase):
-    """The text of the page's components is at least 4.5:1 against its background, in every state of the buttons, banners and cards. Each pair is the colour of one rule against the background of another,
-    read from the style, so a colour that changes is measured again; a pair whose rule is gone fails instead of passing by default."""
+class TheColors(unittest.TestCase):
+    """The text of the page's components is at least 4.5:1 against its background, in every state of the buttons, banners and cards. Each pair is the color of one rule against the background of another,
+    read from the style, so a color that changes is measured again; a pair whose rule is gone fails instead of passing by default."""
 
     def setUp(self):
         page = read("web", "lobby.html")
@@ -864,11 +864,11 @@ class TheColours(unittest.TestCase):
         return self.sheet.tokens[name]
 
     @staticmethod
-    def luminance(colour):
+    def luminance(color):
         def channel(v):
             v /= 255.0
             return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
-        r, g, b = (int(colour[i:i + 2], 16) for i in (1, 3, 5))
+        r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
         return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 
     def ratio(self, one, other):
@@ -876,10 +876,10 @@ class TheColours(unittest.TestCase):
         return (high + 0.05) / (low + 0.05)
 
     def check(self, pairs):
-        """Each pair is (what, (selector, property) of the text's colour, (selector, property) of the background): every colour of the one against every colour of the other (the stops of a gradient)."""
+        """Each pair is (what, (selector, property) of the text's color, (selector, property) of the background): every color of the one against every color of the other (the stops of a gradient)."""
         for what, (text_selector, text_prop), (back_selector, back_prop) in pairs:
             with self.subTest(what):
-                text, back = self.sheet.colours(text_selector, text_prop), self.sheet.colours(back_selector, back_prop)
+                text, back = self.sheet.colors(text_selector, text_prop), self.sheet.colors(back_selector, back_prop)
                 self.assertTrue(text, "%s: the style no longer says %s of %s" % (what, text_prop, text_selector))
                 self.assertTrue(back, "%s: the style no longer says %s of %s" % (what, back_prop, back_selector))
                 for one in text:
@@ -906,40 +906,40 @@ class TheColours(unittest.TestCase):
             ("cream text in the code's field", (".joinbox input", "color"), (".joinbox input", "background")),
             ("cream text in the name step's field", (".name-step input", "color"), (".name-step input", "background")),
             ("the hint in an empty field of the name step", (".name-step input::placeholder", "color"), (".name-step input", "background")),
-            ("cream text of a colour's mode", (".mode", "color"), (".mode", "background")),
+            ("cream text of a color's mode", (".mode", "color"), (".mode", "background")),
             ("cream text of the map's drop-down", (".pick select", "color"), (".pick select", "background")),
             ("the room code", (".code", "color"), (".panel", "background")),
             ("the room code's box", (".code b", "color"), (".code b", "background")),
             ("the note under the link", (".invite-note", "color"), (".panel", "background")),
             ("the links under the link", (".invite-note button", "color"), (".panel", "background")),
             ("a hint", (".hint", "color"), (".panel", "background")),
-            ("the note under the colours", (".slots-note", "color"), (".panel", "background")),
+            ("the note under the colors", (".slots-note", "color"), (".panel", "background")),
             ("a refused team", (".teams-note.warn", "color"), (".panel", "background")),
             ("the name step's refusal", (".name-step-msg", "color"), (".name-step-msg", "background")),
         ))
 
-    def test_the_cards_of_the_colours_keep_their_text_readable_in_every_state(self):
-        backgrounds = (".slot", ".slot.k-open", ".slot.k-nobody", ".slot.drop")                  # a card, an open colour, a colour that is out, a card that a player is dragged over
-        accents = {".slot": self.sheet.colours(".slot", "--accent")}
-        for colour in re.findall(r"\.slot\[data-c=\"(\w+)\"\]", self.style):
-            accents[colour] = self.sheet.colours('.slot[data-c="%s"]' % colour, "--accent")
-        self.assertEqual(sorted(accents), sorted([".slot", "red", "blue", "black"]), "an accent for each colour (green is the card's own)")
+    def test_the_cards_of_the_colors_keep_their_text_readable_in_every_state(self):
+        backgrounds = (".slot", ".slot.k-open", ".slot.k-nobody", ".slot.drop")                  # a card, an open color, a color that is out, a card that a player is dragged over
+        accents = {".slot": self.sheet.colors(".slot", "--accent")}
+        for color in re.findall(r"\.slot\[data-c=\"(\w+)\"\]", self.style):
+            accents[color] = self.sheet.colors('.slot[data-c="%s"]' % color, "--accent")
+        self.assertEqual(sorted(accents), sorted([".slot", "red", "blue", "black"]), "an accent for each color (green is the card's own)")
         for name, accent in accents.items():
             for background in backgrounds:
                 for one in accent:
-                    for other in self.sheet.colours(background, "background"):
-                        self.assertGreaterEqual(self.ratio(one, other), 4.5, "the name of the colour %s (%s) on %s" % (name, one, background))
+                    for other in self.sheet.colors(background, "background"):
+                        self.assertGreaterEqual(self.ratio(one, other), 4.5, "the name of the color %s (%s) on %s" % (name, one, background))
         texts = (("a player's name and the card's words", ".slot", "color"), ("the state of a player", ".pstat", "color"), ("a player who is in the game", ".pstat.in", "color"),
                  ("a player whose game opens", ".pstat.wait", "color"), ("the pencil", ".edit", "color"), ("the pencil under the pointer", ".edit:hover", "color"),
                  ("the question of Remove", ".rmask span", "color"), ("the chip's small line", ".chip small", "color"))
         for what, selector, prop in texts:
             for background in backgrounds:
-                for one in self.sheet.colours(selector, prop):
-                    for other in self.sheet.colours(background, "background"):
+                for one in self.sheet.colors(selector, prop):
+                    for other in self.sheet.colors(background, "background"):
                         self.assertGreaterEqual(self.ratio(one, other), 4.5, "%s on %s" % (what, background))
         self.check((
-            ("an open colour's words", (".slot.k-open .pname", "color"), (".slot.k-open", "background")),
-            ("a colour that is out", (".slot.k-nobody .pname", "color"), (".slot.k-nobody", "background")),
+            ("an open color's words", (".slot.k-open .pname", "color"), (".slot.k-open", "background")),
+            ("a color that is out", (".slot.k-nobody .pname", "color"), (".slot.k-nobody", "background")),
             ("a computer player's name", (".slot.k-bot .pname", "color"), (".slot", "background")),
             ("the name that is typed", (".pname input", "color"), (".pname input", "background")),
             ("the tag YOU", (".you", "color"), (".you", "background")),
@@ -949,7 +949,7 @@ class TheColours(unittest.TestCase):
             ("the question's Remove under the pointer", (".rmask .rm.yes", "color"), (".rmask .rm.yes:hover", "background")),
             ("Keep", (".rmask .rm.keep", "color"), (".rmask .rm.keep", "background")),
             ("Keep under the pointer", (".rmask .rm.keep", "color"), (".rmask .rm.keep:hover", "background")),
-            ("the tab of a colour", (".slot .tab", "color"), (".slot .tab", "background")),
+            ("the tab of a color", (".slot .tab", "color"), (".slot .tab", "background")),
             ("the line that says where a player drops", (".slot.drop::after", "color"), (".slot.drop::after", "background")),
             ("the line that says where a tapped player goes", (".slot.picked-target::after", "color"), (".slot.picked-target::after", "background")),
             ("the token that follows the pointer", (".chip", "color"), (".chip", "background")),
@@ -965,7 +965,7 @@ class TheColours(unittest.TestCase):
             ("the recording notice", (".bar .notice", "color"), (".bar", "background")),
             ("the version", (".bar .ver", "color"), (".bar .ver", "background")),
         ))
-        self.assertEqual(len(self.sheet.colours(".bar", "background")), 2)                                  # (both ends of the bar are measured)
+        self.assertEqual(len(self.sheet.colors(".bar", "background")), 2)                                  # (both ends of the bar are measured)
 
     def test_the_ink_stays_readable_on_the_clay_wherever_the_page_sets_it_there(self):
         # the text that sits on the bare clay or on the name step's card is the ink of the pages (the tile itself, the worst place of it: TheClay)
@@ -974,7 +974,7 @@ class TheColours(unittest.TestCase):
             ("the name step's hint", (".name-step-hint", "color"), (":root", "--clay")),
             ("the line under START", (".go .plan", "color"), (":root", "--clay")),
         ))
-        self.assertEqual(self.sheet.colours("body", "color"), [self.token("ink")])                           # (and the page's own text, where nothing says another colour, is that ink)
+        self.assertEqual(self.sheet.colors("body", "color"), [self.token("ink")])                           # (and the page's own text, where nothing says another color, is that ink)
         self.assertGreaterEqual(self.ratio(self.token("ink"), self.token("clay")), 4.5)
 
 

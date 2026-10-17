@@ -30,30 +30,30 @@
 // and start (Event::LeaderStart carries the levels and the teams; HostLobby::can_start_filled says whether the room could start with them: one person is enough), and start() puts the teams into the
 // Start message that every machine starts its match from.
 //
-// The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"; the swap and the guard are protocol 15's). A SeatMove of the leader of a server's room, while the room is open, puts the
+// The leader moves the colors (protocol 14, docs/NETWORK_PORT.md "Protocol 14"; the swap and the guard are protocol 15's). A SeatMove of the leader of a server's room, while the room is open, puts the
 // guest of seat `from` in seat `to` (HostLobby::move_seat): in an empty seat it goes there, and the guest that holds the seat changes places with it (two guests swap; a bot's seat and the host's never
 // move). It is heard only when its guard, the seating_hash of the room as the leader saw it, is the room's own: a press that was made for other seats than these is ignored and counted. Everything that
 // is a guest's own goes with it (its key, its name, its place in the order of the Welcomes, so that the leader stays the leader, its violations and its budgets); every guest is sent the Room message
-// (each with its own `you`), and a guest whose colour changed is told so with a notice of the room ("Ann moved you to Red.").
+// (each with its own `you`), and a guest whose color changed is told so with a notice of the room ("Ann moved you to Red.").
 //
 // The lobby room (protocol 16, docs/NETWORK_PORT.md "Protocol 16"). A server's room that was made with kCreateLobby (HostLobby::Config::lobby_room) is the room that the front page waits in from its first
-// second; everything below is for it alone, and a room that is not one is exactly what it was. (1) Joining: a Hello without a key takes the lowest colour that nobody holds and the plan calls Open (the colour
-// it asked for when that is one); Easy, Medium, Hard and Nobody colours are never taken by a joiner, no such colour is Full, and a room whose START waits is MatchRunning. (2) The PLAN (PlanMsg, the leader's):
-// the map, what each colour is and the teams; every change is shown to everybody in the Room message, and the plan decides the START (a StartRequest's own fill and teams are not looked at). (3) A SeatMove
-// exchanges the two colours completely: the person (all that is its own), the colour's kind and the team pair, so that a team goes with its player and a bot with its level. (4) A guest whose connection
+// second; everything below is for it alone, and a room that is not one is exactly what it was. (1) Joining: a Hello without a key takes the lowest color that nobody holds and the plan calls Open (the color
+// it asked for when that is one); Easy, Medium, Hard and Nobody colors are never taken by a joiner, no such color is Full, and a room whose START waits is MatchRunning. (2) The PLAN (PlanMsg, the leader's):
+// the map, what each color is and the teams; every change is shown to everybody in the Room message, and the plan decides the START (a StartRequest's own fill and teams are not looked at). (3) A SeatMove
+// exchanges the two colors completely: the person (all that is its own), the color's kind and the team pair, so that a team goes with its player and a bot with its level. (4) A guest whose connection
 // ends keeps its seat for `hold_ms` (it counts as present, a Hello with its key takes the seat back, the leader that is held stays the leader); one that says Leave goes at once. A connection from which nothing at
 // all has come for `silence_ms` has ended too (a live client answers the room's ping every second; a link that died without a word is closed, and its seat is held). (5) The START: the leader's
 // StartRequest is kept as a request (RoomMsg flag kRoomStarting) until every person is a GAME (a Hello of kClientGame holds the seat: the pages go to the game and take their seats over), and then the owner is
 // given the LeaderStart; a request that waits longer than `start_wait_ms`, or whose leader is not the leader any more, is dropped (the leader is told which game did not come in time). A held seat keeps its hold
 // while the request waits. (6) Any person can change the name they go by (NameMsg), and the leader can take another person out of the room (RemoveMsg: with the guard of a SeatMove, so that it acts on the person
-// that the leader's screen showed; the person is sent the rejection Kicked, their colour is free at once and their key is forgotten; it is heard while the START waits too, for a person whose game never opens).
+// that the leader's screen showed; the person is sent the rejection Kicked, their color is free at once and their key is forgotten; it is heard while the START waits too, for a person whose game never opens).
 // (7) The rematch (docs/SERVER.md "Lobby rooms"): a lobby room that the server opens again when its match is over (reopen(), with the match's rematch()) has the match's plan and a RESERVED seat for each of its
-// persons who played in a web browser: the seat keeps its name, colour, key and place in the order of the Welcomes, counts as a game in the Room message (its person is on the game page's results screen), does not
-// lead, does not keep the room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on), and so does a game's Hello with it that asks for a colour
+// persons who played in a web browser: the seat keeps its name, color, key and place in the order of the Welcomes, counts as a game in the Room message (its person is on the game page's results screen), does not
+// lead, does not keep the room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on), and so does a game's Hello with it that asks for a color
 // (want_seat 0 - 3: the game page that the front page's "Rejoin" opens with a key that the match left behind: the person is back, as a game); a game's Hello with it that asks for none (255: the game page's
 // results screen) holds the seat and leaves it reserved. While a seat is reserved only a person of the match leads (the order of the match: a newcomer never leads, so never removes or starts), and nobody new
 // is taken while no person of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms; and when no person of the match is in the room (nobody back, no results screen that holds a seat) while somebody else is, the seats that no results screen holds end after hold_ms, so that the room's own rule leads again. A person whose game said that it is not in a browser (protocol 15's platform: a
-// game of the desktop or a phone's app, which has no "Back to the lobby") gets no seat: the colour is free in the lobby that follows, for them or anybody to join by the code (the server keeps no seat either
+// game of the desktop or a phone's app, which has no "Back to the lobby") gets no seat: the color is free in the lobby that follows, for them or anybody to join by the code (the server keeps no seat either
 // for a person whom the match dropped: Room::take_rematch).
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
@@ -86,7 +86,7 @@ inline constexpr uint32_t kLobbyForgiveMs = 60u * 1000u;
 inline constexpr uint32_t kLobbyReserveMs = 3u * 3600u * 1000u;
 
 /// What a lobby room's match was made of (HostLobby::rematch), for the lobby room that the server opens again with the same code when the match is over (HostLobby::reopen): the plan (the map, what each
-/// colour is, the teams, the game mode) and every person of the match with the seat, name, key, place in the order of the Welcomes and platform that the room gave them.
+/// color is, the teams, the game mode) and every person of the match with the seat, name, key, place in the order of the Welcomes and platform that the room gave them.
 struct Rematch {
     struct Person {
         uint8_t seat{255};
@@ -154,11 +154,11 @@ public:
         bool leader_starts{false};
         /// A dedicated server's own match of computer players alone (RoomSpec::bots_only): can_start() does not ask for a person. Nothing on the wire changes: the room has no guests, so there is nobody to tell.
         bool no_persons{false};
-        /// Protocol 16: the room is a LOBBY ROOM (see the paragraph above). It needs a server's host that has a leader and waits for it to start (host_seat = kNoSeat, early_start and leader_starts), all four colours
+        /// Protocol 16: the room is a LOBBY ROOM (see the paragraph above). It needs a server's host that has a leader and waits for it to start (host_seat = kNoSeat, early_start and leader_starts), all four colors
         /// (max_players) and keys (make_key), or no seat could be held: without any of them this is taken for false. `hold_ms`: a guest whose connection ends keeps its seat this long; `start_wait_ms`: the
         /// leader's START waits this long for every person's game.
         bool lobby_room{false};
-        /// Protocol 20 (a lobby room only): the name key of the room (ai::bot_name_key of its code; 0: none). With a key the Room message shows the name of the bot that a colour's plan asks for in that colour's empty seat
+        /// Protocol 20 (a lobby room only): the name key of the room (ai::bot_name_key of its code; 0: none). With a key the Room message shows the name of the bot that a color's plan asks for in that color's empty seat
         /// (bot_room_name), so every screen shows the bots' names before START; the owner seats the bot under the same name (bot_room_name) when it starts the match.
         uint64_t bot_name_key{0};
         uint32_t hold_ms{kLobbyHoldMs};
@@ -167,7 +167,7 @@ public:
         /// browser which went to sleep is gone, and a room that lives while a person is in it must not live for ever on a link that died.
         uint32_t silence_ms{kLobbySilenceMs};
         /// A lobby room lives as long as its people stay, so what a person got wrong is not held against them for ever: every `forgive_ms` each guest's violations, and each of its counts of ignored requests (START,
-        /// colour moves, plans, renames, removals), go down by one. A connection that offends faster than that is thrown out as ever (eight violations are more than one in forgive_ms). Any other room forgives nothing, and so does 0.
+        /// color moves, plans, renames, removals), go down by one. A connection that offends faster than that is thrown out as ever (eight violations are more than one in forgive_ms). Any other room forgives nothing, and so does 0.
         uint32_t forgive_ms{kLobbyForgiveMs};
         /// A lobby room that was opened again after its match (reopen): a seat that is reserved for a person of the match is given up this long after the reopening, if the person has not come back by then
         uint32_t reserve_ms{kLobbyReserveMs};
@@ -212,12 +212,12 @@ public:
     /// as a guest does not send more than kIgnoredSeatMovesAllowed of them: each one after those is a violation. A malformed one is a violation at once; one beyond the budget of a leader's presses
     /// (kSeatMoveBurst ...) is dropped and counted by nobody.
     uint32_t ignored_seat_moves() const noexcept { return ignored_seat_moves_; }
-    /// How many colour moves were made (move_seat that returned true; a swap of two guests is one)
+    /// How many color moves were made (move_seat that returned true; a swap of two guests is one)
     uint32_t seat_moves() const noexcept { return seat_moves_; }
-    /// The colour of a guest changes (protocol 14): the guest of seat `from` takes seat `to`; when a guest holds `to` the two change places (protocol 15). Everything that is a guest's own goes with it
+    /// The color of a guest changes (protocol 14): the guest of seat `from` takes seat `to`; when a guest holds `to` the two change places (protocol 15). Everything that is a guest's own goes with it
     /// (its connection, key, name, thumb, place in the order of the Welcomes, violations and budgets); the leader is elected again (it is a guest, whose seat may have been one of these), the Room
-    /// message goes to everybody and each guest that moved, unless it is the leader, gets the room's notice "<leader's name> moved you to <colour>.". False (nothing changes) unless the room is open
-    /// (Phase::Room), both seats are 0 - 3 and different, the seat `from` holds a guest and the seat `to` is empty or holds a guest (a colour that a bot or the host holds does not move). This is the
+    /// message goes to everybody and each guest that moved, unless it is the leader, gets the room's notice "<leader's name> moved you to <color>.". False (nothing changes) unless the room is open
+    /// (Phase::Room), both seats are 0 - 3 and different, the seat `from` holds a guest and the seat `to` is empty or holds a guest (a color that a bot or the host holds does not move). This is the
     /// rule; who may ask for it, and with what guard, is the lobby's business (the leader's SeatMove) and a host that holds a seat has no leader to ask.
     bool move_seat(uint8_t from, uint8_t to);
 
@@ -293,14 +293,14 @@ public:
 
     /// Protocol 16 (a lobby room: Config::lobby_room, after the constructor has checked what it needs). The leader's START waits for every person's game (RoomMsg::flags kRoomStarting): the request stands until the
     /// games are in (then the owner is given LeaderStart, again in every pass until it starts the match or drops the request with end_start), until it has waited Config::start_wait_ms, or until it cannot be
-    /// honoured any more (the leader is another guest, or the room could not start with whom it has left). While it stands, no newcomer is taken (MatchRunning) and neither the plan nor the colours move.
+    /// honoured any more (the leader is another guest, or the room could not start with whom it has left). While it stands, no newcomer is taken (MatchRunning) and neither the plan nor the colors move.
     bool lobby_room() const noexcept { return cfg_.lobby_room; }
     bool starting() const noexcept { return starting_.active; }
     /// The seat holds a person whose connection ended and whose hold runs (the person counts as present: it can lead, and a Hello with its key takes the seat back) ...
     bool held(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && guests_[seat].held; }
     /// ... and the seat holds a person whose connection is a game (a Hello of kClientGame): the games are what a match is started with
     bool in_game(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && guests_[seat].conn != nullptr && guests_[seat].kind == kClientGame; }
-    /// The owner drops the leader's START (it cannot honour it: the map, the colours, a place for the match): the flag goes, everybody is sent the Room message, the leader is sent `notice` (not when it is
+    /// The owner drops the leader's START (it cannot honour it: the map, the colors, a place for the match): the flag goes, everybody is sent the Room message, the leader is sent `notice` (not when it is
     /// empty), and the holds that ran during the wait begin again from now. Nothing happens when no START waits.
     void end_start(const std::string& notice);
     /// PlanMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room, the START waits): no offence up to kIgnoredPlansAllowed per guest, a violation each after those
@@ -320,15 +320,15 @@ public:
     uint32_t hold_expiries() const noexcept { return hold_expiries_; }
     /// Connections that were closed for their silence (silence_ms)
     uint32_t silences() const noexcept { return silences_; }
-    /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a colour moves, the plan or a name changes, a person is removed, a line of chat is said, a START is asked for
+    /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a color moves, the plan or a name changes, a person is removed, a line of chat is said, a START is asked for
     /// (a ping, a link that comes back, a seat that is held or gives up are not). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the owner may give
     /// the place of such a room up when it needs it.
     uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + chat_.total()); }
 
     /// The rematch (see (7) above). What this lobby room's match was made of: its plan and every person that its Start seated with a key whose game played in a web browser or did not say what it runs on (empty
-    /// `people` for a room that is no lobby room or whose match has not begun). The colour of a person whose game is not in a browser is left free (its plan is the match's: an open colour).
+    /// `people` for a room that is no lobby room or whose match has not begun). The color of a person whose game is not in a browser is left free (its plan is the match's: an open color).
     Rematch rematch() const;
-    /// A lobby room that nobody has come to yet takes the match's plan and reserves a seat for each of its persons (in the person's colour, with its name, key, place in the order and platform); the next newcomer's
+    /// A lobby room that nobody has come to yet takes the match's plan and reserves a seat for each of its persons (in the person's color, with its name, key, place in the order and platform); the next newcomer's
     /// place in the order comes after theirs. False, and nothing changes, for a room that is no lobby room, one that has a guest or a connection already, or a person that does not fit (a seat or a key twice, no key).
     bool reopen(const Rematch& rematch, uint32_t now_ms);
     /// The seat is reserved for a person of the match who is not back
@@ -512,12 +512,12 @@ public:
     bool request_start(const std::array<FillLevel, sim::MAX_PLAYERS>& fill = {}, const sim::StartTeams& teams = sim::StartTeams{});
     /// The same level in every seat (protocol 11's single choice)
     bool request_start(FillLevel level);
-    /// The leader asks the server to put the player of seat `from` in seat `to` (SeatMove; a free colour since protocol 14, a guest's colour, a swap, since 15). False (nothing is sent) unless this
+    /// The leader asks the server to put the player of seat `from` in seat `to` (SeatMove; a free color since protocol 14, a guest's color, a swap, since 15). False (nothing is sent) unless this
     /// machine leads an open room (InRoom) and the seats are two different ones of 0 - 3. The request carries the guard of the seating as this machine shows it (seating_hash). True means the request
-    /// was sent, not that the server did it: it answers with the Room message that shows the new seats, and says nothing to a request that it cannot honour (a bot's or the host's colour, the seating
+    /// was sent, not that the server did it: it answers with the Room message that shows the new seats, and says nothing to a request that it cannot honour (a bot's or the host's color, the seating
     /// has changed, the room started meanwhile).
     bool request_seat_move(uint8_t from, uint8_t to);
-    /// The leader of a lobby room (protocol 16) tells the server its plan: the map, what each colour is, the teams (PlanMsg). False (nothing is sent) unless this machine leads an open room that the last Room
+    /// The leader of a lobby room (protocol 16) tells the server its plan: the map, what each color is, the teams (PlanMsg). False (nothing is sent) unless this machine leads an open room that the last Room
     /// message shows as a lobby room. True means the request was sent, not that the server did it: the Room message shows the plan that the room has (it says nothing to a plan that it cannot hear).
     bool request_plan(const PlanMsg& plan);
     /// A person of a lobby room (protocol 16) tells the server the name they go by from now on (NameMsg): printable ASCII, at most kMaxNameChars characters, no space at either end (a longer or

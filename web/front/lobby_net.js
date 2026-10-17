@@ -1,4 +1,4 @@
-// The front page's side of network protocol 21 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17" and "Protocol 20", docs/MATCH_COUNTDOWN.md; 18 to 21 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a colour move, and the client that keeps
+// The front page's side of network protocol 21 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17" and "Protocol 20", docs/MATCH_COUNTDOWN.md; 18 to 21 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
@@ -124,20 +124,20 @@
     function encodeLeave() { return new Writer().u8(MSG.Leave).done(); }
     function encodePing(type, nonce, sentMs) { return new Writer().u8(type).u32(nonce).u32(sentMs).done(); }
     function encodePong(nonce, sentMs) { return encodePing(MSG.Pong, nonce, sentMs); }
-    // the guard of a colour move and of a removal: the FNV-1a hash of the seats as the leader's screen shows them (SeatMoveMsg.guard, RemoveMsg.guard); 0 never travels
+    // the guard of a color move and of a removal: the FNV-1a hash of the seats as the leader's screen shows them (SeatMoveMsg.guard, RemoveMsg.guard); 0 never travels
     function seatingHash(room) {
         var h = 2166136261;
         function put(byte) { h = Math.imul((h ^ byte) >>> 0, 16777619) >>> 0; }
         for (var s = 0; s < PLAYERS; s++) {
             put(room.slots[s].state);
-            var name = room.slots[s].state === SLOT.Empty ? '' : room.slots[s].name;          // (protocol 20: the name of a planned bot on an empty colour is not who sits there)
+            var name = room.slots[s].state === SLOT.Empty ? '' : room.slots[s].name;          // (protocol 20: the name of a planned bot on an empty color is not who sits there)
             for (var i = 0; i < name.length; i++) put(name.charCodeAt(i) & 255);
             put(0);
         }
         return h !== 0 ? h : 1;
     }
     function encodeSeatMove(from, to, guard) { return new Writer().u8(MSG.SeatMove).u8(from).u8(to).u32(guard).done(); }
-    // the leader's plan: the map ('' keeps the room's), what each colour is (PLAN.*), the teams (NO_TEAM twice, or two seats a < b) and, since protocol 17, the game mode (0, the original's game, when none is given;
+    // the leader's plan: the map ('' keeps the room's), what each color is (PLAN.*), the teams (NO_TEAM twice, or two seats a < b) and, since protocol 17, the game mode (0, the original's game, when none is given;
     // a mode that is not 0 .. LAST_GAME_MODE is a mistake of the caller and throws: the server would refuse the message, and it is never sent as another mode)
     function encodePlan(map, kinds, teamA, teamB, mode) {
         var gameMode = mode === undefined ? 0 : mode;
@@ -300,7 +300,7 @@
     //   'room' (room)               every Room message, then the events of diffRooms for it
     //   'joined' | 'left' | 'renamed' | 'moved' | 'swapped' | 'host' | 'plan' | 'starting' | 'games'
     //   'notice' ({ text })         a line that the room itself says (the leader's notices, "<name>'s game did not come in time.")
-    //   'chat' ({ sender, team, text })   a line of a player (a sender that is no colour, and an empty line, are not heard: the game's own client drops them too)
+    //   'chat' ({ sender, team, text })   a line of a player (a sender that is no color, and an empty line, are not heard: the game's own client drops them too)
     //   'gone'                      the room of our key does not exist any more (everybody left, a restart): the client makes the room again, without the key, and says 'welcome' with created set
     //   'refused' ({ reason })      the room does not take us (Full, MatchRunning, VersionMismatch, BadRequest, NoSuchRoom when the server has no place for a lobby, ...); reason 0 with an `error` text: no socket
     //                               could be made (no WebSocket in the browser, an address that no socket takes, a code that is no code)
@@ -308,18 +308,18 @@
     //   'superseded'                another window of this browser took the seat
     // A handler that throws does not stop the client or the other handlers: the error goes to onError(error, event), else to console.error. After leave() (or any final status) no event is handed out any more.
     // Requests (move, setPlan, rename, remove, say, start, leave) return false when they cannot be made now (not connected, not the leader, a START waits, the arguments do not fit), and send nothing. The numbers
-    // of a request are whole numbers; the client keeps a little under the server's own pace (a name or a removal 2, then one every 1.25 s; a plan or a colour move 5, then 3.2 a second; a line of chat 4, then one every
+    // of a request are whole numbers; the client keeps a little under the server's own pace (a name or a removal 2, then one every 1.25 s; a plan or a color move 5, then 3.2 a second; a line of chat 4, then one every
     // 1.25 s: see BUDGETS) and answers false to a request that is too fast, which spends nothing (a page that sends faster would be put out of its room).
-    // move and remove act on the person that the leader's screen showed in that colour: the page takes guardNow() when the leader picks the row up or opens the question and gives it back as the last
+    // move and remove act on the person that the leader's screen showed in that color: the page takes guardNow() when the leader picks the row up or opens the question and gives it back as the last
     // argument, and a request whose guard is not the seating of the room as it is now (somebody joined, left, was renamed or moved meanwhile) is not sent (false); without a guard the room as it is now counts.
     // Limits: connectMs (20 s) is how long a socket may take to open, silenceMs (8 s) how long a link that is open may say nothing (the server pings every second), stableMs (10 s) how long a link must stay
     // online before its loss counts as a first loss again (else the waits of the way back go on growing); 0 for a limit waits for the browser.
-    // [burst, a second] of each kind of request, KEPT BELOW the server's own (include/ants_net/flood.hpp: a colour move or a plan 6 and 4, a name or a removal 3 and 1, a line of chat 5 and 1). The server drops a request
+    // [burst, a second] of each kind of request, KEPT BELOW the server's own (include/ants_net/flood.hpp: a color move or a plan 6 and 4, a name or a removal 3 and 1, a line of chat 5 and 1). The server drops a request
     // beyond its own without a word (the sender sees nothing and the room does not change; a connection that goes on is thrown out), and it counts the moment at which it HANDLES a request, not the moment at which it was
     // sent. A page that paced itself at exactly the server's rate lost a request whenever the network (or the server's own loop) delayed one request and not the next: two that were 1000 ms apart arrive 990 ms apart, and
     // the second finds 0.99 of a token (seen once on the macOS CI for the chat, then reproduced for a rename and a plan). So every kind keeps a request in reserve (a burst one smaller than the server's: the server always
     // has a whole request more than the page believes) and a pace of 0.8 of the server's rate (a request every 1.25 s where the server refills 1 a second, every 312.5 ms where it refills 4). A page does not wait for
-    // the room's answer to a request before the next, so each kind has this margin. What it absorbs: one request that is held up while the ones after it arrive on time, by about 0.37 s for a colour move or a plan
+    // the room's answer to a request before the next, so each kind has this margin. What it absorbs: one request that is held up while the ones after it arrive on time, by about 0.37 s for a color move or a plan
     // and about 1.5 s for a name, a removal or a line; a longer hold-up can still lose a request (then the screen follows the room). tests/scripts/web_lobby_client_check.js replays the page's requests of every kind
     // through the server's own bucket (it reads the limits from flood.hpp) with delays of 0 to 150 ms on every request and a hold-up of 333 or 1400 ms on one; tests/scripts/web_lobby_server_check.js sends them
     // through a link that jitters by 150 ms to the real server.
@@ -489,7 +489,7 @@
         } else if (m.type === 'room') {
             var prev = this.room;
             this.room = m;
-            if (m.you !== 255) {                                     // every Room message says which colour is ours: the leader may have moved us
+            if (m.you !== 255) {                                     // every Room message says which color is ours: the leader may have moved us
                 this.seat = m.you;
                 this.name = m.slots[m.you].name;                     // a reconnect says the name that the room shows (the server may have taken another than the one we sent)
             }

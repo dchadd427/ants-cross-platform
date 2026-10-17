@@ -4,7 +4,7 @@
   CHANGELOG.md   the changelog: one entry per release in a fixed template  -> changelog.html (the site's one changelog page)
 
 The Docker image builds the page with the command below (Dockerfile); this test runs the same command on the real file and on small made-up ones. The page is in the Classic look of
-the front page (it links the site's /front/classic.css, shows the logo, and carries the version and the build in the footer): what is pinned here is its structure, not its colours
+the front page (it links the site's /front/classic.css, shows the logo, and carries the version and the build in the footer): what is pinned here is its structure, not its colors
 (web/front/classic.css and tests/scripts/test_web_front.py own those).
 
 The page is the whole list of releases, which is all that a browser without JavaScript gets, and one small inline script shows it in pages (ten releases to a page, five on a phone, named by the

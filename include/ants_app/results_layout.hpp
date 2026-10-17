@@ -11,7 +11,7 @@
 //     everything in the middle of the page moves down by 30 (the page's own margin below is 0 and becomes 30: the content is centred in the picture's height);
 //   * both black boxes are 320 columns wider, built from the original's own pieces as the original builds them from tiles: the top line is one column of efram1100 repeated (all 100 of its columns are
 //     identical), the bottom edge is efram4100 (five rows of dithered shadow, which has only two kinds of column) as a chain of runs whose every junction is between identical columns, the corners are
-//     efram1c .. efram4c, the inside is one flat black (bg50x100 and efrbg100 are 100 % that colour) and the side pieces rel50 / rer50 are placed whole at the new edges (one for the winner's row, three for
+//     efram1c .. efram4c, the inside is one flat black (bg50x100 and efrbg100 are 100 % that color) and the side pieces rel50 / rer50 are placed whole at the new edges (one for the winner's row, three for
 //     the others'). At the original's own width the same construction reproduces the original's boxes exactly (tests/test_app/test_wide_pages.cpp);
 //   * the numbers' columns: the original's labels are single-line labels (no wrap) 49 / 19 / 21 / 20 px wide at x 485 / 534 / 555 / 576, left aligned, whose surface clips what is wider; their face
 //     (Franklin Gothic Medium at the height 18) has digits 8 px wide, so two digits take 16 of the 19 - 21 px. The bundled substitute face has wider digits (10 px on average): the numbers are drawn

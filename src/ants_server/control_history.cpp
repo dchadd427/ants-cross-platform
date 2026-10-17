@@ -136,11 +136,11 @@ bool parse_history_query(const std::string& raw, HistoryQuery& q, std::string& e
             else if (value == kHistoryMode187) q.mode = HistoryQuery::Mode::Kills187;
             else return bad("all, highest-score or 187");
         } else if (key == "colour") {
-            if (value == "all") q.colour = -1;                              // (lower case, like every other word of the query)
-            else if (value == "green") q.colour = 0;
-            else if (value == "red") q.colour = 1;
-            else if (value == "blue") q.colour = 2;
-            else if (value == "black") q.colour = 3;
+            if (value == "all") q.color = -1;                              // (lower case, like every other word of the query)
+            else if (value == "green") q.color = 0;
+            else if (value == "red") q.color = 1;
+            else if (value == "blue") q.color = 2;
+            else if (value == "black") q.color = 3;
             else return bad("all, green, red, blue or black");
         } else if (key == "q") {
             if (value.size() > kMaxHistoryText) return bad("at most " + std::to_string(kMaxHistoryText) + " characters");

@@ -133,12 +133,12 @@ const room = (seats, o) => { const m = N.decode(roomBytes(seats, o)); if (m === 
 
 async function main() {
     // ---- 0. what the library offers ---------------------------------------------------------------------------------------------------------------------------------------------------------------
-    same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['ASK_AFTER_MS', 'BACK_KEY', 'COLOURS', 'DOTS', 'LOBBY_KEY', 'backLine', 'chipText', 'chipsOf', 'findReplay', 'forgetBack',
+    same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['ASK_AFTER_MS', 'BACK_KEY', 'COLORS', 'DOTS', 'LOBBY_KEY', 'backLine', 'chipText', 'chipsOf', 'findReplay', 'forgetBack',
         'frontStrip', 'gamePage', 'handOver', 'parseOver', 'platformOf', 'readBack', 'seatKey', 'statsHref', 'winnerWords']);
     same('the two keys of this tab\'s session storage', [R.BACK_KEY, R.LOBBY_KEY], ['ants.back', 'ants.lobby']);
     same('the results screen asks for its seat two seconds after the game said that the match is over (the server ends the match in a pass of its own)', R.ASK_AFTER_MS, 2000);
     check('the front page keeps its room under the same key (web/lobby.html LOBBY_KEY): the hand-over is the front page\'s own entry', fs.readFileSync(lobbyPath, 'utf8').indexOf("var LOBBY_KEY = 'ants.lobby';") !== -1);
-    same('the colours of the seats and the dots of the strips (picture R1: green, red, blue, black)', [R.COLOURS, R.DOTS], [['Green', 'Red', 'Blue', 'Black'], ['#2e8f56', '#b43a4c', '#5a56c8', '#4a4a50']]);
+    same('the colors of the seats and the dots of the strips (picture R1: green, red, blue, black)', [R.COLORS, R.DOTS], [['Green', 'Red', 'Blue', 'Black'], ['#2e8f56', '#b43a4c', '#5a56c8', '#4a4a50']]);
 
     // ---- 1. what the game says (tests/data/match_over.txt: the game's own text, test_network_app N5.99) ---------------------------------------------------------------------------------------------------
     same('the golden file has the three cases', Object.keys(golden).sort(), ['alliance-187', 'tie-with-a-bot', 'two-players']);
@@ -175,7 +175,7 @@ async function main() {
     {
         const over = (rows, names, mode) => ({ room: 'abc', seat: 0, map: 'TINY.LVL', mode: mode || 0, names: names || ['A', 'B', 'C', 'D'], rows });
         same('no row, or no row that won: no words', [R.winnerWords(over([])), R.winnerWords(over([{ seats: [0], score: 5, won: false }]))], ['', '']);
-        same('a seat without a name is its colour', [R.winnerWords(over([{ seats: [0], score: 10, won: true }], ['', '', '', ''])), R.winnerWords(over([{ seats: [3], score: 10, won: true }], ['', '', '', '']))], ['Green won with 10.', 'Black won with 10.']);
+        same('a seat without a name is its color', [R.winnerWords(over([{ seats: [0], score: 10, won: true }], ['', '', '', ''])), R.winnerWords(over([{ seats: [3], score: 10, won: true }], ['', '', '', '']))], ['Green won with 10.', 'Black won with 10.']);
         same('the score in groups of three, a negative one too', [R.winnerWords(over([{ seats: [1], score: 1234567, won: true }])), R.winnerWords(over([{ seats: [1], score: -1500, won: true }])), R.winnerWords(over([{ seats: [1], score: 0, won: true }]))],
             ['B won with 1,234,567.', 'B won with -1,500.', 'B won with 0.']);
         same('two alliances that tied: four names, one "and"', R.winnerWords(over([{ seats: [0, 2], score: 5, won: true }, { seats: [1, 3], score: 5, won: true }])), 'A, C, B and D tied with 5.');
@@ -234,13 +234,13 @@ async function main() {
             { seat: 2, name: 'Juniper', dot: '#5a56c8', host: false, here: false }, { seat: 3, name: 'Pip', dot: '#4a4a50', host: false, here: true }]);
         same('the words of each chip (picture R1)', R.chipsOf(r).map(R.chipText), ['Maple · host · here', 'Sam · on the results screen', 'Juniper · on the results screen', 'Pip · here']);
         same('START is pressed: every game is a game, nobody is on the results screen', R.chipsOf(room([P('Maple'), P('Sam'), O, O], { you: 1, leader: 0, inGame: 3, starting: true, platforms: [0x13, 0x13, 0, 0] })).map((c) => c.here), [true, true]);
-        same('an open colour, a planned bot and nobody have no chip; no room is no chip', [R.chipsOf(room([P('Maple'), O, O, O], { plan: [0, 2, 4, 0] })).length, R.chipsOf(null).length, R.chipsOf({}).length], [1, 0, 0]);
+        same('an open color, a planned bot and nobody have no chip; no room is no chip', [R.chipsOf(room([P('Maple'), O, O, O], { plan: [0, 2, 4, 0] })).length, R.chipsOf(null).length, R.chipsOf({}).length], [1, 0, 0]);
         same('nobody leads (the room before anybody is back): no "host"', R.chipsOf(room([P('Maple'), P('Sam'), O, O], { you: 1, leader: 255, inGame: 3 })).map(R.chipText), ['Maple · on the results screen', 'Sam · on the results screen']);
     }
 
     // ---- 6. the front page's strip, its words and its link ----------------------------------------------------------------------------------------------------------------------------------------------
     same('the strip of the front page (picture R2)', [R.backLine({ winner: 'Maple won with 2,040.' }), R.backLine({ winner: '' })], [
-        { lead: 'Back from the match.', text: 'Maple won with 2,040. Same room, same colours, same map.' }, { lead: 'Back from the match.', text: 'Same room, same colours, same map.' }]);
+        { lead: 'Back from the match.', text: 'Maple won with 2,040. Same room, same colors, same map.' }, { lead: 'Back from the match.', text: 'Same room, same colors, same map.' }]);
     {
         const T = 1760600000000;
         check('the labels of the public list of replays: the golden file has its cases', listed.length >= 3 && listed.every((l) => l.names.length === 4 && l.labels.length >= 1));
@@ -254,7 +254,7 @@ async function main() {
         const back = { t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam', 'Player 3'], names: ['Maple', 'Sam', 'Player 3', ''] };
         const entry = (o) => Object.assign({ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000) - 20, map: 'TREASURE.LVL', players: ['Green (Maple)', 'Red (Sam)', 'Blue', 'Black (Pip (bot, Hard))'], finished: true }, o);
         same('the newest finished match of the map, ended within ten minutes of the hand-over, with every seat of it', R.findReplay({ replays: [entry({ file: 'ants-TREASURE-20261016-071322Z-2.antsrep' }), entry()] }, back), 'ants-TREASURE-20261016-071322Z-2');
-        same('not: another map, a match that was cut short, one that ended more than ten minutes before or after, one without Sam, Sam in another colour, a file of another shape, an entry that is none',
+        same('not: another map, a match that was cut short, one that ended more than ten minutes before or after, one without Sam, Sam in another color, a file of another shape, an entry that is none',
             [{ map: 'SMALL.LVL' }, { finished: false }, { ended: Math.floor(T / 1000) - 601 }, { ended: Math.floor(T / 1000) + 601 }, { players: ['Green (Maple)', 'Blue'] }, { players: ['Green (Maple)', 'Blue (Sam)', 'Blue'] },
                 { file: '../ants.antsrep' }, { file: 7 }].map((o) => R.findReplay({ replays: [entry(o)] }, back)).concat(R.findReplay({ replays: [null] }, back)),
             ['', '', '', '', '', '', '', '', '']);
@@ -312,7 +312,7 @@ async function main() {
         p.w.last().receive(welcome(1, KEY, 0));
         check('the seat of the key is ours: the strip shows, and the page lays the picture out again', !p.host.hidden && p.win.resized === 1);
         same('the strip\'s words (picture R1)', [byClass(p.host, 'rmt-title').textContent, byClass(p.host, 'rmt-text').textContent, byClass(p.host, 'btn').textContent, byClass(p.host, 'rmt-note').textContent], [
-            'The match is over', 'Everybody can go back to the room together: same host, same colours, same map. Your seat is kept for you.', 'Back to the lobby', 'The game’s own “Leave Game” still goes to the menu.']);
+            'The match is over', 'Everybody can go back to the room together: same host, same colors, same map. Your seat is kept for you.', 'Back to the lobby', 'The game’s own “Leave Game” still goes to the menu.']);
         same('the button is a button of the page\'s look', [byClass(p.host, 'btn').tag, byClass(p.host, 'btn').type, byClass(p.host, 'btn').className], ['button', 'button', 'btn big']);
         p.w.last().receive(roomBytes([[C, 'Maple'], [C, 'Sam'], [C, '<b>Juniper</b>'], [E, '']], { you: 1, leader: 0, inGame: 6, platforms: [0x13, 0x13, 0x16, 0] }));
         const chips = all(p.host, (x) => (' ' + x.className + ' ').indexOf(' rmt-chip ') !== -1);
@@ -464,7 +464,7 @@ async function main() {
         const bar = body.children[0];
         check('the strip goes at the top of the page, above the frame', body.children.length === 2 && bar !== screen && body.children[1] === screen && bar.className === 'backbar' && !bar.hidden);
         same('it is a status that says what happened, with a link (picture R2)', [bar.attrs.role, bar.id, byClass(bar, 'backbar-text').children[0].tag, byClass(bar, 'backbar-text').textContent], ['status', 'backbar', 'b',
-            'Back from the match. Maple won with 2,040. Same room, same colours, same map.']);
+            'Back from the match. Maple won with 2,040. Same room, same colors, same map.']);
         const link = find(bar, (x) => x.tag === 'a');
         same('the link opens the matches in a new tab while the match is looked up', [link.textContent, link.href, link.target, link.rel], ['Stats and replay', '/matches.html', '_blank', 'noopener noreferrer']);
         same('the public list of replays is asked, with no cookies and no cache', fetched, [['/replays', { cache: 'no-store', credentials: 'omit' }]]);

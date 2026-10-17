@@ -313,7 +313,7 @@ void run_lobby_basics_tests() {
             r.host.add_connection(ends.first, r.now);
             return r.guests.size() - 1;
         };
-        // the four ant colours sit where the guests asked: the last to arrive asked for the first guest seat
+        // the four ant colors sit where the guests asked: the last to arrive asked for the first guest seat
         Room room;
         const size_t blue = ask(room, "Blue", 2);
         const size_t black = ask(room, "Black", 3);

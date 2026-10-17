@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The chat of the lobby page (web/front/lobby_chat.js and lobby_chat.css, the client's say() in web/front/lobby_net.js; run by ./run_tests.sh --fast, with the other python tests of tests/scripts,
-and by the CI). The people in a room talk before START: a panel under the colours with the room's lines in the colours of the seats, a field, the small lines of the system ("Sam joined as Red."),
+and by the CI). The people in a room talk before START: a panel under the colors with the room's lines in the colors of the seats, a field, the small lines of the system ("Sam joined as Red."),
 a toast for a line that arrives while the panel is off screen. The room's own chat is the game's (docs/NETWORK_PORT.md "Chat in the waiting room"); the server already relays a page's line, so
 nothing of the server or of the protocol changed (network protocol 21).
 
@@ -9,8 +9,8 @@ nothing of the server or of the protocol changed (network protocol 21).
     line that the client does not take does; the field shut while the link is down or START waits; the page changing its client);
   - the page: the new section, the stylesheet, the script in its place, the hooks, and the limit of 1500 lines of tools/check_hygiene.py (web/lobby.html is at it: the map list's own stylesheet moved
     to its own file to make room);
-  - the stylesheet: the look of the lobby (its tokens, the black box with the green frame, the accents of the four colours), a field that a phone does not zoom into, the places at each width;
-  - this file also changes one thing at a time in a COPY of the library (a character range, a count, a word, a colour, a rule of the box): the check must then fail.
+  - the stylesheet: the look of the lobby (its tokens, the black box with the green frame, the accents of the four colors), a field that a phone does not zoom into, the places at each width;
+  - this file also changes one thing at a time in a COPY of the library (a character range, a count, a word, a color, a rule of the box): the check must then fail.
 The node check needs node; without it these tests are skipped and say so.
 """
 import os
@@ -108,8 +108,8 @@ class ThePage(unittest.TestCase):
     def test_the_page_stops_with_its_line_when_the_script_did_not_come(self):
         self.assertRegex(self.page, r"if \(!Rules \|\| !Net \|\| !Chat \|\| !Rematch\) \{")                           # (the rematch's strip too: front/rematch.js)
 
-    def test_the_page_mounts_the_box_with_its_colours_its_client_and_its_toast_and_gives_it_every_client(self):
-        self.assertRegex(self.page, r"var chat = Chat\.mount\(\{ doc: document, host: \$\('chat'\), colours: COLOURS, say: function \(text\) \{ return !!client && client\.say\(text\); \}, toast: say \}\);")
+    def test_the_page_mounts_the_box_with_its_colors_its_client_and_its_toast_and_gives_it_every_client(self):
+        self.assertRegex(self.page, r"var chat = Chat\.mount\(\{ doc: document, host: \$\('chat'\), colors: COLORS, say: function \(text\) \{ return !!client && client\.say\(text\); \}, toast: say \}\);")
         hook = self.page[self.page.index("function hook(c) {"):self.page.index("function makeClient(p)")]
         self.assertIn("chat.attach(c);", hook, "a client of the room, a link that the host's code gave or a probe that was taken, is the box's")
         self.assertEqual(self.page.count("chat.attach("), 1)
@@ -147,14 +147,14 @@ class TheStylesheet(unittest.TestCase):
             self.assertIn(token, self.css, token)
         self.assertNotRegex(self.css, r"https?://|@import|url\(\s*[\"']?(?:https?:)?//")
 
-    def test_the_four_colours_have_the_accents_of_the_cards(self):
+    def test_the_four_colors_have_the_accents_of_the_cards(self):
         page = read(LOBBY)
         cards = dict(re.findall(r'\.slot\[data-c="(\w+)"\] \{ --accent: (#[0-9a-f]{6}); \}', page))
         self.assertEqual(sorted(cards), ["black", "blue", "red"])
         default = re.search(r"\.slot \{ --accent: (#[0-9a-f]{6});", page).group(1)
         cards["green"] = default
-        for colour, value in cards.items():
-            self.assertRegex(self.css, r'\.chat-log > div\[data-c="%s"\] \{ --accent: %s; \}' % (colour, value) if colour != "green" else r"--accent: %s;" % re.escape(default), colour)
+        for color, value in cards.items():
+            self.assertRegex(self.css, r'\.chat-log > div\[data-c="%s"\] \{ --accent: %s; \}' % (color, value) if color != "green" else r"--accent: %s;" % re.escape(default), color)
 
     def test_a_phone_does_not_zoom_into_the_field(self):
         field = re.search(r"\.chat-form input \{([^}]*)\}", self.css).group(1)
@@ -190,15 +190,15 @@ class TheStylesheet(unittest.TestCase):
         def rgb(text):
             return [int(text[i:i + 2], 16) for i in (1, 3, 5)]
 
-        def dim(colour):                                   # the CSS filters, in the sRGB values: saturate() is a matrix, brightness() a factor
-            r, g, b = (v / 255 for v in colour)
+        def dim(color):                                   # the CSS filters, in the sRGB values: saturate() is a matrix, brightness() a factor
+            r, g, b = (v / 255 for v in color)
             out = ((0.213 + 0.787 * saturate) * r + (0.715 - 0.715 * saturate) * g + (0.072 - 0.072 * saturate) * b,
                    (0.213 - 0.213 * saturate) * r + (0.715 + 0.285 * saturate) * g + (0.072 - 0.072 * saturate) * b,
                    (0.213 - 0.213 * saturate) * r + (0.715 - 0.715 * saturate) * g + (0.072 + 0.928 * saturate) * b)
             return [round(max(0.0, min(1.0, v * brightness)) * 255) for v in out]
 
-        def luminance(colour):
-            lin = [(v / 255 / 12.92) if v / 255 <= 0.04045 else ((v / 255 + 0.055) / 1.055) ** 2.4 for v in colour]
+        def luminance(color):
+            lin = [(v / 255 / 12.92) if v / 255 <= 0.04045 else ((v / 255 + 0.055) / 1.055) ** 2.4 for v in color]
             return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
 
         def ratio(one, other):
@@ -214,8 +214,8 @@ class TheStylesheet(unittest.TestCase):
         words["cream"] = re.search(r"--cream:\s*(#[0-9a-f]{6})", page).group(1)
         words["the system's lines"] = re.search(r"\.chat-log \.sys \{[^}]*color:\s*(#[0-9a-f]{6})", self.css).group(1)
         words["muted"] = re.search(r"--muted:\s*(#[0-9a-f]{6})", page).group(1)
-        for name, colour in sorted(words.items()):
-            self.assertGreaterEqual(ratio(dim(rgb(colour)), dim(back)), 4.5, "%s %s on the dimmed log: %.2f" % (name, colour, ratio(dim(rgb(colour)), dim(back))))
+        for name, color in sorted(words.items()):
+            self.assertGreaterEqual(ratio(dim(rgb(color)), dim(back)), 4.5, "%s %s on the dimmed log: %.2f" % (name, color, ratio(dim(rgb(color)), dim(back))))
 
     def test_a_field_that_is_shut_is_read_only_and_not_disabled_so_that_it_keeps_the_focus(self):
         self.assertRegex(self.css, r"\.chat-form input\[readonly\] \{[^}]*opacity:\s*\.6")

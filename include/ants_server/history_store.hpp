@@ -55,7 +55,7 @@ struct HistoryQuery {
     Who who{Who::Anyone};
     Rec rec{Rec::All};
     Mode mode{Mode::All};
-    int colour{-1};                                  // a seat that took part (0 - 3), -1 for any
+    int color{-1};                                  // a seat that took part (0 - 3), -1 for any
     std::string text;                                // part of a map's name or of a name that a seat has (letters of any case)
 };
 

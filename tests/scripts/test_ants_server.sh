@@ -110,10 +110,10 @@ rate_text() { echo "${1%% *}, $(echo "$1" | cut -d' ' -f2) ticks in $(echo "$1" 
 cd "$ROOT"
 # ---- part options: the pages' own texts and nginx.conf, and the command-line options of ants_server (a bad option is refused at once, a good one starts it) -------
 if part_enabled options; then
-# the lobby tells the players what the room's host can do (protocol 7: the first player in the room leads it and starts the match with whoever is in): on the host's own colour, in the line that the others read, in
+# the lobby tells the players what the room's host can do (protocol 7: the first player in the room leads it and starts the match with whoever is in): on the host's own color, in the line that the others read, in
 # and in "How it works"
-check "web/lobby.html and web/front/lobby_rules.js say what the host can do: the host's colour says 'Host. You start the match.', the others read that the host starts the match when everybody is in, and How it works says that the host starts the match with whoever is in" "$(grep -qF 'Host. You start the match.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'starts the match when everybody is in.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'The host starts the match with whoever is in.' "$ROOT/web/lobby.html"; echo $?)"
-# bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the lobby has a card for each of the four colours; the host gives a free colour to Open, an Easy, Medium or Hard bot or
+check "web/lobby.html and web/front/lobby_rules.js say what the host can do: the host's color says 'Host. You start the match.', the others read that the host starts the match when everybody is in, and How it works says that the host starts the match with whoever is in" "$(grep -qF 'Host. You start the match.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'starts the match when everybody is in.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'The host starts the match with whoever is in.' "$ROOT/web/lobby.html"; echo $?)"
+# bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the lobby has a card for each of the four colors; the host gives a free color to Open, an Easy, Medium or Hard bot or
 # Nobody with a select, presses Team 1 or Team 2 under a player, and every change goes to the room as a plan (the room tells everybody, so nothing is remembered by the page); the links that START hands to the game
 # carry the plan as ?fill=<plan> (and &start=<people>), validated, and the game page turns exactly those texts into --fill-bots, --teams and --start-when (and nothing else: an address cannot put another word on the command line)
 FOUR_PAGE="$ROOT/web/lobby.html"
@@ -121,7 +121,7 @@ SHELL_PAGE="$ROOT/web/shell.html"
 FILL_FORM=1
 if grep -qF "[['open', 'Open'], ['easy', 'Easy bot'], ['medium', 'Medium bot'], ['hard', 'Hard bot'], ['nobody', 'Nobody']]" "$FOUR_PAGE" && grep -qF "'Team ' + t.side" "$FOUR_PAGE" && grep -qF "client.setPlan(" "$FOUR_PAGE" \
     && grep -qF "var GRID = [3, 0, 1, 2];" "$ROOT/web/front/lobby_rules.js" && grep -qF "data-remove" "$FOUR_PAGE"; then FILL_FORM=0; fi
-check 'web/lobby.html has a card for each of the four colours (Black, Green, Red, Blue in the order of the hills) with Open, Easy bot, Medium bot, Hard bot and Nobody for a free colour, the Team 1 and Team 2 buttons, Remove, and sends every change to the room as a plan' "$FILL_FORM"
+check 'web/lobby.html has a card for each of the four colors (Black, Green, Red, Blue in the order of the hills) with Open, Easy bot, Medium bot, Hard bot and Nobody for a free color, the Team 1 and Team 2 buttons, Remove, and sends every change to the room as a plan' "$FILL_FORM"
 FILL_SHELL=1
 if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillPlanArg(q.get('fill'));" "$SHELL_PAGE" && grep -qF "out.args.push('--teams', teams)" "$SHELL_PAGE" && grep -qF "var teams = antsTeamsArg(q.get('teams'));" "$SHELL_PAGE" \
     && grep -qF "out.args.push('--start-when', start)" "$SHELL_PAGE" && grep -qF "var start = antsStartArg(q.get('start'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
@@ -572,7 +572,7 @@ check "the room did not fail (the referee and the leader made the same team: no 
 stop_pids "the client of the room with a plan of bots and teams" $PLAN_PIDS
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$PLAN" > /dev/null
 
-# the links of the earlier front page's one card, START with bots only: the game page gives the leader the colour that was picked (--seat 2, Blue), the plan of the card (easy,medium,none,none: a bot at Green and one at Red; none
+# the links of the earlier front page's one card, START with bots only: the game page gives the leader the color that was picked (--seat 2, Blue), the plan of the card (easy,medium,none,none: a bot at Green and one at Red; none
 # for You, a Friend and Nobody) and --start-when 1. A room for four started by its leader alone seats the bots at the seats 0 and 1 (a bot at Green too), the leader holds seat 2, seat 3 stays empty
 CARD="E2E-CARD-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$CARD\",\"seed\":19}" "$CTL/rooms"
@@ -1111,7 +1111,7 @@ check "without the option a server with public rooms makes lobby rooms (the defa
 stop_server
 
 # the lobby page's own client (web/front/lobby_net.js: the codec, the reconnect with the key, what each refusal means), run by node over a WebSocket against this server, as a browser behind the
-# site's proxy reaches it: the lobby made by one code and joined by the same link, a colour move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a
+# site's proxy reaches it: the lobby made by one code and joined by the same link, a color move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a
 # key for a room that is gone, a second window, START that waits, the chat at the server's pace, and the pages in GET /busy (tests/scripts/web_lobby_server_check.js)
 if command -v node > /dev/null 2>&1; then
     ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
@@ -1629,7 +1629,7 @@ rp_server() {      # rp_server [options]: the server over the results folder, wi
     return 1
 }
 rp_auth() { curl -s -m 5 -H "Authorization: Bearer $SECRET" "$@"; }
-rp_list_ok() {      # rp_list_ok FILE: the control interface's list holds this one replay of TINY.LVL and says the colours with the names that the two games typed (the game whose Hello came first has Green: either order is right), not the room's code
+rp_list_ok() {      # rp_list_ok FILE: the control interface's list holds this one replay of TINY.LVL and says the colors with the names that the two games typed (the game whose Hello came first has Green: either order is right), not the room's code
     rp_auth "$CTL/replays" | python3 -c '
 import sys, json
 d = json.load(sys.stdin)

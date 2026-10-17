@@ -1,7 +1,7 @@
 #pragma once
 
 // The texts of Ants.exe's string table (LoadStr, FUN_010292dc) that the status line, the chat log and the dialogs of a
-// running match use, by their original ids. `%s` stands for a name / colour / title that the caller inserts (the original
+// running match use, by their original ids. `%s` stands for a name / color / title that the caller inserts (the original
 // turns `%%s` into `%s`). The application title (string 79) is "Ants" here. Whether a status is posted with the flash flag
 // (PostStatus flag 1: a 500 ms flicker before the steady text) is a property of the call site in the original; the table
 // records it per id because every site of an id agrees (17, 49, 50, 53, 59, 75).
@@ -66,10 +66,10 @@ inline constexpr uint16_t kTeamMade = 75;             // "A team has been made."
 inline constexpr uint16_t kTeamRejected = 80;         // "%s rejected teaming up"
 inline constexpr uint16_t kTeamAccepted = 81;         // "%s accepted teaming up"
 inline constexpr uint16_t kTeamWithdrawn = 82;        // "%s withdrew offer to team up"
-inline constexpr uint16_t kColourBlack = 100;         // "Black"
-inline constexpr uint16_t kColourBlue = 101;          // "Blue"
-inline constexpr uint16_t kColourRed = 102;           // "Red"
-inline constexpr uint16_t kColourGreen = 103;         // "Green"
+inline constexpr uint16_t kColorBlack = 100;         // "Black"
+inline constexpr uint16_t kColorBlue = 101;          // "Blue"
+inline constexpr uint16_t kColorRed = 102;           // "Red"
+inline constexpr uint16_t kColorGreen = 103;         // "Green"
 // The setup screen / lobby (the original's network states; docs 5.47)
 inline constexpr uint16_t kGameStartedInit = 85;      // "Game started, initializing..."
 inline constexpr uint16_t kFindingGame = 86;          // "Finding game..."
@@ -98,7 +98,7 @@ bool blinks(uint16_t id) noexcept;
 std::string format(uint16_t id, const std::string& a = {}, const std::string& b = {},
                    const std::string& c = {}, const std::string& d = {});
 
-/// Colour name of a colour index 0..3 (black, blue, red, green: strings 100..103), "" otherwise.
-const char* colour_name(uint8_t colour_index) noexcept;
+/// Color name of a color index 0..3 (black, blue, red, green: strings 100..103), "" otherwise.
+const char* color_name(uint8_t color_index) noexcept;
 
 }  // namespace ants::sim::strings

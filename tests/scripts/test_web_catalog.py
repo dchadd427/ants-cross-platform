@@ -8,9 +8,9 @@ pinned here is what that must not break and what it promised:
   - the head loads the font and the shared stylesheet before the page's own style, and nothing else (the script file of the data, and nothing from another site)
   - the header: the logo is a link to the front page (its size is the picture's), the page's banner, the three tabs with the ids and the calls that the script uses, Play first among the buttons
   - every element that the script asks for by a fixed id is in the page (a rewritten header cannot lose one)
-  - the style block makes no colours of its own that the stylesheet has, keeps none of the old dark blue palette, leaves the frame its room, keeps the page's own phone rules (the page
-    scrolls as a document, a table scrolls inside its box, the inspector's two columns stand one above the other) and overrides the colours that the markup and the script give to buttons
-  - the text colours that the style pairs are at least 4.5 to 1 (the browser check measures the whole page; this reads the colours)
+  - the style block makes no colors of its own that the stylesheet has, keeps none of the old dark blue palette, leaves the frame its room, keeps the page's own phone rules (the page
+    scrolls as a document, a table scrolls inside its box, the inspector's two columns stand one above the other) and overrides the colors that the markup and the script give to buttons
+  - the text colors that the style pairs are at least 4.5 to 1 (the browser check measures the whole page; this reads the colors)
 """
 import os
 import re
@@ -96,7 +96,7 @@ class TheScriptAndTheMarkup(unittest.TestCase):
 
 
 class TheStyle(unittest.TestCase):
-    def test_it_makes_no_colours_of_the_stylesheets_and_keeps_none_of_the_old_blue_palette(self):
+    def test_it_makes_no_colors_of_the_stylesheets_and_keeps_none_of_the_old_blue_palette(self):
         self.assertNotRegex(STYLE, r"--(?:clay|ink|teal|teal-hi|teal-lo|edge|cream|inset|frame|frame-hi|frame-lo|shadow|gold|mint|muted|rule|pressed)\s*:")      # (the page's own names are aliases of them)
         for old in ("0b0f19", "070a12", "131d31", "1e2c47", "2a3b5c", "38bdf8", "0ea5e9", "94a3b8", "64748b", "1e3a8a", "0f172a", "0d1527", "334155", "0284c7", "1e293b"):
             self.assertNotIn("#" + old, STYLE.lower(), "#%s is of the old palette" % old)
@@ -117,7 +117,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".header-actions { grid-column: 2; grid-row: 1; justify-content: flex-end; gap: 8px 10px; }", phone)         # (Play stays on a phone: the old rules hid every button)
         self.assertNotRegex(phone, r"\.header-actions \{\s*display: none;")
 
-    def test_the_colours_that_the_markup_and_the_script_give_to_buttons_are_overridden(self):
+    def test_the_colors_that_the_markup_and_the_script_give_to_buttons_are_overridden(self):
         self.assertRegex(STYLE, r"\.copy-btn \{[^}]*color: var\(--cream\) !important; border-color: var\(--edge\) !important;")        # (the links to sounds, animations and sprites)
         self.assertIn(".copy-btn.active { color: var(--pressed-ink) !important; }", STYLE)
         self.assertIn("color:#34d399", SCRIPT.replace(" ", ""))                                                                           # (the script still has them: it is not touched)
@@ -135,7 +135,7 @@ class TheStyle(unittest.TestCase):
 
 
 class ThePairs(unittest.TestCase):
-    """The text colours that the style pairs, read from the style and the stylesheet (aliases and var() resolved)."""
+    """The text colors that the style pairs, read from the style and the stylesheet (aliases and var() resolved)."""
 
     @classmethod
     def setUpClass(cls):
@@ -144,12 +144,12 @@ class ThePairs(unittest.TestCase):
         flat = re.sub(r"/\*.*?\*/", "", STYLE, flags=re.S)
         cls.rules = [(re.sub(r"\s+", " ", m.group(1).strip()), m.group(2)) for m in re.finditer(r"([^{}@]+)\{([^{}]*)\}", flat)]
 
-    def colour(self, value):
+    def color(self, value):
         value = value.strip().replace("!important", "").strip()
-        value = re.sub(r"\s+var\(--sheen(?:, none)?\)$", "", value)                  # (a button's face is its colour with the sheen over it: the light of the sheen stays above the words, test_web_game checks that)
+        value = re.sub(r"\s+var\(--sheen(?:, none)?\)$", "", value)                  # (a button's face is its color with the sheen over it: the light of the sheen stays above the words, test_web_game checks that)
         var = re.fullmatch(r"var\(--([a-z-]+)\)", value)
         if var:
-            return self.colour(self.tokens[var.group(1)])
+            return self.color(self.tokens[var.group(1)])
         if re.fullmatch(r"#[0-9a-fA-F]{3}", value):
             value = "#" + "".join(c * 2 for c in value[1:])
         self.assertRegex(value, r"#[0-9a-fA-F]{6}", value)
@@ -164,11 +164,11 @@ class ThePairs(unittest.TestCase):
         raise AssertionError("no rule %r with %s" % (selector, prop))
 
     @staticmethod
-    def luminance(colour):
+    def luminance(color):
         def channel(v):
             v /= 255.0
             return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
-        r, g, b = (int(colour[i:i + 2], 16) for i in (1, 3, 5))
+        r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
         return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 
     def ratio(self, one, other):
@@ -201,13 +201,13 @@ class ThePairs(unittest.TestCase):
                  ("the sprite's hint", ".stage-hint-pill", "color", ".canvas-stage.bg-checker", "background-color")]
         for pair in pairs:
             what, text_rule, text_prop, back_rule, back_prop = pair
-            text, back = self.colour(self.declared(text_rule, text_prop)), self.colour(self.declared(back_rule, back_prop))
+            text, back = self.color(self.declared(text_rule, text_prop)), self.color(self.declared(back_rule, back_prop))
             self.assertGreaterEqual(self.ratio(text, back), 4.5, "%s: %s on %s" % (what, text, back))
-        inset = self.colour("var(--inset)")
+        inset = self.color("var(--inset)")
         for name in ("--text-primary", "--text-secondary", "--text-dim"):                                                              # (the markup and the script use these on the black boxes)
-            self.assertGreaterEqual(self.ratio(self.colour(self.tokens[name[2:]]), inset), 4.5, name)
+            self.assertGreaterEqual(self.ratio(self.color(self.tokens[name[2:]]), inset), 4.5, name)
         for name in ("--badge-sound", "--badge-anim", "--badge-sprite"):
-            self.assertGreaterEqual(self.ratio(self.colour(self.tokens[name[2:]]), inset), 4.5, name)
+            self.assertGreaterEqual(self.ratio(self.color(self.tokens[name[2:]]), inset), 4.5, name)
 
 
 if __name__ == "__main__":

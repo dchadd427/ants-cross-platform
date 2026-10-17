@@ -165,14 +165,14 @@
   {
    "id": "chat_every_line_is_green",
    "file": "web/front/lobby_chat.js",
-   "old": "if (colours[seat]) li.setAttribute('data-c', colours[seat].id);",
+   "old": "if (colors[seat]) li.setAttribute('data-c', colors[seat].id);",
    "new": "li.setAttribute('data-c', 'green');",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
-   "id": "chat_no_colour",
+   "id": "chat_no_color",
    "file": "web/front/lobby_chat.js",
-   "old": "if (colours[seat]) li.setAttribute('data-c', colours[seat].id);",
+   "old": "if (colors[seat]) li.setAttribute('data-c', colors[seat].id);",
    "new": "",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },

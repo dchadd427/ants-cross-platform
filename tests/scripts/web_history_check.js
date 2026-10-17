@@ -9,7 +9,7 @@ function check(label, ok, detail) { checks++; if (!ok) { failures++; console.log
 function same(label, got, want) { const a = JSON.stringify(got), b = JSON.stringify(want); check(label, a === b, 'got ' + a + ', wanted ' + b); }
 
 // ---- records (made up: a 2 v 2 whose allies fell out, a 1 v 1 of an old version, a 187 match, a draw) ----
-const seat = (n, colour, name, bot, o) => Object.assign({ seat: n, colour, name, bot, score: 0, killed: 0, lost: 0, hatched: 0, bombs_planted: 0, bombs_defused: 0, fires_lit: 0, left: false, winner: false }, o || {});
+const seat = (n, color, name, bot, o) => Object.assign({ seat: n, colour: color, name, bot, score: 0, killed: 0, lost: 0, hatched: 0, bombs_planted: 0, bombs_defused: 0, fires_lit: 0, left: false, winner: false }, o || {});
 const rec2v2 = {
     id: 'ants-TREASURE-20261015-051557Z', mode: 'highest-score', format: '2v2', draw: false, result: 'decided', quitter: null, seconds: 720, turns: 14405, game: 'v0.12.41', recording: 'watch', file: 'ants-TREASURE-20261015-051557Z.antsrep',
     seats: [seat(0, 'Green', 'Ann', '', { score: 140, killed: 7, lost: 4 }), seat(1, 'Red', 'Bea', '', { score: 1010, killed: 7, lost: 5 }), seat(2, 'Blue', 'Pip', 'Hard', { score: 2040, killed: 3, lost: 4, winner: true }),
@@ -42,9 +42,9 @@ same('formats and modes', [H.formatText('1v1'), H.formatText('2v2'), H.formatTex
 same('a format that is not text is nothing', [H.formatText(5), H.formatText(null), H.formatText({})], ['', '', '']);
 
 // ---- the names of the seats ----
-const label = (name, bot, colour) => H.seatLabel({ name, bot, colour: colour || 'Green' });
+const label = (name, bot, color) => H.seatLabel({ name, bot, colour: color || 'Green' });
 same('a person', label('Ann', ''), 'Ann');
-same('a person who typed nothing is the colour', [label('', '', 'Red'), label('', '', 'Black')], ['Red', 'Black']);
+same('a person who typed nothing is the color', [label('', '', 'Red'), label('', '', 'Black')], ['Red', 'Black']);
 same('a computer player with a name: Name (bot, Level)', [label('Pip', 'Hard'), label('Pip', 'Medium'), label('Pip', 'Easy')], ['Pip (bot, Hard)', 'Pip (bot, Medium)', 'Pip (bot, Easy)']);
 same('one that a recording of an earlier version stored with no name: Bot (Level)', [label('', 'Hard'), label('', 'Medium')], ['Bot (Hard)', 'Bot (Medium)']);
 same('a computer player whose level the name says none of', [label('Pip', 'Bot'), label('', 'Bot')], ['Pip (bot)', 'Bot']);
@@ -72,7 +72,7 @@ same('a seat that is not one is nothing', [H.seatLabel(null), H.seatLabel(undefi
 same('a row that names a seat that is not there is skipped (and the seats that no row names come after it)', H.sidesOf({ seats: rec2v2.seats, rows: [{ seats: [9], score: 5 }, { seats: [2, 9], score: 7, winner: true }] }).map((s) => s.seats.map((x) => x.seat)), [[2], [0], [1], [3]]);
 same('rows that are not rows', H.sidesOf({ seats: rec2v2.seats, rows: [null, 5, 'x', { seats: 'no' }] }).length, 4);
 same('a record that is not one has no sides', [H.sidesOf(null).length, H.sidesOf({}).length, H.sidesOf({ seats: 'x', rows: 'y' }).length], [0, 0, 0]);
-same('a seat with an unknown colour is not a seat', H.seatsOf({ seats: [{ colour: 'Purple' }, null, 4, { colour: 'Red', seat: 1 }] }).length, 1);
+same('a seat with an unknown color is not a seat', H.seatsOf({ seats: [{ colour: 'Purple' }, null, 4, { colour: 'Red', seat: 1 }] }).length, 1);
 
 {
     // a seat that dropped out has no row: a side of its own after the others, marked left, and no part of the ranking

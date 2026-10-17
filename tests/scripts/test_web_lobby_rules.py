@@ -2,7 +2,7 @@
 """The lobby page's rules (web/front/lobby_rules.js; run by ./run_tests.sh --tools, with the other python tests of tests/scripts, and by the CI). The front page is the game's lobby; everything in it
 that needs no browser is in this one script, so that it can be checked with no screen: the player's name (the same block as the game page's, held byte for byte), the room's code (made, shown in
 two groups, read back from what a person typed), the six maps (against the level files of the original game), the model of a room (who is the host, who the guest, what each of the four cards
-shows and may do, the START button and the plan sentence), the teams (the rules of the live match card: who may be on a team, the refusals, the bytes of a plan), the move of a colour, the
+shows and may do, the START button and the plan sentence), the teams (the rules of the live match card: who may be on a team, the refusals, the bytes of a plan), the move of a color, the
 sentences of the server (which of them means what) and every message strip of the page.
 
   - tests/scripts/web_lobby_rules_check.js holds all of it to tables: every exported function is called with real inputs (the check fails when one is never called), the Room messages of the

@@ -423,7 +423,7 @@ void test_hud_radar_frame(const assets::AssetArchive& arc) {
                 rig.hud.render(rec, rig.arc, rig.world(), rig.camera);
                 const RectRenderer::Rect* frame = nullptr;
                 for (const auto& r : rec.frames) {
-                    if (r.colour.r == 251 && r.colour.g == 251 && r.colour.b == 255) frame = &r;
+                    if (r.color.r == 251 && r.color.g == 251 && r.color.b == 255) frame = &r;
                 }
                 const std::string at = std::string(wide ? "wide" : "classic") + " at " + zoom::level_name(z) + " from (" + num(rig.camera.x) + ", " + num(rig.camera.y) + "): ";
                 check(frame != nullptr, at + "the HUD draws the minimap's frame");
@@ -464,7 +464,7 @@ void test_hud_radar_frame(const assets::AssetArchive& arc) {
                 hud.render(rec, rig.arc, small.get_world_state(), cam);
                 const RectRenderer::Rect* frame = nullptr;
                 for (const auto& r : rec.frames) {
-                    if (r.colour.r == 251 && r.colour.g == 251 && r.colour.b == 255) frame = &r;
+                    if (r.color.r == 251 && r.color.g == 251 && r.color.b == 255) frame = &r;
                 }
                 const bool whole = z <= 1.0f;                              // (a 384 px map is whole in 442 x 440 and 762 x 500, not in the 221 x 220 or 381 x 250 of the zoom 2)
                 check(frame != nullptr && (whole ? (frame->x == mini.x && frame->y == mini.y && frame->w == mini.w && frame->h == mini.h) : (frame->w <= mini.w && frame->h < mini.h)),

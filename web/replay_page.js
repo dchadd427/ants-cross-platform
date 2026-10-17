@@ -6,7 +6,7 @@
 
     // The file name of a replay, as the server's store makes it (ants-<MAP>-<YYYYMMDD>-<HHMMSS>Z[-N].antsrep) and as docker/nginx.conf lets it through; nothing else is ever fetched.
     var FILE_RE = /^ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?\.antsrep$/;
-    var SEATS = ['Green', 'Red', 'Blue', 'Black'];                       // the colours of seats 0 - 3
+    var SEATS = ['Green', 'Red', 'Blue', 'Black'];                       // the colors of seats 0 - 3
     var MAPS = { TINY: 'Tiny', SMALL: 'Small', MEDIUM: 'Medium', GAUNTLET: 'Gauntlet', TREASURE: 'Treasure', ISLANDS: 'Islands' };     // the original's six, which the pages have a picture of
     // The id of a match that is being played, as the server makes it (<MAP>-<YYYYMMDD>-<HHMMSS>Z[-N]: the map's stem and the UTC time the match began) and as docker/nginx.conf lets it through; nothing else is ever fetched.
     var LIVE_RE = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;
@@ -139,11 +139,11 @@
         return out;
     }
 
-    // A player as the list gives it: "Green (Mika)" is the colour word and, after the first " (", what the player typed (or "Bot (Medium)" for a computer player); a bare "Green" typed nothing
+    // A player as the list gives it: "Green (Mika)" is the color word and, after the first " (", what the player typed (or "Bot (Medium)" for a computer player); a bare "Green" typed nothing
     function parsePlayer(text) {
         var s = typeof text === 'string' ? text : '';
         var m = /^([A-Za-z]+) \(([\s\S]*)\)$/.exec(s);
-        return m ? { colour: m[1], name: m[2] } : { colour: s, name: '' };
+        return m ? { color: m[1], name: m[2] } : { color: s, name: '' };
     }
     // The players of a recording that the game reports (the roster's bits, the names of the four seats), in the list's words
     function playersOf(roster, names) {
@@ -155,7 +155,7 @@
         }
         return out;
     }
-    // The chips of a match as a list element: a square in the colour and the name (the colour word where nothing was typed); the colour word is a tip and for a screen reader. Text only.
+    // The chips of a match as a list element: a square in the color and the name (the color word where nothing was typed); the color word is a tip and for a screen reader. Text only.
     function chipsOf(doc, players) {
         var ul = doc.createElement('ul');
         ul.className = 'chips';
@@ -164,12 +164,12 @@
             var q = parsePlayer(p);
             var li = doc.createElement('li');
             li.className = 'chip';
-            li.setAttribute('data-c', SEATS.indexOf(q.colour) !== -1 ? q.colour : '');
-            li.title = q.name ? q.colour + ': ' + q.name : q.colour;
+            li.setAttribute('data-c', SEATS.indexOf(q.color) !== -1 ? q.color : '');
+            li.title = q.name ? q.color + ': ' + q.name : q.color;
             var square = doc.createElement('i');
             var nm = doc.createElement('span');
             nm.className = 'nm';
-            nm.textContent = q.name || q.colour;
+            nm.textContent = q.name || q.color;
             li.appendChild(square);
             li.appendChild(nm);
             ul.appendChild(li);

@@ -1,5 +1,5 @@
 /* The stats sections of the match page (web/match_stats.js, docs/REPLAYS.md "The match pages"): the band of highlights, "Over time" and "Activity". They use the tokens and the boxes of matches.css (the panel, the table,
-   the seat cards, the meters, the seat colours); the cells of the heat strip are painted by the script (the seat's colour mixed into the dark box, with the ink that reads on it). */
+   the seat cards, the meters, the seat colors); the cells of the heat strip are painted by the script (the seat's color mixed into the dark box, with the ink that reads on it). */
 .stat .head .count { white-space: normal; text-align: right; }
 .stat h3.ct { margin: 22px 0 8px; font-weight: 500; }
 .stat h3.ct:first-of-type { margin-top: 4px; }
@@ -17,7 +17,7 @@
 .chips .lab { font-size: 11px; letter-spacing: .14em; }
 .chips .nm { white-space: normal; }
 
-/* the legend: a shape for each seat besides its colour (the charts mark the end of each line with the same shape) */
+/* the legend: a shape for each seat besides its color (the charts mark the end of each line with the same shape) */
 .key { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0 0 6px; font-size: 14px; color: #c3d6cd; }
 .key li { display: inline-flex; align-items: center; gap: 8px; }
 .mk { display: inline-block; width: 12px; height: 12px; background: var(--c); flex: none; }

@@ -6,7 +6,7 @@
 // (results_layout.hpp) and the desktop start menu (start_menu.hpp) are not centred windows over a margin any more: each is composed for the whole canvas from the original's own art, and
 // they all stand on the same ground, which is here:
 //   * the clay: the tile dclay96 laid at its own pitch of 96 from (0, 0) (the last row of tiles is cut at the canvas's edge), or, for the pages whose own art carries flat clay (the loading screen,
-//     the quick help), a flat field of the colour of that clay (kFlatClay: the tile is 97.3 % that colour with isolated speckles, which a flat field of bitmaps without speckles would show as
+//     the quick help), a flat field of the color of that clay (kFlatClay: the tile is 97.3 % that color with isolated speckles, which a flat field of bitmaps without speckles would show as
 //     rectangles);
 //   * the frame: the corners dfram1 / dfram3 / dfram6 / dfram8, the top (nine pieces of 96 and four of 16), the bottom (4, 2 x 16, 3, 2 x 16, 2 pieces of 96) and the two side strips, whole
 //     pieces of 96 rows stacked and cut once, at a row that is identical to the piece's own neighbour;
@@ -57,9 +57,9 @@ constexpr bool wide_pages_supported(int32_t w, int32_t h) noexcept { return w ==
 inline constexpr int32_t kWidePageDx = kWidePageWidth - ScreenLayout::kClassicWidth;       // 320
 inline constexpr int32_t kWidePageDy = kWidePageHeight - ScreenLayout::kClassicHeight;     // 60
 
-/// The colour of the flat clay (the original's own: the colour that the loading screen is filled with, (219, 75, 19), palette index 173)
+/// The color of the flat clay (the original's own: the color that the loading screen is filled with, (219, 75, 19), palette index 173)
 inline constexpr ants::assets::ColorRGBA kFlatClay{219, 75, 19, 255};
-/// The flat fill inside every black box of the original (the colour of the efram construction)
+/// The flat fill inside every black box of the original (the color of the efram construction)
 inline constexpr ants::assets::ColorRGBA kBoxBlack{7, 11, 15, 255};
 
 enum class PageClay : uint8_t {

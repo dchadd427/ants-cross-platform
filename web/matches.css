@@ -1,6 +1,6 @@
 /* The three pages of the match history (docs/REPLAYS.md "The match pages"): the list of every match (web/matches.html), one match with its stats and replay (web/match.html) and the matches that run
    now (web/live.html). The look of the front page (web/lobby.html): the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black inset boxes, the game's own font and the
-   "ants!" logo, all from web/front/. Nothing is loaded from another site. The colours of the front page (clay, ink, teal ... bad-edge) are the first lines of each page's own <style>, as the front page
+   "ants!" logo, all from web/front/. Nothing is loaded from another site. The colors of the front page (clay, ink, teal ... bad-edge) are the first lines of each page's own <style>, as the front page
    and the game page carry them (tests/scripts/test_web_pages_classic.py keeps them the same as web/front/classic.css); the rest of the tokens are here. */
 @font-face { font-family: "Libre Franklin"; src: url("front/LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
 :root {
@@ -98,7 +98,7 @@ button { font: inherit; color: inherit; }
 .panel + .panel, .panel + section { margin-top: 22px; }
 .panel[tabindex="-1"]:focus { outline: none; }                      /* (the replay's panel is focused by script when it opens: no ring) */
 
-/* ---- the list: the tools (search, who, format, result, replay, colour, mode, sort) ---- */
+/* ---- the list: the tools (search, who, format, result, replay, color, mode, sort) ---- */
 .tools { display: grid; gap: 14px; }
 .tools .r1 { display: flex; gap: 14px 18px; align-items: center; flex-wrap: wrap; }
 .search { position: relative; flex: 1 1 300px; min-width: 0; }

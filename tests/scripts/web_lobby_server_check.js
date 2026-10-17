@@ -1,5 +1,5 @@
 // Runs the lobby page's client of network protocol 16 (web/front/lobby_net.js, LobbyClient) against a REAL ants_server over a WebSocket, as a browser would reach it behind the site's proxy:
-// pages that make a lobby room and join it by one code, the leader's colour moves (a move to an empty colour, a change of places), the plan and the teams, a new name (and a name that looks like a
+// pages that make a lobby room and join it by one code, the leader's color moves (a move to an empty color, a change of places), the plan and the teams, a new name (and a name that looks like a
 // bot's), the leader taking a person out, the leader going (the player who has been there the longest leads), a link that drops (the seat is held and taken back with the key), a key for a room that is
 // gone (the page makes the room again), a second window with the same key, START that waits for the games, and the people of the lobbies in GET /busy.
 // usage: node web_lobby_server_check.js web/front/lobby_net.js ws://127.0.0.1:PORT/ws http://127.0.0.1:WSPORT     (the server: --demo-rooms N --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies M)
@@ -105,30 +105,30 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         A.connect();
         await step('the first page is welcomed to a room that its Hello made, as seat 0', () => online(A), 5000);
         check('(it leads, the room is a lobby room, on the server\'s map, and no key is zero)', A.created === true && A.seat === 0 && A.isLeader() && A.room.lobby && A.room.map === 'TINY.LVL' && !N.isZeroKey(A.key), 'seat ' + A.seat + ', map ' + (A.room && A.room.map));
-        check('(four colours, the plan says Open for each)', A.room.slots.length === 4 && A.room.plan.join() === '0,0,0,0', A.room.plan.join());
+        check('(four colors, the plan says Open for each)', A.room.slots.length === 4 && A.room.plan.join() === '0,0,0,0', A.room.plan.join());
         B.connect();
         await step('the second page finds the room by the same code: seat 1, not created, and sees the first', () => online(B), 5000);
         check('(B is not told that its Hello made the room, and does not lead)', B.created === false && B.seat === 1 && !B.isLeader() && B.room.leader === 0, 'seat ' + B.seat);
         check('(B sees Ada in seat 0 and itself in seat 1)', names(B) === 'Ada|Bea|-|-', names(B));
         await step('A is told that Bea joined, in seat 1', () => () => A.count('joined') === 1 && A.of('joined')[0].seat === 1 && A.of('joined')[0].name === 'Bea');
-        // the leader drags Bea to colour 2 (an empty colour)
-        check('A moves Bea from colour 1 to the empty colour 2 (the request is sent)', A.move(1, 2) === true);
-        await step('both pages see Bea in colour 2 (moved, not left and joined)', () => () => names(A) === 'Ada|-|Bea|-' && names(B) === 'Ada|-|Bea|-' && A.count('moved') === 1 && B.count('moved') === 1 && B.seat !== undefined);
-        check('(the event names the colours)', JSON.stringify(A.of('moved')[0]) === JSON.stringify({ type: 'moved', from: 1, to: 2, name: 'Bea' }), JSON.stringify(A.of('moved')));
-        check('(B knows that it sits in colour 2 now)', B.room.you === 2, 'you ' + B.room.you);
-        // the leader changes places with Bea: the leader drags its own ant onto Bea's colour
-        check('A drags its own ant (colour 0) onto Bea\'s colour 2', A.move(0, 2) === true);
+        // the leader drags Bea to color 2 (an empty color)
+        check('A moves Bea from color 1 to the empty color 2 (the request is sent)', A.move(1, 2) === true);
+        await step('both pages see Bea in color 2 (moved, not left and joined)', () => () => names(A) === 'Ada|-|Bea|-' && names(B) === 'Ada|-|Bea|-' && A.count('moved') === 1 && B.count('moved') === 1 && B.seat !== undefined);
+        check('(the event names the colors)', JSON.stringify(A.of('moved')[0]) === JSON.stringify({ type: 'moved', from: 1, to: 2, name: 'Bea' }), JSON.stringify(A.of('moved')));
+        check('(B knows that it sits in color 2 now)', B.room.you === 2, 'you ' + B.room.you);
+        // the leader changes places with Bea: the leader drags its own ant onto Bea's color
+        check('A drags its own ant (color 0) onto Bea\'s color 2', A.move(0, 2) === true);
         await step('the two change places, and both pages say so', () => () => names(A) === 'Bea|-|Ada|-' && names(B) === 'Bea|-|Ada|-' && A.count('swapped') === 1 && B.count('swapped') === 1);
-        check('(Ada leads still, from colour 2)', A.isLeader() && A.room.leader === 2 && B.room.leader === 2 && A.room.you === 2 && B.room.you === 0, 'leader ' + A.room.leader);
-        // the plan: another map, a bot for colour 1 and 3, the two persons a team
+        check('(Ada leads still, from color 2)', A.isLeader() && A.room.leader === 2 && B.room.leader === 2 && A.room.you === 2 && B.room.you === 0, 'leader ' + A.room.leader);
+        // the plan: another map, a bot for color 1 and 3, the two persons a team
         const plan = { map: 'MEDIUM.LVL', kinds: [N.PLAN.Open, N.PLAN.Medium, N.PLAN.Open, N.PLAN.Hard], teamA: 0, teamB: 2 };
-        check('A sets the plan: MEDIUM.LVL, a Medium bot in colour 1 and a Hard one in colour 3, colours 0 and 2 a team', A.setPlan(plan) === true);
+        check('A sets the plan: MEDIUM.LVL, a Medium bot in color 1 and a Hard one in color 3, colors 0 and 2 a team', A.setPlan(plan) === true);
         await step('both pages see the plan', () => () => A.room.map === 'MEDIUM.LVL' && B.room.map === 'MEDIUM.LVL' && B.room.plan.join() === '0,2,0,3' && B.room.teamA === 0 && B.room.teamB === 2 && B.count('plan') >= 1);
         check('(B cannot change it: only the leader\'s plan is sent)', B.setPlan(plan) === false);
         // a name
         check('B takes the name Beatrice', B.rename('Beatrice') === true);
         await step('A is told of the new name', () => () => A.count('renamed') === 1 && A.of('renamed')[0].to === 'Beatrice' && names(A) === 'Beatrice|-|Ada|-' && B.name === 'Beatrice');
-        check('(the event names the colour and both names)', JSON.stringify(A.of('renamed')[0]) === JSON.stringify({ type: 'renamed', seat: 0, from: 'Bea', to: 'Beatrice' }), JSON.stringify(A.of('renamed')));
+        check('(the event names the color and both names)', JSON.stringify(A.of('renamed')[0]) === JSON.stringify({ type: 'renamed', seat: 0, from: 'Bea', to: 'Beatrice' }), JSON.stringify(A.of('renamed')));
         const renamed = A.count('renamed');
         check('the page itself does not ask for a name that looks like a bot\'s (protocol 20)', B.rename('Bot (Hard)') === false && B.rename('Pip (bot)') === false);
         check('B sends the bytes of such a name by hand all the same (what no honest page does): the server must refuse it', B.sendBytes(N.encodeName('Bot (Hard)')) === true && B.sendBytes(N.encodeName('Pip (bot, Hard)')) === true);
@@ -136,18 +136,18 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         check('(the room keeps Beatrice and says nothing)', names(A) === 'Beatrice|-|Ada|-' && A.count('renamed') === renamed && B.room.slots[0].name === 'Beatrice', names(A));
         // the leader takes Beatrice out
         const guardBefore = N.seatingHash(A.room);
-        check('A removes the person in colour 0', A.remove(0) === true);
+        check('A removes the person in color 0', A.remove(0) === true);
         await step('Beatrice is told that she was removed, and the page lets her key go', () => () => B.status === 'removed' && B.count('removed') === 1 && B.key === null && B.rejoinEntry() === null);
-        await step('A sees colour 0 free', () => () => names(A) === '-|-|Ada|-' && A.count('left') === 1 && A.of('left')[0].seat === 0 && A.of('left')[0].name === 'Beatrice');
-        check('(the plan stays: colours 1 and 3 are still the bots\')', A.room.plan.join() === '0,2,0,3' && A.room.map === 'MEDIUM.LVL', A.room.plan.join());
+        await step('A sees color 0 free', () => () => names(A) === '-|-|Ada|-' && A.count('left') === 1 && A.of('left')[0].seat === 0 && A.of('left')[0].name === 'Beatrice');
+        check('(the plan stays: colors 1 and 3 are still the bots\')', A.room.plan.join() === '0,2,0,3' && A.room.map === 'MEDIUM.LVL', A.room.plan.join());
         check('(the seating changed, so the guard of the room is another number)', N.seatingHash(A.room) !== guardBefore);
         await sleep(300);
         check('(a removed page does not come back by itself)', B.status === 'removed' && B.events.filter((e) => e.ev === 'welcome').length === 1);
         // the same person, opening the link again, is a new person
         const B2 = page('Beatrice', code('a'));
         B2.connect();
-        await step('a new page of the same code is seated in the first open colour (0), as a new person', () => online(B2), 5000);
-        check('(colour 0, not the leader, no word of the old key)', B2.seat === 0 && !B2.isLeader() && B2.created === false, 'seat ' + B2.seat);
+        await step('a new page of the same code is seated in the first open color (0), as a new person', () => online(B2), 5000);
+        check('(color 0, not the leader, no word of the old key)', B2.seat === 0 && !B2.isLeader() && B2.created === false, 'seat ' + B2.seat);
         await step('A sees it join', () => () => A.count('joined') === 2 && A.of('joined')[1].seat === 0);
         // the pages live on the server's pings: nothing has been sent for a while and nobody was dropped
         await sleep(2500);
@@ -176,7 +176,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         check('(the event names the new leader and the one before)', B.of('host')[0].name === 'Bea' && B.of('host')[0].before === 'Ada' && B.of('host')[0].seat === 1, JSON.stringify(B.of('host')));
         check('(B leads, C does not, and the Room messages agree)', B.isLeader() && !C.isLeader() && C.room.leader === 1 && B.room.leader === 1);
         check('(the new leader can move, the other cannot)', B.move(2, 0) === true && C.move(2, 0) === false);
-        await step('B moves Cy to colour 0 and both see it', () => () => names(B) === 'Cy|Bea|-|-' && names(C) === 'Cy|Bea|-|-');
+        await step('B moves Cy to color 0 and both see it', () => () => names(B) === 'Cy|Bea|-|-' && names(C) === 'Cy|Bea|-|-');
         B.leave();
         await step('B is out: Cy leads', () => () => C.count('host') === 2 && C.isLeader());
         check('(the second notice names Cy as the leader, and "you")', C.of('host')[1].you === true && C.of('host')[1].name === 'Cy' && C.of('host')[1].before === 'Bea', JSON.stringify(C.of('host')));
@@ -198,7 +198,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('B notices and is offline', () => () => B.status === 'offline' || B.status === 'connecting' || B.count('welcome') > welcomes, 3000);
         await step('B takes its seat back with the key (a second Welcome, the same seat and key)', () => () => B.status === 'online' && B.count('welcome') === welcomes + 1 && B.seat === 1 && N.hexOf(B.key) === key && B.room !== null);
         check('(A was told of nothing: nobody left, nobody joined)', A.count('left') === 0 && A.count('joined') === 1, A.count('left') + ' left');
-        check('(and B is in its colour, not the leader)', names(A) === 'Ada|Bea|-|-' && B.room.you === 1 && !B.isLeader(), names(A));
+        check('(and B is in its color, not the leader)', names(A) === 'Ada|Bea|-|-' && B.room.you === 1 && !B.isLeader(), names(A));
         check('(the entry for the game page is B\'s key and seat)', B.rejoinEntry().name === 'ants.rejoin.' + code('c') + '.1' && JSON.parse(B.rejoinEntry().text).k === key);
         A.leave();
         B.leave();
@@ -304,8 +304,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('A sees B come and go (the server had seated her, and gave the seat up at the Leave)', () => () => A.count('joined') === 1 && A.count('left') === 1 && names(A) === 'Ada|-|-|-');
         const C = page('Cy', code('j'));
         C.connect();
-        await step('a page that comes next is seated in colour 1: the seat was not held', () => online(C));
-        check('(colour 1, not colour 2)', C.seat === 1, 'seat ' + C.seat);
+        await step('a page that comes next is seated in color 1: the seat was not held', () => online(C));
+        check('(color 1, not color 2)', C.seat === 1, 'seat ' + C.seat);
         check('(B holds no key and wrote no entry for a game)', B.key === null && B.rejoinEntry() === null);
         A.leave();
         C.leave();
@@ -386,27 +386,27 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         C.leave();
     });
 
-    // ---- the other requests at the page's pace: a rename, a plan and a colour move are dropped by the server without a word when they arrive "too early" (docs/NETWORK_PORT.md "Flood control") ------------------------
-    // The server counts the moment at which it HANDLES a request. A page that paced a kind of request at exactly the server's rate (a name 3, then 1 a second; a plan or a colour move 6, then 4 a second) lost one
+    // ---- the other requests at the page's pace: a rename, a plan and a color move are dropped by the server without a word when they arrive "too early" (docs/NETWORK_PORT.md "Flood control") ------------------------
+    // The server counts the moment at which it HANDLES a request. A page that paced a kind of request at exactly the server's rate (a name 3, then 1 a second; a plan or a color move 6, then 4 a second) lost one
     // whenever the link delayed a request and not the next: the room did not change and the person saw the change vanish. Every kind of the page keeps a margin now (lobby_net.js BUDGETS), as the chat does.
     // Pages that ask as fast as the page lets them, for eight seconds, on a link that delays their words by 0 to 150 ms (in order, from a fixed seed): every request that the page SENT has to be applied by the room.
-    await scenario('the renames, the plans and the colour moves: a page that asks as fast as it can, on a link that jitters, loses none', async () => {
-        const L = page('Lia', code('u'), { WebSocket: jitteredWebSocket(150, 20251016) });         // the leader: the plans, the colour moves
+    await scenario('the renames, the plans and the color moves: a page that asks as fast as it can, on a link that jitters, loses none', async () => {
+        const L = page('Lia', code('u'), { WebSocket: jitteredWebSocket(150, 20251016) });         // the leader: the plans, the color moves
         const R = page('Rex', code('u'), { WebSocket: jitteredWebSocket(150, 20251017) });         // a guest who renames herself
         const O = page('Oda', code('u'));                                                          // a guest on a good link: she hears the plans, and is moved about
         L.connect();
         await step('Lia makes the room', () => online(L), 5000);
         R.connect();
-        await step('Rex joins it (colour 1)', () => () => online(R)() && names(L) === 'Lia|Rex|-|-', 8000);
+        await step('Rex joins it (color 1)', () => () => online(R)() && names(L) === 'Lia|Rex|-|-', 8000);
         O.connect();
-        await step('Oda joins it (colour 2; colour 3 is free)', () => () => online(O)() && names(L) === 'Lia|Rex|Oda|-', 8000);
+        await step('Oda joins it (color 2; color 3 is free)', () => () => online(O)() && names(L) === 'Lia|Rex|Oda|-', 8000);
         await sleep(1200);                                                                         // (the pages' links are quiet; every budget of the server is whole)
         const planBase = O.count('plan'), renameBase = L.count('renamed');
         const started = Date.now();
         let planSent = 0, renameSent = 0;
         const sentNames = [];
         while (Date.now() - started < 8500) {
-            if (L.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Open, (planSent + 1) % 5], teamA: N.NO_TEAM, teamB: N.NO_TEAM })) planSent++;       // (colour 3 changes every time, from Open at the start: no plan equals the one before it)
+            if (L.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Open, (planSent + 1) % 5], teamA: N.NO_TEAM, teamB: N.NO_TEAM })) planSent++;       // (color 3 changes every time, from Open at the start: no plan equals the one before it)
             if (R.rename('Rex ' + renameSent)) { sentNames.push('Rex ' + renameSent); renameSent++; }
             await sleep(5);
         }
@@ -415,16 +415,16 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const renamed = () => L.of('renamed').slice(renameBase).map((e) => e.to);
         await until('every plan and every name heard', () => O.count('plan') - planBase === planSent && renamed().length === renameSent, 3000).catch(() => null);
         check('every plan that Lia\'s page sent was applied and shown to the others (the server dropped none)', O.count('plan') - planBase === planSent, 'heard ' + (O.count('plan') - planBase) + ' of ' + planSent);
-        check('(the last plan is the room\'s: colour 3 is ' + (planSent % 5) + ')', O.room.plan[3] === planSent % 5 && L.room.plan[3] === planSent % 5, 'plan ' + O.room.plan.join());
+        check('(the last plan is the room\'s: color 3 is ' + (planSent % 5) + ')', O.room.plan[3] === planSent % 5 && L.room.plan[3] === planSent % 5, 'plan ' + O.room.plan.join());
         check('every name that Rex\'s page sent was taken, in order (the server dropped none)', renamed().join('|') === sentNames.join('|'), 'heard ' + renamed().length + ' of ' + renameSent + ': ' + renamed().join('|'));
         check('(and nobody was thrown out)', [L, R, O].every((p) => p.status === 'online') && [L, R, O].every((p) => p.count('refused') === 0 && p.count('removed') === 0));
-        // the colour moves: Lia puts Oda in colour 3 and back, as fast as the page lets her (and waits for the room to show the move before she asks for the next, as a screen does: a guard of an older seating is no move)
+        // the color moves: Lia puts Oda in color 3 and back, as fast as the page lets her (and waits for the room to show the move before she asks for the next, as a screen does: a guard of an older seating is no move)
         await sleep(1200);
-        check('Lia sets every colour to Open again (a planned bot on a colour is not a place to move to)', L.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
+        check('Lia sets every color to Open again (a planned bot on a color is not a place to move to)', L.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
         await step('... and the room shows it', () => () => L.room.plan.join() === '0,0,0,0' && O.room.plan.join() === '0,0,0,0');
         const moveBase = L.count('moved');
         const moveStarted = Date.now();
-        let moveSent = 0, odaAt = 2;                                                                // (Oda sits in colour 2; colour 3 is free)
+        let moveSent = 0, odaAt = 2;                                                                // (Oda sits in color 2; color 3 is free)
         while (Date.now() - moveStarted < 6000) {
             if (L.seatOf('Oda') === odaAt) {                                                       // (the room has shown the last move)
                 const to = odaAt === 2 ? 3 : 2;
@@ -434,7 +434,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         }
         check('6 seconds of moving Oda back and forth as fast as the page lets Lia: 5 at once and then 3.2 a second at most (10 to 25 moves)', moveSent >= 10 && moveSent <= 25, String(moveSent));
         await until('the last move shown', () => L.seatOf('Oda') === odaAt && L.count('moved') - moveBase === moveSent, 3000).catch(() => null);
-        check('every colour move that Lia\'s page sent was made, and shown (the server dropped none)', L.count('moved') - moveBase === moveSent && L.seatOf('Oda') === odaAt, 'heard ' + (L.count('moved') - moveBase) + ' of ' + moveSent + ', Oda in colour ' + L.seatOf('Oda') + ', wanted ' + odaAt);
+        check('every color move that Lia\'s page sent was made, and shown (the server dropped none)', L.count('moved') - moveBase === moveSent && L.seatOf('Oda') === odaAt, 'heard ' + (L.count('moved') - moveBase) + ' of ' + moveSent + ', Oda in color ' + L.seatOf('Oda') + ', wanted ' + odaAt);
         check('(and nobody was thrown out)', [L, R, O].every((p) => p.status === 'online') && [L, R, O].every((p) => p.count('refused') === 0));
         L.leave();
         R.leave();

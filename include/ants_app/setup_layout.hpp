@@ -15,7 +15,7 @@
 //   * the map list box w_map and the status box statline are made 70 columns wider by repeating one column inside each of three runs of identical columns; the chat input box is statline's
 //     box (rows 11 .. 40, without its "status" label) made 96 columns narrower by dropping columns inside runs of identical columns.
 // All numbers are the approved mock-ups' own (2026-10-02, option C, with the chat and map preview; the chat column restyled in the setup screen's own style: black efram box, statline's
-// input box, TrueType in the labels' colours); tests/test_app/test_wide_setup.cpp compares every rectangle with them, checks every seam against the art of ants.chd and the composed pictures against
+// input box, TrueType in the labels' colors); tests/test_app/test_wide_setup.cpp compares every rectangle with them, checks every seam against the art of ants.chd and the composed pictures against
 // the mock-ups pixel for pixel.
 //
 // THREE VARIANTS of the wide screen:

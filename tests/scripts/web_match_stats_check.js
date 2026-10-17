@@ -1,6 +1,6 @@
 // Runs the OWN code of the stats sections of the match page (web/match_stats.js: the band of highlights, "Over time", "Activity", the note of a match without stats) with the real AntsHistory on a small fake of
 // the browser's DOM: what each section builds from a record's `details`, that a record without details or with damaged ones builds nothing and throws nothing, that a name is text, and the plain
-// functions (the clock, the steps of a chart, the colour of a cell) on tables. tests/scripts/test_web_match_stats.py runs it with node (the quick tier), and again on broken copies, which it must refuse.
+// functions (the clock, the steps of a chart, the color of a cell) on tables. tests/scripts/test_web_match_stats.py runs it with node (the quick tier), and again on broken copies, which it must refuse.
 // usage: node web_match_stats_check.js web/match_stats.js web/history_page.js
 'use strict';
 const path = require('path');
@@ -50,7 +50,7 @@ function draw(node, width) { node.byClass('chartbox').forEach((b) => { b.clientW
 // ---- the plain functions ----
 same('the clock is minutes and seconds of 20 turns a second', [MS.clock(0), MS.clock(967), MS.clock(14405), MS.clock(-5), MS.clock('x')], ['0:00', '0:48', '12:00', '0:00', '0:00']);
 same('a step of 1, 2 or 5 times a power of ten', [MS.niceStep(2040, 5), MS.niceStep(7, 5), MS.niceStep(100, 4), MS.niceStep(0, 5), MS.niceStep(NaN, 5), MS.niceStep(36000, 5)], [500, 2, 50, 1, 1, 10000]);
-same('a cell is the seat colour mixed into the dark box, with the ink that reads on it', [MS.tintOf([121, 191, 147], 0).background, MS.tintOf([121, 191, 147], 1).background, MS.tintOf([121, 191, 147], 0).color, MS.tintOf([121, 191, 147], 1).color, MS.tintOf([121, 191, 147], 9).background],
+same('a cell is the seat color mixed into the dark box, with the ink that reads on it', [MS.tintOf([121, 191, 147], 0).background, MS.tintOf([121, 191, 147], 1).background, MS.tintOf([121, 191, 147], 0).color, MS.tintOf([121, 191, 147], 1).color, MS.tintOf([121, 191, 147], 9).background],
     ['rgb(13,23,31)', 'rgb(121,191,147)', '#f4ece2', '#06120d', 'rgb(121,191,147)']);
 same('the lead as a sentence', MS.leadSentence([{ t: 300, seat: 3, ally: -1 }, { t: 4600, seat: 2, ally: 0 }]), ['Changed hands 1 time: ', { seat: 3, ally: -1 }, ' until 3:50', ', then ', { seat: 2, ally: 0 }, ' to the end', '.']);
 same('... and when it never changed', MS.leadSentence([{ t: 300, seat: 1, ally: -1 }]), ['Never changed hands: ', { seat: 1, ally: -1 }, ' to the end', '.']);
@@ -63,11 +63,11 @@ same('... nothing when nobody led', MS.leadSentence([]), null);
     const b = build(rec);
     same('the band is one list of four links', [b.summary.id, b.summary.byTag('li').length, b.summary.byTag('a').map((a) => a.href)], ['summary', 4, ['#overtime', '#overtime', '#overtime', '#activity']]);
     same('the chips say it in words', b.summary.byTag('a').map(text), ['First bloodFinn (bot, Hard) on Gory, 0:48', 'LeadChanged hands 1 time; Finn (bot, Hard) took it at 3:50', 'ComebackFinn (bot, Hard) won from 285 points behind (at 3:20)', 'BusiestDethcon: 332 orders']);
-    check('the colour squares of the chips are the seats\'', b.summary.byTag('i').filter((i) => i.className === 'sq').map((i) => i.attrs['data-c']).join() === 'Blue,Green,Blue,Blue,Red', b.summary.byTag('i').map((i) => i.attrs['data-c']).join());
+    check('the color squares of the chips are the seats\'', b.summary.byTag('i').filter((i) => i.className === 'sq').map((i) => i.attrs['data-c']).join() === 'Blue,Green,Blue,Blue,Red', b.summary.byTag('i').map((i) => i.attrs['data-c']).join());
 
     const ot = b.overtime;
     same('over time: its id, its title, and how often it looks', [ot.id, ot.attrs['aria-labelledby'], text(ot.byTag('h2')[0]), text(ot.byClass('count')[0])], ['overtime', 'overtime-h', 'Over time', 'Every 15 s · 12:00 long']);
-    same('the legend gives each seat its colour and its shape', ot.byClass('key')[0].byTag('i').map((i) => [i.className, i.attrs['data-c']]), [['mk circle', 'Green'], ['mk square', 'Red'], ['mk triangle', 'Blue'], ['mk diamond', 'Black']]);
+    same('the legend gives each seat its color and its shape', ot.byClass('key')[0].byTag('i').map((i) => [i.className, i.attrs['data-c']]), [['mk circle', 'Green'], ['mk square', 'Red'], ['mk triangle', 'Blue'], ['mk diamond', 'Black']]);
     check('nothing is drawn before the width is known', ot.byTag('svg').length === 0);
     draw(ot, 700);
     const charts = ot.byTag('svg');

@@ -66,7 +66,7 @@ public:
     ~ScorecardModal() = default;
 
     void set_local_player_name(std::string name) { local_player_name_ = std::move(name); }
-    /// The names of the four teams for the rows (an empty name shows the colour word)
+    /// The names of the four teams for the rows (an empty name shows the color word)
     void set_player_names(const std::array<std::string, 4>& names) { player_names_ = names; }
     /// The teams that get a row (bit p = team p): a browser game has no other players, so its idle teams are not listed (default: all)
     void set_shown_teams(uint8_t mask) noexcept { shown_mask_ = static_cast<uint8_t>(mask & 0x0Fu); }

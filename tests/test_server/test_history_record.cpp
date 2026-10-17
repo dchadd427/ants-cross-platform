@@ -368,7 +368,7 @@ int main() {
         f.seat(0, 10, 1, 2, 3).seat(1, 20, 4, 5, 6).seat(2, 30, 7, 8, 9).seat(3, 40, 10, 11, 12);
         HistoryRecord r = record_of(f);
         ASSERT_TRUE(r.seats[0].name == "Ann" && r.seats[0].bot.empty());
-        ASSERT_TRUE(r.seats[1].name.empty() && r.seats[1].bot.empty());                  // (an empty name stays empty: the pages show the colour)
+        ASSERT_TRUE(r.seats[1].name.empty() && r.seats[1].bot.empty());                  // (an empty name stays empty: the pages show the color)
         ASSERT_TRUE(r.seats[2].name.empty() && r.seats[2].bot == "Hard" && r.seats[3].bot == "Bot");
         ASSERT_FALSE(r.computers_only);
         ASSERT_TRUE(r.seats[2].score == 30 && r.seats[2].killed == 7 && r.seats[2].lost == 8 && r.seats[2].hatched == 9 && r.seats[2].bombs_planted == 3 && r.seats[2].bombs_defused == 4 && r.seats[2].fires_lit == 5);

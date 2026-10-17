@@ -579,7 +579,7 @@ int Ant::F102151a(int flag)                                      // 0x102151a, r
     f78 = 1; t7c = new Task24ae4(this); t7c->Start(0, 0);        // stun-invulnerability task
     SetActionDefault(0); ClearPath(); return LowHpCheck(1); }
   if (LowHpCheck(1)) { if (hp74 > 0) SetActionDefault(0); return 1; }
-  SetActionDefault(3);                                           // action 3 anim = world+0x4180[type+6*colour] (carry 0x41e0), dir forced to 4 (S)
+  SetActionDefault(3);                                           // action 3 anim = world+0x4180[type+6*color] (carry 0x41e0), dir forced to 4 (S)
   order = 0; acTarget = {0x5a,0x78}; ClearPath();
   SetPositionPt(TileCentre(PixelTile())); return 0; }
 
@@ -621,7 +621,7 @@ void Ant::StartPause(int on)                                     // FUN_0101cc1e
    - Otherwise, unless `+0x88` is set, check whether the ant is within 2 px of the new tile's centre. Normally it is 16 px away, so the result is `SetAction(1, e0, T(tile5a), T(ntile), 0, 1)`. **The walk animation restarts only if the terrain class differs**, and the new animation uses the new tile's terrain.
 4. The ant is inside `wp[idx]`: each step it tests `|n − centre| ≤ 2` on both axes (16-bit unsigned compare of `abs()`). When true, `d = centre − pos`, so the ant lands exactly on the centre, then `ARRIVE`.
 5. `ARRIVE` for a non-final waypoint: `++idx`, `SetAction(1, DirAdjacent(ntile, next), T(ntile), T(next), 1, 1)`. With flag=1 the animation restarts only if the direction changed (or `+0x88` was set). The animation terrain is `terrA` = the tile just reached. On a straight line the 12-frame cycle continues without interruption.
-6. Swimmers (type 5), where the arrival tile and next tile differ in water-ness: SetAction plays dive-in `world[0x11b0+dir+8*colour]` or climb-out `world[0x11d0+…]` and sets `+0x88 = 1`. While `+0x88` is set, WalkStep skips the ≤2 px arrival test and the terrain restart. The dive still passes through TryEnterTile when it crosses the boundary. On the animation's last frame (status 2) the +0x88 branch replaces that frame's delta with a snap to `centre(tile5a)` and ARRIVEs.
+6. Swimmers (type 5), where the arrival tile and next tile differ in water-ness: SetAction plays dive-in `world[0x11b0+dir+8*color]` or climb-out `world[0x11d0+…]` and sets `+0x88 = 1`. While `+0x88` is set, WalkStep skips the ≤2 px arrival test and the terrain restart. The dive still passes through TryEnterTile when it crosses the boundary. On the animation's last frame (status 2) the +0x88 branch replaces that frame's delta with a snap to `centre(tile5a)` and ARRIVEs.
 7. Tile-boundary asymmetry, from `idiv` truncation with centre offset 16: moving toward +x/+y an orthogonal 4 px walk crosses at step 4 (offset +16). Toward −x/−y it crosses at step 5 (offset −20). Diagonal 3 px walks cross at step 6 in every direction.
 
 Worked timings (straight line, no restart). The number of steps is the count of frame deltas until the ant is within 2 px of the next centre:
@@ -646,7 +646,7 @@ On the timer tick where `now ≥ +0x10`, FUN_0102b997 consumes walk frame F (sta
    - Local ant: `StopSync()` sends message 0x13 {PixelTile(pos before this step), team, idx}. FUN_0100d791 runs handler 0x10236c1 **synchronously**, which calls `StopAt(tile, force=0)`:
      - `SetPositionPt(centre)`. The ant is now exactly at the centre (occupancy unchanged, fog revealed with radius 6).
      - Snap the attached sprite; `StartPause(0)`.
-     - wp==NULL and order==0, but action==1, so `SetActionDefault(0)` = SetAction(0, +0xe0, computed terrain): the idle animation `world[0x3d0 + dir + 8*(type+6*colour)]`, carrying `0x868`, swimming idle `world[0x47c0+4*colour]` on water, `+0x88 = 0`. It is played now, and its nested start step runs.
+     - wp==NULL and order==0, but action==1, so `SetActionDefault(0)` = SetAction(0, +0xe0, computed terrain): the idle animation `world[0x3d0 + dir + 8*(type+6*color)]`, carrying `0x868`, swimming idle `world[0x47c0+4*color]` on water, `+0x88 = 0`. It is played now, and its nested start step runs.
      - `SetPath(0,…)` makes order 0 and acTarget the sentinel.
      - The same message is then broadcast so peers do the same.
    - Remote copy of the ant: `StopAt(tile5a, 0)` is called directly.

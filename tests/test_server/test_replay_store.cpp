@@ -278,7 +278,7 @@ int main() {
         ASSERT_EQ(e.rules, net::kProtocolVersion);
         ASSERT_EQ(e.game, std::string("v0.0.0"));
         ASSERT_EQ(e.turns, uint32_t{700});
-        ASSERT_EQ(e.players, (std::vector<std::string>{"Green", "Blue (Bot (Medium))"}));      // a seat without a name is its colour, a computer player has its name
+        ASSERT_EQ(e.players, (std::vector<std::string>{"Green", "Blue (Bot (Medium))"}));      // a seat without a name is its color, a computer player has its name
         const ReplayEntry* found = store.find(kName0);
         ASSERT_TRUE(found != nullptr && found->bytes == bytes.size() && found->ended_s == kT0);
         ASSERT_TRUE(any_line_has(store.take_notes(), "0 file(s)"));                      // (what prepare found, said once)
@@ -377,7 +377,7 @@ int main() {
         ASSERT_EQ(store.count(), size_t{9999});
     } TEST_END();
 
-    TEST_CASE("RS2.6 The List Says A Seat's Colour With The Name That The File Holds (\"Green (Ann)\"), The Colour Alone For A Seat Without One, A Computer Player's Name As It Is, And Gives A Name With Quotes And Brackets As Typed; Opening The Store Again Reads The Same") {
+    TEST_CASE("RS2.6 The List Says A Seat's Color With The Name That The File Holds (\"Green (Ann)\"), The Color Alone For A Seat Without One, A Computer Player's Name As It Is, And Gives A Name With Quotes And Brackets As Typed; Opening The Store Again Reads The Same") {
         Fixture f;
         ReplayStore store(f.config());
         std::string why;

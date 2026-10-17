@@ -127,7 +127,7 @@ struct ApplicationConfig {
     uint16_t lan_port{net::kLanDiscoveryPort};  // the UDP port on which an open room announces itself to the local network (--lan-port N; 0 = not at all, --no-lan)
     std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
     std::string net_token;                      // Join: the credential that came with the room code (--token T)
-    uint8_t net_seat{255};                      // Join: the seat asked for (--seat N, 0 .. 3: the colours green, red, blue, black); 255: any free seat
+    uint8_t net_seat{255};                      // Join: the seat asked for (--seat N, 0 .. 3: the colors green, red, blue, black); 255: any free seat
     /// --start-when N (1 .. 4; 0 = off, the default): when this game leads a server's room it presses START itself (the S key of the setup screen, the same path as a click) once N
     /// players are in the room, again every second until the match starts. The web front page's card gives it to the game of a match (1 + the card's Friend rows: the START of the
     /// card was the click) and a headless test client has nobody to click at all. 1 is for a leader with --fill-bots (one person is enough then; without a fill the START of one
@@ -166,7 +166,7 @@ struct ApplicationConfig {
     std::string player_name;                    // this player's name (--name); empty: the system user, or "Player" in a network game
     std::array<std::string, 4> team_names{};    // names of the teams of a local game (-N<team><name> as in the original, --team-name)
     /// false: a local game shows a score label only for the teams that have a name (and the local player's own). The browser build sets it: there are no
-    /// other players in it (no multiplayer yet), so the colour words "Red:", "Blue:", "Black:" would only be placeholders. The original draws a label only for
+    /// other players in it (no multiplayer yet), so the color words "Red:", "Blue:", "Black:" would only be placeholders. The original draws a label only for
     /// players that exist (docs 5.42).
     bool label_unnamed_teams{true};
     /// --bot SEAT[:SPEC] (repeatable): computer players at these seats (docs/BOTS.md). A local game then plays the seats that are taken (the local player and the bots); with
@@ -174,7 +174,7 @@ struct ApplicationConfig {
     std::vector<ai::BotSpec> bots;
     /// --alone: a game for one on this computer in which only the local player's seat plays: the other three have no hill, no ants and no eggs, as a seat that nobody takes has none in a game
     /// with --bot (the web page's START with every other seat on Nobody). Without it a game of this machine that has no --bot plays all four colonies, the original's single-player game,
-    /// whose other colours stand still. Not together with --bot (parse_arguments says so); it does nothing in a room, as --play does not.
+    /// whose other colors stand still. Not together with --bot (parse_arguments says so); it does nothing in a room, as --play does not.
     bool alone{false};
     /// --replay FILE (docs/REPLAYS.md "Watching"): the game shows the match that FILE (a .antsrep) holds instead of playing one: its map is found in `maps_dir`, the orders go in at their turns and the HUD's orders are
     /// discarded. The whole map is shown (no fog). The match is played from the start at 1x; replay_control() pauses, changes the speed, jumps. A file that cannot be shown (damaged, other rules, no such map) leaves the
@@ -815,7 +815,7 @@ private:
     void net_finish_load();                               // the map file is here: check its hash, load it, report (net_load_match, poll_map_fetch)
     void poll_map_fetch();                                // once a frame of a room: the room's map is asked for ahead of the Start, and a Start that waits for its map is carried on or failed
     void net_begin_match(bool rejoin = false, uint8_t countdown_seconds = 0);   // everybody loaded: the match runs on this machine (a rejoin: it was given a match that runs, see NetGame::Event::rejoin; `countdown_seconds`: protocol 21, the Begin said the first turn is held that long)
-    void begin_net_countdown(uint8_t seconds);            // the countdown card of a room with two or more people: the count, the colours, the chat (hud.hpp start_match_countdown)
+    void begin_net_countdown(uint8_t seconds);            // the countdown card of a room with two or more people: the count, the colors, the chat (hud.hpp start_match_countdown)
     void tick_net_countdown();                            // once a frame while the card is up: what is left of the count, the status line, and the end of it when the first turn (or a pause) has closed the dialog
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);

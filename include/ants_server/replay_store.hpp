@@ -11,7 +11,7 @@
 // owner only, and deleted when it is old); a `.tmp` that is found at the start is a crash's and is deleted. The ages are the times in the names, so they are as right as the server's clock.
 //
 // What the files say about the players: the names that the room showed everybody. A person's seat has the name that was typed (printable ASCII, at most 32 characters: "Green (Ann)"; replay_person_name in room.hpp)
-// and none when nothing was typed (the readers show the colour: "Green"), a computer player's seat has its display name ("Bot (Medium)"). That is all a file says of the people: no address, room code,
+// and none when nothing was typed (the readers show the color: "Green"), a computer player's seat has its display name ("Bot (Medium)"). That is all a file says of the people: no address, room code,
 // key or chat. The names are public when the server's public door is on (ReplayStore is also what the public list reads).
 //
 // Single threaded like the server's loop. Opening the store reads every file once; after that nothing takes longer than one small file write or one pass over the index (the hourly purge).

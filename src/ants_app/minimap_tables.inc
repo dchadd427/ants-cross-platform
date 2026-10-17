@@ -1,5 +1,5 @@
-// Generated from Ants.exe (minimap object table at VA 0x1001c50: 215 entries of {animation id, colour index, size flag}).
-// Colour is a palette index; size flag 0/1/2 sets the dot size in cells (0: colour only). Do not edit by hand.
+// Generated from Ants.exe (minimap object table at VA 0x1001c50: 215 entries of {animation id, color index, size flag}).
+// Color is a palette index; size flag 0/1/2 sets the dot size in cells (0: color only). Do not edit by hand.
 constexpr MinimapObject kMinimapObjects[] = {
     {34, 77, 2}, // bridge1
     {35, 77, 2}, // bridge2

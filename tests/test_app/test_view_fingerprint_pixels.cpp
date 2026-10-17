@@ -89,7 +89,7 @@ struct RendererRig {
 }  // namespace
 
 void world_pixel_scenarios(const assets::AssetArchive& arc) {
-    // The playfield at the corners and edges of two maps (a 60 x 60 map and TINY, which is smaller than two views): ants of every type, colour and facing, effects and
+    // The playfield at the corners and edges of two maps (a 60 x 60 map and TINY, which is smaller than two views): ants of every type, color and facing, effects and
     // score bubbles, all straddling the borders of the playfield; the canvas outside the playfield must stay black
     for (const char* map : {"MEDIUM", "TINY"}) {
         const int32_t tiles = std::string(map) == "TINY" ? 31 : 60;

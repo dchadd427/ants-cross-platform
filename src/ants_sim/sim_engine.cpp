@@ -703,13 +703,13 @@ void SimulationEngine::set_hatch_delay_ticks(uint32_t ticks) {
     impl_->hatch_delay_ticks_ = ticks;
 }
 
-std::string SimulationEngineImpl::player_colour_name(uint8_t p) const {
-    return strings::colour_name(static_cast<uint8_t>(3u - (p & 3u)));
+std::string SimulationEngineImpl::player_color_name(uint8_t p) const {
+    return strings::color_name(static_cast<uint8_t>(3u - (p & 3u)));
 }
 
 std::string SimulationEngineImpl::player_display_name(uint8_t p) const {
     if (p < MAX_PLAYERS && !player_names_[p].empty()) return player_names_[p];
-    return player_colour_name(p);
+    return player_color_name(p);
 }
 
 void SimulationEngine::set_player_name(uint8_t player_id, const std::string& name) {
@@ -733,11 +733,11 @@ void SimulationEngine::propose_alliance(uint8_t from_player, uint8_t to_player) 
     ev.timestamp_ms = static_cast<uint32_t>(std::max<int64_t>(0, static_cast<int64_t>(impl_->match_limit_ms_) - impl_->match_clock_ms_));
     if (old_ally < MAX_PLAYERS && old_ally != to_player) {
         ev.string_id = strings::kInviteBreakDialog;
-        ev.message_text = strings::format(ev.string_id, impl_->player_display_name(from_player), impl_->player_colour_name(from_player),
-                                          impl_->player_display_name(old_ally), impl_->player_colour_name(old_ally));
+        ev.message_text = strings::format(ev.string_id, impl_->player_display_name(from_player), impl_->player_color_name(from_player),
+                                          impl_->player_display_name(old_ally), impl_->player_color_name(old_ally));
     } else {
         ev.string_id = strings::kInviteDialog;
-        ev.message_text = strings::format(ev.string_id, impl_->player_display_name(from_player), impl_->player_colour_name(from_player));
+        ev.message_text = strings::format(ev.string_id, impl_->player_display_name(from_player), impl_->player_color_name(from_player));
     }
     impl_->news_queue_.push_back(std::move(ev));
 }
@@ -763,8 +763,8 @@ void SimulationEngine::accept_alliance(uint8_t responding_player, uint8_t propos
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceYes, 0, 0, 1, responding_player});
     impl_->post_news(proposing_player, strings::kTeamAccepted, impl_->player_display_name(responding_player), {}, {}, {}, responding_player);
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceOn, 0, 0, 1, 255});
-    impl_->post_news_flash(strings::kTeamNow, impl_->player_display_name(proposing_player), impl_->player_colour_name(proposing_player),
-                           impl_->player_display_name(responding_player), impl_->player_colour_name(responding_player));
+    impl_->post_news_flash(strings::kTeamNow, impl_->player_display_name(proposing_player), impl_->player_color_name(proposing_player),
+                           impl_->player_display_name(responding_player), impl_->player_color_name(responding_player));
     impl_->post_news(255, strings::kTeamMade);
 }
 
@@ -788,8 +788,8 @@ void SimulationEngine::break_alliance(uint8_t player_id) {
     impl_->world_state_dirty_ = true;
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceBreak, 0, 0, 1, 255});
     if (old_ally < MAX_PLAYERS && old_ally != player_id) {
-        impl_->post_news_flash(strings::kTeamNoMore, impl_->player_display_name(player_id), impl_->player_colour_name(player_id),
-                               impl_->player_display_name(old_ally), impl_->player_colour_name(old_ally));
+        impl_->post_news_flash(strings::kTeamNoMore, impl_->player_display_name(player_id), impl_->player_color_name(player_id),
+                               impl_->player_display_name(old_ally), impl_->player_color_name(old_ally));
     }
 }
 
@@ -800,8 +800,8 @@ void SimulationEngine::break_alliance(uint8_t p1, uint8_t p2) {
     impl_->world_state_dirty_ = true;
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceBreak, 0, 0, 1, 255});
     if (were_allied) {
-        impl_->post_news_flash(strings::kTeamNoMore, impl_->player_display_name(p1), impl_->player_colour_name(p1),
-                               impl_->player_display_name(p2), impl_->player_colour_name(p2));
+        impl_->post_news_flash(strings::kTeamNoMore, impl_->player_display_name(p1), impl_->player_color_name(p1),
+                               impl_->player_display_name(p2), impl_->player_color_name(p2));
     }
 }
 
@@ -1168,7 +1168,7 @@ uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, Til
 //  bomber  - a bomb tile (FUN_0101d7f9) for both flags; ground that takes a bomb (FUN_0101d762 with the strict occupancy rule) with the
 //            pedestal latched only;
 //  fire    - the pedestal latched only: a fire wall (layer 2 id 0x86) or plantable ground;
-//  thief   - any hill of another colour, both flags;
+//  thief   - any hill of another color, both flags;
 //  swimmer - the pedestal latched only: a completed bridge (0x25) or water that takes a bridge (FUN_0101d6d6);
 //  worker, combat ant and mixed selections never.
 bool SimulationEngine::is_special_target_valid(AntType type, TileCoord tile, bool auto_flag, uint8_t own_team) const {

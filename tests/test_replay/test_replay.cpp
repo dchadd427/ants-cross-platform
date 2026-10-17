@@ -1208,7 +1208,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(hatch != nullptr && hatch->status == sim::CommandResult::Status::Applied);
     } TEST_END();
 
-    TEST_CASE("RP5.2 The Words Of The List: Game Time As M:SS.T, Seats As Colours (With The Name), Ants As Counts By Type, Places As Tiles Or Allies") {
+    TEST_CASE("RP5.2 The Words Of The List: Game Time As M:SS.T, Seats As Colors (With The Name), Ants As Counts By Type, Places As Tiles Or Allies") {
         ASSERT_EQ(format_time(0), std::string("0:00.0"));
         ASSERT_EQ(format_time(1), std::string("0:00.0"));
         ASSERT_EQ(format_time(2), std::string("0:00.1"));

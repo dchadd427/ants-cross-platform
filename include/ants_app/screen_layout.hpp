@@ -76,7 +76,7 @@ struct ScreenLayout {
     static constexpr int32_t kChatViewY = 299;
     static constexpr int32_t kChatViewW = 138;
     static constexpr int32_t kChatViewH = 101;
-    /// The backing fill of the right panel (480, 22) 160 x 458: the plain colour under the panel's pieces
+    /// The backing fill of the right panel (480, 22) 160 x 458: the plain color under the panel's pieces
     static constexpr int32_t kPanelX = 480;
     static constexpr int32_t kPanelY = 22;
     static constexpr int32_t kPanelW = 160;

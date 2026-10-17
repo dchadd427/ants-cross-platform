@@ -24,7 +24,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     const int32_t map_w = static_cast<int32_t>(world.width);
     const int32_t map_h = static_cast<int32_t>(world.height);
 
-    // Terrain speckle: one random pick per pixel from the class colours, made once per map (the original paints it when
+    // Terrain speckle: one random pick per pixel from the class colors, made once per map (the original paints it when
     // cells are first drawn and keeps it until they are repainted)
     if (radar_map_w_ != world.width || radar_map_h_ != world.height || radar_terrain_.size() != static_cast<size_t>(rw * rh)) {
         radar_map_w_ = world.width;
@@ -36,7 +36,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
                 const int32_t cx = std::min<int32_t>(map_w - 1, x * map_w / rw);
                 const int32_t cy = std::min<int32_t>(map_h - 1, y * map_h / rh);
                 const uint8_t cls = minimap_class(world.cells[static_cast<size_t>(cy) * world.width + static_cast<size_t>(cx)]);
-                radar_terrain_[static_cast<size_t>(y * rw + x)] = kMinimapClassColours[cls < 6 ? cls : 5][rng.rand() % 5u];
+                radar_terrain_[static_cast<size_t>(y * rw + x)] = kMinimapClassColors[cls < 6 ? cls : 5][rng.rand() % 5u];
             }
         }
     }
@@ -44,9 +44,9 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     const auto& palette = archive.get_palette();
     const bool fog = world.fog_of_war_enabled;
 
-    // FUN_01009596: every pixel takes the cell under it. An object shows its colour from the table (a tile id without a record: colour 0) unless the cell is empty or holds a bomb;
-    // then the terrain shows (speckle, or the fog colour of an unexplored cell). In fog the objects that are removed or given out (power-ups, food, fire walls) fall back to the
-    // terrain while their cell is unexplored; every other object, rocks, toys, bridges and the hills of every colony, keeps its colour in the fog
+    // FUN_01009596: every pixel takes the cell under it. An object shows its color from the table (a tile id without a record: color 0) unless the cell is empty or holds a bomb;
+    // then the terrain shows (speckle, or the fog color of an unexplored cell). In fog the objects that are removed or given out (power-ups, food, fire walls) fall back to the
+    // terrain while their cell is unexplored; every other object, rocks, toys, bridges and the hills of every colony, keeps its color in the fog
     std::vector<uint8_t> pixels(static_cast<size_t>(rw * rh), 0);   // palette indices
     for (int32_t y = 0; y < rh; ++y) {
         const int32_t cy = std::min<int32_t>(map_h - 1, y * map_h / rh);
@@ -60,16 +60,16 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
                 const uint8_t flags = sim::movement::tile_flags_of(id);
                 object = (flags & (sim::movement::kTileFlagFood | sim::movement::kTileFlagPowerUp)) == 0 && id != sim::TILE_FIREWALL;
             }
-            uint8_t colour;
+            uint8_t color;
             if (object) {
-                colour = static_cast<uint8_t>(minimap_object_entry(id) & 0xffu);
+                color = static_cast<uint8_t>(minimap_object_entry(id) & 0xffu);
             } else if (explored) {
-                colour = radar_terrain_[static_cast<size_t>(y * rw + x)];
+                color = radar_terrain_[static_cast<size_t>(y * rw + x)];
             } else {
                 const uint8_t cls = minimap_class(cell);
-                colour = kMinimapFogColours[cls < 8 ? cls : 0];
+                color = kMinimapFogColors[cls < 8 ? cls : 0];
             }
-            pixels[static_cast<size_t>(y * rw + x)] = colour;
+            pixels[static_cast<size_t>(y * rw + x)] = color;
         }
     }
 
@@ -91,7 +91,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     // FUN_01009988 paints the dots of the world's object list over the image, in list order and in screen coordinates (a dot is not clipped to the image): plants first (made with
     // the match screen), then the ants in the order they were made. A dot is a filled rectangle centred on the object's position (FUN_01009899): the size flag of its record
     // (one or two cells, 32 world pixels each) scaled down and truncated, at least `min_size`; the top edge is taken from half the WIDTH, as the original does
-    auto dot = [&](int32_t world_x, int32_t world_y, uint8_t colour, int32_t size_flag, int32_t min_size) {
+    auto dot = [&](int32_t world_x, int32_t world_y, uint8_t color, int32_t size_flag, int32_t min_size) {
         const int32_t w = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(32) * size_flag * rw / world_w_px), min_size);
         const int32_t h = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(32) * size_flag * rh / world_h_px), min_size);
         const int32_t cx = to_image_x(world_x);
@@ -109,7 +109,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
             bottom = top + h;
         }
         if (right > left && bottom > top) {
-            const auto& c = palette[colour];
+            const auto& c = palette[color];
             renderer.fill_rect(rx + left, ry + top, right - left, bottom - top, {c.r, c.g, c.b, 255});
         }
     };
@@ -122,7 +122,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     const uint8_t ally = local_player_id_ < world.player_alliances.size() ? world.player_alliances[local_player_id_] : uint8_t{255};
     for (const auto& ant : world.ants) {
         if (fog && ant.player_id != local_player_id_ && ant.player_id != ally && !world.is_tile_revealed(ant.px / 32, ant.py / 32)) continue;
-        dot(ant.px, ant.py, kMinimapAntColours[ant.player_id % 4], 1, 2);
+        dot(ant.px, ant.py, kMinimapAntColors[ant.player_id % 4], 1, 2);
     }
 
     // The view frame (0x1009ae2 - 0x1009b6f, drawn last with GDI FrameRect in (251, 251, 255)): the size of the view scaled down plus one, at the view's origin scaled down, moved

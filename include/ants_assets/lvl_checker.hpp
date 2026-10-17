@@ -42,7 +42,7 @@ enum class OriginalSafeCode : uint8_t {
     FoodPileWithoutStages,   // food_pile_without_stages: the original stops reading block 2 there
     HillMissing,             // hill_missing: a team without a hill
     HillWithoutEntrance,     // hill_without_entrance: hill cells, none of them the entrance
-    HillsSeveral,            // hills_several: more than one hill of a colour
+    HillsSeveral,            // hills_several: more than one hill of a color
     StartingAntsMissing,     // starting_ants_missing: a team without a start marker
     HillNotWhole,            // hill_not_whole (a note): hill cells that are not the 4 x 4 hill around its entrance
     TileNotDrawn,            // tile_not_drawn (a note): tiles that the dictionary names "." and that the original does not load

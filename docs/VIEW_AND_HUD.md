@@ -105,15 +105,15 @@ The gestures and their numbers are in [`TOUCH.md`](TOUCH.md#the-gestures-and-why
 - The frame and the right panel are the original's art, one animation (`uishell`, [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.34).
 - Besides the clock, the score boxes, the minimap and the chat, the HUD shows the card under the minimap with the two command pedestals (see [`CONTROLS.md`](CONTROLS.md)).
 - On your own hill the egg count is an egg tray, `egg1` to `egg9` (ten or more eggs show nine).
-- Every selected ant wears health-coloured selection ears: `dogears` at 9 or more hit points, `yelears` at 3 to 8, `redears` at 2 or fewer.
+- Every selected ant wears health-colored selection ears: `dogears` at 9 or more hit points, `yelears` at 3 to 8, `redears` at 2 or fewer.
 - The recessed status box (`wstatus.bmp`) sits under the card. The chat log and the chat box are below it.
 
 ## Minimap
 
 The 119 x 91 image is painted the way the original's painter does it ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.55):
 
-- Every pixel shows the object of the cell under it, in the colour of the original's table. A tile that is not in the table gets palette colour 0.
-- Bombs show the terrain. In fog only power-ups, food and fire walls fall back to the fog colour, while rocks, toys, bridges and every colony's hill keep theirs. Fire walls show as yellow. There are no dots per object cell.
+- Every pixel shows the object of the cell under it, in the color of the original's table. A tile that is not in the table gets palette color 0.
+- Bombs show the terrain. In fog only power-ups, food and fire walls fall back to the fog color, while rocks, toys, bridges and every colony's hill keep theirs. Fire walls show as yellow. There are no dots per object cell.
 - The dots are rectangles on top of the image: flowers and clovers (3 x 3 on a 60 x 60 map) and the ants, each at its pixel position (2 x 2 on a 60 x 60 map, 3 x 2 on 31 x 31). Every ant has its dot until it is removed, dying and drowning ants too. In fog your own ants and your ally's show, enemies only on explored ground.
 - The view frame is (251, 251, 255). Its size is the world that the view shows (442 x 440 in the 4:3 picture, 762 x 500 in the 16:9 one, divided by the zoom) divided by the scale (world pixels per image pixel), plus one pixel. It stands at the view's origin divided by the scale and is kept inside the image. On an axis where the view is bigger than the map, it is the whole image.
 - The original's flash of the dot of an own or allied ant that was hit in the last 5 seconds is not ported.
@@ -123,7 +123,7 @@ The 119 x 91 image is painted the way the original's painter does it ([`GAME_REV
 The four score boxes are the original's ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.53):
 
 - The local team's box is in the top bar. The others are in the three bottom slots, in team-index order.
-- An allied team's box is half its colour and half its ally's colour, and shows the two scores added.
+- An allied team's box is half its color and half its ally's color, and shows the two scores added.
 - The box of a team that does not play, or has dropped out, is covered with the original's `scorcovr` plate.
 
 ## Status Line & Messages
@@ -150,14 +150,14 @@ Teaming up follows the original's protocol ([`GAME_REVERSE_ENGINEERING.md`](GAME
 
 - The proposer reads "%s accepted teaming up" or "%s rejected teaming up". The invitee reads "%s withdrew offer to team up" when the proposer takes the offer back.
 - A team that is made flashes "A team has been made." and writes the News Flash "%s (%s) and %s (%s) are a team now!" into the chat log. Breaking it writes "... are no longer a team!". A drop-out writes "%s dropped out of the game!".
-- The chat log keeps the original's entries: a header in the sender's team colour ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters, wrapped by pixels and set 10 px in (see Chat Log Window).
+- The chat log keeps the original's entries: a header in the sender's team color ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters, wrapped by pixels and set 10 px in (see Chat Log Window).
 - Chat needs the "Participate In Chat" option. F9 - F12 chat the quick-chat texts to everybody. A team message reaches only the sender and the sender's allies.
 
 ## The countdown card
 
 A match of a server's room with two or more people holds its first turn for 30 s (network protocol 21, [`MATCH_COUNTDOWN.md`](MATCH_COUNTDOWN.md)), and the "Get ready to play!" dialog is a card of the same look for that long: the original's clay orange inside its thin green frame, in the middle of the map view (`include/ants_app/countdown_card.hpp`, 400 x 346 px, in the picture's own pixels whatever its shape).
 
-- **From the top:** `Get ready to play!` (35 px) and `You are the Blue Ants.` (20 px), a black box with the count in 96 px gold digits (the seconds left, rounded up; `0` and "starting..." until the first turn arrives) and "seconds to the start", the four colours in two rows of two in the order of the seats (a dot in the colour, the name, `in` for a person, `bot` for a computer player named like "Pip (bot, Hard)"; your own is "(you)"), the line "Everybody is in. Say hello in the chat." ("The match starts soon." when Participate In Chat is off), and the Fullscreen button (the native game draws it, the web page lays its own over the place, `HUD::countdown_button_rect`).
+- **From the top:** `Get ready to play!` (35 px) and `You are the Blue Ants.` (20 px), a black box with the count in 96 px gold digits (the seconds left, rounded up; `0` and "starting..." until the first turn arrives) and "seconds to the start", the four colors in two rows of two in the order of the seats (a dot in the color, the name, `in` for a person, `bot` for a computer player named like "Pip (bot, Hard)"; your own is "(you)"), the line "Everybody is in. Say hello in the chat." ("The match starts soon." when Participate In Chat is off), and the Fullscreen button (the native game draws it, the web page lays its own over the place, `HUD::countdown_button_rect`).
 - **The chat is open.** The HUD's chat box, its line and the All / Team buttons work: the typed characters (text input; the key events of printable keys are left out, or every letter would be typed twice) and Backspace edit the line, Enter sends it (to the team when you have an ally, else to everybody), F9 - F12 send the quick chat texts, and the lines of the others come into the log. The status line says "Match starts in N s" every second, above the chat box.
 - **Everything else stays out of reach**, as in the 5 s dialog: a click on the map or the pedestals, the keys of the match (F1, Esc, Ctrl+A and the others) and the zoom do nothing. The Quit button and Ctrl+Q ask to leave (the quit dialog is drawn in place of the card; N keeps you here).
 - The card closes with the first executed turn, or for good when a seat is lost and the match is held (the pause overlay and the vote take its place). The 5 s dialog of a match with one person, a game on the local network and a game on this computer is as it was.

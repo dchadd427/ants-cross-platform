@@ -4,7 +4,7 @@ rem
 rem   start_game.bat                 one plain game: the desktop start menu comes first (Single player, Join, Host, Quit), then the original's screens as always
 rem                                  (add --map-select to start on the setup screen at once)
 rem   start_game.bat --players N     the test rig: N games on this machine (2 - 4), one player each, playing one networked match together: window 0 hosts
-rem                                  (green), the others join (red, blue, black), every player has a random name. Four lie in a 2 x 2 grid by colour, the way
+rem                                  (green), the others join (red, blue, black), every player has a random name. Four lie in a 2 x 2 grid by color, the way
 rem                                  the four hills lie on the Small and Treasure maps (the same as the games on web/lobby.html): black top
 rem                                  left, green top right, red bottom left, blue bottom right; two sit side by side (green left, red right), three are green,
 rem                                  red, blue in the first three cells of the grid. The windows of the rig never show the menu: each has --host or --join.
@@ -163,18 +163,18 @@ set /a PICKED+=1
 goto pick
 :picked
 
-set "COLOUR0=Green"
-set "COLOUR1=Red"
-set "COLOUR2=Blue"
-set "COLOUR3=Black"
+set "COLOR0=Green"
+set "COLOR1=Red"
+set "COLOR2=Blue"
+set "COLOR3=Black"
 set "GRID=2x2"
 if "%PLAYERS%"=="2" set "GRID=2x1"
 
 rem The cell of window N (= seat N) in the grid; --cell counts row by row, 0 = top left (1 top right, 2 bottom left, 3 bottom right of the 2 x 2 grid).
-rem Four windows lie by colour, the way the four hills lie on the Small and Treasure maps (the same as the games of web/lobby.html):
+rem Four windows lie by color, the way the four hills lie on the Small and Treasure maps (the same as the games of web/lobby.html):
 rem black (seat 3) top left, green (seat 0) top right, red (seat 1) bottom left, blue (seat 2) bottom right.
 rem (Other maps put the hills elsewhere; the layout is the same for every map.)
-rem Fewer windows keep that order of the colours (black, green, red, blue) without holes, as on the page: two are green left, red right (2 x 1),
+rem Fewer windows keep that order of the colors (black, green, red, blue) without holes, as on the page: two are green left, red right (2 x 1),
 rem three are green, red, blue in cells 0, 1, 2 (nobody is black, so the top left cell goes to green).
 set "CELL0=0"
 set "CELL1=1"
@@ -193,7 +193,7 @@ if "%DRYRUN%"=="1" (
 )
 
 echo [LAUNCHER] %PLAYERS% players in one match on this machine (room on port %PORT%):
-for /l %%N in (0,1,%PLAYERS%) do if %%N lss %PLAYERS% echo    window %%N: !COLOUR%%N!, !PICK%%N!
+for /l %%N in (0,1,%PLAYERS%) do if %%N lss %PLAYERS% echo    window %%N: !COLOR%%N!, !PICK%%N!
 echo    (window 0 is the host: choose the map and press START there)
 echo.
 
@@ -203,13 +203,13 @@ ping -n 3 127.0.0.1 >nul
 for /l %%N in (1,1,%PLAYERS%) do if %%N lss %PLAYERS% call :window %%N start
 exit /b 0
 
-rem :window N echo|start - the command line of window N: window 0 opens the room on this machine only, the others join it and ask for their own colour
+rem :window N echo|start - the command line of window N: window 0 opens the room on this machine only, the others join it and ask for their own color
 :window
 set "WN=%~1"
 set "WNAME=!PICK%WN%!"
-set "WCOLOUR=!COLOUR%WN%!"
+set "WCOLOR=!COLOR%WN%!"
 set "WCELL=!CELL%WN%!"
-set "WARGS=--name !WNAME! --title "Ants - !WCOLOUR! (!WNAME!)" --grid %GRID% --cell !WCELL! --audio-focus --no-lan"
+set "WARGS=--name !WNAME! --title "Ants - !WCOLOR! (!WNAME!)" --grid %GRID% --cell !WCELL! --audio-focus --no-lan"
 if "%WN%"=="0" (
     set "WARGS=!WARGS! --host %PORT% --loopback"
 ) else (
@@ -219,6 +219,6 @@ set "WARGS=!WARGS!!PASS!"
 if "%~2"=="echo" (
     echo %BIN% !WARGS!
 ) else (
-    start "Ants - !WCOLOUR!" "%BIN%" !WARGS!
+    start "Ants - !WCOLOR!" "%BIN%" !WARGS!
 )
 exit /b 0

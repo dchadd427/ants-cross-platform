@@ -99,8 +99,8 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             cell.is_obstacle_overlay = false;
 
             if (is_original_bomb_tile(c2.tile_index)) {
-                // A bomb is a tile id (FUN_01008bc6, 0x81 .. 0x84), never a dictionary name: community editors leave these entries "." and the original arms them all the same. Its COLOUR is the
-                // tile's (the planted bomb's id, 100 + the colour's team index); its OWNER is the cell's second word (the file's third, `properties`: the team index that credits the hits and whose
+                // A bomb is a tile id (FUN_01008bc6, 0x81 .. 0x84), never a dictionary name: community editors leave these entries "." and the original arms them all the same. Its COLOR is the
+                // tile's (the planted bomb's id, 100 + the color's team index); its OWNER is the cell's second word (the file's third, `properties`: the team index that credits the hits and whose
                 // ants and allies route around it), kept verbatim: 0 .. 4 as they are (4 is also "no ally", as in the original), anything above is an editor leftover that matches nobody
                 // (255). The word is not an anchor here: the cell has none, as a planted bomb has none. It is walkable (a bomb is not solid) and set off by the first ant that ends a step on
                 // it (docs/reverse_engineering/map_file_bombs.md).
@@ -174,7 +174,7 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     for (uint32_t y = 0; y < height_; ++y) {
         for (uint32_t x = 0; x < width_; ++x) {
             const auto& c2 = level.get_cell_layer2(x, y);
-            const int team = assets::hill_team_of_id(c2.tile_index);                // the hill of a colour is a tile id (245 .. 248), not a dictionary name (FUN_0100ecac)
+            const int team = assets::hill_team_of_id(c2.tile_index);                // the hill of a color is a tile id (245 .. 248), not a dictionary name (FUN_0100ecac)
             if (team >= 0) {
                 size_t st = static_cast<size_t>(team);
                 if (hill_origins[st].x < 0 || static_cast<int32_t>(x) < hill_origins[st].x) {

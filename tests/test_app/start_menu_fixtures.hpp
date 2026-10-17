@@ -182,11 +182,11 @@ public:
         std::string text;
         int32_t x, y;
         FontSize size;
-        assets::ColorRGBA colour;
+        assets::ColorRGBA color;
     };
     struct Box {
         ButtonRect rect;
-        assets::ColorRGBA colour;
+        assets::ColorRGBA color;
     };
     std::vector<Text> texts;
     std::vector<Box> fills;
