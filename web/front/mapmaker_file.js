@@ -25,7 +25,8 @@
             at = 18 + u16(bytes, 16);                       // the description's length word, then the description
         } else return { ok: false, error: 'the file is not a map of version 8 or 9' };
         if (at + 2 > bytes.length) return { ok: false, error: 'the file is cut short' };
-        at += 2 + 11 * (u16(bytes, at) + 1);                // the dictionary: the number of names less one, then 11 bytes a name
+        var dictAt = at, names = u16(bytes, at) + 1;
+        at += 2 + 11 * names;                               // the dictionary: the number of names less one, then 11 bytes a name
         if (at + 8 > bytes.length) return { ok: false, error: 'the file is cut short' };
         var rows = u32(bytes, at), columns = u32(bytes, at + 4);
         if (version === 8) { rows &= 0xFFFF; columns &= 0xFFFF; }       // the original keeps the lower 16 bits of each
@@ -36,6 +37,7 @@
         if (end > bytes.length) return { ok: false, error: 'the file is cut short inside the grid' };
         var file = {
             ok: true, bytes: bytes, version: version, kind: version === 9 ? 'extended' : 'classic', rows: rows, columns: columns, cells: cells, layer1: layer1, layer2: layer2,
+            dictAt: dictAt, names: names,                   // where the dictionary's word is, and how many names it has
             markers: [], food: [],
             // the tile ids of one cell (a cell outside the grid is plain ground: 485)
             tile1: function (r, c) { return r < 0 || c < 0 || r >= rows || c >= columns ? 485 : u16(bytes, layer1 + 6 * (r * columns + c)); },

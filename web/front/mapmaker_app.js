@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var doc = document, win = window;
-    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapCanvas'];
+    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapPalette', 'MapEdit', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapCanvas', 'MapTools'];
     var GROUND = 485, EGGS = 6, MINUTES = 10;          // a new map: plain grass (docs/MAP_FORMAT.md, "The blank map"), 6 eggs a team, 10 minutes
     var NEW_NAME = 'My map';
 
@@ -11,7 +11,7 @@
     function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
     var opening = 0;
-    var core = null, limits = null, dialogs = null, canvas = null, map = null;
+    var core = null, limits = null, dialogs = null, canvas = null, tools = null, map = null, checkTimer = 0;
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
     function fatal(text) {
@@ -43,8 +43,8 @@
         } else host.appendChild(el('span', 'tag tag-classic', 'Classic map'));
     }
 
-    // Show the open map everywhere it shows: the name, the kind, the numbers, the meter and the one line of the check
-    function showMap() {
+    // The numbers of the open map: the name, the kind, the size, the meter and the one line of the check (not the canvas: a view of the map stays where it is)
+    function showFacts() {
         var f = map.file, kind = f.kind;
         $('map-name').value = map.name;
         doc.title = map.name + ' - Map maker - Ants (1998)';
@@ -56,13 +56,46 @@
         $('meter-fill').style.width = facts.percent + '%';
         $('meter').setAttribute('aria-valuemax', facts.max); $('meter').setAttribute('aria-valuenow', Math.min(f.cells, facts.max));
         $('meter-cap').textContent = facts.caption;
-        var sum = MapChecks.summary(map.report);
-        $('check-dot').className = 'dot ' + (sum.works ? 'ok' : 'bad');
-        $('check-line').textContent = sum.text;
+        showCheckLine();
         var line = $('size-line');
         line.textContent = f.rows + ' x ' + f.columns + ' ';
         if (kind === 'extended') line.appendChild(el('span', 'badge-nv', 'New version only'));
-        canvas.setFile(f);
+    }
+
+    function showCheckLine() {
+        var sum = MapChecks.summary(map.report);
+        $('check-dot').className = 'dot ' + (sum.works ? 'ok' : 'bad');
+        $('check-line').textContent = sum.text;
+    }
+
+    // The check of the map as it is now (the bytes the person is drawing on), as a place that takes both kinds judges it
+    function runCheck() { return core.checkMap(map.bytes, 'extended'); }
+
+    // After a change the check runs again once the hand has rested a moment (the card's button runs it at once)
+    function checkSoon() {
+        win.clearTimeout(checkTimer);
+        checkTimer = win.setTimeout(function () {
+            if (canvas.isStroking()) return checkSoon();
+            var report = runCheck();
+            if (report.status !== 0) return alive();
+            map.report = report.json;
+            showCheckLine();
+        }, 600);
+    }
+
+    // The map has changed (a stroke, an undo, a name written in the dictionary): the numbers, and the check again soon
+    function edited() {
+        showFacts();
+        $('check-dot').className = 'dot wait'; $('check-line').textContent = 'Checking\u2026';          // (not the old answer for the moment it takes)
+        checkSoon();
+    }
+
+    // The dictionary grew, so the bytes are a new, longer array: the page reads them again and the canvas keeps its view
+    function rebase(bytes) {
+        var file = win.MapFile.parse(bytes);
+        map.bytes = bytes; map.file = file;
+        canvas.swapFile(file);
+        return file;
     }
 
     // Take a map in: its check (as a place that takes both kinds judges it) and its grid. Returns an error sentence, or '' when the map is open.
@@ -71,8 +104,11 @@
         if (report.status !== 0) { alive(); return report.error; }
         var file = win.MapFile.parse(bytes);
         if (!file.ok) return 'This file is not a map the map maker can draw: ' + file.error + '.';
+        win.clearTimeout(checkTimer);
         map = { name: name, bytes: bytes, file: file, report: report.json };
-        showMap();
+        showFacts();
+        canvas.setFile(file);
+        tools.setMap(file);
         return '';
     }
 
@@ -95,11 +131,29 @@
         else { var reader = new win.FileReader(); reader.onload = function () { done(reader.result); }; reader.onerror = function () { dialogs.message('This file cannot be opened', 'The file could not be read.'); }; reader.readAsArrayBuffer(file); }
     }
 
+    // A map that has been drawn on is handed over as the core writes it (so that it stays a valid file); one that has not been changed goes as it came
     function download() {
-        var blob = new win.Blob([map.bytes], { type: 'application/octet-stream' }), url = win.URL.createObjectURL(blob), a = el('a');
+        var bytes = map.bytes;
+        if (!tools.isClean()) {
+            var written = core.rewrite(map.bytes, 'extended');
+            if (written.status !== 0) { alive(); return dialogs.message('The file could not be made', MapChecks.capital(written.error) + '.'); }
+            bytes = written.bytes;
+        }
+        var blob = new win.Blob([bytes], { type: 'application/octet-stream' }), url = win.URL.createObjectURL(blob), a = el('a');
         a.href = url; a.download = win.MapFile.downloadName(map.name);
         doc.body.appendChild(a); a.click(); doc.body.removeChild(a);
+        tools.markSaved();
         win.setTimeout(function () { win.URL.revokeObjectURL(url); }, 10000);
+    }
+
+    // What is on the screen is lost when another map takes its place (nothing is kept in the browser yet): when it has been drawn on, ask first
+    function leave(then) {
+        if (tools.isSaved()) return then();
+        dialogs.open({
+            title: 'Leave this map?', cls: 'narrow',
+            build: function (body) { body.appendChild(el('p', 'fatalmsg', 'You have drawn on this map and it is not saved. Download it first, or leave without it.')); },
+            buttons: [{ id: 'download', text: 'Download it first', onClick: function () { download(); then(); } }, { id: 'leave', text: 'Leave without saving', onClick: then }, { id: 'stay', text: 'Stay here', ghost: true }]
+        });
     }
 
     function newMap() {
@@ -115,16 +169,17 @@
     }
 
     function showChecks() {
-        var report = core.checkMap(map.bytes, 'extended');
+        win.clearTimeout(checkTimer);
+        var report = runCheck();
         if (report.status !== 0) return dialogs.message('The check did not run', MapChecks.capital(report.error) + '.');
         map.report = report.json;
-        showMap();
+        showCheckLine();
         dialogs.checks(report.json, { onShow: function (row, column) { canvas.showCell(row, column); $('map').focus(); } });
     }
 
     var ACTIONS = {
-        'new': newMap, open: function () { $('file-in').click(); }, download: download, check: showChecks,
-        menu: function () { dialogs.menu([{ text: 'New', onClick: newMap }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Download', onClick: download }]); }
+        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Download', onClick: download }]); }
     };
 
     function start(module) {
@@ -138,6 +193,15 @@
             zoomIn: doc.querySelector('[data-act="zoom-in"]'), zoomOut: doc.querySelector('[data-act="zoom-out"]'),
             onCursor: function (cell) { $('announce').textContent = cell ? 'Row ' + cell.row + ', column ' + cell.column : ''; }       // (said once for a key or a tap, not for every move of a mouse)
         });
+        tools = MapTools.create({
+            doc: doc, win: win, canvas: canvas,
+            host: {
+                tools: doc.querySelectorAll('[data-tool]'), box: $('palette-box'), title: $('palette-title'), swatches: $('palette'), name: $('palette-name'), hint: $('tool-hint'),
+                tile: $('tile-btn'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn')
+            },
+            file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen(); }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
+        });
+        win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved()) { e.preventDefault(); e.returnValue = ''; } });         // (a drawn map is not kept anywhere yet)
         Array.prototype.forEach.call(doc.querySelectorAll('[data-act]'), function (b) {
             var act = ACTIONS[b.getAttribute('data-act')];
             if (!act) return;

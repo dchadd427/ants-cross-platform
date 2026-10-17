@@ -28,18 +28,26 @@
 <div class="edbody" id="body">
     <aside class="panel tools" aria-label="Tools">
         <h3>Tools</h3>
-        <button class="tool" type="button" disabled><i style="background:#5f8f3c"></i>Ground</button>
-        <button class="tool" type="button" disabled><i style="background:#2f6b2a"></i>Objects</button>
-        <button class="tool" type="button" disabled><i style="background:#c0392b"></i>Hills</button>
-        <button class="tool" type="button" disabled><i style="background:#222"></i>Ants</button>
-        <button class="tool" type="button" disabled><i style="background:#f2c230"></i>Food</button>
-        <button class="tool" type="button" disabled><i style="background:#ddd"></i>Erase</button>
-        <button class="tool" type="button" aria-pressed="true"><i style="background:#8fb3a6"></i>Move</button>
-        <p class="toolnote"><span class="dsk">Drawing comes in the next update. For now you can look around, check a map and download it.</span><span class="mob">Drawing comes next.</span></p>
+        <div class="toolbtns" id="toolbtns" role="group" aria-label="Tools">
+            <button class="tool" type="button" data-tool="ground" aria-pressed="true" aria-keyshortcuts="G" disabled><i style="background:#5f8f3c"></i>Ground</button>
+            <button class="tool" type="button" data-tool="objects" aria-pressed="false" aria-keyshortcuts="O" disabled><i style="background:#2f6b2a"></i>Objects</button>
+            <button class="tool" type="button" data-tool="hills" aria-pressed="false" title="Comes in the next update" disabled><i style="background:#c0392b"></i>Hills</button>
+            <button class="tool" type="button" data-tool="ants" aria-pressed="false" title="Comes in the next update" disabled><i style="background:#222"></i>Ants</button>
+            <button class="tool" type="button" data-tool="food" aria-pressed="false" title="Comes in the next update" disabled><i style="background:#f2c230"></i>Food</button>
+            <button class="tool" type="button" data-tool="erase" aria-pressed="false" aria-keyshortcuts="E" disabled><i style="background:#ddd"></i>Erase</button>
+            <button class="tool" type="button" data-tool="move" aria-pressed="false" aria-keyshortcuts="M" disabled><i style="background:#8fb3a6"></i>Move</button>
+        </div>
+        <button class="tilebtn" type="button" id="tile-btn" aria-haspopup="dialog" hidden><i id="tile-chip"></i><span id="tile-name"></span></button>
+        <div class="palette" id="palette-box" hidden>
+            <h3 id="palette-title">Ground</h3>
+            <div class="swatches" id="palette" role="radiogroup" aria-label="Ground to paint with"></div>
+            <div class="pname" id="palette-name"></div>
+        </div>
+        <p class="toolnote" id="tool-hint"></p>
     </aside>
     <main class="panel canvaswrap">
         <div class="cv" id="cv">
-            <canvas class="map" id="map" tabindex="0" role="application" aria-label="The map. Arrow keys move the marked square, plus and minus zoom, zero shows the whole map." aria-describedby="where"></canvas>
+            <canvas class="map" id="map" tabindex="0" role="application" aria-label="The map. Arrow keys move the marked square, Enter paints it with the chosen tool, plus and minus zoom, zero shows the whole map." aria-describedby="where"></canvas>
             <div class="minimap" id="minimap" hidden><canvas id="mini" role="img" aria-label="Small map of the whole map. Click or tap it to look somewhere else."></canvas><div id="mini-cap"></div></div>
             <div class="bootmsg" id="boot" role="status">Loading the map code&hellip;</div>
         </div>
@@ -47,7 +55,13 @@
             <span class="zoom"><button type="button" data-act="zoom-out" aria-label="Zoom out" disabled>&minus;</button><button type="button" data-act="zoom-in" aria-label="Zoom in" disabled>+</button></span>
             <span id="where"></span><span class="sr" id="announce" role="status"></span>
             <span class="sp"></span>
-            <span class="dsk">Drag to look around. Wheel or two fingers to zoom.</span>
+            <span class="editbar">
+            <span class="undoredo" role="group" aria-label="Undo and redo"><button class="eb" type="button" id="undo-btn" aria-keyshortcuts="Control+Z Meta+Z" disabled>Undo</button><button class="eb" type="button" id="redo-btn" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" disabled>Redo</button></span>
+            <span class="drawopts" role="group" aria-label="Fill and brush size">
+                <button class="eb" type="button" id="fill-btn" aria-pressed="false" aria-keyshortcuts="B" disabled>Fill</button>
+                <span class="brushes" id="brushes" role="radiogroup" aria-label="Brush size in cells"><span class="bl dsk" aria-hidden="true">Brush</span><button class="eb" type="button" role="radio" data-brush="1" aria-label="Brush of 1 cell" aria-checked="true" disabled>1</button><button class="eb" type="button" role="radio" data-brush="3" aria-label="Brush of 3 cells across" aria-checked="false" tabindex="-1" disabled>3</button><button class="eb" type="button" role="radio" data-brush="5" aria-label="Brush of 5 cells across" aria-checked="false" tabindex="-1" disabled>5</button><button class="eb" type="button" role="radio" data-brush="9" aria-label="Brush of 9 cells across" aria-checked="false" tabindex="-1" disabled>9</button></span>
+            </span>
+            </span>
         </div>
     </main>
     <aside class="panel side" aria-label="This map">
@@ -68,11 +82,14 @@
 <script src="lvl_core_api.js"></script>
 <script src="front/mapmaker_file.js"></script>
 <script src="front/mapmaker_tiles.js"></script>
+<script src="front/mapmaker_palette.js"></script>
+<script src="front/mapmaker_edit.js"></script>
 <script src="front/mapmaker_view.js"></script>
 <script src="front/mapmaker_sizes.js"></script>
 <script src="front/mapmaker_checks.js"></script>
 <script src="front/mapmaker_dialog.js"></script>
 <script src="front/mapmaker_canvas.js"></script>
+<script src="front/mapmaker_tools.js"></script>
 <script src="front/mapmaker_app.js"></script>
 </body>
 </html>
