@@ -54,8 +54,8 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'NAMES', 'TEXT',
-    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pickName',
-    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf'
+    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter', 'pickName',
+    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withMode'
 ]);
 
 // The colors: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -254,25 +254,46 @@ const S13b = mk([P('Juniper'), P('Sam'), O, P('Priya')], { plan: [0, 0, 2, 0], s
 const S4 = mk([P('Juniper'), O, O, P('Sam')], { you: 3, leader: 0, plan: [0, 1, 2, 0], teamA: 0, teamB: 3 });         // picture 4: Sam's screen (Black), Juniper hosts, an Easy and a Medium bot, Green + Black
 const S12 = mk([O, P('Sam'), O, P('Priya')], { you: 1, leader: 1, plan: [0, 0, 2, 0] });                              // picture 12: Juniper left, Sam is the host now in Red
 
+// ---- the leader's pending game type: a second plan before the room's answer must not undo the pick ----
+{
+    const room0 = mk([P('Juniper'), P('Sam'), O, O]);                       // the room still says Highest score
+    const pend = (r, p) => R.planWith(R.withMode(r, p), model(r), { seat: 2, kind: 'easy' });
+    same('withMode: nothing pending gives the room itself', R.withMode(room0, -1), room0);
+    same('withMode: a pending mode is the room\'s mode in a copy', [R.withMode(room0, 1).mode, room0.mode, R.withMode(room0, 1) !== room0], [1, 0, true]);
+    same('a second plan (a color changes) before the answer carries the pending mode', pend(room0, 1).mode, 1);
+    same('... and the map change too', R.planWith(R.withMode(room0, 1), model(room0), { map: 'tiny' }).mode, 1);
+    same('... the team mending plan too', R.planWith(R.withMode(room0, 1), model(room0), { sides: [0, 0, 0, 0] }).mode, 1);
+    same('with no pending mode the room\'s own goes back', pend(room0, -1).mode, 0);
+    const answered = mk([P('Juniper'), P('Sam'), O, O], { mode: 1 });
+    same('pendingAfter: the room says it: cleared', R.pendingAfter(1, answered, model(answered)), -1);
+    same('pendingAfter: the room does not say it yet: kept', R.pendingAfter(1, room0, model(room0)), 1);
+    same('pendingAfter: nothing pending stays none', R.pendingAfter(-1, room0, model(room0)), -1);
+    const guestRoom = mk([P('Juniper'), P('Sam'), O, O], { you: 1 });
+    same('pendingAfter: a guest (the lead moved) drops it', R.pendingAfter(1, guestRoom, model(guestRoom)), -1);
+    const starting = mk([P('Juniper'), P('Sam'), O, O], { starting: true });
+    same('pendingAfter: START pressed drops it', R.pendingAfter(1, starting, model(starting)), -1);
+}
+
 // ---- modelOf ----
 same('modelOf, picture 1: you alone at Green, the host', model(S1), {
-    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', sides: [0, 0, 0, 0],
+    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, sides: [0, 0, 0, 0],
     slots: [person('Juniper', true, true), { kind: 'open' }, { kind: 'open' }, { kind: 'open' }]
 });
 same('modelOf, picture 5: a computer player where the plan says Medium, the team pair as switches', model(S5), {
-    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', sides: [1, 0, 1, 0],
+    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, sides: [1, 0, 1, 0],
     slots: [person('Juniper', true, true), person('Sam'), { kind: 'bot', level: 'medium' }, person('Priya')]
 });
 same('modelOf, picture 4: a guest in Black, an Easy and a Medium bot, the pair Green + Black', model(S4), {
-    you: 3, leader: 0, guest: true, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', sides: [1, 0, 0, 1],
+    you: 3, leader: 0, guest: true, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, sides: [1, 0, 0, 1],
     slots: [person('Juniper', false, true), { kind: 'bot', level: 'easy' }, { kind: 'bot', level: 'medium' }, person('Sam', true)]
 });
 same('modelOf, picture 13b: START is pressed, a guest; the game of Juniper is open (not its own)', model(S13b), {
-    you: 1, leader: 0, guest: true, starting: true, map: 'treasure', mapFile: 'TREASURE.LVL', sides: [0, 0, 0, 0],
+    you: 1, leader: 0, guest: true, starting: true, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, sides: [0, 0, 0, 0],
     slots: [person('Juniper', false, true, true), person('Sam', true), { kind: 'bot', level: 'medium' }, person('Priya')]
 });
 same('modelOf, picture 13: the page\'s own bit never counts, the others\' do', [model(mk([P('Juniper'), P('Sam'), O, P('Priya')], { starting: true, inGame: 11 })).slots.filter((s) => s.kind === 'person').map((s) => s.ingame), model(S13).slots.filter((s) => s.kind === 'person').map((s) => s.ingame)], [[false, true, true], [false, true, false]]);
 same('modelOf, picture 12: the new host', model(S12).slots.map((s) => s.kind + (s.leader ? ':leader' : '') + (s.me ? ':me' : '')), ['open', 'person:leader:me', 'bot', 'person']);
+same('modelOf: the game type of the room (0 when the room says none)', [model(mk([P('Juniper'), O, O, O])).mode, model(mk([P('Juniper'), O, O, O], { mode: 1 })).mode, R.modelOf({ slots: [{ state: 2, name: 'A' }, { state: 0, name: '' }, { state: 0, name: '' }, { state: 0, name: '' }], plan: [0, 0, 0, 0], map: 'TREASURE.LVL', you: 0, leader: 0, teamA: 255, teamB: 255, inGame: 0 }).mode], [0, 1, 0]);
 same('modelOf: what each plan value is when no person holds the color (open, easy, medium, hard, nobody)', model(mk([P('Juniper'), O, O, O], { plan: [0, 4, 1, 3] })).slots.slice(1), [{ kind: 'nobody' }, { kind: 'bot', level: 'easy' }, { kind: 'bot', level: 'hard' }]);
 same('... Medium is value 2', model(mk([P('Juniper'), O, O, O], { plan: [0, 2, 0, 0] })).slots[1], { kind: 'bot', level: 'medium' });
 same('modelOf: a person who holds a color shows, whatever the plan of the color says (it comes back when the person leaves)', model(mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 3, 0, 4] })).slots.map((s) => s.kind), ['person', 'person', 'open', 'nobody']);
@@ -471,8 +492,12 @@ const BOTS = mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3], teamA: 0, 
     ['teams and the color that makes the third player at once', TWO, { seat: 2, kind: 'easy', sides: [1, 0, 1, 0] }, plan('', [0, 0, 1, 0], 0, 2)], ['teams and the color that makes the fourth', T3, { seat: 3, kind: 'hard', sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 3], 0, 3)],
     ['teams that name a computer player that the same change makes Nobody', T3, { seat: 3, kind: 'nobody', sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 4])],
     ['everything at once: map, color, teams', T3, { map: 'small', seat: 3, kind: 'easy', sides: [1, 0, 1, 0] }, plan('SMALL.LVL', [0, 0, 0, 1], 0, 2)],
-    ['a room of game mode 187: the page does not change it (it has no control for it) and sends it back', mk([P('Juniper'), P('Sam'), P('Priya'), O], { mode: 1 }), { map: 'tiny' }, plan('TINY.LVL', [0, 0, 0, 0], undefined, undefined, 1)],
-    ['... also when only a color changes', mk([P('Juniper'), P('Sam'), O, O], { mode: 1 }), { seat: 2, kind: 'easy' }, plan('', [0, 0, 1, 0], undefined, undefined, 1)]
+    ['a room of game mode 187: a change of the map keeps it (the plan sends the room\'s own back)', mk([P('Juniper'), P('Sam'), P('Priya'), O], { mode: 1 }), { map: 'tiny' }, plan('TINY.LVL', [0, 0, 0, 0], undefined, undefined, 1)],
+    ['... also when only a color changes', mk([P('Juniper'), P('Sam'), O, O], { mode: 1 }), { seat: 2, kind: 'easy' }, plan('', [0, 0, 1, 0], undefined, undefined, 1)],
+    ['the game type control: 187 chosen in a room of Highest score (the map stays the room\'s)', T3, { mode: 1 }, plan('', [0, 0, 0, 0], undefined, undefined, 1)],
+    ['... Highest score chosen in a room of 187', mk([P('Juniper'), P('Sam'), P('Priya'), O], { mode: 1 }), { mode: 0 }, plan('', [0, 0, 0, 0], undefined, undefined, 0)],
+    ['... a mode with the map and a color in one change', T3, { mode: 1, map: 'tiny', seat: 3, kind: 'easy' }, plan('TINY.LVL', [0, 0, 0, 1], undefined, undefined, 1)],
+    ['a mode that is no number is none: the room\'s own goes back', mk([P('Juniper'), P('Sam'), O, O], { mode: 1 }), { mode: '0' }, plan('', [0, 0, 0, 0], undefined, undefined, 1)]
 ].forEach(([label, room, change, want]) => {
     const before = JSON.stringify(room);
     const got = PW(room, change);

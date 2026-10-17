@@ -194,7 +194,7 @@ ants-cross-platform/
 │   ├── lobby.html                      # The front page: the lobby, a room on the game server (four colors,
 │   │                                   # a code and link, the map, START), a code to join, rejoin a running match
 │   ├── legal.html                      # The Legal page: free, no warranty, no liability, unofficial (static, in the changelog page's look)
-│   ├── front/                          # The front page's pictures, rules and chat box (lobby_rules.js, lobby_net.js, lobby_chat.js and .css, map_picker.js and .css; art made by tools/front_page_art), its font Libre
+│   ├── front/                          # The front page's pictures, rules and chat box (lobby_rules.js, lobby_net.js, lobby_chat.js and .css, map_picker.js and .css, game_modes.js and game_type.js and .css; art made by tools/front_page_art), its font Libre
 │   │                                   # Franklin (SIL Open Font License, licence beside it) and classic.css, the
 │   │                                   # look that the other pages link
 │   ├── favicon.ico                     # Site icon

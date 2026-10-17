@@ -1,0 +1,42 @@
+/* The "Game type" control of the front page (front/game_type.js, made from the rows of front/game_modes.js): the leader's field with its list, the guest's read-only line and the tag by the room's name.
+   It was not put into web/lobby.html, which is at the 1500 lines of tools/check_hygiene.py; the page links this sheet after its own <style>. The colors are the page's own tokens (:root of web/lobby.html). */
+.gtype { position: relative; display: grid; gap: 6px; }
+.gt-label { font-size: 16px; color: var(--cream); }
+.gt-field { position: relative; }
+.gt-combo { position: relative; display: flex; align-items: center; min-height: 44px; padding: 6px 44px 6px 14px; font-size: 20px; color: var(--cream); cursor: pointer; user-select: none; -webkit-user-select: none;
+    background: var(--inset) url("data:image/svg+xml,%3Csvg xmlns='http:%2F%2Fwww.w3.org/2000/svg' width='22' height='22'%3E%3Crect x='1' y='1' width='20' height='20' rx='2' fill='%232b6357' stroke='%23050a08' stroke-width='2'/%3E%3Cpath d='M6 9l5 5 5-5' fill='none' stroke='%23f4ece2' stroke-width='2.4'/%3E%3C/svg%3E") no-repeat right 8px center;
+    border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.gt-combo[aria-disabled="true"] { background-image: none; padding-right: 14px; cursor: default; opacity: .72; }
+.gt-name { min-width: 0; overflow-wrap: anywhere; }
+.gt-line { text-align: center; font-size: 14px; line-height: 1.3; color: var(--cream); }
+.gt-note { padding: 8px 10px; font-size: 15px; line-height: 1.3; color: var(--cream); background: var(--inset); border: 2px solid var(--edge); border-radius: 4px; }
+.gt-guest { text-align: center; font-size: 16px; color: var(--cream); } .gt-glabel { color: var(--gold); } .gt-gname { font-weight: 500; }
+.gt-gline { text-align: center; font-size: 14px; line-height: 1.3; color: var(--cream); margin-top: -4px; }
+.gt-pop { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30; background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 5px 0 2px var(--shadow); }
+.gt-title { display: none; }
+.gt-list { list-style: none; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
+.gt-opt { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 4px 6px; align-items: start; padding: 8px 10px; cursor: pointer; color: var(--cream); border-bottom: 1px solid #17382f; }
+.gt-opt:last-child { border-bottom: 0; }
+.gt-oname { display: block; font-size: 17px; line-height: 1.3; } .gt-oline { display: block; font-size: 14px; line-height: 1.3; color: var(--cream); }
+.gt-opt.sel { background: #14332b; } .gt-opt.sel .gt-oname { color: var(--gold); }
+.gt-opt.sel .gt-check::before { content: ""; display: block; width: 6px; height: 11px; margin: 4px 0 0 6px; border: solid var(--gold); border-width: 0 3px 3px 0; transform: rotate(40deg); }
+.gt-opt.active { background: #1b4538; } .gt-opt.sel.active { background: #14332b; }
+.gt-combo:focus-visible + .gt-pop .gt-opt.active { outline: 3px solid var(--gold); outline-offset: -3px; }      /* (the keys' cursor is shown by an outline; the mouse's by a lighter row) */
+.gt-combo:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.gt-scrim { display: none; touch-action: none; }
+/* the tag by the room's name: the mode's short name, none for the default mode */
+.modetag { display: inline-block; margin-left: 10px; padding: 1px 7px; font-size: 13px; line-height: 1.4; letter-spacing: .04em; vertical-align: 3px; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; }
+@media (max-width: 600px) {
+    .gtype { gap: 4px; }
+    .gt-combo { min-height: 48px; font-size: 19px; }
+    .gt-line, .gt-gline { text-align: left; } .gt-guest { text-align: left; }
+    .gt-scrim { position: fixed; inset: 0; z-index: 85; background: rgba(5, 10, 8, .72); }
+    .gtype.open .gt-scrim { display: block; }
+    .gt-pop { position: fixed; left: 0; right: 0; top: auto; bottom: 0; z-index: 90; display: flex; flex-direction: column; max-height: 60vh; max-height: 60dvh; border-width: 3px 0 0; border-radius: 10px 10px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: 0 -6px 0 rgba(157, 13, 23, .9); }
+    .gt-title { display: block; touch-action: none; padding: 12px 16px 8px; font-size: 17px; color: var(--cream); border-bottom: 1px solid #17382f; }
+    .gt-list { flex: 1 1 auto; max-height: none; }
+    .gt-opt { min-height: 64px; grid-template-columns: 26px minmax(0, 1fr); padding: 10px 16px; align-content: center; }
+    .gt-oname { font-size: 20px; } .gt-oline { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) { .gt-pop { transition: none; } }
+.head .hl { display: flex; flex-wrap: wrap; align-items: baseline; min-width: 0; } .head .hl h2 { min-width: 0; overflow-wrap: anywhere; }
