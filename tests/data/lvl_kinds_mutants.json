@@ -501,7 +501,7 @@
    "id": "remake_tile_sentence_talks_about_the_original",
    "file": "src/ants_assets/lvl_checker.cpp",
    "old": "(original ? \"): the original reads past its tables there\" : \"): the dictionary has no name for that tile\")",
-   "new": "\"): the original reads past its tables there\"",
+   "new": "(original ? \"): the original reads past its tables there\" : \"): the original reads past its tables there\")",
    "build": [
     "test_original_safe"
    ],
