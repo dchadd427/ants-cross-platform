@@ -599,6 +599,27 @@ void run_bot_tests() {
         ASSERT_EQ(plain.net()->room().mode, 0);
     } TEST_END();
 
+    TEST_CASE("AI6.11f A Room Of 187 Made After The Application Began (The Application's Own Mode Is The Original's): The Match Screen Of The Host Is Told The Rules, Its Chat Log Begins With \"Game started! Most kills wins.\"") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.hud().game_mode() == sim::GameMode::HighestScore);
+        app.net()->set_mode(1);                                                                                            // (the room's mode is not the application's: a room that was made for 187)
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start() && bob.net.phase() == net::NetGame::Phase::Room; }, 8000));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_TRUE(app.sim().game_mode() == sim::GameMode::Kills187 && app.hud().game_mode() == sim::GameMode::Kills187);
+        const std::string log = app.hud().chat_transcript("d @ t");
+        ASSERT_TRUE(log.find("News Flash: Game started! Most kills wins.\n") != std::string::npos && log.find("Go get that food") == std::string::npos);
+    } TEST_END();
+
     TEST_CASE("AI6.11e --game-mode 187 With --teams When The Application Hosts: The Start Carries Both, Both Machines Have The Alliances At Tick 0 In The Game Without Food (The Teams Are Not Dropped In The Mode), The Same State To The End Of The Run, And The Recording Has Both In Its Head") {
         using L = net::FillLevel;
         ApplicationConfig cfg = headless_config();
