@@ -378,8 +378,8 @@ def run_part(part, tab, args, check, tiny, junk):
         page = Page(tab, args.web)
         check(page.open() and page.ready(), "the page starts with its map core")
         tools = json.loads(page.ev("JSON.stringify([].map.call(document.querySelectorAll('[data-tool]'), function (b) { return [b.getAttribute('data-tool'), b.disabled, b.getAttribute('aria-pressed')]; }))"))
-        check(tools == [["ground", False, "true"], ["objects", False, "false"], ["hills", False, "false"], ["ants", False, "false"], ["food", False, "false"], ["erase", False, "false"], ["move", False, "false"]],
-              "Ground is chosen, the other six tools are on: %s" % tools)
+        check(tools == [["ground", False, "true"], ["objects", False, "false"], ["bigger", False, "false"], ["hills", False, "false"], ["ants", False, "false"], ["food", False, "false"], ["erase", False, "false"], ["move", False, "false"]],
+              "Ground is chosen, the other seven tools are on: %s" % tools)
         check(page.button_off("#undo-btn") and page.button_off("#redo-btn"), "Undo and Redo are off with nothing drawn")
         grass, dirt, water, rock, sand = page.color_of(485), page.color_of(487), page.color_of(476), page.color_of(0, 302), page.color_of(571)
         page.tile(487)
