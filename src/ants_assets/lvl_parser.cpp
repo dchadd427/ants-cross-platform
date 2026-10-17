@@ -85,6 +85,33 @@ const MapCell& LevelData::get_cell_layer2(uint32_t x, uint32_t y) const {
     return layer2_interactive[idx];
 }
 
+bool LevelData::has_object_anchor(uint32_t row, uint32_t column) const noexcept {
+    if (row >= height || column >= width) return false;
+    const size_t idx = static_cast<size_t>(row) * width + column;
+    if (idx >= layer2_interactive.size()) return false;
+    const uint16_t tile = layer2_interactive[idx].tile_index;
+    return tile != LVL_EMPTY_TILE && tile != 0xFFFFu && (tile < LVL_BOMB_TILE_FIRST || tile > LVL_BOMB_TILE_LAST);
+}
+
+bool LevelData::object_anchor(uint32_t row, uint32_t column, int32_t& anchor_row, int32_t& anchor_column) const noexcept {
+    if (!has_object_anchor(row, column)) return false;
+    const uint16_t word = layer2_interactive[static_cast<size_t>(row) * width + column].properties;
+    if (version != LVL_EXTENDED_VERSION) {
+        anchor_row = static_cast<int32_t>(word & 0xFFu);
+        anchor_column = static_cast<int32_t>((word >> 8) & 0xFFu);
+        return true;
+    }
+    int32_t r = static_cast<int32_t>(row) + static_cast<int8_t>(static_cast<uint8_t>(word & 0xFFu));
+    int32_t c = static_cast<int32_t>(column) + static_cast<int8_t>(static_cast<uint8_t>((word >> 8) & 0xFFu));
+    if (height <= LVL_MAX_GRID_SIDE && width <= LVL_MAX_GRID_SIDE) {
+        r &= 0xFF;                                                  // (two's complement: the sum modulo 256, also for a negative one)
+        c &= 0xFF;
+    }
+    anchor_row = r;
+    anchor_column = c;
+    return true;
+}
+
 const std::string& LevelData::get_tile_name(uint16_t tile_index) const {
     if (tile_index >= tile_dictionary.size()) return EMPTY_STRING;
     return tile_dictionary[tile_index];
@@ -145,6 +172,10 @@ const char* to_string(LevelProblemKind kind) noexcept {
         case LevelProblemKind::FoodOutsideGrid: return "food_outside_grid";
         case LevelProblemKind::ObjectOutsideGrid: return "object_outside_grid";
         case LevelProblemKind::FileTooLarge: return "file_too_large";
+        case LevelProblemKind::VersionNotSupported: return "version_not_supported";
+        case LevelProblemKind::FormatFlagsUnknown: return "format_flags_unknown";
+        case LevelProblemKind::RulesOutOfRange: return "rules_out_of_range";
+        case LevelProblemKind::DescriptionTooLong: return "description_too_long";
     }
     return "?";
 }
@@ -209,26 +240,47 @@ void add_problem(std::vector<LevelProblem>& list, Severity severity, Kind kind, 
 
 std::string num(uint64_t v) { return std::to_string(v); }
 
+std::string hex(uint32_t v) {
+    static const char digits[] = "0123456789abcdef";
+    std::string out;
+    do { out.insert(out.begin(), digits[v & 0xFu]); v >>= 4; } while (v != 0);
+    return out;
+}
+
+// The sentence of a version 9 file or level that a place without LevelLimits::allow_extended is given
+std::string version_not_supported_text(uint32_t version) {
+    return "header version " + num(version) + " is an Extended map: version " + num(version) + " is not supported here, this place reads Classic maps (version " +
+           num(LVL_EXPECTED_VERSION) + ") only; nothing of the file is read (the original game refuses it too: \"the MAP you tried to play is the wrong version\")";
+}
+
 // The checks that decide whether the data can be handed to the engine at all, whatever the roster: the shape of the grid and of the dictionary, within `limits`.
 void collect_layout_problems(const LevelData& level, const LevelLimits& limits, std::vector<LevelProblem>& out) {
     const uint32_t rows = level.height;
     const uint32_t columns = level.width;
+    const uint32_t version = level.version;
+    const bool extended = version == LVL_EXTENDED_VERSION;
+    if (extended && !limits.allow_extended) {
+        add_problem(out, Severity::Fatal, Kind::VersionNotSupported, version_not_supported_text(version));
+    }
     if (rows == 0 || columns == 0) {
         add_problem(out, Severity::Fatal, Kind::GridEmpty,
                     "the grid has " + num(rows) + " rows x " + num(columns) + " columns: the original loads such a file and goes on with a map that has no cell (nothing to stand on, "
                     "and a start marker would index its empty tile table), the remake has nothing to play on");
-    } else if (rows > LVL_MAX_GRID_SIDE || columns > LVL_MAX_GRID_SIDE) {
+    } else if (!extended && (rows > LVL_MAX_GRID_SIDE || columns > LVL_MAX_GRID_SIDE)) {
         add_problem(out, Severity::Fatal, Kind::GridTooLarge,
                     "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(LVL_MAX_GRID_SIDE) + " the remake hosts (the layer-2 object "
                     "anchors of the format are 8 bit); the map editor cannot make such a map");
-    } else if (rows > limits.rows() || columns > limits.columns()) {
+    } else if (extended && (rows > LVL_FORMAT_CEILING_SIDE || columns > LVL_FORMAT_CEILING_SIDE)) {
         add_problem(out, Severity::Fatal, Kind::GridTooLarge,
-                    "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(limits.rows()) + " x " + num(limits.columns()) +
+                    "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(LVL_FORMAT_CEILING_SIDE) + " a side that version 9 of the format holds");
+    } else if (rows > limits.rows_for(version) || columns > limits.columns_for(version)) {
+        add_problem(out, Severity::Fatal, Kind::GridTooLarge,
+                    "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(limits.rows_for(version)) + " x " + num(limits.columns_for(version)) +
                     " allowed here (a new map, or one brought in now, may have at most that)");
-    } else if (static_cast<uint64_t>(rows) * columns > limits.cells()) {
+    } else if (static_cast<uint64_t>(rows) * columns > limits.cells_for(version)) {
         add_problem(out, Severity::Fatal, Kind::GridTooLarge,
                     "the grid has " + num(rows) + " rows x " + num(columns) + " columns, " + num(static_cast<uint64_t>(rows) * columns) + " cells, more than the " +
-                    num(limits.cells()) + " allowed here (a new map, or one brought in now, may have at most that)");
+                    num(limits.cells_for(version)) + " allowed here (a new map, or one brought in now, may have at most that)");
     }
     if (level.tile_dictionary.size() > LVL_MAX_DICTIONARY_ENTRIES) {
         add_problem(out, Severity::Fatal, Kind::DictionaryTooLarge,
@@ -245,7 +297,7 @@ void fail_file_too_large(LevelValidation* report, uint64_t size, const LevelLimi
     if (!report) return;
     *report = LevelValidation{};
     add_problem(report->problems, Severity::Fatal, Kind::FileTooLarge,
-                "the file has " + num(size) + " bytes, more than the " + num(limits.max_read_bytes) + " allowed here: nothing of it is read");
+                "the file has " + num(size) + " bytes, more than the " + num(limits.read_bytes()) + " allowed here: nothing of it is read");
 }
 
 // The checks on the content of a loaded level (the grid has a shape): what lies outside the grid or the dictionary, and the start markers of the teams that play.
@@ -353,7 +405,7 @@ bool LVLParser::load_from_file(const std::string& filepath, LevelData& out_level
 
         std::streamsize size = static_cast<std::streamsize>(file.tellg());
         if (size < 0) size = 0;
-        if (static_cast<uint64_t>(size) > limits.max_read_bytes) {
+        if (static_cast<uint64_t>(size) > limits.read_bytes()) {
             out_level = LevelData{};
             fail_file_too_large(report, static_cast<uint64_t>(size), limits);
             return false;
@@ -402,25 +454,57 @@ void fail_truncated(Parse& p, const char* where, size_t pos, size_t size) {
                 "and the game does not start");
 }
 
-void parse_level(const uint8_t* data, size_t size, Parse& p) {
+void parse_level(const uint8_t* data, size_t size, const LevelLimits& limits, Parse& p) {
     LevelData& lvl = p.lvl;
     BinaryReader r(data, size);
 
     // header: version, then the mode dword (+0x74) and the minutes word (+0x6e), then the 30 bytes of the description (+0xa6)
     if (!r.read_u32(lvl.version)) { fail_truncated(p, "header", r.pos(), size); return; }
-    if (lvl.version != LVL_EXPECTED_VERSION) {
+    if (lvl.version == LVL_EXTENDED_VERSION) {
+        if (!limits.allow_extended) {
+            add_problem(p.fatal, Severity::Fatal, Kind::VersionNotSupported, version_not_supported_text(lvl.version));
+            return;
+        }
+    } else if (lvl.version != LVL_EXPECTED_VERSION) {
         add_problem(p.fatal, Severity::Fatal, Kind::WrongVersion,
                     "header version " + num(lvl.version) + ", the original reads version " + num(LVL_EXPECTED_VERSION) + " only (0x1006386): it shows \"The MAP you tried to play "
-                    "is the wrong version\" and goes on without a map");
+                    "is the wrong version\" and goes on without a map" + (limits.allow_extended ? "; this place reads versions 8 and 9" : ""));
         return;
     }
+    const bool extended = lvl.version == LVL_EXTENDED_VERSION;
     if (!r.read_u32(lvl.game_mode) || !r.read_u16(lvl.default_minutes)) { fail_truncated(p, "header", r.pos(), size); return; }
     if (lvl.game_mode != LVL_GAME_MODE_STANDARD) {
         add_problem(lvl.load_notes, Severity::Info, Kind::ModeIgnored,
                     "the mode dword is " + num(lvl.game_mode) + ", not 1: the original stores it (0x100639f) and never reads it again, the remake does the same (the map "
                     "editor leaves garbage there)");
     }
-    {
+    if (extended) {
+        // version 9: the `format flags` dword and the `rules` word, then the description as a word length and that many bytes (up to the first zero byte, as in version 8)
+        if (!r.read_u32(lvl.format_flags) || !r.read_u16(lvl.rules)) { fail_truncated(p, "header", r.pos(), size); return; }
+        if ((lvl.format_flags & ~LVL_KNOWN_FORMAT_FLAGS) != 0) {
+            add_problem(p.fatal, Severity::Fatal, Kind::FormatFlagsUnknown,
+                        "the format flags are 0x" + hex(lvl.format_flags) + ", of which 0x" + hex(lvl.format_flags & ~LVL_KNOWN_FORMAT_FLAGS) + " are bits that this reader does not know (it knows " +
+                            (LVL_KNOWN_FORMAT_FLAGS == 0 ? std::string("none") : "0x" + hex(LVL_KNOWN_FORMAT_FLAGS)) + "): the file is from a later version of the format and is not read");
+            return;
+        }
+        if (lvl.rules > LVL_RULES_EXTENDED) {
+            add_problem(p.fatal, Severity::Fatal, Kind::RulesOutOfRange,
+                        "the rules word is " + num(lvl.rules) + ": only 0 (the original's rules) and 1 (extended rules) are known, the file is not read");
+            return;
+        }
+        uint16_t description_bytes = 0;
+        if (!r.read_u16(description_bytes)) { fail_truncated(p, "header", r.pos(), size); return; }
+        if (description_bytes > limits.description_bytes()) {
+            add_problem(p.fatal, Severity::Fatal, Kind::DescriptionTooLong,
+                        "the description has " + num(description_bytes) + " bytes, more than the " + num(limits.description_bytes()) + " allowed here");
+            return;
+        }
+        if (r.remaining() < description_bytes) { fail_truncated(p, "description", size, size); return; }
+        std::string text(description_bytes, '\0');
+        if (description_bytes != 0) r.read_bytes(&text[0], description_bytes);
+        const size_t end = text.find('\0');
+        lvl.description = end == std::string::npos ? text : text.substr(0, end);
+    } else {
         char desc_buf[30] = {};
         const size_t take = std::min<size_t>(30, r.remaining());                 // unchecked read in the original
         r.read_bytes(desc_buf, take);
@@ -442,12 +526,21 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
         lvl.tile_dictionary[i].assign(name_buf, nlen);
     }
 
-    // grid size: the FIRST dword is the number of ROWS, the second the number of COLUMNS; the original keeps both as 16 bit words (+0xd0, +0xd2)
+    // grid size: the FIRST dword is the number of ROWS, the second the number of COLUMNS; the original keeps both as 16 bit words (+0xd0, +0xd2); version 9 keeps all 32 bits
     uint32_t rows_raw = 0;
     uint32_t columns_raw = 0;
     if (!r.read_u32(rows_raw) || !r.read_u32(columns_raw)) { fail_truncated(p, "grid size", r.pos(), size); return; }
-    lvl.height.val = rows_raw & 0xFFFFu;
-    lvl.width.val = columns_raw & 0xFFFFu;
+    lvl.height.val = extended ? rows_raw : (rows_raw & 0xFFFFu);
+    lvl.width.val = extended ? columns_raw : (columns_raw & 0xFFFFu);
+    if (extended && lvl.height.val != 0 && lvl.width.val != 0) {
+        // a grid beyond the limits (or the ceiling of the format) is refused here, before a byte of it is counted or allocated: a header can announce 4 billion cells
+        std::vector<LevelProblem> layout;
+        collect_layout_problems(lvl, limits, layout);
+        for (LevelProblem& lp : layout) {
+            if (lp.severity == Severity::Fatal && lp.kind == Kind::GridTooLarge) p.fatal.push_back(std::move(lp));
+        }
+        if (!p.fatal.empty()) return;
+    }
 
     // the two layers, rows as the outer loop, three words per cell (0x10069d8): checked against what is left before anything is allocated
     const uint64_t cells = static_cast<uint64_t>(lvl.width.val) * lvl.height.val;
@@ -489,6 +582,12 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
         uint16_t item_count = 0;
         if (r.remaining() < 10) { fail_truncated(p, "block 2 (food objects)", size, size); return; }
         r.read_u16(fs.y); r.read_u16(fs.x); r.read_u16(fs.initial_delay); r.read_u16(fs.respawn_interval); r.read_u16(item_count);
+        if (item_count == 0 && extended) {
+            // (version 9 is the remake's own format: no quirk of the original's loader is copied, a pile without stages is a file that is not whole)
+            add_problem(p.fatal, Severity::Fatal, Kind::FoodBlockEndedEarly,
+                        "food object #" + num(i) + " of " + num(b2_count) + " has no stages: a version 9 file holds every food object with at least one stage, the file is not read");
+            return;
+        }
         if (item_count == 0) {
             add_problem(lvl.load_notes, Severity::Warning, Kind::FoodBlockEndedEarly,
                         "food object #" + num(i) + " of " + num(b2_count) + " has no stages: the original ends block 2 there (the " + num(i) + " objects before it stay), reads block 3, "
@@ -553,6 +652,12 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
             ++complete_records;
         }
     }
+    if (extended && (cut || r.remaining() < 2)) {
+        // (version 9 copies no quirk of the original's loader either: a file that ends inside block 4 or before the egg word is not whole)
+        fail_truncated(p, cut ? "block 4 (waypoints)" : "egg word", size, size);
+        p.completed = false;
+        return;
+    }
     if (cut) {
         std::string text = cut_text + ": the original catches the read error inside its loader and goes on with what it has read, " + num(complete_records) + " complete waypoints";
         if (b4_count > complete_records) {
@@ -579,12 +684,12 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
             if (report) add_problem(report->problems, Severity::Fatal, Kind::Unreadable, "no data");
             return false;
         }
-        if (size > limits.max_read_bytes) {
+        if (size > limits.read_bytes()) {
             fail_file_too_large(report, size, limits);
             return false;
         }
         Parse p;
-        parse_level(data, size, p);
+        parse_level(data, size, limits, p);
         if (!p.fatal.empty()) {
             if (report) report->problems = p.fatal;
             return false;

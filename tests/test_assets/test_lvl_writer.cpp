@@ -8,7 +8,10 @@
 //      reader and the writer take at once is at most 7 and 8 times their input and 64 KiB (a counting operator new below)
 //   W5 what a rewrite changes in a file (describe_rewrite), kind by kind
 //   W6 the dictionary of a new map (the rule of the six original maps, checked on them) and the blank map, which makes no cell of a grid beyond its limits
+//   W7 Extended maps (version 9): the layout by hand, read-write-read, the relative anchors, the conversions and their reasons, the limits and the ceiling, a place that
+//      reads Classic maps only, hostile headers and fields, every cut, random changes, the heap
 // The 540 maps of the library are the round-trip proof's (tests/test_sim/test_map_roundtrip.cpp).
+#include "ants_assets/lvl_checker.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_test_paths.hpp"
@@ -668,10 +671,12 @@ void walk(OneChange& c, Waypoint& point, const std::string& member, const std::s
 }
 
 void walk(OneChange& c, LevelData& level) {
-    auto& [version, game_mode, default_minutes, description, tile_type_count, tile_dictionary, width, height, layer1_terrain, layer2_interactive, anthill_spawns,
+    auto& [version, format_flags, rules, game_mode, default_minutes, description, tile_type_count, tile_dictionary, width, height, layer1_terrain, layer2_interactive, anthill_spawns,
            food_schedules, ambient_flag, ambient_tile_or_sound, waypoints, boundary_param, load_notes] = level;
     const std::string grid = "grid: " + std::to_string(height.val) + " rows x " + std::to_string(width.val) + " columns / ";
     c.number(version, "version", {"version: "});
+    c.number(format_flags, "format_flags", {"format flags: "});
+    c.number(rules, "rules", {"rules: "});
     c.number(game_mode, "game_mode", {"mode: "});
     c.number(default_minutes, "default_minutes", {"minutes: "});
     c.text(description, "description", {"description: "});
@@ -777,7 +782,7 @@ void w3_random_levels() {
             CHECK_MSG(!same, change.member() + ": the change is not seen");
             for (const std::string& words : change.words()) CHECK_MSG(why.find(words) != std::string::npos, change.member() + ": \"" + why + "\" does not say \"" + words + "\"");
         }
-        CHECK_MSG(walked == 106u, std::to_string(walked) + " changes walked");
+        CHECK_MSG(walked == 108u, std::to_string(walked) + " changes walked");
     });
 }
 
@@ -928,8 +933,8 @@ void w4_hostile_files() {
         CHECK(w.ok && std::memcmp(w.bytes.data() + w0, m.data() + w0, 52) == 0);   // the record's 52 bytes as they were
     });
 
-    run_case("W4.7 Other Versions (0, 7, 9, 0xFFFFFFFF) And Grids Without A Cell (0 x 0, 31 x 0, 0 x 31) Are Refused By The Reader And Have No Level For The Writer", [&] {
-        for (uint32_t version : {0u, 7u, 9u, 0xFFFFFFFFu}) {
+    run_case("W4.7 Other Versions (0, 7, 10, 0xFFFFFFFF) And Grids Without A Cell (0 x 0, 31 x 0, 0 x 31) Are Refused By The Reader And Have No Level For The Writer", [&] {
+        for (uint32_t version : {0u, 7u, 10u, 0xFFFFFFFFu}) {
             std::vector<uint8_t> m = tiny;
             wr32(m, 0, version);
             hostile(m.data(), m.size(), "version " + std::to_string(version));
@@ -1263,6 +1268,881 @@ void w6_new_maps() {
 
 }  // namespace
 
+// ------------------------------------------------------------------------------------------------------------------------------------------------------
+// W7 Extended maps (version 9): the layout, the laws of conversion, the limits, the refusal by a place that reads Classic maps only, hostile input
+// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+// A level of every field a version 9 file has, with the anchors in the relative form of the format (docs/MAP_FORMAT.md, "Version 9")
+LevelData extended_level() {
+    LevelData l;
+    l.version = 9;
+    l.format_flags = 0;
+    l.rules = 1;
+    l.game_mode = 1;
+    l.default_minutes = 8;
+    l.description = std::string(100, 'd') + " and thirty more bytes of text, 130 in all";   // 100 + 30 bytes: more than a Classic map holds
+    l.description.resize(130, '.');
+    l.tile_dictionary = {".", "g01a", "obj", "abcdefghijk"};
+    l.tile_type_count = 3;
+    l.height.val = 3;
+    l.width.val = 4;
+    for (uint16_t i = 0; i < 12; ++i) {
+        l.layer1_terrain.push_back(MapCell{1, i, 0xCDCD});
+        l.layer2_interactive.push_back(MapCell{LVL_EMPTY_TILE, 0, 0});
+    }
+    l.layer2_interactive[0] = MapCell{3, 0, 0x0000};        // row 0, column 0: anchored at itself
+    l.layer2_interactive[6] = MapCell{2, 1, 0x01FF};        // row 1, column 2: the row offset is -1 (0xFF), the column offset +1 (0x01): the anchor is row 0, column 3
+    l.layer2_interactive[11] = MapCell{129, 0, 3};          // a bomb: the third word is its owner, whatever it looks like
+    l.anthill_spawns.push_back(AnthillSpawn{152, 1, 1, 3});
+    l.anthill_spawns.push_back(AnthillSpawn{421, 0, 3, 255});
+    FoodSchedule f;
+    f.y = 2;
+    f.x = 1;
+    f.initial_delay = 4;
+    f.respawn_interval = 2;
+    f.variants = {FoodItemVariant{4, 2}, FoodItemVariant{0, LVL_EMPTY_TILE}};
+    l.food_schedules.push_back(f);
+    l.ambient_flag = 5;
+    l.ambient_tile_or_sound = 62;
+    Waypoint w;
+    w.y = 1;
+    w.x = 1;
+    w.flag = 1;
+    w.param = 40;
+    w.probabilities = {0.5, 0.25, 0.125, 0.0625, 0.0625};
+    l.waypoints.push_back(w);
+    l.boundary_param = 9;
+    return l;
+}
+
+// The bytes of extended_level(), written out here by hand in the order of the document (not with the writer's code)
+std::vector<uint8_t> extended_bytes() {
+    const LevelData l = extended_level();
+    std::vector<uint8_t> d;
+    put32(d, 9);
+    put32(d, 1);                                                                    // mode
+    put16(d, 8);                                                                    // minutes
+    put32(d, 0);                                                                    // format flags
+    put16(d, 1);                                                                    // rules
+    put16(d, 130);                                                                  // the description's length, then its bytes
+    d.insert(d.end(), l.description.begin(), l.description.end());
+    put16(d, 3);                                                                    // the number of names less one
+    for (const std::string& n : l.tile_dictionary) put_text(d, n, 11);
+    put32(d, 3);                                                                    // rows first
+    put32(d, 4);
+    for (const MapCell& c : l.layer1_terrain) { put16(d, c.tile_index); put16(d, c.flags); put16(d, c.properties); }
+    for (const MapCell& c : l.layer2_interactive) { put16(d, c.tile_index); put16(d, c.flags); put16(d, c.properties); }
+    put16(d, 2);
+    put16(d, 152); put16(d, 1); put16(d, 1);
+    put16(d, 421); put16(d, 0); put16(d, 3);
+    put16(d, 1);
+    put16(d, 2); put16(d, 1); put16(d, 4); put16(d, 2); put16(d, 2);
+    put16(d, 4); put16(d, 2); put16(d, 0); put16(d, 0x7FFE);
+    put16(d, 5); put16(d, 62);
+    put16(d, 1);
+    put16(d, 1); put16(d, 1); put32(d, 1); put32(d, 40);
+    for (double p : l.waypoints[0].probabilities) put_double(d, p);
+    put16(d, 9);
+    return d;
+}
+
+// A version 9 file made by hand: the header, a dictionary of three names, the grid size and `cells` cells of each layer (zero words), the four blocks empty and the egg word
+std::vector<uint8_t> v9_bytes(uint32_t flags, uint32_t rules_word, const std::string& description, uint32_t rows, uint32_t columns, uint64_t cells, uint32_t description_length_word = 0xFFFFFFFFu) {
+    std::vector<uint8_t> d;
+    put32(d, 9);
+    put32(d, 1);
+    put16(d, 6);
+    put32(d, flags);
+    put16(d, rules_word);
+    put16(d, description_length_word == 0xFFFFFFFFu ? static_cast<uint32_t>(description.size()) : description_length_word);
+    d.insert(d.end(), description.begin(), description.end());
+    put16(d, 2);
+    put_text(d, ".", 11);
+    put_text(d, "g", 11);
+    put_text(d, "x", 11);
+    put32(d, rows);
+    put32(d, columns);
+    d.insert(d.end(), static_cast<size_t>(cells) * 12, uint8_t{0});
+    put16(d, 0);                                                                    // block 1
+    put16(d, 0);                                                                    // block 2
+    put16(d, 0); put16(d, LVL_EMPTY_TILE);                                          // block 3
+    put16(d, 0);                                                                    // block 4
+    put16(d, 6);
+    return d;
+}
+
+const LevelLimits& extended_limits() {
+    static const LevelLimits limits = LevelLimits::for_extended_maps();
+    return limits;
+}
+
+bool load_extended(const std::vector<uint8_t>& d, LevelData& level, LevelValidation* report = nullptr, const LevelLimits& limits = LevelLimits::format_ceiling()) {
+    return level.load_from_memory(d.data(), d.size(), report, limits);
+}
+
+// Everything a hostile file must give the version 9 reader: a level or a Fatal finding that says why (never a crash), within the heap bound; a level is written, reads
+// back the same, and writes the same bytes again
+void hostile_extended(const uint8_t* data, size_t size, const std::string& what) {
+    const LevelLimits limits = LevelLimits::format_ceiling();
+    LevelData level;
+    LevelValidation report;
+    bool loaded = false;
+    const size_t read_peak = peak_of([&] { loaded = level.load_from_memory(data, size, &report, limits); });
+    CHECK_MSG(read_peak <= reader_bound(size), what + ": the reader held " + std::to_string(read_peak) + " bytes for " + std::to_string(size));
+    if (!loaded) {
+        CHECK_MSG(report.first_fatal() != nullptr && !report.reason().empty(), what + ": a file that does not load says why");
+        CHECK_MSG(is_empty_level(level), what + ": nothing of it is left");
+        return;
+    }
+    LevelWriteResult w;
+    const size_t write_peak = peak_of([&] { w = write_level(level, limits); });
+    CHECK_MSG(w.ok, what + ": a level the reader made is written: " + w.error);
+    if (!w.ok) return;
+    CHECK_MSG(write_peak <= writer_bound(w.bytes.size()), what + ": the writer held " + std::to_string(write_peak) + " bytes for " + std::to_string(w.bytes.size()));
+    LevelData back;
+    CHECK_MSG(back.load_from_memory(w.bytes.data(), w.bytes.size(), nullptr, limits), what + ": the rewrite loads");
+    std::string why;
+    CHECK_MSG(same_level(level, back, &why), what + ": " + why);
+    const LevelWriteResult again = write_level(back, limits);
+    CHECK_MSG(again.ok && again.bytes == w.bytes, what + ": written twice, the same bytes");
+}
+
+void w7_extended_maps() {
+    const std::vector<uint8_t> tiny = read_map(maps_dir() + "/TINY.LVL");
+    const std::vector<uint8_t> small = read_map(maps_dir() + "/SMALL.LVL");
+
+    run_case("W7.1 The Layout Of A Version 9 File: The Bytes Of A Level Written By Hand, Header, Flags, Rules, Description, Dictionary, Grid, Blocks; Read Back, Written Again The Same Bytes", [] {
+        const LevelData level = extended_level();
+        const std::vector<uint8_t> expected = extended_bytes();
+        const LevelWriteResult w = write_level(level, extended_limits());
+        CHECK_MSG(w.ok, w.error);
+        CHECK(w.bytes == expected);
+        LevelData back;
+        LevelValidation report;
+        CHECK(back.load_from_memory(expected.data(), expected.size(), &report, extended_limits()));
+        std::string why;
+        CHECK_MSG(same_level(level, back, &why), why);
+        CHECK(back.version == 9u && back.rules == 1u && back.format_flags == 0u && back.description == level.description && back.is_extended());
+        CHECK(report.parsed && report.playable);
+        const LevelWriteResult again = write_level(back, extended_limits());
+        CHECK(again.ok && again.bytes == expected);
+        // the description's length is a word, then the bytes; the dictionary's count follows at once
+        CHECK(rd32(expected, 0) == 9u && rd32(expected, 10) == 0u && rd16(expected, 14) == 1u && rd16(expected, 16) == 130u && rd16(expected, 18 + 130) == 3u);
+        // the same level without a description: the dictionary follows the length word
+        LevelData none = level;
+        none.description.clear();
+        const LevelWriteResult n = write_level(none, extended_limits());
+        CHECK(n.ok && n.bytes.size() + 130 == expected.size() && rd16(n.bytes, 16) == 0u && rd16(n.bytes, 18) == 3u);
+        // every version 9 byte after the description is the version 8 layout: the dictionary and what follows are the same encoding
+        LevelData classic = level;
+        classic.version = 8;
+        classic.format_flags = 0;
+        classic.rules = 0;
+        classic.description = "short";
+        classic.layer2_interactive[6].properties = 0x0300;       // (an absolute anchor: row 0, column 3)
+        const LevelWriteResult c = write_level(classic);
+        CHECK(c.ok && c.bytes.size() == 42 + 4 * 11 + (expected.size() - (18 + 130 + 2 + 4 * 11)));
+        CHECK(std::equal(c.bytes.begin() + 42 + 44, c.bytes.end() - 0, expected.begin() + 18 + 130 + 2 + 44, expected.end() - 0) == false);   // (the anchor word differs)
+        CHECK(std::equal(c.bytes.begin() + 42, c.bytes.begin() + 42 + 44, expected.begin() + 18 + 130 + 2));
+    });
+
+    run_case("W7.1b What The Writer Refuses In A Version 9 Level: Flags It Does Not Know, A Rules Word Above 1, Flags Or Rules In A Version 8 Level, A Description Of 256 Bytes Or With A Zero Byte", [] {
+        LevelData l = extended_level();
+        l.format_flags = 0x10;
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "the format flags are 0x10: this writer knows no flag bit"), write_level(l, extended_limits()).error);
+        l = extended_level();
+        l.rules = 2;
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "the rules word is 2: only 0 (the original's rules) and 1 (extended rules) are known"), write_level(l, extended_limits()).error);
+        l = extended_level();
+        l.version = 8;
+        l.description = "short";
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "a version 8 file has no format flags and no rules word, the level holds flags 0x0 and rules 1"), write_level(l, extended_limits()).error);
+        l.rules = 0;
+        l.format_flags = 1;
+        CHECK_MSG(refused_with(write_level(l), "holds flags 0x1 and rules 0"), write_level(l).error);
+        l = extended_level();
+        l.description = std::string(256, 'x');
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "the description has 256 bytes, more than the 255 allowed here"), write_level(l, extended_limits()).error);
+        l.description = std::string(255, 'x');
+        CHECK(write_level(l, extended_limits()).ok);
+        l.description[3] = '\0';
+        CHECK(refused_with(write_level(l, extended_limits()), "the description holds a zero byte"));
+        l = extended_level();
+        l.version = 10;
+        CHECK(refused_with(write_level(l, extended_limits()), "version 10: the writer writes version 8, the only one the original reads, and version 9"));
+    });
+
+    run_case("W7.2 Read, Write, Read Of 1,500 Random Extended Levels (Rules 0 And 1, Descriptions Of 0 To 255 Bytes): The Same Level, Written Twice The Same Bytes", [] {
+        Lcg r(0xE17E4DEDu);
+        for (int i = 0; i < 1500; ++i) {
+            LevelData l = random_level(r);
+            l.version = 9;
+            l.rules = static_cast<uint16_t>(r.below(2));
+            l.description.clear();
+            const size_t len = r.below(256);
+            for (size_t k = 0; k < len; ++k) l.description += static_cast<char>(1 + r.below(255));
+            const LevelWriteResult w = write_level(l, extended_limits());
+            CHECK_MSG(w.ok, "level " + std::to_string(i) + ": " + w.error);
+            if (!w.ok) continue;
+            LevelData back;
+            CHECK(back.load_from_memory(w.bytes.data(), w.bytes.size(), nullptr, extended_limits()));
+            std::string why;
+            CHECK_MSG(same_level(l, back, &why), "level " + std::to_string(i) + ": " + why);
+            const LevelWriteResult again = write_level(back, extended_limits());
+            CHECK(again.ok && again.bytes == w.bytes);
+        }
+    });
+
+    run_case("W7.3 The Anchor Of A Layer-2 Object Is Relative To Its Cell In Version 9 (Signed Bytes, Row In The Low Byte): What Has One, The Sum, The Wrap In A Map Of 256 Or Less, The Plain Sum In A Larger One", [] {
+        const LevelData l = extended_level();
+        int32_t ar = -1, ac = -1;
+        CHECK(l.object_anchor(1, 2, ar, ac) && ar == 0 && ac == 3);                // row 1 - 1, column 2 + 1
+        CHECK(l.object_anchor(0, 0, ar, ac) && ar == 0 && ac == 0);
+        CHECK(!l.object_anchor(0, 1, ar, ac) && !l.has_object_anchor(0, 1));       // the empty tile has none
+        CHECK(!l.object_anchor(2, 3, ar, ac) && !l.has_object_anchor(2, 3));       // a bomb's word is its owner
+        CHECK(!l.object_anchor(3, 0, ar, ac) && !l.object_anchor(0, 4, ar, ac));   // outside the grid
+        for (const uint16_t tile : {uint16_t{0xFFFF}, uint16_t{128}, uint16_t{133}, uint16_t{129}, uint16_t{132}}) {
+            LevelData m = l;
+            m.layer2_interactive[1] = MapCell{tile, 0, 0x1234};
+            CHECK_MSG(m.has_object_anchor(0, 1) == (tile == 128 || tile == 133), "tile " + std::to_string(tile));
+        }
+        // the sign of each byte: -128 and 127 reach as far as a byte goes; the two bytes are the row (low) and the column (high)
+        LevelData m = l;
+        m.layer2_interactive[5] = MapCell{2, 0, 0x7F80};                           // row 1, column 1: row offset -128, column offset +127
+        CHECK(m.object_anchor(1, 1, ar, ac) && ar == ((1 - 128) & 255) && ac == ((1 + 127) & 255));   // (a map of 3 x 4: the sum modulo 256, as the Classic anchor byte is)
+        // a version 8 level keeps the absolute bytes, row in the low byte
+        LevelData v8 = l;
+        v8.version = 8;
+        v8.layer2_interactive[6].properties = 0x0300;
+        CHECK(v8.object_anchor(1, 2, ar, ac) && ar == 0 && ac == 3);
+        v8.layer2_interactive[6].properties = 0x0007;
+        CHECK(v8.object_anchor(1, 2, ar, ac) && ar == 7 && ac == 0);
+        // the edge of the rule: at exactly 256 a side the sum wraps (as a Classic anchor byte does), at 257 it is the plain sum
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{40, 256}, std::pair<uint32_t, uint32_t>{256, 40}, std::pair<uint32_t, uint32_t>{40, 257}, std::pair<uint32_t, uint32_t>{257, 40}}) {
+            LevelData e;
+            e.version = 9;
+            e.height.val = shape.first;
+            e.width.val = shape.second;
+            e.layer1_terrain.assign(static_cast<size_t>(shape.first) * shape.second, MapCell{0, 0, 0});
+            e.layer2_interactive.assign(static_cast<size_t>(shape.first) * shape.second, MapCell{LVL_EMPTY_TILE, 0, 0});
+            e.layer2_interactive[10] = MapCell{2, 0, 0xB400};                          // row 0, column 10: row offset 0, column offset -76 (0xB4)
+            const bool wraps = shape.first <= 256 && shape.second <= 256;
+            int32_t er = -1, ec = -1;
+            CHECK(e.object_anchor(0, 10, er, ec) && er == 0 && ec == (wraps ? 190 : -66));
+            e.layer2_interactive[10].properties = 0xCDCD;                              // junk: row offset -51, column offset -51
+            CHECK(e.object_anchor(0, 10, er, ec) && er == (wraps ? 205 : -51) && ec == (wraps ? ((10 - 51) & 255) : -41));
+        }
+        // a map of more than 256 on a side: the plain sum, which may be negative or beyond a byte
+        LevelData wide;
+        wide.version = 9;
+        wide.height.val = 2;
+        wide.width.val = 300;
+        wide.layer1_terrain.assign(600, MapCell{0, 0, 0});
+        wide.layer2_interactive.assign(600, MapCell{LVL_EMPTY_TILE, 0, 0});
+        wide.layer2_interactive[299] = MapCell{2, 0, static_cast<uint16_t>(0x0100 | 0x00FF)};      // row 0, column 299: row -1, column + 1
+        wide.layer2_interactive[2] = MapCell{2, 0, 0x80FD};                                        // row 0, column 2: row -3, column -128
+        CHECK(wide.object_anchor(0, 299, ar, ac) && ar == -1 && ac == 300);
+        CHECK(wide.object_anchor(0, 2, ar, ac) && ar == -3 && ac == -126);
+    });
+
+    run_case("W7.4 Classic To Extended: Every Field Carried, The Anchors Made Relative, Rules 0, The Description Kept; A Copy, Another File; And Back To The Same Bytes", [&] {
+        for (const std::vector<uint8_t>* file : {&tiny, &small}) {
+            LevelData source;
+            CHECK(source.load_from_memory(file->data(), file->size()));
+            const LevelConversion up = convert_to_extended(source);
+            CHECK_MSG(up.ok && up.reasons.empty(), up.reasons.empty() ? "" : up.reasons[0]);
+            CHECK(up.level.version == 9u && up.level.rules == 0u && up.level.format_flags == 0u && up.level.description == source.description && up.level.is_extended());
+            CHECK(source.version == 8u);                                           // the source is not touched
+            // every anchor: the same absolute anchor through the relative word
+            for (uint32_t r = 0; r < source.height; ++r) {
+                for (uint32_t c = 0; c < source.width; ++c) {
+                    int32_t a_row = 0, a_column = 0, b_row = 0, b_column = 0;
+                    const bool has = source.object_anchor(r, c, a_row, a_column);
+                    CHECK(has == up.level.object_anchor(r, c, b_row, b_column));
+                    if (has) CHECK_MSG(a_row == b_row && a_column == b_column, "row " + std::to_string(r) + ", column " + std::to_string(c));
+                    if (!has) CHECK(source.get_cell_layer2(c, r).properties == up.level.get_cell_layer2(c, r).properties);   // the empty cells and the bombs keep their word
+                }
+            }
+            const LevelWriteResult v9 = write_level(up.level, extended_limits());
+            const LevelWriteResult v8 = write_level(source);
+            CHECK(v9.ok && v8.ok && v9.bytes != v8.bytes);                         // another file, so another hash
+            LevelData read9;
+            CHECK(read9.load_from_memory(v9.bytes.data(), v9.bytes.size(), nullptr, extended_limits()));
+            const LevelConversion down = convert_to_classic(read9);
+            CHECK_MSG(down.ok && down.reasons.empty(), down.reasons.empty() ? "" : down.reasons[0]);
+            const LevelWriteResult again = write_level(down.level);
+            CHECK(again.ok && again.bytes == v8.bytes);                            // the same bytes as the canonical file of the source
+            std::string why;
+            CHECK_MSG(same_level(source, down.level, &why), why);
+            CHECK(down.level.version == 8u && down.level.rules == 0u);
+            CHECK(down.notes.empty());
+        }
+        // a junk anchor byte of a Classic map (some library maps hold 0xCDCD where an object stands) survives both ways
+        LevelData junk;
+        CHECK(junk.load_from_memory(tiny.data(), tiny.size()));
+        junk.layer2_interactive[7 * junk.width + 15] = MapCell{476, 0, 0xCDCD};
+        junk.layer2_interactive[0] = MapCell{476, 0, 0xFE58};
+        const LevelConversion up = convert_to_extended(junk);
+        CHECK(up.ok);
+        const LevelConversion down = convert_to_classic(up.level);
+        CHECK_MSG(down.ok && same_level(junk, down.level), down.ok ? "" : down.reasons[0]);
+        int32_t ar = 0, ac = 0;
+        CHECK(up.level.object_anchor(7, 15, ar, ac) && ar == 0xCD && ac == 0xCD);
+        // a level that is Extended already is copied; a level that is no map has reasons
+        const LevelConversion same = convert_to_extended(up.level);
+        CHECK(same.ok && same_level(same.level, up.level));
+        LevelData odd = junk;
+        odd.version = 7;
+        const LevelConversion no = convert_to_extended(odd);
+        CHECK(!no.ok && no.reasons.size() == 1u && no.reasons[0].find("version 7") != std::string::npos);
+        LevelData cut = junk;
+        cut.layer2_interactive.pop_back();
+        CHECK(!convert_to_extended(cut).ok && !convert_to_classic(cut).ok);
+        // a Classic level is copied by convert_to_classic as it is
+        const LevelConversion classic_again = convert_to_classic(junk);
+        CHECK(classic_again.ok && same_level(classic_again.level, junk));
+    });
+
+    run_case("W7.5 Extended To Classic When It Fits, And The Reasons When It Does Not (Each With Its Number And Its Limit); needs_extended Says The Same", [] {
+        LevelData base = extended_level();
+        // 130 bytes of description are more than the 30 of a Classic map's field
+        LevelConversion c = convert_to_classic(base);
+        CHECK(!c.ok && c.reasons.size() == 1u && c.reasons[0].find("the description is 130 bytes; a Classic map holds 30") == 0 && c.notes.empty());
+        base.description = "fits";
+        // it fits: rules 1 is carried with a note
+        c = convert_to_classic(base);
+        CHECK_MSG(c.ok, c.reasons.empty() ? "" : c.reasons[0]);
+        CHECK(c.notes.size() == 1u && c.notes[0].find("rules 1") != std::string::npos);
+        CHECK(c.level.version == 8u && c.level.rules == 0u);
+        LevelData d = base;
+        d.description = std::string(31, 'x');
+        c = convert_to_classic(d);
+        CHECK(!c.ok && c.reasons.size() == 1u && c.reasons[0].find("the description is 31 bytes; a Classic map holds 30") == 0);
+        CHECK(needs_extended(d) == c.reasons);
+        d.description = std::string(30, 'x');
+        CHECK(convert_to_classic(d).ok && needs_extended(d).empty());
+        // both sides, the dictionary, the flags, the rules word
+        LevelData big = base;
+        big.height.val = 300;
+        big.width.val = 400;
+        big.layer1_terrain.assign(120000, MapCell{1, 0, 0});
+        big.layer2_interactive.assign(120000, MapCell{LVL_EMPTY_TILE, 0, 0});
+        c = convert_to_classic(big);
+        CHECK(!c.ok && c.reasons.size() == 2u);
+        CHECK(c.reasons[0] == "this map is 400 columns wide; a Classic map has at most 256 columns" && c.reasons[1] == "this map is 300 rows tall; a Classic map has at most 256 rows");
+        CHECK(needs_extended(big) == c.reasons);
+        LevelData names = base;
+        names.tile_dictionary.assign(1345, ".");
+        names.tile_type_count = 1344;
+        c = convert_to_classic(names);
+        CHECK(!c.ok && c.reasons.size() == 1u && c.reasons[0] == "the dictionary has 1345 names; a Classic map holds at most 1344");
+        LevelData flags = base;
+        flags.format_flags = 0x10;
+        c = convert_to_classic(flags);
+        CHECK(!c.ok && c.reasons.size() == 1u && c.reasons[0].find("format flags (0x10)") != std::string::npos);
+        LevelData rules = base;
+        rules.rules = 2;
+        c = convert_to_classic(rules);
+        CHECK(!c.ok && c.reasons.size() == 1u && c.reasons[0] == "the rules word is 2: only 0 and 1 are known");
+        // an anchor that no byte holds: a map of 300 columns, an object at column 290 anchored at column 289; the map is too wide as well
+        LevelData wide = base;
+        wide.height.val = 1;
+        wide.width.val = 300;
+        wide.layer1_terrain.assign(300, MapCell{1, 0, 0});
+        wide.layer2_interactive.assign(300, MapCell{LVL_EMPTY_TILE, 0, 0});
+        wide.layer2_interactive[290] = MapCell{2, 0, 0xFF00};                       // row offset 0, column offset -1: column 289
+        wide.layer2_interactive[10] = MapCell{2, 0, 0x0000};                        // column 10: fine
+        c = convert_to_classic(wide);
+        CHECK(!c.ok && c.reasons.size() == 2u);
+        CHECK(c.reasons.size() == 2u && c.reasons[1] == "1 object cells are anchored outside the 0 to 255 that a Classic anchor byte holds (the first at row 0, column 290)");
+        // the edges of a byte: column 255 and row 255 are the last anchors a Classic map holds, 256 and -1 are not (the map is wide as well: its width is a reason of its own)
+        auto anchor_reasons = [](uint32_t rows, uint32_t columns, size_t at, uint16_t word) {
+            LevelData m = extended_level();
+            m.description.clear();
+            m.height.val = rows;
+            m.width.val = columns;
+            m.layer1_terrain.assign(static_cast<size_t>(rows) * columns, MapCell{1, 0, 0});
+            m.layer2_interactive.assign(static_cast<size_t>(rows) * columns, MapCell{LVL_EMPTY_TILE, 0, 0});
+            m.layer2_interactive[at] = MapCell{2, 0, word};
+            size_t n = 0;
+            for (const std::string& r : needs_extended(m)) n += r.find("object cells are anchored outside") != std::string::npos ? 1u : 0u;
+            return n;
+        };
+        CHECK(anchor_reasons(1, 300, 280, static_cast<uint16_t>(0xFB00)) == 1u);            // column 280 - 5 = 275: beyond a byte
+        CHECK(anchor_reasons(1, 300, 280, static_cast<uint16_t>(0xE700)) == 0u);            // column 280 - 25 = 255: the last anchor a byte holds
+        CHECK(anchor_reasons(1, 300, 280, static_cast<uint16_t>(0xE800)) == 1u);            // column 280 - 24 = 256: no byte
+        CHECK(anchor_reasons(1, 300, 280, static_cast<uint16_t>(0x0000)) == 1u);            // column 280: no byte
+        CHECK(anchor_reasons(1, 300, 0, static_cast<uint16_t>(0xFF00)) == 1u);              // column 0 - 1 = -1: no byte
+        CHECK(anchor_reasons(1, 300, 0, static_cast<uint16_t>(0x0000)) == 0u);              // column 0: fine
+        CHECK(anchor_reasons(300, 1, 280, static_cast<uint16_t>(0x00E7)) == 0u);            // row 280 - 25 = 255
+        CHECK(anchor_reasons(300, 1, 280, static_cast<uint16_t>(0x00E8)) == 1u);            // row 256
+        CHECK(anchor_reasons(300, 1, 0, static_cast<uint16_t>(0x00FF)) == 1u);              // row -1
+        // exactly 256 a side fits, 257 does not (columns and rows; both conversions give the same reasons as needs_extended)
+        auto of_shape = [&base](uint32_t rows, uint32_t columns) {
+            LevelData m = base;
+            m.description.clear();
+            m.height.val = rows;
+            m.width.val = columns;
+            m.layer1_terrain.assign(static_cast<size_t>(rows) * columns, MapCell{1, 0, 0});
+            m.layer2_interactive.assign(static_cast<size_t>(rows) * columns, MapCell{LVL_EMPTY_TILE, 0, 0});
+            return m;
+        };
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1, 256}, std::pair<uint32_t, uint32_t>{256, 1}, std::pair<uint32_t, uint32_t>{256, 256}}) {
+            const LevelData m = of_shape(shape.first, shape.second);
+            CHECK_MSG(convert_to_classic(m).ok && needs_extended(m).empty(), std::to_string(shape.first) + " x " + std::to_string(shape.second));
+        }
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1, 257}, std::pair<uint32_t, uint32_t>{257, 1}}) {
+            const LevelData m = of_shape(shape.first, shape.second);
+            const LevelConversion r = convert_to_classic(m);
+            CHECK_MSG(!r.ok && r.reasons.size() == 1u && needs_extended(m) == r.reasons, std::to_string(shape.first) + " x " + std::to_string(shape.second));
+            CHECK(r.reasons.size() == 1u && r.reasons[0].find("a Classic map has at most 256") != std::string::npos);
+        }
+        // a description of exactly 30 bytes converts, with a note
+        {
+            LevelData m = base;
+            m.description = std::string(30, 'y');
+            const LevelConversion r = convert_to_classic(m);
+            bool noted = false;
+            for (const std::string& n : r.notes) noted = noted || n.find("the description has 30 bytes") != std::string::npos;
+            CHECK(r.ok && noted);
+            m.description = std::string(29, 'y');
+            bool quiet = true;
+            for (const std::string& n : convert_to_classic(m).notes) quiet = quiet && n.find("the description has 30 bytes") == std::string::npos;
+            CHECK(quiet);
+        }
+        // the notes of the reader describe the old file: neither conversion carries them, even when the level is the kind already
+        {
+            LevelData m = base;
+            m.load_notes.push_back(LevelProblem{});
+            LevelData classic = base;
+            classic.version = 8;
+            classic.rules = 0;
+            classic.layer2_interactive[6].properties = 0x0300;
+            classic.load_notes.push_back(LevelProblem{});
+            CHECK(convert_to_classic(m).ok && convert_to_classic(m).level.load_notes.empty());
+            CHECK(convert_to_classic(classic).ok && convert_to_classic(classic).level.load_notes.empty());
+            CHECK(convert_to_extended(m).ok && convert_to_extended(m).level.load_notes.empty());
+            CHECK(convert_to_extended(classic).ok && convert_to_extended(classic).level.load_notes.empty());
+        }
+        // an anchor that points outside the grid of a map of 256 or less is a byte modulo 256 (so no reason): a bomb's word never is an anchor
+        LevelData small_map = base;
+        small_map.layer2_interactive[6].properties = 0x7F80;                         // -128 rows, +127 columns from row 1, column 2
+        c = convert_to_classic(small_map);
+        CHECK(c.ok);
+        int32_t ar = -1, ac = -1;
+        CHECK(c.ok && c.level.object_anchor(1, 2, ar, ac) && ar == ((1 - 128) & 255) && ac == ((2 + 127) & 255));
+        CHECK(c.ok && c.level.get_cell_layer2(3, 2).properties == 3u);               // the bomb keeps its owner
+        // a level that is no map
+        LevelData seven = base;
+        seven.version = 7;
+        CHECK(!convert_to_classic(seven).ok && needs_extended(seven).size() == 1u);
+        // the conversion writes a copy: the source is unchanged, and nothing is shared
+        LevelData before = base;
+        const LevelConversion once = convert_to_classic(base);
+        CHECK(same_level(before, base) && once.level.version != base.version);
+    });
+
+    run_case("W7.6 Limits: A Place Reads Classic Maps Only Until It Sets allow_extended; The Numbers Of Both Kinds; No Value Passes The Ceiling Of The Format", [] {
+        CHECK(!LevelLimits{}.allow_extended && !LevelLimits::for_new_maps().allow_extended && LevelLimits::for_extended_maps().allow_extended);
+        const LevelLimits e = LevelLimits::for_extended_maps();
+        CHECK(e.rows() == 1024u && e.columns() == 1024u && e.cells() == 262144u && e.read_bytes() == 4u * 1024u * 1024u && e.write_bytes() == 3584u * 1024u &&
+              e.dictionary_names() == 1344u && e.description_bytes() == 255u);
+        CHECK(e.rows_for(8) == 256u && e.columns_for(8) == 256u && e.cells_for(8) == 65536u && e.rows_for(9) == 1024u && e.cells_for(9) == 262144u);   // (a Classic map keeps its 256)
+        CHECK(LVL_FORMAT_CEILING_SIDE == 2048u && LVL_FORMAT_CEILING_CELLS == 4194304u && LVL_FORMAT_CEILING_FILE_BYTES == 64u * 1024u * 1024u);
+        LevelLimits huge = LevelLimits::format_ceiling();
+        huge.max_rows = huge.max_columns = 100000;
+        huge.max_cells = 0xFFFFFFFFu;
+        huge.max_read_bytes = huge.max_write_bytes = std::numeric_limits<size_t>::max();
+        huge.max_dictionary_names = 100000;
+        huge.max_description_bytes = 100000;
+        CHECK(huge.rows() == 2048u && huge.columns() == 2048u && huge.cells() == 4194304u && huge.read_bytes() == 64u * 1024u * 1024u && huge.write_bytes() == 64u * 1024u * 1024u &&
+              huge.dictionary_names() == 1344u && huge.description_bytes() == 255u);
+        LevelLimits classic = huge;
+        classic.allow_extended = false;                                              // without it the values count as the game's
+        CHECK(classic.rows() == 256u && classic.columns() == 256u && classic.cells() == 65536u && classic.read_bytes() == std::numeric_limits<size_t>::max());
+        CHECK(LevelLimits{}.rows() == 256u && LevelLimits::for_new_maps().rows() == 130u && LevelLimits::for_new_maps().cells() == 10000u);   // the Classic kinds are as they were
+        // a canonical file of a 512 x 512 map is within the 3.5 MiB the limits write, and 513 x 512 is not
+        std::vector<std::string> names(1344, ".");
+        const LevelWriteResult w = write_level(blank_extended_level(512, 512, names), e);
+        CHECK_MSG(w.ok && w.bytes.size() < 3584u * 1024u, w.error + " / " + std::to_string(w.bytes.size()));
+        CHECK_MSG(refused_with(write_level(blank_extended_level(513, 512, names), e), "513 rows x 512 columns, 262656 cells, more than the 262144 allowed here"), "513 x 512");
+        CHECK(write_level(blank_extended_level(1024, 256, names), e).ok && write_level(blank_extended_level(256, 1024, names), e).ok);
+        CHECK_MSG(refused_with(write_level(blank_extended_level(1025, 1, names), e), "1025 rows x 1 columns, more than the 1024 x 1024 allowed here"), "1025 x 1");
+        const LevelWriteResult tall = write_level(blank_extended_level(2048, 2048, names, LevelLimits::format_ceiling()), LevelLimits::format_ceiling());
+        CHECK_MSG(tall.ok && tall.bytes.size() > 48u * 1024u * 1024u && tall.bytes.size() <= 64u * 1024u * 1024u, tall.error + " / " + std::to_string(tall.bytes.size()));
+        // the size of the canonical file is what the writer's layout says: a limit of exactly its bytes passes, one byte less refuses
+        const std::vector<uint8_t> exact = extended_bytes();
+        LevelLimits fits = extended_limits();
+        fits.max_write_bytes = exact.size();
+        CHECK(write_level(extended_level(), fits).ok);
+        fits.max_write_bytes = exact.size() - 1;
+        CHECK_MSG(refused_with(write_level(extended_level(), fits), "the file would have " + std::to_string(exact.size()) + " bytes, more than the " + std::to_string(exact.size() - 1) + " allowed here"),
+                  write_level(extended_level(), fits).error);
+        // the ceiling is the format's: the writer refuses 2049 whatever the limits
+        CHECK_MSG(refused_with(write_level(blank_extended_level(2049, 1, names), huge), "2049 rows x 1 columns, more than the 2048 x 2048 allowed here"), "2049");
+        // the blank Extended map: rules 1 from 91 rows or 257 columns on
+        CHECK(blank_extended_level(90, 256, names).rules == 0u && blank_extended_level(91, 5, names).rules == 1u && blank_extended_level(5, 257, names).rules == 1u);
+        CHECK(blank_extended_level(5, 5, names).version == 9u && blank_extended_level(5, 5, names).format_flags == 0u);
+        // a grid beyond the limits gets no cell and nothing of its size is allocated
+        LevelData none;
+        const size_t held = peak_of([&] { none = blank_extended_level(0xFFFFFFFFu, 0xFFFFFFFFu, names); });
+        CHECK_MSG(none.layer1_terrain.empty() && none.layer2_interactive.empty() && held <= kSlack + 4096, std::to_string(held));   // (the 64 KiB are the table of the tile ids that dictionary_of_used_tiles keeps, and the library's own small blocks add a few bytes that differ by standard library: 39 on MSVC; a grid of 2^32-1 x 2^32-1 would be 51 GB)
+        CHECK(refused_with(write_level(none, e), "more than the 1024 x 1024 allowed here"));
+    });
+
+    run_case("W7.7 A Place That Reads Classic Maps Only Refuses Version 9 Cleanly (version_not_supported), Reads Nothing, Writes Nothing; A Version 8 File Is The Same In Either Reader", [&] {
+        const std::vector<uint8_t> v9 = extended_bytes();
+        for (const LevelLimits& limits : {LevelLimits{}, LevelLimits::for_new_maps()}) {
+            LevelData level;
+            LevelValidation v;
+            bool loaded = true;
+            const size_t held = peak_of([&] { loaded = level.load_from_memory(v9.data(), v9.size(), &v, limits); });
+            CHECK(!loaded && !v.parsed && !v.playable && has_fatal(v, LevelProblemKind::VersionNotSupported) && is_empty_level(level) && held < kSlack);
+            CHECK_MSG(mentions(v, "version 9 is not supported here"), v.reason());
+            CHECK(std::string(to_string(LevelProblemKind::VersionNotSupported)) == "version_not_supported" && !LVLParser::check_memory(v9.data(), v9.size(), 0x0F, limits).playable);
+            CHECK(refused_with(write_level(extended_level(), limits), "this place writes Classic maps (version 8) only"));
+        }
+        // the same by file, and by a level in memory
+        const std::string path = scratch_path("test_lvl_writer_v9");
+        {
+            std::ofstream out(path, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(v9.data()), static_cast<std::streamsize>(v9.size()));
+        }
+        LevelValidation from_file = LVLParser::check_file(path);
+        CHECK(!from_file.playable && has_fatal(from_file, LevelProblemKind::VersionNotSupported));
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        const LevelValidation in_memory = extended_level().validate();
+        CHECK(!in_memory.playable && in_memory.has(LevelProblemKind::VersionNotSupported));
+        CHECK(extended_level().validate(0x0F, extended_limits()).playable);
+        // version 10 and the others stay what they were (and a place with Extended maps says it reads both)
+        std::vector<uint8_t> ten = v9;
+        wr32(ten, 0, 10);
+        LevelData level;
+        LevelValidation v;
+        CHECK(!level.load_from_memory(ten.data(), ten.size(), &v) && has_fatal(v, LevelProblemKind::WrongVersion) && !mentions(v, "versions 8 and 9"));
+        CHECK(!level.load_from_memory(ten.data(), ten.size(), &v, extended_limits()) && has_fatal(v, LevelProblemKind::WrongVersion) && mentions(v, "this place reads versions 8 and 9"));
+        // a version 8 file in the Extended reader: the level, the findings and the canonical bytes of the Classic reader
+        for (const std::vector<uint8_t>* file : {&tiny, &small}) {
+            LevelData a;
+            LevelData b;
+            LevelValidation va;
+            LevelValidation vb;
+            CHECK(a.load_from_memory(file->data(), file->size(), &va) && b.load_from_memory(file->data(), file->size(), &vb, extended_limits()));
+            CHECK(same_level(a, b) && a.version == 8u && va.describe() == vb.describe());
+            CHECK(write_level(b, extended_limits()).bytes == write_level(a).bytes);
+        }
+        // a version 8 file of 300 columns is still too large for a Classic map in the Extended reader (the anchors of its format are bytes)
+        const std::vector<uint8_t> wide = flat_map(4, 4, 300, 4, 300);
+        LevelData w;
+        CHECK(!w.load_from_memory(wide.data(), wide.size(), &v, LevelLimits::format_ceiling()) && has_fatal(v, LevelProblemKind::GridTooLarge) && mentions(v, "more than the 256 the remake hosts"));
+        // the original-safe profile: an Extended map is not for the original, no fault, no warning, no reading of the file
+        const OriginalSafeReport by_bytes = check_original_safe(v9.data(), v9.size());
+        CHECK(by_bytes.issues.size() == 1u && by_bytes.has(OriginalSafeCode::NotForOriginal) && by_bytes.issues[0].severity == LevelProblemSeverity::Info && by_bytes.not_for_original());
+        CHECK(!by_bytes.works_in_original_game() && by_bytes.judged && by_bytes.fits_the_place());
+        CHECK(by_bytes.issues[0].message == "not for the original game (needs a version 8 file): this is an Extended map, version 9, which only this remake loads");
+        const OriginalSafeReport by_level = check_original_safe(extended_level());
+        CHECK(by_level.issues.size() == 1u && by_level.not_for_original() && !by_level.works_in_original_game());
+        const std::vector<uint8_t> four = {9, 0, 0, 0};
+        CHECK(check_original_safe(four.data(), four.size(), extended_limits()).not_for_original());     // (by the version word alone, whatever the limits)
+        CHECK(std::string(to_string(OriginalSafeCode::NotForOriginal)) == "not_for_original");
+        CHECK(!check_original_safe(tiny.data(), tiny.size()).not_for_original() && check_original_safe(tiny.data(), tiny.size()).works_in_original_game());
+    });
+
+    run_case("W7.8 Hostile Headers: 65,535 x 65,535, 2^32-1, 65,536 x 65,536 (A Cell Count That Is 0 In 32 Bits), More Than The Ceiling Or The Limits Of The Place: Refused Before Any Allocation", [] {
+        struct Dims {
+            uint32_t rows, columns;
+            const char* what;
+        };
+        const Dims dims[] = {{65535, 65535, "65535 x 65535"}, {0xFFFFFFFFu, 0xFFFFFFFFu, "2^32-1 x 2^32-1"}, {0xFFFFFFFFu, 1, "2^32-1 x 1"}, {1, 0xFFFFFFFFu, "1 x 2^32-1"},
+                             {65536, 65536, "65536 x 65536 (2^32 cells: 0 in 32 bits)"}, {65536, 1, "65536 x 1"}, {2049, 1, "2049 x 1"}, {1, 2049, "1 x 2049"}, {2048, 2049, "2048 x 2049"},
+                             {0x10001, 0x10000, "65537 x 65536"}, {0x80000000u, 2, "2^31 x 2"}};
+        for (const Dims& d : dims) {
+            for (const LevelLimits& limits : {LevelLimits::format_ceiling(), LevelLimits::for_extended_maps()}) {
+                const std::vector<uint8_t> file = v9_bytes(0, 0, "", d.rows, d.columns, 0);
+                LevelData level;
+                LevelValidation v;
+                bool loaded = true;
+                const size_t held = peak_of([&] { loaded = level.load_from_memory(file.data(), file.size(), &v, limits); });
+                CHECK_MSG(!loaded && has_fatal(v, LevelProblemKind::GridTooLarge) && is_empty_level(level), d.what);
+                CHECK_MSG(held < kSlack, std::string(d.what) + ": " + std::to_string(held));
+            }
+        }
+        // 2,048 x 2,048 is within the ceiling: with the bytes missing it is a truncated file, still without an allocation
+        {
+            const std::vector<uint8_t> file = v9_bytes(0, 0, "", 2048, 2048, 0);
+            LevelData level;
+            LevelValidation v;
+            bool loaded = true;
+            const size_t held = peak_of([&] { loaded = level.load_from_memory(file.data(), file.size(), &v, LevelLimits::format_ceiling()); });
+            CHECK(!loaded && has_fatal(v, LevelProblemKind::Truncated) && mentions(v, "the layers") && held < kSlack);
+            // and the places' limits refuse it by its grid: 4,194,304 cells are more than the 262,144 of an Extended map
+            CHECK(!level.load_from_memory(file.data(), file.size(), &v, LevelLimits::for_extended_maps()) && has_fatal(v, LevelProblemKind::GridTooLarge));
+        }
+        // 1,024 x 256 and 512 x 512 are the 262,144 cells that an Extended map may have; one cell more is too many
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1024, 256}, std::pair<uint32_t, uint32_t>{512, 512}, std::pair<uint32_t, uint32_t>{256, 1024}, std::pair<uint32_t, uint32_t>{1, 1024}}) {
+            const std::vector<uint8_t> file = v9_bytes(0, 0, "", shape.first, shape.second, static_cast<uint64_t>(shape.first) * shape.second);
+            LevelData level;
+            LevelValidation v;
+            bool loaded = false;
+            const size_t held = peak_of([&] { loaded = level.load_from_memory(file.data(), file.size(), &v, LevelLimits::for_extended_maps()); });
+            CHECK_MSG(loaded && level.height == shape.first && level.width == shape.second, std::to_string(shape.first) + " x " + std::to_string(shape.second) + ": " + v.describe());
+            CHECK_MSG(held <= reader_bound(file.size()), std::to_string(held) + " for " + std::to_string(file.size()));
+        }
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1025, 1}, std::pair<uint32_t, uint32_t>{1, 1025}, std::pair<uint32_t, uint32_t>{513, 512}, std::pair<uint32_t, uint32_t>{1024, 257}}) {
+            const std::vector<uint8_t> file = v9_bytes(0, 0, "", shape.first, shape.second, static_cast<uint64_t>(shape.first) * shape.second);
+            LevelData level;
+            LevelValidation v;
+            CHECK_MSG(!level.load_from_memory(file.data(), file.size(), &v, LevelLimits::for_extended_maps()) && has_fatal(v, LevelProblemKind::GridTooLarge),
+                      std::to_string(shape.first) + " x " + std::to_string(shape.second));
+        }
+        // a file of more than the limits' bytes is not read at all
+        std::vector<uint8_t> five(5u * 1024u * 1024u, 0x09);
+        LevelData level;
+        LevelValidation v;
+        const size_t held = peak_of([&] { level.load_from_memory(five.data(), five.size(), &v, LevelLimits::for_extended_maps()); });
+        CHECK(has_fatal(v, LevelProblemKind::FileTooLarge) && mentions(v, "5242880 bytes, more than the 4194304 allowed here") && held < kSlack);
+        std::vector<uint8_t> above(64u * 1024u * 1024u + 1u, 0x09);
+        LevelLimits unlimited = LevelLimits::format_ceiling();
+        unlimited.max_read_bytes = std::numeric_limits<size_t>::max();
+        CHECK(!level.load_from_memory(above.data(), above.size(), &v, unlimited) && has_fatal(v, LevelProblemKind::FileTooLarge) && mentions(v, "more than the 67108864 allowed here"));
+        // an empty grid is still a finding of its own
+        const std::vector<uint8_t> empty = v9_bytes(0, 0, "", 0, 7, 0);
+        CHECK(!level.load_from_memory(empty.data(), empty.size(), &v, extended_limits()) && has_fatal(v, LevelProblemKind::GridEmpty));
+    });
+
+    run_case("W7.9 Hostile Fields: Every Unknown Flag Bit, A Rules Word Above 1, A Description Of 256 Bytes Or More Than The File Holds, A Zero Byte In It; The Dictionary And The Blocks", [] {
+        // the flags: each of the 32 bits alone, and all of them
+        for (int bit = 0; bit < 33; ++bit) {
+            const uint32_t flags = bit == 32 ? 0xFFFFFFFFu : (1u << bit);
+            const std::vector<uint8_t> file = v9_bytes(flags, 0, "x", 1, 1, 1);
+            LevelData level;
+            LevelValidation v;
+            CHECK_MSG(!level.load_from_memory(file.data(), file.size(), &v, extended_limits()) && has_fatal(v, LevelProblemKind::FormatFlagsUnknown) && is_empty_level(level), "flags bit " + std::to_string(bit));
+            CHECK_MSG(mentions(v, "bits that this reader does not know") && mentions(v, "0x"), v.reason());
+        }
+        // the rules: 0 and 1 are the two; every other word is refused
+        for (const uint32_t word : {0u, 1u, 2u, 3u, 255u, 256u, 0x8000u, 0xFFFFu}) {
+            const std::vector<uint8_t> file = v9_bytes(0, word, "x", 1, 1, 1);
+            LevelData level;
+            LevelValidation v;
+            const bool loaded = level.load_from_memory(file.data(), file.size(), &v, extended_limits());
+            CHECK_MSG(loaded == (word <= 1), "rules " + std::to_string(word));
+            if (word > 1) CHECK_MSG(has_fatal(v, LevelProblemKind::RulesOutOfRange) && mentions(v, "only 0 (the original's rules) and 1 (extended rules)"), v.reason());
+            if (loaded) CHECK(level.rules == word);
+        }
+        // the description: 255 bytes are the most; 256 and the words above are refused before the bytes are looked for; a length that the file cannot hold is a cut file
+        for (const size_t len : {size_t{0}, size_t{1}, size_t{255}}) {
+            const std::vector<uint8_t> file = v9_bytes(0, 0, std::string(len, 'a'), 1, 1, 1);
+            LevelData level;
+            CHECK_MSG(level.load_from_memory(file.data(), file.size(), nullptr, extended_limits()) && level.description.size() == len, std::to_string(len));
+        }
+        for (const uint32_t len : {256u, 257u, 4096u, 0xFFFFu}) {
+            const std::vector<uint8_t> file = v9_bytes(0, 0, std::string(len, 'a'), 1, 1, 1);
+            LevelData level;
+            LevelValidation v;
+            CHECK_MSG(!level.load_from_memory(file.data(), file.size(), &v, extended_limits()) && has_fatal(v, LevelProblemKind::DescriptionTooLong) && mentions(v, "more than the 255 allowed here"),
+                      std::to_string(len));
+        }
+        {
+            const std::vector<uint8_t> file = v9_bytes(0, 0, "abc", 1, 1, 1, 200);       // the word says 200 bytes, the file has 3 and the rest of the layout
+            LevelData level;
+            LevelValidation v;
+            const bool loaded = level.load_from_memory(file.data(), file.size(), &v, extended_limits());
+            CHECK(!loaded);
+            const std::vector<uint8_t> cut = v9_bytes(0, 0, "", 1, 1, 1, 255);
+            CHECK(!level.load_from_memory(cut.data(), 30, &v, extended_limits()) && has_fatal(v, LevelProblemKind::Truncated) && mentions(v, "the file ends inside the description"));
+        }
+        {
+            LevelLimits shorter = extended_limits();
+            shorter.max_description_bytes = 10;
+            const std::vector<uint8_t> file = v9_bytes(0, 0, "01234567890", 1, 1, 1);
+            LevelData level;
+            LevelValidation v;
+            CHECK(!level.load_from_memory(file.data(), file.size(), &v, shorter) && has_fatal(v, LevelProblemKind::DescriptionTooLong) && mentions(v, "more than the 10 allowed here"));
+        }
+        {
+            std::string with_zero = "ab";
+            with_zero += '\0';
+            with_zero += "cd";
+            const std::vector<uint8_t> file = v9_bytes(0, 0, with_zero, 1, 1, 1);
+            LevelData level;
+            CHECK(level.load_from_memory(file.data(), file.size(), nullptr, extended_limits()) && level.description == "ab");          // read to its first zero byte, as in version 8
+        }
+        // the dictionary: a count that the file cannot hold, and one beyond the 1,344 names
+        {
+            std::vector<uint8_t> file = v9_bytes(0, 0, "", 1, 1, 1);
+            wr16(file, 18, 0xFFFF);
+            LevelData level;
+            LevelValidation v;
+            const size_t held = peak_of([&] { level.load_from_memory(file.data(), file.size(), &v, extended_limits()); });
+            CHECK(has_fatal(v, LevelProblemKind::Truncated) && mentions(v, "tile dictionary") && held < kSlack);
+            std::vector<uint8_t> many;
+            put32(many, 9); put32(many, 1); put16(many, 6); put32(many, 0); put16(many, 0); put16(many, 0);
+            put16(many, 1344);                                                                // 1,345 names: one too many
+            for (int i = 0; i < 1345; ++i) put_text(many, "n", 11);
+            put32(many, 1); put32(many, 1);
+            many.insert(many.end(), 12, uint8_t{0});
+            put16(many, 0); put16(many, 0); put16(many, 0); put16(many, LVL_EMPTY_TILE); put16(many, 0); put16(many, 6);
+            CHECK(!level.load_from_memory(many.data(), many.size(), &v, extended_limits()) && has_fatal(v, LevelProblemKind::DictionaryTooLarge));
+            wr16(many, 18, 1343);                                                             // 1,344 names: the most (the file holds one name more than it announces: the rest is block 1)
+            CHECK(!level.load_from_memory(many.data(), many.size(), &v, extended_limits()) && !has_fatal(v, LevelProblemKind::DictionaryTooLarge));
+        }
+        // a version 9 file copies no quirk of the original's loader: a pile without stages, a cut inside block 4 and a missing egg word are files that are not whole
+        {
+            std::vector<uint8_t> file = v9_bytes(0, 0, "", 1, 1, 1);
+            const size_t b2 = file.size() - 10;                                               // block 2's count word (then block 3, block 4's count and the egg word: 10 bytes)
+            std::vector<uint8_t> pile(file.begin(), file.begin() + static_cast<std::ptrdiff_t>(b2));
+            put16(pile, 1);
+            for (int k = 0; k < 5; ++k) put16(pile, 0);                                       // row, column, units, points and 0 stages
+            put16(pile, 0); put16(pile, LVL_EMPTY_TILE); put16(pile, 0); put16(pile, 6);
+            LevelData level;
+            LevelValidation v;
+            CHECK(!level.load_from_memory(pile.data(), pile.size(), &v, extended_limits()) && has_fatal(v, LevelProblemKind::FoodBlockEndedEarly) && mentions(v, "every food object with at least one stage"));
+            CHECK(level.load_from_memory(file.data(), file.size(), &v, extended_limits()));
+            CHECK(!level.load_from_memory(file.data(), file.size() - 1, &v, extended_limits()) && has_fatal(v, LevelProblemKind::Truncated) && mentions(v, "egg word"));
+            std::vector<uint8_t> trailing = file;
+            trailing.insert(trailing.end(), 100, 0x55);
+            CHECK(level.load_from_memory(trailing.data(), trailing.size(), &v, extended_limits()));           // (bytes after the egg word are never read)
+            const LevelWriteResult w = write_level(level, extended_limits());
+            const std::vector<RewriteChange> changes = describe_rewrite(trailing.data(), trailing.size(), level, w.bytes);
+            CHECK(w.ok && w.bytes == file && changes.size() == 1u && changes[0].kind == RewriteChangeKind::TrailingBytes && changes[0].count == 100u);
+            CHECK(describe_rewrite(file.data(), file.size(), level, w.bytes).empty());
+            std::vector<uint8_t> altered = file;
+            altered[20] ^= 1;
+            CHECK(describe_rewrite(altered.data(), altered.size(), level, w.bytes)[0].kind == RewriteChangeKind::Unexplained);
+        }
+    });
+
+    run_case("W7.10 Every Cut Of A Version 9 File (Every Length From 0 To The Whole File): A Finding That Says Why, Never A Level, Nothing Held That Is Not Bounded", [&] {
+        LevelData source;
+        CHECK(source.load_from_memory(tiny.data(), tiny.size()));
+        const std::vector<uint8_t> converted = write_level(convert_to_extended(source).level, extended_limits()).bytes;
+        for (const std::vector<uint8_t>* file : {&converted}) {
+            LevelData level;
+            LevelValidation v;
+            CHECK(level.load_from_memory(file->data(), file->size(), &v, extended_limits()));
+            for (size_t cut = 0; cut < file->size(); ++cut) {
+                bool loaded = true;
+                const size_t held = peak_of([&] { loaded = level.load_from_memory(file->data(), cut, &v, extended_limits()); });
+                if (loaded || v.first_fatal() == nullptr || held > reader_bound(cut)) {
+                    CHECK_MSG(false, "cut at " + std::to_string(cut) + " of " + std::to_string(file->size()) + ": loaded " + std::to_string(loaded) + ", held " + std::to_string(held));
+                    break;
+                }
+            }
+        }
+        const std::vector<uint8_t> hand = extended_bytes();
+        for (size_t cut = 0; cut < hand.size(); ++cut) {
+            LevelData level;
+            LevelValidation v;
+            const bool loaded = level.load_from_memory(hand.data(), cut, &v, extended_limits());
+            CHECK_MSG(!loaded && v.first_fatal() != nullptr && !v.reason().empty() && is_empty_level(level), "the hand-made file cut at " + std::to_string(cut));
+        }
+        // the sentence of a cut says where
+        LevelData level;
+        LevelValidation v;
+        CHECK(!level.load_from_memory(hand.data(), 12, &v, extended_limits()) && mentions(v, "the file ends inside the header"));
+        CHECK(!level.load_from_memory(hand.data(), 18 + 100, &v, extended_limits()) && mentions(v, "the file ends inside the description"));
+        CHECK(!level.load_from_memory(hand.data(), 18 + 130 + 2 + 20, &v, extended_limits()) && mentions(v, "the file ends inside the tile dictionary"));
+        CHECK(!level.load_from_memory(hand.data(), 18 + 130 + 2 + 44 + 4, &v, extended_limits()) && mentions(v, "the file ends inside the grid size"));
+        CHECK(!level.load_from_memory(hand.data(), 18 + 130 + 2 + 44 + 8 + 50, &v, extended_limits()) && mentions(v, "the file ends inside the layers"));
+    });
+
+    run_case("W7.11 Bytes Changed At Random In Version 9 Files (1,000 Files Each, Fixed Seeds, 1 To 8 Bytes): No Crash, A Reason For Each Refusal, Each Level Written And Read Back The Same, Twice The Same Bytes", [&] {
+        LevelData source;
+        CHECK(source.load_from_memory(small.data(), small.size()));
+        const std::vector<uint8_t> converted = write_level(convert_to_extended(source).level, extended_limits()).bytes;
+        const std::vector<uint8_t> hand = extended_bytes();
+        uint32_t seed = 0x9A9A0001u;
+        int loaded = 0;
+        for (const std::vector<uint8_t>* base : {&hand, &converted}) {
+            Lcg r(seed++);
+            for (int i = 0; i < 1000; ++i) {
+                std::vector<uint8_t> m = *base;
+                const size_t flips = 1 + r.below(8);
+                for (size_t k = 0; k < flips; ++k) {
+                    // half of the changes land in the header and the first dictionary names, where the fields that the new version adds are
+                    const size_t at = r.below(2) == 0 ? r.below(static_cast<uint32_t>(std::min<size_t>(m.size(), 80))) : r.below(static_cast<uint32_t>(m.size()));
+                    m[at] = static_cast<uint8_t>(r.below(256));
+                }
+                LevelData level;
+                loaded += level.load_from_memory(m.data(), m.size(), nullptr, LevelLimits::format_ceiling()) ? 1 : 0;
+                hostile_extended(m.data(), m.size(), "file " + std::to_string(i));
+            }
+        }
+        CHECK_MSG(loaded > 200, std::to_string(loaded) + " of the changed files load");
+    });
+
+    run_case("W7.12 The Heap: The Reader Holds At Most 7 Times Its File And 64 KiB For A Version 9 File (From A File 8), The Writer 8 Times; 512 x 512 (3.1 MB), 8,000 Waypoints Without Trigger", [&] {
+        std::vector<std::string> names(1344, ".");
+        const LevelData big = blank_extended_level(512, 512, names);
+        LevelWriteResult w;
+        size_t held = peak_of([&] { w = write_level(big, extended_limits()); });
+        CHECK_MSG(w.ok && held <= writer_bound(w.bytes.size()), w.error + " / " + std::to_string(held));
+        CHECK(w.ok && w.bytes.size() > 3u * 1000u * 1000u);
+        LevelData back;
+        LevelValidation v;
+        held = peak_of([&] { back.load_from_memory(w.bytes.data(), w.bytes.size(), &v, extended_limits()); });
+        CHECK_MSG(back.height == 512u && held <= reader_bound(w.bytes.size()) && v.parsed, std::to_string(held));
+        const std::string path = scratch_path("test_lvl_writer_v9_big");
+        {
+            std::ofstream out(path, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(w.bytes.data()), static_cast<std::streamsize>(w.bytes.size()));
+        }
+        LevelValidation from_file;
+        held = peak_of([&] { from_file = LVLParser::check_file(path, 0x0F, extended_limits()); });
+        CHECK_MSG(from_file.parsed && held <= kSlack + 8 * w.bytes.size(), std::to_string(held));
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        // 8,000 waypoints without a trigger: 8 bytes of file, 56 of memory each
+        std::vector<uint8_t> file = v9_bytes(0, 0, "", 1, 1, 1);
+        file.resize(file.size() - 4);                                                       // block 4's count and the egg word go
+        put16(file, 8000);
+        for (int i = 0; i < 8000; ++i) { put16(file, 0); put16(file, 0); put32(file, 0); }
+        put16(file, 6);
+        LevelData level;
+        held = peak_of([&] { level.load_from_memory(file.data(), file.size(), &v, extended_limits()); });
+        CHECK_MSG(level.waypoints.size() == 8000u && held <= reader_bound(file.size()) && held >= 7 * file.size() / 2, std::to_string(held));
+        // a block 2 that announces 65,535 piles and holds one byte of them
+        std::vector<uint8_t> piles = v9_bytes(0, 0, "", 1, 1, 1);
+        piles.resize(piles.size() - 10);                                                    // (block 2's count word and what follows it go)
+        put16(piles, 65535);
+        piles.insert(piles.end(), 4, uint8_t{0});
+        held = peak_of([&] { level.load_from_memory(piles.data(), piles.size(), &v, extended_limits()); });
+        CHECK_MSG(!v.parsed && held < kSlack, std::to_string(held));
+    });
+
+    run_case("W7.13 Round Trip Of A Bigger Extended Map With Objects Everywhere: 300 x 700, Anchors Of -128 To 127, Read Back The Same, Written Twice The Same Bytes", [] {
+        LevelData l;
+        l.version = 9;
+        l.rules = 1;
+        l.game_mode = 1;
+        l.default_minutes = 12;
+        l.description = "300 x 700";
+        l.tile_dictionary = {".", "ground", "tree"};
+        l.tile_type_count = 2;
+        l.height.val = 300;
+        l.width.val = 700;
+        Lcg r(0x300700u);
+        const size_t cells = 300u * 700u;
+        for (size_t i = 0; i < cells; ++i) {
+            l.layer1_terrain.push_back(MapCell{1, 0, 0xCDCD});
+            l.layer2_interactive.push_back(r.below(5) == 0 ? MapCell{2, 0, r.word()} : MapCell{LVL_EMPTY_TILE, 0, 0});
+        }
+        const LevelWriteResult w = write_level(l, extended_limits());
+        CHECK_MSG(w.ok, w.error);
+        LevelData back;
+        CHECK(back.load_from_memory(w.bytes.data(), w.bytes.size(), nullptr, extended_limits()));
+        std::string why;
+        CHECK_MSG(same_level(l, back, &why), why);
+        CHECK(write_level(back, extended_limits()).bytes == w.bytes);
+        const LevelConversion c = convert_to_classic(l);
+        CHECK(!c.ok);
+        CHECK(c.reasons.size() == 3u && c.reasons[0].find("700 columns wide") != std::string::npos && c.reasons[1].find("300 rows tall") != std::string::npos &&
+              c.reasons[2].find("object cells are anchored outside the 0 to 255") != std::string::npos);
+    });
+}
+
 int main() {
     std::cout << "=======================================================\n"
               << " The map writer, and the reader and the writer on hostile input\n"
@@ -1273,6 +2153,7 @@ int main() {
     w4_hostile_files();
     w5_describe_rewrite();
     w6_new_maps();
+    w7_extended_maps();
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }
