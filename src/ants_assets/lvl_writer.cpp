@@ -553,6 +553,9 @@ std::vector<std::string> classic_reasons(const LevelData& level, std::vector<std
     if (level.tile_dictionary.size() > LVL_MAX_DICTIONARY_ENTRIES) {
         why.push_back("the dictionary has " + num(level.tile_dictionary.size()) + " names; a Classic map holds at most " + num(LVL_MAX_DICTIONARY_ENTRIES));
     }
+    if (level.description.size() == kClassicMostDescription && notes != nullptr) {
+        notes->push_back("the description has 30 bytes: the original reads no zero byte that ends it (29 characters fit), and the original-safe check warns");
+    }
     if (level.description.size() > kClassicMostDescription) {
         why.push_back("the description is " + num(level.description.size()) + " bytes; a Classic map holds " + num(kClassicMostDescription) + " (29 characters end with the zero byte that the original needs)");
     }
@@ -563,7 +566,9 @@ std::vector<std::string> classic_reasons(const LevelData& level, std::vector<std
         notes->push_back("the map asks for the extended rules (rules 1); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
                          "and a long path order can fail)");
     }
-    // every object anchor must fit the byte of a Classic map; only a map of more than 256 a side can hold one that does not (a smaller map's anchors are bytes modulo 256)
+    // every object anchor must fit the byte of a Classic map. This loop (O(cells)) can never fire for a version 9 map of 256 x 256 or less, whose anchors are bytes modulo 256
+    // (LevelData::object_anchor), and for a larger map it only adds a reason on top of the size reasons above; it stays so that the list is complete, and tells an editor
+    // which objects to move when the map is cropped.
     if (level.version == LVL_EXTENDED_VERSION && rows != 0 && columns != 0) {
         uint64_t beyond = 0;
         uint32_t first_row = 0;
@@ -593,13 +598,7 @@ LevelLimits conversion_limits(bool extended) { return extended ? LevelLimits::fo
 
 }  // namespace
 
-std::vector<std::string> needs_extended(const LevelData& level) {
-    try {
-        return classic_reasons(level, nullptr);
-    } catch (...) {
-        return {"the level cannot be looked at (out of memory)"};
-    }
-}
+std::vector<std::string> needs_extended(const LevelData& level) { return convert_to_classic(level).reasons; }     // (the one code path: the reasons of the conversion, so that they cannot drift)
 
 LevelConversion convert_to_extended(const LevelData& level) {
     LevelConversion result;

@@ -901,6 +901,72 @@
     "lvl_tool"
    ],
    "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "wrap_stops_at_255_a_side",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (height <= LVL_MAX_GRID_SIDE && width <= LVL_MAX_GRID_SIDE) {\n        r &= 0xFF;",
+   "new": "if (height < LVL_MAX_GRID_SIDE && width < LVL_MAX_GRID_SIDE) {\n        r &= 0xFF;",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "wrap_only_by_columns",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (height <= LVL_MAX_GRID_SIDE && width <= LVL_MAX_GRID_SIDE) {\n        r &= 0xFF;",
+   "new": "if (width <= LVL_MAX_GRID_SIDE) {\n        r &= 0xFF;",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "classic_width_256_does_not_fit",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (columns > LVL_MAX_GRID_SIDE) why.push_back",
+   "new": "if (columns >= LVL_MAX_GRID_SIDE) why.push_back",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "classic_height_256_does_not_fit",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (rows > LVL_MAX_GRID_SIDE) why.push_back",
+   "new": "if (rows >= LVL_MAX_GRID_SIDE) why.push_back",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "thirty_byte_description_without_a_note",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.description.size() == kClassicMostDescription && notes != nullptr) {",
+   "new": "if (false) {",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "conversion_keeps_the_notes_of_the_old_file",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "        LevelData copy(level);\n        copy.load_notes.clear();\n        if (level.version == LVL_EXTENDED_VERSION) {",
+   "new": "        LevelData copy(level);\n        if (level.version == LVL_EXTENDED_VERSION) {",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
   }
  ]
 }

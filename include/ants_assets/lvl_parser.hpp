@@ -20,7 +20,6 @@ constexpr uint32_t LVL_FORMAT_CEILING_SIDE = 2048;
 constexpr uint32_t LVL_FORMAT_CEILING_CELLS = LVL_FORMAT_CEILING_SIDE * LVL_FORMAT_CEILING_SIDE;   // 4,194,304
 constexpr size_t   LVL_FORMAT_CEILING_FILE_BYTES = 64u * 1024u * 1024u;
 constexpr size_t   LVL_EXTENDED_MAX_DESCRIPTION = 255;       // bytes of a version 9 description (the word before it holds the length)
-constexpr size_t   LVL_CLASSIC_MAX_DESCRIPTION = 29;         // characters of a version 8 description that the original can end with a zero byte (the field holds 30 bytes)
 constexpr uint32_t LVL_KNOWN_FORMAT_FLAGS = 0;               // the `format flags` bits this reader knows (none yet): a file with any other bit set is refused
 constexpr uint16_t LVL_RULES_ORIGINAL = 0;                   // `rules` 0: the original's rules exactly
 constexpr uint16_t LVL_RULES_EXTENDED = 1;                   // `rules` 1: extended rules (the simulation does not read the word yet)

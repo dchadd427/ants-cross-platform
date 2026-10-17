@@ -1517,6 +1517,21 @@ void w7_extended_maps() {
         CHECK(v8.object_anchor(1, 2, ar, ac) && ar == 0 && ac == 3);
         v8.layer2_interactive[6].properties = 0x0007;
         CHECK(v8.object_anchor(1, 2, ar, ac) && ar == 7 && ac == 0);
+        // the edge of the rule: at exactly 256 a side the sum wraps (as a Classic anchor byte does), at 257 it is the plain sum
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{40, 256}, std::pair<uint32_t, uint32_t>{256, 40}, std::pair<uint32_t, uint32_t>{40, 257}, std::pair<uint32_t, uint32_t>{257, 40}}) {
+            LevelData e;
+            e.version = 9;
+            e.height.val = shape.first;
+            e.width.val = shape.second;
+            e.layer1_terrain.assign(static_cast<size_t>(shape.first) * shape.second, MapCell{0, 0, 0});
+            e.layer2_interactive.assign(static_cast<size_t>(shape.first) * shape.second, MapCell{LVL_EMPTY_TILE, 0, 0});
+            e.layer2_interactive[10] = MapCell{2, 0, 0xB400};                          // row 0, column 10: row offset 0, column offset -76 (0xB4)
+            const bool wraps = shape.first <= 256 && shape.second <= 256;
+            int32_t er = -1, ec = -1;
+            CHECK(e.object_anchor(0, 10, er, ec) && er == 0 && ec == (wraps ? 190 : -66));
+            e.layer2_interactive[10].properties = 0xCDCD;                              // junk: row offset -51, column offset -51
+            CHECK(e.object_anchor(0, 10, er, ec) && er == (wraps ? 205 : -51) && ec == (wraps ? ((10 - 51) & 255) : -41));
+        }
         // a map of more than 256 on a side: the plain sum, which may be negative or beyond a byte
         LevelData wide;
         wide.version = 9;
@@ -1662,6 +1677,53 @@ void w7_extended_maps() {
         CHECK(anchor_reasons(300, 1, 280, static_cast<uint16_t>(0x00E7)) == 0u);            // row 280 - 25 = 255
         CHECK(anchor_reasons(300, 1, 280, static_cast<uint16_t>(0x00E8)) == 1u);            // row 256
         CHECK(anchor_reasons(300, 1, 0, static_cast<uint16_t>(0x00FF)) == 1u);              // row -1
+        // exactly 256 a side fits, 257 does not (columns and rows; both conversions give the same reasons as needs_extended)
+        auto of_shape = [&base](uint32_t rows, uint32_t columns) {
+            LevelData m = base;
+            m.description.clear();
+            m.height.val = rows;
+            m.width.val = columns;
+            m.layer1_terrain.assign(static_cast<size_t>(rows) * columns, MapCell{1, 0, 0});
+            m.layer2_interactive.assign(static_cast<size_t>(rows) * columns, MapCell{LVL_EMPTY_TILE, 0, 0});
+            return m;
+        };
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1, 256}, std::pair<uint32_t, uint32_t>{256, 1}, std::pair<uint32_t, uint32_t>{256, 256}}) {
+            const LevelData m = of_shape(shape.first, shape.second);
+            CHECK_MSG(convert_to_classic(m).ok && needs_extended(m).empty(), std::to_string(shape.first) + " x " + std::to_string(shape.second));
+        }
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1, 257}, std::pair<uint32_t, uint32_t>{257, 1}}) {
+            const LevelData m = of_shape(shape.first, shape.second);
+            const LevelConversion r = convert_to_classic(m);
+            CHECK_MSG(!r.ok && r.reasons.size() == 1u && needs_extended(m) == r.reasons, std::to_string(shape.first) + " x " + std::to_string(shape.second));
+            CHECK(r.reasons.size() == 1u && r.reasons[0].find("a Classic map has at most 256") != std::string::npos);
+        }
+        // a description of exactly 30 bytes converts, with a note
+        {
+            LevelData m = base;
+            m.description = std::string(30, 'y');
+            const LevelConversion r = convert_to_classic(m);
+            bool noted = false;
+            for (const std::string& n : r.notes) noted = noted || n.find("the description has 30 bytes") != std::string::npos;
+            CHECK(r.ok && noted);
+            m.description = std::string(29, 'y');
+            bool quiet = true;
+            for (const std::string& n : convert_to_classic(m).notes) quiet = quiet && n.find("the description has 30 bytes") == std::string::npos;
+            CHECK(quiet);
+        }
+        // the notes of the reader describe the old file: neither conversion carries them, even when the level is the kind already
+        {
+            LevelData m = base;
+            m.load_notes.push_back(LevelProblem{});
+            LevelData classic = base;
+            classic.version = 8;
+            classic.rules = 0;
+            classic.layer2_interactive[6].properties = 0x0300;
+            classic.load_notes.push_back(LevelProblem{});
+            CHECK(convert_to_classic(m).ok && convert_to_classic(m).level.load_notes.empty());
+            CHECK(convert_to_classic(classic).ok && convert_to_classic(classic).level.load_notes.empty());
+            CHECK(convert_to_extended(m).ok && convert_to_extended(m).level.load_notes.empty());
+            CHECK(convert_to_extended(classic).ok && convert_to_extended(classic).level.load_notes.empty());
+        }
         // an anchor that points outside the grid of a map of 256 or less is a byte modulo 256 (so no reason): a bomb's word never is an anchor
         LevelData small_map = base;
         small_map.layer2_interactive[6].properties = 0x7F80;                         // -128 rows, +127 columns from row 1, column 2
