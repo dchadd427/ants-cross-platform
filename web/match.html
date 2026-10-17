@@ -235,7 +235,7 @@
         var show = $('show'); if (show) show.addEventListener('click', function () { setReplay(!frame); });
         var full = $('rep-full');
         var finger = false; if (full) full.addEventListener('pointerdown', function (e) { finger = e.pointerType === 'touch'; });
-        if (full) full.addEventListener('click', function () { var f = frame; if (!f) return; try { var d = f.contentDocument, own = d.getElementById('fullscreen-btn'); if (own) { if (finger) d.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })); own.click(); return; } } catch (e) { /* not reachable: the frame itself goes */ } var go = f.requestFullscreen || f.webkitRequestFullscreen; if (go) { try { go.call(f); } catch (e) { /* the page's own button is there */ } } });
+        if (full) full.addEventListener('click', function () { var f = frame; if (!f) return; var touched = finger; finger = false; try { var d = f.contentDocument, own = d.getElementById('fullscreen-btn'); if (own) { if (touched) { try { d.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })); } catch (e) { /* no PointerEvent there: the page just is not told of the finger */ } } own.click(); return; } } catch (e) { /* not reachable: the frame itself goes */ } var go = f.requestFullscreen || f.webkitRequestFullscreen; if (go) { try { go.call(f); } catch (e) { /* the page's own button is there */ } } });
         pics.lookMaps().then(function () { var d = $('fact-map'); if (d) d.textContent = R.mapTitle(rec.map) + (H.mapFact(rec.map, pics.maps()) ? '  ' + H.mapFact(rec.map, pics.maps()) : ''); });
     }
     function load() {
