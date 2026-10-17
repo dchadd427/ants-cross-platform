@@ -32,7 +32,7 @@
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
         var state = { tool: 'ground', ground: 485, objects: 302, brush: 1, fill: false, team: 0, ants: 4, stages: 4 };
-        var editor = null, current = null;
+        var editor = null, current = null, fits = '';                     // `fits`: a note when fewer ants than asked for found room, until the next choice
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function paints() { return Palette.paints(state.tool); }
@@ -80,7 +80,7 @@
             if (!file || !(state.tool === 'hills' || state.tool === 'ants' || state.tool === 'food')) return '';
             var facts = Blocks.facts(file, state.tool === 'hills'), who = teamNow().label, set = Blocks.FOOD[state.stages];
             if (state.tool === 'hills') return who + ': ' + (facts.hills[state.team] ? 'has a hill' : 'no hill yet');
-            if (state.tool === 'ants') return who + ': ' + (facts.ants[state.team] ? plural(facts.ants[state.team], 'ant', 'ants') : 'no ants yet');
+            if (state.tool === 'ants') return who + ': ' + (facts.ants[state.team] ? plural(facts.ants[state.team], 'ant', 'ants') + fits : 'no ants yet');
             return plural(set.units, 'bite', 'bites') + ' of ' + set.points + ' points. ' + (facts.piles < 0 ? '' : plural(facts.piles, 'pile', 'piles') + ' on the map.');
         }
 
@@ -91,6 +91,7 @@
         function stepBy(d) {
             var r = stepRange(), v = Math.max(r[0], Math.min(r[1], stepValue() + d));
             if (state.tool === 'ants') state.ants = v; else state.stages = v;
+            fits = '';
             showPalette();
         }
 
@@ -204,12 +205,12 @@
             showPalette();
         }
 
-        function chooseTeam(id) { state.team = id; showPalette(); }
+        function chooseTeam(id) { state.team = id; fits = ''; showPalette(); }
 
         function chooseTool(id) {
             if (!Palette.usable(id)) return;
             if (canvas.isStroking()) return;
-            state.tool = id;
+            state.tool = id; fits = '';
             showTools();
         }
 
@@ -245,6 +246,8 @@
             else change = Blocks.placePile(file, cell.row, cell.column, state.stages);
             if (change.error) { if (env.say) env.say('It cannot be put there', change.error); return; }
             var was = env.file(), dirty = editor.act(change);
+            fits = '';
+            if (state.tool === 'ants') { var put = Blocks.facts(env.file(), false).ants[state.team]; if (put < state.ants) fits = ' (only ' + put + ' fit)'; }
             if (dirty) changed(dirty);
             else { showInfo(); if (env.file() !== was) env.onEdit(); }                    // (nothing changed on the map, but the dictionary may have got a name: the page is told)
         }

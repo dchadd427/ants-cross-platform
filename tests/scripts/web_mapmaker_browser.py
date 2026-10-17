@@ -18,6 +18,8 @@ Parts:
              the hill is there and "Works in the original game" when the four hills, their ants and a pile are, undo and redo bring the check back, the eraser takes a hill, a team's ants and a pile
              away, a drag looks around and puts nothing, the letters H, A and F choose the tools, and Download hands over what the core writes; then a touch screen (390 x 844): a tap puts, a drag
              and two fingers do not, and the sheet of a phone has the teams, the stepper and the numbers;
+  * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
+             hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
   * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
              keeps a usable height, and the palette of a phone is one button that opens a sheet of tiles with their names (for Hills, Ants and Food: the teams, the steppers);
   * phone    390 x 844 (portrait) and 844 x 390 (landscape), a touch screen: no sideways scroll, the buttons and the New map dialog are inside the screen, two fingers zoom and one finger pans (Move) or
@@ -41,7 +43,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "panel", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -730,6 +732,28 @@ def run_part(part, tab, args, check, tiny, junk):
         time.sleep(0.3)
         check(page.pixel(*page.cell_point(10, 20)) == food_color or page.pixel(*page.cell_point(10, 20))[0] > 200, "a tap puts a food pile (a gold square under the marked square)")
         page.shot(args.shots, "mapmaker-blocks-phone")
+    elif part == "panel":
+        for w, h in ((1280, 800), (1366, 768), (1280, 720)):
+            print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))
+            tab.emulate(w, h, 1)
+            page = Page(tab, args.web)
+            check(page.open() and page.ready(), "the page starts")
+            page.ev("(function () { var s = document.createElement('style'); s.textContent = '*::-webkit-scrollbar { width: 15px; height: 15px; }'; document.head.appendChild(s); })()")
+            for tool in ("ground", "objects", "hills", "ants", "food", "erase", "move"):
+                page.tool(tool)
+                time.sleep(0.1)
+                found = json.loads(page.ev("""JSON.stringify((function () {
+                    var p = document.querySelector('.tools'), inner = p.getBoundingClientRect().left + p.clientLeft + p.clientWidth, outside = [];
+                    [].forEach.call(p.querySelectorAll('button'), function (b) { if (b.offsetParent === null) return; var r = b.getBoundingClientRect(); if (r.right > inner + 0.5 || r.left < p.getBoundingClientRect().left) outside.push(b.id || b.textContent); });
+                    var note = document.getElementById('tool-hint');
+                    return {wide: p.scrollWidth > p.clientWidth, tall: p.scrollHeight > p.clientHeight, outside: outside, note: note.offsetParent !== null};
+                })())"""))
+                check(not found["wide"] and not found["tall"] and found["outside"] == [], "%d x %d, %s: the tools column has no scrollbar and every button is inside it (%s)" % (w, h, tool, found))
+                if h >= 800:
+                    check(found["note"], "%d x %d, %s: the note under the palette shows" % (w, h, tool))
+            if (w, h) == (1280, 720):
+                page.tool("ants")
+                page.shot(args.shots, "mapmaker-panel-1280x720-ants")
     elif part == "layout":
         for w, h in ((667, 375), (740, 360), (812, 375), (844, 390), (390, 844), (375, 667), (360, 640), (340, 700), (320, 568)):
             print("[web map maker] layout, %d x %d" % (w, h))

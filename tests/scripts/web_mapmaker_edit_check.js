@@ -676,32 +676,37 @@ function caseI() {
         // the same place again changes nothing and is no step
         const steps = ed.history.size().strokes, same = Blocks.placeHill(ed.file, 2, 12, 12);
         check(ed.act(same) === null && ed.history.size().strokes === steps, 'a hill put where it is changes nothing and keeps no step' + tag);
-        // put over another team's hill: it goes whole, over an object: the object goes whole
-        const over = Blocks.placeHill(ed.file, 0, 12, 14);
-        ed.act(over);
-        check(hillFootprint(ed.file, 246).length === 0 && hillFootprint(ed.file, 248).length === 16, 'a hill put over another team\'s hill takes that one away whole (not half of it)' + tag);
-        expectHill(ed.file, 248, 12, 14, ' of Green over it' + tag);
+        // put over (even one cell of) another team's hill: refused in words with the team's name, and nothing changes
+        const before = Array.from(ed.file.bytes), stepsHere = ed.history.size().strokes;
+        for (const [r, c] of [[12, 14], [12, 15], [9, 12], [11, 10]]) {
+            const over = Blocks.placeHill(ed.file, 0, r, c);
+            check(typeof over.error === 'string' && /^Blue\u2019s hill is here\. Move it first/.test(over.error) && !over.cells && !over.splices, 'a hill with its entrance at (' + r + ', ' + c + ') would touch the Blue hill: refused, the team is named: ' + over.error + tag);
+        }
+        check(Array.from(ed.file.bytes).join() === before.join() && ed.history.size().strokes === stepsHere && hillFootprint(ed.file, 246).length === 16, 'and nothing was taken away' + tag);
+        ed.act(Blocks.placeHill(ed.file, 0, 4, 19));
+        expectHill(ed.file, 248, 4, 19, ' of Green, moved beside it' + tag);
+        check(hillFootprint(ed.file, 246).length === 16, 'the Blue hill is still there' + tag);
         // undo all the way: byte for byte the first states
         let n = 0;
         while (ed.history.canUndo()) { ed.undo(); n++; }
         const opened = File.parse(bytes);
-        check(n === 6, 'six steps are undone: four hills, the move, and the one put over a hill' + tag);
+        check(n === 6, 'six steps are undone: four hills, the move of Blue and the move of Green' + tag);
         equal(cells2(ed.file), Array.from(opened.bytes.subarray(opened.layer2, opened.layer2 + 6 * 480)), 'undo puts back every cell of layer 2' + tag);
         while (ed.history.canRedo()) ed.redo();
-        expectHill(ed.file, 248, 12, 14, ' redone' + tag);
+        expectHill(ed.file, 248, 4, 19, ' redone' + tag);
         // refusals at the edge: the hill needs the cell before its entrance and two after it
         for (const [r, c, why] of [[0, 5, 'the top row'], [5, 0, 'the first column'], [18, 5, 'the second to last row'], [5, 22, 'the second to last column'], [19, 5, 'the last row']]) {
             const bad = Blocks.placeHill(ed.file, 1, r, c);
             check(typeof bad.error === 'string' && /no room/.test(bad.error) && !bad.cells, 'no hill with its entrance in ' + why + ': ' + (bad.error || '').slice(0, 40) + tag);
         }
         check(!Blocks.placeHill(ed.file, 1, 1, 1).error && !Blocks.placeHill(ed.file, 1, 17, 21).error, 'the nearest places to the edge that have room are accepted' + tag);
-        // an object under the hill goes whole: a hill of Black on top of a hill of Red that sticks out of the footprint
+        // an object under the hill goes away (whole); another team's hill near it stays
         const g = editorOn(makeMap(version, 20, 24, 486));
         g.act(Blocks.placeHill(g.file, 1, 6, 6));
-        put(g.file, 2, 6, 9, 302, 1, version === 8 ? (6 | (9 << 8)) : 0);
-        const cover = Blocks.placeHill(g.file, 3, 8, 8);
-        g.act(cover);
-        check(hillFootprint(g.file, 247).length === 0 && Edit.tile(g.file, 2, 6 * 24 + 9) === 302 && hillFootprint(g.file, 245).length === 16, 'a hill that is put half over another goes over it whole, the object beside it stays' + tag);
+        put(g.file, 2, 12, 13, 302, 1, version === 8 ? (12 | (13 << 8)) : 0);
+        g.act(Blocks.placeHill(g.file, 3, 12, 12));
+        check(hillFootprint(g.file, 247).length === 16 && Edit.tile(g.file, 2, 12 * 24 + 13) === 245 && hillFootprint(g.file, 245).length === 16, 'a hill put over an object takes the object away; the other team\'s hill beside it stays' + tag);
+        check(/Red\u2019s hill is here/.test(Blocks.placeHill(g.file, 3, 8, 8).error), 'and one that would touch the Red hill is refused' + tag);
         // a short dictionary grows by itself, and the page is told through the rebase hook
         let rebased = 0;
         const small = Edit.create(File.parse(makeMap(version, 20, 24, 100)), { rebase: (b) => { rebased++; return File.parse(b); }, erase: Blocks.eraseAt });
@@ -841,6 +846,46 @@ function caseJ() {
     }
 }
 
+// ---- J3: what the first checks of the lists left unsaid ----
+function caseJ3() {
+    const nameAt = (f, id) => String.fromCharCode.apply(null, Array.from(f.bytes.slice(f.dictAt + 2 + 11 * id, f.dictAt + 2 + 11 * id + 8))).replace(/\0.*$/, '');
+    for (const version of [8, 9]) {
+        const tag = ' (version ' + version + ')';
+        // the start marker of each team is named in the dictionary, in place (the checker's rule of a new map: every tile that is used has its name)
+        const ed = editorOn(mapWith(version, 20, 24, 486, [], []));
+        for (let t = 0; t < 4; t++) { ed.act(Blocks.placeStart(ed.file, t, 5 + 3 * t, 5, 2)); check(nameAt(ed.file, Blocks.TEAMS[t].marker) === Blocks.TEAMS[t].markerName, Blocks.TEAMS[t].label + ': its start marker is named ' + Blocks.TEAMS[t].markerName + ' in the dictionary' + tag); }
+        // the stages of a pile are kept between 2 and 6, whatever is asked
+        for (const [asked, got] of [[1, 2], [0, 2], [-3, 2], [2, 2], [6, 6], [99, 6]]) {
+            const x = editorOn(mapWith(version, 20, 24, 486, [], []));
+            x.act(Blocks.placePile(x.file, 5, 5, asked));
+            check(Blocks.layout(x.file).piles[0].stages.length === got, 'a pile of ' + asked + ' stages asked for has ' + got + tag);
+        }
+        // a step that has only a splice is counted: end() says how many cells and splices it changed
+        const y = editorOn(mapWith(version, 20, 24, 486, [], []));
+        let st = y.begin('act');
+        st.change(Blocks.placeStart(y.file, 1, 8, 8, 3));
+        check(st.end() === 1 && y.history.size().strokes === 1, 'a change of one splice is one step that reports 1' + tag);
+        st = y.begin('act');
+        st.change(Blocks.placeHill(y.file, 1, 10, 10));
+        check(st.end() === 16, 'and a hill of 16 cells reports 16' + tag);
+        // a stroke taken back (a second finger) gives back the lists too, byte for byte, and keeps no step
+        const z = editorOn(mapWith(version, 20, 24, 486, [[152, 3, 3], [152, 3, 4]], [{ row: 9, column: 9, units: 10, points: 30, stages: [[10, 280], [0, 0x7FFE]] }])), start = Array.from(z.file.bytes);
+        const e = z.begin('erase', null);
+        e.stamp(3, 3, 1); e.stamp(9, 9, 1);
+        check(Blocks.layout(z.file).records.length === 0 && Blocks.layout(z.file).piles.length === 0, 'the eraser took the ants and the pile' + tag);
+        e.cancel();
+        check(Array.from(z.file.bytes).join() === start.join() && z.history.size().strokes === 0, 'a stroke that is cancelled puts the ants and the pile back, byte for byte, and keeps no step' + tag);
+        // a patch whose bytes are not where it says (it cannot be, but) is not forced onto the file
+        const w = editorOn(mapWith(version, 20, 24, 486, [], []));
+        w.act(Blocks.placeStart(w.file, 0, 5, 5, 3));
+        const lay = Blocks.layout(w.file), at = w.file.blocksAt + lay.records[1].rel + 2;
+        w.file.bytes[at] ^= 0x55;
+        const length = w.file.bytes.length, tampered = w.file.bytes[at];
+        w.undo();
+        check(w.file.bytes.length === length && w.file.bytes[at] === tampered, 'an undo whose splice does not find its bytes changes nothing (' + w.file.bytes.length + ' bytes)' + tag);
+    }
+}
+
 // ---- the history is bounded for the lists too ----
 function caseJ2() {
     const big = [];
@@ -899,6 +944,15 @@ function caseK() {
     sheet.body.children[0].children[3].click();
     check(p.tools.state().team === 3 && sheet.ctl.closed && p.host.tile.querySelector('span').textContent === 'Black', 'a team of the sheet is chosen and the sheet closes');
 
+    // the arrow keys in the team swatches choose a team, not a tile
+    const groundBefore = p.tools.state().ground;
+    p.button('hills').click();
+    p.host.swatches.children[0].focus();
+    p.host.swatches.listeners.keydown[0]({ key: 'ArrowDown', preventDefault() {} });
+    check(p.tools.state().team === 1 && p.tools.state().ground === groundBefore && p.host.swatches.children[1].getAttribute('aria-checked') === 'true', 'the arrow keys in the team swatches go from team to team (Red), and leave the ground that was chosen');
+    p.host.swatches.listeners.keydown[0]({ key: 'ArrowUp', preventDefault() {} });
+    check(p.tools.state().team === 0, 'and back');
+    p.host.swatches.children[3].click();
     // Ants
     p.doc.key('a');
     check(p.tools.state().tool === 'ants' && p.host.title.textContent === 'Ants' && !p.host.stepper.hidden && p.host.swatches.children.length === 4, 'Ants: four teams and a stepper');
@@ -924,6 +978,15 @@ function caseK() {
     check(p.tools.state().ants === 4 && val.textContent === '4' && p.host.stepValue.textContent === '4' && p.host.tile.querySelector('span').textContent === 'Black · 4 ants', 'the stepper of the sheet changes the same number, and the page\'s button follows');
     less.click(); less.click(); less.click(); less.click();
     check(p.tools.state().ants === 1 && less.disabled, 'down to 1 in the sheet');
+
+    // on a map with fewer cells than ants, the line says how many fit
+    const tiny = toolsPage(File.parse(mapWith(8, 3, 3, 486, [], [])));
+    tiny.button('ants').click();
+    for (let i = 0; i < 60; i++) tiny.host.stepMore.click();
+    tiny.painter().begin({ row: 1, column: 1 });
+    check(Blocks.layout(tiny.file()).records.length === 9 && tiny.host.name.textContent === 'Green: 9 ants (only 9 fit)', 'asked for 64 ants on a map of 9 cells, the line says what is on the map: ' + tiny.host.name.textContent);
+    tiny.host.stepLess.click();
+    check(tiny.host.name.textContent === 'Green: 9 ants', 'and the note goes when the number is changed: ' + tiny.host.name.textContent);
 
     // Food
     p.doc.key('f');
@@ -963,7 +1026,7 @@ function caseK() {
     check(p.host.hint.children[0].textContent.indexOf('team’s ants') > 0 && p.host.hint.children[1].textContent.length > 0, 'Erase says that it takes ants, hills and piles too');
 }
 
-const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['K Hills, Ants and Food on a fake page', caseK]];
+const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK]];
 for (const [name, fn] of cases) {
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

@@ -136,12 +136,17 @@
     }
 
     // The hill of a team put with its entrance on (row, column): 4 x 4 cells (one row and one column before the entrance, two after), each anchored at the entrance, the entrance flagged. The
-    // team's hill goes from where it was (only one for each team), and an object under the new one goes whole. {error} when there is no room on the map.
+    // team's hill goes from where it was (only one for each team), and an object under the new one goes whole; another team's hill under it is never taken away: {error}, as when there is no room on the map.
     function placeHill(file, teamIndex, row, column) {
         var t = TEAMS[teamIndex];
         if (!t) return { error: 'There is no such team.' };
         if (row < 1 || column < 1 || row + 2 >= file.rows || column + 2 >= file.columns) return { error: 'A hill is 4 x 4 cells and there is no room for a whole one there. Try a place a little further from the edge of the map.' };
-        var change = emptyChange(), old = hillCells(file, teamIndex), r, c, i;
+        var r, c, i;
+        for (r = row - 1; r <= row + 2; r++) for (c = column - 1; c <= column + 2; c++) {
+            var other = teamOfHill(Edit.tile(file, 2, r * file.columns + c));
+            if (other >= 0 && other !== teamIndex) return { error: TEAMS[other].label + '\u2019s hill is here. Move it first, or take it away with Erase.' };       // (another team's hill is never taken away without being asked)
+        }
+        var change = emptyChange(), old = hillCells(file, teamIndex);
         for (i = 0; i < old.length; i++) putCell(change, old[i], EMPTY2, 0, 0);
         for (r = row - 1; r <= row + 2; r++) for (c = column - 1; c <= column + 2; c++) {
             var idx = r * file.columns + c;
