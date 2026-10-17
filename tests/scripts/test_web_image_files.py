@@ -21,6 +21,10 @@ def read(*parts):
         return f.read()
 
 
+# Files that a page loads and that the web build makes (they are not in web/): name -> the line of the Dockerfile that copies it and the text of build_web.sh that copies it
+BUILT = {"lvl_core.js": ("COPY --from=builder /src/build_web/lvl_core/lvl_core.js ", "lvl_core/lvl_core.js")}
+
+
 def loaded_files():
     """{path in web/: [pages that load it]} for every local script and stylesheet of web/*.html"""
     found = {}
@@ -41,11 +45,14 @@ class ThePagesAndTheImage(unittest.TestCase):
 
     def test_the_pages_load_something(self):
         refs = loaded_files()
-        for name in ("history_page.js", "match_stats.js", "match_stats.css", "matches.css", "replay_page.js"):
+        for name in ("history_page.js", "match_stats.js", "match_stats.css", "matches.css", "replay_page.js", "lvl_core.js", "lvl_core_api.js", "front/mapmaker_app.js"):
             self.assertIn(name, refs, name + " is loaded by no page: did the scan stop reading the pages?")
 
     def test_every_file_a_page_loads_is_a_file_of_web_and_is_copied_into_the_image(self):
         for ref, pages in loaded_files().items():
+            if ref in BUILT:
+                self.assertIn(BUILT[ref][0], self.dockerfile, "%s (loaded by %s) is made by the web build: the image must copy it" % (ref, ", ".join(pages)))
+                continue
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", ref)), "%s (loaded by %s) is not a file of web/" % (ref, ", ".join(pages)))
             if ref.startswith("front/"):
                 self.assertIn("COPY web/front/ ", self.dockerfile, ref)
@@ -59,7 +66,7 @@ class ThePagesAndTheImage(unittest.TestCase):
             if "/" in ref or ref.startswith("favicon."):
                 continue
             self.assertRegex(self.ci, r"ls -l [^\n]*\b%s\b" % re.escape(ref), "%s (loaded by %s) is not in the CI's check of the image" % (ref, ", ".join(pages)))
-            self.assertIn("web/" + ref, self.build, "%s (loaded by %s) is not copied by build_web.sh" % (ref, ", ".join(pages)))
+            self.assertIn(BUILT[ref][1] if ref in BUILT else "web/" + ref, self.build, "%s (loaded by %s) is not copied by build_web.sh" % (ref, ", ".join(pages)))
 
     def test_the_stub_root_of_the_routes_test_has_every_script_and_stylesheet_that_the_routes_check_asks_for(self):
         asked = set(re.findall(r"""\(\s*["']/([A-Za-z0-9_.-]+\.(?:js|css))["']\s*,""", read("tests", "scripts", "web_routes_check.py")))

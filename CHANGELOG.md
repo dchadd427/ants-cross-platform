@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.72 - 2026-10-17 - Map maker: the editor starts (E1)
+
+**For players:**
+- A first map maker page (not linked from the site yet: /mapmaker.html): make a Classic or Extended map, open a map file, look around, check it, download it. Drawing comes next.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b39a8c8b...4e1327d9)
+
 ## v0.12.71 - 2026-10-17 - Tests: faster and steadier (round 2)
 
 **For players:**
