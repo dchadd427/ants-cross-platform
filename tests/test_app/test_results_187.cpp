@@ -539,6 +539,7 @@ void test_positions(const assets::AssetArchive& arc) {
         check(c.headings187[i].stroke_y + w.dy == w.headings187[i].stroke_y && c.headings187[i].text_y + w.dy == w.headings187[i].text_y, "classic: rows are the wide ones less " + str(w.dy));
     }
     check(w.arrow_tip_y187 == kPictureTip && c.arrow_tip_y187 + w.dy == kPictureTip, "the arrows' tips are at row 247 (wide)");
+    check(kPictureShaftEnd == w.arrow_tip_y187 - 1 && kPictureHeadTop + 9 == w.arrow_tip_y187 - 0, "the shafts run down to the row above the tips' row, and the head's ten rows end at the tip (the picture's own numbers agree with the layout)");
     check(w.headline187.x + w.headline187.w / 2 == kPictureHeadlineCentre, "the headline is centred on x 570");
     check(w.headline187.y + (w.headline187.h - font_cell_height(FontSize::Px35)) / 2 == kPictureHeadlineY, "its 35 px line is at y 71");
     check(w.numbers187_w[0] == 49 && w.numbers187_w[1] == 42 && w.numbers187_w[2] == 24, "the labels of the three numbers: up to the next column, the last one up to the box's inside edge");
