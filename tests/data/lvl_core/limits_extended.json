@@ -1,0 +1,4 @@
+{"profile":"extended","allow_extended":true,
+"classic":{"rows":256,"columns":256,"cells":65536},
+"extended":{"rows":1024,"columns":1024,"cells":262144,"description_bytes":255},
+"read_bytes":4194304,"write_bytes":3670016,"dictionary_names":1344}

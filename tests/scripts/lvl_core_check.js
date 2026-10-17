@@ -61,14 +61,17 @@ function parseArgs(argv) {
 function text(file) { return fs.readFileSync(path.join(EXPECTED, file), 'utf8'); }
 function bytesOf(relative) { return new Uint8Array(fs.readFileSync(path.join(ROOT, relative))); }
 
-// FNV-1a, 64 bits, 16 hex digits (the native test has the same)
+// FNV-1a, 64 bits, 16 hex digits (the native test has the same). Two 32-bit halves, so that a file of 3 MB takes a few milliseconds: h * (2^40 + 0x1b3) modulo 2^64
 function fnv(bytes) {
-    let h = 0xcbf29ce484222325n;
+    let hi = 0xcbf29ce4;
+    let lo = 0x84222325;
     for (let i = 0; i < bytes.length; i++) {
-        h ^= BigInt(bytes[i]);
-        h = (h * 0x100000001b3n) & 0xFFFFFFFFFFFFFFFFn;
+        lo = (lo ^ bytes[i]) >>> 0;
+        const low = lo * 0x1b3;                                        // (below 2^41: exact)
+        hi = (hi * 0x1b3 + Math.floor(low / 4294967296) + lo * 256) % 4294967296;
+        lo = low % 4294967296;
     }
-    return h.toString(16).padStart(16, '0');
+    return hi.toString(16).padStart(8, '0') + lo.toString(16).padStart(8, '0');
 }
 
 function randomBytes(seed, n) {   // xorshift32, as the native test
@@ -110,6 +113,38 @@ function hostileCases() {
     return cases;
 }
 
+
+// A version 9 file with another description (the description's length is the word at 16, its bytes follow) and rules word (at 14): the inputs of the conversions' reasons and notes
+function extendedWith(bytes, description, rules) {
+    const text = Buffer.from(description, 'latin1');
+    const out = new Uint8Array(bytes.length - 2 + 2 + text.length - 0);
+    out.set(bytes.subarray(0, 16), 0);
+    out[16] = text.length & 0xFF; out[17] = text.length >> 8;
+    out.set(text, 18);
+    out.set(bytes.subarray(18), 18 + text.length);
+    out[14] = rules & 0xFF; out[15] = rules >> 8;
+    return out;
+}
+
+// The sentences and codes of a conversion's reasons or notes
+function codesOf(list) { return list.map((r) => r.code).join(','); }
+
+function hostileExtendedCases(tinyUp) {
+    const description = tinyUp[16] | (tinyUp[17] << 8);
+    const shift = 18 + description - 40;                // where the offsets of a version 8 file (the dictionary's count at 40) are in the version 9 file
+    const cases = [];
+    const add = (id, b) => cases.push({ id: 'hostile_ext_' + id, bytes: b });
+    const flags = tinyUp.slice(); flags[10] = 1; add('format_flag', flags);
+    const rules = tinyUp.slice(); rules[14] = 2; add('rules_2', rules);
+    const grid = tinyUp.slice(); put32(grid, 7412 + shift, 0xFFFFFFFF); put32(grid, 7416 + shift, 0xFFFFFFFF); add('huge_grid', grid);
+    const grid2 = tinyUp.slice(); put32(grid2, 7412 + shift, 65535); put32(grid2, 7416 + shift, 65535); add('grid_65535', grid2);
+    add('cut_in_header', tinyUp.slice(0, 12));
+    add('cut_in_layers', tinyUp.slice(0, 12000));
+    add('cut_in_half', tinyUp.slice(0, tinyUp.length >> 1));
+    const v9 = randomBytes(5, 30000); v9[0] = 9; v9[1] = v9[2] = v9[3] = 0; add('version_9_then_random', v9);
+    return cases;
+}
+
 function libraryCases() {
     return text('index.txt').split('\n').filter(Boolean).map((line) => {
         const f = line.split('\t');
@@ -137,7 +172,7 @@ function main() {
         const hostile = hostileCases();
 
         await runCase('module: the interface', () => {
-            check(core.interfaceVersion === 1, 'interface version 1');
+            check(core.interfaceVersion === 2, 'interface version 2');
             check(typeof module._lvl_free === 'function' && typeof module._lvl_alloc === 'function', 'the buffer calls are exported');
             check(module.FS === undefined, 'no file system in the module');
         });
@@ -270,13 +305,155 @@ function main() {
             check(core.readReport(library[0].bytes).text === text(library[0].id + '.read.json'), 'the module answers as before');
         });
 
+
+        await runCase('E the profiles: the limits are the code\'s, the Extended profile reads both kinds, a module older than the page is told apart', () => {
+            for (const name of ['new_map', 'game', 'extended']) {
+                const l = core.limits(name);
+                check(l.status === 0 && l.text === text('limits_' + name + '.json'), name + ': the limits are the native ones, byte for byte');
+                check(l.json.profile === name, name + ': named');
+            }
+            check(core.limits().json.profile === 'new_map', 'the default profile is the new map\'s');
+            check(core.limits('extended').json.extended.rows === 1024 && core.limits('extended').json.extended.cells === 262144 && core.limits('extended').json.classic.rows === 256, 'the Extended profile: 1,024 a side, 262,144 cells, a Classic map keeps 256');
+            check(core.limits('new_map').json.classic.rows === 90 && core.limits('new_map').json.extended === null, 'a new Classic map: 90 rows, no Extended map');
+            check(core.limits('bogus').status === 1 && core.checkMap(new Uint8Array(0), 'bogus').status === 1 && core.convertToClassic(new Uint8Array(0), 'bogus').status === 1 && core.needsExtended(new Uint8Array(0), 'bogus').status === 1, 'an unknown profile is refused');
+            check(api.EXPECTED_INTERFACE === 2 && api.moduleVersion(module) === 2 && api.moduleVersion({}) === 0 && api.moduleVersion({ _lvl_interface_version: () => 1 }) === 1 && api.moduleVersion(null) === 0, 'the version a page can ask for before it wraps a module');
+            const tiny = library.find((c) => c.id === 'tiny').bytes;
+            const up = core.convertToExtended(tiny);
+            check(up.status === 0 && up.json.ok === true, 'tiny goes up');
+            const read9 = core.readReport(up.bytes, 'extended');
+            check(read9.status === 0 && read9.json.loaded === true && read9.json.version === 9 && read9.json.profile === 'extended', 'the Extended profile reads a version 9 file');
+            check(core.readReport(up.bytes, 'new_map').json.loaded === false && core.readReport(up.bytes, 'game').json.loaded === false, 'the Classic profiles refuse it, as before');
+            check(core.rewrite(up.bytes, 'extended').status === 0 && Buffer.compare(Buffer.from(core.rewrite(up.bytes, 'extended').bytes), Buffer.from(up.bytes)) === 0, 'a version 9 file is its own canonical rewrite');
+            check(core.rewrite(up.bytes).status === 1, 'a Classic place cannot rewrite it');
+            check(core.sameLevel(up.bytes, up.bytes, 'extended').json.same === true && core.sameLevel(tiny, up.bytes, 'extended').json.same === false, 'two kinds are two levels');
+            check(core.blank(200, 200, 485, 6, 10, 'extended').status === 0 && core.blank(257, 10, 485, 6, 10, 'extended').status === 1, 'a Classic blank map under the Extended profile keeps its 256 a side');
+        });
+
+        await runCase('E the check by kind: the library as Classic maps and as Extended maps', () => {
+            for (const c of library) {
+                const m = core.checkMap(c.bytes);
+                check(m.status === 0 && m.json.kind === 'classic' && m.text === text(c.id + '.map.json'), c.id + ': the check by kind is the native one, byte for byte');
+                check(m.json.works === core.checkOriginal(c.bytes).json.works_in_original_game && m.json.badge === '', c.id + ': a Classic map works as the original-safe profile says, with no badge');
+                const up = core.convertToExtended(c.bytes);
+                const e = core.checkMap(up.bytes, 'extended');
+                check(e.status === 0 && e.json.kind === 'extended' && e.json.badge === 'New version only' && e.text === text(c.id + '.extended.map.json'), c.id + ': the Extended map\'s check is the native one, byte for byte');
+                check(e.json.findings.some((f) => f.code === 'not_for_original' && f.severity === 'note'), c.id + ': not for the original, as a note');
+                const here = core.checkMap(up.bytes);
+                check(here.json.judged === false && here.json.findings.some((f) => f.code === 'extended_not_accepted_here') && here.json.badge === 'New version only', c.id + ': a place for Classic maps does not judge it');
+            }
+            for (const c of hostile) {
+                const m = core.checkMap(c.bytes, 'extended');
+                check(m.status === 0 && m.json.works === false, c.id + ': a file that is no map does not work');
+            }
+        });
+
+        await runCase('E the conversions: up and back is the canonical file, a copy that is another file, the reasons and notes with their codes', () => {
+            const index = Object.fromEntries(text('kinds_index.txt').split('\n').filter(Boolean).map((l) => { const f = l.split('\t'); return [f[0], f]; }));
+            for (const c of library) {
+                const up = core.convertToExtended(c.bytes);
+                check(up.status === 0 && up.json.ok === true && up.json.from === 'classic' && up.json.to === 'extended' && up.text === text(c.id + '.to_extended.json'), c.id + ': the conversion is the native one, byte for byte');
+                check(up.bytes.length === up.json.bytes && String(up.bytes.length) === index[c.id][1] && fnv(up.bytes) === index[c.id][2], c.id + ': the Extended file is the native one (size and FNV-1a)');
+                check(up.bytes[0] === 9 && Buffer.compare(Buffer.from(up.bytes), Buffer.from(c.bytes)) !== 0, c.id + ': version 9, another file');
+                const again = core.convertToExtended(up.bytes);
+                check(again.json.from === 'extended' && Buffer.compare(Buffer.from(again.bytes), Buffer.from(up.bytes)) === 0, c.id + ': an Extended map converts to itself');
+                const back = core.convertToClassic(up.bytes);
+                check(back.status === 0 && back.json.ok === true && back.text === text(c.id + '.to_classic.json'), c.id + ': the way back is the native one, byte for byte');
+                check(String(back.bytes.length) === index[c.id][3] && fnv(back.bytes) === index[c.id][4], c.id + ': the Classic file is the native one');
+                const rw = core.rewrite(c.bytes);
+                check(rw.status === 0 && Buffer.compare(Buffer.from(rw.bytes), Buffer.from(back.bytes)) === 0, c.id + ': up and back is the canonical file');
+                check(core.needsExtended(up.bytes, 'extended').json.needs_extended === false && core.needsExtended(c.bytes).json.needs_extended === false, c.id + ': it needs nothing');
+            }
+            const refused = core.convertToExtended(Uint8Array.of(8));
+            check(refused.status === 1 && refused.bytes === undefined && /does not load/.test(refused.error), 'a file that does not load is not converted: ' + refused.error);
+            check(core.convertToClassic(new Uint8Array(0)).status === 1 && core.convertToExtended('abc').status === 1, 'nor is something that is no bytes');
+            // the reasons: 95 rows (the wall at row 90), 300 x 400 with a description of 100 bytes
+            const tall = core.blankExtended(95, 20, 485, 6, 10).bytes;
+            const down = core.convertToClassic(tall);
+            check(down.status === 0 && down.json.ok === false && down.bytes === undefined && codesOf(down.json.reasons) === 'rows_beyond_wall' && down.text === text('to_classic_95x20.json'), 'rows_beyond_wall: ' + down.text);
+            const needs = core.needsExtended(tall, 'extended');
+            check(needs.status === 0 && needs.json.needs_extended === true && needs.text === text('needs_extended_95x20.json'), 'needs_extended says why, as the native core does');
+            const wide = extendedWith(core.blankExtended(300, 400, 485, 6, 10).bytes, 'x'.repeat(100), 1);
+            const wideDown = core.convertToClassic(wide);
+            check(wideDown.status === 0 && codesOf(wideDown.json.reasons) === 'columns_beyond_classic,rows_beyond_classic,rows_beyond_wall,description_too_long' && wideDown.text === text('to_classic_300x400.json'), 'every reason, in the writer\'s order: ' + codesOf(wideDown.json.reasons));
+            // the notes of a conversion that works
+            const noted = extendedWith(core.blankExtended(40, 40, 485, 6, 10).bytes, 'd'.repeat(30), 1);
+            const notedDown = core.convertToClassic(noted);
+            check(notedDown.status === 0 && notedDown.json.ok === true && codesOf(notedDown.json.notes) === 'description_30_bytes,rules_extended_dropped' && notedDown.bytes[0] === 8 && notedDown.text === text('to_classic_40x40_noted.json'), 'the notes: ' + codesOf(notedDown.json.notes));
+            // the place: 10,800 cells are a Classic map, not a new one
+            const big = core.blankExtended(90, 120, 485, 6, 10).bytes;
+            const bigNew = core.convertToClassic(big, 'new_map');
+            check(bigNew.json.ok === false && codesOf(bigNew.json.reasons) === 'beyond_place_limits' && core.convertToClassic(big, 'game').json.ok === true, 'beyond_place_limits for a new Classic map only');
+            const bigNoted = extendedWith(big, 'd'.repeat(30), 0);
+            check(codesOf(core.convertToClassic(bigNoted, 'new_map').json.notes) === '' && codesOf(core.convertToClassic(bigNoted, 'game').json.notes) === 'description_30_bytes', 'a copy that the place refuses tells no note');
+            check(core.needsExtended(big, 'new_map').json.needs_extended === true && core.needsExtended(big, 'game').json.needs_extended === false, 'the place decides');
+        });
+
+        await runCase('E the blank Extended map, and a map of 512 x 512', () => {
+            const cases = text('blank_extended_index.txt').split('\n').filter(Boolean).map((line) => {
+                const f = line.split('\t');
+                const m = /^blank_extended_(\d+)x(\d+)_g(\d+)_e(\d+)_m(\d+)$/.exec(f[0]);
+                return { id: f[0], args: m.slice(1).map(Number), status: Number(f[1]), size: f[2], tail: f[3] };
+            });
+            for (const c of cases) {
+                const started = Date.now();
+                const r = core.blankExtended.apply(null, c.args);
+                check(r.status === c.status, c.id + ': status ' + c.status);
+                if (c.status !== 0) { check(r.error === c.tail, c.id + ': refused with the native sentence'); continue; }
+                check(String(r.bytes.length) === c.size && fnv(r.bytes) === c.tail, c.id + ': the bytes are the native blank map\'s');
+                const read = core.readReport(r.bytes, 'extended');
+                check(read.json.loaded && read.json.version === 9 && read.json.rows === c.args[0] && read.json.columns === c.args[1], c.id + ': reads back as asked');
+                const m = core.checkMap(r.bytes, 'extended');
+                check(m.json.kind === 'extended' && m.json.fits_the_place === true && m.json.works === false && !m.json.findings.some((f) => f.code === 'rows_beyond_wall'), c.id + ': an Extended map with no hill yet, no wall');
+                if (c.args[0] * c.args[1] <= 120000) {
+                    check(read.text === text(c.id + '.read.json') && m.text === text(c.id + '.map.json'), c.id + ': the report and the check are the native ones');
+                }
+                const rw = core.rewrite(r.bytes, 'extended');
+                check(rw.status === 0 && Buffer.compare(Buffer.from(rw.bytes), Buffer.from(r.bytes)) === 0, c.id + ': its own canonical file');
+                check(Date.now() - started < 20000, c.id + ': in reasonable time');
+            }
+            for (const bad of [[NaN, 1, 485, 6, 10], [1.5, 1, 485, 6, 10], [-1, 1, 485, 6, 10], ['3', 3, 485, 6, 10], [1, 1, 485, 6, Infinity]]) {
+                check(core.blankExtended.apply(null, bad).status === 1, 'blankExtended(' + String(bad) + ') is refused');
+            }
+            // the largest map goes through every call, and the module keeps nothing of it
+            const largest = core.blankExtended(512, 512, 485, 6, 10).bytes;
+            let grown = 0;
+            for (let i = 0; i < 2; i++) {
+                check(core.checkMap(largest, 'extended').json.kind === 'extended', '512 x 512: checked');
+                const wall = core.convertToClassic(largest);
+                check(wall.json.ok === false && wall.bytes === undefined, '512 x 512: not a Classic map');
+                const upAgain = core.convertToExtended(largest);
+                check(upAgain.json.ok === true && Buffer.compare(Buffer.from(upAgain.bytes), Buffer.from(largest)) === 0, '512 x 512: converts to itself');
+                check(core.needsExtended(largest, 'extended').json.needs_extended === true, '512 x 512: needs to be Extended');
+                check(core.readReport(largest, 'extended').json.loaded === true, '512 x 512: read');
+                check(core.readReport(largest, 'new_map').json.findings[0].code === 'file_too_large', '512 x 512: a Classic place refuses it by its size');
+                if (i === 0) grown = module.HEAPU8.length;
+            }
+            check(module.HEAPU8.length === grown, 'the second round of the largest map takes no more memory (' + grown + ' bytes) than the first');
+            check(module.HEAPU8.length <= 128 * 1024 * 1024, 'the module held the largest map in at most 128 MB (' + module.HEAPU8.length + ' bytes; it may grow to 256 MB)');
+        });
+
+        await runCase('E hostile Extended files: a report that says it, no throw', () => {
+            const tinyUp = core.convertToExtended(library.find((c) => c.id === 'tiny').bytes).bytes;
+            const expected = Object.fromEntries(text('hostile_ext_index.txt').split('\n').filter(Boolean).map((l) => { const f = l.split('\t'); return [f[0], f]; }));
+            for (const c of hostileExtendedCases(tinyUp)) {
+                const map = core.checkMap(c.bytes, 'extended');
+                const read = core.readReport(c.bytes, 'extended');
+                const down = core.convertToClassic(c.bytes);
+                check(map.status === 0 && map.json.works === false && map.text === text(c.id + '.map.json'), c.id + ': it does not work, as the native check says');
+                check(read.status === 0 && read.json.loaded === false && read.text === text(c.id + '.read.json'), c.id + ': it does not load, as the native report says');
+                check(down.status === 1 && down.error === expected[c.id][2] && core.convertToExtended(c.bytes).status === 1 && core.needsExtended(c.bytes, 'extended').status === 1, c.id + ': it is not converted, the native sentence');
+            }
+        });
+
         await runCase('D memory: every buffer is given back (a fresh module, a baseline before anything large)', async () => {
             const fresh = await createLvlCore();
             const c2 = api.wrap(fresh);
             const bomber = library.find((c) => c.id === 'bomberworld').bytes;
             const round = () => {
                 c2.readReport(bomber); c2.checkOriginal(bomber); const rw = c2.rewrite(bomber); c2.sameLevel(bomber, rw.bytes);
-                c2.blank(100, 100, 485, 6, 10);
+                c2.blank(90, 90, 485, 6, 10);
+                const small = c2.convertToExtended(library[0].bytes); c2.checkMap(small.bytes, 'extended'); c2.convertToClassic(small.bytes); c2.needsExtended(small.bytes, 'extended');
+                c2.convertToClassic(c2.blankExtended(95, 20, 485, 6, 10).bytes); c2.limits('extended'); c2.checkMap(bomber);
                 for (const c of hostile.filter((h) => h.bytes.length < 200000)) { c2.readReport(c.bytes); c2.rewrite(c.bytes); }
             };
             round(); round();                                              // warm-up: the allocator settles
@@ -294,8 +471,8 @@ function main() {
 
         await runCase('wrapper: a module of another interface version is refused, a trap kills the core', () => {
             let threw = '';
-            try { api.wrap({ _lvl_interface_version: () => 2 }); } catch (e) { threw = e.message; }
-            check(/interface version 2/.test(threw) && /needs 1/.test(threw), 'a module of interface version 2 is refused with a sentence: ' + threw);
+            try { api.wrap({ _lvl_interface_version: () => 1 }); } catch (e) { threw = e.message; }
+            check(/interface version 1/.test(threw) && /needs 2/.test(threw), 'a module of interface version 1 (the first one) is refused with a sentence: ' + threw);
             threw = '';
             try { api.wrap({}); } catch (e) { threw = e.message; }
             check(/interface version 0/.test(threw), 'a module with no version call is refused');
@@ -308,8 +485,18 @@ function main() {
             const first = c3.readReport(new Uint8Array(10));
             check(first.status === 2 && /unreachable/.test(first.error), 'the trap is a status 2 with its sentence: ' + first.error);
             check(c3.isDead() === true, 'the core is dead after a trap');
-            for (const r of [c3.readReport(new Uint8Array(1)), c3.checkOriginal(new Uint8Array(1)), c3.rewrite(new Uint8Array(1)), c3.sameLevel(new Uint8Array(1), new Uint8Array(1)), c3.blank(31, 31, 485, 6, 10)]) {
+            for (const r of [c3.readReport(new Uint8Array(1)), c3.checkOriginal(new Uint8Array(1)), c3.rewrite(new Uint8Array(1)), c3.sameLevel(new Uint8Array(1), new Uint8Array(1)), c3.blank(31, 31, 485, 6, 10),
+                c3.checkMap(new Uint8Array(1)), c3.convertToExtended(new Uint8Array(1)), c3.convertToClassic(new Uint8Array(1)), c3.needsExtended(new Uint8Array(1)), c3.blankExtended(31, 31, 485, 6, 10), c3.limits()]) {
                 check(r.status === 2 && /stopped/.test(r.error) && /create the module again/.test(r.error), 'every later call fails clearly: ' + r.error);
+            }
+            // a trap in a conversion, in the check by kind, in the limits: the same
+            for (const [name, call] of [['_lvl_convert_to_extended', (c) => c.convertToExtended(new Uint8Array(4))], ['_lvl_convert_to_classic', (c) => c.convertToClassic(new Uint8Array(4))], ['_lvl_check_map', (c) => c.checkMap(new Uint8Array(4))],
+                ['_lvl_needs_extended', (c) => c.needsExtended(new Uint8Array(4))], ['_lvl_blank_extended', (c) => c.blankExtended(31, 31, 485, 6, 10)], ['_lvl_limits', (c) => c.limits()]]) {
+                const trap = Object.create(real);
+                trap[name] = () => { throw new WebAssembly.RuntimeError('unreachable'); };
+                const cc = api.wrap(trap);
+                const r = call(cc);
+                check(r.status === 2 && /unreachable/.test(r.error) && cc.isDead(), name + ': a trap is a status 2 and the core is dead');
             }
             // a module that has no memory left: the null block is "out of memory", not a trap
             const noMemory = Object.create(real);

@@ -1,0 +1,4 @@
+{"bytes":19315,"profile":"extended","loaded":false,"reason":"the grid has 65535 rows x 65535 columns, more than the 2048 a side that version 9 of the format holds",
+"findings":[
+{"severity":"fatal","code":"grid_too_large","message":"the grid has 65535 rows x 65535 columns, more than the 2048 a side that version 9 of the format holds","team":-1,"count":1}
+]}

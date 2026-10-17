@@ -1,5 +1,5 @@
-{"bytes":125408,"profile":"new_map","loaded":true,"reason":"",
-"version":8,"mode":1,"minutes":10,"description":"","description_bytes":0,
+{"bytes":125386,"profile":"extended","loaded":true,"reason":"",
+"version":9,"mode":1,"minutes":10,"description":"","description_bytes":0,
 "rows":100,"columns":100,"dictionary_names":486,"tile_ids_used":1,"eggs":6,"default_type_tile":32766,"food_piles":0,"waypoints":0,
 "teams":[{"team":"green","start_markers":0,"hill_cells":0},{"team":"red","start_markers":0,"hill_cells":0},{"team":"blue","start_markers":0,"hill_cells":0},{"team":"black","start_markers":0,"hill_cells":0}],
 "playable":true,

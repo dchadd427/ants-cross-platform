@@ -35,7 +35,7 @@ class TheWiring(unittest.TestCase):
         self.assertTrue(listed)
         exported = {name.lstrip("_") for name in listed.group(1).split(",")}
         self.assertEqual(exported, defined)
-        self.assertEqual(len(defined), 11)
+        self.assertEqual(len(defined), 17)
 
     def test_the_module_is_a_target_of_the_web_build_only_and_has_no_game_code(self):
         text = read("CMakeLists.txt")
@@ -74,6 +74,36 @@ class TheWiring(unittest.TestCase):
                 i, path = line.split("\t")[:2]
                 self.assertTrue(os.path.isfile(os.path.join(REPO, path)), path)
                 self.assertTrue(os.path.isfile(os.path.join(folder, i + ".lvl_tool.txt")), i)
+
+    def test_the_expectation_of_the_two_kinds_is_complete(self):
+        folder = os.path.join(REPO, "tests", "data", "lvl_core")
+        library = [line.split("\t")[0] for line in read("tests", "data", "lvl_core", "index.txt").splitlines() if line]
+        kinds = [line.split("\t")[0] for line in read("tests", "data", "lvl_core", "kinds_index.txt").splitlines() if line]
+        self.assertEqual(kinds, library)
+        for i in library:
+            for suffix in (".map.json", ".extended.map.json", ".to_extended.json", ".to_classic.json"):
+                self.assertTrue(os.path.isfile(os.path.join(folder, i + suffix)), i + suffix)
+        for profile in ("new_map", "game", "extended"):
+            self.assertTrue(os.path.isfile(os.path.join(folder, "limits_" + profile + ".json")), profile)
+        blank = [line.split("\t") for line in read("tests", "data", "lvl_core", "blank_extended_index.txt").splitlines() if line]
+        self.assertGreaterEqual(len(blank), 10)
+        self.assertTrue(any(f[1] == "0" for f in blank) and any(f[1] == "1" for f in blank))
+        hostile = [line.split("\t")[0] for line in read("tests", "data", "lvl_core", "hostile_ext_index.txt").splitlines() if line]
+        self.assertGreaterEqual(len(hostile), 8)
+        for i in hostile:
+            for suffix in (".map.json", ".read.json"):
+                self.assertTrue(os.path.isfile(os.path.join(folder, i + suffix)), i + suffix)
+
+    def test_the_wrapper_has_a_call_for_every_export_and_asks_for_the_version_it_was_written_for(self):
+        wrapper = read("web", "lvl_core_api.js")
+        interface = re.search(r"var EXPECTED_INTERFACE = (\d+);", wrapper)
+        self.assertTrue(interface)
+        c_source = read("src", "ants_assets", "lvl_core_c.cpp")
+        self.assertRegex(c_source, r"lvl_interface_version\(\) \{ return " + interface.group(1) + r"; \}")
+        for name in re.findall(r"(?m)^LVL_CORE_EXPORT\s+[\w\s\*]+?\b(lvl_\w+)\(", c_source):
+            if name in ("lvl_alloc", "lvl_free", "lvl_result_status", "lvl_result_size", "lvl_result_data"):
+                continue                                  # (the buffer calls and the accessors of a result block: the wrapper's own plumbing)
+            self.assertIn("module._" + name + "(", wrapper, name)
 
     def test_the_wrapper_is_a_plain_script_with_no_storage_or_network(self):
         text = read("web", "lvl_core_api.js")

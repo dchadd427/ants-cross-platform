@@ -30,6 +30,20 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [the 187 bots](docs/BOTS.md#187-the-brawl)
 
+## v0.12.69 - 2026-10-17 - Extended maps: the browser module does conversions and the per-kind check
+
+**For players:**
+- Under the hood: the map code in the browser module can now make a blank Extended map, turn a Classic map into an Extended one and back (with plain reasons and notes, each with a stable code), check either kind and tell a page the limits of each; a page can refuse an older module. No page uses it yet; nothing changes in the game or on the site.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/15c56b6b...0372a2e2), [the map core in the browser](docs/MAP_FORMAT.md#in-the-browser)
+
+## v0.12.68 - 2026-10-17 - Extended maps: the checker per kind and the 90-row limit for new Classic maps
+
+**For players:**
+- Under the hood: the map checker now answers for each of the two kinds of map (a Classic map, and an Extended map that only the new version loads), and a new Classic map is limited to 90 rows, because the original game's ants cannot enter or cross the 91st row of a taller map; a taller map is an Extended map. No map of the library is taller than 81 rows. Nothing changes in the game or on the site; the map maker's limits and checks are prepared.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/28773bfd...366d3ab8), [the checker per kind](docs/MAP_FORMAT.md#the-checker-per-kind)
+
 ## v0.12.67 - 2026-10-16 - 187 mode: the out-of-ants line, the start line and the results page on screen
 
 **For players:**
@@ -612,15 +626,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e10047d...7017ff3), [view and HUD](docs/VIEW_AND_HUD.md), [play in the browser](docs/PLAY_IN_BROWSER.md), [network port](docs/NETWORK_PORT.md)
 
-## v0.12.0 - 2026-10-08 - The server's lobby rooms (network protocol 16; no page uses them yet)
+## Older versions (v0.12.0 and before)
 
-**For players:**
-- **Nothing on screen changes in this release.** It teaches the game server to keep a room open before a match starts, which the lobby page that comes next will use: you will land in a room the moment the front page opens, send one link, and the host will set the colors, the computer players, the teams and the map while everybody waits. No page or menu uses it yet.
-
-**Rules / network:** network protocol 16, so a game of an earlier release cannot join (reload the page once after the update); no rule of the game changes. A lobby page can now ask the server for a lobby room, which holds no match yet: the player who has been in it the longest leads (the next player when the leader goes, never a computer player), and the leader's plan (the map, what each color is, the teams) and every player's name are shown to everybody. The leader can swap two players' colors, take a player out of the room, and press START, which waits (up to 90 seconds) until every player's game has opened. A color is kept for a minute after a lost connection, and a room that nobody is in closes a minute later. Three messages are new (the plan, a player's own new name, the removal); the full text is [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4a536a9...305ccb9)
-
-## Older versions (v0.11.0 and before)
-
-Every release before v0.12.0, and the long notes of v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.1, and the long notes of v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -1,0 +1,4 @@
+{"kind":"classic","judged":true,"works":true,"fits_the_place":true,"headline":"Works in the original game","badge":"",
+"findings":[
+{"severity":"note","code":"tile_not_drawn","message":"one cell uses a tile that the dictionary names \".\" (row 1, column 31: tile 320): the original does not load its picture, so it does not draw it","row":1,"column":31,"team":-1,"count":1,"place_limit":false}
+]}

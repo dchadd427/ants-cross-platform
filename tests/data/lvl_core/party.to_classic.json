@@ -1,0 +1,5 @@
+{"to":"classic","from":"extended","ok":true,"bytes":27564,
+"reasons":[],
+"notes":[
+{"code":"description_30_bytes","message":"the description has 30 bytes: the original reads no zero byte that ends it (29 characters fit), and the original-safe check warns"}
+]}

@@ -1,0 +1,4 @@
+{"profile":"game","allow_extended":false,
+"classic":{"rows":256,"columns":256,"cells":65536},
+"extended":null,
+"read_bytes":null,"write_bytes":null,"dictionary_names":1344}

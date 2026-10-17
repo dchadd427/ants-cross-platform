@@ -1,0 +1,274 @@
+{
+ "note": "Mutants of the map core's Extended calls in the browser module (docs/MAP_FORMAT.md, \"In the browser\"): the Extended profile and its limits, the conversions and their reasons, the check by kind, the blank Extended map, the C interface and the JavaScript wrapper. Run: python3 tools/mutate.py tests/data/lvl_core_mutants.json --keep-going --jobs 1 (do not commit the .report.json). The first mutants are held by test_lvl_core, the last ones by tests/scripts/lvl_core_check.js (it needs build_web/lvl_core: emcmake cmake -B build_web -DBUILD_TESTS=OFF && cmake --build build_web --target lvl_core) and by tests/scripts/test_lvl_core.py.",
+ "defaults": {},
+ "mutants": [
+  {
+   "id": "extended_profile_has_the_limits_of_a_new_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "case Profile::Extended: limits = LevelLimits::for_extended_maps(); return true;",
+   "new": "case Profile::Extended: limits = LevelLimits::for_new_maps(); return true;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "extended_profile_is_named_like_the_game",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "profile == Profile::Game ? \"game\" : \"extended\"",
+   "new": "profile == Profile::Game ? \"game\" : \"game\"",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "blank_extended_makes_a_classic_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "LevelData level = extended ? blank_extended_level(",
+   "new": "LevelData level = !extended ? blank_extended_level(",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "blank_extended_makes_the_cells_of_a_refused_grid",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "blank_extended_level(rows, columns, names, limits) :",
+   "new": "blank_extended_level(rows, columns, names, LevelLimits::format_ceiling()) :",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "conversion_goes_the_other_way",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "to_extended ? ants::assets::convert_to_extended(level) : ants::assets::convert_to_classic(level)",
+   "new": "to_extended ? ants::assets::convert_to_classic(level) : ants::assets::convert_to_extended(level)",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "conversion_names_the_wrong_source_kind",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "c.from_extended = level.version == LVL_EXTENDED_VERSION;",
+   "new": "c.from_extended = level.version != LVL_EXTENDED_VERSION;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "conversion_reads_with_the_limits_of_a_new_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "load(data, size, LevelLimits::for_extended_maps(), level, why)",
+   "new": "load(data, size, LevelLimits::for_new_maps(), level, why)",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "place_refusal_keeps_the_notes",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "    c.conversion.notes.clear();\n    c.conversion.note_codes.clear();\n}",
+   "new": "}",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "place_reason_has_another_code",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "\"beyond_place_limits\"",
+   "new": "\"beyond_limits\"",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "place_does_not_stop_a_conversion",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "    c.conversion.ok = false;\n    c.conversion.reasons.push_back(\"this place",
+   "new": "    c.conversion.ok = true;\n    c.conversion.reasons.push_back(\"this place",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "json_size_of_a_conversion_is_cut",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "(json.size() >> (8 * i)) & 0xFF",
+   "new": "(json.size() >> (4 * i)) & 0xFF",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "code_of_a_reason_is_its_sentence",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "put_text(out, \"code\", i < codes.size() ? codes[i] : std::string());",
+   "new": "put_text(out, \"code\", i < codes.size() ? texts[i] : std::string());",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "needs_extended_turned_round",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "put_bool(out, \"needs_extended\", !c.conversion.ok);",
+   "new": "put_bool(out, \"needs_extended\", c.conversion.ok);",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "check_map_works_is_the_fit",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "put_bool(out, \"works\", r.works);",
+   "new": "put_bool(out, \"works\", r.fits_the_place);",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "check_map_loses_the_badge",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "put_text(out, \"badge\", r.badge);",
+   "new": "put_text(out, \"badge\", \"\");",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "check_map_holds_a_place_for_classic_maps",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "ants::assets::check_map(data, size, limits);",
+   "new": "ants::assets::check_map(data, size, LevelLimits{});",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "findings_of_check_original_close_differently",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "out += issues.empty() ? \"]\" : \"\\n]\";",
+   "new": "out += \"]\";",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "limits_report_the_extended_rows_for_classic_maps",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "put_number(out, \"rows\", limits.rows_for(LVL_EXPECTED_VERSION));",
+   "new": "put_number(out, \"rows\", limits.rows_for(LVL_EXTENDED_VERSION));",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "limits_of_a_profile_without_a_file_limit_are_a_number",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "out += value >= 0xFFFFFFFFu ? std::string(\"null\") : std::to_string(value);",
+   "new": "out += std::to_string(value);",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "interface_version_stays_1",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "lvl_interface_version() { return 2; }",
+   "new": "lvl_interface_version() { return 1; }",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "convert_to_classic_ignores_the_profile",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "convert_to_classic(data, size, profile_of(profile))",
+   "new": "convert_to_classic(data, size, profile_of(profile == 1 ? 0 : profile))",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "limits_ignore_the_profile",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "profile_limits(profile_of(profile))",
+   "new": "profile_limits(profile_of(profile == 2 ? 0 : profile))",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "export_list_loses_a_call",
+   "file": "CMakeLists.txt",
+   "old": "_lvl_blank_extended,_lvl_limits,",
+   "new": "_lvl_blank_extended,",
+   "build": [],
+   "test": "python3 -m unittest tests/scripts/test_lvl_core.py"
+  },
+  {
+   "id": "wrapper_needs_the_first_interface",
+   "file": "web/lvl_core_api.js",
+   "old": "var EXPECTED_INTERFACE = 2;",
+   "new": "var EXPECTED_INTERFACE = 1;",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_cuts_the_new_file_one_byte_late",
+   "file": "web/lvl_core_api.js",
+   "old": "answer.bytes = bytes.slice(4 + jsonSize);",
+   "new": "answer.bytes = bytes.slice(5 + jsonSize);",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_hands_out_bytes_of_a_refused_conversion",
+   "file": "web/lvl_core_api.js",
+   "old": "if (answer.json.ok) answer.bytes",
+   "new": "if (true) answer.bytes",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_extended_profile_is_the_new_map_profile",
+   "file": "web/lvl_core_api.js",
+   "old": "extended: 2 };",
+   "new": "extended: 0 };",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_reads_the_size_of_the_json_wrong",
+   "file": "web/lvl_core_api.js",
+   "old": "(bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);",
+   "new": "(bytes[1] << 7) | (bytes[2] << 16) | (bytes[3] << 24);",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  }
+ ]
+}

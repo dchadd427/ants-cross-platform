@@ -60,12 +60,18 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
 
 /// What a conversion between the two kinds of map made of a level (convert_to_extended, convert_to_classic). A conversion always makes a COPY: the source level is not touched,
 /// and the copy is another level (written, it is another file with another hash). `ok` false: `reasons` say in plain sentences why the level cannot be made (nothing is
-/// converted). `notes` are things to tell the person that do not stop the conversion ("the extended rules are not carried").
+/// converted). `notes` are things to tell the person that do not stop the conversion ("the extended rules are not carried"). `reason_codes` and `note_codes` are parallel to
+/// `reasons` and `notes` (the same length and order): the stable code of each, so that the editor can key on it without reading the sentence. The codes of a reason:
+/// level_version_unknown, grid_empty, columns_beyond_classic, rows_beyond_classic, rows_beyond_wall (an Extended map of more than 90 rows: a new Classic map has at most 90),
+/// layers_not_grid, dictionary_too_large, description_too_long, format_flags_set, rules_unknown, anchor_beyond_byte, not_writable_as_classic, not_writable_as_extended,
+/// out_of_memory; of a note: description_30_bytes, rules_extended_dropped.
 struct LevelConversion {
     bool ok{false};
     LevelData level;
     std::vector<std::string> reasons;
     std::vector<std::string> notes;
+    std::vector<std::string> reason_codes;
+    std::vector<std::string> note_codes;
 };
 
 /// The level as an Extended map (version 9): every field carried, the layer-2 anchors made relative to their cells, format flags 0, rules 0 (the original's rules, so the map plays
@@ -74,12 +80,16 @@ struct LevelConversion {
 LevelConversion convert_to_extended(const LevelData& level);
 
 /// The level as a Classic map (version 8), when it fits: both sides at most 256, the dictionary at most 1,344 names, the description at most 30 bytes (the file's field), no
-/// format flags, rules 0 or 1 (rules 1 is dropped, with a note), every object anchor inside a byte (0 .. 255). Else `reasons` list every way in which it does not. The 90-row
-/// policy of new Classic maps is no part of this (it is a limit of the places that make maps). A level that is already Classic is copied as it is.
+/// format flags, rules 0 or 1 (rules 1 is dropped, with a note), every object anchor inside a byte (0 .. 255), and, for an Extended map, at most 90 rows: the conversion makes a NEW
+/// Classic map, and a new Classic map has at most 90 rows (the original's path finder never enters tile row 90; `rows_beyond_wall` tells the person to crop first). Else `reasons`
+/// list every way in which it does not. A level that is already Classic is copied as it is, whatever its rows (a map of the library, read and written again, is not made now).
 LevelConversion convert_to_classic(const LevelData& level);
 
 /// Why `level` cannot be a Classic map (version 8): the reasons of convert_to_classic, one sentence each, empty when it can. For the editor to show.
 std::vector<std::string> needs_extended(const LevelData& level);
+
+/// The codes of needs_extended, in the same order (one per reason; LevelConversion::reason_codes).
+std::vector<std::string> needs_extended_codes(const LevelData& level);
 
 /// The tile ids a level uses, in rising order: every layer cell, block 1 record, food stage and block 3's default type that is not the empty tile 0x7FFE.
 std::vector<uint16_t> used_tile_ids(const LevelData& level);

@@ -1,0 +1,6 @@
+{"kind":"classic","judged":true,"works":false,"fits_the_place":true,"headline":"Does not work in the original game","badge":"",
+"findings":[
+{"severity":"warning","code":"food_pile_not_shown","message":"the food pile at row 10, column 10 does not show in the original from stage 1 on: its tile 317 is named \".\" in the dictionary, the original places no pile of a tile whose picture it does not load, and nobody can see or harvest a pile that is not placed","row":10,"column":10,"team":-1,"count":1,"place_limit":false},
+{"severity":"note","code":"hill_not_whole","message":"the hill of Blue is not whole: 4 cells (the first at row 27, column 46) differ from the 4 x 4 hill around its entrance (row 28, column 47)","row":27,"column":46,"team":2,"count":4,"place_limit":false},
+{"severity":"note","code":"tile_not_drawn","message":"36 cells use tiles that the dictionary names \".\" (the first at row 3, column 29: tile 548): the original does not load their pictures, so it does not draw them","row":3,"column":29,"team":-1,"count":36,"place_limit":false}
+]}
