@@ -211,7 +211,7 @@ class TheLivePage(unittest.TestCase):
         self.assertIn("document.hidden", self.page)                                                          # (a page that is out of sight does not ask)
         self.assertIn("R.liveEntriesOf(", self.page)                                                         # (the door's answer goes through the shared code that keeps only what is well formed)
         self.assertIn("'/play.html?live=' + encodeURIComponent(e.id)", self.page)
-        for words in ("Matches being played right now.", "No match is on right now.", "Watch live", "so far", "See all matches", "This server doesn\\u00752019t show matches that are being played.",
+        for words in ("Matches being played right now.", "No match is on right now.", "Watch live", "so far", "See all matches", "This server doesn’t show matches that are being played.",
                       "A match shows up here after its first 30 seconds, and this list updates by itself. The picture is about ' + R.LIVE_LAG + ' seconds behind the players."):
             self.assertIn(words, self.page, words)
         self.assertNotIn("/history", self.page)                                                              # (a running match has no stats: the page does not ask for any)
