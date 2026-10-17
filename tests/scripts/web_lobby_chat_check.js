@@ -1,7 +1,7 @@
 // Runs the lobby page's chat (web/front/lobby_chat.js) without a browser: what may be typed and sent (printable ASCII, 100 characters, no empty line), what the box shows in each state of the room
 // (nothing before a room, the hint when alone, the hint when nobody has spoken, "Chat is back when you are in the room again." while the link is down, "Opening the game" while START waits), the
 // words of the lines of the system, and the whole box built and driven with a small fake of the DOM and of the page's client: a line of a player and a line of the room's guests are set as TEXT only
-// (the fake throws when innerHTML is assigned), a colour for each seat, the last 200 lines, the box follows the newest line unless it was scrolled up, a line that arrives while the box is off
+// (the fake throws when innerHTML is assigned), a color for each seat, the last 200 lines, the box follows the newest line unless it was scrolled up, a line that arrives while the box is off
 // screen is also a toast (cut to 60 characters, at most one in 4 s: the log has every line), what a line that the room did not take does (the typed text stays, and the hint says why), a line that the
 // room did not echo within 3 s or before the link dropped (the hint says it may not have arrived, the text is back in the field), what happens to the box when the page changes its client.
 //   - every exported function of lobby_chat.js must be called by this check (a function that no table reaches is a failure);
@@ -87,7 +87,7 @@ function roomOf(states, o) {
     return { lobby: o.lobby === undefined ? true : o.lobby, starting: !!o.starting, you: o.you === undefined ? 0 : o.you, leader: 0, slots: states.map((s, i) => ({ state: s, name: s === E ? '' : (o.names && o.names[i] !== undefined ? o.names[i] : ['Maple', 'Sam', 'Juniper', 'Pip'][i]) })) };
 }
 {
-    same('peopleIn counts persons: a host or a client; a computer player and an empty colour are none', [C.peopleIn(roomOf([P, P, B, E])), C.peopleIn(roomOf([H, E, E, E])), C.peopleIn(roomOf([E, E, B, B])), C.peopleIn(roomOf([P, P, P, P])), C.peopleIn(null)], [2, 1, 0, 4, 0]);
+    same('peopleIn counts persons: a host or a client; a computer player and an empty color are none', [C.peopleIn(roomOf([P, P, B, E])), C.peopleIn(roomOf([H, E, E, E])), C.peopleIn(roomOf([E, E, B, B])), C.peopleIn(roomOf([P, P, P, P])), C.peopleIn(null)], [2, 1, 0, 4, 0]);
     const alone = roomOf([P, E, E, E]), two = roomOf([P, P, E, E]), vsBot = roomOf([P, B, E, E]);
     same('no room yet: the box is not there', C.stateOf('connecting', null), { shown: false, live: false, placeholder: C.TEXT.down, empty: C.TEXT.alone });
     same('a room that no lobby made (a game made it): no box', C.stateOf('online', roomOf([P, P, E, E], { lobby: false })).shown, false);
@@ -98,15 +98,15 @@ function roomOf(states, o) {
     same('START pressed: the field is shut, "Opening the game"', C.stateOf('online', roomOf([P, P, E, E], { starting: true })), { shown: true, live: false, placeholder: C.TEXT.opening, empty: C.TEXT.empty });
 }
 
-// ---- 4. names, colours and the words of the lines of the system ---------------------------------------------------------------------------------------------------------------------------------------
+// ---- 4. names, colors and the words of the lines of the system ---------------------------------------------------------------------------------------------------------------------------------------
 {
     const room = roomOf([P, P, E, P], { names: ['Maple', 'Sam', '', ''] });
     same('a line is under the name that the room shows for the seat', [C.nameOf(room, 0), C.nameOf(room, 1)], ['Maple', 'Sam']);
     same('a seat with no name is "Seat N" (the game\'s own chat box says the same)', [C.nameOf(room, 2), C.nameOf(room, 3), C.nameOf(null, 1), C.nameOf(room, 9)], ['Seat 3', 'Seat 4', 'Seat 2', 'Seat 10']);
-    same('a joiner is announced as the page\'s toast says it: name, "joined as", the colour', C.joinedText('Sam', 1, Rules.COLOURS), 'Sam joined as Red.');
-    same('... in each colour', [0, 1, 2, 3].map((s) => C.joinedText('X', s, Rules.COLOURS)), ['X joined as Green.', 'X joined as Red.', 'X joined as Blue.', 'X joined as Black.']);
+    same('a joiner is announced as the page\'s toast says it: name, "joined as", the color', C.joinedText('Sam', 1, Rules.COLORS), 'Sam joined as Red.');
+    same('... in each color', [0, 1, 2, 3].map((s) => C.joinedText('X', s, Rules.COLORS)), ['X joined as Green.', 'X joined as Red.', 'X joined as Blue.', 'X joined as Black.']);
     same('a person who goes', C.leftText('Sam'), 'Sam left.');
-    same('a name is put in as it is (it is text; nothing is cut or escaped here)', [C.leftText('<b>'), C.joinedText('<i>&', 3, Rules.COLOURS)], ['<b> left.', '<i>& joined as Black.']);
+    same('a name is put in as it is (it is text; nothing is cut or escaped here)', [C.leftText('<b>'), C.joinedText('<i>&', 3, Rules.COLORS)], ['<b> left.', '<i>& joined as Black.']);
     same('the toast of a line is "name: line"', C.toastText('Sam', 'hello there'), 'Sam: hello there');
     same('a line of 60 characters is whole in the toast, one of 61 is cut with an ellipsis (a stranger\'s line of 100 must not fill the screen)', [C.toastText('Sam', 'y'.repeat(60)), C.toastText('Sam', 'x'.repeat(61)), C.toastText('Sam', 'x'.repeat(100))], ['Sam: ' + 'y'.repeat(60), 'Sam: ' + 'x'.repeat(59) + '…', 'Sam: ' + 'x'.repeat(59) + '…']);
 }
@@ -150,7 +150,7 @@ function world() {
         state.now = until;
     };
     const chat = C.mount({
-        doc, host, colours: Rules.COLOURS, say: (text) => { state.said.push(text); return state.sayResult; }, toast: (text) => toasts.push(text), onScreen: () => state.onScreen,
+        doc, host, colors: Rules.COLORS, say: (text) => { state.said.push(text); return state.sayResult; }, toast: (text) => toasts.push(text), onScreen: () => state.onScreen,
         now: () => state.now, setTimeout: (fn, ms) => { const id = state.nextTimer++; state.timers.push({ id, at: state.now + ms, fn }); return id; }, clearTimeout: (id) => { state.timers = state.timers.filter((t) => t.id !== id); }
     });
     return { doc, host, toasts, state, chat };
@@ -187,7 +187,7 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     check('the form is the field and the button, and it does not let a browser fill it in', byTag(w.host, 'form').getAttribute('autocomplete') === 'off' && byTag(w.host, 'form').children.length === 2);
 }
 
-{   // a room of one: the box opens with the hint; a second person changes the hint; the lines of players are text with a colour
+{   // a room of one: the box opens with the hint; a second person changes the hint; the lines of players are text with a color
     const w = world();
     const room = roomOf([P, E, E, E]);
     const c = fakeClient('k7m2xq', 0, room);
@@ -201,8 +201,8 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     c.emit('chat', { sender: 1, team: false, text: 'hey! is this the room link?' });
     same('a line of a player: "Name:", a blank and the line (a copy reads "Sam: hey!"), and the hint is gone', lineTexts(w), ['Sam: hey! is this the room link?']);
     const li = logOf(w).children[0];
-    check('the line carries the seat\'s colour (Red is seat 1) and no other class that styles it as the system', li.getAttribute('data-c') === 'red' && li.className === '');
-    check('the name and the line are two spans (the name is in the colour, a blank after its colon)', li.tag === 'div' && li.children.length === 2 && li.children[0].className === 'who' && li.children[0].textContent === 'Sam: ' && li.children[1].className === 'say' && li.children[1].textContent === 'hey! is this the room link?');
+    check('the line carries the seat\'s color (Red is seat 1) and no other class that styles it as the system', li.getAttribute('data-c') === 'red' && li.className === '');
+    check('the name and the line are two spans (the name is in the color, a blank after its colon)', li.tag === 'div' && li.children.length === 2 && li.children[0].className === 'who' && li.children[0].textContent === 'Sam: ' && li.children[1].className === 'say' && li.children[1].textContent === 'hey! is this the room link?');
     for (const [seat, id] of [[0, 'green'], [1, 'red'], [2, 'blue'], [3, 'black']]) {
         c.room = roomOf([P, P, P, P]);
         c.emit('chat', { sender: seat, team: false, text: 'x' });
@@ -214,9 +214,9 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     const before = lineTexts(w).length;
     c.emit('joined', { type: 'joined', seat: 3, name: 'Pip' });
     c.emit('left', { type: 'left', seat: 3, name: 'Pip' });
-    same('a person who comes and goes is a small line of the system, in no colour', lineTexts(w).slice(before), ['Pip joined as Black.', 'Pip left.']);
+    same('a person who comes and goes is a small line of the system, in no color', lineTexts(w).slice(before), ['Pip joined as Black.', 'Pip left.']);
     const sys = logOf(w).children.slice(before);
-    check('(the system lines have the class "sys" and no seat colour)', sys.every((l) => l.className === 'sys' && l.getAttribute('data-c') === null && l.children.length === 0));
+    check('(the system lines have the class "sys" and no seat color)', sys.every((l) => l.className === 'sys' && l.getAttribute('data-c') === null && l.children.length === 0));
     c.emit('joined', { type: 'joined', seat: 0, name: 'Maple' });
     check('the page\'s own seat is not announced to itself', lineTexts(w).length === before + 2);
 }
@@ -303,7 +303,7 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     const host = node('section');
     const toasts = [];
     let clock = 0;                                                  // (one chat toast in 4 s: the lines of this check come 5 s apart)
-    const chat = C.mount({ doc, host, colours: Rules.COLOURS, say: () => true, toast: (t) => toasts.push(t), now: () => clock });
+    const chat = C.mount({ doc, host, colors: Rules.COLORS, say: () => true, toast: (t) => toasts.push(t), now: () => clock });
     const c = fakeClient('k7m2xq', 0, roomOf([P, P, E, E]));
     chat.attach(c);
     host.rect = { top: 100, bottom: 500 };

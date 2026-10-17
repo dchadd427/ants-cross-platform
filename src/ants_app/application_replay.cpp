@@ -323,7 +323,7 @@ void Application::start_replay() {
     hud_.set_roster_mask(roster);
     scorecard_.set_shown_teams(roster);
     apply_team_names(head.names, roster);
-    hud_.set_player_name(head.names[seat]);                                // (an empty name is the colour word: apply_team_names leaves the old name when the new one is empty)
+    hud_.set_player_name(head.names[seat]);                                // (an empty name is the color word: apply_team_names leaves the old name when the new one is empty)
     scorecard_.set_local_player_name(head.names[seat]);
     replay_next_ = 0;
     hud_.set_view_only(true);                                              // (a recording is for looking: nothing can be picked, hud.hpp)

@@ -194,7 +194,7 @@ uint64_t masked_digest(const std::vector<uint8_t>& rgba, int32_t w, int32_t h, c
     return f.value();
 }
 
-/// How many pixels of two pictures differ (a pixel is equal when its three colour bytes are)
+/// How many pixels of two pictures differ (a pixel is equal when its three color bytes are)
 int64_t differing_pixels(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b, int32_t w, const LayoutRect& region) {
     int64_t n = 0;
     for (int32_t y = region.y; y < region.bottom(); ++y) {
@@ -225,7 +225,7 @@ public:
         std::string name;                     // the sprite's name, the text
         int32_t x{0}, y{0}, w{0}, h{0};       // (a squeezed text: w is the width it is squeezed to)
         int32_t sx{0}, sy{0}, sw{0}, sh{0};
-        assets::ColorRGBA colour{};
+        assets::ColorRGBA color{};
         FontSize size{FontSize::Px12};
     };
 
@@ -241,12 +241,12 @@ public:
     }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA c) override {
         Ev e = base(Kind::Fill);
-        e.x = x; e.y = y; e.w = w; e.h = h; e.colour = c;
+        e.x = x; e.y = y; e.w = w; e.h = h; e.color = c;
         events.push_back(e);
     }
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA c) override {
         Ev e = base(Kind::Rect);
-        e.x = x; e.y = y; e.w = w; e.h = h; e.colour = c;
+        e.x = x; e.y = y; e.w = w; e.h = h; e.color = c;
         events.push_back(e);
     }
     void draw_text(const std::string& s, int32_t x, int32_t y, assets::ColorRGBA c) override { text(Kind::Text, s, x, y, c, FontSize::Px12, 0); }
@@ -297,7 +297,7 @@ public:
             f.byte(static_cast<uint8_t>(e.kind));
             f.text(e.name);
             for (int32_t v : {e.x, e.y, e.w, e.h, e.sx, e.sy, e.sw, e.sh}) f.i32(v);
-            f.byte(e.colour.r); f.byte(e.colour.g); f.byte(e.colour.b); f.byte(e.colour.a);
+            f.byte(e.color.r); f.byte(e.color.g); f.byte(e.color.b); f.byte(e.color.a);
             f.byte(static_cast<uint8_t>(e.size));
         }
         return f.value();
@@ -319,7 +319,7 @@ private:
     void text(Kind k, const std::string& s, int32_t x, int32_t y, assets::ColorRGBA c, FontSize size, int32_t max_width) {
         Ev e = base(k);
         e.name = s;
-        e.x = x; e.y = y; e.w = max_width; e.colour = c; e.size = size;
+        e.x = x; e.y = y; e.w = max_width; e.color = c; e.size = size;
         events.push_back(e);
     }
     const assets::AssetArchive& arc_;
@@ -637,7 +637,7 @@ void test_layout(const assets::AssetArchive& arc) {
 // 2. The seams
 // =====================================================================================================================================================
 
-/// Are two lines of a sprite (columns or rows, over the cross range) identical, pixel for pixel (the colour key included)?
+/// Are two lines of a sprite (columns or rows, over the cross range) identical, pixel for pixel (the color key included)?
 bool lines_identical(const assets::Sprite& s, bool columns, int32_t a, int32_t b, int32_t cross_first, int32_t cross_count) {
     const int32_t cross = cross_count > 0 ? cross_count : (columns ? static_cast<int32_t>(s.height) : static_cast<int32_t>(s.width));
     for (int32_t i = 0; i < cross; ++i) {
@@ -855,7 +855,7 @@ void test_boxes(const assets::AssetArchive& arc) {
         check(left == 0, std::string("the wide ") + e.what + " box's left end (60 columns) is the original's, 30 rows lower (" + std::to_string(left) + " pixels differ)");
         check(right == 0, std::string("the wide ") + e.what + " box's right end (the last column of the edge, the corner, the side piece) is the original's, 320 columns further right and 30 rows lower (" + std::to_string(right) + " pixels differ)");
     }
-    // the black inside is one flat colour, the top line is one repeated column: the rows in between are identical all along the box
+    // the black inside is one flat color, the top line is one repeated column: the rows in between are identical all along the box
     {
         bool flat = true;
         for (int32_t x = 100; x < 860; ++x) flat = flat && pixel(wide_px, 960, x, 280) == Rgb{7, 11, 15} && pixel(wide_px, 960, x, 280) == pixel(wide_px, 960, 100, 280);
@@ -903,7 +903,7 @@ void test_loading_order(const assets::AssetArchive& arc) {
         }
         check(!want.empty() && drawn == want, "the classic loading screen draws the frame pieces in the order of frame_part_draw_order (" + std::to_string(drawn.size()) + " pieces, the last stored first)");
         check(!spy.events.empty() && spy.events.front().kind == Spy::Kind::Fill && spy.events.front().x == 0 && spy.events.front().y == 0 && spy.events.front().w == 640 && spy.events.front().h == 480 &&
-                  spy.events.front().colour.r == 219 && spy.events.front().colour.g == 75 && spy.events.front().colour.b == 19, "... after the page is filled with the original's flat orange (219, 75, 19)");
+                  spy.events.front().color.r == 219 && spy.events.front().color.g == 75 && spy.events.front().color.b == 19, "... after the page is filled with the original's flat orange (219, 75, 19)");
         const size_t n = spy.events.size();
         check(n >= 4 && spy.events[n - 3].name == "logo.bmp" && spy.events[n - 3].x == 25 && spy.events[n - 3].y == 23 && spy.events[n - 2].name == "credits.bmp" && spy.events[n - 2].x == 32 && spy.events[n - 2].y == 299 &&
                   spy.events[n - 1].name == "strip.bmp" && spy.events[n - 1].x == 40 && spy.events[n - 1].y == 315, "... and before the logo (25, 23), the credits (32, 299) and the strip (40, 315), in that order");
@@ -974,18 +974,18 @@ void test_catch_up_screen(const assets::AssetArchive& arc) {
             if (spy.events.size() == n + 3) {
                 const Spy::Ev& fill = spy.events[n];
                 const int32_t fill_w = 45 * l.bar.w / 100;
-                check(fill.kind == Spy::Kind::Fill && fill.x == l.bar.x && fill.y == l.bar.y && fill.w == fill_w && fill.h == l.bar.h && fill.colour.r == kLoadingBarColour.r && fill.colour.g == kLoadingBarColour.g &&
-                          fill.colour.b == kLoadingBarColour.b,
-                      shape + ": the bar is filled from the slot's left edge to 45% of its width (" + std::to_string(fill_w) + " of " + std::to_string(l.bar.w) + " px) in the loading bar's colour");
+                check(fill.kind == Spy::Kind::Fill && fill.x == l.bar.x && fill.y == l.bar.y && fill.w == fill_w && fill.h == l.bar.h && fill.color.r == kLoadingBarColor.r && fill.color.g == kLoadingBarColor.g &&
+                          fill.color.b == kLoadingBarColor.b,
+                      shape + ": the bar is filled from the slot's left edge to 45% of its width (" + std::to_string(fill_w) + " of " + std::to_string(l.bar.w) + " px) in the loading bar's color");
                 const Spy::Ev& words = spy.events[n + 1];
                 const int32_t text_w = static_cast<int32_t>(std::string("Catching up 45%").size()) * 6;
                 check(words.kind == Spy::Kind::Text && words.name == "Catching up 45%" && words.size == FontSize::Px24 && words.x == l.strip.x + (l.strip.w - text_w) / 2 &&
-                          words.y == l.strip.y + (l.strip.h - font_cell_height(FontSize::Px24)) / 2 && words.colour.r == 7 && words.colour.g == 11 && words.colour.b == 15,
+                          words.y == l.strip.y + (l.strip.h - font_cell_height(FontSize::Px24)) / 2 && words.color.r == 7 && words.color.g == 11 && words.color.b == 15,
                       shape + ": the words are centred on the strip, in the black of the original's labels (" + std::to_string(words.x) + ", " + std::to_string(words.y) + ")");
                 const Spy::Ev& hint = spy.events[n + 2];
                 const int32_t hint_w = static_cast<int32_t>(std::string(kCatchUpHint).size()) * 6;
                 check(hint.kind == Spy::Kind::Text && hint.name == kCatchUpHint && hint.size == FontSize::Px14 && hint.x == l.strip.right() - 12 - hint_w && hint.y == l.strip.y + (l.strip.h - font_cell_height(FontSize::Px14)) / 2 &&
-                          hint.colour.r == 7 && hint.colour.g == 11 && hint.colour.b == 15,
+                          hint.color.r == 7 && hint.color.g == 11 && hint.color.b == 15,
                       shape + ": the hint ends 12 px before the strip's right end, in the strip's middle line (" + std::to_string(hint.x) + ", " + std::to_string(hint.y) + ")");
                 check(words.x + text_w < hint.x && hint.x >= l.strip.x && hint.x + hint_w <= l.strip.right() && words.y >= l.strip.y && words.y + font_cell_height(FontSize::Px24) <= l.strip.bottom(),
                       shape + ": the words and the hint lie on the strip and do not touch");
@@ -1363,7 +1363,7 @@ void test_counters(const assets::AssetArchive& arc) {
                 ++found;
                 const bool clip_before = i > 0 && spy.events[i - 1].kind == Spy::Kind::Clip && spy.events[i - 1].x == l.column_x[n.col] && spy.events[i - 1].y == l.row_y(n.row) && spy.events[i - 1].w == l.column_w[n.col] && spy.events[i - 1].h == 50;
                 const bool clear_after = i + 1 < spy.events.size() && spy.events[i + 1].kind == Spy::Kind::ClearClip;
-                if (clip_before && clear_after && e.w == kResultsDigitWidth * static_cast<int32_t>(std::string(n.text).size()) && e.size == FontSize::Px18 && e.colour.r == 239 && e.colour.g == 231 && e.colour.b == 223) ++bracketed;
+                if (clip_before && clear_after && e.w == kResultsDigitWidth * static_cast<int32_t>(std::string(n.text).size()) && e.size == FontSize::Px18 && e.color.r == 239 && e.color.g == 231 && e.color.b == 223) ++bracketed;
             }
         }
         check(found == 12 && bracketed == 12, at + "the twelve numbers are drawn clipped to their label's box (x of the column, 50 high) and squeezed to 8 px a digit, 18 px, in the labels' cream (" + std::to_string(found) + ", " + std::to_string(bracketed) + ")");
@@ -1861,7 +1861,7 @@ constexpr Golden kGolden[] = {
     {"screen.wide.pages.results.big_numbers", 0x5eb6de5aa4403d36, 200ull},
     {"screen.wide.pages.results.classic_rows", 0x9e0737830f145ffa, 201ull},
     {"screen.wide.pages.menu_main", 0x0af18420436d3565, 160ull},
-    {"screen.wide.pages.menu_single", 0x29fe2740618363c0, 232ull},
+    {"screen.wide.pages.menu_single", 0x1dda6d1c99ab9185, 232ull},
     {"screen.wide.pages.menu_join", 0xc2108141358be108, 162ull},
     // menu_host moved deliberately in bot games part B (network protocol 13): the panel has a row for each seat after the leader's and the Teams row (see test_view_fingerprint_hud.cpp, screen.menu.host.*),
     // so its draw calls (224 -> 296), its pixels outside the text (the mock-up's digest above is the panel as it is now), its notice state and the control under every pixel changed.

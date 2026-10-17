@@ -71,11 +71,11 @@ public:
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA color) override {
         rects.push_back({x, y, w, h, color});
     }
-    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA colour) override {
-        texts.push_back({text, x, y, FontSize::Px12, colour});
+    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA color) override {
+        texts.push_back({text, x, y, FontSize::Px12, color});
     }
-    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA colour, FontSize size) override {
-        texts.push_back({text, x, y, size, colour});
+    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA color, FontSize size) override {
+        texts.push_back({text, x, y, size, color});
     }
     // the cell height is what the real renderer reports (the original's line distance); the width stays the interface's 6 px per character
     int32_t get_text_height(FontSize size = FontSize::Px12) const override { return font_cell_height(size); }
@@ -108,7 +108,7 @@ public:
 
     struct Image { int32_t x, y, w, h; std::vector<uint8_t> rgba; };
     std::vector<Image> images;
-    struct Text { std::string text; int32_t x; int32_t y; FontSize size; assets::ColorRGBA colour{}; };
+    struct Text { std::string text; int32_t x; int32_t y; FontSize size; assets::ColorRGBA color{}; };
     std::vector<SpriteDraw> sprites;
     std::vector<FillDraw> fills;
     std::vector<FillDraw> rects;         // frames (draw_rect)

@@ -305,7 +305,7 @@ The pause-and-retry paths return 1 with +0x60 set, so the caller freezes the ant
 Callee notes:
 - **FUN_0101ace3(action)** [ret 4] = FUN_0101ad02(action, +0xe0, 0xffff, 0xffff, 0, 0) (@101ace3..101acff).
   - action 0 = idle. It does not clear the pause, because FUN_0101ad02 calls FUN_0101cc1e(0) only when action != 0 (@101ae36..101ae40). Old action 1 needs no cleanup (the jump-table index goes out of range, @101ad3d..101ad43).
-  - action 0xb (handler 0x101b22e) sets +0xac = sentinel and plays world[0x4060 + 4*(type + 6*colour(+0xd4))], or world[0x40c0 + …] when carrying food (+0xe8). This is the "can't" animation.
+  - action 0xb (handler 0x101b22e) sets +0xac = sentinel and plays world[0x4060 + 4*(type + 6*color(+0xd4))], or world[0x40c0 + …] when carrying food (+0xe8). This is the "can't" animation.
 - **FUN_0101ab56** = free +0xd8, then +0xd8=0, +0xdc=0, +0xde=0 (@101ab56..101ab86). FUN_0101ab87 = the same, plus order=0 and +0xac=sentinel, then optionally allocates a new waypoint array.
 - **FUN_010214d9** (@10214d9..1021519): does nothing unless IsLocal. Otherwise msg = FUN_0102368f(PixelTile(this), team, +0x58, 0), which is msg type 0x13, size 0x10, with +8 team (bit15 = arg4), +0xa idx and +0xc tile. It is dispatched with FUN_0100d791(msg,0xa,0) and then deleted.
   - Dispatch flag 0xa means the handler runs locally at once (table 0x1047320[type*8] → 0x10236c1) and the message is also sent over the network (bit 8).

@@ -708,8 +708,8 @@ void test_hud_drawing(const assets::AssetArchive& arc) {
     check(text_at(w, "hello").x == 801 && text_at(w, "hello").y == 484, "960 x 540: the chat input at (801, 484)");
     check(text_at(c, "_").x == 481 + 30 && text_at(w, "_").x == 801 + 30 && text_at(w, "_").y == 484, "960 x 540: the chat input's caret is drawn too (it is hidden only beyond the picture's right edge, which is 960 here)");
 
-    // the four score boxes: 54 x 14 fills in the team colours (green 7 67 47, red 119 0 0, blue 43 39 107, black 39 39 59); the local team (green) has the top bar's slot, the others the
-    // bottom strip's three in colour order
+    // the four score boxes: 54 x 14 fills in the team colors (green 7 67 47, red 119 0 0, blue 43 39 107, black 39 39 59); the local team (green) has the top bar's slot, the others the
+    // bottom strip's three in color order
     auto box_of = [](const Recorder& r, uint8_t red, uint8_t green, uint8_t blue) {
         for (const auto& f : r.fills) {
             if (f.w == 54 && f.h == 14 && f.c.r == red && f.c.g == green && f.c.b == blue) return f;

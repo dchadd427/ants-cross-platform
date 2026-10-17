@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OPT-IN, not part of ./run_tests.sh: the rematch of a lobby room in REAL browsers (docs/PLAY_IN_BROWSER.md, "After a match"): two people play a match that the front page started, one quits, both
-# game pages show "The match is over" with "Back to the lobby", the button takes each tab back to the same room (the strip "Back from the match.", the colours' words, START that waits for the one
+# game pages show "The match is over" with "Back to the lobby", the button takes each tab back to the same room (the strip "Back from the match.", the colors' words, START that waits for the one
 # who is not back), and the rematch starts. --shots DIR saves the pictures that the check looks at.
 #
 #   tools/web_without_docker.py -- tests/scripts/test_web_rematch.sh [--shots DIR] [--server PATH-TO-ants_server]

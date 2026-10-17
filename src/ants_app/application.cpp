@@ -344,7 +344,7 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.net_token = argv[++i];
             mode_given = true;
         } else if (std::strcmp(argv[i], "--seat") == 0 && i + 1 < argc) {
-            const int seat = std::atoi(argv[++i]);                             // the colour to sit in: 0 green, 1 red, 2 blue, 3 black
+            const int seat = std::atoi(argv[++i]);                             // the color to sit in: 0 green, 1 red, 2 blue, 3 black
             if (seat >= 0 && seat < 4) cfg.net_seat = static_cast<uint8_t>(seat);
             mode_given = true;
         } else if (std::strcmp(argv[i], "--start-when") == 0 && i + 1 < argc) {
@@ -858,7 +858,7 @@ bool Application::init(const ApplicationConfig& config) {
     if (replay_mode_) {
         audio_mixer_.stop_music();
         midi_player_.stop();
-        config_.label_unnamed_teams = true;                          // (every seat of the match is shown, by its name or its colour)
+        config_.label_unnamed_teams = true;                          // (every seat of the match is shown, by its name or its color)
         start_replay();
     } else if (!config_.start_in_map_select) {
         state_ = AppState::Playing;
@@ -1254,12 +1254,12 @@ void Application::enter_match(bool rejoin) {
 }
 
 // The names of the teams reach every place that shows one: the simulation's texts (alliances, drop-outs, the chat log), the HUD's score labels,
-// the results rows and the local player's own label. An empty name keeps the colour word.
+// the results rows and the local player's own label. An empty name keeps the color word.
 void Application::apply_team_names(const std::array<std::string, 4>& names, uint8_t roster) {
     std::array<std::string, 4> all = names;
     if (!network_active() && local_player_id_ < 4) all[local_player_id_] = player_name_;      // a local game: the own name (--name) belongs to the own team
     for (uint8_t p = 0; p < 4; ++p) {
-        sim_.set_player_name(p, ((roster >> p) & 1u) != 0 ? all[p] : std::string());       // an empty name is the colour word again
+        sim_.set_player_name(p, ((roster >> p) & 1u) != 0 ? all[p] : std::string());       // an empty name is the color word again
     }
     hud_.set_team_names(all);
     scorecard_.set_player_names(all);
@@ -2683,7 +2683,7 @@ void Application::sync_room_view() {
         view.seats[i].thumb = static_cast<MapSelectScreen::Thumb>(static_cast<uint8_t>(net_->seat_quality(static_cast<uint8_t>(i))));   // connection quality
     }
     // A guest that has not been welcomed yet has no seat and the room is not known: it shows ITSELF alone (the original's slot 0 is the local machine from the
-    // start, with the good thumb; the host's row follows once the connection exists), in the colour of its seat (or of the seat it asked for)
+    // start, with the good thumb; the host's row follows once the connection exists), in the color of its seat (or of the seat it asked for)
     if (net_->phase() == net::NetGame::Phase::Connecting || net_->phase() == net::NetGame::Phase::Failed) {
         for (auto& seat : view.seats) seat = MapSelectScreen::RoomSeat{};
         const uint8_t assigned = net_->my_seat();                              // (known once the host has welcomed it; the requested seat is only a guess before that)
@@ -2840,7 +2840,7 @@ void Application::net_request_start() {
     if (!net_ || !net_->request_start()) play_effect(sim::SoundID::CantGo);
 }
 
-// A press on a player's row of the leader's screen (protocol 14): the player goes to the next colour (NetGame::request_move_seat decides, and says nothing when the request is held back).
+// A press on a player's row of the leader's screen (protocol 14): the player goes to the next color (NetGame::request_move_seat decides, and says nothing when the request is held back).
 void Application::net_move_seat(uint8_t seat) {
     if (net_) net_->request_move_seat(seat);
 }

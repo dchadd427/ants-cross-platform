@@ -12,7 +12,7 @@ namespace {
 std::string player_text(const std::string& name, int seat) { return name.empty() ? "Player " + std::to_string(seat + 1) : name; }
 
 // "Red" for seat 1 (the seats are green, red, blue, black)
-std::string colour_text(int seat) { return seat >= 0 && seat < 4 ? sim::strings::colour_name(static_cast<uint8_t>(3 - seat)) : std::string(); }
+std::string color_text(int seat) { return seat >= 0 && seat < 4 ? sim::strings::color_name(static_cast<uint8_t>(3 - seat)) : std::string(); }
 
 bool fits(const NetOverlayInput& in, const std::string& text, int32_t max_width) { return !in.measure || max_width <= 0 || in.measure(text) <= max_width; }
 
@@ -32,8 +32,8 @@ std::string with_name(const NetOverlayInput& in, const std::string& before, cons
 // "Bob (Red) lost the connection, waiting 0:42", or "Bob (Red) is coming back... 45%"
 std::string missing_line(const NetOverlayInput& in, const NetOverlaySeat& seat) {
     const std::string name = player_text(seat.name, seat.seat);
-    const std::string colour = colour_text(seat.seat);
-    const std::string tag = colour.empty() ? std::string() : " (" + colour + ")";
+    const std::string color = color_text(seat.seat);
+    const std::string tag = color.empty() ? std::string() : " (" + color + ")";
     if (seat.catching_up) return with_name(in, "", name, tag + " is coming back... " + std::to_string(std::min<unsigned>(seat.progress, 100u)) + "%", in.max_width);
     return with_name(in, "", name, tag + " lost the connection, waiting " + net_overlay_clock(seat.away_s), in.max_width);
 }
@@ -85,8 +85,8 @@ NetOverlayLine net_overlay_line(const NetOverlayInput& in) {
     if (in.vote_open) {
         if (!(show_missing && is_missing(in, in.vote_seat))) {                 // a seat that is back but keeps losing its connection: the block says which one
             const std::string name = player_text(in.vote_name, in.vote_seat);
-            const std::string colour = colour_text(in.vote_seat);
-            line.lines.push_back(with_name(in, "", name, (colour.empty() ? std::string() : " (" + colour + ")") + " keeps losing the connection", in.max_width));
+            const std::string color = color_text(in.vote_seat);
+            line.lines.push_back(with_name(in, "", name, (color.empty() ? std::string() : " (" + color + ")") + " keeps losing the connection", in.max_width));
         }
         fill_vote(in, line);
     }

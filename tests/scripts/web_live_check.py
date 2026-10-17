@@ -508,12 +508,12 @@ def main():
             check(tab.ev("[document.getElementById('b-rew').getAttribute('aria-label'), document.getElementById('b-rew').title, document.querySelector('#b-rew .n').textContent]") == ["Back 30 seconds", "Back 30 seconds", "30"], "its name, its tip and the 30")
             same = ("(function () { var a = getComputedStyle(document.getElementById('b-play')), b = getComputedStyle(document.getElementById('b-rew'));"
                     " return ['color', 'backgroundColor', 'borderTopColor', 'borderTopWidth', 'boxShadow', 'borderRadius'].every(function (k) { return a[k] === b[k]; }); })()")
-            check(tab.ev(same) is True, "the same colour, ground, edge, bevel and corners as Pause")
+            check(tab.ev(same) is True, "the same color, ground, edge, bevel and corners as Pause")
             size = tab.ev("(function () { var r = document.getElementById('b-rew').getBoundingClientRect(); return [r.width, r.height]; })()")
             check(size[0] >= 64 and size[1] >= 50, "at least 64 x 50 px (%d x %d)" % (size[0], size[1]))
             bare = ("(function () { var s = getComputedStyle(document.querySelector('#b-rew .n')); return s.backgroundColor === 'rgba(0, 0, 0, 0)' && s.borderTopWidth === '0px' && s.boxShadow === 'none'"
                     " && s.color === getComputedStyle(document.querySelector('#b-rew svg')).fill; })()")
-            check(tab.ev(bare) is True, "the 30 has no box, edge or shadow of its own and the colour of the triangles")
+            check(tab.ev(bare) is True, "the 30 has no box, edge or shadow of its own and the color of the triangles")
             tab.ev("__stub.turn = 1000; __stub.state = 2; __stub.speed = 200")
             cx, cy = centre(tab, "b-rew")
             tab.click(cx, cy)

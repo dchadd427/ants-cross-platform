@@ -19,7 +19,7 @@ browser of its own (its own profile: its own local storage, as a player's own co
   * restart  the same match; the server is stopped with SIGTERM and started again on the same folder and ports: both pages say "Connection lost. Reconnecting...", both come back by themselves,
              the room came back from its restart record (the server's clock for a pause begins at the restore: players back within 3 s of it resume at once, and a pause of 3 s or more is
              counted down on a screen), and the match goes on with equal hashes;
-  * rejoin   the first player CLOSES its tab in the middle of the match (the key stays in the browser's storage), a new tab opens the front page: its Rejoin strip is there, above the logo and the colours, with the button
+  * rejoin   the first player CLOSES its tab in the middle of the match (the key stays in the browser's storage), a new tab opens the front page: its Rejoin strip is there, above the logo and the colors, with the button
              "Rejoin it" and its note "Your match in room CODE is still running: go back to your seat." (the code as a screen shows it, in two groups of three), pressing it puts the player back in its seat (the address has the plain code and no key, and no create block: the room is there),
              the other player sees "... is back", the match goes on with equal hashes;
   * leave    two players in a match; the second leaves ON PURPOSE through the page's Menu button and says yes to its question ("Leave the game and go back to the menu?"): the page goes to the front
@@ -708,7 +708,7 @@ def main():
                         return { button: go.textContent, note: note.textContent, bottom: r.bottom, cards: lobby.top, mast: mast.top, enabled: !go.disabled }; })()""")
                     check(info["button"] == "Rejoin it", "its button says \"Rejoin it\" (the room's code is in the note beside it: %r)" % info["button"])
                     check(info["note"] == "Your match in room %s is still running: go back to your seat." % grouped(room), "... and the note beside it says that the match is still running, with the room's code in two groups of three (%r)" % info["note"])
-                    check(info["bottom"] <= info["mast"] and info["mast"] <= info["cards"] and info["enabled"], "... above the logo and the colours (the button ends at %.0f px, the logo begins at %.0f px, the colours at %.0f px)" % (info["bottom"], info["mast"], info["cards"]))
+                    check(info["bottom"] <= info["mast"] and info["mast"] <= info["cards"] and info["enabled"], "... above the logo and the colors (the button ends at %.0f px, the logo begins at %.0f px, the colors at %.0f px)" % (info["bottom"], info["mast"], info["cards"]))
                     a.shot(args.shots, "rejoin_button")
                     pages = lambda: len([t for t in a.browser.devtools.call("Target.getTargets")["targetInfos"] if t["type"] == "page"])
                     before_pages = pages()
@@ -806,7 +806,7 @@ def main():
                 for k, v in items.items():
                     p.ev("localStorage.setItem(%s, %s); 1" % (json.dumps(k), json.dumps(v)))
                 p.call("Page.navigate", {"url": web})
-                wait_for(lambda: p.ev("!!document.getElementById('rejoin') && !!document.querySelector('#slots li.k-person')"), 20, 0.2)       # (the page has its room: it sits in a colour)
+                wait_for(lambda: p.ev("!!document.getElementById('rejoin') && !!document.querySelector('#slots li.k-person')"), 20, 0.2)       # (the page has its room: it sits in a color)
                 time.sleep(0.4)
                 return p.ev("""(function () { var r = document.getElementById('rejoin'), go = document.getElementById('rejoin-go'), mast = document.querySelector('header.mast').getBoundingClientRect(),
                     main = document.querySelector('main.wrap'), top = main.getBoundingClientRect().top + parseFloat(getComputedStyle(main).paddingTop);

@@ -12,6 +12,7 @@ Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --too
   5. at most ASSERT_TRUE_DEFINITIONS definitions of the macro ASSERT_TRUE;
   6. every .cpp under src/, tests/ and tools/ is named in a CMakeLists.txt, except CMAKE_EXCEPTIONS;
   7. no tracked path begins with a build folder (build/ or build_*/ at the top: local build output that .gitignore keeps out; it gets in by `git add -f` or a tool that adds everything).
+  8. American spelling (AGENTS.md "Spelling"): no tracked text file writes the British spelling of "color" (SPELLING_*; the word is built from two halves below, so that this file does not name it);
 Ratchets: a number may never grow. When a page or file shrinks by more than the tolerance, the table must be lowered, so that the gain is kept.
 """
 import argparse
@@ -252,10 +253,43 @@ def check_build_folders(files):
             % (folder, len(names), names[0], folder) for folder, names in sorted(tracked.items())]
 
 
+BRITISH = "col" + "our"       # (the word the project does not write; split so that this file passes its own check)
+SPELLING_WORD = re.compile(BRITISH, re.I)
+SPELLING_SKIPPED = (
+    "Community-Maps/",         # the players' maps and their README: never edited here
+    "docs/legacy/",            # extracts of the original program, kept as the original wrote them
+    "third_party/",            # other people's code
+)
+SPELLING_KEPT = [              # (a line may keep the British word only inside one of these; each is a name that users' saved data, bookmarks or the wire already hold)
+    re.escape("This map cannot be played with these %ss." % BRITISH),        # the server's notice, which the web lobby matches word for word (protocol 21)
+    r"""["'`]%s["'`]""" % BRITISH,                                           # the key "%s" of a match record's seats (GET /history, stored in the history) and of its filter
+    r"\b%s=" % BRITISH,                                                      # the query parameter of GET /history and of the pages' addresses (bookmarks)
+    r"\.%s\b|\b%s:" % (BRITISH, BRITISH),                                    # the same key as a property or object key in the pages that read it
+    r"\brec, %s\b" % BRITISH,                                                # the server's list of the filter names
+]
+SPELLING_KEPT_RE = re.compile("|".join(SPELLING_KEPT), re.I)
+
+
+def check_spelling(root, files, skipped=SPELLING_SKIPPED):
+    out = []
+    for rel in files:
+        if rel.startswith(skipped) or os.path.splitext(rel)[1].lower() in TEXT_SUFFIXES_SKIPPED:
+            continue
+        if SPELLING_WORD.search(rel):
+            out.append("%s: the file name has the British spelling (write the American one)" % rel)
+        data = read_bytes(root, rel)
+        if looks_binary(data):
+            continue
+        for n, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+            if SPELLING_WORD.search(SPELLING_KEPT_RE.sub("", line)):
+                out.append("%s:%d: British spelling (AGENTS.md, Spelling: American English; write the American spelling of color)" % (rel, n))
+    return out
+
+
 def run_checks(root):
     files = tracked_files(root)
     return (check_doc_sizes(root, files) + check_reachable(root, files) + check_forbidden(root, files)
-            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files))
+            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files) + check_spelling(root, files))
 
 
 def list_numbers(root):

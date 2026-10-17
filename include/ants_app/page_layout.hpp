@@ -48,7 +48,7 @@ struct LoadingLayout {
 };
 
 /// The fill of the progress bar (the original's dark purple, #1F1733)
-inline constexpr ants::assets::ColorRGBA kLoadingBarColour{31, 23, 51, 255};
+inline constexpr ants::assets::ColorRGBA kLoadingBarColor{31, 23, 51, 255};
 
 /// Draws the loading screen after `ticks` ticks of the loading state: the classic page when `wide` is false (the original's own picture, 640 x 480), the wide page otherwise
 void draw_loading_screen(IRenderer& renderer, const ants::assets::AssetArchive& archive, bool wide, int32_t ticks);

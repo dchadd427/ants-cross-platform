@@ -704,7 +704,7 @@ void run_b2fix_tests() {
             build_world(b, 51, 12);
             // power-ups are on every screen: a free one, one that an ant of the seat stands on and one that an ant of another team stands on (the same in both worlds, B4-1)
             for (sim::SimulationEngine* e : {&a, &b}) {
-                e->grid_mut().place_bomb(33, 31, seat);                                                           // a bomb of the seat and one of another team: on the screen, in the owner's colour
+                e->grid_mut().place_bomb(33, 31, seat);                                                           // a bomb of the seat and one of another team: on the screen, in the owner's color
                 e->grid_mut().place_bomb(34, 31, static_cast<uint8_t>((seat + 1) % sim::MAX_PLAYERS));
                 e->grid_mut().place_powerup(30, 30, 3);
                 e->grid_mut().place_powerup(31, 30, 4);

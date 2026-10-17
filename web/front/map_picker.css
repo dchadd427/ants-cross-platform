@@ -1,5 +1,5 @@
 /* The map list of the front page (front/map_picker.js): a dialog opened from the map selector; a bottom sheet on a phone. It was inline in web/lobby.html, which is at the 1500 lines of
-   tools/check_hygiene.py; the page links this sheet AFTER its own <style>, so a rule that wins a tie by order (.pickhow .panel against .how .panel) still comes later, as it did. The colours are the
+   tools/check_hygiene.py; the page links this sheet AFTER its own <style>, so a rule that wins a tie by order (.pickhow .panel against .how .panel) still comes later, as it did. The colors are the
    page's own tokens (:root of web/lobby.html). */
 .pickhow .panel > * { flex: none; } .pickhow .panel > .pk-out { flex: 1 1 auto; }
 .pickhow .panel { max-width: 780px; width: 100%; max-height: 92vh; max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }

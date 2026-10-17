@@ -103,7 +103,7 @@ The layout is a 0-rooted heap with parent(i) = i>>1. The root (index 0) therefor
 
 * **Occupancy grid** `[world+0x553c]` (row pointers, 2 bytes per cell). byte0 bits 0..2 = team (7 = empty), byte0 bits 3..7 = ant index, byte1 bit0 = multiple ants on the cell. For a single occupant the ant is `player[team].ants[index]`.
 * **Multiple occupants** are resolved by `FUN_0100f2cd` (0x100f2cd-0x100f3c7). It walks every player's ants on the tile. The first one found becomes the chosen ant. A later ant replaces it if that ant is stationary (`+0xd8==0` and action in {0, 3..9, 0xb}) and either it is locally controlled or the current choice is not.
-* **Anthill test (req 0x10).** The layer-2 id goes through `FUN_0100ecac` (0xf5->0, 0xf6->1, 0xf7->2, 0xf8->3, else 4) and then `FUN_0100f43c` (the team whose `player+0x2c` equals that colour, else 4).
+* **Anthill test (req 0x10).** The layer-2 id goes through `FUN_0100ecac` (0xf5->0, 0xf6->1, 0xf7->2, 0xf8->3, else 4) and then `FUN_0100f43c` (the team whose `player+0x2c` equals that color, else 4).
 * **Food test (req 0x80).** The layer-2 id must not be 0x7ffe and must have tileinfo flag 2 (`FUN_010071dd`).
 * Other tileinfo predicates: `FUN_01007202` = flag 4 (powerup); `FUN_01008bc6` = layer-2 id in {0x81,0x82,0x83,0x84} (bomb).
 

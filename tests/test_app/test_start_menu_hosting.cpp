@@ -8,7 +8,7 @@ void run_start_menu_hosting_tests() {
         const LocalTeams green_blue{true, 0, 2};
         const LocalTeams green_black{true, 0, 3};
         const LocalTeams red_blue{true, 1, 2};
-        // the words of a choice: the colour words of the seats that play, the pair first
+        // the words of a choice: the color words of the seats that play, the pair first
         ASSERT_EQ(StartMenu::host_teams_text(ffa, 4), std::string("Free for all"));
         ASSERT_EQ(StartMenu::host_teams_text(green_red, 4), std::string("Green + Red against Blue + Black"));
         ASSERT_EQ(StartMenu::host_teams_text(green_blue, 4), std::string("Green + Blue against Red + Black"));
@@ -623,8 +623,8 @@ void run_start_menu_hosting_tests() {
         const MenuElement dull = m.element(MenuId::Quit);
         assets::ColorRGBA lit_face{}, dull_face{};
         for (const Recorder::Box& box : c.fills) {
-            if (box.rect.x == lit.rect.x + 1 && box.rect.y == lit.rect.y + 1 && box.rect.w == lit.rect.w - 2 && box.rect.h == lit.rect.h - 2) lit_face = box.colour;
-            if (box.rect.x == dull.rect.x + 1 && box.rect.y == dull.rect.y + 1 && box.rect.w == dull.rect.w - 2 && box.rect.h == dull.rect.h - 2) dull_face = box.colour;
+            if (box.rect.x == lit.rect.x + 1 && box.rect.y == lit.rect.y + 1 && box.rect.w == lit.rect.w - 2 && box.rect.h == lit.rect.h - 2) lit_face = box.color;
+            if (box.rect.x == dull.rect.x + 1 && box.rect.y == dull.rect.y + 1 && box.rect.w == dull.rect.w - 2 && box.rect.h == dull.rect.h - 2) dull_face = box.color;
         }
         ASSERT_TRUE(lit_face.g > dull_face.g);
     } TEST_END();
@@ -1209,10 +1209,10 @@ void run_start_menu_hosting_tests() {
         ASSERT_TRUE(whole);
     } TEST_END();
 
-    TEST_CASE("M11.4 What the panels say: the single-player panel says what its seats mean in both states (nobody: the original's game, the other colours stand still; a bot: no fog of war, empty seats have no ants), a bot choice that is stored for the player's own seat is not a bot; the copy failure is one line that is not cut") {
+    TEST_CASE("M11.4 What the panels say: the single-player panel says what its seats mean in both states (nobody: the original's game, the other colors stand still; a bot: no fog of war, empty seats have no ants), a bot choice that is stored for the player's own seat is not a bot; the copy failure is one line that is not cut") {
         Rig r;
         r.to_panel(MenuId::Single);
-        ASSERT_TRUE(has_text(r.menu.elements(), "No bots: the original single-player game (the other colours stand still)."));
+        ASSERT_TRUE(has_text(r.menu.elements(), "No bots: the original single-player game (the other colors stand still)."));
         ASSERT_FALSE(has_text(r.menu.elements(), "Bots play without fog of war"));
         r.click(MenuId::Seat2);
         ASSERT_TRUE(has_text(r.menu.elements(), "Bots play without fog of war. Empty seats have no ants."));

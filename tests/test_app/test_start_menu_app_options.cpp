@@ -142,7 +142,7 @@ void run_start_menu_app_options_tests() {
             bool bottom_up{true};
             std::string bmp;
             uint32_t offset{0};
-            std::array<uint8_t, 3> at(int32_t x, int32_t y) const {                           // the colour at the image's (x, y), top down
+            std::array<uint8_t, 3> at(int32_t x, int32_t y) const {                           // the color at the image's (x, y), top down
                 const int32_t row = bottom_up ? height - 1 - y : y;
                 const size_t i = offset + (static_cast<size_t>(row) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 4;
                 return {static_cast<uint8_t>(bmp[i + 2]), static_cast<uint8_t>(bmp[i + 1]), static_cast<uint8_t>(bmp[i])};

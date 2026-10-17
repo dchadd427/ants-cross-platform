@@ -15,8 +15,8 @@ chd.py was not used. Throw-away Capstone / CHD helper scripts were used for the 
 | C4 | CONFIRMED | Adds: a play call first stops tracked sounds if the target's old anim had flag3. It copies only bits 3/4/5 (bit 2 'running' is kept). |
 | C5 | CONFIRMED | Ants have the running bit. The recursive start step finishes before the outer function adds the duration again. A same-list replay variant also exists (see C5). |
 | C6 | CONFIRMED, partly | Iteration details added. The call frequency of the display-list pass was not traced. |
-| C7 | CONFIRMED, with corrections | The formulas use the colour index +0xd4, not the team. The old-action switch has **early exits** that return before anything is stored. +8 is set, then cleared. The computed terrain uses the pixel tile. All compares are 16-bit. |
-| C8 | CORRECTED (minor) | The dir 5..7 entries ARE read: they are synthetic anim IDs (3135..3545 > 1343) passed to the mirror function and stored at template +0xc. Mirroring negates dx only, and the box is not mirrored. Per-colour copies are built by FUN_01018d48. |
+| C7 | CONFIRMED, with corrections | The formulas use the color index +0xd4, not the team. The old-action switch has **early exits** that return before anything is stored. +8 is set, then cleared. The computed terrain uses the pixel tile. All compares are 16-bit. |
+| C8 | CORRECTED (minor) | The dir 5..7 entries ARE read: they are synthetic anim IDs (3135..3545 > 1343) passed to the mirror function and stored at template +0xc. Mirroring negates dx only, and the box is not mirrored. Per-color copies are built by FUN_01018d48. |
 | C9 | CORRECTED (minor) | Speeds, frame counts and distances confirmed. "All six types identical" is false for **mud diagonals**: the 1/2 alternation phase differs by type (table below). |
 | C10 | CONFIRMED core, several omissions | The zero-component nudge is -1. The c4f2/+0x60/+0xfc block runs only on a new tile. Missed: pre-checks, action gating, the idle/no-path branch, an immediate arrive for action 0/3 with a path, a harvest early-finish, and auto-engage cancelling the snap. Arrive's bomb check reads +0x5a. |
 | C11 | CONFIRMED, with details added | The +0x60 return does **not** zero d. The +0xfc path also returns immediately. Child sprite handling added. |
@@ -162,7 +162,7 @@ Main loop 0x1031916: PeekMessageA(PM_NOREMOVE). If a message exists: GetMessageA
 0101ae9f type = FUN_0100f9cb(0)                         ; +0x54, or FUN_01021087(map+0x70) if 0
 0101aeb5 switch(action) table 0x101b4db
 ```
-Walk handler 0x101b032 (action 1), with `c = word +0xd4` (colour index copied from player+0x2c at ctor 0x101a7cd, **not** team) and `d = +0xe0`:
+Walk handler 0x101b032 (action 1), with `c = word +0xd4` (color index copied from player+0x2c at ctor 0x101a7cd, **not** team) and `d = +0xe0`:
 ```
 if (flag && type==5) {                                  ; word compares
    if (terrA!=2 && terrB==2) play(world[0x11b0 + d + 8*c])      ; dive (asdi); +0x88=1 ; EXIT (no restart test)
@@ -188,8 +188,8 @@ Mirroring 0x10188d4/0x10188e8 calls FUN_01018a7a(dest, src): `dest[5]=Mirror(des
 **Correction:** src[5..7] are read. They are IDs 3135..3545 (> 1343, so not CHD indices), stored into the new template's word +0xc (0x1018c04).
 Mirror FUN_01018b9f: new sprite (0x48 bytes), deep copy through 0x102c0db(new,1,0x1018ac1). Then per frame: **dx = -dx** (0x1018c54). dy, dur, event and box +0x12..+0x18 are unchanged (**the box is not mirrored**).
 Per part: `x = -x + (w[+0x14] - w[+0x18])`, and the image flag `[part+0x1c]+8 |= 1`. The part-union rect is recomputed.
-Colours: FUN_01018d48 loops the 4 players. For each colour index c != 0 it builds recoloured copies (FUN_010192fd(src,id,c)) of all 8 dirs into `+240*c` (walk/carry) and `+48*c` (idle).
-Swim, dive and climb (0x1004838/0x1004878/0x10048c0) go to world 0x1190/0x11b0/0x11d0 with colour stride 8.
+Colors: FUN_01018d48 loops the 4 players. For each color index c != 0 it builds recolored copies (FUN_010192fd(src,id,c)) of all 8 dirs into `+240*c` (walk/carry) and `+48*c` (idle).
+Swim, dive and climb (0x1004838/0x1004878/0x10048c0) go to world 0x1190/0x11b0/0x11d0 with color stride 8.
 
 Walk table 0x1002fb8 (dirs 0..4 | mirror IDs):
 ```
@@ -402,7 +402,7 @@ I found no claim that is wrong in substance. Three small refinements are listed 
 | T1 | Worked timeline | CONFIRMED (under stated assumptions) | Hand-simulated with the verified rules. It assumes grass on both tiles, path [A,B], c4f2 passes, no auto-engage, and start from idle. Move k at t2+50+50k; x=32 (col 1) on move 4, where there is no snap (|32-48|=16) and no restart (same terrain); snap on move 8 (nx=48) -> ARRIVE, idx 2>=2 -> ClearPath+ccaf at t2+450. |
 
 ## Corrections / refinements
-1. C8: the ID tables at 0x1002fb8 (walk) and 0x1003738 (carry) are really [4 colour][6 type][5 terrain][8 dir] ushort, which is 960 entries, not 240. The loader FUN_010175ad reads only the colour-0 block. FUN_01018d48 reads W[240*c + 40*type + 8*t + d] (0x1018e25 / 0x1018e4c, [ebp-0x24] = c*0xf0) as the ID for the recoloured copies of colours 1..3. Those blocks hold synthetic IDs for all 8 dirs, starting at 1352 (c1), 1934 (c2) and 2516 (c3). The same layout probably applies to 0x1002cb8/0x1002e38 (idle), with stride 48*c.
+1. C8: the ID tables at 0x1002fb8 (walk) and 0x1003738 (carry) are really [4 color][6 type][5 terrain][8 dir] ushort, which is 960 entries, not 240. The loader FUN_010175ad reads only the color-0 block. FUN_01018d48 reads W[240*c + 40*type + 8*t + d] (0x1018e25 / 0x1018e4c, [ebp-0x24] = c*0xf0) as the ID for the recolored copies of colors 1..3. Those blocks hold synthetic IDs for all 8 dirs, starting at 1352 (c1), 1934 (c2) and 2516 (c3). The same layout probably applies to 0x1002cb8/0x1002e38 (idle), with stride 48*c.
 2. C5 evidence: the xref list of vtbl+0x24 calls omits 0x102e870. That call is a DirectSound interface call, so the conclusion does not change.
 3. "Other things the claims missed", on path-start latency: this is not "about 100-150 ms" in a loose sense. When the path arrives by the path message (see Additional #3), the idle anim is restarted outside a callback just before the path is stored. The walk therefore starts exactly one idle first-frame duration later: 150 ms for types 0, 4 and 5 (agst/acst/asst), 100 ms for types 1, 2 and 3 (abst/afst/atst). The first pixel move comes 2x the walk dur0 after that. For a worker on grass that is 150+100 = 250 ms from order handling to the first pixel.
 

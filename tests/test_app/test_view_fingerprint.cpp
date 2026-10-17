@@ -3,11 +3,11 @@
 // can prove that the classic picture stays exactly what it is. M0 itself changes no production code and no other test.
 //
 // WHAT IS FINGERPRINTED
-//   1. Draw calls (names "hud.*", "screen.*"): HUD::render for 97 scenes (every local colour, the start dialog, selections of every ant type, the hill, the chat with
+//   1. Draw calls (names "hud.*", "screen.*"): HUD::render for 97 scenes (every local color, the start dialog, selections of every ant type, the hill, the chat with
 //      entries and typing, the minimap with all four teams, at every corner of the map and on maps of other sizes, fog of war, allied / dropped / absent score boxes,
 //      a crowd, the quit / options / quick-help / alliance dialogs, hovered and pressed buttons, the rubber band) and the setup, network room, guest and results
 //      screens. A recording IRenderer takes EVERY mutating call with ALL its parameters in final screen coordinates (sprite ids, named sprites, rectangles,
-//      frames, fills, texts with position, size and colour, the HUD team, clips, the image bytes of the minimap); the fingerprint is FNV-1a 64 over a canonical
+//      frames, fills, texts with position, size and color, the HUD team, clips, the image bytes of the minimap); the fingerprint is FNV-1a 64 over a canonical
 //      little-endian serialisation (no pointers, no padding, no floats, no locale) plus the number of calls.
 //   2. The pointer (names "ptr.*", "view.camera.*"): for EVERY pixel of the 640 x 480 screen the step of the edge scroll (the 60 x 60 map at the default rate from a
 //      camera away from the borders and at each of the eight borders and corners; other rates and map sizes; a ring outside the screen), the cursor that
@@ -16,7 +16,7 @@
 //      conversions, what a press and a release do (which control reacts, what is selected, which command is issued, what is heard; every zone found to the exact pixel) in 17 HUD states
 //      and on the dialogs, the setup and results screens, and the application's own pointer gate.
 //   3. Pixels (names "px.*"): what the real software renderer puts on the 640 x 480 canvas: Renderer::render_world at the corners and edges of two maps and at
-//      the middle of the others (ants of every type, colour and facing, effects, score bubbles, fog, selection markers, hit point digits, a crowd, all straddling the
+//      the middle of the others (ants of every type, color and facing, effects, score bubbles, fog, selection markers, hit point digits, a crowd, all straddling the
 //      borders of the playfield), the single-frame cursors at every edge of the screen, and whole frames of an Application (the loading screen, the setup screen, the
 //      quick help, the match screen at the corners of the map). TrueType text is never part of a pixel hash (its pixels depend on the machine's font library): the
 //      boxes where the classic picture has text and the frame-rate plate are masked, with fixed rectangles. The numbers are the same on every machine (checked on
@@ -35,7 +35,7 @@
 //      maps, and whole Application frames: the setup screen, the quick help and the results, each composed for the whole canvas (their wide pages: the quick help and the results were centred pages of the original until then), the match screen and its windows).
 //
 // WHAT IS NOT COVERED (the blind spots; the places that hard-code 640 / 480 / 442 / 440 / the margins with a covered / not covered note)
-//   - the glyph pixels of TrueType text (the CALLS that draw it are fingerprinted: string, place, size, colour; the text boxes are masked in the pixel hashes);
+//   - the glyph pixels of TrueType text (the CALLS that draw it are fingerprinted: string, place, size, color; the text boxes are masked in the pixel hashes);
 //   - the frame-rate counter, its sparkline and the version text (Application::render_frame: their width depends on the font and the version changes every release);
 //   - the network overlay (Application::render_net_overlay: it needs a network match and sockets);
 //   - the four animated cursors (Move, Target, Attack, Food: Renderer::render_software_cursor follows the wall clock);
@@ -384,7 +384,7 @@ const Golden kGoldens[] = {
     {"screen.menu.main.second_selected", 0x7ec2b1c259beacce, 146},
     {"screen.menu.main.quit_selected", 0x647ac943406089ce, 146},
     {"screen.menu.main.notice", 0xe9d5e1ba26ad5f25, 156},
-    {"screen.menu.single.empty", 0x227af479f1885934, 218},                // the three Single panel goldens: regenerated for the name field (+ the Teams row of two_bots)
+    {"screen.menu.single.empty", 0x41cc425d3cb792cf, 218},                // the three Single panel goldens: regenerated for the name field (+ the Teams row of two_bots)
     {"screen.menu.single.two_bots", 0xc7548f9283cdd916, 242},
     {"screen.menu.single.own_seat_2", 0xb2edf0250758b271, 218},
     {"screen.menu.join.empty", 0xa3719b0cf65673ec, 148},

@@ -128,7 +128,7 @@ inline Pic compose_from_spans(const assets::AssetArchive& arc, const ScreenLayou
 // 4. The real renderer draws the spans exactly
 // =====================================================================================================================================================
 
-/// What the renderer shows of a palette index of a piece: the HUD's colour of the local team 0 (TextureCache::compose_palette is the renderer's own rule)
+/// What the renderer shows of a palette index of a piece: the HUD's color of the local team 0 (TextureCache::compose_palette is the renderer's own rule)
 inline std::array<uint8_t, 4> rgb_of(const assets::AssetArchive& arc, const std::string& sprite_name, int16_t index) {
     const auto palette = TextureCache::compose_palette(arc.get_palette(), sprite_name, 0);
     const assets::ColorRGBA c = palette[static_cast<size_t>(index)];
@@ -179,7 +179,7 @@ public:
         std::string name;                     // the sprite's name, the text
         int32_t x{0}, y{0}, w{0}, h{0};       // as given
         int32_t sx{0}, sy{0}, sw{0}, sh{0};   // Region
-        assets::ColorRGBA colour{};
+        assets::ColorRGBA color{};
         int32_t ox{0}, oy{0};                 // the origin that was set
         FontSize size{FontSize::Px12};
     };
@@ -211,12 +211,12 @@ public:
     }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA c) override {
         Ev e = base(Kind::Fill);
-        e.x = x; e.y = y; e.w = w; e.h = h; e.colour = c;
+        e.x = x; e.y = y; e.w = w; e.h = h; e.color = c;
         events.push_back(e);
     }
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA c) override {
         Ev e = base(Kind::Rect);
-        e.x = x; e.y = y; e.w = w; e.h = h; e.colour = c;
+        e.x = x; e.y = y; e.w = w; e.h = h; e.color = c;
         events.push_back(e);
     }
     void draw_text(const std::string& s, int32_t x, int32_t y, assets::ColorRGBA c) override { text(s, x, y, c, FontSize::Px12); }
@@ -278,7 +278,7 @@ private:
         e.name = s;
         e.x = x;
         e.y = y;
-        e.colour = c;
+        e.color = c;
         e.size = size;
         events.push_back(e);
     }

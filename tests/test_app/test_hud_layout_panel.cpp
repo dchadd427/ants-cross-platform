@@ -74,7 +74,7 @@ void test_score_digits(const assets::AssetArchive& arc) {
             check(rr.has_sprite_at(name + ".bmp", x, 6 + o.dy),
                   "score " + std::to_string(score) + " digit " + std::string(1, s[i]) + " at x=" + std::to_string(x));
         }
-        // the box is filled with the team colour first
+        // the box is filled with the team color first
         bool filled = false;
         for (const auto& f : rr.fills) if (f.x == 402 && f.y == 4 && f.w == 54 && f.h == 14) filled = true;
         check(filled, "local score box filled");
@@ -82,10 +82,10 @@ void test_score_digits(const assets::AssetArchive& arc) {
 }
 
 // The score boxes (Ants.exe FUN_0100dbe2 0x100e1f0 - 0x100e222 for the slots, FUN_01021e36 for the boxes; docs 5.53): the slot follows the team index, absent and dropped teams
-// are covered with scorcovr, an allied team's box is half its colour and half its ally's with the two scores added
+// are covered with scorcovr, an allied team's box is half its color and half its ally's with the two scores added
 void test_score_boxes(const assets::AssetArchive& arc) {
     std::printf("[hud] score boxes: slots by team index, scorcovr for absent and dropped teams, allied boxes split with the summed score\n");
-    const assets::ColorRGBA colour[4] = {{7, 67, 47, 255}, {119, 0, 0, 255}, {43, 39, 107, 255}, {39, 39, 59, 255}};
+    const assets::ColorRGBA color[4] = {{7, 67, 47, 255}, {119, 0, 0, 255}, {43, 39, 107, 255}, {39, 39, 59, 255}};
     auto fill_at = [](const RecordingRenderer& rr, int32_t x, int32_t y, int32_t w, const assets::ColorRGBA& c) {
         for (const auto& f : rr.fills) {
             if (f.x == x && f.y == y && f.w == w && f.h == 14 && f.color.r == c.r && f.color.g == c.g && f.color.b == c.b) return true;
@@ -120,10 +120,10 @@ void test_score_boxes(const assets::AssetArchive& arc) {
         hud.init(0);
         RecordingRenderer rr(arc);
         render(hud, world, rr);
-        check(fill_at(rr, 402, 4, 54, colour[0]) && digits_at(rr, 401, 6, 10), "local team 0: its box in the top bar with its score");
-        check(fill_at(rr, 105, 464, 54, colour[1]) && digits_at(rr, 104, 466, 20), "team 1: bottom slot 0");
-        check(fill_at(rr, 254, 464, 54, colour[2]) && digits_at(rr, 253, 466, 30), "team 2: bottom slot 1");
-        check(fill_at(rr, 402, 464, 54, colour[3]) && digits_at(rr, 401, 466, 40), "team 3: bottom slot 2");
+        check(fill_at(rr, 402, 4, 54, color[0]) && digits_at(rr, 401, 6, 10), "local team 0: its box in the top bar with its score");
+        check(fill_at(rr, 105, 464, 54, color[1]) && digits_at(rr, 104, 466, 20), "team 1: bottom slot 0");
+        check(fill_at(rr, 254, 464, 54, color[2]) && digits_at(rr, 253, 466, 30), "team 2: bottom slot 1");
+        check(fill_at(rr, 402, 464, 54, color[3]) && digits_at(rr, 401, 466, 40), "team 3: bottom slot 2");
         check(rr.named("scorcovr.bmp").empty(), "nothing is covered");
     }
     // the local team is 1: the others keep index order (0, 2, 3 in slots 0, 1, 2)
@@ -135,7 +135,7 @@ void test_score_boxes(const assets::AssetArchive& arc) {
         hud.init(1);
         RecordingRenderer rr(arc);
         render(hud, world, rr);
-        check(fill_at(rr, 402, 4, 54, colour[1]) && fill_at(rr, 105, 464, 54, colour[0]) && fill_at(rr, 254, 464, 54, colour[2]) && fill_at(rr, 402, 464, 54, colour[3]),
+        check(fill_at(rr, 402, 4, 54, color[1]) && fill_at(rr, 105, 464, 54, color[0]) && fill_at(rr, 254, 464, 54, color[2]) && fill_at(rr, 402, 464, 54, color[3]),
               "local team 1: team 0, 2 and 3 in the bottom slots 0, 1, 2");
     }
     // teams 0 and 2 play: team 1's slot (slot 0) and team 3's (slot 2) are covered, team 2 keeps slot 1 (the slots do not close up)
@@ -149,9 +149,9 @@ void test_score_boxes(const assets::AssetArchive& arc) {
         RecordingRenderer rr(arc);
         render(hud, world, rr);
         check(rr.has_sprite_at("scorcovr.bmp", 103, 463), "team 1 is absent: its box (105, 464) is covered at (103, 463) by scorcovr");
-        check(fill_at(rr, 254, 464, 54, colour[2]) && digits_at(rr, 253, 466, 30), "team 2 is in slot 1 (254, 464), not in the first slot");
+        check(fill_at(rr, 254, 464, 54, color[2]) && digits_at(rr, 253, 466, 30), "team 2 is in slot 1 (254, 464), not in the first slot");
         check(rr.has_sprite_at("scorcovr.bmp", 400, 463), "team 3 is absent: its box (402, 464) is covered at (400, 463)");
-        check(!fill_at(rr, 105, 464, 54, colour[2]) && !fill_at(rr, 105, 464, 54, colour[1]), "nothing is filled in the covered slots");
+        check(!fill_at(rr, 105, 464, 54, color[2]) && !fill_at(rr, 105, 464, 54, color[1]), "nothing is filled in the covered slots");
         check(!has_text(rr, "Red:") && !has_text(rr, "Black:") && has_text(rr, "Blue:"), "only the teams that exist have a label");
         const auto cover = arc.find_sprite("scorcovr.bmp");
         check(cover != nullptr && cover->width == 58 && cover->height == 17, "scorcovr is 58 x 17");
@@ -166,11 +166,11 @@ void test_score_boxes(const assets::AssetArchive& arc) {
         hud.init(0);
         RecordingRenderer rr(arc);
         render(hud, world, rr);
-        check(rr.has_sprite_at("scorcovr.bmp", 103, 463) && !fill_at(rr, 105, 464, 54, colour[1]), "team 1 has dropped out: its box is covered, its score is gone");
+        check(rr.has_sprite_at("scorcovr.bmp", 103, 463) && !fill_at(rr, 105, 464, 54, color[1]), "team 1 has dropped out: its box is covered, its score is gone");
         check(has_text(rr, "Red:"), "its label stays");
-        check(fill_at(rr, 254, 464, 54, colour[2]), "the others keep their slots");
+        check(fill_at(rr, 254, 464, 54, color[2]), "the others keep their slots");
     }
-    // teams 0 and 1 are allied: each box is half its colour and half its ally's (the right half from left + 26) and shows the two scores added. The engine's
+    // teams 0 and 1 are allied: each box is half its color and half its ally's (the right half from left + 26) and shows the two scores added. The engine's
     // player_scores are the sums already (display scores): the box draws its team's entry once. (An earlier box added the ally's entry again: 1500.)
     {
         sim::WorldState world;
@@ -180,11 +180,11 @@ void test_score_boxes(const assets::AssetArchive& arc) {
         hud.init(0);
         RecordingRenderer rr(arc);
         render(hud, world, rr);
-        check(fill_at(rr, 402, 4, 54, colour[0]) && fill_at(rr, 428, 4, 28, colour[1]), "the local box: green, and red from x = 428");
+        check(fill_at(rr, 402, 4, 54, color[0]) && fill_at(rr, 428, 4, 28, color[1]), "the local box: green, and red from x = 428");
         check(digits_at(rr, 401, 6, 750), "it shows 300 + 450");
-        check(fill_at(rr, 105, 464, 54, colour[1]) && fill_at(rr, 131, 464, 28, colour[0]), "the ally's box: red, and green from x = 131");
+        check(fill_at(rr, 105, 464, 54, color[1]) && fill_at(rr, 131, 464, 28, color[0]), "the ally's box: red, and green from x = 131");
         check(digits_at(rr, 104, 466, 750), "it shows the same sum");
-        check(!fill_at(rr, 254, 464, 28, colour[0]) && !fill_at(rr, 254 + 26, 464, 28, colour[0]), "a team without an ally has a single colour");
+        check(!fill_at(rr, 254, 464, 28, color[0]) && !fill_at(rr, 254 + 26, 464, 28, color[0]), "a team without an ally has a single color");
         check(!digits_at(rr, 401, 6, 1500) && !digits_at(rr, 104, 466, 1500), "the sum is not added twice");
     }
     // the same with the real engine: two allied teams with 300 and 450 points, the boxes show 750, and a team that plays alone shows its own score
@@ -499,7 +499,7 @@ void test_pedestal_timeline(const assets::AssetArchive& arc) {
     }
 }
 
-// Minimap (Ants.exe FUN_01009596): a 119x91 image at (480,35) with the class speckle colours, the object table and the fog table.
+// Minimap (Ants.exe FUN_01009596): a 119x91 image at (480,35) with the class speckle colors, the object table and the fog table.
 // The dots of the ants and plants (FUN_01009988) and the view frame are drawn over it as rectangles (test_minimap_dots).
 void test_minimap(const assets::AssetArchive& arc) {
     std::printf("[hud] minimap image\n");
@@ -520,7 +520,7 @@ void test_minimap(const assets::AssetArchive& arc) {
         else if (x >= 20 && x < 30) { c.surface_type = sim::SurfaceType::Mud; c.is_mud = true; }
         else if (x >= 40 && x < 50) { c.surface_type = sim::SurfaceType::Gravel; }
     }
-    // an anthill tile of the black colony (animation 245, colour 239), the original's bomb id 129 at (15,40), the remake's own planted bomb (id 100 + team) at (16,40), a
+    // an anthill tile of the black colony (animation 245, color 239), the original's bomb id 129 at (15,40), the remake's own planted bomb (id 100 + team) at (16,40), a
     // rock (animation 293) at (12,20)
     world.cells[30 * 60 + 15].interactive_id = 245;
     world.cells[40 * 60 + 15].interactive_id = 129;
@@ -549,23 +549,23 @@ void test_minimap(const assets::AssetArchive& arc) {
         for (int x = 42; x < 58; ++x) if (!in_set(pixel(im, x, y), {77})) mud_ok = false;           // cells 21..29
         for (int x = 82; x < 98; ++x) if (!in_set(pixel(im, x, y), {231, 232, 233})) dirt_ok = false; // cells 41..49
     }
-    check(water_ok, "water cells use class colour 37");
-    check(gravel_ok, "gravel cells use the class-0 speckle colours 251/201/249");
-    check(mud_ok, "mud cells use class colour 77");
-    check(dirt_ok, "dirt cells use the class-4 speckle colours 231/232/233");
+    check(water_ok, "water cells use class color 37");
+    check(gravel_ok, "gravel cells use the class-0 speckle colors 251/201/249");
+    check(mud_ok, "mud cells use class color 77");
+    check(dirt_ok, "dirt cells use the class-4 speckle colors 231/232/233");
 
-    // the painter gives every pixel of a cell the colour of the object in it: the hill (pixel (30,46) is cell (15,30)) and the rock of tile (12,20) (pixels 24 .. 25 x 31)
-    check(pixel(im, 30, 46) == rgb_of(239), "hill drawn with colour 239 at its cell");
-    check(pixel(im, 24, 31) == rgb_of(51) && pixel(im, 25, 31) == rgb_of(51), "a rock (animation 293) shows colour 51 on its cell");
+    // the painter gives every pixel of a cell the color of the object in it: the hill (pixel (30,46) is cell (15,30)) and the rock of tile (12,20) (pixels 24 .. 25 x 31)
+    check(pixel(im, 30, 46) == rgb_of(239), "hill drawn with color 239 at its cell");
+    check(pixel(im, 24, 31) == rgb_of(51) && pixel(im, 25, 31) == rgb_of(51), "a rock (animation 293) shows color 51 on its cell");
     // a bomb shows the terrain: the original's ids 129 .. 132 and the remake's own (100 .. 103) alike (pixels (30,61) and (32,61) are cells (15,40) and (16,40))
     check(in_set(pixel(im, 30, 61), {251, 201, 249}), "the bomb of id 129 is not drawn on the minimap");
     check(in_set(pixel(im, 32, 61), {251, 201, 249}), "a bomb planted by the remake is not drawn on the minimap");
     // no dot per object cell any more: the hill's cell next to it (16,30) shows the terrain
     check(in_set(pixel(im, 32, 46), {251, 201, 249}), "no dot around an object: the next cell shows the terrain");
 
-    // a tile id that the table has no record for has colour 0 (the table is cleared first); the placeholder of a bomb that is being planted (0xa0) is one
+    // a tile id that the table has no record for has color 0 (the table is cleared first); the placeholder of a bomb that is being planted (0xa0) is one
     world.cells[5 * 60 + 40].interactive_id = sim::TILE_RESERVED;
-    // a fire wall (134, colour 250) and a power-up dropped by the remake (0x8000 | type 4, the pu_comb tile 62, colour 171)
+    // a fire wall (134, color 250) and a power-up dropped by the remake (0x8000 | type 4, the pu_comb tile 62, color 171)
     world.cells[5 * 60 + 45].interactive_id = sim::TILE_FIREWALL;
     world.cells[5 * 60 + 47].interactive_id = static_cast<uint16_t>(0x8000u | 4u);
     world.cells[5 * 60 + 47].is_powerup = true;
@@ -573,50 +573,50 @@ void test_minimap(const assets::AssetArchive& arc) {
     RecordingRenderer ro(arc);
     hud.render(ro, arc, world, camera);
     const auto& oim = ro.images[0];
-    check(pixel(oim, 80, 8) == rgb_of(0), "a tile id without a record in the colour table shows palette colour 0");
-    check(pixel(oim, 90, 8) == rgb_of(250), "a fire wall shows colour 250");
-    check(pixel(oim, 94, 8) == rgb_of(171), "a dropped power-up shows the colour of its tile (171)");
+    check(pixel(oim, 80, 8) == rgb_of(0), "a tile id without a record in the color table shows palette color 0");
+    check(pixel(oim, 90, 8) == rgb_of(250), "a fire wall shows color 250");
+    check(pixel(oim, 94, 8) == rgb_of(171), "a dropped power-up shows the color of its tile (171)");
 
-    // Fog: unexplored cells use the fog colours by class
+    // Fog: unexplored cells use the fog colors by class
     world.fog_of_war_enabled = true;
     world.fog_revealed.assign(3600, 0);
     for (uint32_t y = 0; y < 60; ++y) for (uint32_t x = 20; x < 30; ++x) world.fog_revealed[y * 60 + x] = 1;   // reveal the mud band
     RecordingRenderer rf(arc);
     hud.render(rf, arc, world, camera);
     const auto& fim = rf.images[0];
-    check(pixel(fim, 5, 20) == rgb_of(225), "unexplored water shows fog colour 225");
-    check(pixel(fim, 30, 20) == rgb_of(244), "unexplored gravel shows fog colour 244");
-    check(pixel(fim, 50, 20) == rgb_of(77), "explored mud keeps its colour");
-    check(pixel(fim, 90, 20) == rgb_of(236), "unexplored dirt (class 4) shows fog colour 236");
-    // in the fog only what gets removed or given out falls back to the terrain (power-ups, food, fire walls); every other object keeps its colour, the hills of the enemy too
-    check(pixel(fim, 30, 46) == rgb_of(239), "a hill keeps its colour in the fog");
-    check(pixel(fim, 24, 31) == rgb_of(51), "a rock keeps its colour in the fog");
-    check(pixel(fim, 80, 8) == rgb_of(0), "an unlisted tile id shows colour 0 in the fog as well");
-    check(pixel(fim, 90, 8) == rgb_of(236), "an unexplored fire wall shows the fog colour (of its class, dirt: 236)");
-    check(pixel(fim, 94, 8) == rgb_of(236), "an unexplored power-up shows the fog colour");
-    // food (animation 253, colour 171) in the fog: hidden while its cell is unexplored, shown once it is explored
+    check(pixel(fim, 5, 20) == rgb_of(225), "unexplored water shows fog color 225");
+    check(pixel(fim, 30, 20) == rgb_of(244), "unexplored gravel shows fog color 244");
+    check(pixel(fim, 50, 20) == rgb_of(77), "explored mud keeps its color");
+    check(pixel(fim, 90, 20) == rgb_of(236), "unexplored dirt (class 4) shows fog color 236");
+    // in the fog only what gets removed or given out falls back to the terrain (power-ups, food, fire walls); every other object keeps its color, the hills of the enemy too
+    check(pixel(fim, 30, 46) == rgb_of(239), "a hill keeps its color in the fog");
+    check(pixel(fim, 24, 31) == rgb_of(51), "a rock keeps its color in the fog");
+    check(pixel(fim, 80, 8) == rgb_of(0), "an unlisted tile id shows color 0 in the fog as well");
+    check(pixel(fim, 90, 8) == rgb_of(236), "an unexplored fire wall shows the fog color (of its class, dirt: 236)");
+    check(pixel(fim, 94, 8) == rgb_of(236), "an unexplored power-up shows the fog color");
+    // food (animation 253, color 171) in the fog: hidden while its cell is unexplored, shown once it is explored
     world.cells[15 * 60 + 15].interactive_id = 253;
     world.cells[15 * 60 + 25].interactive_id = 253;                       // in the revealed mud band
     RecordingRenderer rfood(arc);
     hud.render(rfood, arc, world, camera);
     const auto& food = rfood.images[0];
-    check(pixel(food, 30, 23) == rgb_of(244), "unexplored food shows the fog colour (pixel (30,23) is cell (15,15))");
-    check(pixel(food, 50, 23) == rgb_of(171), "explored food shows its colour 171");
-    // a bridge is an object like the rock: it keeps its colour (77) in the fog
+    check(pixel(food, 30, 23) == rgb_of(244), "unexplored food shows the fog color (pixel (30,23) is cell (15,15))");
+    check(pixel(food, 50, 23) == rgb_of(171), "explored food shows its color 171");
+    // a bridge is an object like the rock: it keeps its color (77) in the fog
     world.cells[15 * 60 + 35].interactive_id = sim::TILE_BRIDGE2;
     RecordingRenderer rbridge(arc);
     hud.render(rbridge, arc, world, camera);
-    check(pixel(rbridge.images[0], 70, 23) == rgb_of(77), "a bridge shows colour 77 in the fog");
+    check(pixel(rbridge.images[0], 70, 23) == rgb_of(77), "a bridge shows color 77 in the fog");
 }
 
 // The dots and the frame (FUN_01009988, FUN_01009899, 0x1009ae2 - 0x1009b6f): drawn over the image in screen coordinates, in list order (plants, then ants).
 void test_minimap_dots(const assets::AssetArchive& arc) {
     std::printf("[hud] minimap dots, plants and the view frame\n");
     const auto& pal = arc.get_palette();
-    auto colour_of = [&](int idx) { return assets::ColorRGBA{ pal[static_cast<size_t>(idx)].r, pal[static_cast<size_t>(idx)].g, pal[static_cast<size_t>(idx)].b, 255 }; };
+    auto color_of = [&](int idx) { return assets::ColorRGBA{ pal[static_cast<size_t>(idx)].r, pal[static_cast<size_t>(idx)].g, pal[static_cast<size_t>(idx)].b, 255 }; };
     auto same = [](const assets::ColorRGBA& a, const assets::ColorRGBA& b) { return a.r == b.r && a.g == b.g && a.b == b.b; };
     auto find_fill = [&](const RecordingRenderer& rr, int x, int y, int w, int h, int palette_index) {
-        for (const auto& f : rr.fills) if (f.x == x && f.y == y && f.w == w && f.h == h && same(f.color, colour_of(palette_index))) return true;
+        for (const auto& f : rr.fills) if (f.x == x && f.y == y && f.w == w && f.h == h && same(f.color, color_of(palette_index))) return true;
         return false;
     };
     auto world_of = [](uint32_t w, uint32_t h) {
@@ -642,8 +642,8 @@ void test_minimap_dots(const assets::AssetArchive& arc) {
         HUD hud;
         hud.init(0);
         hud.render(rr, arc, world, camera);
-        check(find_fill(rr, 540, 57, 2, 2, 47), "a green ant is a 2x2 dot of colour 47 at its pixel position");
-        check(find_fill(rr, 540, 57, 2, 2, 239), "the black ant's dot (colour 239) is drawn at the same place, over the green one");
+        check(find_fill(rr, 540, 57, 2, 2, 47), "a green ant is a 2x2 dot of color 47 at its pixel position");
+        check(find_fill(rr, 540, 57, 2, 2, 239), "the black ant's dot (color 239) is drawn at the same place, over the green one");
         // the dots come after the image and before the frame
         check(rr.images.size() == 1 && rr.rects.size() == 1, "one image, one frame");
     }
@@ -661,8 +661,8 @@ void test_minimap_dots(const assets::AssetArchive& arc) {
         hud.init(0);
         hud.render(rr, arc, world, camera);
         // (640, 640) -> image (39, 30); (800, 640) -> (49, 30)
-        check(find_fill(rr, 480 + 38, 35 + 29, 2, 2, 158), "an ant without hit points keeps its dot (red, colour 158)");
-        check(find_fill(rr, 480 + 48, 35 + 29, 2, 2, 211), "a drowning ant keeps its dot (blue, colour 211)");
+        check(find_fill(rr, 480 + 38, 35 + 29, 2, 2, 158), "an ant without hit points keeps its dot (red, color 158)");
+        check(find_fill(rr, 480 + 48, 35 + 29, 2, 2, 211), "a drowning ant keeps its dot (blue, color 211)");
     }
     // The size grows with the scale: on a 31 x 31 map 32 px are trunc(119 / 31) = 3 wide and trunc(91 / 31) = 2 high; the top edge is taken from half of the WIDTH
     // (y - 1, where half of the height would also give y - 1). Ant at the tile centre (15, 15) = (496, 496): image (496 * 119 / 992, 496 * 91 / 992) = (59, 45)
@@ -686,7 +686,7 @@ void test_minimap_dots(const assets::AssetArchive& arc) {
         check(find_fill(rr, 480 + 59 - 3, 35 + 45 - 3, 7, 6, 47), "on a 16x16 map the top edge is taken from half the width: a 7x6 rectangle (y - 3 .. y + 3)");
     }
 
-    // Plants (Block 1 flowers and clovers, 0x100e3b0): a dot of the colour and size flag of the tile's record (flower1 421: colour 51, two cells) at the centre of the cell,
+    // Plants (Block 1 flowers and clovers, 0x100e3b0): a dot of the color and size flag of the tile's record (flower1 421: color 51, two cells) at the centre of the cell,
     // 3 x 3 on a 60 x 60 map. Plant (20, 10): centre (656, 336) -> image (40, 15) -> left 39, top 14. Drawn before the ants, in the fog as well. A plant whose tile has no
     // record, or a size flag of 0, has no dot.
     {
@@ -699,7 +699,7 @@ void test_minimap_dots(const assets::AssetArchive& arc) {
         HUD hud;
         hud.init(0);
         hud.render(rr, arc, world, camera);
-        check(find_fill(rr, 480 + 39, 35 + 14, 3, 3, 51), "a flower plant is a 3x3 dot of colour 51 at the centre of its cell, even in the fog");
+        check(find_fill(rr, 480 + 39, 35 + 14, 3, 3, 51), "a flower plant is a 3x3 dot of color 51 at the centre of its cell, even in the fog");
         int plant_dots = 0;
         for (const auto& f : rr.fills) if (f.w == 3 && f.h == 3 && f.x >= 480 && f.x < 599 && f.y >= 35 && f.y < 126) ++plant_dots;
         check(plant_dots == 1, "only the plant with a record has a dot");
@@ -745,7 +745,7 @@ void test_minimap_dots(const assets::AssetArchive& arc) {
             ViewportCamera cam;
             cam.x = cx; cam.y = cy;
             hud.render(rr, arc, world, cam);
-            struct R { int x, y, w, h; bool colour; size_t count; } r{0, 0, 0, 0, false, rr.rects.size()};
+            struct R { int x, y, w, h; bool color; size_t count; } r{0, 0, 0, 0, false, rr.rects.size()};
             if (!rr.rects.empty()) {
                 const auto& f = rr.rects[0];
                 r = {f.x, f.y, f.w, f.h, f.color.r == 251 && f.color.g == 251 && f.color.b == 255, rr.rects.size()};
@@ -753,7 +753,7 @@ void test_minimap_dots(const assets::AssetArchive& arc) {
             return r;
         };
         auto f0 = frame_of(0.0f, 0.0f);
-        check(f0.count == 1 && f0.x == 480 && f0.y == 35 && f0.w == 28 && f0.h == 21 && f0.colour, "frame at the origin: (480, 35) 28x21 in (251, 251, 255)");
+        check(f0.count == 1 && f0.x == 480 && f0.y == 35 && f0.w == 28 && f0.h == 21 && f0.color, "frame at the origin: (480, 35) 28x21 in (251, 251, 255)");
         auto mid = frame_of(960.0f, 960.0f);                                // (960 * 119 / 1920, 960 * 91 / 1920) = (59, 45)
         check(mid.x == 480 + 59 && mid.y == 35 + 45 && mid.w == 28 && mid.h == 21, "the frame follows the view's origin, truncated");
         auto some = frame_of(1400.0f, 100.0f);                              // x: 1400 * 119 / 1920 = 86 -> right edge 480 + 86 + 28 = 594 < 599: not moved

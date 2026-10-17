@@ -1,7 +1,7 @@
 #pragma once
 
 // The countdown card of a match of a room with two or more people (protocol 21, docs/MATCH_COUNTDOWN.md, docs/VIEW_AND_HUD.md "The countdown"): the "Get ready to play!" dialog of every match,
-// made bigger while the host holds the first turn for 30 s: the count in a big black box, the four colours with who plays them, a line that says the chat is open, and the place of the Fullscreen
+// made bigger while the host holds the first turn for 30 s: the count in a big black box, the four colors with who plays them, a line that says the chat is open, and the place of the Fullscreen
 // button. It lies in the middle of the map view (the picture the owner approved: clay orange, the thin green frame, the black boxes of the setup screens), in the picture's own pixels, whatever the
 // picture's shape; the chat box, the input line and the Send buttons are the HUD's own and stay where they are.
 
@@ -23,7 +23,7 @@ struct CountdownCardLayout {
     LayoutRect count_box;                              // the black box with the count (96 px digits) and its caption
     int32_t digits_y{0};
     int32_t caption_y{0};
-    std::array<LayoutRect, 4> seat;                    // the colours in the order of the seats (green, red, blue, black): two rows of two
+    std::array<LayoutRect, 4> seat;                    // the colors in the order of the seats (green, red, blue, black): two rows of two
     int32_t hint_y{0};
     LayoutRect button;                                 // the Fullscreen button (the page's own on the web: it is laid over this place; a drawn one in the native game)
 };
@@ -47,9 +47,9 @@ constexpr CountdownCardLayout countdown_card_layout(const LayoutRect& view) noex
     return l;
 }
 
-/// What the card shows of one colour
+/// What the card shows of one color
 struct CountdownSeat {
-    bool plays{false};                                 // the colour is in the match
+    bool plays{false};                                 // the color is in the match
     bool computer{false};                              // a computer player (its name says so: "Pip (bot, Hard)")
     std::string name;
 };

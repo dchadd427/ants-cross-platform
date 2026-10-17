@@ -8,8 +8,8 @@ namespace ants::app {
 
 namespace {
 
-// The text of the edit fields: colour 0xdfe7ef (a COLORREF: R 239, G 231, B 223), 12 px letters (the label default FUN_0102ad16: nothing sets another height)
-const assets::ColorRGBA kEditColour{239, 231, 223, 255};
+// The text of the edit fields: color 0xdfe7ef (a COLORREF: R 239, G 231, B 223), 12 px letters (the label default FUN_0102ad16: nothing sets another height)
+const assets::ColorRGBA kEditColor{239, 231, 223, 255};
 constexpr FontSize kEditFont = FontSize::Px12;
 
 // The pictures of a latching button: up, hover, down, down + hover (the animations 9 - 0xc of the constructor's argument lists, by name)
@@ -195,7 +195,7 @@ void OptionsScreen::on_text(const std::string& text) {
 }
 
 void OptionsScreen::draw_edit(IRenderer& renderer, const ScreenEdit& edit, uint32_t now_ms) const {
-    draw_edit_line(renderer, edit.text(), edit.x(), edit.y(), edit.w(), edit.tail_aligned(), edit.caret_visible(now_ms), kEditColour, kEditFont);
+    draw_edit_line(renderer, edit.text(), edit.x(), edit.y(), edit.w(), edit.tail_aligned(), edit.caret_visible(now_ms), kEditColor, kEditFont);
 }
 
 void OptionsScreen::render(IRenderer& renderer, const assets::AssetArchive& assets, uint32_t now_ms) {

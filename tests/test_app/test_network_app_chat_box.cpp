@@ -101,7 +101,7 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(app.room_chat_box() == &SL::of(SetupVariant::Online).chat);
         ASSERT_TRUE(app.map_select().chat_panel().visible);                                     // (the box is drawn from the first frame of the room: its frame and label)
         ASSERT_TRUE(app.map_select().chat_panel().lines.empty() && app.map_select().chat_panel().typed.empty() && !app.map_select().chat_panel().caret);
-        d.hall.step(5000);                                                                      // (the first five seconds of company say how to change a colour: the START prompt is back after them)
+        d.hall.step(5000);                                                                      // (the first five seconds of company say how to change a color: the START prompt is back after them)
         const std::string prompt = app.map_select().room().status;
         ASSERT_EQ(prompt, std::string(sim::strings::text(sim::strings::kPressStart)));
         // Bob speaks: the line is in the box with his name; the status line is not changed by it
@@ -632,8 +632,8 @@ void run_room_chat_box_tests() {
         e.key.keysym.sym = sym;
         return queue(e);
     };
-    // the picture of a rectangle of the canvas: the number of distinct colours in it (a picture of a map has many, the "No preview" box a handful)
-    const auto region_colours = [](Application& app, const LayoutRect& r) {
+    // the picture of a rectangle of the canvas: the number of distinct colors in it (a picture of a map has many, the "No preview" box a handful)
+    const auto region_colors = [](Application& app, const LayoutRect& r) {
         SDL_Rect rect{r.x, r.y, r.w, r.h};
         std::vector<uint8_t> px(static_cast<size_t>(r.w) * static_cast<size_t>(r.h) * 4u, 0);
         if (SDL_RenderReadPixels(app.renderer().get_sdl_renderer(), &rect, SDL_PIXELFORMAT_RGBA32, px.data(), r.w * 4) != 0) return 0;
@@ -950,7 +950,7 @@ void run_room_chat_box_tests() {
         struct Shot {
             bool ok{false};
             uint64_t hash{0};
-            int colours{0};
+            int colors{0};
             float camera_zoom{0};
         };
         const auto preview_after = [&](bool leader, float level, int index) {
@@ -965,7 +965,7 @@ void run_room_chat_box_tests() {
             app.map_select().update(0.6f);
             app.run_frame_with_delta(0.016f);
             out.hash = region_hash(app, area);
-            out.colours = region_colours(app, area);
+            out.colors = region_colors(app, area);
             out.camera_zoom = app.renderer().camera().zoom;
             out.ok = out.hash != 0;
             app.quit();
@@ -974,14 +974,14 @@ void run_room_chat_box_tests() {
         int index = 0;
         for (const bool leader : {true, false}) {
             const Shot at1 = preview_after(leader, 1.0f, index++);
-            ASSERT_TRUE(at1.ok && at1.colours > 30 && at1.camera_zoom == 1.0f);              // (a picture of the map, not the "No preview" box)
+            ASSERT_TRUE(at1.ok && at1.colors > 30 && at1.camera_zoom == 1.0f);              // (a picture of the map, not the "No preview" box)
             for (const float level : {0.5f, 2.0f}) {
                 const Shot other = preview_after(leader, level, index++);
-                if (!(other.ok && other.hash == at1.hash && other.colours == at1.colours && other.camera_zoom == level)) {
-                    std::cout << "\n    [" << (leader ? "leader" : "guest") << ", camera at " << level << "] hash " << other.hash << " vs " << at1.hash << ", colours " << other.colours << " vs " << at1.colours
+                if (!(other.ok && other.hash == at1.hash && other.colors == at1.colors && other.camera_zoom == level)) {
+                    std::cout << "\n    [" << (leader ? "leader" : "guest") << ", camera at " << level << "] hash " << other.hash << " vs " << at1.hash << ", colors " << other.colors << " vs " << at1.colors
                               << ", camera " << other.camera_zoom << "\n";
                 }
-                ASSERT_TRUE(other.ok && other.hash == at1.hash && other.colours == at1.colours && other.camera_zoom == level);
+                ASSERT_TRUE(other.ok && other.hash == at1.hash && other.colors == at1.colors && other.camera_zoom == level);
             }
         }
     } TEST_END();
@@ -1063,7 +1063,7 @@ void run_room_chat_box_tests() {
 }
 
 
-// The earlier front page's one card ("New match"; today's old test-room addresses of web/lobby.html make the same links) sends every player to the game page of a room of four seats with the card's plan, and the game starts the match by itself: `--seat` (the colour
+// The earlier front page's one card ("New match"; today's old test-room addresses of web/lobby.html make the same links) sends every player to the game page of a room of four seats with the card's plan, and the game starts the match by itself: `--seat` (the color
 // of the person: any of the four), `--fill-bots` (four words: a bot row is its level, You, Friend and Nobody are none) and `--start-when N` (1 + the Friend rows: the leader's game presses START once N
 // people are in). The same plan and the same N are in every link of the room, because whoever connects first leads and only the leader's game starts the match.
 void run_one_card_tests() {
@@ -1096,14 +1096,14 @@ void run_one_card_tests() {
         return block;
     };
 
-    TEST_CASE("N5.83 One Card, The Game's Arguments: --seat, --fill-bots (Four Words: A Level For A Bot Row, none For You / Friend / Nobody) And --start-when N Together; The Seat Is Any Of The Four Colours And The Plan Keeps A Bot At Green") {
+    TEST_CASE("N5.83 One Card, The Game's Arguments: --seat, --fill-bots (Four Words: A Level For A Bot Row, none For You / Friend / Nobody) And --start-when N Together; The Seat Is Any Of The Four Colors And The Plan Keeps A Bot At Green") {
         std::vector<std::string> args = {"ants", "--join-url", "wss://play.example.org/ws", "--room", "k7m2xq", "--seat", "2", "--fill-bots", "easy,medium,none,none", "--start-when", "1", "--name", "Ann", "--aspect", "16:9"};
         std::vector<char*> st;
         ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_TRUE(c.startup_error.empty());
         ASSERT_TRUE(c.net_url == "wss://play.example.org/ws" && c.net_room == "k7m2xq" && c.net_seat == 2 && c.net_start_when == 1 && c.player_name == "Ann");
         ASSERT_TRUE(c.fill_bots == net::FillPlan(std::array<L, 4>{L::Easy, L::Medium, L::None, L::None}));        // (a bot at Green: the plan's seat 0 is a seat like the others)
-        for (int seat = 0; seat < 4; ++seat) {                                                                   // every colour can be the person's
+        for (int seat = 0; seat < 4; ++seat) {                                                                   // every color can be the person's
             const std::string text = std::to_string(seat);
             args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--seat", text, "--start-when", "3"};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
@@ -1122,7 +1122,7 @@ void run_one_card_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N5.84 One Card, Bots Only: A Leader Who Sits At Any Colour With --start-when 1 Starts The Match At Once, The Bots Of The Plan In Their Seats (A Bot At Green Too), The Nobody Seat Empty, The Room's Teams Made; The Plan's Word For The Leader's Own Seat Is Ignored") {
+    TEST_CASE("N5.84 One Card, Bots Only: A Leader Who Sits At Any Color With --start-when 1 Starts The Match At Once, The Bots Of The Plan In Their Seats (A Bot At Green Too), The Nobody Seat Empty, The Room's Teams Made; The Plan's Word For The Leader's Own Seat Is Ignored") {
         struct Row {
             uint8_t seat;
             std::array<L, 4> plan;
@@ -1145,7 +1145,7 @@ void run_one_card_tests() {
             ASSERT_TRUE(leader.init(leader_cfg));
             Hall hall{server, &leader, {}};
             ASSERT_TRUE(hall.until([&]() { return leader.state() == AppState::Playing; }, 20000));                // (the hook pressed START by itself: one person and the plan's bots)
-            ASSERT_EQ(leader.net()->my_seat(), row.seat);                                                        // (the room of four took the colour that was asked for, whatever it is)
+            ASSERT_EQ(leader.net()->my_seat(), row.seat);                                                        // (the room of four took the color that was asked for, whatever it is)
             server::RoomStatus s = server.status(row.code);
             ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 2);
             for (size_t i = 0; i < 2; ++i) ASSERT_TRUE(s.bots[i].seat == row.bots[i].first && s.bots[i].name == bn(row.code, row.bots[i].first, std::string(row.bots[i].second).substr(5, std::string(row.bots[i].second).size() - 6)) && s.bots[i].fill);

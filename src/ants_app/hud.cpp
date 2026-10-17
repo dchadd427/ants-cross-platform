@@ -74,7 +74,7 @@ void HUD::init(uint8_t local_player_id, bool announce) {
     selected_actions_.clear();
     chat_entries_.clear();
     chat_log_.clear();
-    chat_line_colour_.clear();
+    chat_line_color_.clear();
     chat_content_end_ = 0;
     chat_follow_pos_ = 0;
     chat_follow_target_ = 0;
@@ -334,7 +334,7 @@ void HUD::check_selected_pickups(const sim::WorldState& world) {
     }
 }
 
-// The status box (label rect (481, 254) - (620, 266)): steady colour (79, 0, 143), left aligned, clipped at 139 px, hidden on the
+// The status box (label rect (481, 254) - (620, 266)): steady color (79, 0, 143), left aligned, clipped at 139 px, hidden on the
 // odd 50 ms steps while a flash runs.
 void HUD::render_status_line(IRenderer& renderer) const {
     if (!status_line_.visible()) return;
@@ -675,8 +675,8 @@ void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& ass
         renderer.draw_text(label, slot.label_right - label_w, slot.top + (14 - label_h) / 2, {255, 255, 255, 255}, FontSize::Px14);
     }
 
-    // The box (FUN_01021e36): a team that exists and has not dropped out is filled with its colour; with an ally the right half (from left + (right - left) / 2) takes the
-    // ally's colour and the score shown is the sum of the two; any other team's box is covered (scorcovr, 58 x 17 at (left - 2, top - 1))
+    // The box (FUN_01021e36): a team that exists and has not dropped out is filled with its color; with an ally the right half (from left + (right - left) / 2) takes the
+    // ally's color and the score shown is the sum of the two; any other team's box is covered (scorcovr, 58 x 17 at (left - 2, top - 1))
     const bool dropped = ((world.dropped_mask >> team) & 1u) != 0;
     if (!exists || dropped) {
         renderer.draw_named_sprite("scorcovr.bmp", slot.box_left - 2, slot.top - 1);
@@ -724,7 +724,7 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
     // Quit dialog (Ants.exe 0x10142cb): no dim layer, origin (100,100) (OffsetRect(100,100) on the dialog's children)
     draw_std_dialog(renderer, assets);
 
-    // Prompt (string 99): a wrapped, centred label of 24 px letters in the rect (130,180) 260x160, colour (31,23,51) (FUN_010142cb: label (30,80),
+    // Prompt (string 99): a wrapped, centred label of 24 px letters in the rect (130,180) 260x160, color (31,23,51) (FUN_010142cb: label (30,80),
     // 260x160, height 24, centred, moved by (100,100) with the dialog)
     draw_label(renderer, "Do you really want to quit?", 130, 180, 260, ColorRGBA{31, 23, 51, 255}, FontSize::Px24, true);
 
@@ -742,8 +742,8 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
 // Alliance dialogs (Ants.exe FUN_01015b65 invitation, FUN_010160e2 waiting, FUN_01016438 confirmation; docs 5.42)
 // ------------------------------------------------------------------------------------------------
 
-std::string HUD::alliance_colour_word(uint8_t team) const {
-    return sim::strings::colour_name(static_cast<uint8_t>(3u - (team & 3u)));      // strings 100 - 103: black, blue, red, green by colour index
+std::string HUD::alliance_color_word(uint8_t team) const {
+    return sim::strings::color_name(static_cast<uint8_t>(3u - (team & 3u)));      // strings 100 - 103: black, blue, red, green by color index
 }
 
 bool HUD::ally_pedestal_possible(const sim::WorldState& world) const {
@@ -756,7 +756,7 @@ bool HUD::ally_pedestal_possible(const sim::WorldState& world) const {
 }
 
 std::string HUD::alliance_name(uint8_t team) const {
-    return team < team_names_.size() && !team_names_[team].empty() ? team_names_[team] : alliance_colour_word(team);
+    return team < team_names_.size() && !team_names_[team].empty() ? team_names_[team] : alliance_color_word(team);
 }
 
 void HUD::open_alliance_dialog(AllianceDialog kind, uint8_t other, std::string text) {
@@ -824,15 +824,15 @@ void HUD::update_alliance_dialog(const sim::WorldState& world) {
         const uint8_t old_ally = world.player_alliances[me];
         const bool replaces = old_ally < sim::MAX_PLAYERS && old_ally != from;       // string 2 when accepting ends the present team
         open_alliance_dialog(AllianceDialog::Invitation, from,
-                             replaces ? sim::strings::format(sim::strings::kInviteBreakDialog, alliance_name(from), alliance_colour_word(from),
-                                                             alliance_name(old_ally), alliance_colour_word(old_ally))
-                                      : sim::strings::format(sim::strings::kInviteDialog, alliance_name(from), alliance_colour_word(from)));
+                             replaces ? sim::strings::format(sim::strings::kInviteBreakDialog, alliance_name(from), alliance_color_word(from),
+                                                             alliance_name(old_ally), alliance_color_word(old_ally))
+                                      : sim::strings::format(sim::strings::kInviteDialog, alliance_name(from), alliance_color_word(from)));
         alliance_replaces_team_ = replaces;
         return;
     }
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
         if (t != me && world.pending_invite_from[t] == me && t != suppressed_wait_for_) {
-            open_alliance_dialog(AllianceDialog::Waiting, t, sim::strings::format(sim::strings::kWaitingForAnswer, alliance_name(t), alliance_colour_word(t)));
+            open_alliance_dialog(AllianceDialog::Waiting, t, sim::strings::format(sim::strings::kWaitingForAnswer, alliance_name(t), alliance_color_word(t)));
             return;
         }
     }
@@ -841,7 +841,7 @@ void HUD::update_alliance_dialog(const sim::WorldState& world) {
 void HUD::render_alliance_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
     using assets::ColorRGBA;
     draw_std_dialog(renderer, assets);
-    // the label (30, 10) of the dialog, 24 px, centred, colour (31, 23, 51); 270 px wide in the invitation, 240 px in the other two
+    // the label (30, 10) of the dialog, 24 px, centred, color (31, 23, 51); 270 px wide in the invitation, 240 px in the other two
     draw_label(renderer, alliance_text_, 130, 110, alliance_dialog_ == AllianceDialog::Invitation ? 270 : 240, ColorRGBA{31, 23, 51, 255}, FontSize::Px24, true);
     auto button = [&](const UIButton& b, const char* up, const char* hover, const char* down) {
         if (b.w > 0) draw_animation_frame0(renderer, assets, b.is_pressed ? down : (b.is_active ? hover : up), 100, 100);
@@ -914,7 +914,7 @@ void HUD::request_team_up(sim::SimulationEngine& sim, uint8_t target) {
         if (is_modal_open()) return;
         pending_break_ = PendingBreak{PendingBreak::Action::Invite, target, {}, {}};
         open_alliance_dialog(AllianceDialog::BreakConfirm, ally,
-                             sim::strings::format(sim::strings::kBreakTeamConfirm, alliance_name(ally), alliance_colour_word(ally)));
+                             sim::strings::format(sim::strings::kBreakTeamConfirm, alliance_name(ally), alliance_color_word(ally)));
         return;
     }
     sim::Command invite;                                                              // FUN_0100c838(1): the offer goes out
@@ -1645,9 +1645,9 @@ const IRenderer& default_text_metrics() {
 
 }  // namespace
 
-void HUD::add_chat_entry(const std::string& sender, const std::string& message, bool team_only, int colour_index) {
-    const uint8_t colour = static_cast<uint8_t>(colour_index >= 0 && colour_index <= 3 ? colour_index : (3 - (local_player_id_ & 3)));
-    push_chat_entry(sender + (team_only ? " (To Teammate):" : ":"), message, colour);
+void HUD::add_chat_entry(const std::string& sender, const std::string& message, bool team_only, int color_index) {
+    const uint8_t color = static_cast<uint8_t>(color_index >= 0 && color_index <= 3 ? color_index : (3 - (local_player_id_ & 3)));
+    push_chat_entry(sender + (team_only ? " (To Teammate):" : ":"), message, color);
 }
 
 void HUD::set_text_metrics(const IRenderer* metrics) {
@@ -1668,10 +1668,10 @@ void HUD::layout_chat_entry(ChatEntry& entry, int32_t top) const {
 
 void HUD::append_chat_display_lines(const ChatEntry& entry) {
     chat_log_.push_back(entry.header);
-    chat_line_colour_.push_back(entry.colour);
+    chat_line_color_.push_back(entry.color);
     for (const std::string& line : entry.body_lines) {
         chat_log_.push_back(line);
-        chat_line_colour_.push_back(5);
+        chat_line_color_.push_back(5);
     }
 }
 
@@ -1682,7 +1682,7 @@ void HUD::relayout_chat(int32_t old_view_h) {
     const bool pos_at_bottom = old_view_h >= 0 && chat_follow_pos_ >= old_bottom;
     const bool target_at_bottom = old_view_h >= 0 && chat_follow_target_ >= old_bottom;
     chat_log_.clear();
-    chat_line_colour_.clear();
+    chat_line_color_.clear();
     int32_t top = 0;
     for (ChatEntry& entry : chat_entries_) {
         layout_chat_entry(entry, top);
@@ -1699,12 +1699,12 @@ void HUD::relayout_chat(int32_t old_view_h) {
 
 // AddLine (0x10120e9): the entry is made at the end of the log (`+0x2c`), the end moves to its bottom + 1, and when the end is now below the window the window's target is the
 // position that puts the new bottom on the window's last row; the follow task (CHATAPPD) is started unless it is running (the window is not at its target)
-void HUD::push_chat_entry(std::string header, const std::string& message, uint8_t colour) {
+void HUD::push_chat_entry(std::string header, const std::string& message, uint8_t color) {
     if (header.size() > kChatHeaderMaxChars) header.resize(kChatHeaderMaxChars);
     ChatEntry entry;
     entry.header = std::move(header);
     entry.body = message.substr(0, kChatBodyMaxChars);
-    entry.colour = colour;
+    entry.color = color;
     layout_chat_entry(entry, chat_content_end_);
     append_chat_display_lines(entry);
     const int32_t bottom = entry.bottom();
@@ -1797,7 +1797,7 @@ void HUD::end_chat_drag() noexcept {
 
 // FUN_01012190: the entries that reach into the view are drawn at their place, the header at the left edge and the body 10 px right of it, clipped to the view
 void HUD::render_chat_log(IRenderer& renderer) {
-    static const assets::ColorRGBA kChatColours[6] = {
+    static const assets::ColorRGBA kChatColors[6] = {
         {39, 39, 59, 255}, {43, 39, 107, 255}, {119, 0, 0, 255}, {7, 67, 47, 255}, {79, 0, 143, 255}, {7, 11, 15, 255}};
     const int32_t offset = chat_view_offset();
     const int32_t line = font_cell_height(FontSize::Px12);
@@ -1807,10 +1807,10 @@ void HUD::render_chat_log(IRenderer& renderer) {
         if (entry.bottom() <= offset) continue;
         if (entry.top >= offset + view.h) break;
         const int32_t y = view.y + entry.top - offset;
-        draw_single_line_label(renderer, entry.header, view.x, y, view.w, true, kChatColours[std::min<size_t>(entry.colour, 5)], FontSize::Px12);
+        draw_single_line_label(renderer, entry.header, view.x, y, view.w, true, kChatColors[std::min<size_t>(entry.color, 5)], FontSize::Px12);
         int32_t body_y = y + entry.header_h;
         for (const std::string& body_line : entry.body_lines) {
-            renderer.draw_text(body_line, view.x + kChatBodyX, body_y, kChatColours[5], FontSize::Px12);
+            renderer.draw_text(body_line, view.x + kChatBodyX, body_y, kChatColors[5], FontSize::Px12);
             body_y += line;
         }
     }

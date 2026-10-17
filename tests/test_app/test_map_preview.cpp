@@ -1,6 +1,6 @@
 // The map preview of the wide setup screen as the game's own picture of the map (include/ants_app/map_preview.hpp, Renderer::render_world_image in
 // src/ants_app/renderer_world_image.cpp, MapSelectScreen::preview_of in src/ants_app/map_select_wide.cpp):
-//   1. the filter: box_downscale against an independent oracle (a brute-force area average in doubles with std::pow, written here), flat colours exact, linear-light averaging (a black and
+//   1. the filter: box_downscale against an independent oracle (a brute-force area average in doubles with std::pow, written here), flat colors exact, linear-light averaging (a black and
 //      white checker is 188, not 128), fractional weights, a lone bright pixel, enlarging, degenerate arguments, and the real world image of a shipped map;
 //   2. the fit: the longer side of the map fills the box, the shorter keeps the proportion; a NON-SQUARE level (a 60 x 40 piece of GAUNTLET, written as a real .LVL by a writer that is
 //      checked by a round trip) is 300 x 200, centred on black on the real screen;
@@ -8,7 +8,7 @@
 //      layout and clip are put back, the picture does not depend on the clock, a world that does not fit one render target is drawn in tiles with the same pixels, a failing device fails;
 //   4. the engine: the preview's simulation is a new one (a running match's state hash does not move), and a level that only some teams can play shows those teams;
 //   5. the cache: one render per map (a map shown again is not drawn again; a map that is shown in another box is), the oldest of 24 are dropped;
-//   6. the fallback: a renderer that cannot draw offscreen, or fails, gets the minimap-colour picture (exactly render_map_preview_in_box's) and ONE log line; a file that is not a map has no
+//   6. the fallback: a renderer that cannot draw offscreen, or fails, gets the minimap-color picture (exactly render_map_preview_in_box's) and ONE log line; a file that is not a map has no
 //      picture and no render is tried;
 //   7. the six shipped maps' previews pinned by digest with the software renderer (the digests are the same on the real Metal renderer: see the commit message).
 // Usage: test_map_preview [--print] [--time]   (--print writes the digest table for regeneration, never to silence a failure; --time prints the time per map). Exit code 0 when every check passes.
@@ -306,7 +306,7 @@ void test_filter(const assets::AssetArchive& arc) {
             check_against_oracle(src, 248, 248, "the world of GAUNTLET");
         }
     }
-    // flat colours stay exactly what they are, every value of every channel, through fractional weights too
+    // flat colors stay exactly what they are, every value of every channel, through fractional weights too
     {
         bool all = true;
         for (int v = 0; v < 256; ++v) {
@@ -323,7 +323,7 @@ void test_filter(const assets::AssetArchive& arc) {
             const std::vector<uint8_t> out = box_downscale(flat.rgba.data(), flat.w, flat.h, 5, 3);
             for (size_t i = 0; i < out.size(); i += 4) all = all && out[i] == flat.rgba[0] && out[i + 1] == flat.rgba[1] && out[i + 2] == flat.rgba[2] && out[i + 3] == 255;
         }
-        check(all, "a flat colour keeps its exact value (all 256 values of the three channels, 13 x 11 -> 5 x 3)");
+        check(all, "a flat color keeps its exact value (all 256 values of the three channels, 13 x 11 -> 5 x 3)");
     }
     // the average is taken in LINEAR light: black and white in a checker is half the light, which is 188 as sRGB, not 128 (an average of the encoded values)
     {
@@ -1043,7 +1043,7 @@ void test_engine(const assets::AssetArchive& arc) {
         why.clear();
         const MapPreview none = render_map_preview_world(rig.renderer, level, 300, &why);
         check(!none.valid() && why.find("no team") != std::string::npos, "a level that no team can play has no such preview: \"" + why + "\"");
-        // ... and the screen still has a picture for it: the minimap colours
+        // ... and the screen still has a picture for it: the minimap colors
         const MapPreview fallback = render_map_preview_in_box(level, arc.get_palette(), 300);
         check(fallback.valid() && !fallback.rendered, "the older preview can still be made of it");
     }
@@ -1139,7 +1139,7 @@ void test_cache(const assets::AssetArchive& arc) {
 }
 
 void test_fallback(const assets::AssetArchive& arc) {
-    group("fallback", "no offscreen render: the minimap-colour picture and one log line; an unreadable file: no picture, no render");
+    group("fallback", "no offscreen render: the minimap-color picture and one log line; an unreadable file: no picture, no render");
     TempDir dir;
     const std::vector<uint8_t> tiny = serialize_level(load_level("TINY"));
     write_file(dir.path / "A.LVL", tiny);
@@ -1164,7 +1164,7 @@ void test_fallback(const assets::AssetArchive& arc) {
             screen.render(stub, arc);
         }
         check(stub.images.size() >= 3 && stub.render_calls == 3, std::string(mode.name) + ": a render was tried once per map (" + std::to_string(stub.render_calls) + ") and every map has a picture");
-        // map A is TINY: the picture is exactly the minimap-colour preview of the older code
+        // map A is TINY: the picture is exactly the minimap-color preview of the older code
         check(!stub.images.empty() && stub.images.front().w == old_picture.width && stub.images.front().h == old_picture.height && stub.images.front().rgba == old_picture.rgba,
               std::string(mode.name) + ": the picture is render_map_preview_in_box's (279 x 279, a whole scale)");
         check(log.lines() == 1 && log.text().find("[MapSelect]") != std::string::npos && log.text().find(mode.reason) != std::string::npos,
@@ -1201,7 +1201,7 @@ void test_fallback(const assets::AssetArchive& arc) {
         check(stub.render_calls == 0 && stub.images.empty() && captions.find("No preview") != std::string::npos && captions.find("Map cannot be read") != std::string::npos && log.lines() == 0,
               "a file that is not a map: the \"No preview\" box, no render tried, nothing logged");
     }
-    // a level that no team can play: the renderer is not asked, the minimap colours are shown and the log says why
+    // a level that no team can play: the renderer is not asked, the minimap colors are shown and the log says why
     {
         assets::LevelData level = load_level("TINY");
         for (assets::AnthillSpawn& s : level.anthill_spawns) {
@@ -1216,7 +1216,7 @@ void test_fallback(const assets::AssetArchive& arc) {
         screen.render(stub, arc);
         const MapPreview want = render_map_preview_in_box(level, arc.get_palette(), 300);
         check(stub.render_calls == 0 && !stub.images.empty() && want.valid() && stub.images.back().rgba == want.rgba && log.lines() == 1 && log.text().find("no team") != std::string::npos,
-              "a level no team can play: the minimap colours, and the log says why (" + log.text() + ")");
+              "a level no team can play: the minimap colors, and the log says why (" + log.text() + ")");
     }
 }
 

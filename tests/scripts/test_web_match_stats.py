@@ -60,7 +60,7 @@ class TheSections(unittest.TestCase):
         "the lead is not followed by its end": ("parts.push(i + 1 < lead.length ? ' until ' + clock(lead[i + 1].t) : ' to the end');", "parts.push(' to the end');"),
         "a one-sentence lead does not name the ally": ("parts: [side(lead[0].seat, lead[0].ally), ' led from '", "parts: [side(lead[0].seat, -1), ' led from '"),
         "the ink of a cell is always light": ("color: lum(m) > 0.3 ? '#06120d' : '#f4ece2'", "color: '#f4ece2'"),
-        "a cell of the strongest colour is not the seat colour": ("BASE[i] + (v - BASE[i]) * a", "BASE[i] + (v - BASE[i]) * a * 0.5"),
+        "a cell of the strongest color is not the seat color": ("BASE[i] + (v - BASE[i]) * a", "BASE[i] + (v - BASE[i]) * a * 0.5"),
         "a step of a chart is not round": ("return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;", "return m * p;"),
         "the top of a chart is below its largest value": ("Math.ceil(Math.max(maxV, o.ymax || 0) / tstep) * tstep", "Math.floor(Math.max(maxV, o.ymax || 0) / tstep) * tstep"),
         "a point of a line is at its start": ("var px = X((k + 1) * step).toFixed(1)", "var px = X(k * step).toFixed(1)"),
@@ -131,11 +131,11 @@ class TheFiles(unittest.TestCase):
         self.assertIn("The totals below are complete.", helpers)
         self.assertNotIn("The stats below are complete.", helpers)
 
-    def test_the_seat_colours_are_the_scoreboards(self):
+    def test_the_seat_colors_are_the_scoreboards(self):
         css = read("web", "matches.css")
         for token in ("--c-green", "--c-red", "--c-blue", "--c-black"):
             self.assertIn(token, css)
-        self.assertEqual(len(re.findall(r"#79bf93|#d4707f|#8f8fd6|#b3afb9", self.css)), 0)                       # (one home for the colours: matches.css)
+        self.assertEqual(len(re.findall(r"#79bf93|#d4707f|#8f8fd6|#b3afb9", self.css)), 0)                       # (one home for the colors: matches.css)
 
 
 class TheDocument(unittest.TestCase):

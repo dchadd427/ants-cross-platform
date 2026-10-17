@@ -133,7 +133,7 @@ void ViewportCamera::center_on(int32_t world_px, int32_t world_py, uint32_t map_
 
 // The view never shows beyond the map: the origin stays in [0, map - the world that the view shows]. A map that is smaller than that on an axis has no such range (a 16 x 16 map is 512
 // pixels wide, the 16:9 view is 762): the camera is fixed on that axis, at the origin that centres the map in the view when `centre_small_maps` (a negative one: the world pixel 0 is right
-// of the view's left edge; what the map does not cover stays the colour that the frame starts with, black) and at 0 otherwise. At the zoom 1 this is the camera's own arithmetic as it always
+// of the view's left edge; what the map does not cover stays the color that the frame starts with, black) and at 0 otherwise. At the zoom 1 this is the camera's own arithmetic as it always
 // was; at another zoom the origin is put on the grid of one screen pixel (view_zoom.hpp) and held by the same rule over the world that the view shows then.
 void ViewportCamera::clamp_to_bounds(uint32_t map_w, uint32_t map_h) {
     const int32_t map_px_w = static_cast<int32_t>(map_w * TILE_SIZE);
@@ -255,13 +255,13 @@ std::array<ants::assets::ColorRGBA, 256> TextureCache::compose_palette(const std
                                                                        const std::string& image_name,
                                                                        uint8_t team_id) {
     auto pal = base;
-    if (team_id >= ANT_COLOUR_BASE && team_id < ANT_COLOUR_BASE + 4) {
-        // Original ant blit (Ants.exe FUN_0102cfef, remap enabled by FUN_0101b802): the colour offset is added to
+    if (team_id >= ANT_COLOR_BASE && team_id < ANT_COLOR_BASE + 4) {
+        // Original ant blit (Ants.exe FUN_0102cfef, remap enabled by FUN_0101b802): the color offset is added to
         // every non-transparent pixel index; the callback at 0x101b7eb exempts image names starting with a digit.
         // Offsets by remake player id 0..3 (green, red, blue, black) = {60, 40, 20, 0}.
         static constexpr uint8_t kOffset[4] = { 60, 40, 20, 0 };
         const bool exempt = !image_name.empty() && std::isdigit(static_cast<unsigned char>(image_name[0])) != 0;
-        const uint8_t offset = kOffset[team_id - ANT_COLOUR_BASE];
+        const uint8_t offset = kOffset[team_id - ANT_COLOR_BASE];
         if (!exempt && offset != 0) {
             for (size_t i = 0; i < 256; ++i) {
                 if (i == ants::assets::CHD_COLOR_KEY_INDEX) continue;
@@ -305,7 +305,7 @@ void TextureCache::clear() {
 
 SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored, uint8_t team_id) {
     // The bomb in a bomber's hands is the neutral maroon 2bomb.bmp for every team (its digit name exempts it from the
-    // colour shift); only the planted bomb tiles have team art.
+    // color shift); only the planted bomb tiles have team art.
     const uint32_t eff_sprite_id = sprite_id;
     if (!renderer_ || eff_sprite_id >= archive_.sprite_count()) return nullptr;
 
@@ -322,7 +322,7 @@ SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored,
     if (sp.width == 0 || sp.height == 0) return nullptr;
 
 
-    // Convert 8-bit paletted sprite to 32-bit RGBA under the requested colour mode
+    // Convert 8-bit paletted sprite to 32-bit RGBA under the requested color mode
     const auto pal = compose_palette(archive_.get_palette(), sp.name, team_id);
 
     std::vector<uint8_t> rgba = sp.to_rgba32(pal);
@@ -984,7 +984,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
 // ============================================================================
 
 void Renderer::draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy, bool mirrored,
-                                uint8_t colour) {
+                                uint8_t color) {
     if (!archive_ || !texture_cache_ || !renderer_) return;
     // A mirrored part is written one pixel to the right of its own origin (Ants.exe part blitter 0x102cfef, mirrored
     // inner loop at 0x102d12c: the row starts at dest + width and runs backwards), which makes the reflection exact
@@ -994,7 +994,7 @@ void Renderer::draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32
     for (size_t k = sub.frames.size(); k-- > 0;) {
         const auto& f = sub.frames[k];
         const uint32_t sp_idx = f.sprite_index;
-        SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, colour);
+        SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, color);
         if (!tex) continue;
         const auto& sp = mirrored ? archive_->get_mirrored_sprite(sp_idx) : archive_->get_sprite(sp_idx);
         const SDL_Rect dst = placed(sx + f.dx + mirror_shift, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height));
@@ -1013,12 +1013,12 @@ size_t Renderer::template_frame_index(int32_t anim_id) {
     return anim_frame_cache_[i];
 }
 
-void Renderer::draw_template_screen(int32_t anim_id, int32_t sx, int32_t sy, uint8_t colour) {
+void Renderer::draw_template_screen(int32_t anim_id, int32_t sx, int32_t sy, uint8_t color) {
     if (!archive_ || anim_id < 0 || static_cast<size_t>(anim_id) >= archive_->animation_count()) return;
     const auto& seq = archive_->get_animation(static_cast<uint32_t>(anim_id));
     if (seq.subitems.empty()) return;
     const size_t fi = std::min(template_frame_index(anim_id), seq.subitems.size() - 1);
-    draw_frame_parts(seq.subitems[fi], sx, sy, false, colour);
+    draw_frame_parts(seq.subitems[fi], sx, sy, false, color);
 }
 
 const AnimBounds& Renderer::anim_bounds(int32_t anim_id) {
@@ -1041,7 +1041,7 @@ const AnimBounds& Renderer::anim_bounds(int32_t anim_id) {
     return b;
 }
 
-void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t colour) {
+void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t color) {
     const AnimBounds& b = anim_bounds(anim_id);
     if (!b.valid) return;
     const int32_t cam_x = static_cast<int32_t>(camera_.x);
@@ -1051,7 +1051,7 @@ void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t wor
         world_y + b.y1 <= cam_y || world_y + b.y0 >= cam_y + view.h) {
         return;
     }
-    draw_template_screen(anim_id, view.x + (world_x - cam_x), view.y + (world_y - cam_y), colour);
+    draw_template_screen(anim_id, view.x + (world_x - cam_x), view.y + (world_y - cam_y), color);
 }
 
 // ============================================================================
@@ -1100,7 +1100,7 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
                 continue;
             }
 
-            // Synthetic grids without a loaded level: flat colours per terrain category
+            // Synthetic grids without a loaded level: flat colors per terrain category
             const SDL_Rect dst = placed(sx, sy, TILE_SIZE, TILE_SIZE);
             if (cell.terrain_type == ants::sim::TERRAIN_WATER) {
                 SDL_SetRenderDrawColor(renderer_, 23, 71, 151, 255); // Navy Water
@@ -1636,8 +1636,8 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         // overlay, and drawing the idle ant beneath it would show a ghost body around the flames.
     } else if (loco_seq && !loco_seq->subitems.empty()) {
         // Draws one animation frame's parts at the ant in the original order (last stored part first, so the first stored part - e.g. a carried lunchbox in front of the body -
-        // is on top) with the original ant colour rule.
-        draw_frame_parts(loco_seq->subitems[pred.frame], sx + pred.dx, render_y + pred.dy, ant.loco_mirrored, ant_colour(ant.player_id));
+        // is on top) with the original ant color rule.
+        draw_frame_parts(loco_seq->subitems[pred.frame], sx + pred.dx, render_y + pred.dy, ant.loco_mirrored, ant_color(ant.player_id));
     }
 
 }
@@ -1854,13 +1854,13 @@ void Renderer::collect_burn_overlays(const ants::sim::WorldState& world) {
         item.created_ms = now - a.burn_elapsed_ms;
         const int32_t px = a.px, py = a.py;
         const uint32_t elapsed = static_cast<uint32_t>(a.burn_elapsed_ms) + sub_tick_ms_;
-        const uint8_t colour = ant_colour(a.player_id);
-        item.draw = [this, bu_seq, px, py, elapsed, colour]() {
+        const uint8_t color = ant_color(a.player_id);
+        item.draw = [this, bu_seq, px, py, elapsed, color]() {
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen(px, py, sx, sy);
             const LayoutRect view = world_view();
             if (sx < view.x - 160 || sx > view.x + view.w + 160 || sy < view.y - 160 || sy > view.y + view.h + 160) return;
-            this->draw_frame_parts(bu_seq->subitems[get_anim_subitem_by_time(*bu_seq, elapsed)], sx, sy, false, colour);
+            this->draw_frame_parts(bu_seq->subitems[get_anim_subitem_by_time(*bu_seq, elapsed)], sx, sy, false, color);
         };
         overlay_queue_.push_back(std::move(item));
     }

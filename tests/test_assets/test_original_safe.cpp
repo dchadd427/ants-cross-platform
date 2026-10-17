@@ -75,7 +75,7 @@ const LevelData& tiny() {
 
 size_t at(const LevelData& l, uint32_t row, uint32_t column) { return static_cast<size_t>(row) * l.width + column; }
 
-// TINY's hills (rows x columns 31 x 31): the entrance of each colour and its 4 x 4 footprint, one row and one column up and left of it
+// TINY's hills (rows x columns 31 x 31): the entrance of each color and its 4 x 4 footprint, one row and one column up and left of it
 struct Hill {
     int team;
     uint32_t row;
@@ -353,7 +353,7 @@ void s1_rules() {
         }
     });
 
-    run_case("S1.15 A Hill That Is Not Whole Is A Note: A Cell Anchored Elsewhere, A Cell Of The Colour Outside Its 4 x 4 Hill; The Map Still Works", [] {
+    run_case("S1.15 A Hill That Is Not Whole Is A Note: A Cell Anchored Elsewhere, A Cell Of The Color Outside Its 4 x 4 Hill; The Map Still Works", [] {
         LevelData l = tiny();
         l.layer2_interactive[at(l, 25, 26)].properties = static_cast<uint16_t>(0 | (0 << 8));
         OriginalSafeReport r = check_original_safe(l);
@@ -367,7 +367,7 @@ void s1_rules() {
         CHECK(finds(r, Code::HillNotWhole, Severity::Info,
                     "the hill of Green is not whole: 2 cells (the first at row 0, column 0) differ from the 4 x 4 hill around its entrance (row 5, column 5)", 0, 0, 0));
         CHECK(!check_original_safe(tiny()).has(Code::HillNotWhole));
-        // a stray cell of the colour just beside the 4 x 4 (Red's cover columns 23 .. 26, rows 23 .. 26): column 27, and the column before the first, 22
+        // a stray cell of the color just beside the 4 x 4 (Red's cover columns 23 .. 26, rows 23 .. 26): column 27, and the column before the first, 22
         for (const uint32_t column : {27u, 22u}) {
             l = tiny();
             l.layer2_interactive[at(l, 24, column)] = MapCell{247, 0, static_cast<uint16_t>(24 | (24 << 8))};

@@ -338,7 +338,7 @@ void test_cursor_special_targets() {
     want("fire ant", plain, false, probe(AntType::Fire, plain, false), CursorType::Move);
     want("fire ant", plain, true, probe(AntType::Fire, plain, true), CursorType::Target);
     want("fire ant", bomb, true, probe(AntType::Fire, bomb, true), CursorType::Move);
-    // thief: any hill of another colour with either flag, its own hill never
+    // thief: any hill of another color with either flag, its own hill never
     want("thief", enemy_hill, false, probe(AntType::Thief, enemy_hill, false), CursorType::Target);
     want("thief", enemy_hill, true, probe(AntType::Thief, enemy_hill, true), CursorType::Target);
     want("thief", own_hill, false, probe(AntType::Thief, own_hill, false), CursorType::Move);

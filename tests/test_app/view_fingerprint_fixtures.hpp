@@ -99,8 +99,8 @@ inline std::string hex64(uint64_t v) {
 // The recording renderer
 // =====================================================================================================================================================
 
-/// An IRenderer that records EVERY mutating call with ALL its parameters. Position, size, clip, flip, colour (alpha included), text, font size and the
-/// image bytes are in the hash; the HUD team is a call of its own (it recolours the sprites that follow). get_text_width / get_text_height are
+/// An IRenderer that records EVERY mutating call with ALL its parameters. Position, size, clip, flip, color (alpha included), text, font size and the
+/// image bytes are in the hash; the HUD team is a call of its own (it recolors the sprites that follow). get_text_width / get_text_height are
 /// not recorded but deterministic: the interface's 6 px per character, and the cell height of the font size (what the real renderer reports).
 class FrameRecorder : public IRenderer {
 public:
@@ -350,7 +350,7 @@ inline sim::WorldState make_world(const assets::AssetArchive& arc, uint32_t w = 
         }
     }
     uint32_t seed = 12345u;
-    for (uint32_t i = 0; i < w * h / 40u; ++i) {                             // rocks (animation 293, colour 51) on walkable ground
+    for (uint32_t i = 0; i < w * h / 40u; ++i) {                             // rocks (animation 293, color 51) on walkable ground
         const uint32_t x = lcg(seed) % w;
         const uint32_t y = lcg(seed) % h;
         sim::TileCell& c = cell_of(world, x, y);
@@ -359,7 +359,7 @@ inline sim::WorldState make_world(const assets::AssetArchive& arc, uint32_t w = 
     auto put = [&](uint32_t x, uint32_t y, uint16_t id) {
         if (x < w && y < h) cell_of(world, x, y).interactive_id = id;
     };
-    put(20, 35, 253);                                                         // food piles (fdburgr1, colour 171)
+    put(20, 35, 253);                                                         // food piles (fdburgr1, color 171)
     put(22, 36, 260);
     put(16, 20, 267);
     put(24, 24, sim::TILE_LUNCHBOX);
@@ -803,7 +803,7 @@ inline int32_t idle_clip(const assets::AssetArchive& arc, int type, int dir_digi
     return arc.find_animation_id(name);
 }
 
-/// Ants of every type and colour, of every facing and mirrored clip, spread over the view of the camera (cx, cy) and 80 px beyond its edges, so that sprites straddle
+/// Ants of every type and color, of every facing and mirrored clip, spread over the view of the camera (cx, cy) and 80 px beyond its edges, so that sprites straddle
 /// every border of the playfield
 inline void populate_view(sim::WorldState& world, const assets::AssetArchive& arc, int32_t cx, int32_t cy, int count, uint32_t seed, int32_t view_w = PLAYFIELD_W, int32_t view_h = PLAYFIELD_H) {
     static const int kDirs[5] = {3, 7, 2, 8, 9};

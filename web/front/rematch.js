@@ -18,8 +18,8 @@
     var MAX_AGE_MS = 3 * 60 * 60 * 1000;            // a key lives three hours (the game's kRejoinMaxAgeMs), and so does the server's reservation
     var ASK_AFTER_MS = 2000;                        // the results screen asks for its seat this long after the game said that the match is over: the server ends the match in a pass of its own, which
                                                     // a game can be a moment ahead of, and the Hello must find the lobby that follows the match, not the match (where a game's key takes its seat back)
-    var COLOURS = ['Green', 'Red', 'Blue', 'Black'];
-    var DOTS = ['#2e8f56', '#b43a4c', '#5a56c8', '#4a4a50'];   // the colour of each seat's dot in the strips
+    var COLORS = ['Green', 'Red', 'Blue', 'Black'];
+    var DOTS = ['#2e8f56', '#b43a4c', '#5a56c8', '#4a4a50'];   // the color of each seat's dot in the strips
     var ID_RE = /^ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;      // a match's id (web/history_page.js): its replay's file name without .antsrep
 
     function printable(s, max) { return typeof s === 'string' && s.length <= max && /^[\x20-\x7e]*$/.test(s); }
@@ -54,7 +54,7 @@
     function winnerWords(over) {
         var won = over.rows.filter(function (r) { return r.won; });
         if (won.length === 0) return '';
-        var nameOf = function (seat) { return over.names[seat] || COLOURS[seat]; };
+        var nameOf = function (seat) { return over.names[seat] || COLORS[seat]; };
         var who = [];
         won.forEach(function (r) { r.seats.forEach(function (s) { who.push(nameOf(s)); }); });
         var verb = won.length === 1 ? ' won' : ' tied';
@@ -93,7 +93,7 @@
     function forgetBack(session) { try { session.removeItem(BACK_KEY); } catch (e) { /* nothing was kept */ } }
 
     // ---- what the strips say --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // The people of a lobby room's Room message (web/front/lobby_net.js decode) for the game page's strip, in the order of the colours: { seat, name, dot, host, here }. Not here: still on the results screen
+    // The people of a lobby room's Room message (web/front/lobby_net.js decode) for the game page's strip, in the order of the colors: { seat, name, dot, host, here }. Not here: still on the results screen
     // (the room counts the reserved seat as a game before any START, and its game runs in a browser or did not say: web/front/lobby_rules.js modelOf has the same rule); here: everybody else, a game of the
     // desktop that joined by the code too
     function chipsOf(room) {
@@ -108,14 +108,14 @@
         return out;
     }
     function chipText(chip) { return chip.name + (chip.host ? ' · host' : '') + ' · ' + (chip.here ? 'here' : 'on the results screen'); }
-    // The front page's strip: { lead, text } ("Back from the match." and "Maple won with 2,040. Same room, same colours, same map.")
-    function backLine(back) { return { lead: 'Back from the match.', text: (back.winner ? back.winner + ' ' : '') + 'Same room, same colours, same map.' }; }
-    // How the public list of replays names a seat of the match: the colour, and the name in brackets ("Green (Maple)"); a seat without a name of its own (none, "Player", "Player 2") is its colour. The
+    // The front page's strip: { lead, text } ("Back from the match." and "Maple won with 2,040. Same room, same colors, same map.")
+    function backLine(back) { return { lead: 'Back from the match.', text: (back.winner ? back.winner + ' ' : '') + 'Same room, same colors, same map.' }; }
+    // How the public list of replays names a seat of the match: the color, and the name in brackets ("Green (Maple)"); a seat without a name of its own (none, "Player", "Player 2") is its color. The
     // server's replay::seat_label of the name that the recording keeps (replay_person_name; tests/data/replay_players.txt holds the two to the server's own output).
     function replayLabel(seat, name) {
         var kept = name.replace(/^ +| +$/g, '');
         if (/^Player( [1-4])?$/.test(kept)) kept = '';
-        return kept ? COLOURS[seat] + ' (' + kept + ')' : COLOURS[seat];
+        return kept ? COLORS[seat] + ' (' + kept + ')' : COLORS[seat];
     }
     // The match's id in the public list of replays (GET /replays: { replays: [{ file, ended (s), map, players: the labels of the seats, finished }, ...] }, newest first): the newest finished match on the map,
     // ended within ten minutes of the hand-over, in which every seat of the match played as it did (its label); '' when there is none (the strip links the list of matches then)
@@ -174,7 +174,7 @@
             main.appendChild(el(doc, 'div', 'rmt-title', 'The match is over'));
             var text = el(doc, 'div', 'rmt-text');
             text.appendChild(doc.createTextNode('Everybody can go back to the room together: '));
-            text.appendChild(el(doc, 'b', '', 'same host, same colours, same map'));
+            text.appendChild(el(doc, 'b', '', 'same host, same colors, same map'));
             text.appendChild(doc.createTextNode('. Your seat is kept for you.'));
             main.appendChild(text);
             var who = el(doc, 'div', 'rmt-who');
@@ -318,7 +318,7 @@
     }
 
     return {
-        BACK_KEY: BACK_KEY, LOBBY_KEY: LOBBY_KEY, ASK_AFTER_MS: ASK_AFTER_MS, COLOURS: COLOURS, DOTS: DOTS,
+        BACK_KEY: BACK_KEY, LOBBY_KEY: LOBBY_KEY, ASK_AFTER_MS: ASK_AFTER_MS, COLORS: COLORS, DOTS: DOTS,
         parseOver: parseOver, winnerWords: winnerWords, seatKey: seatKey, handOver: handOver, readBack: readBack, forgetBack: forgetBack,
         chipsOf: chipsOf, chipText: chipText, backLine: backLine, findReplay: findReplay, statsHref: statsHref, platformOf: platformOf,
         gamePage: gamePage, frontStrip: frontStrip

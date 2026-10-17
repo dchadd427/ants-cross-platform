@@ -92,15 +92,15 @@ constexpr bool kInBrowser = false;
 // (public_room_code): a code with a capital is the name of a room of the control interface, which a block never makes, and the answer for it is a room that does not exist (or is over)
 constexpr const char* kTextNoPlace = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
 
-// "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
-std::string seat_colour(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(str::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
+// "Green", "Red", "Blue", "Black": the color word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
+std::string seat_color(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(str::color_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
 
 // The leader's tap on a player (request_move_seat). A press within kMoveGapMs of the last request is held back: a double click is one press (its second one would act on the rows as the first one
 // left them, and move the next player on, or the same one twice). The press after that waits for the room's answer, and the answer is a room that seats its people otherwise; a request that the
 // room cannot do is not answered at all, so the wait ends after a second in any case.
 constexpr uint32_t kMoveGapMs = 500;                                                  // (the time of a double click)
 constexpr uint32_t kMoveAnswerMs = 1000;
-constexpr const char* kTextMoveHint = "Tap a player to change their colour.";
+constexpr const char* kTextMoveHint = "Tap a player to change their color.";
 
 }  // namespace
 
@@ -393,7 +393,7 @@ StartFacts start_facts(const FillPlan& plan, const sim::StartTeams& teams, const
     }
     if (plan.uniform()) {
         f.same = plan.level[0];
-    } else if (f.seats.size() >= 2 && f.seats.size() == empty_seats) {            // (the plan gives the same level to every empty seat: "the empty seats get Medium bots"; one seat is named by its colour)
+    } else if (f.seats.size() >= 2 && f.seats.size() == empty_seats) {            // (the plan gives the same level to every empty seat: "the empty seats get Medium bots"; one seat is named by its color)
         f.same = f.seats[0].second;
         for (const auto& bot : f.seats) f.same = bot.second == f.same ? f.same : FillLevel::None;
     }
@@ -466,7 +466,7 @@ NetGame::FooterTexts NetGame::start_footer(const FillPlan& plan, const sim::Star
     } else if (bots && f.teams) {
         out.line[0] = f.same != FillLevel::None ? std::vector<std::string>{"Empty seats: " + bots_detail} : std::vector<std::string>{"Bots: " + bots_detail, bots_detail};
         out.line[1] = {"Teams: " + f.title, f.title, "Teams: " + f.vs, f.vs};
-        if (room_teams) out.line[1].insert(out.line[1].begin(), {"Room teams: " + f.title, "Room teams: " + f.vs});      // ("Room teams: ..." where it fits; the shorter ways keep the colours and the teams)
+        if (room_teams) out.line[1].insert(out.line[1].begin(), {"Room teams: " + f.title, "Room teams: " + f.vs});      // ("Room teams: ..." where it fits; the shorter ways keep the colors and the teams)
     }
     return out;
 }
@@ -483,7 +483,7 @@ bool NetGame::is_leader() const noexcept {
 
 bool NetGame::request_start() {
     if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
-    if (move_unanswered()) return false;                                              // (the plan of bots is for the colours as the room shows them: it follows the answer of a SeatMove, so a START waits for it)
+    if (move_unanswered()) return false;                                              // (the plan of bots is for the colors as the room shows them: it follows the answer of a SeatMove, so a START waits for it)
     size_t players = 0;
     for (const auto& slot : room_.slots) players += slot.state != SlotState::Empty ? 1u : 0u;
     if (players < 2 && plan_fill_seats(fill_, room_, sim::MAX_PLAYERS).empty()) return false;      // "too few players": as the host's START (with bots to seat they make up the rest: one person is enough)
@@ -492,15 +492,15 @@ bool NetGame::request_start() {
 
 uint8_t NetGame::seat_move_target(const RoomMsg& room, uint8_t seat) noexcept {
     if (seat >= sim::MAX_PLAYERS || room.slots[seat].state != SlotState::Client) return 255;
-    for (uint8_t step = 1; step < sim::MAX_PLAYERS; ++step) {                         // the next colour that nobody holds ...
+    for (uint8_t step = 1; step < sim::MAX_PLAYERS; ++step) {                         // the next color that nobody holds ...
         const uint8_t next = static_cast<uint8_t>((seat + step) % sim::MAX_PLAYERS);
         if (room.slots[next].state == SlotState::Empty) return next;
     }
-    for (uint8_t step = 1; step < sim::MAX_PLAYERS; ++step) {                         // ... else the next guest's: the two change places (a bot's colour and the host's stay)
+    for (uint8_t step = 1; step < sim::MAX_PLAYERS; ++step) {                         // ... else the next guest's: the two change places (a bot's color and the host's stay)
         const uint8_t next = static_cast<uint8_t>((seat + step) % sim::MAX_PLAYERS);
         if (room.slots[next].state == SlotState::Client) return next;
     }
-    return 255;                                                                       // no other guest and no free colour: nowhere to go
+    return 255;                                                                       // no other guest and no free color: nowhere to go
 }
 
 // A SeatMove went out and the room has not answered it: the room still seats its people as it did, and less than a second has passed (a request that the room cannot do is not answered at all)
@@ -511,8 +511,8 @@ bool NetGame::move_unanswered() const noexcept {
 bool NetGame::request_move_seat(uint8_t from, uint8_t to) {
     if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
     if (from >= sim::MAX_PLAYERS || to >= sim::MAX_PLAYERS || from == to) return false;
-    if (room_.slots[from].state != SlotState::Client) return false;                  // (a person's colour: the host's, a bot's and an empty one do not move)
-    if (room_.slots[to].state != SlotState::Empty && room_.slots[to].state != SlotState::Client) return false;      // (a free colour, or a guest's: a bot's stays)
+    if (room_.slots[from].state != SlotState::Client) return false;                  // (a person's color: the host's, a bot's and an empty one do not move)
+    if (room_.slots[to].state != SlotState::Empty && room_.slots[to].state != SlotState::Client) return false;      // (a free color, or a guest's: a bot's stays)
     if (move_pending_ != 0 && now_ - move_sent_ms_ < kMoveGapMs) return false;      // a double click is one press
     if (move_unanswered()) return false;                                              // the last request has not been answered
     if (!client_lobby_->request_seat_move(from, to)) return false;                   // (it carries the guard: the seats as this machine shows them)
@@ -526,9 +526,9 @@ bool NetGame::request_move_seat(uint8_t seat) {
     return target < sim::MAX_PLAYERS && request_move_seat(seat, target);
 }
 
-// The leader's plan of bots is by colour: a level for each seat, seated in the seats that are empty at START. When the room shows a person in another colour (a colour that a person held is empty
-// now, one that was empty is a person's now, nothing else changed: the leader's SeatMove, whenever its answer comes) the bot that was for the colour that the person took is for the colour that it
-// left, so the match that START makes has the same people and the same bots as the leader saw. A swap of two guests leaves the same colours empty: nothing changes in any state, and the plan stays.
+// The leader's plan of bots is by color: a level for each seat, seated in the seats that are empty at START. When the room shows a person in another color (a color that a person held is empty
+// now, one that was empty is a person's now, nothing else changed: the leader's SeatMove, whenever its answer comes) the bot that was for the color that the person took is for the color that it
+// left, so the match that START makes has the same people and the same bots as the leader saw. A swap of two guests leaves the same colors empty: nothing changes in any state, and the plan stays.
 // The plan follows what the room shows, not what was asked: a request that the room does not do, or does once however many times it was sent, changes nothing here. Each Room message is compared
 // with the one before it (a move is one message; a person who comes or goes is another), however many arrive in one update.
 void NetGame::follow_moved_player(const RoomMsg& before) {
@@ -734,7 +734,7 @@ void NetGame::update_client() {
                     room_ = ev.room;                                                 // (this event's Room message: update() can read several, and each is compared with the one before it)
                     seat_ = ev.room.you < sim::MAX_PLAYERS ? ev.room.you : client_lobby_->my_seat();
                     if (!first && is_leader()) follow_moved_player(before);
-                    if (!move_hint_given_ && is_leader() && notice_until_ms_ <= now_) {        // (the leader's first company: it can put a player in another colour)
+                    if (!move_hint_given_ && is_leader() && notice_until_ms_ <= now_) {        // (the leader's first company: it can put a player in another color)
                         size_t people = 0;
                         for (const RoomMsg::Slot& slot : room_.slots) people += slot.state == SlotState::Client ? 1u : 0u;
                         if (people >= 2) {
@@ -941,10 +941,10 @@ void NetGame::note_lobby_welcome() {
         forget_key();
         set_notice(kTextNewRoom);
     }
-    // The colour that this player asked for (a link of the front page names one) was taken, so the room gave the first free seat (see join): it says so, once, in colour words. A machine that
+    // The color that this player asked for (a link of the front page names one) was taken, so the room gave the first free seat (see join): it says so, once, in color words. A machine that
     // shows a key sits where the key says and is told nothing of the kind.
     const uint8_t given = client_lobby_->my_seat();
-    if (!showed_key && target_.want_seat < sim::MAX_PLAYERS && given != target_.want_seat) set_notice(seat_colour(target_.want_seat) + " was taken: you play " + seat_colour(given) + ".");
+    if (!showed_key && target_.want_seat < sim::MAX_PLAYERS && given != target_.want_seat) set_notice(seat_color(target_.want_seat) + " was taken: you play " + seat_color(given) + ".");
     if (client_lobby_->rejoined()) announce_key(key, client_lobby_->my_seat());
     else pending_key_ = key;                                    // (zero for a room that gives none: nothing to announce then)
 }

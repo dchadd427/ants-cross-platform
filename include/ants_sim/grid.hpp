@@ -43,14 +43,14 @@ constexpr uint16_t BOMB_BLACK = 100u;
 constexpr uint16_t BOMB_BLUE  = 101u;
 constexpr uint16_t BOMB_RED   = 102u;
 constexpr uint16_t BOMB_GREEN = 103u;
-// (The remake keeps a planted bomb as 100 + the owner's team index: 0 green, 1 red, 2 blue, 3 black. The constants' names are older than that and do not say the colours.)
+// (The remake keeps a planted bomb as 100 + the owner's team index: 0 green, 1 red, 2 blue, 3 black. The constants' names are older than that and do not say the colors.)
 
 // The original's bomb tiles, the ids 0x81 .. 0x84 (FUN_01008bc6; Table 4 of ants.chd: 129 redbomb, 130 greenbomb, 131 blackbomb, 132 bluebomb). A map file can hold them in layer 2
-// (208 community maps do); Grid::init_from_level turns each into the planted bomb of its colour (docs/reverse_engineering/map_file_bombs.md).
+// (208 community maps do); Grid::init_from_level turns each into the planted bomb of its color (docs/reverse_engineering/map_file_bombs.md).
 constexpr uint16_t ORIGINAL_BOMB_FIRST = 129u;
 constexpr uint16_t ORIGINAL_BOMB_LAST  = 132u;
 constexpr bool is_original_bomb_tile(uint16_t id) noexcept { return id >= ORIGINAL_BOMB_FIRST && id <= ORIGINAL_BOMB_LAST; }
-/// The team (0 green, 1 red, 2 blue, 3 black) whose colour an original bomb tile (129 .. 132) has
+/// The team (0 green, 1 red, 2 blue, 3 black) whose color an original bomb tile (129 .. 132) has
 constexpr uint8_t original_bomb_team(uint16_t id) noexcept {
     return id == 129u ? uint8_t{1} : id == 130u ? uint8_t{0} : id == 131u ? uint8_t{3} : uint8_t{2};
 }
@@ -200,7 +200,7 @@ struct TileCell {
  * @brief A plant of LVL Block 1 (a flower or a clover): a world object at the centre of its cell (Ants.exe 0x100e3b0 - 0x100e436).
  */
 struct MapPlant {
-    uint16_t tile_id{0};                   // the animation (tile) id of the plant, which the minimap's colour table is indexed by
+    uint16_t tile_id{0};                   // the animation (tile) id of the plant, which the minimap's color table is indexed by
     uint16_t x{0};                         // the column of its cell
     uint16_t y{0};                         // the row of its cell
 };

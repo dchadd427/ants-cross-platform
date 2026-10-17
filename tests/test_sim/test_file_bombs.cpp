@@ -1,7 +1,7 @@
 // Bombs that a map FILE holds (docs/reverse_engineering/map_file_bombs.md). The original's bomb tiles are the layer-2 ids 129 .. 132 (FUN_01008bc6; Table 4 of ants.chd: redbomb, greenbomb,
 // blackbomb, bluebomb), and the original reads nothing else of a bomb cell: an ant that ends a step on one sets it off, whoever it is (0x101bb42, 0x101d44f). 208 community maps
 // carry them (the editor leaves their dictionary entries "."), and the remake used to take them for solid obstacles that nothing draws. Grid::init_from_level now turns each into the
-// planted bomb of its colour (id 100 + the colour's team) owned by the team that the cell's second word names, so that every rule of a planted bomb applies to it unchanged.
+// planted bomb of its color (id 100 + the color's team) owned by the team that the cell's second word names, so that every rule of a planted bomb applies to it unchanged.
 // New file for the topic; its own small check() that counts and goes on (the shared tests/common/test_assert.hpp macros return from the case at the first failure, which the loops here do not want).
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/grid.hpp"
@@ -42,7 +42,7 @@ void run_case(const std::string& name, const std::function<void()>& fn) {
     if (g_failures == before) std::cout << "PASS\n";
 }
 
-// (original tile id, the team whose colour it is: 0 green, 1 red, 2 blue, 3 black)
+// (original tile id, the team whose color it is: 0 green, 1 red, 2 blue, 3 black)
 struct BombTile {
     uint16_t id;
     uint8_t team;
@@ -115,7 +115,7 @@ int main() {
               << " Bombs that a map file holds (layer-2 ids 129 .. 132)\n"
               << "=======================================================\n";
 
-    run_case("FB1.1 Each Original Bomb Id Becomes The Planted Bomb Of Its Colour (129 Red, 130 Green, 131 Black, 132 Blue), Whatever The Dictionary Calls It: \".\", Its Own Name, Or Another Object's", [] {
+    run_case("FB1.1 Each Original Bomb Id Becomes The Planted Bomb Of Its Color (129 Red, 130 Green, 131 Black, 132 Blue), Whatever The Dictionary Calls It: \".\", Its Own Name, Or Another Object's", [] {
         const char* names[3] = {".", "", "rock1"};     // (the editor's "unnamed", an empty name, a wrong one)
         for (int variant = 0; variant < 4; ++variant) {
             LevelData level = open_ground();
@@ -175,7 +175,7 @@ int main() {
         CHECK(g.init_from_level(open_ground()) && !g.has_bomb_at(at[0]));
     });
 
-    run_case("FB2.1 An Ant Of Another Team Ordered Onto A File Bomb Sets It Off: The Bomb Is Gone, The Ant Lost 2 Hit Points (Credit: The Bomb's Colour) And Was Thrown; All Four Colours", [] {
+    run_case("FB2.1 An Ant Of Another Team Ordered Onto A File Bomb Sets It Off: The Bomb Is Gone, The Ant Lost 2 Hit Points (Credit: The Bomb's Color) And Was Thrown; All Four Colors", [] {
         for (const BombTile& b : kBombs) {
             LevelData level = open_ground();
             const std::vector<TileCoord> at = open_tiles(level, 1);
@@ -207,7 +207,7 @@ int main() {
             const std::vector<TileCoord> at = open_tiles(with, 1);
             CHECK(at.size() == 1);
             if (at.empty()) return;
-            set_layer2(with, at[0], b.id, 1, b.team);        // (the owner word names the colour's team: the bomb a bomber of that colour would plant)
+            set_layer2(with, at[0], b.id, 1, b.team);        // (the owner word names the color's team: the bomb a bomber of that color would plant)
             name_tile(with, b.id, ".");
             LevelData without = open_ground();
             SimulationEngine a, p;
@@ -233,7 +233,7 @@ int main() {
         }
     });
 
-    run_case("FB2.3 The Bomb Of A Colour Blocks The Paths Of Its Own Team (And Its Allies) And Not The Others', As Every Planted Bomb Does (R7): A Red Ant Does Not Walk Over A Red File Bomb On Its Way, A Green One Does", [] {
+    run_case("FB2.3 The Bomb Of A Color Blocks The Paths Of Its Own Team (And Its Allies) And Not The Others', As Every Planted Bomb Does (R7): A Red Ant Does Not Walk Over A Red File Bomb On Its Way, A Green One Does", [] {
         LevelData level = open_ground();
         const std::vector<TileCoord> at = open_tiles(level, 1);
         CHECK(at.size() == 1);
@@ -259,7 +259,7 @@ int main() {
         CHECK(sim.get_unit(green).hp == 8u || sim.get_unit(green).removed);
     });
 
-    run_case("FB1.4 The Owner Is The Cell's Second Word, Not The Colour: 0 .. 4 As They Are, Anything Above Matches Nobody (255); The Colour Stays The Tile's", [] {
+    run_case("FB1.4 The Owner Is The Cell's Second Word, Not The Color: 0 .. 4 As They Are, Anything Above Matches Nobody (255); The Color Stays The Tile's", [] {
         const uint16_t words[] = {0, 1, 2, 3, 4, 5, 257, 513, 22616, 65535};
         for (const uint16_t word : words) {
             LevelData level = open_ground();
@@ -312,7 +312,7 @@ int main() {
                 const TileCell& c = g.get_cell(x, y);
                 if (c.has_bomb()) {
                     ++bombs;
-                    black += (c.interactive_id == BOMB_BLACK + 3) ? 1u : 0u;      // (the colour is the tile's: 131)
+                    black += (c.interactive_id == BOMB_BLACK + 3) ? 1u : 0u;      // (the color is the tile's: 131)
                     CHECK(!c.is_obstacle_overlay);
                 }
             }

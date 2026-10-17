@@ -198,7 +198,7 @@ target_link_libraries(test_level_defaults PRIVATE ants_test_paths)
 
 add_test(NAME test_level_defaults COMMAND test_level_defaults)
 
-# Bombs that a map file holds (layer-2 ids 129 .. 132, docs/reverse_engineering/map_file_bombs.md): they are the planted bomb of their colour, walkable, set off by a step; the community map Bombz Away plays
+# Bombs that a map file holds (layer-2 ids 129 .. 132, docs/reverse_engineering/map_file_bombs.md): they are the planted bomb of their color, walkable, set off by a step; the community map Bombz Away plays
 add_executable(test_file_bombs
     test_file_bombs.cpp
 )

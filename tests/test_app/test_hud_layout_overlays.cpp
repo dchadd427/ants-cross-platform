@@ -532,7 +532,7 @@ void test_button_states(const assets::AssetArchive& arc) {
         };
         auto text_at = [&](const RecordingRenderer& rr, const std::string& text, int32_t x, int32_t y) {
             for (const auto& t : rr.texts) {
-                if (t.text == text && t.x == x && t.y == y && t.size == FontSize::Px12 && t.colour.r == 239 && t.colour.g == 231 && t.colour.b == 223) return true;
+                if (t.text == text && t.x == x && t.y == y && t.size == FontSize::Px12 && t.color.r == 239 && t.color.g == 231 && t.color.b == 223) return true;
             }
             return false;
         };
@@ -554,7 +554,7 @@ void test_button_states(const assets::AssetArchive& arc) {
         hud.handle_mouse_down(300, 330, 1, sim, camera);
         RecordingRenderer h = frame(1400);
         bool any_caret = false;
-        for (const auto& t : h.texts) if (t.text == "_" && t.colour.r == 239 && t.colour.g == 231 && t.colour.b == 223) any_caret = true;
+        for (const auto& t : h.texts) if (t.text == "_" && t.color.r == 239 && t.color.g == 231 && t.color.b == 223) any_caret = true;
         check(!any_caret, "no field has the focus: no caret");
         // a text that does not fit (135 px here: 22 characters of 6 px): focused it shows its end, unfocused its beginning
         hud.options().quick_chat[0] = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -605,7 +605,7 @@ void test_button_states(const assets::AssetArchive& arc) {
         };
         auto text_at = [&](const RecordingRenderer& rr, const std::string& text, int32_t x, int32_t y) {
             for (const auto& t : rr.texts) {
-                if (t.text == text && t.x == x && t.y == y && t.size == FontSize::Px12 && t.colour.r == 7 && t.colour.g == 11 && t.colour.b == 15) return true;
+                if (t.text == text && t.x == x && t.y == y && t.size == FontSize::Px12 && t.color.r == 7 && t.color.g == 11 && t.color.b == 15) return true;
             }
             return false;
         };
@@ -625,7 +625,7 @@ void test_button_states(const assets::AssetArchive& arc) {
         hud.close_options();
         RecordingRenderer c = frame(5000);
         bool any = false;
-        for (const auto& t : c.texts) if (t.colour.r == 7 && t.colour.g == 11 && t.colour.b == 15 && (t.text == "_" || t.text.rfind("0123", 0) == 0 || t.text.find("efgh") != std::string::npos)) any = true;
+        for (const auto& t : c.texts) if (t.color.r == 7 && t.color.g == 11 && t.color.b == 15 && (t.text == "_" || t.text.rfind("0123", 0) == 0 || t.text.find("efgh") != std::string::npos)) any = true;
         check(!any, "with the chat option off nothing of the input box is drawn");
     }
 
@@ -812,7 +812,7 @@ void test_net_overlay() {
         check(net_overlay_line(m).lines.empty(), "overlay: a blip of less than a second is not worth a banner");
         m.held_ms = NET_HELD_MESSAGE_MS;
         NetOverlayLine l = net_overlay_line(m);
-        check(l.lines.size() == 1 && l.lines[0] == "Bob (Red) lost the connection, waiting 0:42" && l.text == l.lines[0] && !l.alarm && !l.vote.open, "overlay: a seat that is missing: name, colour and the seconds");
+        check(l.lines.size() == 1 && l.lines[0] == "Bob (Red) lost the connection, waiting 0:42" && l.text == l.lines[0] && !l.alarm && !l.vote.open, "overlay: a seat that is missing: name, color and the seconds");
         m.missing = {NetOverlaySeat{0, "Ann", 65, false, 0}, NetOverlaySeat{2, "", 20, false, 0}, NetOverlaySeat{3, "Dee", 7, true, 45}};
         l = net_overlay_line(m);
         check(l.lines.size() == 3 && l.lines[0] == "Ann (Green) lost the connection, waiting 1:05" && l.lines[1] == "Player 3 (Blue) lost the connection, waiting 0:20" &&
@@ -1138,8 +1138,8 @@ void test_latency_corner(const assets::AssetArchive& arc) {
         check(rr.texts.size() == 2 && rr.sprites.empty() && rr.fills.empty() && rr.rects.empty() && rr.images.empty(), "latency: the corner draws two texts and nothing else");
         check(rr.texts.size() == 2 && rr.texts[0].text == "ping 57 ms" && rr.texts[1].text == "delay -", "latency: the texts are ping first, then delay (a dash before the first command)");
         bool style = rr.texts.size() == 2;
-        for (const auto& t : rr.texts) style = style && t.size == FontSize::Px12 && t.colour.r == 255 && t.colour.g == 255 && t.colour.b == 255 && t.colour.a == 255;
-        check(style, "latency: in the frame rate's size (12 px) and colour (white)");
+        for (const auto& t : rr.texts) style = style && t.size == FontSize::Px12 && t.color.r == 255 && t.color.g == 255 && t.color.b == 255 && t.color.a == 255;
+        check(style, "latency: in the frame rate's size (12 px) and color (white)");
         RecordingRenderer match(arc);
         readout.delay_ms = 230u;
         draw_latency_corner(match, readout, ver_x, text_y, LATENCY_LEFT_LIMIT_MATCH);
@@ -1208,7 +1208,7 @@ void test_alliance_dialog_layout(const assets::AssetArchive& arc) {
     t.sim.apply_command(AllianceTable::command(sim::CommandType::AllianceInvite, 0, 1));          // Alice asks Bob
     t.refresh(hud);
     check(hud.alliance_dialog() == D::Invitation && hud.alliance_dialog_team() == 0 && hud.is_modal_open(), "question: the invitee sees the invitation of Alice");
-    check(hud.alliance_dialog_text() == sim::strings::format(sim::strings::kInviteDialog, "Alice", "Green"), "question: string 1 with the name and the colour word");
+    check(hud.alliance_dialog_text() == sim::strings::format(sim::strings::kInviteDialog, "Alice", "Green"), "question: string 1 with the name and the color word");
     {
         RecordingRenderer rr(arc);
         sim::WorldState world = t.sim.get_world_state();
@@ -1249,7 +1249,7 @@ void test_alliance_dialog_layout(const assets::AssetArchive& arc) {
     t.prepare(proposer, 0);
     t.refresh(proposer);
     check(proposer.alliance_dialog() == D::Waiting && proposer.alliance_dialog_team() == 1, "waiting: the proposer waits for Bob");
-    check(proposer.alliance_dialog_text() == sim::strings::format(sim::strings::kWaitingForAnswer, "Bob", "Red"), "waiting: string 3 with the name and the colour word");
+    check(proposer.alliance_dialog_text() == sim::strings::format(sim::strings::kWaitingForAnswer, "Bob", "Red"), "waiting: string 3 with the name and the color word");
     {
         RecordingRenderer rr(arc);
         proposer.render(rr, arc, t.sim.get_world_state(), t.camera);
@@ -1264,7 +1264,7 @@ void test_alliance_dialog_layout(const assets::AssetArchive& arc) {
     u.prepare(leader, 0);
     leader.request_team_up(u.sim, 1);                                                             // Alice (allied with Carol) offers Bob a team
     check(leader.alliance_dialog() == D::BreakConfirm && leader.alliance_dialog_team() == 2, "confirmation: asked about the team with Carol");
-    check(leader.alliance_dialog_text() == sim::strings::format(sim::strings::kBreakTeamConfirm, "Carol", "Blue"), "confirmation: string 4 with the ally's name and colour word");
+    check(leader.alliance_dialog_text() == sim::strings::format(sim::strings::kBreakTeamConfirm, "Carol", "Blue"), "confirmation: string 4 with the ally's name and color word");
     {
         RecordingRenderer rr(arc);
         leader.render(rr, arc, u.sim.get_world_state(), u.camera);

@@ -1509,7 +1509,7 @@ void run_b41_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI7.21 The View's Bombs And Fire Walls Are The Engine's Grid At Every Look: Every Bomb With The Team Whose Colour It Is Drawn In (An Enemy's Too: A Person Sees It), Every Fire Wall Without Owner Or Timer, In Reading Order; A Bomb That Went Off Or Was Defused And A Wall That Burned Out Are Gone At The Next Look; A Copy Of The View Keeps Them; Power-Ups, Bombs And Walls Do Not Mix") {
+    TEST_CASE("AI7.21 The View's Bombs And Fire Walls Are The Engine's Grid At Every Look: Every Bomb With The Team Whose Color It Is Drawn In (An Enemy's Too: A Person Sees It), Every Fire Wall Without Owner Or Timer, In Reading Order; A Bomb That Went Off Or Was Defused And A Wall That Burned Out Are Gone At The Next Look; A Copy Of The View Keeps Them; Power-Ups, Bombs And Walls Do Not Mix") {
         sim::SimulationEngine sim;
         empty_field(sim, 81);
         struct B {

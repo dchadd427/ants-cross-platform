@@ -25,7 +25,7 @@ How a computer player is named, shown and kept apart from a person. The code is 
 
 ## Network protocol 20
 
-No layout changed. The Room message of a lobby room shows, in the empty seat of a colour whose plan is a bot, that bot's label (the room's own copy keeps the seat empty; `seating_hash` ignores the name of an empty seat). The decoder refuses a name on an empty seat that is not a planned bot's label, and the NameMsg decoder refuses a reserved name. The server seats the plan's bots under the same strings at START, so the Start message and the replay head carry them. A client of 19 is refused (`VersionMismatch`).
+No layout changed. The Room message of a lobby room shows, in the empty seat of a color whose plan is a bot, that bot's label (the room's own copy keeps the seat empty; `seating_hash` ignores the name of an empty seat). The decoder refuses a name on an empty seat that is not a planned bot's label, and the NameMsg decoder refuses a reserved name. The server seats the plan's bots under the same strings at START, so the Start message and the replay head carry them. A client of 19 is refused (`VersionMismatch`).
 
 ## The HUD (not changed yet)
 

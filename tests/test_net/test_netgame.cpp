@@ -421,9 +421,9 @@ void run_lan_tests() {
     } TEST_END();
 }
 
-// The four colours of a match on one machine (the start scripts): every window asks for its own seat
+// The four colors of a match on one machine (the start scripts): every window asks for its own seat
 void run_seat_tests() {
-    TEST_CASE("N3.16 Seats: Four Machines Ask For Their Colour In A Scrambled Order And Sit Where They Asked; The Match Gives Them Their Names And Teams") {
+    TEST_CASE("N3.16 Seats: Four Machines Ask For Their Color In A Scrambled Order And Sit Where They Asked; The Match Gives Them Their Names And Teams") {
         Table t;
         Machine& host = t.add("Alice");
         ASSERT_TRUE(host.net.host(0, "Alice", true));
@@ -457,7 +457,7 @@ void run_seat_tests() {
         ASSERT_TRUE(all_equal(t));
     } TEST_END();
 
-    TEST_CASE("N3.37 Seats: A Guest Whose Colour Was Taken Is Told Which Colour It Plays (A Notice Of Five Seconds, The Colour Words); A Guest That Got The Colour It Asked For Or Asked For None Is Told Nothing") {
+    TEST_CASE("N3.37 Seats: A Guest Whose Color Was Taken Is Told Which Color It Plays (A Notice Of Five Seconds, The Color Words); A Guest That Got The Color It Asked For Or Asked For None Is Told Nothing") {
         Table t;
         Machine& host = t.add("Alice");
         ASSERT_TRUE(host.net.host(0, "Alice", true));
@@ -473,7 +473,7 @@ void run_seat_tests() {
         ASSERT_TRUE(t.run_until([&]() { return carl.net.phase() == NetGame::Phase::Room && carl.net.my_seat() < 4; }, 3000));
         ASSERT_EQ(carl.net.my_seat(), 3);
         ASSERT_TRUE(carl.net.status_text().find("taken") == std::string::npos);
-        ASSERT_TRUE(dora.net.join("127.0.0.1", host.net.listen_port(), "Dora"));             // no colour asked for: the first free seat, and nothing to explain
+        ASSERT_TRUE(dora.net.join("127.0.0.1", host.net.listen_port(), "Dora"));             // no color asked for: the first free seat, and nothing to explain
         ASSERT_TRUE(t.run_until([&]() { return dora.net.phase() == NetGame::Phase::Room && dora.net.my_seat() < 4; }, 3000));
         ASSERT_EQ(dora.net.my_seat(), 2);
         ASSERT_TRUE(dora.net.status_text().find("taken") == std::string::npos);

@@ -206,9 +206,9 @@ std::string format_time(uint32_t turn) {
 }
 
 std::string seat_label(const Header& head, uint8_t seat) {
-    static const char* const colours[sim::MAX_PLAYERS] = {"Green", "Red", "Blue", "Black"};
+    static const char* const colors[sim::MAX_PLAYERS] = {"Green", "Red", "Blue", "Black"};
     if (seat >= sim::MAX_PLAYERS) return "seat " + std::to_string(static_cast<unsigned>(seat));
-    return head.names[seat].empty() ? std::string(colours[seat]) : std::string(colours[seat]) + " (" + head.names[seat] + ")";
+    return head.names[seat].empty() ? std::string(colors[seat]) : std::string(colors[seat]) + " (" + head.names[seat] + ")";
 }
 
 const char* ant_type_name(sim::AntType type) noexcept {

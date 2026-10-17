@@ -4,7 +4,7 @@
 //   * a map cell's tile value is the id of its Table-4 animation; all cells of an id share one template clock that
 //     starts at map load (FUN_0100674e, FUN_0102c1fc, FUN_0102b997),
 //   * layer-2 objects are drawn from their anchor cells in row-major order at the anchor top-left + part offset,
-//   * ants are recoloured by adding the colour offset to every pixel index unless the image name starts with a digit.
+//   * ants are recolored by adding the color offset to every pixel index unless the image name starts with a digit.
 #include <SDL.h>
 
 #include <array>
@@ -491,8 +491,8 @@ void test_food_fog_footprint(Renderer& r) {
     check(!differ(body, at_anchor), "from the body cell the pile looks as it does from its anchor");
 }
 
-void test_ant_colour_rule(const assets::AssetArchive& arc) {
-    std::printf("[palette] original per-pixel ant colour rule and raw world palette\n");
+void test_ant_color_rule(const assets::AssetArchive& arc) {
+    std::printf("[palette] original per-pixel ant color rule and raw world palette\n");
     const auto& base = arc.get_palette();
     static const uint8_t offsets[4] = { 60, 40, 20, 0 };
     long checked = 0, bad_raw = 0, bad_ant = 0;
@@ -502,7 +502,7 @@ void test_ant_colour_rule(const assets::AssetArchive& arc) {
         const auto raw = TextureCache::compose_palette(base, name, TEAM_NONE);
         for (size_t i = 0; i < 256; ++i) if (raw[i] != base[i]) { ++bad_raw; break; }
         for (uint8_t team = 0; team < 4; ++team) {
-            const auto pal = TextureCache::compose_palette(base, name, ant_colour(team));
+            const auto pal = TextureCache::compose_palette(base, name, ant_color(team));
             ++checked;
             for (size_t i = 0; i < 256; ++i) {
                 assets::ColorRGBA expect = base[i];
@@ -513,12 +513,12 @@ void test_ant_colour_rule(const assets::AssetArchive& arc) {
     }
     check(checked == static_cast<long>(arc.sprite_count()) * 4, "checked every sprite for every team");
     check(bad_raw == 0, "TEAM_NONE is the raw CHD palette (bad sprites: " + std::to_string(bad_raw) + ")");
-    check(bad_ant == 0, "ant colour rule (bad sprite/team pairs: " + std::to_string(bad_ant) + ")");
-    // transparent index is never recoloured; digit names are exempt
-    const auto p = TextureCache::compose_palette(base, "agst301.bmp", ant_colour(0));
+    check(bad_ant == 0, "ant color rule (bad sprite/team pairs: " + std::to_string(bad_ant) + ")");
+    // transparent index is never recolored; digit names are exempt
+    const auto p = TextureCache::compose_palette(base, "agst301.bmp", ant_color(0));
     check(p[assets::CHD_COLOR_KEY_INDEX].a == 0, "transparent key stays transparent");
-    const auto d = TextureCache::compose_palette(base, "3lb0000.bmp", ant_colour(0));
-    check(d[85] == base[85], "digit-named images are not recoloured");
+    const auto d = TextureCache::compose_palette(base, "3lb0000.bmp", ant_color(0));
+    check(d[85] == base[85], "digit-named images are not recolored");
 }
 
 // Mirrored directions (SW, W, NW) draw one pixel to the right of the plain flip: an exact reflection about the anchor.
@@ -544,7 +544,7 @@ void test_mirrored_draw(Renderer& r, const assets::AssetArchive& arc) {
                 model_draw_frame(ref, arc, seq->subitems[f], 100, 100, true, shifted);
                 SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
                 SDL_RenderClear(sr);
-                r.draw_animation_frame(seq->subitems[f], 100, 100, true, ant_colour(team));
+                r.draw_animation_frame(seq->subitems[f], 100, 100, true, ant_color(team));
                 const Image got = read_region(sr, 0, 0, 200, 200);
                 bool same = true;
                 for (size_t i = 0; i < ref.px.size() && same; i += 4) same = std::memcmp(&got.px[i], &ref.px[i], 3) == 0;
@@ -760,7 +760,7 @@ void test_burn_overlay_layer(Renderer& r, const assets::AssetArchive& arc) {
         for (int y = 0; y < PLAYFIELD_H; ++y) for (int x = 0; x < PLAYFIELD_W; ++x) if (std::memcmp(a.at(x, y), b.at(x, y), 3) != 0) return false;
         return true;
     };
-    // everything explored: the lower ant first, the burn overlay (player 0's colour) over it
+    // everything explored: the lower ant first, the burn overlay (player 0's color) over it
     {
         const Image got = render(false);
         Image full = model_map(arc, level, 0);
@@ -1270,11 +1270,11 @@ void test_ant_sprite_pixels(Renderer& r, const assets::AssetArchive& arc) {
         model_draw_frame(ref, arc, seq->subitems[0], 100, 100, false, shifted);
         SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
         SDL_RenderClear(sr);
-        r.draw_animation_frame(seq->subitems[0], 100, 100, false, ant_colour(team));
+        r.draw_animation_frame(seq->subitems[0], 100, 100, false, ant_color(team));
         const Image got = read_region(sr, 0, 0, 200, 200);
         bool same = true;
         for (size_t i = 0; i < ref.px.size() && same; i += 4) same = std::memcmp(&got.px[i], &ref.px[i], 3) == 0;
-        check(same, "agst301 rendered with team colour " + std::to_string(team));
+        check(same, "agst301 rendered with team color " + std::to_string(team));
     }
 }
 
@@ -1342,11 +1342,11 @@ void test_dynamic_items(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
-// A bomb is on every viewer's screen in the colour of its owner (B4-1, the fairness check of the standard bot): a person of team 0 sees the bombs that teams 1 .. 3 planted, with the
+// A bomb is on every viewer's screen in the color of its owner (B4-1, the fairness check of the standard bot): a person of team 0 sees the bombs that teams 1 .. 3 planted, with the
 // art of the team that planted each, and a bot of any seat reads the same list from the grid (BotView::bombs(), test AI7.21). The picture of a bomb must not depend on the viewer's team
 // and must differ from the picture without it and from the bomb of another owner. (Fog of War hides a bomb on an unexplored tile, and bots are refused with fog.)
 void test_enemy_bombs_are_drawn(Renderer& r, const assets::AssetArchive& arc) {
-    std::printf("[enemy bombs] every viewer sees every owner's bomb in the owner's colour\n");
+    std::printf("[enemy bombs] every viewer sees every owner's bomb in the owner's color\n");
     assets::LevelData level;
     if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
     const int32_t g = arc.find_animation_id("g01a");
@@ -1374,7 +1374,7 @@ void test_enemy_bombs_are_drawn(Renderer& r, const assets::AssetArchive& arc) {
             per_viewer.push_back(capture_map(r, grid, level.width, level.height));
             const Image ref = model_map(arc, level, 0, {}, {{5, 5, arc.find_animation_id(bomb_names[owner])}});
             const DiffStats st = diff_images(per_viewer.back(), ref);
-            check(st.pixels == 0, "the bomb of team " + std::to_string(owner) + " is drawn in its colour for the viewer of team " + std::to_string(viewer) + " (" + std::to_string(st.pixels) + " pixels differ)");
+            check(st.pixels == 0, "the bomb of team " + std::to_string(owner) + " is drawn in its color for the viewer of team " + std::to_string(viewer) + " (" + std::to_string(st.pixels) + " pixels differ)");
             const DiffStats vs_bare = diff_images(per_viewer.back(), without);
             check(vs_bare.pixels > 0 && vs_bare.cells == 1, "a bomb changes exactly one cell of the picture (viewer " + std::to_string(viewer) + ", owner " + std::to_string(owner) + ")");
         }
@@ -1382,7 +1382,7 @@ void test_enemy_bombs_are_drawn(Renderer& r, const assets::AssetArchive& arc) {
     }
     r.set_hud_team(0);
     for (size_t a = 0; a < 4; ++a) {
-        for (size_t b = a + 1; b < 4; ++b) check(diff_images(shown[a], shown[b]).pixels > 0, "the bombs of teams " + std::to_string(a) + " and " + std::to_string(b) + " are drawn in different colours");
+        for (size_t b = a + 1; b < 4; ++b) check(diff_images(shown[a], shown[b]).pixels > 0, "the bombs of teams " + std::to_string(a) + " and " + std::to_string(b) + " are drawn in different colors");
     }
     r.unpin_animation_clock();
 }
@@ -1838,7 +1838,7 @@ int main(int argc, char* argv[]) {
     test_mirrored_part_order(arc);
     test_template_clock(arc);
     test_effect_specs(arc);
-    test_ant_colour_rule(arc);
+    test_ant_color_rule(arc);
     test_part_order_all_frames(r, arc);
     test_ant_sprite_pixels(r, arc);
     test_mirrored_draw(r, arc);

@@ -128,8 +128,8 @@ std::string format(uint16_t id, const std::string& a, const std::string& b, cons
     return out;
 }
 
-const char* colour_name(uint8_t colour_index) noexcept {
-    return colour_index < 4 ? text(static_cast<uint16_t>(kColourBlack + colour_index)) : "";
+const char* color_name(uint8_t color_index) noexcept {
+    return color_index < 4 ? text(static_cast<uint16_t>(kColorBlack + color_index)) : "";
 }
 
 }  // namespace ants::sim::strings

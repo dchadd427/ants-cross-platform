@@ -170,7 +170,7 @@ bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, con
                 foreign = true;
             }
             if (!foreign) return false;                                                     // an attack click is made on an enemy ant: with nobody there a person's click is a move
-            for (const assets::AnthillSpawn& hill : sim.grid().anthills()) {                 // an ant of another colour on a hill tile gets the plain move cursor
+            for (const assets::AnthillSpawn& hill : sim.grid().anthills()) {                 // an ant of another color on a hill tile gets the plain move cursor
                 if (tile.x >= static_cast<int32_t>(hill.x) && tile.x <= static_cast<int32_t>(hill.x) + 3 && tile.y >= static_cast<int32_t>(hill.y) && tile.y <= static_cast<int32_t>(hill.y) + 3) return false;
             }
         }

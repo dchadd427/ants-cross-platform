@@ -39,7 +39,7 @@ DIRTAB = [7, 0, 1, 6, 0, 2, 5, 4, 3]         # 0x1002b28: direction by [drow + 1
 class Tables:
     def __init__(self, exe, chd):
         self.chd = chd
-        self.walk = exe.u16s(emt.WALK_VA, 240)             # colour-0 block [type 6][terrain 5][dir 8]
+        self.walk = exe.u16s(emt.WALK_VA, 240)             # color-0 block [type 6][terrain 5][dir 8]
         self.carry = exe.u16s(emt.CARRY_WALK_VA, 240)
         self.idle = exe.u16s(emt.IDLE_VA, 48)              # [type 6][dir 8]
         self.carry_idle = exe.u16s(emt.CARRY_IDLE_VA, 48)

@@ -387,7 +387,7 @@ struct SetupAfterMatch {
     float live_zoom{1.0f};                                     // the camera's zoom while the setup screen is up (the last match's)
     float remembered{1.0f};
     std::vector<uint8_t> preview;                              // the preview's inner square on the canvas, RGBA
-    int colours{0};                                            // distinct colours in it (a picture of the map, not the "No preview" box)
+    int colors{0};                                            // distinct colors in it (a picture of the map, not the "No preview" box)
     int32_t area_x{0};
     int32_t area_y{0};
 };
@@ -421,7 +421,7 @@ SetupAfterMatch setup_after_zoomed_match(float level, const std::string& map, in
             if (std::find(seen.begin(), seen.end(), key) == seen.end()) seen.push_back(key);
         }
     }
-    out.colours = static_cast<int>(seen.size());
+    out.colors = static_cast<int>(seen.size());
     out.live_zoom = app.zoom();
     out.remembered = app.remembered_zoom();
     out.ok = true;
@@ -439,7 +439,7 @@ void test_app_setup_screen() {
     for (const Pair& pair : {Pair{"TINY", 1}, Pair{"GAUNTLET", 4}}) {
         const std::string name = std::string("match on ") + pair.match + ", list at " + std::to_string(pair.shown) + ": ";
         const SetupAfterMatch at1 = setup_after_zoomed_match(1.0f, pair.match, pair.shown);
-        check(at1.ok && at1.preview.size() > 100000u && at1.colours > 30, name + "(setup) the preview after a match at the zoom 1 is a picture of the map (" + std::to_string(at1.colours) + " colours)");
+        check(at1.ok && at1.preview.size() > 100000u && at1.colors > 30, name + "(setup) the preview after a match at the zoom 1 is a picture of the map (" + std::to_string(at1.colors) + " colors)");
         if (!at1.ok) continue;
         for (const float level : {zoom::series(-1), zoom::series(2), 2.0f}) {                  // (levels that both maps offer: TINY's own limit is 0.768 in this view)
             const std::string label = name + "after a match at the zoom " + zoom::level_name(level) + ": ";

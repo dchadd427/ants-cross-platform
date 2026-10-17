@@ -508,7 +508,7 @@ non-default `newtask` mode, see C2 in the verification notes)*) and only one ant
 Idle first-frame durations (static tables 0x1002cb8 idle / 0x1002e38 carrying, [type*8+dir],
 dirs 0..4; CHD Table-4 names): worker agst*/hgst* 150; bomber abst* 100; fire afst* 100;
 thief atst* 100; combat acst* 150 except dir 4 (acst301/hcst301) 125; swimmer asst* 150.
-(Swimmer on water uses world+0x47c0[colour], not resolved here.)
+(Swimmer on water uses world+0x47c0[color], not resolved here.)
 
 -----------------------------------------------------------------------------------------------
 ## 13. New order issued while the ant is mid-stride
@@ -766,7 +766,7 @@ Each item below was checked instruction by instruction, including push order, si
 - The mechanism is confirmed: no stride completion and no reversal.
 
 **C4. Claim 13: incomplete for swimmers on water.**
-- SetAction case 0 uses world+0x47c0[colour] when terrA==2 (0x101aebc..0x101aed3). terrA is 0xffff in the msg-6 call, so it is computed from the ant's current tile (0x101ae5b..0x101ae90).
+- SetAction case 0 uses world+0x47c0[color] when terrA==2 (0x101aebc..0x101aed3). terrA is 0xffff in the msg-6 call, so it is computed from the ant's current tile (0x101ae5b..0x101ae90).
 - world+0x47c0 ← anim ID at 0x10048b8 (0x101881d..0x1018836) = CHD #1006 'astw301', 85 frames, first frame 40 ms.
 - A swimmer standing on water therefore starts walking 40 ms after delivery, not 150.
 - If the path arrives while the ant is in action 3, the action-3 "sd" anim (world+0x4180/0x41e0 ← tables 0x10045d8/0x1004608, loaded at 0x10185a9/0x10185d1; dir forced to 4 at 0x101b3b3) sets the delay instead: worker 125, bomber 105, fire 100, thief 10, combat 100, swimmer 100 ms.
@@ -791,7 +791,7 @@ Each item below was checked instruction by instruction, including push order, si
 - **Sprite-update cadence** (how soon after the due time a step actually runs), and so the exact wall-clock latency of the "first-step" boundary.
 - **Per-order bodies of FUN_0101ccaf beyond orders 1/4, the dispatch table and the tail.** The report's section 16 details for orders 3, 5, 6..0xf were not re-derived.
 - **Combat internals:** FUN_0101dbec, FUN_0101da6f, FUN_01022c57. I only saw that FUN_0101dd6f re-issues the saved order (+0xc4) after an auto-engage (0x101dd6f..0x101ddea).
-- **Colour 1..3 copies** of the idle and swim-idle anims are assumed to keep the colour-0 frame durations.
+- **Color 1..3 copies** of the idle and swim-idle anims are assumed to keep the color-0 frame durations.
 - **What the uninitialised mode-5 tile** (FUN_010277f4 [ebp-0x18], FUN_01027b51 [ebp-0x18]) actually produces.
 - **FUN_01026f91 per-type details.**
 - **Multiplayer paths:** remote-flag stops, and msg 6 received for remote ants.

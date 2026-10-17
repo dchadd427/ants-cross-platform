@@ -458,7 +458,7 @@ void run_demo_tests() {
         ASSERT_TRUE(st.state == RoomState::Failed && st.reason.find("did not all come (1 of 4)") != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("S3.24c The Platform Byte Through A Real Room (Protocol 15): What A Player Tells In Its Hello Is Shown To Everybody At Its Seat; It Goes With The Player When The Leader Swaps Two Colours; A Player Who Leaves Takes It Away (The Seat Says 0 Until A Newcomer Says Its Own); The Start Of The Match Carries The Platform Of Every Seat That Plays") {
+    TEST_CASE("S3.24c The Platform Byte Through A Real Room (Protocol 15): What A Player Tells In Its Hello Is Shown To Everybody At Its Seat; It Goes With The Player When The Leader Swaps Two Colors; A Player Who Leaves Takes It Away (The Seat Says 0 Until A Newcomer Says Its Own); The Start Of The Match Carries The Platform Of Every Seat That Plays") {
         ServerLimits limits;
         limits.demo_rooms = 4;
         limits.demo_map = "TINY.LVL";
@@ -480,14 +480,14 @@ void run_demo_tests() {
         w.run(1000);
         ASSERT_TRUE(w.status("plat0001").state == RoomState::Waiting && ann.lobby->is_leader());
         for (const Client* c : {&ann, &bob, &cat}) ASSERT_EQ(platforms(*c), std::string("1 18 4 0"));
-        ASSERT_TRUE(ann.lobby->request_seat_move(1, 2));                                  // Ann swaps Bob and Cat: each takes its platform to the other colour
+        ASSERT_TRUE(ann.lobby->request_seat_move(1, 2));                                  // Ann swaps Bob and Cat: each takes its platform to the other color
         w.run(500);
         for (const Client* c : {&ann, &bob, &cat}) ASSERT_EQ(platforms(*c), std::string("1 4 18 0"));
-        bob.lobby->leave();                                                               // Bob goes: his colour says nothing any more
+        bob.lobby->leave();                                                               // Bob goes: his color says nothing any more
         w.run(500);
         for (const Client* c : {&ann, &cat}) ASSERT_EQ(platforms(*c), std::string("1 4 0 0"));
         w.next_platform = net::kOsIos;
-        Client& dan = w.connect("Dan", "plat0001");                                       // a newcomer takes the colour that is free, with its own byte
+        Client& dan = w.connect("Dan", "plat0001");                                       // a newcomer takes the color that is free, with its own byte
         w.next_platform = net::kPlatformUnknown;
         w.run(500);
         ASSERT_EQ(dan.lobby->my_seat(), 2);
@@ -1051,7 +1051,7 @@ void run_leader_tests() {
         ASSERT_EQ(ann.sim.current_tick(), bob.sim.current_tick());
     } TEST_END();
 
-    TEST_CASE("S3.26b The Leader Moves The Colours (Protocol 14, The Swap And The Guard Of 15) In A Real Room: Cat And Bob Change Places And Bob Is Put In Black, Everybody Who Moved Is Told, The Status Shows The Seats And The Counts, The Match Runs With The Seats As They Are Now (Each Client Plays The Colour It Was Moved To) And The Clients Agree With The Referee; A Player Who Is Not The Leader Moves Nobody, Nor Does A Press That Was Made For Other Seats; A Press After The Start Is Ignored And Counted") {
+    TEST_CASE("S3.26b The Leader Moves The Colors (Protocol 14, The Swap And The Guard Of 15) In A Real Room: Cat And Bob Change Places And Bob Is Put In Black, Everybody Who Moved Is Told, The Status Shows The Seats And The Counts, The Match Runs With The Seats As They Are Now (Each Client Plays The Color It Was Moved To) And The Clients Agree With The Referee; A Player Who Is Not The Leader Moves Nobody, Nor Does A Press That Was Made For Other Seats; A Press After The Start Is Ignored And Counted") {
         World w;
         ASSERT_TRUE(w.mgr.create_room(spec_of("MOVE-1", 4), w.now).ok);
         Client& ann = w.connect("Ann", "MOVE-1");
@@ -1078,7 +1078,7 @@ void run_leader_tests() {
         s = w.status("MOVE-1");
         ASSERT_TRUE(s.names[1] == "Bob" && s.names[2] == "Cat" && s.seat_moves == 0 && s.ignored_seat_moves == 2);
         ASSERT_TRUE(ann.room_chat.empty() && bob.room_chat.empty() && cat.room_chat.empty());
-        // Ann puts Cat (blue) onto Bob's colour (red): the two change places and both are told; then Bob (blue now) in black (nobody holds it)
+        // Ann puts Cat (blue) onto Bob's color (red): the two change places and both are told; then Bob (blue now) in black (nobody holds it)
         ASSERT_TRUE(ann.lobby->request_seat_move(2, 1));
         w.run(500);
         s = w.status("MOVE-1");
@@ -1108,7 +1108,7 @@ void run_leader_tests() {
         ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Cat" && s.names[2].empty() && s.names[3] == "Bob");
         ASSERT_TRUE(ann.sim.roster_mask() == 0x0B && bob.sim.roster_mask() == 0x0B && cat.sim.roster_mask() == 0x0B);       // green, red and black play
         ASSERT_TRUE(ann.session != nullptr && bob.session != nullptr && cat.session != nullptr);
-        ASSERT_TRUE(ann.session->player() == 0 && cat.session->player() == 1 && bob.session->player() == 3);              // each client plays the colour it was moved to
+        ASSERT_TRUE(ann.session->player() == 0 && cat.session->player() == 1 && bob.session->player() == 3);              // each client plays the color it was moved to
         // the leader's press that crossed the Start: the running match ignores it and counts it, and the match is as it was
         ann.end->send(net::encode(net::SeatMoveMsg{3, 2, net::seating_hash(ann.lobby->room())}));
         w.run(500);
@@ -1403,7 +1403,7 @@ void run_leader_tests() {
         ctl::JsonValue v = json_of(r);
         ASSERT_TRUE(v.get("early_start").is_bool() && v.get("early_start").as_bool_or(false));   // the default: on
         ASSERT_TRUE(v.get("leader").is_null() && v.get("ignored_start_requests").as_int_or(9) == 0);
-        ASSERT_TRUE(v.get("seat_moves").as_int_or(9) == 0 && v.get("ignored_seat_moves").as_int_or(9) == 0);       // (protocol 14: the colours that the leader moved, and the moves that were heard and not done)
+        ASSERT_TRUE(v.get("seat_moves").as_int_or(9) == 0 && v.get("ignored_seat_moves").as_int_or(9) == 0);       // (protocol 14: the colors that the leader moved, and the moves that were heard and not done)
         r = call("POST", "/rooms", R"({"map":"TINY.LVL","players":4,"code":"J-2","early_start":false})");
         ASSERT_EQ(r.status, 201);
         v = json_of(r);

@@ -68,7 +68,7 @@ void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int
     const std::string ping = ping_text(readout.ping_ms);
     const std::string delay = delay_text(readout.delay_ms);
     const LatencyCornerLayout layout = latency_corner_layout(renderer, readout, version_x, text_y, left_limit, corner);
-    const ants::assets::ColorRGBA white{255, 255, 255, 255};              // the frame rate's colour
+    const ants::assets::ColorRGBA white{255, 255, 255, 255};              // the frame rate's color
     renderer.draw_text(ping, layout.ping_x, layout.ping_y, white, FontSize::Px12);
     renderer.draw_text(delay, layout.delay_x, layout.delay_y, white, FontSize::Px12);
 }

@@ -115,7 +115,7 @@ struct PileView {
     bool lunchbox{false};                // dropped by a dying ant: one unit
 };
 
-/// A planted bomb as the screen draws it: its tile and the team whose colour it is drawn in (every bomb is drawn, an enemy's too, in its owner's colour: Renderer, the layer-2 pass;
+/// A planted bomb as the screen draws it: its tile and the team whose color it is drawn in (every bomb is drawn, an enemy's too, in its owner's color: Renderer, the layer-2 pass;
 /// with Fog of War a bomb on an unexplored tile is hidden, and bots are refused with fog). An ant that steps on an enemy bomb loses 2 hit points and is thrown 4 tiles.
 struct BombView {
     sim::TileCoord tile{};

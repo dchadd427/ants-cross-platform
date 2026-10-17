@@ -106,7 +106,7 @@ ai::Level level_of(SeatChoice choice) noexcept {
 constexpr int32_t kButtonX = 160;
 constexpr int32_t kButtonW = 320;
 constexpr int32_t kButtonH = 46;
-constexpr int32_t kSeatRowH = 44;                  // a seat row of the single-player panel (portrait, colour, cycler): the panel also holds the name and, with two bots, the Teams row
+constexpr int32_t kSeatRowH = 44;                  // a seat row of the single-player panel (portrait, color, cycler): the panel also holds the name and, with two bots, the Teams row
 constexpr int32_t kRejoinX = 100;                  // the first panel's "Rejoin your match (CODE)": in the gap between the title and Single player (nothing else of the panel moves), wider than the others for the room's code
 constexpr int32_t kRejoinY = 78;
 constexpr int32_t kRejoinW = 440;
@@ -502,7 +502,7 @@ LocalTeams StartMenu::teams() const {
 std::string StartMenu::teams_text(const LocalTeams& teams, uint8_t own_seat) {
     if (!teams.set) return "Free for all";
     const uint8_t other = teams.a == own_seat ? teams.b : teams.a;
-    return std::string("You + ") + sim::strings::colour_name(static_cast<uint8_t>(3u - other));
+    return std::string("You + ") + sim::strings::color_name(static_cast<uint8_t>(3u - other));
 }
 
 net::FillPlan StartMenu::host_fill() const {
@@ -732,12 +732,12 @@ std::vector<MenuElement> StartMenu::elements() const {
         }
         case MenuPanel::Single: {
             add_title(out, "Single player");
-            std::string own = sim::strings::colour_name(static_cast<uint8_t>(3u - own_seat_));
+            std::string own = sim::strings::color_name(static_cast<uint8_t>(3u - own_seat_));
             if (!own.empty()) own[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(own[0])));
             MenuElement intro = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 80, kTextW, 22}, "You play the " + own + " ants. Who plays against you?", FontSize::Px18);
             intro.centered = true;
             out.push_back(intro);
-            // The player's name, in the column of the controls (the rows below it have a portrait, a colour and a cycler there): the same text as the Join and Host panels, so one remembered name
+            // The player's name, in the column of the controls (the rows below it have a portrait, a color and a cycler there): the same text as the Join and Host panels, so one remembered name
             out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{136, 106 + 5, 130, 24}, "Your name", FontSize::Px24));
             out.push_back(control(MenuId::SingleName, MenuKind::Field, ButtonRect{280, 106, 280, 34}, name_, FontSize::Px18));
             // With two or more bots there is a choice of teams: a Teams row under the seats (the same row of a label and a cycler) that pushes the rule below it
@@ -747,7 +747,7 @@ std::vector<MenuElement> StartMenu::elements() const {
                 MenuElement portrait = control(MenuId::None, MenuKind::Portrait, ButtonRect{84, y, 40, kSeatRowH}, std::string(), FontSize::Px18);
                 portrait.team = static_cast<uint8_t>(s);
                 out.push_back(portrait);
-                MenuElement name = control(MenuId::None, MenuKind::Text, ButtonRect{136, y + 10, 130, 24}, sim::strings::colour_name(static_cast<uint8_t>(3u - s)), FontSize::Px24);
+                MenuElement name = control(MenuId::None, MenuKind::Text, ButtonRect{136, y + 10, 130, 24}, sim::strings::color_name(static_cast<uint8_t>(3u - s)), FontSize::Px24);
                 out.push_back(name);
                 MenuElement cycler = control(static_cast<MenuId>(static_cast<uint8_t>(MenuId::Seat0) + s), MenuKind::Cycler, ButtonRect{280, y, 280, kSeatRowH}, std::string(), FontSize::Px24);
                 cycler.value = seat_choice_text(settings_.seats[s]);
@@ -800,7 +800,7 @@ std::vector<MenuElement> StartMenu::elements() const {
             row("Map", MenuId::HostMap, menu_map(static_cast<size_t>(settings_.host_map)).name);
             row("Players", MenuId::HostPlayers, std::to_string(players) + " players");
             for (int seat = 1; seat < players; ++seat) {                      // the seats after the leader's, each with the bot that START puts there when nobody has taken it
-                row(std::string(sim::strings::colour_name(static_cast<uint8_t>(3 - seat))) + " at START", host_seat_id(static_cast<size_t>(seat)), fill_seat_text(settings_.host_fill.level[static_cast<size_t>(seat)]));
+                row(std::string(sim::strings::color_name(static_cast<uint8_t>(3 - seat))) + " at START", host_seat_id(static_cast<size_t>(seat)), fill_seat_text(settings_.host_fill.level[static_cast<size_t>(seat)]));
             }
             if (players >= 3) row("Teams", MenuId::HostTeams, host_teams_text(host_teams(), players));
             // under the rows: what the bots do (the standard bot gathers, raids and fights back: docs/BOTS.md)

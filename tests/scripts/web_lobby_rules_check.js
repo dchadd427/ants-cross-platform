@@ -1,6 +1,6 @@
-// Runs the rules and the words of the lobby page (web/front/lobby_rules.js) without a browser, on tables: what a Room message of network protocol 16 shows on each of the four colour cards and on the
+// Runs the rules and the words of the lobby page (web/front/lobby_rules.js) without a browser, on tables: what a Room message of network protocol 16 shows on each of the four color cards and on the
 // map's side (the pictures 1, 2, 3, 4, 5, 5b, 6, 12, 13, 13b, 14, 15b, 16, 17 and the rematch's R2, which the words below are compared with), who may press which of the Team 1 / Team 2 buttons and what is said when
-// a press is refused, what the leader asks of the room (the plan, a colour moved or exchanged), the player's name (the same rules as the game page's own NAME block, which is read from web/shell.html and
+// a press is refused, what the leader asks of the room (the plan, a color moved or exchanged), the player's name (the same rules as the game page's own NAME block, which is read from web/shell.html and
 // web/lobby.html and must be the same text in both), the room codes (the alphabet, the two groups of three, what a typed or pasted code may be), the maps (against the level files of Original-Ants/Maps),
 // the sentences that the server says (noticeKind) and every message strip of picture 15 (text, tone and button).
 //   - the Room messages are built as bytes and read by web/front/lobby_net.js (the codec of the same protocol), so a table row is a message that a server can send;
@@ -53,14 +53,14 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 // 0. What the library offers
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
-    'ACTS', 'CODE_CHARS', 'COLOURS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'NAMES', 'TEXT',
+    'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'NAMES', 'TEXT',
     'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pickName',
     'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf'
 ]);
 
-// The colours: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
-same('the colours are the server\'s seats: Green 0, Red 1, Blue 2, Black 3', R.COLOURS, [{ id: 'green', name: 'Green' }, { id: 'red', name: 'Red' }, { id: 'blue', name: 'Blue' }, { id: 'black', name: 'Black' }]);
-same('the cards lie Black, Green, Red, Blue (top left to bottom right, as the four hills lie)', R.GRID.map((seat) => R.COLOURS[seat].name), ['Black', 'Green', 'Red', 'Blue']);
+// The colors: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
+same('the colors are the server\'s seats: Green 0, Red 1, Blue 2, Black 3', R.COLORS, [{ id: 'green', name: 'Green' }, { id: 'red', name: 'Red' }, { id: 'blue', name: 'Blue' }, { id: 'black', name: 'Black' }]);
+same('the cards lie Black, Green, Red, Blue (top left to bottom right, as the four hills lie)', R.GRID.map((seat) => R.COLORS[seat].name), ['Black', 'Green', 'Red', 'Blue']);
 same('GRID is a way through the four seats, each once', R.GRID.slice().sort(), [0, 1, 2, 3]);
 same('the plan words are the protocol\'s plan values 0 to 4', R.KINDS.map((k) => N.PLAN[k.charAt(0).toUpperCase() + k.slice(1)]), [0, 1, 2, 3, 4]);
 check('the slot states of the protocol are the ones that the rules read (a person is a Host or a Client, a computer player a Bot)', N.SLOT.Empty === 0 && N.SLOT.Host === 1 && N.SLOT.Client === 2 && N.SLOT.Bot === 3);
@@ -245,7 +245,7 @@ const ALL = [0, 1, 2, 3];
 const person = (name, me, leader, ingame) => ({ kind: 'person', name: name, leader: !!leader, me: !!me, ingame: !!ingame });
 
 // the situations of the pictures
-const S1 = mk([P('Juniper'), O, O, O]);                                                                               // picture 1: you alone, three colours open
+const S1 = mk([P('Juniper'), O, O, O]);                                                                               // picture 1: you alone, three colors open
 const S2 = mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 0] });                                                // pictures 2, 3 and 6: Sam in Red, a Medium bot in Blue, Black open
 const S5 = mk([P('Juniper'), P('Sam'), O, P('Priya')], { plan: [0, 0, 2, 0], teamA: 0, teamB: 2 });                   // pictures 5 and 5b: Green + Blue against Red + Black
 const S14 = mk([P('Juniper'), P('Sam'), O, P('Priya')], { plan: [0, 0, 2, 0] });                                      // picture 14 (and 13 before START): four play, no teams
@@ -273,15 +273,15 @@ same('modelOf, picture 13b: START is pressed, a guest; the game of Juniper is op
 });
 same('modelOf, picture 13: the page\'s own bit never counts, the others\' do', [model(mk([P('Juniper'), P('Sam'), O, P('Priya')], { starting: true, inGame: 11 })).slots.filter((s) => s.kind === 'person').map((s) => s.ingame), model(S13).slots.filter((s) => s.kind === 'person').map((s) => s.ingame)], [[false, true, true], [false, true, false]]);
 same('modelOf, picture 12: the new host', model(S12).slots.map((s) => s.kind + (s.leader ? ':leader' : '') + (s.me ? ':me' : '')), ['open', 'person:leader:me', 'bot', 'person']);
-same('modelOf: what each plan value is when no person holds the colour (open, easy, medium, hard, nobody)', model(mk([P('Juniper'), O, O, O], { plan: [0, 4, 1, 3] })).slots.slice(1), [{ kind: 'nobody' }, { kind: 'bot', level: 'easy' }, { kind: 'bot', level: 'hard' }]);
+same('modelOf: what each plan value is when no person holds the color (open, easy, medium, hard, nobody)', model(mk([P('Juniper'), O, O, O], { plan: [0, 4, 1, 3] })).slots.slice(1), [{ kind: 'nobody' }, { kind: 'bot', level: 'easy' }, { kind: 'bot', level: 'hard' }]);
 same('... Medium is value 2', model(mk([P('Juniper'), O, O, O], { plan: [0, 2, 0, 0] })).slots[1], { kind: 'bot', level: 'medium' });
-same('modelOf: a person who holds a colour shows, whatever the plan of the colour says (it comes back when the person leaves)', model(mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 3, 0, 4] })).slots.map((s) => s.kind), ['person', 'person', 'open', 'nobody']);
+same('modelOf: a person who holds a color shows, whatever the plan of the color says (it comes back when the person leaves)', model(mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 3, 0, 4] })).slots.map((s) => s.kind), ['person', 'person', 'open', 'nobody']);
 same('modelOf: a seat that the server filled with a computer player is a computer player (Medium when the plan does not say)', model(mk([P('Juniper'), [B, 'Bot (Easy)'], [B, 'Bot (Hard)'], [B, 'Bot (Medium)']], { plan: [0, 1, 3, 4] })).slots.slice(1), [{ kind: 'bot', level: 'easy' }, { kind: 'bot', level: 'hard' }, { kind: 'bot', level: 'medium' }]);
 same('modelOf: a Host seat of a game room is a person like a Client seat', R.modelOf({ slots: [{ state: 1, name: 'A' }, { state: 2, name: 'B' }, { state: 0, name: '' }, { state: 0, name: '' }], plan: [0, 0, 0, 0], map: '', you: 0, leader: 0, teamA: 255, teamB: 255, inGame: 0, starting: false }).slots.map((s) => s.kind), ['person', 'person', 'open', 'open']);
 same('modelOf: no leader (255) is -1, and the page is a guest then', [model(mk([P('A'), P('B'), O, O], { leader: 255 })).leader, model(mk([P('A'), P('B'), O, O], { leader: 255 })).guest], [-1, true]);
 same('modelOf: the map of the file name, in any case, else none (and the file name as the room says it)', ['ISLANDS.LVL', 'islands.lvl', 'MYMAP.LVL', ''].map((f) => { const m = model(mk([P('A'), O, O, O], { map: f })); return [m.map, m.mapFile]; }), [['islands', 'ISLANDS.LVL'], ['islands', 'islands.lvl'], ['', 'MYMAP.LVL'], ['', '']]);
 same('modelOf: the team pair is two switches on Team 1; no team is none', [model(mk([P('A'), P('B'), P('C'), P('D')], { teamA: 1, teamB: 3 })).sides, model(mk([P('A'), P('B'), P('C'), P('D')], { teamA: 0, teamB: 1 })).sides, model(S14).sides], [[0, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 0]]);
-same('modelOf: a team that names a colour that is none (a message that no server sends) is no team', [255, 9].map((b) => R.modelOf({ slots: ALL.map(() => ({ state: 2, name: 'x' })), plan: [0, 0, 0, 0], map: '', you: 0, leader: 0, teamA: 1, teamB: b, inGame: 0, starting: false }).sides), [[0, 0, 0, 0], [0, 0, 0, 0]]);
+same('modelOf: a team that names a color that is none (a message that no server sends) is no team', [255, 9].map((b) => R.modelOf({ slots: ALL.map(() => ({ state: 2, name: 'x' })), plan: [0, 0, 0, 0], map: '', you: 0, leader: 0, teamA: 1, teamB: b, inGame: 0, starting: false }).sides), [[0, 0, 0, 0], [0, 0, 0, 0]]);
 same('modelOf: starting is read from the Room message', [model(S13).starting, model(S14).starting], [true, false]);
 {
     const before = JSON.stringify(S5);
@@ -295,7 +295,7 @@ same('article: an Easy bot, a Medium bot, a Hard bot', ['easy', 'medium', 'hard'
 same('listOf: nothing, one, two, three, four', [[], ['a'], ['a', 'b'], ['a', 'b', 'c'], ['a', 'b', 'c', 'd']].map(R.listOf), ['', 'a', 'a and b', 'a, b and c', 'a, b, c and d']);
 same('playing: every person and every computer player, in seat order (open and nobody do not play)', [model(S1), model(S2), model(S5), model(S12), model(mk([P('A'), O, O, O], { plan: [0, 4, 4, 1] }))].map(R.playing), [[0], [0, 1, 2], [0, 1, 2, 3], [1, 2, 3], [0, 3]]);
 same('hostName: the leader\'s name, or "The host" when the room has none', [R.hostName(model(S4)), R.hostName(model(S12)), R.hostName(model(mk([P('A'), P('B'), O, O], { leader: 255 })))], ['Juniper', 'Sam', 'The host']);
-same('nameOf: what a card is called (the question of a moved colour)', ALL.map((i) => R.nameOf(model(S2), i)), ['Juniper', 'Sam', 'Medium bot', 'the open Black']);
+same('nameOf: what a card is called (the question of a moved color)', ALL.map((i) => R.nameOf(model(S2), i)), ['Juniper', 'Sam', 'Medium bot', 'the open Black']);
 same('nameOf: Easy bot, Hard bot, the unused Red', [R.nameOf(model(mk([P('A'), O, O, O], { plan: [0, 4, 1, 3] })), 1), R.nameOf(model(mk([P('A'), O, O, O], { plan: [0, 4, 1, 3] })), 2), R.nameOf(model(mk([P('A'), O, O, O], { plan: [0, 4, 1, 3] })), 3)], ['the unused Red', 'Easy bot', 'Hard bot']);
 same('nameAt: who a toast is about (You for the page itself)', [R.nameAt(model(S2), 0, true), R.nameAt(model(S2), 1, false), R.nameAt(model(S2), 2, false), R.nameAt(model(S2), 3, false), R.nameAt(model(mk([P('A'), O, O, O], { plan: [0, 4, 0, 0] })), 1, false)],
     ['You', 'Sam', 'The Medium bot', 'The open Black', 'The unused Red']);
@@ -304,17 +304,17 @@ same('startsAlone: START plays on this computer when nobody else is in the match
 ].map((r) => R.startsAlone(model(r))), [true, true, true, false, false, false, false, false]);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 5. Team 1 and Team 2: the rules of the live match card (a team is two colours on the same button)
+// 5. Team 1 and Team 2: the rules of the live match card (a team is two colors on the same button)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 [
     ['four, two and two', [1, 1, 2, 2], ALL, [1, 1, 2, 2]], ['four, a pair and nothing', [1, 0, 1, 0], ALL, [1, 0, 1, 0]], ['three play, a pair', [1, 1, 2, 0], [0, 1, 2], [1, 1, 2, 0]],
     ['two play: no teams', [1, 1, 2, 2], [0, 1], [0, 0, 0, 0]], ['one plays', [1, 0, 0, 0], [0], [0, 0, 0, 0]], ['nobody plays', [1, 1, 2, 2], [], [0, 0, 0, 0]],
-    ['a colour that does not play loses its button', [1, 1, 2, 2], [0, 1, 2], [1, 1, 2, 0]], ['three on Team 1 is too many: all clear', [1, 1, 1, 0], [0, 1, 2], [0, 0, 0, 0]],
+    ['a color that does not play loses its button', [1, 1, 2, 2], [0, 1, 2], [1, 1, 2, 0]], ['three on Team 1 is too many: all clear', [1, 1, 1, 0], [0, 1, 2], [0, 0, 0, 0]],
     ['three on Team 1 of four: all clear', [1, 1, 1, 2], ALL, [0, 0, 0, 0]], ['three on Team 2: all clear', [2, 2, 2, 0], [0, 1, 2], [0, 0, 0, 0]],
     ['three on a button, but one of them does not play: two are left, which is fine', [1, 1, 1, 0], [0, 1, 3], [1, 1, 0, 0]],
     ['a value that is no button (3, -1, "1", null, 1.5) is none', [3, -1, '1', null], [0, 1, 2, 3], [0, 0, 0, 0]], ['a value that is no button next to a good one', [3, 1, 1.5, 2], ALL, [0, 1, 0, 2]],
     ['not a list of numbers: none', null, ALL, [0, 0, 0, 0]], ['not a list of numbers: a text', 'abcd', ALL, [0, 0, 0, 0]], ['not a list of numbers: nothing', undefined, ALL, [0, 0, 0, 0]],
-    ['colours that do not touch', [1, 0, 1, 2], [0, 2, 3], [1, 0, 1, 2]]
+    ['colors that do not touch', [1, 0, 1, 2], [0, 2, 3], [1, 0, 1, 2]]
 ].forEach(([label, sides, play, want]) => {
     const before = JSON.stringify(sides);
     same('sidesFix: ' + label, R.sidesFix(sides, play), want);
@@ -322,7 +322,7 @@ same('startsAlone: START plays on this computer when nobody else is in the match
 });
 [
     ['a pair on Team 1', [1, 0, 1, 0], ALL, [0, 2]], ['a pair on Team 2', [0, 2, 0, 2], ALL, [1, 3]], ['Team 1 first when both are pairs', [1, 1, 2, 2], ALL, [0, 1]], ['... and when the pair of Team 1 is the higher one', [2, 2, 1, 1], ALL, [2, 3]],
-    ['one colour on a button is no pair', [1, 0, 0, 0], ALL, null], ['three on a button is no pair', [1, 1, 1, 0], ALL, null], ['no button', [0, 0, 0, 0], ALL, null],
+    ['one color on a button is no pair', [1, 0, 0, 0], ALL, null], ['three on a button is no pair', [1, 1, 1, 0], ALL, null], ['no button', [0, 0, 0, 0], ALL, null],
     ['two on a button, the second one does not play', [1, 0, 1, 0], [0, 1, 3], null], ['a pair of three that play', [1, 1, 0, 0], [0, 1, 2], [0, 1]], ['a pair on Team 2 of three that play', [0, 2, 0, 2], [1, 2, 3], [1, 3]]
 ].forEach(([label, sides, play, want]) => same('pairOf: ' + label, R.pairOf(sides, play), want));
 [
@@ -338,32 +338,32 @@ same('startsAlone: START plays on this computer when nobody else is in the match
 }
 [
     // [label, sides, play, seat, side, may it have it on]
-    ['two play: no', [0, 0, 0, 0], [0, 1], 0, 1, false], ['a colour that does not play: no', [0, 0, 0, 0], [0, 1, 2], 3, 1, false], ['a button that is none: no', [0, 0, 0, 0], ALL, 0, 0, false], ['... or a third', [0, 0, 0, 0], ALL, 0, 3, false],
+    ['two play: no', [0, 0, 0, 0], [0, 1], 0, 1, false], ['a color that does not play: no', [0, 0, 0, 0], [0, 1, 2], 3, 1, false], ['a button that is none: no', [0, 0, 0, 0], ALL, 0, 0, false], ['... or a third', [0, 0, 0, 0], ALL, 0, 3, false],
     ['... or a text', [0, 0, 0, 0], ALL, 0, '1', false], ['nothing pressed, four play: yes', [0, 0, 0, 0], ALL, 2, 2, true],
     ['one is on Team 1: another may join it', [1, 0, 0, 0], ALL, 1, 1, true], ['two on Team 1: a third may not', [1, 0, 1, 0], ALL, 1, 1, false], ['... nor the fourth', [1, 0, 1, 0], ALL, 3, 1, false],
-    ['two on Team 1: those two have it, so they may keep it', [1, 0, 1, 0], ALL, 0, 1, true], ['... and the others are lit on Team 2 already', [1, 0, 1, 0], ALL, 1, 2, true], ['... but Team 2 is the other two colours: Green may not have it', [1, 0, 1, 0], ALL, 0, 2, false],
-    ['three play, a pair on Team 1: the third may have Team 2', [1, 1, 0, 0], [0, 1, 2], 2, 2, true], ['... but not Team 1', [1, 1, 0, 0], [0, 1, 2], 2, 1, false], ['... and a colour of the pair may go to Team 2 (nobody is lit there)', [1, 1, 0, 0], [0, 1, 2], 0, 2, true],
+    ['two on Team 1: those two have it, so they may keep it', [1, 0, 1, 0], ALL, 0, 1, true], ['... and the others are lit on Team 2 already', [1, 0, 1, 0], ALL, 1, 2, true], ['... but Team 2 is the other two colors: Green may not have it', [1, 0, 1, 0], ALL, 0, 2, false],
+    ['three play, a pair on Team 1: the third may have Team 2', [1, 1, 0, 0], [0, 1, 2], 2, 2, true], ['... but not Team 1', [1, 1, 0, 0], [0, 1, 2], 2, 1, false], ['... and a color of the pair may go to Team 2 (nobody is lit there)', [1, 1, 0, 0], [0, 1, 2], 0, 2, true],
     ['three play, two on Team 2 by their own press: the third may not', [0, 2, 2, 0], [0, 1, 2], 0, 2, false], ['four play, Team 2 pressed twice', [0, 2, 2, 0], ALL, 3, 2, false], ['... Team 1 is lit for them, so Green may have it', [0, 2, 2, 0], ALL, 0, 1, true]
 ].forEach(([label, sides, play, seat, side, want]) => same('sideOpen: ' + label, R.sideOpen(sides, play, seat, side), want));
 
-const REFUSE_FULL = (k) => 'Team ' + k + ' has two colours already. Press one of them to take it off first.';
-const REFUSE_OTHER = (k) => 'Team ' + k + ' is the other two colours already. Press a lit button to clear the teams first.';
+const REFUSE_FULL = (k) => 'Team ' + k + ' has two colors already. Press one of them to take it off first.';
+const REFUSE_OTHER = (k) => 'Team ' + k + ' is the other two colors already. Press a lit button to clear the teams first.';
 function sequence(label, play, start, steps) {
     let sides = start;
     steps.forEach(([seat, side, want, refusal], i) => {
         const before = JSON.stringify(sides);
         const got = R.pressSide(sides, play, seat, side);
-        same(label + ' #' + (i + 1) + ': press ' + R.COLOURS[seat].name + ' Team ' + side + (refusal ? ' is refused: ' + refusal.slice(0, 20) + '...' : ''), got, { sides: want, refusal: refusal });
+        same(label + ' #' + (i + 1) + ': press ' + R.COLORS[seat].name + ' Team ' + side + (refusal ? ' is refused: ' + refusal.slice(0, 20) + '...' : ''), got, { sides: want, refusal: refusal });
         check(label + ' #' + (i + 1) + ': the switches that were given are not changed, a new list comes back', JSON.stringify(sides) === before && got.sides !== sides);
         sides = got.sides;
     });
 }
 sequence('four play (pictures 5 and 5b)', ALL, [0, 0, 0, 0], [
-    [0, 1, [1, 0, 0, 0], ''],                                // Green on Team 1: one colour is no team yet
+    [0, 1, [1, 0, 0, 0], ''],                                // Green on Team 1: one color is no team yet
     [2, 1, [1, 0, 1, 0], ''],                                // Blue on Team 1: the two make the teams, Red and Black show Team 2
-    [1, 1, [1, 0, 1, 0], REFUSE_FULL(1)],                    // picture 5b: a third colour on Team 1
+    [1, 1, [1, 0, 1, 0], REFUSE_FULL(1)],                    // picture 5b: a third color on Team 1
     [3, 1, [1, 0, 1, 0], REFUSE_FULL(1)],                    // the fourth, too
-    [0, 2, [1, 0, 1, 0], REFUSE_OTHER(2)],                   // Green on Team 2 when Team 2 is the other two colours
+    [0, 2, [1, 0, 1, 0], REFUSE_OTHER(2)],                   // Green on Team 2 when Team 2 is the other two colors
     [2, 2, [1, 0, 1, 0], REFUSE_OTHER(2)],
     [0, 1, [0, 0, 1, 0], ''],                                // a lit button goes off: Blue is alone on Team 1, so there are no teams
     [0, 1, [1, 0, 1, 0], ''],                                // ... and on again
@@ -372,7 +372,7 @@ sequence('four play (pictures 5 and 5b)', ALL, [0, 0, 0, 0], [
     [1, 2, [2, 2, 0, 0], ''],                                // Red with it: the teams are Green + Red, Blue and Black show Team 1
     [2, 2, [2, 2, 0, 0], REFUSE_FULL(2)],                    // a third on Team 2
     [3, 2, [2, 2, 0, 0], REFUSE_FULL(2)],
-    [0, 1, [2, 2, 0, 0], REFUSE_OTHER(1)],                   // Team 1 is the other two colours now: Green may not take it
+    [0, 1, [2, 2, 0, 0], REFUSE_OTHER(1)],                   // Team 1 is the other two colors now: Green may not take it
     [2, 1, [0, 0, 0, 0], '']                                 // Blue's Team 1 is lit only because the others are: pressing it clears the teams
 ]);
 sequence('four play, the lit button of the other team', ALL, [0, 1, 1, 0], [
@@ -392,20 +392,20 @@ sequence('three play', [0, 1, 2], [0, 0, 0, 0], [
 sequence('a press that cannot count', [0, 1, 2], [0, 0, 0, 0], [[3, 1, [0, 0, 0, 0], ''], [3, 2, [0, 0, 0, 0], '']]);
 sequence('two play: no buttons', [0, 1], [0, 0, 0, 0], [[0, 1, [0, 0, 0, 0], ''], [1, 2, [0, 0, 0, 0], '']]);
 sequence('switches that no room can hold are mended first', [0, 1, 2], [1, 1, 1, 0], [[0, 2, [2, 0, 0, 0], '']]);
-sequence('a colour that stopped playing loses its button on the next press', [0, 1, 2], [1, 0, 0, 1], [[1, 1, [1, 1, 0, 0], '']]);
+sequence('a color that stopped playing loses its button on the next press', [0, 1, 2], [1, 0, 0, 1], [[1, 1, [1, 1, 0, 0], '']]);
 same('a press of a button that is none (0, 3, "1") changes nothing', [0, 3, '1', null].map((side) => R.pressSide([1, 0, 0, 0], ALL, 1, side).sides), [[1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]]);
 
 // teamBytes, teamsText, reconcileSides, teamNeedsFix
 [
     ['a pair on Team 1', [1, 0, 1, 0], ALL, { teamA: 0, teamB: 2 }], ['a pair on Team 2', [0, 2, 0, 2], ALL, { teamA: 1, teamB: 3 }], ['Red + Blue', [0, 1, 1, 0], ALL, { teamA: 1, teamB: 2 }],
-    ['the lower colour comes first whichever was pressed first', [0, 0, 1, 1], ALL, { teamA: 2, teamB: 3 }], ['two and two: the pair of Team 1 is the one the room is told', [2, 2, 1, 1], ALL, { teamA: 2, teamB: 3 }],
-    ['a pair of three', [1, 1, 0, 0], [0, 1, 2], { teamA: 0, teamB: 1 }], ['one colour is no team', [1, 0, 0, 0], ALL, { teamA: 255, teamB: 255 }], ['two play: no team', [1, 1, 0, 0], [0, 1], { teamA: 255, teamB: 255 }],
-    ['three on one button: no team', [1, 1, 1, 0], [0, 1, 2], { teamA: 255, teamB: 255 }], ['the second colour of the pair does not play: no team', [1, 0, 0, 1], [0, 1, 2], { teamA: 255, teamB: 255 }],
+    ['the lower color comes first whichever was pressed first', [0, 0, 1, 1], ALL, { teamA: 2, teamB: 3 }], ['two and two: the pair of Team 1 is the one the room is told', [2, 2, 1, 1], ALL, { teamA: 2, teamB: 3 }],
+    ['a pair of three', [1, 1, 0, 0], [0, 1, 2], { teamA: 0, teamB: 1 }], ['one color is no team', [1, 0, 0, 0], ALL, { teamA: 255, teamB: 255 }], ['two play: no team', [1, 1, 0, 0], [0, 1], { teamA: 255, teamB: 255 }],
+    ['three on one button: no team', [1, 1, 1, 0], [0, 1, 2], { teamA: 255, teamB: 255 }], ['the second color of the pair does not play: no team', [1, 0, 0, 1], [0, 1, 2], { teamA: 255, teamB: 255 }],
     ['no buttons', [0, 0, 0, 0], ALL, { teamA: 255, teamB: 255 }], ['no list', null, ALL, { teamA: 255, teamB: 255 }]
 ].forEach(([label, sides, play, want]) => same('teamBytes: ' + label, R.teamBytes(sides, play), want));
-const FREE = 'Free for all. For a team, put two colours on the same team.';
+const FREE = 'Free for all. For a team, put two colors on the same team.';
 [
-    // [label, sides, play, guest, the line under the colours]
+    // [label, sides, play, guest, the line under the colors]
     ['nobody else: nothing to say', [0, 0, 0, 0], [0], false, ''], ['nobody else, a guest', [0, 0, 0, 0], [0], true, ''], ['nobody plays', [0, 0, 0, 0], [], false, ''],
     ['two play: the host is told why there are no buttons', [0, 0, 0, 0], [0, 1], false, 'Teams need three or four players.'], ['two play: a guest is told nothing', [0, 0, 0, 0], [0, 1], true, ''],
     ['three play, no team: the host is told how', [0, 0, 0, 0], [0, 1, 2], false, FREE], ['three play, no team: a guest is told nothing', [0, 0, 0, 0], [0, 1, 2], true, ''],
@@ -426,20 +426,20 @@ const M3 = (o) => model(mk([P('Juniper'), P('Sam'), P('Priya'), O], o));
     ['the room holds a pair: a button pressed alone is dropped with the rest of the leader\'s own', [1, 0, 0, 0], M4({ teamA: 1, teamB: 3 }), [0, 1, 0, 1]],
     ['no pair in the room: a button pressed alone stays (the room cannot hold it)', [1, 0, 0, 0], M4(), [1, 0, 0, 0]], ['no pair in the room: two singles on two buttons stay', [1, 2, 0, 0], M4(), [1, 2, 0, 0]],
     ['no pair in the room: a pair of the leader\'s own that the room does not hold goes (the room is told of pairs only)', [1, 0, 1, 0], M4(), [0, 0, 0, 0]],
-    ['a button of a colour that does not play goes', [1, 0, 0, 1], M3(), [1, 0, 0, 0]], ['fewer than three play: no buttons', [1, 2, 0, 0], model(mk([P('Juniper'), P('Sam'), O, O])), [0, 0, 0, 0]],
-    ['the room\'s pair names a colour that does not play: it is no pair, and the leader\'s own single stays', [1, 0, 0, 0], M3({ teamA: 0, teamB: 3 }), [1, 0, 0, 0]], ['no list of switches', null, M4(), [0, 0, 0, 0]],
+    ['a button of a color that does not play goes', [1, 0, 0, 1], M3(), [1, 0, 0, 0]], ['fewer than three play: no buttons', [1, 2, 0, 0], model(mk([P('Juniper'), P('Sam'), O, O])), [0, 0, 0, 0]],
+    ['the room\'s pair names a color that does not play: it is no pair, and the leader\'s own single stays', [1, 0, 0, 0], M3({ teamA: 0, teamB: 3 }), [1, 0, 0, 0]], ['no list of switches', null, M4(), [0, 0, 0, 0]],
     ['the room holds a pair of three: it is the truth', [0, 0, 0, 0], M3({ teamA: 1, teamB: 2 }), [0, 1, 1, 0]]
 ].forEach(([label, local, m, want]) => same('reconcileSides: ' + label, R.reconcileSides(local, m), want));
 [
     ['no team: nothing to mend', mk([P('A'), P('B'), P('C'), P('D')]), false], ['no team, two play', mk([P('A'), P('B'), O, O]), false],
-    ['a pair of colours that play', mk([P('A'), P('B'), P('C'), O], { teamA: 0, teamB: 2 }), false], ['a pair of four', mk([P('A'), P('B'), P('C'), P('D')], { teamA: 1, teamB: 3 }), false],
-    ['a pair that names a colour that does not play (Black is open)', mk([P('A'), P('B'), P('C'), O], { teamA: 0, teamB: 3 }), true], ['... the other colour', mk([P('A'), O, P('C'), P('D')], { teamA: 1, teamB: 3 }), true],
+    ['a pair of colors that play', mk([P('A'), P('B'), P('C'), O], { teamA: 0, teamB: 2 }), false], ['a pair of four', mk([P('A'), P('B'), P('C'), P('D')], { teamA: 1, teamB: 3 }), false],
+    ['a pair that names a color that does not play (Black is open)', mk([P('A'), P('B'), P('C'), O], { teamA: 0, teamB: 3 }), true], ['... the other color', mk([P('A'), O, P('C'), P('D')], { teamA: 1, teamB: 3 }), true],
     ['a pair, but two play', mk([P('A'), P('B'), O, O], { teamA: 0, teamB: 1 }), true], ['a pair of a person and a computer player', mk([P('A'), P('B'), O, P('D')], { teamA: 0, teamB: 2, plan: [0, 0, 1, 0] }), false],
-    ['a pair that names a colour left Nobody', mk([P('A'), P('B'), O, P('D')], { teamA: 0, teamB: 2, plan: [0, 0, 4, 0] }), true]
+    ['a pair that names a color left Nobody', mk([P('A'), P('B'), O, P('D')], { teamA: 0, teamB: 2, plan: [0, 0, 4, 0] }), true]
 ].forEach(([label, room, want]) => same('teamNeedsFix: ' + label, R.teamNeedsFix(room, model(room)), want));
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 6. What the leader asks of the room: the plan (planWith) and a colour moved or exchanged (moveOf)
+// 6. What the leader asks of the room: the plan (planWith) and a color moved or exchanged (moveOf)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const PW = (room, change) => R.planWith(room, model(room), change);
 const plan = (map, kinds, teamA, teamB, mode) => ({ map: map, kinds: kinds, teamA: teamA === undefined ? 255 : teamA, teamB: teamB === undefined ? 255 : teamB, mode: mode || 0 });   // (protocol 17: the room's own game mode goes back)
@@ -455,24 +455,24 @@ const BOTS = mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3], teamA: 0, 
     ['Black becomes a Hard bot', T3, { seat: 3, kind: 'hard' }, plan('', [0, 0, 0, 3])], ['... an Easy bot', T3, { seat: 3, kind: 'easy' }, plan('', [0, 0, 0, 1])], ['... a Medium bot', T3, { seat: 3, kind: 'medium' }, plan('', [0, 0, 0, 2])],
     ['... Nobody', T3, { seat: 3, kind: 'nobody' }, plan('', [0, 0, 0, 4])], ['... open again', mk([P('Juniper'), P('Sam'), P('Priya'), O], { plan: [0, 0, 0, 3] }), { seat: 3, kind: 'open' }, plan('', [0, 0, 0, 0])],
     ['Red (Sam holds it) is set too: the plan comes back when Sam leaves', T3, { seat: 1, kind: 'hard' }, plan('', [0, 3, 0, 0])],
-    ['a word that is none changes nothing', T3, { seat: 3, kind: 'bogus' }, plan('', [0, 0, 0, 0])], ['a number is not a word', T3, { seat: 3, kind: 3 }, plan('', [0, 0, 0, 0])], ['a word without a colour', T3, { kind: 'hard' }, plan('', [0, 0, 0, 0])],
-    ['a colour that is a text is none', T3, { seat: '3', kind: 'hard' }, plan('', [0, 0, 0, 0])],
-    ['a map and a colour at once', T3, { map: 'small', seat: 2, kind: 'easy' }, plan('SMALL.LVL', [0, 0, 1, 0])],
-    ['the room\'s team stays when the map changes', T3t, { map: 'tiny' }, plan('TINY.LVL', [0, 0, 0, 0], 0, 2)], ['... and when a fourth colour plays', T3t, { seat: 3, kind: 'easy' }, plan('', [0, 0, 0, 1], 0, 2)],
-    ['... and when a person\'s colour is set (it plays all the same)', T3t, { seat: 0, kind: 'nobody' }, plan('', [4, 0, 0, 0], 0, 2)],
+    ['a word that is none changes nothing', T3, { seat: 3, kind: 'bogus' }, plan('', [0, 0, 0, 0])], ['a number is not a word', T3, { seat: 3, kind: 3 }, plan('', [0, 0, 0, 0])], ['a word without a color', T3, { kind: 'hard' }, plan('', [0, 0, 0, 0])],
+    ['a color that is a text is none', T3, { seat: '3', kind: 'hard' }, plan('', [0, 0, 0, 0])],
+    ['a map and a color at once', T3, { map: 'small', seat: 2, kind: 'easy' }, plan('SMALL.LVL', [0, 0, 1, 0])],
+    ['the room\'s team stays when the map changes', T3t, { map: 'tiny' }, plan('TINY.LVL', [0, 0, 0, 0], 0, 2)], ['... and when a fourth color plays', T3t, { seat: 3, kind: 'easy' }, plan('', [0, 0, 0, 1], 0, 2)],
+    ['... and when a person\'s color is set (it plays all the same)', T3t, { seat: 0, kind: 'nobody' }, plan('', [4, 0, 0, 0], 0, 2)],
     ['a computer player of the team is set to open: only two play, the team goes', BOT2, { seat: 2, kind: 'open' }, plan('', [0, 0, 0, 0])], ['... to Nobody', BOT2, { seat: 2, kind: 'nobody' }, plan('', [0, 0, 4, 0])],
-    ['... to Hard: it plays on, the team stays', BOT2, { seat: 2, kind: 'hard' }, plan('', [0, 0, 3, 0], 0, 2)], ['a fourth colour joins: the team stays', BOT2, { seat: 3, kind: 'easy' }, plan('', [0, 0, 2, 1], 0, 2)],
+    ['... to Hard: it plays on, the team stays', BOT2, { seat: 2, kind: 'hard' }, plan('', [0, 0, 3, 0], 0, 2)], ['a fourth color joins: the team stays', BOT2, { seat: 3, kind: 'easy' }, plan('', [0, 0, 2, 1], 0, 2)],
     ['the map changes: the team stays', BOT2, { map: 'islands' }, plan('ISLANDS.LVL', [0, 0, 2, 0], 0, 2)],
-    ['four play, the fourth is set to open: three play, the team stays', BOTS, { seat: 3, kind: 'open' }, plan('', [0, 0, 2, 0], 0, 2)], ['four play, the colour of the team is set to Nobody: it is gone', BOTS, { seat: 2, kind: 'nobody' }, plan('', [0, 0, 4, 3])],
-    ['a room whose team names a colour that does not play: the plan that goes out has none', mk([P('A'), P('B'), P('C'), O], { teamA: 0, teamB: 3 }), {}, plan('', [0, 0, 0, 0])],
+    ['four play, the fourth is set to open: three play, the team stays', BOTS, { seat: 3, kind: 'open' }, plan('', [0, 0, 2, 0], 0, 2)], ['four play, the color of the team is set to Nobody: it is gone', BOTS, { seat: 2, kind: 'nobody' }, plan('', [0, 0, 4, 3])],
+    ['a room whose team names a color that does not play: the plan that goes out has none', mk([P('A'), P('B'), P('C'), O], { teamA: 0, teamB: 3 }), {}, plan('', [0, 0, 0, 0])],
     ['teams pressed: Red + Blue', T3, { sides: [0, 1, 1, 0] }, plan('', [0, 0, 0, 0], 1, 2)], ['teams pressed: Green + Blue', T3, { sides: [1, 0, 1, 0] }, plan('', [0, 0, 0, 0], 0, 2)],
     ['three on one button is no team', T3, { sides: [1, 1, 1, 0] }, plan('', [0, 0, 0, 0])], ['teams cleared (the mend of a team that cannot be)', T3t, { sides: [0, 0, 0, 0] }, plan('', [0, 0, 0, 0])],
-    ['teams that name a colour that does not play (Black is open)', T3, { sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 0])], ['teams with two persons only', TWO, { sides: [1, 1, 0, 0] }, plan('', [0, 0, 0, 0])],
-    ['teams and the colour that makes the third player at once', TWO, { seat: 2, kind: 'easy', sides: [1, 0, 1, 0] }, plan('', [0, 0, 1, 0], 0, 2)], ['teams and the colour that makes the fourth', T3, { seat: 3, kind: 'hard', sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 3], 0, 3)],
+    ['teams that name a color that does not play (Black is open)', T3, { sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 0])], ['teams with two persons only', TWO, { sides: [1, 1, 0, 0] }, plan('', [0, 0, 0, 0])],
+    ['teams and the color that makes the third player at once', TWO, { seat: 2, kind: 'easy', sides: [1, 0, 1, 0] }, plan('', [0, 0, 1, 0], 0, 2)], ['teams and the color that makes the fourth', T3, { seat: 3, kind: 'hard', sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 3], 0, 3)],
     ['teams that name a computer player that the same change makes Nobody', T3, { seat: 3, kind: 'nobody', sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 4])],
-    ['everything at once: map, colour, teams', T3, { map: 'small', seat: 3, kind: 'easy', sides: [1, 0, 1, 0] }, plan('SMALL.LVL', [0, 0, 0, 1], 0, 2)],
+    ['everything at once: map, color, teams', T3, { map: 'small', seat: 3, kind: 'easy', sides: [1, 0, 1, 0] }, plan('SMALL.LVL', [0, 0, 0, 1], 0, 2)],
     ['a room of game mode 187: the page does not change it (it has no control for it) and sends it back', mk([P('Juniper'), P('Sam'), P('Priya'), O], { mode: 1 }), { map: 'tiny' }, plan('TINY.LVL', [0, 0, 0, 0], undefined, undefined, 1)],
-    ['... also when only a colour changes', mk([P('Juniper'), P('Sam'), O, O], { mode: 1 }), { seat: 2, kind: 'easy' }, plan('', [0, 0, 1, 0], undefined, undefined, 1)]
+    ['... also when only a color changes', mk([P('Juniper'), P('Sam'), O, O], { mode: 1 }), { seat: 2, kind: 'easy' }, plan('', [0, 0, 1, 0], undefined, undefined, 1)]
 ].forEach(([label, room, change, want]) => {
     const before = JSON.stringify(room);
     const got = PW(room, change);
@@ -488,23 +488,23 @@ const BOTS = mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3], teamA: 0, 
     const swapped = mk([P('Juniper'), P('Leo'), P('Priya'), P('Sam')], { teamA: 0, teamB: 3 });                    // Sam (Green's team-mate, Red) swapped with Leo (Black): the team went with Sam
     same('two persons swap: the plan sent after keeps the pair', PW(swapped, { seat: 2, kind: 'open' }), plan('', [0, 0, 0, 0], 0, 3));
     const gone = mk([P('Juniper'), O, P('Priya'), O], { teamA: 0, teamB: 1 });                                    // Sam left: the team that needed him is mended
-    same('a person leaves, and the team that needed the colour has to go', [R.teamNeedsFix(gone, model(gone)), PW(gone, {}).teamA, PW(gone, {}).teamB], [true, 255, 255]);
+    same('a person leaves, and the team that needed the color has to go', [R.teamNeedsFix(gone, model(gone)), PW(gone, {}).teamA, PW(gone, {}).teamB], [true, 255, 255]);
 }
 
 const MV = S2;                                                                                                   // Green Juniper, Red Sam, Blue a Medium bot, Black open
 const exchanged = (kinds, teamA, teamB) => ({ op: 'plan', plan: { map: '', kinds: kinds, teamA: teamA === undefined ? 255 : teamA, teamB: teamB === undefined ? 255 : teamB } });
 [
-    ['a colour onto itself: nothing', MV, 1, 1, null], ['from a colour that is none (-1, 4, 7)', MV, -1, 1, null], ['... 4', MV, 4, 1, null], ['... 7', MV, 7, 0, null], ['to a colour that is none (-1)', MV, 1, -1, null], ['... 4', MV, 1, 4, null],
-    ['a person onto an open colour: the person moves', MV, 1, 3, { op: 'move', from: 1, to: 3 }], ['a person onto a person: they swap places', MV, 1, 0, { op: 'move', from: 1, to: 0 }],
-    ['the host onto an open colour: the host moves too', MV, 0, 3, { op: 'move', from: 0, to: 3 }], ['a person onto a computer player: the person goes there', MV, 1, 2, { op: 'move', from: 1, to: 2 }],
-    ['an open colour onto a person: the person goes to the open colour (the person is `from`)', MV, 3, 1, { op: 'move', from: 1, to: 3 }], ['a computer player onto a person: the person goes to its colour', MV, 2, 1, { op: 'move', from: 1, to: 2 }],
-    ['a computer player and an open colour exchange their plans: no person is in it, the plan carries it', MV, 2, 3, exchanged([0, 0, 0, 2])], ['... dragged the other way: the same exchange', MV, 3, 2, exchanged([0, 0, 0, 2])],
-    ['two bots exchange levels', mk([P('A'), O, O, O], { plan: [0, 1, 3, 0] }), 1, 2, exchanged([0, 3, 1, 0])], ['an open colour and Nobody exchange', mk([P('A'), O, O, O], { plan: [0, 4, 0, 0] }), 1, 2, exchanged([0, 0, 4, 0])],
-    ['two open colours exchange: nothing changes, but the plan is asked all the same', mk([P('A'), O, O, O]), 2, 3, exchanged([0, 0, 0, 0])],
+    ['a color onto itself: nothing', MV, 1, 1, null], ['from a color that is none (-1, 4, 7)', MV, -1, 1, null], ['... 4', MV, 4, 1, null], ['... 7', MV, 7, 0, null], ['to a color that is none (-1)', MV, 1, -1, null], ['... 4', MV, 1, 4, null],
+    ['a person onto an open color: the person moves', MV, 1, 3, { op: 'move', from: 1, to: 3 }], ['a person onto a person: they swap places', MV, 1, 0, { op: 'move', from: 1, to: 0 }],
+    ['the host onto an open color: the host moves too', MV, 0, 3, { op: 'move', from: 0, to: 3 }], ['a person onto a computer player: the person goes there', MV, 1, 2, { op: 'move', from: 1, to: 2 }],
+    ['an open color onto a person: the person goes to the open color (the person is `from`)', MV, 3, 1, { op: 'move', from: 1, to: 3 }], ['a computer player onto a person: the person goes to its color', MV, 2, 1, { op: 'move', from: 1, to: 2 }],
+    ['a computer player and an open color exchange their plans: no person is in it, the plan carries it', MV, 2, 3, exchanged([0, 0, 0, 2])], ['... dragged the other way: the same exchange', MV, 3, 2, exchanged([0, 0, 0, 2])],
+    ['two bots exchange levels', mk([P('A'), O, O, O], { plan: [0, 1, 3, 0] }), 1, 2, exchanged([0, 3, 1, 0])], ['an open color and Nobody exchange', mk([P('A'), O, O, O], { plan: [0, 4, 0, 0] }), 1, 2, exchanged([0, 0, 4, 0])],
+    ['two open colors exchange: nothing changes, but the plan is asked all the same', mk([P('A'), O, O, O]), 2, 3, exchanged([0, 0, 0, 0])],
     ['the pair of a computer player follows it (Blue + Green: Blue goes to Black)', mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 3, 2], teamA: 0, teamB: 2 }), 2, 3, exchanged([0, 0, 2, 3], 0, 3)],
-    ['... and the lower colour comes first (Red + Blue: Red goes to Black, the pair is Blue + Black)', mk([P('Juniper'), O, O, O], { plan: [0, 1, 3, 0], teamA: 1, teamB: 2 }), 1, 3, exchanged([0, 0, 3, 1], 2, 3)],
+    ['... and the lower color comes first (Red + Blue: Red goes to Black, the pair is Blue + Black)', mk([P('Juniper'), O, O, O], { plan: [0, 1, 3, 0], teamA: 1, teamB: 2 }), 1, 3, exchanged([0, 0, 3, 1], 2, 3)],
     ['a pair of two computer players that exchange places stays a pair', mk([P('Juniper'), O, O, O], { plan: [0, 1, 2, 3], teamA: 1, teamB: 2 }), 1, 2, exchanged([0, 2, 1, 3], 1, 2)],
-    ['the other colour of the pair does not move: Black and Blue exchange, the pair Green + Red stays', mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3], teamA: 0, teamB: 1 }), 2, 3, exchanged([0, 0, 3, 2], 0, 1)]
+    ['the other color of the pair does not move: Black and Blue exchange, the pair Green + Red stays', mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3], teamA: 0, teamB: 1 }), 2, 3, exchanged([0, 0, 3, 2], 0, 1)]
 ].forEach(([label, room, from, to, want]) => {
     const before = JSON.stringify(room);
     same('moveOf: ' + label, R.moveOf(room, model(room), from, to), want);
@@ -523,16 +523,16 @@ const exchanged = (kinds, teamA, teamB) => ({ op: 'plan', plan: { map: '', kinds
 const ctx = (o) => Object.assign({ sides: [0, 0, 0, 0], picked: -1, removing: -1, offline: false, refusal: '' }, o || {});
 const view = (room, o) => R.viewOf(model(room), ctx(o));
 
-// ---- the names of the planned bots (network protocol 20: the empty colour of a bot's plan carries the bot's label) ----
+// ---- the names of the planned bots (network protocol 20: the empty color of a bot's plan carries the bot's label) ----
 {
     const SB = mk([P('Juniper'), [E, 'Pip (bot, Hard)'], [E, 'Wren (bot, Easy)'], O], { you: 0, leader: 0, plan: [0, 3, 1, 0] });
     const mb = R.modelOf(SB);
-    same('modelOf: a colour whose plan is a bot shows the bot\'s name from the empty seat', [mb.slots[1], mb.slots[2]], [{ kind: 'bot', level: 'hard', name: 'Pip (bot, Hard)' }, { kind: 'bot', level: 'easy', name: 'Wren (bot, Easy)' }]);
+    same('modelOf: a color whose plan is a bot shows the bot\'s name from the empty seat', [mb.slots[1], mb.slots[2]], [{ kind: 'bot', level: 'hard', name: 'Pip (bot, Hard)' }, { kind: 'bot', level: 'easy', name: 'Wren (bot, Easy)' }]);
     const SG = mk([P('Juniper'), P('Sam'), [E, 'Pip (bot, Hard)'], O], { you: 1, leader: 0, plan: [0, 0, 3, 0] });
     const guestCard = R.viewOf(R.modelOf(SG), ctx({})).cards.filter((c) => c.seat === 2)[0];
-    same('a guest\'s card of that colour says the bot\'s name where it said "Hard bot"', guestCard.who.map((w) => w.text), ['Pip (bot, Hard)']);
+    same('a guest\'s card of that color says the bot\'s name where it said "Hard bot"', guestCard.who.map((w) => w.text), ['Pip (bot, Hard)']);
     const hostCard = R.viewOf(mb, ctx({})).cards.filter((c) => c.seat === 1)[0];
-    same('the leader\'s card of that colour keeps its level switch and shows the name', [hostCard.mode, hostCard.who.map((w) => w.text), hostCard.label], ['hard', ['Pip (bot, Hard)'], 'Red: Pip (bot, Hard)']);
+    same('the leader\'s card of that color keeps its level switch and shows the name', [hostCard.mode, hostCard.who.map((w) => w.text), hostCard.label], ['hard', ['Pip (bot, Hard)'], 'Red: Pip (bot, Hard)']);
     const SL0 = mk([P('Juniper'), [E, ''], O, O], { you: 0, leader: 0, plan: [0, 2, 0, 0] });
     same('the START line tells the named bots by their names, the leader\'s and the guest\'s alike', [view(SB, {}).side.plan, view(SG, {}).side.plan], [
         'You, Pip (bot, Hard) and Wren (bot, Easy) play on Treasure. Black is open and stays empty unless a player joins first.',
@@ -541,12 +541,12 @@ const view = (room, o) => R.viewOf(model(room), ctx(o));
     const SL = mk([P('Juniper'), [E, ''], [3, 'Bot (Hard)'], O], { you: 0, leader: 0, plan: [0, 2, 0, 0] });
     same('a room without names (or the legacy "Bot (Hard)") shows the level as before', [R.modelOf(SL).slots[1], R.modelOf(SL).slots[2]], [{ kind: 'bot', level: 'medium' }, { kind: 'bot', level: 'medium' }]);
     const refused = (seats, o) => { try { mk(seats, o); return false; } catch (e) { return true; } };
-    same('a name on an empty colour is refused by the codec unless the plan asks a bot there and the name is a bot\'s', [refused([P('J'), [E, 'Pip (bot, Hard)'], O, O], { plan: [0, 0, 0, 0] }), refused([P('J'), [E, 'Pip'], O, O], { plan: [0, 3, 0, 0] }), refused([P('J'), [E, 'Pip (bot, Hard)'], O, O], { plan: [0, 3, 0, 0] })], [true, true, false]);
+    same('a name on an empty color is refused by the codec unless the plan asks a bot there and the name is a bot\'s', [refused([P('J'), [E, 'Pip (bot, Hard)'], O, O], { plan: [0, 0, 0, 0] }), refused([P('J'), [E, 'Pip'], O, O], { plan: [0, 3, 0, 0] }), refused([P('J'), [E, 'Pip (bot, Hard)'], O, O], { plan: [0, 3, 0, 0] })], [true, true, false]);
 }
 
 // a card in a few words: only what is on, so that a field that should be off but is on shows
 function show(c) {
-    const o = { seat: c.seat, colour: c.colour.name, kind: c.kind, who: c.who.map((w) => w.text + '/' + w.cls), stat: c.stat };
+    const o = { seat: c.seat, color: c.color.name, kind: c.kind, who: c.who.map((w) => w.text + '/' + w.cls), stat: c.stat };
     if (c.statCls !== 'pstat') o.statCls = c.statCls;
     ['mode', 'tab', 'label', 'drop'].forEach((f) => { if (c[f]) o[f] = c[f]; });
     ['pencil', 'remove', 'ask', 'grip'].forEach((f) => { if (c[f]) o[f] = true; });
@@ -554,14 +554,14 @@ function show(c) {
     return o;
 }
 const seatName = ['Green', 'Red', 'Blue', 'Black'];
-const youHost = (seat, extra, name) => Object.assign({ seat: seat, colour: seatName[seat], kind: 'person', who: [(name || 'Juniper') + '/nm', 'You/you'], stat: 'Host. You start the match.', pencil: true, grip: true, label: seatName[seat] + ': ' + (name || 'Juniper') + ', you, host' }, extra || {});
-const sam = (seat, extra) => Object.assign({ seat: seat, colour: seatName[seat], kind: 'person', who: ['Sam/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': Sam' }, extra || {});
-const priya = (seat, extra) => Object.assign({ seat: seat, colour: seatName[seat], kind: 'person', who: ['Priya/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': Priya' }, extra || {});
-const open = (seat, extra) => Object.assign({ seat: seat, colour: seatName[seat], kind: 'open', who: [], stat: 'Takes the next player who joins.', mode: 'open', grip: true, label: seatName[seat] + ': open' }, extra || {});
-const bot = (seat, level, extra) => Object.assign({ seat: seat, colour: seatName[seat], kind: 'bot', who: [], stat: 'Computer player', mode: level, grip: true, label: seatName[seat] + ': bot' }, extra || {});
-const NOTE_INVITE = 'Players who open this link take the next free colour.';
-const NOTE_DRAG = 'Drag a player onto another colour to move them. A colour that is taken swaps places.';
-const NOTE_WAIT = 'Waiting for players. Drag a player onto another colour to move them.';
+const youHost = (seat, extra, name) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: [(name || 'Juniper') + '/nm', 'You/you'], stat: 'Host. You start the match.', pencil: true, grip: true, label: seatName[seat] + ': ' + (name || 'Juniper') + ', you, host' }, extra || {});
+const sam = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: ['Sam/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': Sam' }, extra || {});
+const priya = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: ['Priya/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': Priya' }, extra || {});
+const open = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'open', who: [], stat: 'Takes the next player who joins.', mode: 'open', grip: true, label: seatName[seat] + ': open' }, extra || {});
+const bot = (seat, level, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'bot', who: [], stat: 'Computer player', mode: level, grip: true, label: seatName[seat] + ': bot' }, extra || {});
+const NOTE_INVITE = 'Players who open this link take the next free color.';
+const NOTE_DRAG = 'Drag a player onto another color to move them. A color that is taken swaps places.';
+const NOTE_WAIT = 'Waiting for players. Drag a player onto another color to move them.';
 const TREASURE = { mapKey: 'treasure', mapName: 'Treasure', mapInfo: 'One person\'s trash... (12 min)' };
 const side = (o) => Object.assign({ mapDisabled: false, startDisabled: false, startBusy: false, startLabel: 'START!', note: '' }, TREASURE, o);
 function expectView(label, v, want) {
@@ -569,34 +569,34 @@ function expectView(label, v, want) {
     same(label + ': the notes', v.notes, want.notes);
     same(label + ': the map\'s side', v.side, want.side);
     same(label + ': the heading and the state', { heading: v.heading, guest: v.guest, busy: v.busy, ro: v.ro, offline: v.offline, removing: v.removing }, Object.assign({ heading: 'Your room', guest: false, busy: false, ro: false, offline: false, removing: -1 }, want.top));
-    same(label + ': the switches and the colours that play', { sides: v.sides, play: v.play }, { sides: want.sides || [0, 0, 0, 0], play: want.play });
+    same(label + ': the switches and the colors that play', { sides: v.sides, play: v.play }, { sides: want.sides || [0, 0, 0, 0], play: want.play });
 }
 const lit = (v) => v.cards.map((c) => c.teams.map((t) => (t.pressed ? '+' : '-') + t.side + (t.disabled ? 'x' : '')).join(' '));
 
-// picture 1: you alone, three colours open
+// picture 1: you alone, three colors open
 expectView('picture 1 (you alone)', view(S1), {
     cards: [youHost(0), open(1), open(2), open(3)], play: [0],
     notes: { invite: NOTE_INVITE, slots: NOTE_WAIT, teams: '', teamsWarn: false },
     side: side({ plan: 'A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', planShort: 'You · Treasure · 3 open' })
 });
-// picture 2: Sam in Red, a Medium bot in Blue, Black open: Team 1 and Team 2 under the three colours that play
+// picture 2: Sam in Red, a Medium bot in Blue, Black open: Team 1 and Team 2 under the three colors that play
 expectView('picture 2 (three play)', view(S2), {
     cards: [youHost(0, { teams: '-1 -2' }), sam(1, { teams: '-1 -2' }), bot(2, 'medium', { teams: '-1 -2' }), open(3)], play: [0, 1, 2],
     notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: FREE, teamsWarn: false },
     side: side({ plan: 'You, Sam and a Medium bot play on Treasure. Black is open and stays empty unless a player joins first.', planShort: 'You, Sam and Medium bot · Treasure · 1 open' })
 });
 // picture 6 (the phone) shows the same room: the four cards are one column in the order of the picture, the line under START is the short one
-same('picture 6 (phone): the cards lie Black, Green, Red, Blue, so the column reads an open Black, then the host (Green), Sam, the bot', R.GRID.map((seat) => view(S2).cards[seat]).map((c) => c.colour.name + ':' + c.kind), ['Black:open', 'Green:person', 'Red:person', 'Blue:bot']);
+same('picture 6 (phone): the cards lie Black, Green, Red, Blue, so the column reads an open Black, then the host (Green), Sam, the bot', R.GRID.map((seat) => view(S2).cards[seat]).map((c) => c.color.name + ':' + c.kind), ['Black:open', 'Green:person', 'Red:person', 'Blue:bot']);
 same('picture 6 (phone): the line under START', view(S2).side.planShort, 'You, Sam and Medium bot · Treasure · 1 open');
-// picture 3: dragging; the dots and then a colour (the tap way): the question in the line, a word on each card
+// picture 3: dragging; the dots and then a color (the tap way): the question in the line, a word on each card
 {
     const v = view(S2, { picked: 1 });
-    same('picture 3 (tap way, Sam picked): every card says what a tap does, the line says what to do', [v.cards.map((c) => c.drop), v.notes.slots], [['Tap to put Sam here', 'Tap to put Sam here', 'Tap to put Sam here', 'Tap to put Sam here'], 'Now tap the colour where Sam goes (tap the same player again to let go).']);
+    same('picture 3 (tap way, Sam picked): every card says what a tap does, the line says what to do', [v.cards.map((c) => c.drop), v.notes.slots], [['Tap to put Sam here', 'Tap to put Sam here', 'Tap to put Sam here', 'Tap to put Sam here'], 'Now tap the color where Sam goes (tap the same player again to let go).']);
     same('picture 3 (tap way): nothing else changes on the cards', v.cards.map((c) => { const s = show(c); delete s.drop; return s; }), view(S2).cards.map(show));
     same('picture 3 (a drag): the cards carry no word of the tap way, the line is the drag line (the words Move here / Swap places are the page\'s own)', [view(S2).cards.map((c) => c.drop), view(S2).notes.slots], [['', '', '', ''], NOTE_DRAG]);
-    same('picture 3 (tap way): what each kind of colour is called when it is the one that was picked', [0, 2, 3].map((i) => view(S2, { picked: i }).cards[0].drop), ['Tap to put Juniper here', 'Tap to put Medium bot here', 'Tap to put the open Black here']);
-    same('picture 3 (tap way): the line names the one that was picked (a computer player, an open colour)', [2, 3].map((i) => view(S2, { picked: i }).notes.slots), ['Now tap the colour where Medium bot goes (tap the same player again to let go).', 'Now tap the colour where the open Black goes (tap the same player again to let go).']);
-    same('a picked colour that is none (-1, nothing): the drag line', [view(S2, { picked: -1 }).notes.slots, R.viewOf(model(S2), { sides: [0, 0, 0, 0] }).notes.slots], [NOTE_DRAG, NOTE_DRAG]);
+    same('picture 3 (tap way): what each kind of color is called when it is the one that was picked', [0, 2, 3].map((i) => view(S2, { picked: i }).cards[0].drop), ['Tap to put Juniper here', 'Tap to put Medium bot here', 'Tap to put the open Black here']);
+    same('picture 3 (tap way): the line names the one that was picked (a computer player, an open color)', [2, 3].map((i) => view(S2, { picked: i }).notes.slots), ['Now tap the color where Medium bot goes (tap the same player again to let go).', 'Now tap the color where the open Black goes (tap the same player again to let go).']);
+    same('a picked color that is none (-1, nothing): the drag line', [view(S2, { picked: -1 }).notes.slots, R.viewOf(model(S2), { sides: [0, 0, 0, 0] }).notes.slots], [NOTE_DRAG, NOTE_DRAG]);
 }
 // picture 5: Green + Blue against Red + Black; the pressed buttons are lit, the other team shows lit on the other two, a full button is dashed
 expectView('picture 5 (teams set)', view(S5, { sides: [1, 0, 1, 0] }), {
@@ -604,12 +604,12 @@ expectView('picture 5 (teams set)', view(S5, { sides: [1, 0, 1, 0] }), {
     notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: 'Teams: Green + Blue against Red + Black.', teamsWarn: false },
     side: side({ plan: 'You, Sam, a Medium bot and Priya play on Treasure.', planShort: 'You, Sam, Medium bot and Priya · Treasure' })
 });
-// picture 5b: a third colour pressed on Team 1: the press is refused and the line says why (the page puts the refusal into the context)
+// picture 5b: a third color pressed on Team 1: the press is refused and the line says why (the page puts the refusal into the context)
 {
     const pressed = R.pressSide([1, 0, 1, 0], ALL, 1, 1);
-    same('picture 5b: the press of Red on Team 1 is refused with the words of the picture', pressed, { sides: [1, 0, 1, 0], refusal: 'Team 1 has two colours already. Press one of them to take it off first.' });
+    same('picture 5b: the press of Red on Team 1 is refused with the words of the picture', pressed, { sides: [1, 0, 1, 0], refusal: 'Team 1 has two colors already. Press one of them to take it off first.' });
     const v = view(S5, { sides: pressed.sides, refusal: pressed.refusal });
-    same('picture 5b: the line under the colours is the refusal, in the warning colour; the teams stay as they were', [v.notes.teams, v.notes.teamsWarn, v.cards.map((c) => c.teams.map((t) => (t.pressed ? '+' : '-') + t.side).join(' '))], ['Team 1 has two colours already. Press one of them to take it off first.', true, ['+1 -2', '-1 +2', '+1 -2', '-1 +2']]);
+    same('picture 5b: the line under the colors is the refusal, in the warning color; the teams stay as they were', [v.notes.teams, v.notes.teamsWarn, v.cards.map((c) => c.teams.map((t) => (t.pressed ? '+' : '-') + t.side).join(' '))], ['Team 1 has two colors already. Press one of them to take it off first.', true, ['+1 -2', '-1 +2', '+1 -2', '-1 +2']]);
     same('a refusal that is empty is no warning', [view(S5, { sides: [1, 0, 1, 0], refusal: '' }).notes.teamsWarn, view(S5, { sides: [1, 0, 1, 0], refusal: undefined }).notes.teamsWarn], [false, false]);
 }
 // the leader's own press of one button (a room cannot hold it): lit alone, the others may still take it
@@ -619,7 +619,7 @@ expectView('one button pressed alone', view(S14, { sides: [1, 0, 0, 0] }), {
     side: side({ plan: 'You, Sam, a Medium bot and Priya play on Treasure.', planShort: 'You, Sam, Medium bot and Priya · Treasure' })
 });
 // picture 14 (and 13 before START): four play, no teams
-same('picture 14: four play, no teams: the line is free for all and every colour has both buttons, none lit or dashed', [view(S14).notes.teams, lit(view(S14))], [FREE, ['-1 -2', '-1 -2', '-1 -2', '-1 -2']]);
+same('picture 14: four play, no teams: the line is free for all and every color has both buttons, none lit or dashed', [view(S14).notes.teams, lit(view(S14))], [FREE, ['-1 -2', '-1 -2', '-1 -2', '-1 -2']]);
 // picture 12: Juniper left, Sam leads from Red
 expectView('picture 12 (the host left)', view(S12), {
     cards: [open(0), youHost(1, { teams: '-1 -2' }, 'Sam'), bot(2, 'medium', { teams: '-1 -2' }), priya(3, { teams: '-1 -2' })], play: [1, 2, 3],
@@ -629,23 +629,23 @@ expectView('picture 12 (the host left)', view(S12), {
 // picture 4: Sam's screen: the teams are read-only tabs, nothing can be pressed, dragged or set; START waits for the host
 expectView('picture 4 (a player\'s screen)', view(S4), {
     cards: [
-        { seat: 0, colour: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/you'], stat: 'Starts the match.', tab: 'Team 1', label: 'Green: Juniper, host' },
-        { seat: 1, colour: 'Red', kind: 'bot', who: ['Easy bot/'], stat: 'Computer player', tab: 'Team 2', label: 'Red: Easy bot' },
-        { seat: 2, colour: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', tab: 'Team 2', label: 'Blue: Medium bot' },
-        { seat: 3, colour: 'Black', kind: 'person', who: ['Sam/nm', 'You/you'], stat: 'Waiting for the host to start.', pencil: true, tab: 'Team 1', label: 'Black: Sam, you' }
+        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/you'], stat: 'Starts the match.', tab: 'Team 1', label: 'Green: Juniper, host' },
+        { seat: 1, color: 'Red', kind: 'bot', who: ['Easy bot/'], stat: 'Computer player', tab: 'Team 2', label: 'Red: Easy bot' },
+        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', tab: 'Team 2', label: 'Blue: Medium bot' },
+        { seat: 3, color: 'Black', kind: 'person', who: ['Sam/nm', 'You/you'], stat: 'Waiting for the host to start.', pencil: true, tab: 'Team 1', label: 'Black: Sam, you' }
     ], play: [0, 1, 2, 3], sides: [1, 0, 0, 1],
     top: { heading: 'Juniper’s room', guest: true, ro: true },
-    notes: { invite: NOTE_INVITE, slots: 'Juniper arranges the colours and starts the match.', teams: 'Teams: Green + Black against Red + Blue.', teamsWarn: false },
+    notes: { invite: NOTE_INVITE, slots: 'Juniper arranges the colors and starts the match.', teams: 'Teams: Green + Black against Red + Blue.', teamsWarn: false },
     side: side({ mapDisabled: true, startDisabled: true, startLabel: 'Waiting for Juniper', plan: 'Juniper starts the match when everybody is in. Juniper, an Easy bot, a Medium bot and you play on Treasure.', planShort: 'Juniper starts the match' })
 });
 same('picture 4: the leader\'s own switches do not show on a player\'s screen, the room\'s do', view(S4, { sides: [2, 2, 0, 0] }).cards.map((c) => c.tab), ['Team 1', 'Team 2', 'Team 2', 'Team 1']);
 // picture 13: START is pressed (the host's screen): the room is frozen, each player is opening the game or in it
 expectView('picture 13 (START pressed, the host)', view(S13), {
     cards: [
-        { seat: 0, colour: 'Green', kind: 'person', who: ['Juniper/nm', 'You/you'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Green: Juniper, you, host' },
-        { seat: 1, colour: 'Red', kind: 'person', who: ['Sam/nm'], stat: 'In the game', statCls: 'pstat in', label: 'Red: Sam' },
-        { seat: 2, colour: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', label: 'Blue: Medium bot' },
-        { seat: 3, colour: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Black: Priya' }
+        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'You/you'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Green: Juniper, you, host' },
+        { seat: 1, color: 'Red', kind: 'person', who: ['Sam/nm'], stat: 'In the game', statCls: 'pstat in', label: 'Red: Sam' },
+        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', label: 'Blue: Medium bot' },
+        { seat: 3, color: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Black: Priya' }
     ], play: [0, 1, 2, 3],
     top: { busy: true, ro: true },
     notes: { invite: 'New players cannot join while the game opens.', slots: 'The match begins as soon as all of you are in the game.', teams: FREE, teamsWarn: false },
@@ -654,10 +654,10 @@ expectView('picture 13 (START pressed, the host)', view(S13), {
 // picture 13b: the same on Sam's phone
 expectView('picture 13b (START pressed, a player)', view(S13b), {
     cards: [
-        { seat: 0, colour: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/you'], stat: 'In the game', statCls: 'pstat in', label: 'Green: Juniper, host' },
-        { seat: 1, colour: 'Red', kind: 'person', who: ['Sam/nm', 'You/you'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Red: Sam, you' },
-        { seat: 2, colour: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', label: 'Blue: Medium bot' },
-        { seat: 3, colour: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Black: Priya' }
+        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/you'], stat: 'In the game', statCls: 'pstat in', label: 'Green: Juniper, host' },
+        { seat: 1, color: 'Red', kind: 'person', who: ['Sam/nm', 'You/you'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Red: Sam, you' },
+        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', label: 'Blue: Medium bot' },
+        { seat: 3, color: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Black: Priya' }
     ], play: [0, 1, 2, 3],
     top: { heading: 'Juniper’s room', guest: true, busy: true, ro: true },
     notes: { invite: 'New players cannot join while the game opens.', slots: 'The match begins as soon as all of you are in the game.', teams: '', teamsWarn: false },
@@ -667,21 +667,21 @@ same('START is pressed: a pair that is in the room shows as read-only tabs on th
 // picture 15b: the connection dropped (the host's screen): the room goes grey and read-only, START says Reconnecting
 expectView('picture 15b (the connection is lost)', view(S14, { offline: 'lost' }), {
     cards: [
-        { seat: 0, colour: 'Green', kind: 'person', who: ['Juniper/nm', 'You/you'], stat: 'Host. You start the match.', label: 'Green: Juniper, you, host' },
-        { seat: 1, colour: 'Red', kind: 'person', who: ['Sam/nm'], stat: 'In the room', label: 'Red: Sam' },
-        { seat: 2, colour: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', label: 'Blue: Medium bot' },
-        { seat: 3, colour: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'In the room', label: 'Black: Priya' }
+        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'You/you'], stat: 'Host. You start the match.', label: 'Green: Juniper, you, host' },
+        { seat: 1, color: 'Red', kind: 'person', who: ['Sam/nm'], stat: 'In the room', label: 'Red: Sam' },
+        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', label: 'Blue: Medium bot' },
+        { seat: 3, color: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'In the room', label: 'Black: Priya' }
     ], play: [0, 1, 2, 3],
     top: { ro: true, offline: 'lost' },
-    notes: { invite: NOTE_INVITE, slots: 'Your colour is kept for a minute while the page gets you back in.', teams: FREE, teamsWarn: false },
+    notes: { invite: NOTE_INVITE, slots: 'Your color is kept for a minute while the page gets you back in.', teams: FREE, teamsWarn: false },
     side: side({ mapDisabled: true, startDisabled: true, startLabel: 'Reconnecting…', plan: 'START comes back as soon as you are in.', planShort: 'Getting you back in' })
 });
 same('the connection is lost on a player\'s screen: START says Reconnecting, the pencil is gone', [view(S4, { offline: 'lost' }).side.startLabel, view(S4, { offline: 'lost' }).cards.map((c) => c.pencil)], ['Reconnecting…', [false, false, false, false]]);
-// picture 16: the page that waits for a name (a room of nobody: four open colours, nothing to press)
+// picture 16: the page that waits for a name (a room of nobody: four open colors, nothing to press)
 {
     const blank = R.modelOf({ slots: ALL.map(() => ({ state: 0, name: '', rtt: 0, platform: 0 })), plan: [0, 0, 0, 0], map: 'TREASURE.LVL', you: 0, leader: 0, teamA: 255, teamB: 255, inGame: 0, starting: false });
     const v = R.viewOf(blank, ctx({ offline: 'join' }));
-    same('picture 16 (joining a room): four open colours, nothing to press, no names, START off',
+    same('picture 16 (joining a room): four open colors, nothing to press, no names, START off',
         [v.heading, v.cards.map((c) => [c.kind, c.who.map((w) => w.text), c.stat, c.grip, c.mode, !!c.teams, c.pencil, c.remove]), v.notes, v.side.startLabel, v.side.startDisabled, v.side.mapDisabled, v.side.plan, v.side.planShort],
         ['Joining a room', ALL.map(() => ['open', ['Open'], 'Takes the next player who joins.', false, '', false, false, false]), { invite: NOTE_INVITE, slots: '', teams: '', teamsWarn: false }, 'START!', true, true, '', '']);
     const none = R.viewOf(blank, ctx({ offline: 'none' }));
@@ -689,12 +689,12 @@ same('the connection is lost on a player\'s screen: START says Reconnecting, the
 }
 // picture 17: the host's Remove buttons and the question
 {
-    same('picture 17: a Remove button on every other person of the host\'s screen: not on its own colour, a computer player or an open colour', view(S14).cards.map((c) => c.remove), [false, true, false, true]);
-    same('... and none on the open colour of picture 2', view(S2).cards.map((c) => c.remove), [false, true, false, false]);
+    same('picture 17: a Remove button on every other person of the host\'s screen: not on its own color, a computer player or an open color', view(S14).cards.map((c) => c.remove), [false, true, false, true]);
+    same('... and none on the open color of picture 2', view(S2).cards.map((c) => c.remove), [false, true, false, false]);
     const asks = view(S14, { removing: 3 });
     same('picture 17b (the question): Priya\'s card asks and has no button, Sam keeps his', [asks.cards.map((c) => c.remove), asks.cards.map((c) => c.ask), asks.removing], [[false, true, false, false], [false, false, false, true], 3]);
-    same('a question about the host\'s own colour, a computer player, an open colour, a colour that does not exist or none: nobody is asked', [0, 2, 9, -1, undefined].map((r) => view(S14, { removing: r }).removing).concat(view(S2, { removing: 3 }).removing), [-1, -1, -1, -1, -1, -1]);
-    same('a question goes with its player: when the colour holds nobody (Priya left) the question is gone', view(S2, { removing: 3 }).cards.map((c) => c.ask), [false, false, false, false]);
+    same('a question about the host\'s own color, a computer player, an open color, a color that does not exist or none: nobody is asked', [0, 2, 9, -1, undefined].map((r) => view(S14, { removing: r }).removing).concat(view(S2, { removing: 3 }).removing), [-1, -1, -1, -1, -1, -1]);
+    same('a question goes with its player: when the color holds nobody (Priya left) the question is gone', view(S2, { removing: 3 }).cards.map((c) => c.ask), [false, false, false, false]);
     same('a player\'s screen has no Remove button and no question', [view(S4, { removing: 0 }), view(S4, { removing: 1 })].map((v) => [v.removing, v.cards.some((c) => c.remove || c.ask)]), [[-1, false], [-1, false]]);
     same('while START waits and while the link is lost (or there is no room) there is no Remove button and no question', [view(S13, { removing: 1 }), view(S14, { removing: 1, offline: 'lost' }), view(S14, { removing: 1, offline: 'none' }), view(S14, { removing: 1, offline: 'join' })].map((v) => [v.removing, v.cards.some((c) => c.remove || c.ask)]),
         [[-1, false], [-1, false], [-1, false], [-1, false]]);
@@ -703,13 +703,13 @@ same('the connection is lost on a player\'s screen: START says Reconnecting, the
 same('picture 16c: the pencil is on the page\'s own name only (the host\'s, a player\'s), not while START waits or the link is lost', [
     view(S14), view(S4), view(S13), view(S13b), view(S14, { offline: 'lost' }), view(S4, { offline: 'lost' })
 ].map((v) => v.cards.map((c) => c.pencil ? 1 : 0).join('')), ['1000', '0001', '0000', '0000', '0000', '0000']);
-// the grips (the dots: drag a player onto another colour) and the drop-downs are the host's, while the room is open
-same('only the host of an open room can drag (grips) and set the colours (drop-downs): a player, START, a lost link have none', [view(S2), view(S4), view(S13), view(S2, { offline: 'lost' }), view(S2, { offline: 'none' })].map((v) => [v.cards.filter((c) => c.grip).length, v.cards.filter((c) => c.mode).length]), [[4, 2], [0, 0], [0, 0], [0, 0], [0, 0]]);
+// the grips (the dots: drag a player onto another color) and the drop-downs are the host's, while the room is open
+same('only the host of an open room can drag (grips) and set the colors (drop-downs): a player, START, a lost link have none', [view(S2), view(S4), view(S13), view(S2, { offline: 'lost' }), view(S2, { offline: 'none' })].map((v) => [v.cards.filter((c) => c.grip).length, v.cards.filter((c) => c.mode).length]), [[4, 2], [0, 0], [0, 0], [0, 0], [0, 0]]);
 
-// ---- the map's side: who plays and what an open colour does ----
+// ---- the map's side: who plays and what an open color does ----
 [
     // [label, room, context, the line under START, the short line (a phone)]
-    ['alone, three colours open (picture 1)', S1, {}, 'A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', 'You · Treasure · 3 open'],
+    ['alone, three colors open (picture 1)', S1, {}, 'A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', 'You · Treasure · 3 open'],
     ['alone, two open (one is Nobody)', mk([P('Juniper'), O, O, O], { plan: [0, 0, 4, 0] }), {}, 'A game for one. Red and Black are open and stay empty unless a player joins first.', 'You · Treasure · 2 open'],
     ['alone, one open', mk([P('Juniper'), O, O, O], { plan: [0, 4, 4, 0] }), {}, 'A game for one. Black is open and stays empty unless a player joins first.', 'You · Treasure · 1 open'],
     ['alone, nobody else may come', mk([P('Juniper'), O, O, O], { plan: [0, 4, 4, 4] }), {}, 'A game for one: only your colony is on the map.', 'You · Treasure'],
@@ -717,7 +717,7 @@ same('only the host of an open room can drag (grips) and set the colours (drop-d
     ['a Hard bot and a Medium bot', mk([P('Juniper'), O, O, O], { plan: [0, 3, 2, 4] }), {}, 'You, a Hard bot and a Medium bot play on Treasure.', 'You, Hard bot and Medium bot · Treasure'],
     ['another map, two open', mk([P('Juniper'), P('Sam'), O, O], { map: 'ISLANDS.LVL' }), {}, 'You and Sam play on Islands. Blue and Black are open and stay empty unless a player joins first.', 'You and Sam · Islands · 2 open'],
     ['the room has no map yet: Treasure, the default', mk([P('Juniper'), P('Sam'), P('Priya'), P('Leo')], { map: '' }), {}, 'You, Sam, Priya and Leo play on Treasure.', 'You, Sam, Priya and Leo · Treasure'],
-    ['a player\'s screen: the host starts it (no line about open colours)', mk([P('Juniper'), P('Sam'), O, O], { you: 1 }), {}, 'Juniper starts the match when everybody is in. Juniper and you play on Treasure.', 'Juniper starts the match'],
+    ['a player\'s screen: the host starts it (no line about open colors)', mk([P('Juniper'), P('Sam'), O, O], { you: 1 }), {}, 'Juniper starts the match when everybody is in. Juniper and you play on Treasure.', 'Juniper starts the match'],
     ['a player\'s screen, a room of four', mk([P('Juniper'), P('Sam'), P('Priya'), P('Leo')], { you: 2 }), {}, 'Juniper starts the match when everybody is in. Juniper, Sam, you and Leo play on Treasure.', 'Juniper starts the match'],
     ['the host pressed START (a player\'s screen)', mk([P('Juniper'), P('Sam'), O, O], { you: 1, starting: true }), {}, 'Juniper pressed START. Opening the game for everybody. The match begins as soon as all of you are in.', 'Juniper pressed START'],
     ['the connection is lost, a player\'s screen', mk([P('Juniper'), P('Sam'), O, O], { you: 1 }), { offline: 'lost' }, 'START comes back as soon as you are in.', 'Getting you back in'],
@@ -764,9 +764,9 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
 {
     const BACK = { people: ['Maple', 'Sam', 'Juniper', 'Pip'] };
     const R2 = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 4 });                  // Maple (Green) leads, Sam and Pip are back, Juniper (Blue) is still on the results screen
-    const NOTE_R2 = 'START waits for Juniper. You can wait, or press Remove on their colour to start without them.';
+    const NOTE_R2 = 'START waits for Juniper. You can wait, or press Remove on their color to start without them.';
     const backIn = { stat: 'Back in the room', statCls: 'pstat back' }, onResults = { stat: 'Still on the results screen…', statCls: 'pstat away' };
-    const guestOf = (seat, name, extra) => Object.assign({ seat: seat, colour: seatName[seat], kind: 'person', who: [name + '/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': ' + name, teams: '-1 -2' }, extra || {});
+    const guestOf = (seat, name, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: [name + '/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': ' + name, teams: '-1 -2' }, extra || {});
     expectView('picture R2 (the host is back, Juniper is still on the results screen)', view(R2, { back: BACK }), {
         cards: [youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam', backIn), guestOf(2, 'Juniper', onResults), guestOf(3, 'Pip', backIn)], play: [0, 1, 2, 3],
         notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: FREE, teamsWarn: false },
@@ -774,11 +774,11 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
     });
     same('picture R2: Juniper is the one who is not back (a press of START goes to the room, which says whom it waits for: the strip "notback")', R.notBack(model(R2), ctx({ back: BACK })), [2]);
     const two = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12 });
-    same('two who are not back: both are named, the note says "their colours"', [R.notBack(model(two), ctx({ back: BACK })), view(two, { back: BACK }).side.note],
-        [[2, 3], 'START waits for Juniper and Pip. You can wait, or press Remove on their colours to start without them.']);
+    same('two who are not back: both are named, the note says "their colors"', [R.notBack(model(two), ctx({ back: BACK })), view(two, { back: BACK }).side.note],
+        [[2, 3], 'START waits for Juniper and Pip. You can wait, or press Remove on their colors to start without them.']);
     same('startNote of nobody, one, two and three names', [R.startNote([]), R.startNote(['A']), R.startNote(['A', 'B']), R.startNote(['A', 'B', 'C'])], ['',
-        'START waits for A. You can wait, or press Remove on their colour to start without them.', 'START waits for A and B. You can wait, or press Remove on their colours to start without them.',
-        'START waits for A, B and C. You can wait, or press Remove on their colours to start without them.']);
+        'START waits for A. You can wait, or press Remove on their color to start without them.', 'START waits for A and B. You can wait, or press Remove on their colors to start without them.',
+        'START waits for A, B and C. You can wait, or press Remove on their colors to start without them.']);
     const all = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 0 });
     same('everybody is back: every other person is "Back in the room", nothing is waited for', [view(all, { back: BACK }).cards.map((c) => c.stat), view(all, { back: BACK }).side.note, R.notBack(model(all), ctx({ back: BACK }))],
         [['Host. You start the match.', 'Back in the room', 'Back in the room', 'Back in the room'], '', []]);
@@ -790,7 +790,7 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
     // Sam came back first and leads until Maple, the host of the match, is back (the room's rule: the earliest of the match who is back leads)
     const first = mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 1, inGame: 1 });
     same('the first one back leads: Maple (the host of the match) is still on the results screen, START waits for her', [view(first, { back: BACK }).cards.map((c) => c.stat), view(first, { back: BACK }).side.note],
-        [['Still on the results screen…', 'Host. You start the match.', 'Takes the next player who joins.', 'Takes the next player who joins.'], 'START waits for Maple. You can wait, or press Remove on their colour to start without them.']);
+        [['Still on the results screen…', 'Host. You start the match.', 'Takes the next player who joins.', 'Takes the next player who joins.'], 'START waits for Maple. You can wait, or press Remove on their color to start without them.']);
     // what is not the match's: a page that did not come back from it, a person who was not in it, START pressed, no link
     same('a page that did not come back from the match (no ctx.back) shows the room as ever: no "back", no note (the room says whom START waits for)', [view(R2).cards.map(show), view(R2).side.note, R.notBack(model(R2), ctx())],
         [[youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam'), guestOf(2, 'Juniper'), guestOf(3, 'Pip')], '', []]);
@@ -798,10 +798,10 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
     same('a person who was not in the match (Leo, who joined after it) is "In the room" even when the room counts their seat as a game (a game of the desktop): only the match\'s people are waited for',
         [view(leo, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(leo), ctx({ back: BACK })), view(leo, { back: BACK }).side.note], [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'In the room'], [2], NOTE_R2]);
     const pressed = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 4, starting: true });
-    same('START is pressed (everybody was back): the colours say whose game is open, nothing is waited for', [view(pressed, { back: BACK }).cards.map((c) => c.stat), view(pressed, { back: BACK }).side.note, R.notBack(model(pressed), ctx({ back: BACK }))],
+    same('START is pressed (everybody was back): the colors say whose game is open, nothing is waited for', [view(pressed, { back: BACK }).cards.map((c) => c.stat), view(pressed, { back: BACK }).side.note, R.notBack(model(pressed), ctx({ back: BACK }))],
         [['Opening the game…', 'Opening the game…', 'In the game', 'Opening the game…'], '', []]);
     same('the link is lost or there is no room: no note under START (START is off)', ['lost', 'none'].map((o) => view(R2, { back: BACK, offline: o }).side.note), ['', '']);
-    same('the page\'s own colour is never "back" or "on the results screen", whatever the bit says (the page\'s own bit never counts)', view(mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 0, inGame: 2 }), { back: BACK }).cards[1].stat, 'Waiting for the host to start.');
+    same('the page\'s own color is never "back" or "on the results screen", whatever the bit says (the page\'s own bit never counts)', view(mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 0, inGame: 2 }), { back: BACK }).cards[1].stat, 'Waiting for the host to start.');
     // the server keeps a seat only for a game in a browser (protocol 15's platform byte; a game that did not say is given one too): a game of the desktop of the match (Pip, Windows) joined the room by the
     // code like anybody, so the room counts it as a game and it is back; Juniper's results screen runs in a browser (Linux) and is not back
     const desk = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12, platforms: [0x16, 0x13, 0x13, 0x01] });
@@ -821,8 +821,8 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
     const v = view(room);
     same('names go through as they are: no markup is made, no letter is changed, nothing is cut', [v.cards[0].who[0].text, v.cards[1].who[0].text, v.cards[2].who[0].text], [NAME_A, NAME_B, NAME_C]);
     same('... in the heading, the labels and the lines', [v.heading, v.cards[0].label, v.cards[1].label, v.side.startLabel, v.side.plan === NAME_A + ' starts the match when everybody is in. ' + NAME_A + ', you and ' + NAME_C + ' play on Treasure.', v.notes.slots],
-        [NAME_A + '’s room', 'Green: ' + NAME_A + ', host', 'Red: ' + NAME_B + ', you', 'Waiting for ' + NAME_A, true, NAME_A + ' arranges the colours and starts the match.']);
-    same('... in the question about a colour that is picked', R.viewOf(model(mk([P(NAME_A), P(NAME_B), O, O])), ctx({ picked: 1 })).cards[0].drop, 'Tap to put ' + NAME_B + ' here');
+        [NAME_A + '’s room', 'Green: ' + NAME_A + ', host', 'Red: ' + NAME_B + ', you', 'Waiting for ' + NAME_A, true, NAME_A + ' arranges the colors and starts the match.']);
+    same('... in the question about a color that is picked', R.viewOf(model(mk([P(NAME_A), P(NAME_B), O, O])), ctx({ picked: 1 })).cards[0].drop, 'Tap to put ' + NAME_B + ' here');
 }
 same('the page does not change the room it is shown or the switches it is given', (() => { const m = model(S5), c = ctx({ sides: [1, 0, 1, 0] }), a = JSON.stringify([m, c]); R.viewOf(m, c); return JSON.stringify([m, c]) === a; })(), true);
 same('a context with nothing in it is the plain host screen', R.viewOf(model(S2), {}).cards.map(show), view(S2).cards.map(show));
@@ -834,10 +834,10 @@ same('a context with nothing in it is the plain host screen', R.viewOf(model(S2)
 const protocolPath = path.join(repoDir, 'include', 'ants_net', 'protocol.hpp');
 const protocolText = fs.existsSync(protocolPath) ? fs.readFileSync(protocolPath, 'utf8') : '';
 const said = (name) => { const m = new RegExp(name + ' = "((?:[^"\\\\]|\\\\.)*)"').exec(protocolText); return m ? m[1] : null; };
-const SAID = { late: said('kNoticeGameLate'), lates: said('kNoticeGamesLate'), maplost: said('kNoticeMapLost'), mapcolours: said('kNoticeMapColours'), noplace: said('kNoticeNoPlace'), startsfailed: said('kNoticeStartsFailed'), noteams: said('kNoticeNoTeams'),
+const SAID = { late: said('kNoticeGameLate'), lates: said('kNoticeGamesLate'), maplost: said('kNoticeMapLost'), mapcolors: said('kNoticeMapColors'), noplace: said('kNoticeNoPlace'), startsfailed: said('kNoticeStartsFailed'), noteams: said('kNoticeNoTeams'),
     notback: said('kNoticeNotBack'), notbacks: said('kNoticeNotBackMany') };
 same('the sentences of the server\'s START, as protocol.hpp has them', SAID, {
-    late: '\'s game did not come in time.', lates: 'These games did not come in time: ', maplost: 'This map could not be loaded: choose another map.', mapcolours: 'This map cannot be played with these colours.',
+    late: '\'s game did not come in time.', lates: 'These games did not come in time: ', maplost: 'This map could not be loaded: choose another map.', mapcolors: 'This map cannot be played with these colours.',
     noplace: 'The server has no place for another match right now: try again in a minute.', startsfailed: 'The match could not start a few times in a row: try again in a minute.', noteams: 'No teams: ',
     notback: ' is not back from the match yet.', notbacks: 'These players are not back from the match yet: '
 });
@@ -845,13 +845,13 @@ const PRIYA_LATE = 'Priya' + SAID.late;
 [
     // [the line that the room said, the kind]
     [PRIYA_LATE, 'late'], ['Sam' + SAID.late, 'late'], ['x' + SAID.late, 'late'], [SAID.lates + 'Priya, Sam.', 'late'], [SAID.lates + 'Priya.', 'late'], [SAID.lates, 'late'],
-    [SAID.noplace, 'noplace'], ['The server has no place for another match right now', 'noplace'], [SAID.noplace + ' (later)', 'noplace'], [SAID.startsfailed, 'startsfailed'], [SAID.maplost, 'maplost'], [SAID.mapcolours, 'mapcolours'],
+    [SAID.noplace, 'noplace'], ['The server has no place for another match right now', 'noplace'], [SAID.noplace + ' (later)', 'noplace'], [SAID.startsfailed, 'startsfailed'], [SAID.maplost, 'maplost'], [SAID.mapcolors, 'mapcolors'],
     // near misses are only notices: the sentences are matched whole, from the first letter
-    [SAID.maplost.slice(0, -1), 'notice'], [SAID.mapcolours.slice(0, -1), 'notice'], [SAID.maplost + ' ', 'notice'], [' ' + SAID.mapcolours, 'notice'], [SAID.mapcolours.toLowerCase(), 'notice'], [SAID.mapcolours + ' Later.', 'notice'],
+    [SAID.maplost.slice(0, -1), 'notice'], [SAID.mapcolors.slice(0, -1), 'notice'], [SAID.maplost + ' ', 'notice'], [' ' + SAID.mapcolors, 'notice'], [SAID.mapcolors.toLowerCase(), 'notice'], [SAID.mapcolors + ' Later.', 'notice'],
     [PRIYA_LATE.slice(0, -1), 'notice'], [PRIYA_LATE + ' Press START.', 'notice'], ['Priya’s game did not come in time.', 'notice'], ['These games did not come in time', 'notice'], ['These games did not come in time:', 'notice'],
     ['  ' + SAID.noplace, 'notice'], ['the server has no place for another match right now', 'notice'], [SAID.startsfailed.slice(0, 20), 'notice'], ['The match could not start', 'notice'],
     [SAID.noteams + 'the teams need a pair.', 'notice'], ['Hello', 'notice'], ['', 'notice'],
-    // the line that a moved player is sent (HostLobby::move_seat) has no strip: the colour and the toast say it
+    // the line that a moved player is sent (HostLobby::move_seat) has no strip: the color and the toast say it
     ['Sam moved you to Blue.', 'moved'], ['The room moved you to Red.', 'moved'], ['Player 2 moved you to Black.', 'moved'], ['Sam moved you to Blue', 'notice'], [' moved you to Blue.', 'notice'], ['moved you to Blue.', 'notice'],
     ['Sam moved you to Blue. Later.', 'notice'], ['Sam moved you to blue 2.', 'notice'], ['Sam moved you', 'notice'],
     // the rematch: the leader's START while a person of the match is not back from it (HostLobby::not_back_notice); a long list is cut by the room at 100 characters and is still this kind
@@ -860,24 +860,24 @@ const PRIYA_LATE = 'Priya' + SAID.late;
 ].forEach(([text, kind]) => same('noticeKind(' + JSON.stringify(text).slice(0, 60) + ') is ' + kind + ', with the text as the room said it', R.noticeKind(text), { kind: kind, server: text }));
 same('noticeKind of what is no text is a notice with no words', [null, undefined, 42, {}].map((t) => R.noticeKind(t)), [{ kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }]);
 
-// picture 15, strip by strip: [kind, what the page knows (the arguments), the words, the colour of the strip ('' green, 'warn' gold), the button ('' none)]
+// picture 15, strip by strip: [kind, what the page knows (the arguments), the words, the color of the strip ('' green, 'warn' gold), the button ('' none)]
 const ARGS_HOST = { guest: false, leaver: 'Leo', host: 'Sam' };
 const BANNERS = [
-    ['host', ARGS_HOST, 'Leo left, so you are the host now. The map, the colours and START are yours.', '', 'OK'],
+    ['host', ARGS_HOST, 'Leo left, so you are the host now. The map, the colors and START are yours.', '', 'OK'],
     ['host', { guest: true, leaver: 'Juniper', host: 'Sam' }, 'Juniper left. Sam is the host now.', '', 'OK'],
     ['old', {}, 'That room is gone, because everybody left, so this one is yours now, with the same map. Send the link on if you like.', '', 'OK'],
     ['old', { sameMap: true }, 'That room is gone, because everybody left, so this one is yours now, with the same map. Send the link on if you like.', '', 'OK'],
     ['old', { sameMap: false }, 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', '', 'OK'],
     ['host', { guest: true, back: true, leaver: 'Sam', host: 'Maple' }, 'Maple is back, and is the host again.', '', 'OK'],
-    ['notback', { server: 'Juniper' + SAID.notback }, 'Juniper is not back from the match yet. START waits for them: wait, or press Remove on their colour to start without them.', 'warn', 'OK'],
-    ['notback', { server: SAID.notbacks + 'Juniper and Pip.' }, 'These players are not back from the match yet: Juniper and Pip. START waits for them: wait, or press Remove on their colour to start without them.', 'warn', 'OK'],
+    ['notback', { server: 'Juniper' + SAID.notback }, 'Juniper is not back from the match yet. START waits for them: wait, or press Remove on their color to start without them.', 'warn', 'OK'],
+    ['notback', { server: SAID.notbacks + 'Juniper and Pip.' }, 'These players are not back from the match yet: Juniper and Pip. START waits for them: wait, or press Remove on their color to start without them.', 'warn', 'OK'],
     ['late', { server: PRIYA_LATE }, 'Priya\'s game did not come in time. Everybody is back in the room, as you left it. Press START to try again.', 'warn', 'OK'],
     ['late', { server: SAID.lates + 'Priya, Sam.' }, 'These games did not come in time: Priya, Sam. Everybody is back in the room, as you left it. Press START to try again.', 'warn', 'OK'],
     ['lateplayer', { host: 'Juniper' }, 'The match did not start, so everybody is back in the room. Juniper can press START to try again.', 'warn', 'OK'],
     ['noplace', { server: SAID.noplace }, 'The server has no place for another match right now: try again in a minute. Everybody is back in the room.', 'warn', 'OK'],
     ['startsfailed', { server: SAID.startsfailed }, 'The match could not start a few times in a row: try again in a minute. Everybody is back in the room.', 'warn', 'OK'],
     ['maplost', { server: SAID.maplost }, 'This map could not be loaded: choose another map.', 'warn', 'OK'],
-    ['mapcolours', { server: SAID.mapcolours }, 'This map cannot be played with these colours.', 'warn', 'OK'],
+    ['mapcolors', { server: SAID.mapcolors }, 'This map cannot be played with these colours.', 'warn', 'OK'],
     ['full', {}, 'That room is full, so this one is yours now. Send the link on if you like.', '', 'OK'],
     ['running', {}, 'The match in that room has already started, so this room is yours instead. Send the link on if you like.', '', 'OK'],
     ['removed', {}, 'The host removed you from the room, so this one is yours now. Send the link on if you like.', '', 'OK'],
@@ -891,13 +891,13 @@ const BANNERS = [
 BANNERS.forEach(([kind, args, text, tone, btn]) => same('banner ' + kind + ' ' + JSON.stringify(args).slice(0, 40), R.banner(kind, args), { kind: kind, text: text, tone: tone, btn: btn }));
 // (picture 15's "over", the strip of a match that is over, is the rematch's own strip "Back from the match." now: web/front/rematch.js; the rematch adds "notback", the START that waits for a person of the match)
 same('picture 15 lists seventeen messages: these are their kinds, with the rematch\'s "notback" in the place of "over"', BANNERS.map((b) => b[0]).filter((k, i, a) => a.indexOf(k) === i && k !== 'notice').sort(),
-    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'notback', 'old', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolors', 'maplost', 'noplace', 'notback', 'old', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
 same('green is the page changing something for you (the host, an old room, a full room, a running match, a removal); gold is something that did not work (or waits)', [R.META.host, R.META.old, R.META.full, R.META.running, R.META.removed].map((m) => m.tone).concat([R.META.late, R.META.lost, R.META.busy, R.META.version, R.META.notice, R.META.notback].map((m) => m.tone)), ['', '', '', '', '', 'warn', 'warn', 'warn', 'warn', 'warn', 'warn']);
 same('the kinds that have a strip: the seventeen and the line of the room that has no kind of its own', Object.keys(R.META).sort(),
-    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'notback', 'notice', 'old', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolors', 'maplost', 'noplace', 'notback', 'notice', 'old', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
 same('no strip says "Welcome back" any more: the front page\'s strip of the rematch says it (picture R2)', [('over' in R.META), ('over' in R.TEXT)], [false, false]);
 same('every strip has its words; the one more is the line under the code field (no room with that code), which is no strip', Object.keys(R.TEXT).sort(), Object.keys(R.META).concat('noroom').sort());
-same('every kind that noticeKind can say has a strip', ['late', 'noplace', 'startsfailed', 'maplost', 'mapcolours', 'notback', 'notice'].map((k) => k in R.META), [true, true, true, true, true, true, true]);
+same('every kind that noticeKind can say has a strip', ['late', 'noplace', 'startsfailed', 'maplost', 'mapcolors', 'notback', 'notice'].map((k) => k in R.META), [true, true, true, true, true, true, true]);
 same('... but "moved" is the one kind that says nothing: no strip and no words (the page drops it)', [('moved' in R.META), ('moved' in R.TEXT)], [false, false]);
 same('a button that is not OK or none says what it does, in words (the page does it; here the words are read): Try again, Use this window, Reload', Object.keys(R.META).filter((k) => R.META[k].btn !== '' && R.META[k].btn !== 'OK').sort(), Object.keys(R.ACTS).sort());
 same('what those buttons do', R.ACTS, { busy: 'This asks the server again.', away: 'This window takes the room back, and the other window closes.', version: 'This reloads the page.' });
@@ -954,10 +954,10 @@ for (let i = 0; i < 700; i++) {
     if (room.teamA !== 255) tally.teamed++;
     const D = (extra) => 'room ' + J(room.slots.map((s) => s.name)) + ' plan ' + J(room.plan) + ' you ' + room.you + ' leader ' + room.leader + ' teams ' + room.teamA + ',' + room.teamB + (extra ? ' ' + extra : '');
     // the model
-    holds('modelOf says what each colour is (a person, a computer player, nobody, open)', J(m.slots.map((s) => s.kind)) === J(kinds), D());
+    holds('modelOf says what each color is (a person, a computer player, nobody, open)', J(m.slots.map((s) => s.kind)) === J(kinds), D());
     holds('modelOf: the page is a guest exactly when it is not the leader, and the leader is the leader', m.guest === (room.you !== room.leader) && m.leader === room.leader && m.starting === room.starting, D());
     holds('modelOf: the switches are the room\'s pair or none', (room.teamA === 255 ? J(m.sides) === '[0,0,0,0]' : m.sides.filter((v) => v === 1).length === 2 && m.sides[room.teamA] === 1 && m.sides[room.teamB] === 1), D());
-    holds('startsAlone is true exactly when one colour plays (a person or a computer player)', R.startsAlone(m) === (kinds.filter((k) => k === 'person' || k === 'bot').length === 1), D());
+    holds('startsAlone is true exactly when one color plays (a person or a computer player)', R.startsAlone(m) === (kinds.filter((k) => k === 'person' || k === 'bot').length === 1), D());
     holds('playing lists the persons and the computer players, in seat order', J(R.playing(m)) === J(ALL.filter((s) => kinds[s] === 'person' || kinds[s] === 'bot')), D());
     // the views
     for (const offline of [false, false, 'lost', 'none', 'join']) {
@@ -972,9 +972,9 @@ for (let i = 0; i < 700; i++) {
         tally.views++;
         if (!ro) tally.hostViews++;
         if (!ro && R.playing(m).length >= 3 && R.pairOf(v.sides, R.playing(m))) tally.pairViews++;
-        holds('viewOf: four cards, in seat order, each with its colour', v.cards.length === 4 && v.cards.every((c, s) => c.seat === s && c.colour === R.COLOURS[s] && c.kind === m.slots[s].kind), Dv);
+        holds('viewOf: four cards, in seat order, each with its color', v.cards.length === 4 && v.cards.every((c, s) => c.seat === s && c.color === R.COLORS[s] && c.kind === m.slots[s].kind), Dv);
         holds('viewOf: read-only (a player, START, no link): no dots, no drop-down, no Remove, no question, no buttons', !ro || v.cards.every((c) => !c.grip && c.mode === '' && !c.remove && !c.ask && c.teams === null), Dv);
-        holds('viewOf: the host of an open room can drag every card and set every colour that no person holds', ro || v.cards.every((c) => c.grip && (c.mode !== '') === (c.kind !== 'person')), Dv);
+        holds('viewOf: the host of an open room can drag every card and set every color that no person holds', ro || v.cards.every((c) => c.grip && (c.mode !== '') === (c.kind !== 'person')), Dv);
         holds('viewOf: the pencil is on the page\'s own name, while the room is open and the link is there', v.cards.every((c, s) => c.pencil === (m.slots[s].kind === 'person' && !!m.slots[s].me && !m.starting && !offline)), Dv);
         holds('viewOf: Remove is on persons that are neither the page nor the leader, never on a read-only screen; one question at a time, and it is the one that removing says', (() => {
             const ask = v.cards.filter((c) => c.ask).map((c) => c.seat);
@@ -983,14 +983,14 @@ for (let i = 0; i < 700; i++) {
         })(), Dv);
         const play = R.playing(m), can = play.length >= 3;
         const shown = R.shownOf(v.sides, play);
-        holds('viewOf: the switches that it shows are mended ones (a pair at most, never three on a button, none for a colour that does not play)', J(R.sidesFix(v.sides, play)) === J(v.sides) && v.sides.every((x, s) => x === 0 || play.indexOf(s) >= 0), Dv);
-        holds('viewOf: the buttons are under the colours that play when three or four play, and only then', v.cards.every((c, s) => (c.teams !== null) === (!ro && can && play.indexOf(s) >= 0)), Dv);
+        holds('viewOf: the switches that it shows are mended ones (a pair at most, never three on a button, none for a color that does not play)', J(R.sidesFix(v.sides, play)) === J(v.sides) && v.sides.every((x, s) => x === 0 || play.indexOf(s) >= 0), Dv);
+        holds('viewOf: the buttons are under the colors that play when three or four play, and only then', v.cards.every((c, s) => (c.teams !== null) === (!ro && can && play.indexOf(s) >= 0)), Dv);
         holds('viewOf: a lit button is the one that shownOf says (a pair makes the other two light the other button), never more than two on a button', v.cards.every((c, s) => c.teams === null || c.teams.every((t) => t.pressed === (shown[s] === t.side))) && [1, 2].every((k) => v.cards.filter((c) => c.teams && c.teams[k - 1].pressed).length <= 2), Dv);
         holds('viewOf: a dashed button is exactly one that a press would refuse (and a refusal says why)', v.cards.every((c, s) => c.teams === null || c.teams.every((t) => t.disabled === (R.pressSide(v.sides, play, s, t.side).refusal !== ''))), Dv);
         holds('viewOf: a read-only card shows its team as a tab, only when it has one', v.cards.every((c, s) => c.tab === (ro && can && play.indexOf(s) >= 0 && shown[s] ? 'Team ' + shown[s] : '')), Dv);
-        holds('viewOf: a person\'s card shows the name as it is, every label starts with the colour', v.cards.every((c, s) => (m.slots[s].kind !== 'person' || c.who[0].text === m.slots[s].name) && c.label.indexOf(R.COLOURS[s].name + ': ') === 0), Dv);
-        holds('viewOf: a card says what a tap does only while a colour is picked', v.cards.every((c) => (o.picked >= 0 ? c.drop.indexOf('Tap to put ') === 0 : c.drop === '')), Dv);
-        holds('viewOf: the warning line is the refusal that the page has, in the warning colour', v.notes.teamsWarn === (o.refusal !== '') && (o.refusal === '' || v.notes.teams === o.refusal), Dv);
+        holds('viewOf: a person\'s card shows the name as it is, every label starts with the color', v.cards.every((c, s) => (m.slots[s].kind !== 'person' || c.who[0].text === m.slots[s].name) && c.label.indexOf(R.COLORS[s].name + ': ') === 0), Dv);
+        holds('viewOf: a card says what a tap does only while a color is picked', v.cards.every((c) => (o.picked >= 0 ? c.drop.indexOf('Tap to put ') === 0 : c.drop === '')), Dv);
+        holds('viewOf: the warning line is the refusal that the page has, in the warning color', v.notes.teamsWarn === (o.refusal !== '') && (o.refusal === '' || v.notes.teams === o.refusal), Dv);
         holds('viewOf: START and the map are off for a player, while START waits and without a room; START waits ("Getting ready") only after START', v.side.startDisabled === ro && v.side.mapDisabled === ro && v.side.startBusy === m.starting && (v.side.startLabel === 'Getting ready…') === m.starting, Dv);
         holds('viewOf: the lines of the side are text, and there is one unless the page is joining', typeof v.side.plan === 'string' && typeof v.side.planShort === 'string' && (offline === 'join' || (v.side.plan !== '' && v.side.planShort !== '')), Dv);
         holds('viewOf: the heading is "Joining a room" while joining, the host\'s room for a player, else "Your room"', v.heading === (offline === 'join' ? 'Joining a room' : m.guest ? R.hostName(m) + '’s room' : 'Your room'), Dv);
@@ -1009,10 +1009,10 @@ for (let i = 0; i < 700; i++) {
         holds('pressSide: what comes back is a mended list, a list of its own, and never three lit on a button', J(R.sidesFix(res.sides, play)) === J(res.sides) && res.sides !== sides && [1, 2].every((b) => play.filter((s) => after[s] === b).length <= 2), Dp);
         holds('pressSide: a press that is accepted always changes what is lit', !live || res.refusal !== '' || J(after) !== J(before), Dp);
         holds('pressSide: a press that is refused changes nothing and says why in one of the two ways', !live || res.refusal === '' || (J(res.sides) === J(fixed) && (res.refusal === REFUSE_FULL(button) || res.refusal === REFUSE_OTHER(button))), Dp);
-        holds('pressSide: a colour that does not play, or fewer than three that play, is no press: nothing changes, nothing is said', live || (J(res.sides) === J(fixed) && res.refusal === ''), Dp);
+        holds('pressSide: a color that does not play, or fewer than three that play, is no press: nothing changes, nothing is said', live || (J(res.sides) === J(fixed) && res.refusal === ''), Dp);
         holds('pressSide: a refusal is the press of a button that sideOpen says is closed, and only that', !live || (res.refusal !== '') === !R.sideOpen(fixed, play, seat, button), Dp);
-        holds('teamBytes: a pair that the room is told is two colours that play, the lower first, or two 255', (() => { const t = R.teamBytes(sides, play); return (t.teamA === 255 && t.teamB === 255) || (t.teamA < t.teamB && t.teamB < 4 && play.indexOf(t.teamA) >= 0 && play.indexOf(t.teamB) >= 0 && play.length >= 3); })(), Dp);
-        holds('teamsText: a line that names a pair names the colours of the pair, once', (() => { const t = R.teamsText(fixed, play, false); const pair = R.pairOf(fixed, play); return pair === null || (/^Teams: .* against .*\.$/.test(t) && play.every((s) => t.split(R.COLOURS[s].name).length === 2)); })(), Dp);
+        holds('teamBytes: a pair that the room is told is two colors that play, the lower first, or two 255', (() => { const t = R.teamBytes(sides, play); return (t.teamA === 255 && t.teamB === 255) || (t.teamA < t.teamB && t.teamB < 4 && play.indexOf(t.teamA) >= 0 && play.indexOf(t.teamB) >= 0 && play.length >= 3); })(), Dp);
+        holds('teamsText: a line that names a pair names the colors of the pair, once', (() => { const t = R.teamsText(fixed, play, false); const pair = R.pairOf(fixed, play); return pair === null || (/^Teams: .* against .*\.$/.test(t) && play.every((s) => t.split(R.COLORS[s].name).length === 2)); })(), Dp);
     }
     // the plans and the moves
     for (let k = 0; k < 6; k++) {
@@ -1021,8 +1021,8 @@ for (let i = 0; i < 700; i++) {
         const Dw = D('change ' + J(change) + ' -> ' + J(got));
         const playAfter = ALL.filter((s) => kinds[s] === 'person' || (got.kinds[s] >= 1 && got.kinds[s] <= 3));
         holds('planWith: four plan values, a map that is none or a file of the page, teams that the codec takes', got.kinds.length === 4 && got.kinds.every((x) => Number.isInteger(x) && x >= 0 && x <= 4) && (got.map === '' || R.MAPS.some((x) => x.file === got.map)) && N.validTeams(got.teamA, got.teamB) && attempt(() => N.encodePlan(got.map, got.kinds, got.teamA, got.teamB)).threw === undefined, Dw);
-        holds('planWith: a team that goes out is two colours that play, with three or four playing', (got.teamA === 255 && got.teamB === 255) || (playAfter.length >= 3 && playAfter.indexOf(got.teamA) >= 0 && playAfter.indexOf(got.teamB) >= 0), Dw);
-        holds('planWith: only the colour that was named changes its plan, and to the word that was said', J(got.kinds) === J(ALL.map((s) => (change && typeof change.seat === 'number' && change.seat === s ? R.KINDS.indexOf(change.kind) : room.plan[s]))), Dw);
+        holds('planWith: a team that goes out is two colors that play, with three or four playing', (got.teamA === 255 && got.teamB === 255) || (playAfter.length >= 3 && playAfter.indexOf(got.teamA) >= 0 && playAfter.indexOf(got.teamB) >= 0), Dw);
+        holds('planWith: only the color that was named changes its plan, and to the word that was said', J(got.kinds) === J(ALL.map((s) => (change && typeof change.seat === 'number' && change.seat === s ? R.KINDS.indexOf(change.kind) : room.plan[s]))), Dw);
         holds('planWith: without a map the room\'s own stays (an empty name)', (change && change.map && change.map !== 'nowhere') || got.map === '', Dw);
         const none = R.planWith(room, m, { sides: [0, 0, 0, 0] });
         holds('planWith: the plan that clears the teams has none', none.teamA === 255 && none.teamB === 255 && J(none.kinds) === J(room.plan), Dw);
@@ -1037,16 +1037,16 @@ for (let i = 0; i < 700; i++) {
         const from = Math.floor(rnd() * 4), to = Math.floor(rnd() * 4);
         const op = R.moveOf(room, m, from, to);
         const Dm = D('move ' + from + '->' + to + ' = ' + J(op));
-        if (from === to) { holds('moveOf: a colour onto itself is nothing', op === null, Dm); continue; }
+        if (from === to) { holds('moveOf: a color onto itself is nothing', op === null, Dm); continue; }
         const aPerson = kinds[from] === 'person', bPerson = kinds[to] === 'person';
         if (aPerson || bPerson) {
             tally.moves++;
-            holds('moveOf: a move that holds a person is asked of the room, with the person as `from` (the colours of the two are the two that were named)', op !== null && op.op === 'move' && kinds[op.from] === 'person' && ((op.from === from && op.to === to) || (op.from === to && op.to === from && !aPerson)) && (!aPerson || op.from === from), Dm);
+            holds('moveOf: a move that holds a person is asked of the room, with the person as `from` (the colors of the two are the two that were named)', op !== null && op.op === 'move' && kinds[op.from] === 'person' && ((op.from === from && op.to === to) || (op.from === to && op.to === from && !aPerson)) && (!aPerson || op.from === from), Dm);
             continue;
         }
         tally.exchanges++;
-        holds('moveOf: two colours that no person holds exchange their plans, and nothing else changes', op !== null && op.op === 'plan' && op.plan.map === '' && ALL.every((s) => op.plan.kinds[s] === (s === from ? room.plan[to] : s === to ? room.plan[from] : room.plan[s])) && op.plan.kinds !== room.plan, Dm);
-        holds('moveOf: the team pair follows the colours (the same two plans, the lower colour first), none stays none', (() => {
+        holds('moveOf: two colors that no person holds exchange their plans, and nothing else changes', op !== null && op.op === 'plan' && op.plan.map === '' && ALL.every((s) => op.plan.kinds[s] === (s === from ? room.plan[to] : s === to ? room.plan[from] : room.plan[s])) && op.plan.kinds !== room.plan, Dm);
+        holds('moveOf: the team pair follows the colors (the same two plans, the lower color first), none stays none', (() => {
             const moved = (s) => (s === from ? to : s === to ? from : s);
             if (room.teamA === 255) return op.plan.teamA === 255 && op.plan.teamB === 255;
             return op.plan.teamA === Math.min(moved(room.teamA), moved(room.teamB)) && op.plan.teamB === Math.max(moved(room.teamA), moved(room.teamB));

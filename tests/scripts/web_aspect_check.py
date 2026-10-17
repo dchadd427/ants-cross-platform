@@ -1076,7 +1076,7 @@ def main():
                 return changed / max(1, total)
 
             def block_fraction(rows, nch):
-                """The share of the 2 x 2 blocks (on the best of the four alignments) that are one colour: a picture that was enlarged 2 times with the nearest filter is all of them"""
+                """The share of the 2 x 2 blocks (on the best of the four alignments) that are one color: a picture that was enlarged 2 times with the nearest filter is all of them"""
                 best = 0.0
                 for oy in (0, 1):
                     for ox in (0, 1):
@@ -1306,7 +1306,7 @@ def main():
                     rows1, nch = view_rows("1")
                     rows2, _ = view_rows("2")
                     b1, b2 = block_fraction(rows1, nch), block_fraction(rows2, nch)
-                    check(b2 > 0.95 and b1 < 0.85, "%s: at the zoom 2 every world pixel is a 2 x 2 square (%.0f %% of the 2 x 2 blocks are one colour, %.0f %% at the zoom 1)" % (label, b2 * 100, b1 * 100))
+                    check(b2 > 0.95 and b1 < 0.85, "%s: at the zoom 2 every world pixel is a 2 x 2 square (%.0f %% of the 2 x 2 blocks are one color, %.0f %% at the zoom 1)" % (label, b2 * 100, b1 * 100))
                     s1, nch = strip("1")
                     s2, _ = strip("2")
                     check(s1 == s2, "%s: the frame around the map view (its left strip) is the same picture at the zoom 1 and 2" % label)

@@ -129,7 +129,7 @@ struct Frame {
 // original makes at start (FUN_01018a7a); the model mirrors the clips of 3, 2, 1 itself (src()).
 constexpr uint16_t kNotStored = 0xFFFF;
 
-// The rows of a colour-0 animation table: 8 directions per row (16 bytes), of which the original stores 0..4.
+// The rows of a color-0 animation table: 8 directions per row (16 bytes), of which the original stores 0..4.
 std::vector<uint16_t> stored_rows(const ProgramBytes& exe, uint32_t va, uint32_t rows) {
     std::vector<uint16_t> out(8u * rows, kNotStored);
     for (uint32_t r = 0; r < rows; ++r) {
@@ -138,7 +138,7 @@ std::vector<uint16_t> stored_rows(const ProgramBytes& exe, uint32_t va, uint32_t
     return out;
 }
 
-// The animation tables of the walk model, read straight from the executable (colour-0 blocks), and the Table-4
+// The animation tables of the walk model, read straight from the executable (color-0 blocks), and the Table-4
 // frames of the archive.
 class Original {
 public:

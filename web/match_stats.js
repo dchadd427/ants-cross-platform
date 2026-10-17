@@ -1,7 +1,7 @@
 /* The stats sections of the match page (docs/REPLAYS.md "The match pages"): a band of highlights, "Over time" and "Activity". They read what the server's replay pass keeps under a record's `details`
    (`AntsHistory.detailsOf`: a plain object or nothing) and build a panel from the keys they know, or nothing when the keys are not there, so a match without them looks as it did before. `details` is data
    that came from a server: every number is read as a number (anything else is 0), every list as a list, a seat as 0 to 3, and a name is put in as text, never as markup. The charts are inline SVG, with
-   no library: each seat has its colour and its own shape (circle, square, triangle, diamond), so that no chart depends on the colour alone.
+   no library: each seat has its color and its own shape (circle, square, triangle, diamond), so that no chart depends on the color alone.
    Plain functions with no page in them where they can be (tests/scripts/web_match_stats_check.js runs them, and the sections on a small fake of the DOM, with node). */
 (function (root, factory) {
     'use strict';
@@ -125,7 +125,7 @@
         var raw = v / rows, p = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), m = raw / p;
         return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;
     }
-    // the cell colour: the seat's colour mixed into the dark box by `a` (0 to 1), and the ink that reads on it
+    // the cell color: the seat's color mixed into the dark box by `a` (0 to 1), and the ink that reads on it
     function lum(c) { var f = c.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]; }
     function tintOf(rgb, a) {
         a = Math.max(0, Math.min(1, a));
@@ -159,7 +159,7 @@
         function nameNode(ctx, seat, withMark) {
             var w = el('span', 'nm'); w.appendChild(withMark ? mark(seat) : sq(seat)); w.appendChild(doc.createTextNode(nameText(ctx, seat))); return w;
         }
-        // parts of a sentence: strings, and sides (a seat, or a seat and its ally) with their colour squares
+        // parts of a sentence: strings, and sides (a seat, or a seat and its ally) with their color squares
         function say(ctx, parts) {
             var p = el('span', 'say');
             parts.forEach(function (x) {
@@ -357,7 +357,7 @@
         return { summaryBand: summaryBand, overTime: overTime, activity: activity };
     }
 
-    // The sections of the page, for a document (and a way to read a colour of the page's style): each makes a panel from a record, or null. The page's SECTIONS list holds them.
+    // The sections of the page, for a document (and a way to read a color of the page's style): each makes a panel from a record, or null. The page's SECTIONS list holds them.
     function sections(doc, getStyle) {
         var b = builder(doc, getStyle);
         return { summary: b.summaryBand, overtime: b.overTime, activity: b.activity };

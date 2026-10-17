@@ -280,7 +280,7 @@ public:
 
 // ---- rank 4: the counters to the enemy's bombs ---------------------------------------------------------------------------------------------------------------
 
-/// An enemy bomb (any bomb whose owner is neither the seat nor its ally; every bomb is drawn in its owner's colour, so a person sees it) that lies near the own hill or a pile that the
+/// An enemy bomb (any bomb whose owner is neither the seat nor its ally; every bomb is drawn in its owner's color, so a person sees it) that lies near the own hill or a pile that the
 /// hill reaches is harmful: an ant that steps on it loses 2 hit points, is thrown four tiles and loses its walk (a carrier stands with its food), and the engine's path finder does not
 /// go round an enemy bomb. One bomb at a time is cleared:
 ///   a Bomber    an own Bomber Ant defuses it (a special order onto the bomb's tile: it walks next to it and the 12-tick clip removes the bomb; nothing is hurt)

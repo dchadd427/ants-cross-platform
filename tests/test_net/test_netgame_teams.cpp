@@ -284,7 +284,7 @@ void run_team_tests() {
             const NetGame::FooterTexts f = NetGame::start_footer(every_medium, ffa, room_with({0}), false);
             ASSERT_TRUE(f.line[0] == std::vector<std::string>{"Empty seats at START:"} && f.line[1] == std::vector<std::string>{"Medium bots"});
         }
-        // a level for each seat: the seats that are empty, by their colours
+        // a level for each seat: the seats that are empty, by their colors
         ASSERT_EQ(NetGame::start_prompt_texts(eh, ffa, room_with({0, 1}), false).front(), std::string("Press START: Blue gets an Easy bot, Black a Hard bot."));
         ASSERT_EQ(NetGame::start_prompt_texts(ehm, ffa, room_with({0}), false).front(), std::string("Press START: Red gets an Easy bot, Blue a Hard bot, Black a Medium bot."));
         ASSERT_EQ(NetGame::start_prompt_texts(ehm, ffa, room_with({0, 2}), false).front(), std::string("Press START: Red gets an Easy bot, Black a Medium bot."));          // (a person took Blue: its Hard bot is not seated)
@@ -404,7 +404,7 @@ void run_team_tests() {
 }
 
 void run_seat_move_tests() {
-    TEST_CASE("N3.38 Protocol 14 And 15, The Colour That A Tap Asks For (NetGame::seat_move_target): The Next Colour That Nobody Holds, Round Again After Black; When Every Colour Is Held, The Next Colour Of Another Guest (The Two Change Places); Never The Seat Of A Bot Or Of The Host, Nothing For A Seat That Holds No Person Or Has No Guest To Go To; Every Room Of Four Seats Of Four Kinds Agrees With The Rule Said Another Way") {
+    TEST_CASE("N3.38 Protocol 14 And 15, The Color That A Tap Asks For (NetGame::seat_move_target): The Next Color That Nobody Holds, Round Again After Black; When Every Color Is Held, The Next Color Of Another Guest (The Two Change Places); Never The Seat Of A Bot Or Of The Host, Nothing For A Seat That Holds No Person Or Has No Guest To Go To; Every Room Of Four Seats Of Four Kinds Agrees With The Rule Said Another Way") {
         const auto room_of = [](const std::string& kinds) {                         // "CC.B": a person, a person, nobody, a bot (H: the host's own seat)
             RoomMsg r;
             for (size_t seat = 0; seat < 4; ++seat) {
@@ -416,7 +416,7 @@ void run_seat_move_tests() {
             return r;
         };
         const auto target = [&room_of](const std::string& kinds, uint8_t seat) { return NetGame::seat_move_target(room_of(kinds), seat); };
-        // by name: the next free colour, in the order green, red, blue, black and round again
+        // by name: the next free color, in the order green, red, blue, black and round again
         ASSERT_EQ(target("C...", 0), 1);                                           // a lone leader moves to red
         ASSERT_EQ(target("CC..", 0), 2);                                           // red is taken: blue
         ASSERT_EQ(target("CC..", 1), 2);
@@ -429,18 +429,18 @@ void run_seat_move_tests() {
         ASSERT_EQ(target(".C.C", 1), 2);
         ASSERT_EQ(target(".C.C", 3), 0);
         ASSERT_EQ(target("C..C", 3), 1);                                           // (green is taken: the next free is red)
-        // every colour held by people (a room that does not start by itself when it is full, protocol 15): the next colour of another guest, round again, so that a person goes round with every press and
+        // every color held by people (a room that does not start by itself when it is full, protocol 15): the next color of another guest, round again, so that a person goes round with every press and
         // the leader can have every arrangement of the people
         for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_EQ(target("CCCC", seat), (seat + 1) % 4);
         // a bot's seat is not taken from it, and a bot does not move: past it, the next guest
-        ASSERT_EQ(target("CBCC", 0), 2);                                           // no free colour: the next guest's, past the bot
+        ASSERT_EQ(target("CBCC", 0), 2);                                           // no free color: the next guest's, past the bot
         ASSERT_EQ(target("CBCC", 2), 3);
         ASSERT_EQ(target("CBCC", 3), 0);
         ASSERT_EQ(target("CBCC", 1), 255);                                         // (a bot is no person)
         ASSERT_EQ(target("CBBC", 0), 3);
         ASSERT_EQ(target("CBBB", 0), 255);                                         // a lone guest among bots has nobody to change places with
         ASSERT_EQ(target("BBBC", 3), 255);
-        ASSERT_EQ(target("CB.C", 0), 2);                                           // a free colour is found past the bot (and goes before a guest's: seat 3 is a guest's)
+        ASSERT_EQ(target("CB.C", 0), 2);                                           // a free color is found past the bot (and goes before a guest's: seat 3 is a guest's)
         ASSERT_EQ(target("CB.C", 3), 2);
         ASSERT_EQ(target("C.BC", 0), 1);
         ASSERT_EQ(target("HCCC", 3), 1);                                           // the host sits in green: its seat is nobody's to take, the next guest is red's
@@ -454,7 +454,7 @@ void run_seat_move_tests() {
         ASSERT_EQ(target("C...", 1), 255);                                         // nobody sits there
         ASSERT_EQ(target("C...", 4), 255);                                         // no such seat
         ASSERT_EQ(target("C...", 255), 255);
-        // every room of four seats of four kinds, every seat: the rule said another way (the first free colour after the seat, else the first guest's colour after it, looked up in a list)
+        // every room of four seats of four kinds, every seat: the rule said another way (the first free color after the seat, else the first guest's color after it, looked up in a list)
         size_t answered = 0;
         size_t swaps = 0;
         for (unsigned code = 0; code < 256; ++code) {
@@ -468,27 +468,27 @@ void run_seat_move_tests() {
                     continue;
                 }
                 uint8_t want = 255;
-                for (unsigned step = 1; step < 4 && want == 255; ++step) {         // the first free colour after this one, round the circle
+                for (unsigned step = 1; step < 4 && want == 255; ++step) {         // the first free color after this one, round the circle
                     if (kinds[(seat + step) % 4u] == '.') want = static_cast<uint8_t>((seat + step) % 4u);
                 }
-                for (unsigned step = 1; step < 4 && want == 255; ++step) {         // ... else the first colour of another guest
+                for (unsigned step = 1; step < 4 && want == 255; ++step) {         // ... else the first color of another guest
                     if (kinds[(seat + step) % 4u] == 'C') want = static_cast<uint8_t>((seat + step) % 4u);
                 }
                 ASSERT_EQ(got, want);
                 if (got != 255) {
-                    ASSERT_TRUE(got < 4 && got != seat && (kinds[got] == '.' || kinds[got] == 'C'));     // (a free colour or a guest's: never a bot's or the host's)
-                    if (kinds.find('.') != std::string::npos) ASSERT_EQ(kinds[got], '.');                  // (a free colour goes before a guest's: a move, not a swap, whenever one can be had)
+                    ASSERT_TRUE(got < 4 && got != seat && (kinds[got] == '.' || kinds[got] == 'C'));     // (a free color or a guest's: never a bot's or the host's)
+                    if (kinds.find('.') != std::string::npos) ASSERT_EQ(kinds[got], '.');                  // (a free color goes before a guest's: a move, not a swap, whenever one can be had)
                     else ++swaps;
                     ++answered;
                 }
             }
         }
-        ASSERT_TRUE(answered > 100 && swaps > 10);                                 // (the rule answers for many of the rooms, and for the rooms with no free colour: the test is no empty loop)
+        ASSERT_TRUE(answered > 100 && swaps > 10);                                 // (the rule answers for many of the rooms, and for the rooms with no free color: the test is no empty loop)
     } TEST_END();
 
-    TEST_CASE("N3.39 Protocol 14, The Plan Of Bots Follows The Room Message By Message (NetGame::follow_moved_player, With A Server That Is A Script): A Message In Which A Person Left One Colour And Took Another Trades The Levels Of The Two Colours; A Person Who Only Comes Or Goes, Two Who Go And One Who Comes, One Who Goes And Two Who Come, A Bot Seated Or Nothing Changed Trade Nothing; Messages Read Together Are Compared One By One (A Person Who Goes And Another Who Comes Are No Move, A Move With A Newcomer After It Is One); A Guest's Plan Never Moves") {
+    TEST_CASE("N3.39 Protocol 14, The Plan Of Bots Follows The Room Message By Message (NetGame::follow_moved_player, With A Server That Is A Script): A Message In Which A Person Left One Color And Took Another Trades The Levels Of The Two Colors; A Person Who Only Comes Or Goes, Two Who Go And One Who Comes, One Who Goes And Two Who Come, A Bot Seated Or Nothing Changed Trade Nothing; Messages Read Together Are Compared One By One (A Person Who Goes And Another Who Comes Are No Move, A Move With A Newcomer After It Is One); A Guest's Plan Never Moves") {
         using L = FillLevel;
-        const FillPlan base(std::array<L, 4>{L::None, L::Easy, L::Medium, L::Hard});            // a different level in each colour but the leader's: any trade shows
+        const FillPlan base(std::array<L, 4>{L::None, L::Easy, L::Medium, L::Hard});            // a different level in each color but the leader's: any trade shows
         const auto traded = [&base](size_t a, size_t b) {
             std::array<L, 4> level = base.level;
             std::swap(level[a], level[b]);
@@ -559,7 +559,7 @@ void run_seat_move_tests() {
             struct Case {
                 const char* from;
                 std::vector<const char*> then;       // each is one Room message
-                int a;                               // the two colours whose levels trade places (-1: none)
+                int a;                               // the two colors whose levels trade places (-1: none)
                 int b;
             };
             const std::vector<Case> cases = {
@@ -589,7 +589,7 @@ void run_seat_move_tests() {
                 ASSERT_TRUE(net.fill_bots() == want);
                 ASSERT_TRUE(net.phase() == NetGame::Phase::Room && net.my_seat() == 0);
             }
-            {   // two guests that changed places (protocol 15): the names go with the guests, the colours that are free are the same colours, so nothing trades
+            {   // two guests that changed places (protocol 15): the names go with the guests, the colors that are free are the same colors, so nothing trades
                 ASSERT_TRUE(say("CCC."));
                 ASSERT_TRUE(run_until([&]() { return shows("CCC."); }));
                 net.set_fill_bots(base);
@@ -630,7 +630,7 @@ void run_seat_move_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N3.40 Protocol 15, The Leader's Press (NetGame::request_move_seat(from, to), With A Server That Is A Script): A Machine That Leads An Open Room Sends A SeatMove With The Guard Of The Seats That It Shows, To A Free Colour And To A Guest's Alike; Whatever The Rule Refuses Is Not Sent; The Next Press Waits Half A Second And For The Room's Answer (A Second At Most); The Tap On A Row Sends What seat_move_target Names; A Machine That Does Not Lead Sends Nothing") {
+    TEST_CASE("N3.40 Protocol 15, The Leader's Press (NetGame::request_move_seat(from, to), With A Server That Is A Script): A Machine That Leads An Open Room Sends A SeatMove With The Guard Of The Seats That It Shows, To A Free Color And To A Guest's Alike; Whatever The Rule Refuses Is Not Sent; The Next Press Waits Half A Second And For The Room's Answer (A Second At Most); The Tap On A Row Sends What seat_move_target Names; A Machine That Does Not Lead Sends Nothing") {
         // a room as the script says it: "CCB." is a person, a person, a bot, nobody; this machine (a person) is seat 0
         const auto room_of = [](const std::string& kinds, uint8_t leader) {
             RoomMsg r;
@@ -726,7 +726,7 @@ void run_seat_move_tests() {
                 ASSERT_EQ(sent_so_far(), size_t{0});
                 continue;
             }
-            // what the rule refuses is not sent: the same seat twice, a seat that no room has, a seat that holds no guest, a colour that a bot holds, a bot that moves
+            // what the rule refuses is not sent: the same seat twice, a seat that no room has, a seat that holds no guest, a color that a bot holds, a bot that moves
             say("CCB.");
             const uint32_t seated = seating_hash(room_of("CCB.", 0));
             ASSERT_TRUE(net.room().slots[2].state == SlotState::Bot && seating_hash(net.room()) == seated);
@@ -735,12 +735,12 @@ void run_seat_move_tests() {
             ASSERT_FALSE(net.request_move_seat(4, 1));
             ASSERT_FALSE(net.request_move_seat(255, 255));
             ASSERT_FALSE(net.request_move_seat(3, 1));                                                              // nobody sits in black
-            ASSERT_FALSE(net.request_move_seat(1, 2));                                                              // the bot's colour is not taken from it
+            ASSERT_FALSE(net.request_move_seat(1, 2));                                                              // the bot's color is not taken from it
             ASSERT_FALSE(net.request_move_seat(2, 1));                                                              // ... and a bot does not move
             ASSERT_FALSE(net.request_move_seat(2));                                                                 // (the tap on a bot's row asks nothing)
-            ASSERT_FALSE(net.request_move_seat(3));                                                                 // (nor the tap on an empty colour)
+            ASSERT_FALSE(net.request_move_seat(3));                                                                 // (nor the tap on an empty color)
             ASSERT_EQ(sent_so_far(), size_t{0});
-            // a free colour: one SeatMove, with the guard of the seats that the machine shows
+            // a free color: one SeatMove, with the guard of the seats that the machine shows
             ASSERT_TRUE(net.request_move_seat(1, 3));
             ASSERT_TRUE(wait_sent(1));
             ASSERT_EQ(sent.size(), size_t{1});
@@ -753,7 +753,7 @@ void run_seat_move_tests() {
             ASSERT_FALSE(net.request_move_seat(0, 3));                                                              // 600 ms, and the room has not answered
             ASSERT_EQ(sent_so_far(), size_t{1});
             run_for(500);                                                                                           // more than a second: the room is not going to answer, and the leader may press again
-            ASSERT_TRUE(net.request_move_seat(1, 0));                                                               // a guest's colour: the leader's own, so the leader goes to red and the guest to green
+            ASSERT_TRUE(net.request_move_seat(1, 0));                                                               // a guest's color: the leader's own, so the leader goes to red and the guest to green
             ASSERT_TRUE(wait_sent(2));
             ASSERT_TRUE(sent[1].from == 1 && sent[1].to == 0 && sent[1].guard == seated);                          // (the same seats as shown: the same guard)
             // the room answers with the seats as they are: the guard of the next press is the new room's, and it may go out when half a second has passed
@@ -765,7 +765,7 @@ void run_seat_move_tests() {
             ASSERT_TRUE(net.request_move_seat(1, 2));
             ASSERT_TRUE(run_until([&]() { return sent.size() == 3; }));
             ASSERT_TRUE(sent[2].from == 1 && sent[2].to == 2 && sent[2].guard == after);
-            // the tap on a row: the next free colour, else the next guest's colour (a full room: protocol 15)
+            // the tap on a row: the next free color, else the next guest's color (a full room: protocol 15)
             say("CCC.");
             run_for(1100);
             const uint32_t three = seating_hash(room_of("CCC.", 0));
@@ -775,11 +775,11 @@ void run_seat_move_tests() {
             say("CCCC");
             run_for(1100);
             const uint32_t four = seating_hash(room_of("CCCC", 0));
-            ASSERT_TRUE(net.request_move_seat(2));                                                                  // no colour is free: blue changes places with black
+            ASSERT_TRUE(net.request_move_seat(2));                                                                  // no color is free: blue changes places with black
             ASSERT_TRUE(run_until([&]() { return sent.size() == 5; }));
             ASSERT_TRUE(sent[4].from == 2 && sent[4].to == 3 && sent[4].guard == four);
             run_for(1100);
-            ASSERT_TRUE(net.request_move_seat(3));                                                                  // ... and round again: black with green, the leader's own colour
+            ASSERT_TRUE(net.request_move_seat(3));                                                                  // ... and round again: black with green, the leader's own color
             ASSERT_TRUE(run_until([&]() { return sent.size() == 6; }));
             ASSERT_TRUE(sent[5].from == 3 && sent[5].to == 0 && sent[5].guard == four);
             ASSERT_EQ(garbage, size_t{0});

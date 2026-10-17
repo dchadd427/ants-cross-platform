@@ -15,7 +15,7 @@ constexpr int32_t kMaxCamY = static_cast<int32_t>(kMap) * 32 - PLAYFIELD_H;
 void hud_scenarios(const assets::AssetArchive& arc) {
     using T = sim::AntType;
 
-    // The start of a match: the "Get ready" dialog over the whole HUD, for each local colour (the shell art, the sprites' colour and the backing fill depend on it)
+    // The start of a match: the "Get ready" dialog over the whole HUD, for each local color (the shell art, the sprites' color and the backing fill depend on it)
     for (uint8_t p = 0; p < 4; ++p) {
         Scene s(arc, p);
         s.hud.start_match_modal();
@@ -30,7 +30,7 @@ void hud_scenarios(const assets::AssetArchive& arc) {
         s.tick(70);                                              // 5.0 s: the modal has closed itself
         s.shoot("hud.start.modal.closed_by_timer");
     }
-    // The same with the dialog closed: the idle HUD of each colour (welcome status, the "Game started" news flash, the score boxes)
+    // The same with the dialog closed: the idle HUD of each color (welcome status, the "Game started" news flash, the score boxes)
     for (uint8_t p = 0; p < 4; ++p) {
         Scene s(arc, p);
         s.shoot("hud.start.idle.p" + std::to_string(p));
@@ -100,7 +100,7 @@ void hud_scenarios(const assets::AssetArchive& arc) {
         enemy.shoot("hud.sel.hill.enemy");
     }
     {
-        Scene s(arc, 2);                                         // the same selections for another colour (blue)
+        Scene s(arc, 2);                                         // the same selections for another color (blue)
         s.hud.select_ant(21);
         s.tick(0);
         s.shoot("hud.sel.one.p2");
@@ -116,7 +116,7 @@ void hud_scenarios(const assets::AssetArchive& arc) {
         }
     }
 
-    // The chat: entries of every colour (wrapped bodies, a news flash), the text being typed with the caret on and off, the log scrolled, the buttons
+    // The chat: entries of every color (wrapped bodies, a news flash), the text being typed with the caret on and off, the log scrolled, the buttons
     auto fill_chat = [](Scene& s) {
         s.hud.add_chat_entry("Alice", "Hello everybody, this is a rather long message that has to wrap over several lines of the log window.", false, 3);
         s.hud.add_chat_entry("Bob", "Team only: attack the red hill together!", true, 2);
@@ -195,7 +195,7 @@ void hud_scenarios(const assets::AssetArchive& arc) {
         s.shoot("hud.minimap.no_world");
     }
 
-    // Fog of war: unexplored cells use the fog colours, ants and objects in the fog are hidden on the minimap
+    // Fog of war: unexplored cells use the fog colors, ants and objects in the fog are hidden on the minimap
     {
         Scene s(arc, 0);
         s.world.fog_of_war_enabled = true;
@@ -422,7 +422,7 @@ void screen_scenarios(const assets::AssetArchive& arc) {
         frame("screen.setup.locked", [&](FrameRecorder& r) { screen.render(r, arc); });
     }
     {
-        MS screen = make_setup_screen();                                                                         // another player's colour and name
+        MS screen = make_setup_screen();                                                                         // another player's color and name
         screen.set_player_name("Alice");
         screen.set_player_team(2);
         screen.update(0.5f);
@@ -492,7 +492,7 @@ void screen_scenarios(const assets::AssetArchive& arc) {
 
     // The 16:9 setup screen of a room with its chat box (online rooms, protocol 11): the draw calls of the leader's screen (a server's room: the Online variant, the fill footer "Empty seats at START:" /
     // "Medium bots") and of a guest's (the Guest variant) with the lines of a conversation (a notice among them, in the status text's size), the typed line and the caret on and off, and with
-    // an empty box; the text's places, sizes and colours are what these pin (the pixel fingerprints below mask the TrueType text). The map list holds the six original maps; ISLANDS is the room's.
+    // an empty box; the text's places, sizes and colors are what these pin (the pixel fingerprints below mask the TrueType text). The map list holds the six original maps; ISLANDS is the room's.
     {
         const auto room_screen = [&](bool leader) {
             MS screen = make_setup_screen();

@@ -268,7 +268,7 @@ int main() {
         ASSERT_EQ(board.running(), size_t{3 + 60});
     } TEST_END();
 
-    TEST_CASE("LB1.3 The Players Are Written Exactly As The Replay List Writes Them: The Strings Of A Match That Runs Are The Ones Of Its File Once It Is Kept (A Name, The Colour Alone, \"Bot (Medium)\")") {
+    TEST_CASE("LB1.3 The Players Are Written Exactly As The Replay List Writes Them: The Strings Of A Match That Runs Are The Ones Of Its File Once It Is Kept (A Name, The Color Alone, \"Bot (Medium)\")") {
         TempDir dir;
         Clock clock;
         LiveBoard board([&clock]() { return clock.now; });

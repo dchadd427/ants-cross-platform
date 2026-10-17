@@ -8,8 +8,8 @@ namespace ants::app {
 
 namespace {
 
-// Minimap ground truth (Ants.exe FUN_01009596): the colour of every object, palette indices
-struct MinimapObject { uint16_t id; uint8_t colour; uint8_t size_flag; };
+// Minimap ground truth (Ants.exe FUN_01009596): the color of every object, palette indices
+struct MinimapObject { uint16_t id; uint8_t color; uint8_t size_flag; };
 #include "minimap_tables.inc"
 
 }  // namespace
@@ -18,7 +18,7 @@ uint16_t minimap_object_entry(uint16_t id) {
     static const std::array<uint16_t, kMinimapTileIds> table = [] {
         std::array<uint16_t, kMinimapTileIds> t{};
         for (const auto& o : kMinimapObjects) {
-            if (o.id < kMinimapTileIds) t[o.id] = static_cast<uint16_t>(o.colour | (o.size_flag << 8));
+            if (o.id < kMinimapTileIds) t[o.id] = static_cast<uint16_t>(o.color | (o.size_flag << 8));
         }
         return t;
     }();

@@ -8,8 +8,8 @@
 // Regenerate:  python3 tools/extract_movement_tables.py
 // Verify:      python3 tools/extract_movement_tables.py --check
 //
-// Addresses are Ants.exe virtual addresses (image base 0x01000000). Only the colour-0 blocks
-// of the static tables hold real CHD Table-4 indices (colours 1..3 share colour 0's frames).
+// Addresses are Ants.exe virtual addresses (image base 0x01000000). Only the color-0 blocks
+// of the static tables hold real CHD Table-4 indices (colors 1..3 share color 0's frames).
 //   kFrames, kClips   ants.chd Table-4 frames {dx, dy, duration_ms, event, sound} of every
 //                     animation referenced below, as FUN_0102a977 reads them (event 1111111 ->
 //                     11111 = none, sound -1 = none). A frame's dx/dy is applied when that
@@ -24,7 +24,7 @@
 //   kSwim             0x1004838 [dir 0..4] swimmer on water (walk, terrain 2)
 //   kDive             0x1004878 [dir 0..4] swimmer entering water (one tile)
 //   kClimb            0x10048c0 [dir 0..4] swimmer leaving water (one tile)
-//   kIdleWater        0x10048b8 [colour 0] idle on water, no direction
+//   kIdleWater        0x10048b8 [color 0] idle on water, no direction
 //   kCantGo           0x1004548 [type] action 0xB, single direction
 //   kCarryCantGo      0x1004578 same, ant holding food
 //   kBump             push imm32 at 0x101cae3 (FUN_0101c4f2 blocked-walk effect)

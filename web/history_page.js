@@ -14,7 +14,7 @@
     // The id of a match, as the replay store makes it (the recording's name without ".antsrep") and as docker/nginx.conf lets it through
     var ID_RE = /^ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;
     var FILE_RE = /^ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?\.antsrep$/;
-    var COLOURS = ['Green', 'Red', 'Blue', 'Black'];
+    var COLORS = ['Green', 'Red', 'Blue', 'Black'];
     var FORMATS = { '1v1': '1 v 1', '2v1': '2 v 1', '2v2': '2 v 2', 'ffa3': 'Free for all', 'ffa4': 'Free for all', 'solo': 'Alone' };
     var MODES = { 'highest-score': 'Highest score', '187': '187' };
 
@@ -40,7 +40,7 @@
     function modeText(m) { return Object.prototype.hasOwnProperty.call(MODES, m) ? MODES[m] : text(m); }
 
     // ---- the players of a record ----
-    // What a seat shows: "Pip (bot, Hard)" for a computer player with a name, "Bot (Hard)" for one that a recording of an earlier version stored with no name, what the player typed, else the colour
+    // What a seat shows: "Pip (bot, Hard)" for a computer player with a name, "Bot (Hard)" for one that a recording of an earlier version stored with no name, what the player typed, else the color
     // (docs/BOT_NAMES.md; the record's `bot` is the level, "Bot" when its name says none)
     function seatLabel(seat) {
         var s = seat && typeof seat === 'object' ? seat : {};
@@ -49,12 +49,12 @@
             if (bot === 'Bot') return name ? name + ' (bot)' : 'Bot';
             return name ? name + ' (bot, ' + bot + ')' : 'Bot (' + bot + ')';
         }
-        return name || (COLOURS.indexOf(s.colour) !== -1 ? s.colour : '');
+        return name || (COLORS.indexOf(s.colour) !== -1 ? s.colour : '');
     }
     function seatsOf(rec) {
         var out = [];
         (rec && Array.isArray(rec.seats) ? rec.seats : []).forEach(function (s) {
-            if (s && typeof s === 'object' && COLOURS.indexOf(s.colour) !== -1) out.push(s);
+            if (s && typeof s === 'object' && COLORS.indexOf(s.colour) !== -1) out.push(s);
         });
         return out;
     }
@@ -148,7 +148,7 @@
         { key: 'format', label: 'Format', options: [['all', 'Any format'], ['1v1', '1 v 1'], ['team', 'Teams'], ['ffa', 'Free for all']] },
         { key: 'result', label: 'Result', options: [['all', 'Any result'], ['decided', 'Decided'], ['draw', 'Draw'], ['cut', 'Cut short']] },
         { key: 'rec', label: 'Replay', options: [['all', 'Any replay'], ['watch', 'Can be watched'], ['old', 'Older version'], ['removed', 'Removed']] },
-        { key: 'colour', label: 'Colour', options: [['all', 'Any colour'], ['green', 'Green'], ['red', 'Red'], ['blue', 'Blue'], ['black', 'Black']] },
+        { key: 'colour', label: 'Color', options: [['all', 'Any color'], ['green', 'Green'], ['red', 'Red'], ['blue', 'Blue'], ['black', 'Black']] },
         { key: 'mode', label: 'Mode', options: [['all', 'Any mode'], ['highest-score', 'Highest score'], ['187', '187']] }
     ];
     var SORTS = [['new', 'Newest first'], ['old', 'Oldest first'], ['score', 'Highest score'], ['kills', 'Most kills'], ['hatched', 'Most hatched'], ['long', 'Longest'], ['short', 'Shortest']];
@@ -386,7 +386,7 @@
     }
 
     return {
-        PAGE: PAGE, ID_RE: ID_RE, FILE_RE: FILE_RE, COLOURS: COLOURS, WHO: WHO, FILTERS: FILTERS, SORTS: SORTS, Q_MAX: Q_MAX,
+        PAGE: PAGE, ID_RE: ID_RE, FILE_RE: FILE_RE, COLORS: COLORS, WHO: WHO, FILTERS: FILTERS, SORTS: SORTS, Q_MAX: Q_MAX,
         idOf: idOf, fileOfId: fileOfId, idOfFile: idOfFile, numberText: numberText, formatText: formatText, modeText: modeText,
         seatLabel: seatLabel, seatsOf: seatsOf, sidesOf: sidesOf, sideName: sideName, scoreText: scoreText, winnerSide: winnerSide, noWinnerText: noWinnerText, playersText: playersText, howEnded: howEnded, bestOf: bestOf, shareOf: shareOf,
         columnsOf: columnsOf, recState: recState, detailsOf: detailsOf, rankedOf: rankedOf,

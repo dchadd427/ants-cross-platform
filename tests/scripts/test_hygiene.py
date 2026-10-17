@@ -243,6 +243,44 @@ class Cli(Tree):
         self.assertIn("ASSERT_TRUE definitions", done.stdout)
 
 
+class Spelling(Tree):
+    UK = "col" + "our"          # (the test file passes the check itself)
+
+    def test_the_british_spelling_fails_in_any_case_and_compound(self):
+        for i, w in enumerate([self.UK, self.UK.capitalize(), self.UK.upper(), self.UK + "s", "dis" + self.UK + "ed", "k" + self.UK.capitalize() + "Red"]):
+            self.put("src/f%d.cpp" % i, "int x;\n// the %s here\n" % w)
+        out = ch.check_spelling(self.root, self.files())
+        self.assertEqual(len(out), 6)
+        self.assertTrue(out[0].startswith("src/f0.cpp:2: British spelling"))
+
+    def test_the_american_spelling_and_other_words_pass(self):
+        self.put("docs/a.md", "color, Colors, COLOR, colored, a cool hour\n")
+        self.assertEqual(ch.check_spelling(self.root, self.files()), [])
+
+    def test_a_file_name_fails(self):
+        self.put("tools/make_%s.py" % self.UK, "x = 1\n")
+        self.assertEqual(len(ch.check_spelling(self.root, self.files())), 1)
+
+    def test_skipped_folders_binary_files_and_lvl_pass(self):
+        for rel in ("Community-Maps/README.md", "docs/legacy/x.md", "third_party/sqlite/a.c"):
+            self.put(rel, "the %s\n" % self.UK)
+        self.put("Community-Maps/m.lvl", "%s\n" % self.UK)
+        with open(os.path.join(self.root, "b.bin"), "wb") as f:
+            f.write(b"\0\0" + self.UK.encode())
+        self.assertEqual(ch.check_spelling(self.root, self.files()), [])
+
+    def test_each_kept_name_passes_and_the_word_next_to_it_fails(self):
+        uk = self.UK
+        kept = ['"%s": "Green"' % uk, "seat['%s']" % uk, "`%s` (`all`)" % uk, "/history?%s=blue" % uk, "seat.%s" % uk, "{ %s: 'all' }" % uk,
+                "limit, offset, who, rec, %s, mode" % uk, "This map cannot be played with these %ss." % uk]
+        for i, line in enumerate(kept):
+            self.put("web/k%d.js" % i, line + "\n")
+        self.assertEqual(ch.check_spelling(self.root, self.files()), [])
+        self.put("web/bad.js", "seat.%s = 'the %s of a seat';\n" % (uk, uk))
+        self.put("web/bad2.js", "var %ss = 1; // the key \"%s\" stays\n" % (uk, uk))
+        self.assertEqual([x.split(":")[0] for x in ch.check_spelling(self.root, self.files())], ["web/bad.js", "web/bad2.js"])
+
+
 class RealRepository(unittest.TestCase):
     def test_repository_passes(self):
         done = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", ROOT], capture_output=True, text=True)

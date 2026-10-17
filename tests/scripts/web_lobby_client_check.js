@@ -1,6 +1,6 @@
 // Runs the lobby page's client of network protocol 21 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
 // takes in, the answers to the server's pings, what changed between two Room messages (joined, left, renamed, moved, swapped, a new host), the requests that only the leader may make and the
-// bytes they put on the wire (the guard of a colour move is the room's seating hash), the way back with the key after a lost link (the waits grow, the link that says nothing is given up, a page
+// bytes they put on the wire (the guard of a color move is the room's seating hash), the way back with the key after a lost link (the waits grow, the link that says nothing is given up, a page
 // that comes back to the front tries at once), what each refusal means (the room is gone: made again without the key; removed; another window; full), and the entry that the game page reads.
 // usage: node web_lobby_client_check.js web/front/lobby_net.js     (exit 0: every check holds; failures are printed)
 'use strict';
@@ -124,13 +124,13 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     // the leader's requests
     const guard = N.seatingHash(N.decode(two));
     check('move 1 to 2 sends a SeatMove with the seating hash as the guard', c.move(1, 2) && hex(w.last().sent[2]) === hex(N.encodeSeatMove(1, 2, guard)));
-    check('move 0 to 3 (the leader to an empty colour) is made too', c.move(0, 3) && hex(w.last().sent[3]) === hex(N.encodeSeatMove(0, 3, guard)));
-    check('move from an empty colour is refused', c.move(2, 3) === false && w.last().sent.length === 4);
-    check('move to the same colour is refused', c.move(1, 1) === false);
-    check('move to a colour that does not exist is refused', c.move(1, 4) === false && c.move(-1, 1) === false);
+    check('move 0 to 3 (the leader to an empty color) is made too', c.move(0, 3) && hex(w.last().sent[3]) === hex(N.encodeSeatMove(0, 3, guard)));
+    check('move from an empty color is refused', c.move(2, 3) === false && w.last().sent.length === 4);
+    check('move to the same color is refused', c.move(1, 1) === false);
+    check('move to a color that does not exist is refused', c.move(1, 4) === false && c.move(-1, 1) === false);
     check('remove 1 sends a Remove with the guard', c.remove(1) && hex(w.last().sent[4]) === hex(N.encodeRemove(1, guard)));
     check('the leader cannot remove itself', c.remove(0) === false);
-    check('an empty colour cannot be removed', c.remove(2) === false);
+    check('an empty color cannot be removed', c.remove(2) === false);
     const plan = { map: 'ISLANDS.LVL', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Medium, N.PLAN.Hard], teamA: 0, teamB: 2 };
     check('setPlan sends the plan', c.setPlan(plan) && hex(w.last().sent[5]) === hex(N.encodePlan('ISLANDS.LVL', plan.kinds, 0, 2)));
     check('setPlan keeps the map with an empty name', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) && hex(w.last().sent[6]) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255)));
@@ -174,7 +174,7 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     const base = w.last().sent.length;
     check('a removal with the guard of the screen is sent, with that guard', c.remove(1, seen) && hex(w.last().sent[base]) === hex(N.encodeRemove(1, seen)));
     check('a move with the guard of the screen is sent, with that guard', c.move(1, 3, seen) && hex(w.last().sent[base + 1]) === hex(N.encodeSeatMove(1, 3, seen)));
-    w.last().receive(room([[C, 'Priya'], [C, 'Sammy'], [C, 'Tess'], [E, '']], { you: 0, leader: 0 }));      // (the player of colour 2 goes by another name now)
+    w.last().receive(room([[C, 'Priya'], [C, 'Sammy'], [C, 'Tess'], [E, '']], { you: 0, leader: 0 }));      // (the player of color 2 goes by another name now)
     const after = c.guardNow();
     check('a changed seating is another guard', after !== 0 && after !== seen);
     check('the old guard sends nothing: no removal and no move', c.remove(1, seen) === false && c.move(1, 3, seen) === false && w.last().sent.length === base + 2);
@@ -236,10 +236,10 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     same('a first Room message has no diff', N.diffRooms(null, a), []);
     same('a joiner', N.diffRooms(a, r([[C, 'Priya'], [C, 'Sam'], [C, 'Juniper'], [E, '']], { leader: 0 })), [{ type: 'joined', seat: 2, name: 'Juniper' }]);
     same('a person who leaves', N.diffRooms(a, r([[C, 'Priya'], [E, ''], [E, ''], [E, '']], { leader: 0 })), [{ type: 'left', seat: 1, name: 'Sam' }]);
-    same('a person who is dragged to an empty colour is moved, not gone and new', N.diffRooms(a, r([[C, 'Priya'], [E, ''], [C, 'Sam'], [E, '']], { leader: 0 })), [{ type: 'moved', from: 1, to: 2, name: 'Sam' }]);
+    same('a person who is dragged to an empty color is moved, not gone and new', N.diffRooms(a, r([[C, 'Priya'], [E, ''], [C, 'Sam'], [E, '']], { leader: 0 })), [{ type: 'moved', from: 1, to: 2, name: 'Sam' }]);
     same('two persons who changed places are swapped (the page of the leader: its own seat moved with it)', N.diffRooms(a, r([[C, 'Sam'], [C, 'Priya'], [E, ''], [E, '']], { leader: 1, you: 1 })), [{ type: 'swapped', a: 0, b: 1, names: ['Sam', 'Priya'] }]);
     same('a name that changed', N.diffRooms(a, r([[C, 'Priya'], [C, 'Samuel'], [E, ''], [E, '']], { leader: 0 })), [{ type: 'renamed', seat: 1, from: 'Sam', to: 'Samuel' }]);
-    same('the leader dragged to another colour leads still: no host event', N.diffRooms(a, r([[E, ''], [C, 'Sam'], [C, 'Priya'], [E, '']], { leader: 2, you: 2 })).map((e) => e.type), ['moved']);
+    same('the leader dragged to another color leads still: no host event', N.diffRooms(a, r([[E, ''], [C, 'Sam'], [C, 'Priya'], [E, '']], { leader: 2, you: 2 })).map((e) => e.type), ['moved']);
     same('the leader leaves, the next one leads', N.diffRooms(a, r([[E, ''], [C, 'Sam'], [E, ''], [E, '']], { leader: 1 })).map((e) => e.type), ['left', 'host']);
     same('the leader leaves, nobody is left to lead', N.diffRooms(r([[C, 'Priya'], [E, ''], [E, ''], [E, '']], { leader: 0 }), r([[E, ''], [E, ''], [E, ''], [E, '']], { leader: 255, you: 255 })).map((e) => e.type), ['left']);
     same('a player of the same name as the leader leads after the leader left', N.diffRooms(r([[C, 'Player'], [C, 'Player'], [E, ''], [E, '']], { leader: 0 }), r([[E, ''], [C, 'Player'], [E, ''], [E, '']], { leader: 1 })).map((e) => e.type), ['left', 'host']);
@@ -261,7 +261,7 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
         [{ type: 'host', seat: 1, name: 'Sam', you: true, before: 'Priya', back: false }]);
     same('two players of one name swap and the host is one of them: the same host, no event', N.diffRooms(r([[C, 'Player'], [C, 'Player'], [E, ''], [E, '']], { leader: 0, you: 0 }), r([[C, 'Player'], [C, 'Player'], [E, ''], [E, '']], { leader: 1, you: 1 })), []);
     same('the same, seen by a third player', N.diffRooms(r([[C, 'Player'], [C, 'Player'], [C, 'Tess'], [E, '']], { leader: 0, you: 2 }), r([[C, 'Player'], [C, 'Player'], [C, 'Tess'], [E, '']], { leader: 1, you: 2 })), []);
-    same('a host who is dragged to another colour and a joiner at once: the host is still the host', N.diffRooms(a, r([[C, 'Juniper'], [C, 'Sam'], [C, 'Priya'], [E, '']], { leader: 2, you: 2 })).map((e) => e.type).filter((t) => t === 'host'), []);
+    same('a host who is dragged to another color and a joiner at once: the host is still the host', N.diffRooms(a, r([[C, 'Juniper'], [C, 'Sam'], [C, 'Priya'], [E, '']], { leader: 2, you: 2 })).map((e) => e.type).filter((t) => t === 'host'), []);
 }
 
 // ---- a lost link: the way back with the key, the waits, the link that says nothing -----------------------------------------------------------------------------------------------------------------------
@@ -855,7 +855,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     check('(3 seconds)', i.status === 'offline');
 }
 
-{   // the seat of a page is the seat that the last Room message says (the leader may have moved it to another colour): the entry for the game page names that seat
+{   // the seat of a page is the seat that the last Room message says (the leader may have moved it to another color): the entry for the game page names that seat
     const w = world();
     const c = client(w, { name: 'Sam' });
     c.connect();
@@ -864,7 +864,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0 }));
     check('the Welcome gives the seat', c.seat === 1 && c.rejoinEntry(1).name === 'ants.rejoin.k7m2xq.1');
     w.last().receive(room([[C, 'Priya'], [E, ''], [C, 'Sam'], [E, '']], { you: 2, leader: 0 }));
-    check('the leader moves the page to the colour 2: the seat is 2', c.seat === 2);
+    check('the leader moves the page to the color 2: the seat is 2', c.seat === 2);
     check('... and so is the entry that the game page reads', c.rejoinEntry(1).name === 'ants.rejoin.k7m2xq.2', c.rejoinEntry(1).name);
     w.last().receive(room([[C, 'Priya'], [E, ''], [C, 'Sam'], [E, '']], { you: 255, leader: 0 }));
     check('a Room message that does not say who we are leaves the seat as it was', c.seat === 2);
@@ -969,7 +969,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     check('a platform is a whole number', !N.validPlatform(1.5) && !N.validPlatform('3') && !N.validPlatform(null) && !N.validPlatform(NaN) && !N.validPlatform(-1) && !N.validPlatform(256) && N.validPlatform(0x13));
 }
 
-{   // a page that sends too fast is held back here, a little under the server's budgets (names and removals 2 at once, then one every 1.25 s, where the server's are 3 and 1 a second; plans and colour moves 5, then
+{   // a page that sends too fast is held back here, a little under the server's budgets (names and removals 2 at once, then one every 1.25 s, where the server's are 3 and 1 a second; plans and color moves 5, then
     // 3.2 a second, where the server's are 6 and 4; the margin itself is held to the server's bucket by the replay at the end of this file), not thrown out of the room
     const w = world();
     const c = client(w, { silenceMs: 0 });                 // (a minute of rest without a ping from the scripted server is the budgets' business here, not the watchdog's)
@@ -986,7 +986,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     check('... then 3.2 a second: not after 312 milliseconds (a plan every 312.5 ms, where the server\'s is every 250)', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false);
     w.advance(1);
     check('... (313)', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === true && c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false);
-    check('the budget of a colour move is another one (5, the server\'s is 6)', count(() => c.move(1, 3), 9) === 5);
+    check('the budget of a color move is another one (5, the server\'s is 6)', count(() => c.move(1, 3), 9) === 5);
     w.advance(312);
     check('... not after 312 milliseconds', c.move(1, 3) === false);
     w.advance(1);
@@ -1029,7 +1029,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
 // ---- the SERVER's buckets, replayed (include/ants_net/flood.hpp) --------------------------------------------------------------------------------------------------------------------------------------
 // The server counts the moment at which it HANDLES a request, not the moment at which the page sent it, and a request that finds less than a whole token is dropped without a word (the sender sees nothing; the
 // room just does not change). So a page that paced a kind of request at exactly the server's rate lost one whenever the network (or the server's loop) delayed a request and not the next: two requests that
-// were 1000 ms apart arrive 990 ms apart and the second finds 0.99 of a token (seen on the macOS CI, for the chat; the same for a rename, a plan, a colour move and a removal). Each kind has a bucket of its own
+// were 1000 ms apart arrive 990 ms apart and the second finds 0.99 of a token (seen on the macOS CI, for the chat; the same for a rename, a plan, a color move and a removal). Each kind has a bucket of its own
 // in the server (burst, then so many a second); the numbers are read from the server's own header here, so that a limit that changes there changes what the page is held to.
 const FLOOD = (() => {
     let text = '';
@@ -1054,7 +1054,7 @@ const serverDrops = (kind, moments, delays) => {
     }
     return dropped;
 };
-// what a page asks for, for each kind, in a room of two people where it leads (a plan that keeps everything, a colour move of the guest to an empty colour, a new name, the removal of the guest, a line)
+// what a page asks for, for each kind, in a room of two people where it leads (a plan that keeps everything, a color move of the guest to an empty color, a new name, the removal of the guest, a line)
 const ASKS = {
     move: (d) => d.move(1, 2),
     plan: (d) => d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }),
@@ -1245,7 +1245,7 @@ const exactMoments = (kind) => {
                 const r = worstRandom(kind, moments, jitter, 300);
                 check(kind + ', ' + name + ', all ' + moments.length + ' requests late by 0 .. ' + jitter + ' ms (300 draws): the server drops none', r === 0, r + ' dropped');
             }
-            // one request held up while the ones after it come on time: the margin absorbs about a third of a second for a colour move and a plan (the burst of 6 less 5, 4 a second against 3.2), about one and a
+            // one request held up while the ones after it come on time: the margin absorbs about a third of a second for a color move and a plan (the burst of 6 less 5, 4 a second against 3.2), about one and a
             // half seconds for a name, a removal and a line (the burst of 3 less 2, 1 a second against 0.8): the claim of the changelog and of docs/PLAY_IN_BROWSER.md
             const hold = kind === 'move' || kind === 'plan' ? 333 : 1400;
             const held = holdUp(kind, moments, hold, 12);

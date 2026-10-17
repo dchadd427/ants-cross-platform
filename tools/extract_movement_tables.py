@@ -71,20 +71,20 @@ DIR_NAMES = ["N", "NE", "E", "SE", "S"]
 DIR_DIGITS = "78923"        # CHD name digit per stored direction (N=7, NE=8, E=9, SE=2, S=3)
 
 # ---------------------------------------------------------------------------------------------
-# Static tables (colour-0 block; the colour 1..3 blocks hold only virtual per-colour ids >= 1344)
+# Static tables (color-0 block; the color 1..3 blocks hold only virtual per-color ids >= 1344)
 # ---------------------------------------------------------------------------------------------
-WALK_VA = 0x1002FB8         # uint16 [colour 4][type 6][terrain 5][dir 8]
+WALK_VA = 0x1002FB8         # uint16 [color 4][type 6][terrain 5][dir 8]
 CARRY_WALK_VA = 0x1003738   # same shape, ant holding food
-IDLE_VA = 0x1002CB8         # uint16 [colour 4][type 6][dir 8]
+IDLE_VA = 0x1002CB8         # uint16 [color 4][type 6][dir 8]
 CARRY_IDLE_VA = 0x1002E38   # same shape, ant holding food
-SWIM_VA = 0x1004838         # uint16 [colour 4][dir 8]  swimmer on water
-DIVE_VA = 0x1004878         # uint16 [colour 4][dir 8]  swimmer entering water
-CLIMB_VA = 0x10048C0        # uint16 [colour 4][dir 8]  swimmer leaving water
-IDLE_WATER_VA = 0x10048B8   # uint16 [colour 4]         idle on water (no direction)
-CANT_GO_VA = 0x1004548      # uint16 [colour 4][type 6] action 0xB "can't go"
+SWIM_VA = 0x1004838         # uint16 [color 4][dir 8]  swimmer on water
+DIVE_VA = 0x1004878         # uint16 [color 4][dir 8]  swimmer entering water
+CLIMB_VA = 0x10048C0        # uint16 [color 4][dir 8]  swimmer leaving water
+IDLE_WATER_VA = 0x10048B8   # uint16 [color 4]         idle on water (no direction)
+CANT_GO_VA = 0x1004548      # uint16 [color 4][type 6] action 0xB "can't go"
 CARRY_CANT_GO_VA = 0x1004578
-# Action clips of FUN_0101ad02 (SetAction): every table has four colour blocks of the same shape; only the
-# colour-0 block holds real CHD indices (dirs 5..7 of a row are virtual ids of the mirrored copies).
+# Action clips of FUN_0101ad02 (SetAction): every table has four color blocks of the same shape; only the
+# color-0 block holds real CHD indices (dirs 5..7 of a row are virtual ids of the mirrored copies).
 #   shape "type"      uint16 [type 6]
 #   shape "type_dir"  uint16 [type 6][dir 8]
 #   shape "dir"       uint16 [dir 8]  (cardinal-only clips: N, E, S stored, W = mirrored E, the rest empty)
@@ -148,7 +148,7 @@ def le32(v):
 # Code anchors: (address, expected bytes, what it proves). Each one is an instruction inside
 # the function that consumes the table, and its operand is the table address used above.
 CODE_ANCHORS = [
-    # FUN_010175ad (startup animation-table build, colour 0, dirs 0..4)
+    # FUN_010175ad (startup animation-table build, color 0, dirs 0..4)
     (0x101834C, b"\x66\x8b\x80" + le32(WALK_VA), "mov ax, [eax+walk]"),
     (0x101837C, b"\x66\x8b\x80" + le32(CARRY_WALK_VA), "mov ax, [eax+carry walk]"),
     (0x10183C1, b"\x0f\xb7\x87" + le32(IDLE_VA), "movzx eax, [edi+idle]"),
@@ -312,7 +312,7 @@ def extract(exe, chd):
             fail(f"{where}: CHD {index} is named {got!r}, expected {expected!r}")
 
     def check_mirror_ids(row, where):
-        # Dirs 5..7 of the colour-0 rows are virtual ids of the mirrored copies (FUN_01018a7a),
+        # Dirs 5..7 of the color-0 rows are virtual ids of the mirrored copies (FUN_01018a7a),
         # never real CHD animations.
         for d in (5, 6, 7):
             if not (row[d] >= TILE_COUNT or row[d] == NO_ANIM):
@@ -424,7 +424,7 @@ def extract(exe, chd):
         if not (-1 <= dr <= 1 and -1 <= dc <= 1) or t["dir_table"][(dr + 1) * 3 + (dc + 1)] != d:
             fail(f"neighbour {d} = {(dr, dc)} is inconsistent with the direction table")
 
-    # --- action clips (FUN_0101ad02): colour-0 block of each table -----------------------------------
+    # --- action clips (FUN_0101ad02): color-0 block of each table -----------------------------------
     t["actions"] = {}
     for key, _cname, va, shape, template, _what in ACTION_TABLES:
         if shape == "type":
@@ -531,8 +531,8 @@ def render(t, chd, exe_bytes, chd_bytes):
     w("// Regenerate:  python3 tools/extract_movement_tables.py")
     w("// Verify:      python3 tools/extract_movement_tables.py --check")
     w("//")
-    w("// Addresses are Ants.exe virtual addresses (image base 0x01000000). Only the colour-0 blocks")
-    w("// of the static tables hold real CHD Table-4 indices (colours 1..3 share colour 0's frames).")
+    w("// Addresses are Ants.exe virtual addresses (image base 0x01000000). Only the color-0 blocks")
+    w("// of the static tables hold real CHD Table-4 indices (colors 1..3 share color 0's frames).")
     w("//   kFrames, kClips   ants.chd Table-4 frames {dx, dy, duration_ms, event, sound} of every")
     w("//                     animation referenced below, as FUN_0102a977 reads them (event 1111111 ->")
     w("//                     11111 = none, sound -1 = none). A frame's dx/dy is applied when that")
@@ -547,7 +547,7 @@ def render(t, chd, exe_bytes, chd_bytes):
     w(f"//   kSwim             {SWIM_VA:#x} [dir 0..4] swimmer on water (walk, terrain 2)")
     w(f"//   kDive             {DIVE_VA:#x} [dir 0..4] swimmer entering water (one tile)")
     w(f"//   kClimb            {CLIMB_VA:#x} [dir 0..4] swimmer leaving water (one tile)")
-    w(f"//   kIdleWater        {IDLE_WATER_VA:#x} [colour 0] idle on water, no direction")
+    w(f"//   kIdleWater        {IDLE_WATER_VA:#x} [color 0] idle on water, no direction")
     w(f"//   kCantGo           {CANT_GO_VA:#x} [type] action 0xB, single direction")
     w(f"//   kCarryCantGo      {CARRY_CANT_GO_VA:#x} same, ant holding food")
     w(f"//   kBump             push imm32 at {BUMP_PUSH_VA:#x} (FUN_0101c4f2 blocked-walk effect)")

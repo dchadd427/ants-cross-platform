@@ -111,29 +111,29 @@ void run_start_menu_panels_tests() {
         ASSERT_TRUE(r.take().type == MenuRequest::Type::Quit);
     } TEST_END();
 
-    TEST_CASE("M2.1 Single player: one row per other seat in the colour's own words (own seat green: Red, Blue, Black; own seat blue: Green, Red, Black), every row Empty, no fog line, Continue is the selection and asks for no bots") {
+    TEST_CASE("M2.1 Single player: one row per other seat in the color's own words (own seat green: Red, Blue, Black; own seat blue: Green, Red, Black), every row Empty, no fog line, Continue is the selection and asks for no bots") {
         for (uint8_t own = 0; own < 4; ++own) {
             Rig r(own);
             r.to_panel(MenuId::Single);
             ASSERT_EQ(r.menu.panel(), MenuPanel::Single);
             const std::vector<MenuElement> all = r.menu.elements();
             size_t rows = 0;
-            std::vector<std::string> colours;
+            std::vector<std::string> colors;
             for (const MenuElement& e : all) {
                 if (e.kind == MenuKind::Cycler) {
                     ++rows;
                     ASSERT_EQ(e.value, std::string("Empty"));
                 }
-                if (e.kind == MenuKind::Portrait) colours.push_back(std::to_string(e.team));
+                if (e.kind == MenuKind::Portrait) colors.push_back(std::to_string(e.team));
             }
             ASSERT_EQ(rows, static_cast<size_t>(3));
-            ASSERT_EQ(colours.size(), static_cast<size_t>(3));
-            // the seat of the player has no row, the other three do (their portraits are in their colours)
+            ASSERT_EQ(colors.size(), static_cast<size_t>(3));
+            // the seat of the player has no row, the other three do (their portraits are in their colors)
             std::vector<std::string> want;
             for (uint8_t s = 0; s < 4; ++s) {
                 if (s != own) want.push_back(std::to_string(s));
             }
-            ASSERT_TRUE(colours == want);
+            ASSERT_TRUE(colors == want);
             ASSERT_FALSE(r.exists(static_cast<MenuId>(static_cast<uint8_t>(MenuId::Seat0) + own)));
             ASSERT_FALSE(has_text(all, "fog of war"));
             ASSERT_TRUE(has_text(all, StartMenu::kNoBotsLine));                            // nobody seated: the panel says that this is the original's game (L7)
@@ -393,7 +393,7 @@ void run_start_menu_panels_tests() {
             r.click(MenuId::Seat1);
             r.click(MenuId::Seat1);                                                        // Red: Empty: the team is gone, and so is the stored word
             ASSERT_EQ(store.get_string("teams", "?", 99), std::string("ffa"));
-            ASSERT_EQ(store.get_string("bots", "?", 99), std::string("off,off,easy,off"));   // (the seats by colour: green is the player's, red is empty again, blue is Easy)
+            ASSERT_EQ(store.get_string("bots", "?", 99), std::string("off,off,easy,off"));   // (the seats by color: green is the player's, red is empty again, blue is Easy)
         }
     } TEST_END();
 

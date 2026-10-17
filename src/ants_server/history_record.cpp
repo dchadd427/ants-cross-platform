@@ -38,7 +38,7 @@ bool bot_level_of(const std::string& name, std::string& level, std::string& bot_
     return false;
 }
 
-const char* const kColours[sim::MAX_PLAYERS] = {"Green", "Red", "Blue", "Black"};
+const char* const kColors[sim::MAX_PLAYERS] = {"Green", "Red", "Blue", "Black"};
 
 bool row_has(const HistoryRow& r, int seat) {
     if (seat < 0 || seat >= sim::MAX_PLAYERS) return false;
@@ -48,7 +48,7 @@ bool row_has(const HistoryRow& r, int seat) {
 JsonValue seat_json(const HistorySeat& s, bool full) {
     JsonValue o = JsonValue::make_object();
     o.set("seat", JsonValue::make_int(s.seat));
-    o.set("colour", JsonValue::make_string(kColours[s.seat < sim::MAX_PLAYERS ? s.seat : 0]));
+    o.set("colour", JsonValue::make_string(kColors[s.seat < sim::MAX_PLAYERS ? s.seat : 0]));
     o.set("name", JsonValue::make_string(s.name));
     o.set("bot", JsonValue::make_string(s.bot));
     o.set("score", JsonValue::make_int(s.score));

@@ -50,7 +50,7 @@ inline constexpr uint8_t kNoSeat = 255;
 /// The rules number of the simulation: it changes ONLY when a match plays out differently (a golden hash moves: the engine, the map reader, the original's tables). A file says the number of the build that
 /// recorded it (the head's field `sim_rules`) and plays on a build with the same number, whatever the network protocol did meanwhile: a protocol bump that leaves the simulation alone strands no file.
 /// tests/test_replay (RP7.x) fail when the reference match's final hash changes and this number does not.
-/// History: 1 and 2 (game mode 187) were the numbers until the bombs of a map file (the layer-2 ids 129 .. 132) became the planted bombs of their colours (Grid::init_from_level, docs/reverse_engineering/map_file_bombs.md), which moves the plays of
+/// History: 1 and 2 (game mode 187) were the numbers until the bombs of a map file (the layer-2 ids 129 .. 132) became the planted bombs of their colors (Grid::init_from_level, docs/reverse_engineering/map_file_bombs.md), which moves the plays of
 /// the community maps that hold them: the original's game was 3 then and game mode 187 (which plays on those maps too) 4. The loader as the original's (docs/reverse_engineering/map_loader_fidelity.md, v0.12.10) moved the plays of the community maps again: 5 and 6. A file of 1 to 4 is an earlier version's.
 inline constexpr uint16_t kSimRules = 5;
 /// The rules number of a match played by game mode 1, "187" (sim::GameMode::Kills187, docs/GAMEPLAY.md): the head carries the mode in field 17 (written only when it is not 0) and this number in field 16. A build that
@@ -78,7 +78,7 @@ struct Header {
     uint8_t roster{0};                                 // bit p: seat p takes part
     bool fog{false};
     uint8_t mode{0};                                   // sim::GameMode as a byte (head field 17, written only when it is not 0): the rules the match was played by; set_mode() keeps it and sim_rules together
-    std::array<std::string, sim::MAX_PLAYERS> names;   // printable ASCII, at most 32 characters (the game makes a '?' of any other); empty: the colour word
+    std::array<std::string, sim::MAX_PLAYERS> names;   // printable ASCII, at most 32 characters (the game makes a '?' of any other); empty: the color word
     sim::StartTeams teams;                             // the teams that the match started with (applied before the first tick)
     uint8_t recorder_seat{kNoSeat};                    // the seat of the machine that wrote the file (kNoSeat: none)
     uint32_t hash_period{kHashPeriodTurns};

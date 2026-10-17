@@ -13,8 +13,8 @@ constexpr uint32_t LVL_EXPECTED_VERSION = 8;
 constexpr uint32_t LVL_GAME_MODE_STANDARD = 1;   // what the shipped maps hold; the original stores the dword (map + 0x74) and never reads it again, so it is no condition
 constexpr uint16_t LVL_EMPTY_TILE = 0x7FFE; // 32,766 = Empty interactive overlay sentinel
 constexpr uint32_t LVL_MAX_GRID_SIDE = 256;       // rows and columns of a grid the remake hosts (the anchor bytes of a layer-2 object are 8 bit)
-// Hills and start markers are TILE IDS, never dictionary names (Ants.exe FUN_0100ecac, the table at 0x1002468): the colour ids are 0 black, 1 blue, 2 red, 3 green, the hill of a colour is
-// the layer-2 id 245 + colour (245 black, 246 blue, 247 red, 248 green) and its start marker the block-1 id 152 + colour (152 black, 153 blue, 154 green, 155 red). The remake numbers its teams
+// Hills and start markers are TILE IDS, never dictionary names (Ants.exe FUN_0100ecac, the table at 0x1002468): the color ids are 0 black, 1 blue, 2 red, 3 green, the hill of a color is
+// the layer-2 id 245 + color (245 black, 246 blue, 247 red, 248 green) and its start marker the block-1 id 152 + color (152 black, 153 blue, 154 green, 155 red). The remake numbers its teams
 // 0 green, 1 red, 2 blue, 3 black. Both functions answer -1 for any other id.
 constexpr uint16_t LVL_HILL_FIRST = 245;
 constexpr uint16_t LVL_HILL_LAST = 248;
@@ -307,7 +307,7 @@ public:
 
     /// The level as it is played by the teams of `roster_mask` (bit t = team t takes part): a team without a player has no hill, no start marker
     /// (so no starting ant) and no eggs. The original keeps a NULL entry in its team table for such a team (CHECKGO skips it), so nothing of it exists.
-    /// Team t is the colour of the hill tile 248 (green, 0), 247 (red, 1), 246 (blue, 2), 245 (black, 3) and of the start marker 154, 155, 153, 152 (by tile id, not by name).
+    /// Team t is the color of the hill tile 248 (green, 0), 247 (red, 1), 246 (blue, 2), 245 (black, 3) and of the start marker 154, 155, 153, 152 (by tile id, not by name).
     LevelData for_roster(uint8_t roster_mask) const;
 
     /// Is this level playable by the teams of `roster_mask`, and what is odd about it? The loader's own notes (load_notes) plus the checks that need the whole level:

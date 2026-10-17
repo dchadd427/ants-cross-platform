@@ -299,7 +299,7 @@ int main() {
 
     // ---- the list ---------------------------------------------------------------------------------------------------------------------
 
-    TEST_CASE("HS2.1 The list is filtered by format, result, who, colour, mode and text, alone and together, newest first, with the count of what fits") {
+    TEST_CASE("HS2.1 The list is filtered by format, result, who, color, mode and text, alone and together, newest first, with the count of what fits") {
         Db d;
         ASSERT_TRUE(d.ok);
         const std::vector<HistoryRecord> all = eight_records();
@@ -318,8 +318,8 @@ int main() {
         ASSERT_EQ(list([](HistoryQuery& q) { q.result = HistoryQuery::Result::Decided; }), ids_at(all, {6, 2, 1, 0}));
         ASSERT_EQ(list([](HistoryQuery& q) { q.who = HistoryQuery::Who::Computers; }), ids_at(all, {3}));
         ASSERT_EQ(list([](HistoryQuery& q) { q.who = HistoryQuery::Who::People; }), ids_at(all, {7, 6, 5, 4, 2, 1, 0}));
-        ASSERT_EQ(list([](HistoryQuery& q) { q.colour = 3; }), ids_at(all, {2, 1}));                                   // (a seat of that colour took part)
-        ASSERT_EQ(list([](HistoryQuery& q) { q.colour = 2; }), ids_at(all, {7, 5, 2, 1}));
+        ASSERT_EQ(list([](HistoryQuery& q) { q.color = 3; }), ids_at(all, {2, 1}));                                   // (a seat of that color took part)
+        ASSERT_EQ(list([](HistoryQuery& q) { q.color = 2; }), ids_at(all, {7, 5, 2, 1}));
         ASSERT_EQ(list([](HistoryQuery& q) { q.mode = HistoryQuery::Mode::Kills187; }), ids_at(all, {7, 6}));
         ASSERT_EQ(list([](HistoryQuery& q) { q.mode = HistoryQuery::Mode::HighestScore; }), ids_at(all, {5, 4, 3, 2, 1, 0}));
         ASSERT_EQ(list([](HistoryQuery& q) { q.mode = HistoryQuery::Mode::Kills187; q.format = HistoryQuery::Format::OneVsOne; }), ids_at(all, {6}));
@@ -328,10 +328,10 @@ int main() {
         ASSERT_EQ(list([](HistoryQuery& q) { q.text = "kim"; }), ids_at(all, {5}));                                      // (a name that was typed)
         ASSERT_EQ(list([](HistoryQuery& q) { q.text = "bot (hard)"; }), ids_at(all, {1}));                              // (what the pages show for a computer)
         ASSERT_EQ(list([](HistoryQuery& q) { q.text = "bot"; }), ids_at(all, {5, 3, 1}));
-        ASSERT_EQ(list([](HistoryQuery& q) { q.text = "red"; }), ids_at(all, {1}));                                     // (a seat with no name shows its colour: the second seat of record 1 is Red)
+        ASSERT_EQ(list([](HistoryQuery& q) { q.text = "red"; }), ids_at(all, {1}));                                     // (a seat with no name shows its color: the second seat of record 1 is Red)
         ASSERT_EQ(list([](HistoryQuery& q) { q.text = "green"; }), std::vector<std::string>());                        // (and the first one is "Cy": nobody shows Green)
         ASSERT_EQ(list([](HistoryQuery& q) { q.text = "nobody-has-this"; }), std::vector<std::string>());
-        ASSERT_EQ(list([](HistoryQuery& q) { q.format = HistoryQuery::Format::OneVsOne; q.result = HistoryQuery::Result::Decided; q.who = HistoryQuery::Who::People; q.colour = 1; q.text = "tiny"; }), ids_at(all, {0}));
+        ASSERT_EQ(list([](HistoryQuery& q) { q.format = HistoryQuery::Format::OneVsOne; q.result = HistoryQuery::Result::Decided; q.who = HistoryQuery::Who::People; q.color = 1; q.text = "tiny"; }), ids_at(all, {0}));
         HistoryQuery q;
         q.format = HistoryQuery::Format::OneVsOne;
         const HistoryPage page = d.store.query(q, kNoRecordings);
@@ -498,9 +498,9 @@ int main() {
             ASSERT_FALSE(contains(plan, "TEMP B-TREE"));
             ASSERT_FALSE(contains(plan, "SCAN history_matches m\n") && !contains(plan, "USING"));
         }
-        // the page of a colour is a lookup of the seat's key
-        const std::string colour = plan_of(d.database, from + " WHERE EXISTS (SELECT 1 FROM history_seats s WHERE s.match_id = m.id AND s.seat = 2) ORDER BY m.ended DESC, m.id DESC LIMIT 50");
-        ASSERT_TRUE(contains(colour, "USING PRIMARY KEY (match_id=? AND seat=?)"));
+        // the page of a color is a lookup of the seat's key
+        const std::string color = plan_of(d.database, from + " WHERE EXISTS (SELECT 1 FROM history_seats s WHERE s.match_id = m.id AND s.seat = 2) ORDER BY m.ended DESC, m.id DESC LIMIT 50");
+        ASSERT_TRUE(contains(color, "USING PRIMARY KEY (match_id=? AND seat=?)"));
     } TEST_END();
 
     TEST_CASE("HS2.7 A thousand records: a page from the middle of the list is the right one, with its filters, and the list answers at once") {
@@ -626,7 +626,7 @@ int main() {
         // the three lists that were measured at 125 ms, 25 ms and 50 - 70 ms on the main thread before the box: a visitor's query now ends inside its box or is refused
         std::vector<HistoryQuery> heavy(3);
         heavy[0].rec = HistoryQuery::Rec::Removed;
-        heavy[0].colour = 3;
+        heavy[0].color = 3;
         heavy[0].sort = HistoryQuery::Sort::Long;
         heavy[0].limit = 100;
         heavy[0].text = "e";
@@ -1048,7 +1048,7 @@ int main() {
         ASSERT_TRUE(parse_history_query("", q, why) && q.limit == 50 && q.offset == 0 && q.mode == HistoryQuery::Mode::All);
         ASSERT_TRUE(parse_history_query("limit=100&offset=1000000&sort=short&format=team&result=cut&who=computers&rec=old&colour=black&mode=187&q=a%20b%2Bc+d", q, why));
         ASSERT_TRUE(q.limit == 100 && q.offset == 1000000 && q.sort == HistoryQuery::Sort::Short && q.format == HistoryQuery::Format::Teams && q.result == HistoryQuery::Result::Cut);
-        ASSERT_TRUE(q.who == HistoryQuery::Who::Computers && q.rec == HistoryQuery::Rec::Old && q.colour == 3 && q.mode == HistoryQuery::Mode::Kills187 && q.text == "a b+c d");
+        ASSERT_TRUE(q.who == HistoryQuery::Who::Computers && q.rec == HistoryQuery::Rec::Old && q.color == 3 && q.mode == HistoryQuery::Mode::Kills187 && q.text == "a b+c d");
         ASSERT_TRUE(parse_history_query("mode=highest-score", q, why) && q.mode == HistoryQuery::Mode::HighestScore);
         const std::vector<std::pair<std::string, std::string>> bad = {
             {"limit=0", "limit"}, {"limit=101", "limit"}, {"limit=-1", "limit"}, {"limit=abc", "limit"}, {"limit=", "limit"}, {"offset=1000001", "offset"}, {"offset=1.5", "offset"},

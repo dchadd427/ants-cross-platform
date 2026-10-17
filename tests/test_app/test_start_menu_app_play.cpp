@@ -1028,7 +1028,7 @@ void run_start_menu_app_play_tests() {
         ASSERT_FALSE(app.network_active());
         ASSERT_EQ(app.sim().get_player_name(0), std::string("Hostess"));                     // the panel's field holds the name that was typed for the room (one name for the three panels), and the game takes it
         ASSERT_EQ(app.sim().get_player_name(0), app.start_menu().name());
-        ASSERT_EQ(app.sim().get_player_name(1), std::string("Red"));                         // (nothing else of the room's game: the other seats have their colours' names)
+        ASSERT_EQ(app.sim().get_player_name(1), std::string("Red"));                         // (nothing else of the room's game: the other seats have their colors' names)
     } TEST_END();
 
     TEST_CASE("A6.2 A network game that is lost or left goes back to the menu too: the server closes the room in the middle of the match (the notice names it), a room that dies under the player, Leave on the room's screen, and the quit dialog's Yes; without the menu the same Leave ends the program as it always did") {

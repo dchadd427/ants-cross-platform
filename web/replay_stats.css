@@ -1,5 +1,5 @@
 /* The stats of a match on the game page in replay mode (docs/REPLAYS.md "The match pages"), and the page in the frame of a match page (embed mode). Loaded by web/shell.html next to its own style; the
-   panel is built by AntsHistory.replayStats (web/history_page.js). The colours are the page's. */
+   panel is built by AntsHistory.replayStats (web/history_page.js). The colors are the page's. */
 /* ================= THE STATS OF THE MATCH (docs/REPLAYS.md "The match pages"): a replay of a match that the server has a record of. The "Stats" button of the header (wide screens) opens a panel under it, over the
    corner of the picture; a phone has a row under the controls instead, that opens in the page. Both hold the same numbers (the record's, final: they do not follow the picture). ================= */
 #stats-btn[hidden], .mstats[hidden] { display: none !important; }

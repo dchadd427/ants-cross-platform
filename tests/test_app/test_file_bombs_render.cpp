@@ -1,5 +1,5 @@
 // Bombs that a map FILE holds (layer-2 ids 129 .. 132, docs/reverse_engineering/map_file_bombs.md), on the screen and on the minimap:
-//   * the real Renderer draws a file bomb exactly as it draws the same bomb planted after the load (Grid::place_bomb): the same pixels, in the colour of its id, once;
+//   * the real Renderer draws a file bomb exactly as it draws the same bomb planted after the load (Grid::place_bomb): the same pixels, in the color of its id, once;
 //   * the dictionary does not matter ("." as the editors leave it, or the tile's own name): a bomb that went off (or was defused) leaves nothing behind, not even the static object
 //     that its dictionary name would have made;
 //   * under Fog of War an unexplored file bomb is hidden like a planted one;
@@ -156,9 +156,9 @@ void test_parity_with_planted_bombs(Renderer& r, const assets::AssetArchive& arc
             Image planted = capture_map(r, gp, without.width, without.height);
             Image empty = capture_map(r, gn, without.width, without.height);
             check(image_diff(got, planted) == 0, std::string("file bombs (") + naming + ") draw the pixels of planted bombs at t=" + std::to_string(t));
-            for (int k = 0; k < 4; ++k) check(cell_diff(got, empty, 3 * k, 1) > 50, "the bomb of colour " + std::to_string(kBombs[k].team) + " is visible (" + naming + ")");
+            for (int k = 0; k < 4; ++k) check(cell_diff(got, empty, 3 * k, 1) > 50, "the bomb of color " + std::to_string(kBombs[k].team) + " is visible (" + naming + ")");
         }
-        // the four colours are four different pictures (red, green, black, blue)
+        // the four colors are four different pictures (red, green, black, blue)
         r.set_level(with);
         r.pin_animation_clock(0);
         Image got = capture_map(r, ga, with.width, with.height);
@@ -168,7 +168,7 @@ void test_parity_with_planted_bombs(Renderer& r, const assets::AssetArchive& arc
                 for (int y = 0; y < 32; ++y)
                     for (int x = 0; x < 32; ++x)
                         if (std::memcmp(got.at(3 * a * 32 + x, 32 + y), got.at(3 * b * 32 + x, 32 + y), 4) != 0) ++n;
-                check(n > 20, "two colours of file bombs differ");
+                check(n > 20, "two colors of file bombs differ");
             }
         r.unpin_animation_clock();
     }
@@ -220,7 +220,7 @@ void test_fog_hides_unexplored_file_bombs(Renderer& r, const assets::AssetArchiv
 }
 
 void test_minimap_shows_terrain(const assets::AssetArchive& arc) {
-    std::printf("[file bombs] the minimap objects: a bomb is the original's 129 (terrain colour)\n");
+    std::printf("[file bombs] the minimap objects: a bomb is the original's 129 (terrain color)\n");
     assets::LevelData with = flat_level(arc);
     put_file_bombs(with, "dot");
     sim::Grid g;
@@ -234,7 +234,7 @@ void test_minimap_shows_terrain(const assets::AssetArchive& arc) {
 }
 
 void test_map_picture_shows_terrain(const assets::AssetArchive& arc) {
-    std::printf("[file bombs] the map picture (setup screen, minimap colours): a bomb shows the terrain under it, as the original's minimap does\n");
+    std::printf("[file bombs] the map picture (setup screen, minimap colors): a bomb shows the terrain under it, as the original's minimap does\n");
     const auto& palette = arc.get_palette();
     // a flat level with four bombs against the same level without them
     assets::LevelData with = flat_level(arc);

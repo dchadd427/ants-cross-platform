@@ -9,7 +9,7 @@ from PIL import Image, ImageFilter
 
 from artlib import CLAY, CLAY_DOT, sprite
 
-ANT = (150, 44, 286, 190)        # the ant mascot of the lettering: its stripes are the clay's own orange and its legs share the colour of the shadow
+ANT = (150, 44, 286, 190)        # the ant mascot of the lettering: its stripes are the clay's own orange and its legs share the color of the shadow
 
 
 def make_logo():

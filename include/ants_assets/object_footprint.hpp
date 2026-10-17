@@ -4,7 +4,7 @@
 // PlaceObject, FUN_0100744f RemoveObject, FUN_01007d59 the frame box, FUN_01007710 the cell mask): the first frame's box
 // of the tile's animation, taken from the anchor tile's top-left, gives a rectangle of tiles; a tile of that rectangle
 // belongs to the object when its 32 x 32 area, cut with the box and with the first part's image, holds at least one pixel
-// that is not the colour key. Used by tools/gen_food_footprints.cpp (which writes src/ants_sim/food_footprints_data.inc)
+// that is not the color key. Used by tools/gen_food_footprints.cpp (which writes src/ants_sim/food_footprints_data.inc)
 // and by the test that keeps that file in sync with ants.chd; the simulation reads the generated table.
 
 #include <cstdint>

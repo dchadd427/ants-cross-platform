@@ -157,7 +157,7 @@ void Room::forget(uint32_t now_ms) {
 }
 
 // The rematch: what the lobby of this room's match gave each person (the seat, the name, the key, the place in the order) and its plan, once, for the lobby room that the manager opens with this code. A person
-// whom the match dropped (who left it, whose link was lost for too long, whom a vote took out) is not on any results screen of it: no seat is kept for them, their colour is open in the lobby. A quitter whose
+// whom the match dropped (who left it, whose link was lost for too long, whom a vote took out) is not on any results screen of it: no seat is kept for them, their color is open in the lobby. A quitter whose
 // quit ended the match (one other side was left) stays in it (sim::SimulationEngine::quit_player) and keeps the seat.
 std::optional<net::Rematch> Room::take_rematch() {
     if (!rematch_due()) return std::nullopt;
@@ -435,7 +435,7 @@ uint32_t Room::lobby_pause_ms(uint32_t now_ms) noexcept {
 
 // A lobby room that waits (protocol 16). Two things happen here, and neither is the full room's. The room is forgotten when nobody has been in it for empty_close_ms (a person who is held counts as in it). And the
 // leader's START, which the lobby keeps as a request until every person is a game and then gives to the owner in every pass, is carried out with what the PLAN says: the map is loaded now (the leader may change
-// its mind many times, and each map is read when it is wanted), the empty colours get the bots of the plan, the plan's teams are the match's, and the server is asked for a place. What cannot be done ends the
+// its mind many times, and each map is read when it is wanted), the empty colors get the bots of the plan, the plan's teams are the match's, and the server is asked for a place. What cannot be done ends the
 // request with a notice for the leader (HostLobby::end_start) and the room goes on waiting: nothing here fails the room; a start that the lobby refuses at the last moment (the room changed in this very pass) ends it
 // quietly, and the leader asks again. The pause after a cancelled start holds, as in any room: a short one the request stands through, a long one (kLongPauseMs) it does not, and its leader is told.
 void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::array<net::FillLevel, sim::MAX_PLAYERS>& asked_fill, const sim::StartTeams& asked_teams) {
@@ -469,7 +469,7 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     }
     const std::vector<std::pair<uint8_t, net::FillLevel>> fill_seats = net::plan_fill_seats(net::FillPlan(asked_fill), lobby_.room(), spec_.players);
     const uint8_t roster = roster_with(fill_seats);
-    if (!level_.validate(roster).playable) return lobby_.end_start(net::kNoticeMapColours);
+    if (!level_.validate(roster).playable) return lobby_.end_start(net::kNoticeMapColors);
     if (!services_.match_place || !services_.match_place(now_ms)) return lobby_.end_start(net::kNoticeNoPlace);
     if (!start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, true, asked_teams))) lobby_.end_start(std::string());
 }
@@ -714,7 +714,7 @@ void Room::set_replay_store(ReplayStore* store, const std::string& why_not) {
 
 // The recorder of the match, made from the Start message that every machine of the match got, and the tap on the referee's runner: it sees every turn that the referee executes, with the commands as they were
 // sealed (the bots' too), and only watches. The names are the Start's, what the room showed everybody: a person's seat has what was typed (replay_person_name: a seat that was given no name is left empty, and the
-// readers show the colour), a computer player's seat has its display name ("Bot (Medium)"). Nothing else of the room is in the file: no address, room code, key or chat.
+// readers show the color), a computer player's seat has its display name ("Bot (Medium)"). Nothing else of the room is in the file: no address, room code, key or chat.
 void Room::replay_begin(const net::StartMsg& start) {
     live_end(std::string());
     recorder_.reset();

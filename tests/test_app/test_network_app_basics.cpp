@@ -103,7 +103,7 @@ void run_command_line_tests() {
         c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_EQ(c.net_seat, 2);
         ASSERT_EQ(c.title, "Ants - Blue");
-        args = {"ants", "--seat", "4"};                                                  // no fifth colour: ignored
+        args = {"ants", "--seat", "4"};                                                  // no fifth color: ignored
         c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_EQ(c.net_seat, 255);
         args = {"ants", "--seat", "-1"};
@@ -170,7 +170,7 @@ void run_command_line_tests() {
         ASSERT_TRUE(ApplicationConfig{}.label_unnamed_teams);                             // the native default keeps the four labels
     } TEST_END();
 
-    TEST_CASE("N5.8 Local Game: By Default Every Team Has A Score Label (colour words for the unnamed ones)") {
+    TEST_CASE("N5.8 Local Game: By Default Every Team Has A Score Label (color words for the unnamed ones)") {
         ApplicationConfig cfg = headless_config();
         Application app;
         ASSERT_TRUE(app.init(cfg));
@@ -192,7 +192,7 @@ void run_command_line_tests() {
         ASSERT_EQ(app.sim().get_player_name(0), "Alice");                                // the own name belongs to the own team
         ASSERT_EQ(app.sim().get_player_name(1), "Bob");
         ASSERT_EQ(app.sim().get_player_name(2), "Carol");
-        ASSERT_EQ(app.sim().get_player_name(3), sim::strings::colour_name(0));            // no name given: the colour word (black)
+        ASSERT_EQ(app.sim().get_player_name(3), sim::strings::color_name(0));            // no name given: the color word (black)
         ASSERT_EQ(app.hud().team_names()[0], "Alice");
         ASSERT_EQ(app.hud().team_names()[1], "Bob");
         ASSERT_EQ(app.hud().team_names()[3], "");
@@ -401,7 +401,7 @@ void run_bot_tests() {
         ASSERT_EQ(app.hud().roster_mask(), 0x0B);
         ASSERT_EQ(app.sim().get_player_name(0), "Alice");
         ASSERT_EQ(app.sim().get_player_name(1), "Bot (Medium)");
-        ASSERT_EQ(app.sim().get_player_name(2), sim::strings::colour_name(1));                                          // nobody sits there: the colour word of seat 2 (red)
+        ASSERT_EQ(app.sim().get_player_name(2), sim::strings::color_name(1));                                          // nobody sits there: the color word of seat 2 (red)
         ASSERT_EQ(app.sim().get_player_name(3), "Zed");                                                                 // -N / --team-name wins over "Bot (Idle)"
         ASSERT_EQ(app.hud().team_names()[1], "Bot (Medium)");
         ASSERT_EQ(app.hud().team_names()[3], "Zed");
@@ -1390,7 +1390,7 @@ void run_guest_tests() {
         ASSERT_FALSE(app.net()->desynced());
     } TEST_END();
 
-    TEST_CASE("N5.9 Teaming Over The Network: An Offer Reaches The Application As A Question, Accept Makes The Team Everywhere, Team Chat Reaches Only Allies, In The Sender's Colour") {
+    TEST_CASE("N5.9 Teaming Over The Network: An Offer Reaches The Application As A Question, Accept Makes The Team Everywhere, Team Chat Reaches Only Allies, In The Sender's Color") {
         Peer host;
         Peer bob;
         Application app;
@@ -1424,7 +1424,7 @@ void run_guest_tests() {
         trio.step(300);
         ASSERT_EQ(app.hud().alliance_dialog(), HUD::AllianceDialog::None);                // the question does not come back
         ASSERT_TRUE(log_joined(app.hud().get_chat_log()).find("Bob (Red) and Carol (Blue) are a team now!") != std::string::npos);   // the news flash, wrapped by the chat box
-        // Bob's team message reaches his ally in his team's colour (red, index 2); Alice's, sent to her team, still does not
+        // Bob's team message reaches his ally in his team's color (red, index 2); Alice's, sent to her team, still does not
         bob.net.chat("we are allies", true);
         host.net.chat("secret plan two", true);
         trio.step(800);
@@ -1434,7 +1434,7 @@ void run_guest_tests() {
             if (log[i] == "Bob (To Teammate):") header = i;
         }
         ASSERT_TRUE(header < log.size());
-        ASSERT_EQ(app.hud().get_chat_line_colour(header), 2);
+        ASSERT_EQ(app.hud().get_chat_line_color(header), 2);
         ASSERT_TRUE(log_has(log, "we are allies"));
         ASSERT_FALSE(log_has(log, "secret plan"));
         // the application's own team message goes through the host to its ally (and nobody else: the host, Alice, is not an ally) and is marked as a team message
@@ -1906,7 +1906,7 @@ void run_window_tests() {
             ASSERT_EQ(app.audio_mixer().sound_volume(), volume);                               // ... and the sound is back with the focus
         }
     } TEST_END();
-    TEST_CASE("N5.19 Guest: --seat N asks the host for that colour (the start script seats window i in colour i)") {
+    TEST_CASE("N5.19 Guest: --seat N asks the host for that color (the start script seats window i in color i)") {
         Peer host;
         ASSERT_TRUE(host.net.host(0, "Alice", true));
         ApplicationConfig cfg = headless_config();
