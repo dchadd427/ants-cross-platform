@@ -34,6 +34,7 @@
 #include <tuple>
 
 #include "ants_ai/bot.hpp"
+#include "ants_ai/brawl_task.hpp"
 #include "ants_ai/field_task.hpp"
 #include "ants_ai/gate_task.hpp"
 #include "ants_ai/island_expedition.hpp"
@@ -79,7 +80,8 @@ private:
           expedition_(kExpedition, tactics_, expedition_params(plan)),
           ferry_(kFerry, ferry_params(plan)),
           gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)),
-          field_(kField, tactics_) {
+          field_(kField, tactics_),
+          brawl_(kBrawl, plan.brawl) {
         island_.attach(&harvest_);
         expedition_.attach(&island_);
     }
@@ -159,6 +161,7 @@ public:
     static constexpr TaskId kRush = 18;
     static constexpr TaskId kGateGoals = 19;
     static constexpr TaskId kField = 20;
+    static constexpr TaskId kBrawl = 21;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -291,6 +294,7 @@ private:
     FerryTask ferry_;
     GateGoalTask gate_goals_;
     FieldTask field_;
+    BrawlTask brawl_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);

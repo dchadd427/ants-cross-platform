@@ -31,6 +31,7 @@
 #include "ants_ai/map_info.hpp"
 #include "ants_sim/ant_unit.hpp"
 #include "ants_sim/command.hpp"
+#include "ants_sim/game_mode.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -183,6 +184,8 @@ public:
     /// The type that every ant shows until it takes a power-up: Worker, except on a level whose block 3 names a default type (some community maps: all their workers are
     /// Combat, Thief, Bomber, Swimmer or Fire ants, as the sprites and the panel say from the first second). An ant whose AntView::type is this one has not (visibly) changed.
     sim::AntType default_ant_type() const noexcept { return default_ant_type_; }
+    /// The rules of the match (the room's game type, the same on every machine and known to every player): HighestScore, or Kills187 (no food, the kills are the score, docs/GAMEPLAY.md "187")
+    sim::GameMode game_mode() const noexcept { return game_mode_; }
     /// The analysis of the match, null when the view was built without one
     const MapInfo* map() const noexcept { return map_; }
     /// What the engine's dynamic walking rules need besides the grid for this seat's ants: its ally (own and allied bombs block) and the teams that dropped out (their queue rows are
@@ -222,6 +225,7 @@ private:
     uint32_t eggs_{0};
     bool hatching_{false};
     sim::AntType default_ant_type_{sim::AntType::Worker};
+    sim::GameMode game_mode_{sim::GameMode::HighestScore};
     std::array<TeamRow, sim::MAX_PLAYERS> rows_{};
     std::vector<AntView> mine_;
     std::vector<AntView> others_;

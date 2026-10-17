@@ -212,7 +212,7 @@ if(NOT EMSCRIPTEN)
     # Bot arena (not part of the normal build): plays matches of computer players headless with the real engine and the controller (docs/BOTS.md)
     #   cmake --build build --target bot_arena && ./build/bot_arena --map TINY --seeds 1..8 --seat 0=worker:hard --seat 1=worker:easy --rotate --out report.json
     #   (./build/bot_arena --selftest checks the tool itself)
-    add_executable(bot_arena EXCLUDE_FROM_ALL tools/bot_arena.cpp)
+    add_executable(bot_arena EXCLUDE_FROM_ALL tools/bot_arena.cpp tools/bot_arena_tune.cpp)
     target_link_libraries(bot_arena PRIVATE ants_ai ants_server_core ants_replay ants_net ants_sim ants_assets ants_version ants_test_paths Threads::Threads)     # ants_server_core: the store that --save-replays keeps its files with
 
     # Replay tool (not part of the normal build): checks a replay file and lists its orders with their time, place and ant type (docs/REPLAYS.md)

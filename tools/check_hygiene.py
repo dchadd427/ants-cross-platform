@@ -36,7 +36,7 @@ LINE_CEILINGS = {
     "src/ants_ai/standard_tasks.cpp": 3911,
     "web/shell.html": 3989,
     "src/ants_app/application.cpp": 3420,
-    "tools/bot_arena.cpp": 2773,
+    "tools/bot_arena.cpp": 2541,
     "tools/map_sweep.cpp": 2626,
     "src/ants_app/renderer.cpp": 2368,
     "src/ants_app/hud.cpp": 1867,

@@ -75,6 +75,7 @@ BotView::BotView(const BotView& other)
       eggs_(other.eggs_),
       hatching_(other.hatching_),
       default_ant_type_(other.default_ant_type_),
+      game_mode_(other.game_mode_),
       rows_(other.rows_),
       mine_(other.mine_),
       others_(other.others_),
@@ -152,6 +153,7 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
     const sim::WorldState& ws = sim.get_world_state();
     v.tick_ = sim.current_tick();
     v.default_ant_type_ = static_cast<sim::AntType>(sim.grid().default_ant_type());     // the level's block 3: every ant shows it until it takes a power-up
+    v.game_mode_ = sim.game_mode();
     v.ticks_left_ = ws.match_time_remaining_ms / sim::TICK_MS;
     // The scores are what the score boxes show (FUN_01021e36): the team's score plus its ally's, and a box draws 0 for a negative number. Not the individual score:
     // a person cannot see how the sum is made up.
