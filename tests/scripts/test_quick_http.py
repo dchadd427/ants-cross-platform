@@ -2,8 +2,9 @@
 
   - starting either class never calls socket.getfqdn, gethostbyaddr, gethostbyname or getaddrinfo with a name (a lookup of an address literal by getaddrinfo is local and is let through)
   - they still serve a request, and the threading one serves two at once
-  - no tests/scripts/test_*.py makes a http.server.HTTPServer or ThreadingHTTPServer itself (the stdlib one asks for the name of the machine when it binds)
+  - no tests/scripts/test_*.py makes or derives from a http.server.HTTPServer or ThreadingHTTPServer itself (the stdlib one asks for the name of the machine when it binds); found in the syntax tree
 """
+import ast
 import glob
 import http.client
 import os
@@ -71,17 +72,43 @@ class NoLookup(unittest.TestCase):
                 http.server.HTTPServer(("127.0.0.1", 0), Hello)
 
 
+def stdlib_server_uses(path):
+    """Where a file builds, or derives from, a stdlib HTTP server (found in the syntax tree: a call over several lines, an alias of the import and a subclass are all seen)."""
+    with open(path, encoding="utf-8") as f:
+        tree = ast.parse(f.read(), path)
+    names = {"HTTPServer", "ThreadingHTTPServer"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "http.server":
+            names |= {alias.asname for alias in node.names if alias.asname and alias.name in ("HTTPServer", "ThreadingHTTPServer")}
+    def named(expr):
+        return (expr.id if isinstance(expr, ast.Name) else expr.attr if isinstance(expr, ast.Attribute) else "") in names
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and named(node.func):
+            found.append(node.lineno)
+        if isinstance(node, ast.ClassDef) and any(named(base) for base in node.bases) and not any(isinstance(n, ast.FunctionDef) and n.name == "server_bind" for n in node.body):
+            found.append(node.lineno)
+    return found
+
+
 class NoTestBuildsTheStdlibServer(unittest.TestCase):
     def test_every_test_file_uses_the_quick_classes(self):
         found = []
         for path in sorted(glob.glob(os.path.join(HERE, "test_*.py"))):
-            if os.path.basename(path) == os.path.basename(__file__):
-                continue
-            with open(path, encoding="utf-8") as f:
-                for number, line in enumerate(f, 1):
-                    if re.search(r"(?<![A-Za-z])(?:http\.server\.)?(?:Threading)?HTTPServer\(\s*\(", line) and "Quick" not in line:
-                        found.append("%s:%d" % (os.path.basename(path), number))
+            if os.path.abspath(path) != os.path.abspath(__file__):         # (this file builds the stdlib one on purpose, to show that it asks)
+                found += ["%s:%d" % (os.path.basename(path), n) for n in stdlib_server_uses(path)]
         self.assertEqual(found, [], "use tests/scripts/quick_http.py: the stdlib server looks up the name of the machine when it binds")
+
+    def test_the_guard_sees_what_it_is_for(self):      # (the guard is not vacuous: calls over several lines, aliases and subclasses are found, the quick classes are not)
+        import tempfile
+        text = ("import http.server\nfrom http.server import HTTPServer as H\nclass S(http.server.ThreadingHTTPServer):\n    pass\n"
+                "a = http.server.HTTPServer(\n    (\"127.0.0.1\", 0), None)\nb = H((\"127.0.0.1\", 0), None)\nc = quick_http.QuickHTTPServer((\"127.0.0.1\", 0), None)\n"
+                "class Q(http.server.HTTPServer):\n    def server_bind(self):\n        pass\n")
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "sample.py")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            self.assertEqual(stdlib_server_uses(path), [3, 5, 7])
 
 
 if __name__ == "__main__":

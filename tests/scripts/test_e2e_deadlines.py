@@ -246,7 +246,7 @@ class Watchdog(unittest.TestCase):
 FAKE_SERVER = r"""#!/usr/bin/env python3
 import time
 started = time.time()
-import http.server, os, signal, socket, socketserver, sys
+import http.server, os, signal, socket, sys
 args = sys.argv[1:]
 text = " ".join(args)
 def note(what):
@@ -298,12 +298,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b'{"status":"ok"}')
     def log_message(self, *args):
         pass
-class QuickServer(http.server.ThreadingHTTPServer):
-    def server_bind(self):
-        socketserver.TCPServer.server_bind(self)
-        self.server_name = "localhost"
-        self.server_port = self.server_address[1]
-server = QuickServer(("127.0.0.1", int(value("--ctl-port"))), Handler)
+sys.path.insert(0, "@QUICK_HTTP_DIR@")
+import quick_http
+server = quick_http.QuickThreadingHTTPServer(("127.0.0.1", int(value("--ctl-port"))), Handler)
 note("up after %.2f s" % (time.time() - started))
 server.serve_forever()
 """
@@ -350,7 +347,7 @@ class TheScriptCounts(unittest.TestCase):
                 path = os.path.join(root, name)
                 os.makedirs(os.path.dirname(path))
                 with open(path, "w", encoding="utf-8") as f:
-                    f.write(body)
+                    f.write(body.replace("@QUICK_HTTP_DIR@", os.path.dirname(os.path.abspath(__file__))))
                 os.chmod(path, 0o755)
             tmp = os.path.join(root, "tmp")
             os.makedirs(tmp)

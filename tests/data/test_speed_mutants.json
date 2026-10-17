@@ -1,5 +1,5 @@
 {
- "note": "Mutants for the test cleanup of round 2 (the time-aware ping flood ceiling of the server script, the box of HS2.10, the name-lookup-free HTTP servers) for tools/mutate.py: python3 tools/mutate.py tests/data/test_speed_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by the test that the 'expect' names.",
+ "note": "Mutants for the test cleanup of round 2 (the time-aware ping flood ceiling of the server script, the box of HS2.10, the name-lookup-free HTTP servers) for tools/mutate.py: python3 tools/mutate.py tests/data/test_speed_mutants.json --keep-going --jobs 1 --timeout 900. (The python tests run with their own empty bytecode folder: a mutant that keeps a file's size and time would otherwise be read from a stale .pyc, and the baseline would fail.) Every mutant must be caught by the test that the 'expect' names.",
  "mutants": [
   {
    "id": "ping_flood_burst_2000",
@@ -54,7 +54,7 @@
    "file": "tests/scripts/quick_http.py",
    "old": "socketserver.TCPServer.server_bind(self)",
    "new": "http.server.HTTPServer.server_bind(self)",
-   "test": "python3 -m unittest tests.scripts.test_quick_http",
+   "test": "env PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=$(mktemp -d) python3 -m unittest tests.scripts.test_quick_http",
    "expect": "binds_without_asking"
   },
   {
@@ -62,7 +62,7 @@
    "file": "tests/scripts/test_deploy_wait.py",
    "old": "quick_http.QuickThreadingHTTPServer((",
    "new": "http.server.ThreadingHTTPServer((",
-   "test": "python3 -m unittest tests.scripts.test_quick_http",
+   "test": "env PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=$(mktemp -d) python3 -m unittest tests.scripts.test_quick_http",
    "expect": "test_every_test_file_uses_the_quick_classes"
   },
   {
@@ -97,7 +97,7 @@
    "file": "run_tests.sh",
    "old": "[ $((USED + w)) -le \"$EFFECTIVE_JOBS\" ] || return 1",
    "new": "[ $((USED + w)) -le \"$((EFFECTIVE_JOBS + 1))\" ] || return 1",
-   "test": "python3 -m unittest tests.scripts.test_run_tests.ParallelResources",
+   "test": "env PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=$(mktemp -d) python3 -m unittest tests.scripts.test_run_tests.ParallelResources",
    "expect": "test_jobs_limits_how_many_suites_run_at_once"
   },
   {
@@ -105,8 +105,17 @@
    "file": "run_tests.sh",
    "old": "[ $((USED + w)) -le \"$EFFECTIVE_JOBS\" ] || return 1",
    "new": "[ $((USED + w)) -lt \"$EFFECTIVE_JOBS\" ] || [ \"$USED\" -eq 0 ] || return 1",
-   "test": "python3 -m unittest tests.scripts.test_run_tests.ParallelResources",
+   "test": "env PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=$(mktemp -d) python3 -m unittest tests.scripts.test_run_tests.ParallelResources",
    "expect": "test_jobs_limits_how_many_suites_run_at_once"
+  },
+  {
+   "id": "history_real_clock_stands_still",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    if (cfg_.clock_us) return cfg_.clock_us();\n    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());\n}\n\nint HistoryStore::time_box_expired",
+   "new": "    if (cfg_.clock_us) return cfg_.clock_us();\n    return 0;\n}\n\nint HistoryStore::time_box_expired",
+   "build": "test_history_store",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HS2.10 ./build/tests/test_server/test_history_store",
+   "expect": "HS2.10"
   }
  ]
 }

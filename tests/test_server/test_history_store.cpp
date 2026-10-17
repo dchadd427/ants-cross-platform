@@ -135,6 +135,8 @@ std::vector<std::string> ids_at(const std::vector<HistoryRecord>& all, std::vect
     return out;
 }
 
+// (The tests of the list that run on the real clock ask as the owner: the public door's box is 15 ms and a stall of that long under a parallel load would answer TooHeavy and an empty list. The box and the budget
+// of the public door are the business of HS2.8 - HS2.11, which inject a clock.)
 const std::function<Recording(const std::string&)> kNoRecordings = [](const std::string&) { return Recording::Removed; };
 
 // A thousand (or more) matches a minute apart, written by ONE statement; every third on TREASURE, every second a 1v1, every fifth mode 187, `best_*` and `turns` from k
@@ -286,7 +288,7 @@ int main() {
         HistoryStore other(again);
         std::string why;
         ASSERT_TRUE(other.prepare(why) && other.count() == all.size());
-        const HistoryPage page = other.query(HistoryQuery(), kNoRecordings);
+        const HistoryPage page = other.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == all.size() && page.items.size() == all.size());
         ASSERT_EQ(page.items.front().id, all.back().id);
         ASSERT_TRUE(same_record(page.items.back(), all.front()));
@@ -307,7 +309,7 @@ int main() {
         const auto list = [&](const std::function<void(HistoryQuery&)>& tweak) {
             HistoryQuery q;
             tweak(q);
-            return ids_of(d.store.query(q, kNoRecordings));
+            return ids_of(d.store.query(q, kNoRecordings, HistoryStore::Door::Owner));
         };
         ASSERT_EQ(list([](HistoryQuery&) {}), ids_at(all, {7, 6, 5, 4, 3, 2, 1, 0}));
         ASSERT_EQ(list([](HistoryQuery& q) { q.format = HistoryQuery::Format::OneVsOne; }), ids_at(all, {6, 4, 3, 0}));
@@ -334,7 +336,7 @@ int main() {
         ASSERT_EQ(list([](HistoryQuery& q) { q.format = HistoryQuery::Format::OneVsOne; q.result = HistoryQuery::Result::Decided; q.who = HistoryQuery::Who::People; q.color = 1; q.text = "tiny"; }), ids_at(all, {0}));
         HistoryQuery q;
         q.format = HistoryQuery::Format::OneVsOne;
-        const HistoryPage page = d.store.query(q, kNoRecordings);
+        const HistoryPage page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == 4 && page.items.size() == 4 && d.store.count() == 8);
         ASSERT_TRUE(page.items[0].seats.size() == 2 && page.items[0].seats[1].name == "May" && page.items[0].rows.size() == 2);       // (the page holds whole records)
     } TEST_END();
@@ -347,7 +349,7 @@ int main() {
         const auto sorted = [&](HistoryQuery::Sort sort) {
             HistoryQuery q;
             q.sort = sort;
-            return ids_of(d.store.query(q, kNoRecordings));
+            return ids_of(d.store.query(q, kNoRecordings, HistoryStore::Door::Owner));
         };
         ASSERT_EQ(sorted(HistoryQuery::Sort::New), ids_at(all, {7, 6, 5, 4, 3, 2, 1, 0}));
         ASSERT_EQ(sorted(HistoryQuery::Sort::Old), ids_at(all, {0, 1, 2, 3, 4, 5, 6, 7}));
@@ -365,21 +367,21 @@ int main() {
         for (int k = 0; k < 130; ++k) many.push_back(record_of(kT0 + k, "TINY.LVL", "1v1", 1000u + static_cast<uint32_t>(k), true, -1, false, {seat_of(0, "Ann", "", k, 1, 1, 1), seat_of(1, "Bob", "", 1, 1, 1, 1)}));
         ASSERT_TRUE(d.fill(many));
         HistoryQuery q;
-        HistoryPage page = d.store.query(q, kNoRecordings);
+        HistoryPage page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.count == 130 && page.items.size() == 50 && page.items.front().id == many.back().id);                 // (the default limit is 50)
         q.limit = 1000;
-        page = d.store.query(q, kNoRecordings);
+        page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.count == 130 && page.items.size() == 100);                                                               // (and the most is 100)
         q.limit = 10;
         q.offset = 125;
-        page = d.store.query(q, kNoRecordings);
+        page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.count == 130 && page.items.size() == 5 && page.items.back().id == many.front().id);
         q.offset = 5000;
-        page = d.store.query(q, kNoRecordings);
+        page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == 130 && page.items.empty());
         q.limit = 0;                                                                                                              // (a limit of 0 is one: the route refuses it, the store does not guess more)
         q.offset = 3;
-        page = d.store.query(q, kNoRecordings);
+        page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.items.size() == 1 && page.items[0].id == many[126].id);
     } TEST_END();
 
@@ -393,7 +395,7 @@ int main() {
         const auto find = [&](const std::string& text) {
             HistoryQuery q;
             q.text = text;
-            return ids_of(d.store.query(q, kNoRecordings));
+            return ids_of(d.store.query(q, kNoRecordings, HistoryStore::Door::Owner));
         };
         ASSERT_EQ(find("50%"), ids_at(v, {0}));
         ASSERT_EQ(find("%"), ids_at(v, {0}));                          // (a lone % is a percent sign, not "everything")
@@ -424,7 +426,7 @@ int main() {
         const auto find = [&](const std::string& text) {
             HistoryQuery q;
             q.text = text;
-            return ids_of(d.store.query(q, kNoRecordings));
+            return ids_of(d.store.query(q, kNoRecordings, HistoryStore::Door::Owner));
         };
         ASSERT_EQ(find("pip (bot, hard)"), ids_at(v, {0}));
         ASSERT_EQ(find("Pip (bot, Hard)"), ids_at(v, {0}));
@@ -451,24 +453,24 @@ int main() {
             return Recording::Watch;
         };
         HistoryQuery q;
-        const HistoryPage plain = d.store.query(q, state);
+        const HistoryPage plain = d.store.query(q, state, HistoryStore::Door::Owner);
         ASSERT_TRUE(plain.count == 8 && asked.empty());                                                       // (no filter by the recording: never asked)
         q.rec = HistoryQuery::Rec::Watch;
-        ASSERT_EQ(ids_of(d.store.query(q, state)), ids_at(all, {7, 6, 5}));
+        ASSERT_EQ(ids_of(d.store.query(q, state, HistoryStore::Door::Owner)), ids_at(all, {7, 6, 5}));
         ASSERT_EQ(asked.size(), size_t{8});                                                                    // (each once)
         q.rec = HistoryQuery::Rec::Old;
-        ASSERT_EQ(ids_of(d.store.query(q, state)), ids_at(all, {4, 3}));
+        ASSERT_EQ(ids_of(d.store.query(q, state, HistoryStore::Door::Owner)), ids_at(all, {4, 3}));
         q.rec = HistoryQuery::Rec::Removed;
         q.limit = 2;
         q.offset = 1;
-        HistoryPage page = d.store.query(q, state);
+        HistoryPage page = d.store.query(q, state, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.count == 3 && ids_of(page) == ids_at(all, {1, 0}));                                  // (the whole count, the window cut from it)
         q.mode = HistoryQuery::Mode::HighestScore;
         q.format = HistoryQuery::Format::OneVsOne;
         q.limit = 50;
         q.offset = 0;
         asked.clear();
-        page = d.store.query(q, state);
+        page = d.store.query(q, state, HistoryStore::Door::Owner);
         ASSERT_TRUE(ids_of(page) == ids_at(all, {0}) && asked.size() == 3);                                   // (asked only for the 1v1 matches of the original's rules: 0, 3 and 4)
         ASSERT_TRUE(page.items[0].seats.size() == 2);
     } TEST_END();
@@ -665,6 +667,15 @@ int main() {
             }
             ASSERT_TRUE(best < 60);
         }
+        // THE PRODUCTION CLOCK IS WIRED IN: a store with no injected clock pays for its public queries with the time they really take, so a run of heavy ones uses up the budget (100 ms, earned back at 50 ms a second) and the
+        // answer becomes Busy. A clock that stood still would never bill anything. (A count of tries, not a time: a slow machine bills more for each, so it gets there sooner.)
+        {
+            HistoryStore real(d.database);
+            ASSERT_TRUE(real.prepare(why));
+            int tries = 0;
+            while (tries < 400 && real.query(heavy[1], removed, HistoryStore::Door::Public).fail != HistoryPage::Fail::Busy) ++tries;
+            ASSERT_TRUE(tries < 400);
+        }
         // a list without a filter is a few ms whatever the size of the table, and a page of 100 with seats is read by statements that do not grow with it
         for (int k = 0; k < 100; ++k) {
             HistoryRecord r = record_of(kT0 + 2000000 + k * 60, "TINY.LVL", "1v1", 1200, true, -1, false, {seat_of(0, "Ann", "", 9, 1, 1, 1), seat_of(1, "Bob", "", 4, 1, 1, 1)});
@@ -771,7 +782,7 @@ int main() {
         db::Database other;                                                         // (another connection takes a table away, as a broken file or a full disk would)
         ASSERT_TRUE(other.open(d.path()).ok());
         ASSERT_TRUE(other.exec("ALTER TABLE history_seats RENAME TO history_seats_away").ok());
-        HistoryPage page = d.store.query(HistoryQuery(), kNoRecordings);
+        HistoryPage page = d.store.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_FALSE(page.ok);
         ASSERT_TRUE(!d.store.available() && !d.store.unavailable_reason().empty());
         HistoryRecord got;
@@ -799,7 +810,7 @@ int main() {
         ASSERT_TRUE(d.store.available() && d.store.unavailable_reason().empty() && d.store.count() == all.size());
         notes = d.store.take_notes();
         ASSERT_TRUE(notes.size() == 1 && contains(notes[0], "available"));
-        page = d.store.query(HistoryQuery(), kNoRecordings);
+        page = d.store.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == all.size());
         d.store.maintain(ms + 3 * HistoryStore::kRetryMs);                          // (an available store has nothing to retry)
         ASSERT_TRUE(d.store.available() && d.store.take_notes().empty());
