@@ -15,7 +15,6 @@ struct BrawlParams {
     uint32_t regap_ticks{8};             // a pack is ordered onto its victim again no sooner than this
     int32_t reach_tiles{40};             // enemy ants further than this from an ant are no target of that ant
     uint32_t march_gap_ticks{60};        // an ant that marches is told again no sooner than this
-    int32_t x1{0}, x2{0}, x3{0}, x4{0};  // experiment knobs (removed before the pull request)
 };
 
 }  // namespace ants::ai

@@ -738,10 +738,6 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "bcrowd") { p.brawl.crowd = static_cast<uint32_t>(v); return true; }
     if (key == "bhp") { p.brawl.hp_weight = static_cast<uint32_t>(v); return true; }
     if (key == "bregap") { p.brawl.regap_ticks = static_cast<uint32_t>(v); return true; }
-    if (key == "bx1") { p.brawl.x1 = static_cast<int32_t>(v); return true; }
-    if (key == "bx2") { p.brawl.x2 = static_cast<int32_t>(v); return true; }
-    if (key == "bx3") { p.brawl.x3 = static_cast<int32_t>(v); return true; }
-    if (key == "bx4") { p.brawl.x4 = static_cast<int32_t>(v); return true; }                                     // the 187 brawl (0: the bot as it was before it: the food game's tasks in 187 too)
     if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOTS.md, "The war batch"; 0: the war batch without it)
     if (key == "bt1") { p.behind_tier1 = static_cast<uint32_t>(v); return true; }
     if (key == "bt2") { p.behind_tier2 = static_cast<uint32_t>(v); return true; }

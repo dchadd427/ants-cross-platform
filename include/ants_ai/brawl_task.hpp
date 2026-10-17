@@ -4,14 +4,15 @@
 // wins, so a standard bot that sees the game mode plays this task INSTEAD of the food game's tasks: it keeps its profile (look interval, reaction time, command budget), its answer to an
 // invitation to team up and its fairness, and spends every ant on the fight.
 //
-// What the engine allows (measured, docs/BOTS.md "Fights of its own"): one blow lands per hit clip however many ants strike; a worker's blow takes 1 hit point and throws the victim one
-// tile away from the attacker, a Combat Ant's punch takes 2 and throws it four; an ant left with ONE hit point walks home and is rarely caught; an ant thrown into water drowns whatever its hit
-// points. So the kills are of four kinds: a blow that throws the victim into water (or onto a bomb) from the side that the bot chooses, the last hit point of a wounded ant, a Combat Ant's
-// punch on an even number of hit points, and a pack that corners a retreating ant. The task
-//   * sends every ant that is hurt home to heal (the hill restores all hit points) and brings it back,
-//   * takes the kills that stand in reach: it walks a healthy ant to the side of a victim from which one blow kills it, then strikes,
-//   * otherwise attacks the nearest enemy ants in packs of a few, the wounded first, each pack on its own target (blows land in parallel on different victims),
-//   * and when no enemy ant can be struck (every one is inside its hill) marches to the enemy hills and waits at their doors.
+// What the engine allows (measured; docs/BOTS.md, "187: the brawl"): one blow lands per hit clip, about every 40 ticks, however many ants strike a victim; a worker's blow takes 1 hit point and
+// throws the victim one tile away from the attacker, a Combat Ant's punch takes 2 and throws it four; an ant left with ONE hit point walks home and is caught only by luck; an ant thrown into
+// water drowns whatever its hit points. An order that names a tile is carried out against whoever stands there when it arrives, so a victim that was struck (and thrown to another tile) or has
+// moved on is hit again only by an order that names its new tile. The task therefore
+//   * sends every ant that is hurt home to heal (the hill restores all hit points) and calls it back when it is whole,
+//   * forms packs of a few ants on each enemy ant it can reach, the wounded and the near first, so that blows land in parallel on different victims,
+//   * orders a whole pack onto its victim again whenever the victim was thrown to another tile or an ant of the pack stands idle after its blow,
+//   * lets ants that found no victim of their own join the nearest fight, and
+//   * when no enemy ant can be struck (every one is inside its hill, or beyond any walk) marches to the nearest enemy hill that a walk reaches and waits at its door.
 // It reads only the BotView (what a player sees), sends only clicks a person could make, uses integers and ordered containers: the same world gives the same orders.
 
 #include <cstdint>
@@ -36,18 +37,16 @@ public:
 
     // ---- for the tests and the reports ----
     uint32_t attacks_ordered() const noexcept { return attacks_ordered_; }
-    uint32_t kill_stands_ordered() const noexcept { return kill_stands_ordered_; }
-    uint32_t kill_blows_ordered() const noexcept { return kill_blows_ordered_; }
     uint32_t retreats_ordered() const noexcept { return retreats_ordered_; }
     uint32_t marches_ordered() const noexcept { return marches_ordered_; }
 
 private:
-    enum class Kind : uint8_t { None, Attack, Stage, Home, March };
+    enum class Kind : uint8_t { None, Attack, Home, March };
     static constexpr uint64_t kPending = ~uint64_t{0};
     struct Job {
         Kind kind{Kind::None};
-        uint32_t target{0};              // the enemy ant of an Attack or a Stage
-        sim::TileCoord tile{};           // where the target stood when the order was decided / where a Stage, Home or March leads
+        uint32_t target{0};              // the enemy ant of an Attack
+        sim::TileCoord tile{};           // where the target stood when the order was decided / where a Home or March leads
         uint64_t decided{0};
         uint64_t sent{kPending};         // the tick the order left (kPending: not yet, or never)
         bool refused{false};             // the "can't go" that followed it was counted
@@ -70,10 +69,7 @@ private:
     std::map<uint32_t, Fight> fights_;   // by victim
     std::map<std::pair<uint32_t, uint32_t>, Refusal> refusals_;
     std::map<std::pair<uint32_t, uint32_t>, uint64_t> shun_;   // (own ant, enemy ant) -> until when the pair is left alone: an attack that showed "can't go" (the enemy stands where no walk joins them)
-    std::vector<uint32_t> occupant_;     // the id of the ant on each tile (scratch of one look, cleared again at its end)
     uint32_t attacks_ordered_{0};
-    uint32_t kill_stands_ordered_{0};
-    uint32_t kill_blows_ordered_{0};
     uint32_t retreats_ordered_{0};
     uint32_t marches_ordered_{0};
 };
