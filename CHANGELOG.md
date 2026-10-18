@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.81 - 2026-10-18 - Lobby: Map maker link
+
+**For players:**
+- The lobby has a small Map maker button next to Matches, at the top right.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/73e722fb...be12b42c)
+
 ## v0.12.80 - 2026-10-18 - Map maker: My maps (E6)
 
 **For players:**
@@ -657,15 +664,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0a6a7cf...46f7b115)
 
-## v0.12.5 - 2026-10-11 - The match server keeps a database file
+## Older versions (v0.12.5 and before)
 
-**For players:**
-- No change to play. The match server now keeps a database file for records (nothing is stored in it yet).
-
-**Rules / network:** none: the simulation and the protocol are untouched.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9889d7d...0a6a7cf4)
-
-## Older versions (v0.12.4 and before)
-
-Every release before v0.12.5, and the long notes of v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.6, and the long notes of v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
