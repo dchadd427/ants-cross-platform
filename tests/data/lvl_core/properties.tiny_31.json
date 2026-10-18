@@ -1,0 +1,6 @@
+{"ok":false,"changed":false,"bytes":0,"description_bytes":31,"description_limit":29,
+"edits":[],
+"reasons":[
+{"code":"description_too_long","message":"the description is 31 bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)"}
+],
+"warnings":[]}

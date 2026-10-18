@@ -5,7 +5,7 @@
 //   createLvlCore().then(function (module) { var core = LvlCore.wrap(module); var r = core.readReport(bytes); if (r.status === 0) console.log(r.json.findings); });
 //
 // Every call answers {status, text, bytes, json, error}: status 0 is the answer (`json` is the parsed report for readReport, checkOriginal, checkMap, needsExtended, limits and
-// sameLevel, `bytes` is the file for rewrite, blank and blankExtended, and for convertToExtended and convertToClassic when `json.ok`, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
+// sameLevel, `bytes` is the file for rewrite, blank and blankExtended, and for convertToExtended, convertToClassic and setProperties when `json.ok`, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
 // wrap() throws when the module is not the interface version the wrapper needs; after a call made the module throw (a trap) `isDead()` is true and every later call answers
 // status 2 until the module is created again. A sentence can hold text of the file: show it with textContent, never innerHTML.
 // `profile`: "new_map" (the default: the limits of a new Classic map, at most 90 rows, 130 columns and 10,000 cells, 512 KB read), "game" (the game's own limits) or "extended" (a place that also takes
@@ -20,7 +20,7 @@
     'use strict';
 
     var PROFILES = { new_map: 0, game: 1, extended: 2 };
-    var EXPECTED_INTERFACE = 2;     // lvl_interface_version() of the module this wrapper was written for
+    var EXPECTED_INTERFACE = 3;     // lvl_interface_version() of the module this wrapper was written for
 
     function profileOf(profile) {
         if (profile === undefined || profile === null) return 0;
@@ -37,6 +37,7 @@
             throw new Error('lvl_core.js is interface version ' + found + ' and lvl_core_api.js needs ' + EXPECTED_INTERFACE + ' (an old copy of one of them is cached: reload the page)');
         }
         var decoder = new TextDecoder('utf-8');
+        var encoder = new TextEncoder();
         var dead = false;      // set when the module threw (a wasm trap): its memory is in an unknown state, so every later call fails until the module is created again
 
         function fault(status, message) { return { status: status, error: message, text: message }; }
@@ -152,6 +153,22 @@
                 } catch (e) {
                     return trapped(e);
                 }
+            },
+            // The properties of a map set in its own bytes (interface version 3): the match length, the description (a string, stored as UTF-8, or a Uint8Array of the bytes to store as they are),
+            // the eggs of every team and the default ant type (the tile id of the file's block 3: 62 combat, 63 thief, 64 bomber, 65 swimmer, 66 fire, any other is none). Only those places of the
+            // file change, so the values the file already has give the same bytes. Answers a conversion's shape: json.ok, json.changed, json.bytes, json.description_bytes, json.description_limit,
+            // json.edits (each {at, removed, inserted}: the pieces of the old file that changed, in order; the inserted bytes are in the new file at `at` plus the growth of the edits before it),
+            // json.reasons and json.warnings (each {code, message}), and bytes (the new file) when json.ok. A refusal (a description that does not fit) is status 0 with json.ok false.
+            setProperties: function (bytes, description, minutes, eggs, defaultAntType, profile) {
+                var p = profileOf(profile);
+                if (p < 0) return fault(1, 'unknown profile');
+                var numbers = [minutes, eggs, defaultAntType];
+                for (var i = 0; i < numbers.length; i++) {
+                    if (typeof numbers[i] !== 'number' || !isFinite(numbers[i]) || numbers[i] < 0 || numbers[i] > 4294967295 || Math.floor(numbers[i]) !== numbers[i]) return fault(1, 'the minutes, the eggs and the default ant type are whole numbers');
+                }
+                var text = typeof description === 'string' ? encoder.encode(description) : description;
+                if (!(text instanceof Uint8Array)) return fault(1, 'the description must be a string or a Uint8Array');
+                return withBuffers([bytes, text], function (ptr) { return take(module._lvl_set_properties(ptr[0], bytes.length, ptr[1], text.length, minutes, eggs, defaultAntType, p), 'conversion'); });
             },
             // The limits of a profile as the code applies them: json.classic and json.extended (rows, columns, cells), json.read_bytes, json.write_bytes (null: no limit)
             limits: function (profile) {

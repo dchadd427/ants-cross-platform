@@ -15,6 +15,8 @@ namespace {
 
 constexpr uint32_t kFault = 2;
 constexpr uint32_t kMostTileId = 1344;   // the ids that have a name
+constexpr size_t kClassicField = 30;       // the description's field of a Classic map
+constexpr size_t kClassicDescription = 29; // what fits in it with the zero byte that ends the text
 
 const char* const kTeams[4] = {"green", "red", "blue", "black"};
 
@@ -338,6 +340,16 @@ void put_coded(std::string& out, const char* key, const std::vector<std::string>
     out += texts.empty() ? "]" : "\n]";
 }
 
+// The payload of a conversion (and of set_properties): a dword (little endian) with the size of the JSON, the JSON, then the bytes of the new file
+Result framed(const std::string& json, const char* bytes, size_t count) {
+    Result r;
+    r.payload.reserve(4 + json.size() + count);
+    for (int i = 0; i < 4; ++i) r.payload += static_cast<char>((json.size() >> (8 * i)) & 0xFF);
+    r.payload += json;
+    r.payload.append(bytes, count);
+    return r;
+}
+
 // What a conversion made: the conversion of the library (reasons, notes, codes), the new file when it was possible
 struct Converted {
     LevelConversion conversion;
@@ -385,12 +397,7 @@ Result conversion_result(bool to_extended, const Converted& c) {
     json += ",\n";
     put_coded(json, "notes", c.conversion.note_codes, c.conversion.notes);
     json += '}';
-    Result r;
-    r.payload.reserve(4 + json.size() + c.bytes.size());
-    for (int i = 0; i < 4; ++i) r.payload += static_cast<char>((json.size() >> (8 * i)) & 0xFF);
-    r.payload += json;
-    r.payload.append(c.bytes.begin(), c.bytes.end());
-    return r;
+    return framed(json, reinterpret_cast<const char*>(c.bytes.data()), c.bytes.size());
 }
 
 Result convert_to_extended_impl(const uint8_t* data, size_t size) {
@@ -421,6 +428,135 @@ Result needs_extended_impl(const uint8_t* data, size_t size, Profile profile) {
     put_coded(out, "reasons", c.conversion.reason_codes, c.conversion.reasons);
     out += '}';
     return Result{0, out};
+}
+
+// ---- the properties of a map ----
+
+Result fault(const char* sentence) noexcept;      // (below: a fault as a Result)
+
+// One piece of the file that changes: `at` and `removed` are of the old file, `inserted` is what takes its place
+struct PropertyEdit {
+    size_t at{0};
+    size_t removed{0};
+    std::string inserted;
+};
+
+void put_word(std::string& out, uint32_t v) {
+    out += static_cast<char>(v & 0xFF);
+    out += static_cast<char>((v >> 8) & 0xFF);
+}
+
+// The properties of a map set in its own bytes: the match length, the description, the default ant type and the eggs of every team. Nothing else of the file is touched (a file is not
+// read and written again: its quirks, the bytes after the egg word, the dictionary, the layers stay as they are), so setting the values that a file has returns the very same bytes.
+// A refusal (a text that does not fit, a number beyond a word) is status 0 with "ok": false and its reasons; a file that does not load is status 1.
+Result set_properties_impl(const uint8_t* data, size_t size, const uint8_t* description, size_t description_size, uint32_t minutes, uint32_t eggs, uint32_t default_ant_type, Profile profile) {
+    LevelLimits limits;
+    if (!limits_of(profile, limits)) return refused("unknown profile");
+    if (description == nullptr && description_size != 0) return refused("the description has no bytes to read");
+    LevelData level;
+    HeaderLayout layout;
+    LevelValidation report;
+    if (!LVLParser::load_from_memory(data, size, level, &report, limits, &layout)) return refused("does not load: " + report.reason());
+    const bool extended = level.version == LVL_EXTENDED_VERSION;
+    const MapKind kind = extended ? MapKind::Extended : MapKind::Classic;
+    const size_t fits = extended ? limits.description_bytes() : kClassicDescription;                  // the bytes that fit with no warning (the 30th of a Classic map is the zero that ends the text)
+    const size_t most = extended ? fits : kClassicField;                                                // the bytes the file can hold at all
+    // a text beyond what the file can hold is refused before it is copied (its size is all the sentence needs)
+    const std::string text = description_size == 0 || description_size > most || description == nullptr ? std::string() : std::string(reinterpret_cast<const char*>(description), description_size);
+
+    std::vector<std::pair<std::string, std::string>> reasons;
+    std::vector<std::pair<std::string, std::string>> warnings;
+    if (description_size > most) reasons.emplace_back("description_too_long", description_too_long_text(kind, description_size));
+    else if (description_size > fits) warnings.emplace_back("description_too_long", description_too_long_text(kind, description_size));
+    if (text.find('\0') != std::string::npos) reasons.emplace_back("description_has_zero_byte", "the description holds a zero byte (at " + std::to_string(text.find('\0')) + "): a reader would end it there");
+    if (minutes > 65535) reasons.emplace_back("minutes_out_of_range", "the minutes are a number from 0 to 65535");
+    if (eggs > 65535) reasons.emplace_back("eggs_out_of_range", "the eggs are a number from 0 to 65535");
+    if (default_ant_type > 65535) reasons.emplace_back("default_ant_type_out_of_range", "the default ant type is a tile id from 0 to 65535");
+    if (reasons.empty() && layout.eggs_at == HeaderLayout::kNone && eggs != level.boundary_param) {
+        reasons.emplace_back("eggs_not_in_file", "the file ends before its egg word, so it has no place to keep the eggs");
+    }
+
+    std::vector<PropertyEdit> edits;                                                                      // in the order of the file
+    if (reasons.empty()) {
+        if (minutes != level.default_minutes) {
+            PropertyEdit e{layout.minutes_at, 2, std::string()};
+            put_word(e.inserted, minutes);
+            edits.push_back(std::move(e));
+        }
+        if (text != level.description) {
+            PropertyEdit e{layout.description_at, layout.description_field_bytes, std::string()};
+            if (extended) put_word(e.inserted, static_cast<uint32_t>(text.size()));
+            e.inserted += text;
+            if (!extended) e.inserted.append(kClassicField - text.size(), '\0');
+            edits.push_back(std::move(e));
+        }
+        if (default_ant_type != level.ambient_tile_or_sound) {
+            PropertyEdit e{layout.default_type_at, 2, std::string()};
+            put_word(e.inserted, default_ant_type);
+            edits.push_back(std::move(e));
+        }
+        if (layout.eggs_at != HeaderLayout::kNone && eggs != level.boundary_param) {
+            PropertyEdit e{layout.eggs_at, 2, std::string()};
+            put_word(e.inserted, eggs);
+            edits.push_back(std::move(e));
+        }
+    }
+
+    std::string bytes;
+    if (reasons.empty()) {
+        size_t grown = size;
+        for (const PropertyEdit& e : edits) grown = grown - e.removed + e.inserted.size();
+        bytes.reserve(grown);
+        size_t from = 0;
+        for (const PropertyEdit& e : edits) {
+            bytes.append(reinterpret_cast<const char*>(data) + from, e.at - from);
+            bytes += e.inserted;
+            from = e.at + e.removed;
+        }
+        bytes.append(reinterpret_cast<const char*>(data) + from, size - from);
+        if (!edits.empty()) {
+            // the file as it is now says what was asked, and nothing else (a fault of the core otherwise, never a file with other values)
+            LevelData again;
+            const uint8_t* made = reinterpret_cast<const uint8_t*>(bytes.data());
+            if (!again.load_from_memory(made, bytes.size(), nullptr, limits) || again.description != text || again.default_minutes != minutes || again.boundary_param != (layout.eggs_at == HeaderLayout::kNone ? level.boundary_param : eggs) ||
+                again.ambient_tile_or_sound != default_ant_type) {
+                return fault("internal error: the file with the new properties does not read back");
+            }
+        }
+    }
+
+    std::string json = "{";
+    put_bool(json, "ok", reasons.empty());
+    json += ',';
+    put_bool(json, "changed", !edits.empty());
+    json += ',';
+    put_number(json, "bytes", reasons.empty() ? static_cast<long long>(bytes.size()) : 0);
+    json += ',';
+    put_number(json, "description_bytes", static_cast<long long>(description_size));
+    json += ',';
+    put_number(json, "description_limit", static_cast<long long>(fits));
+    json += ",\n";
+    put_key(json, "edits");
+    json += '[';
+    for (size_t i = 0; i < edits.size(); ++i) {
+        json += i == 0 ? "\n{" : ",\n{";
+        put_number(json, "at", static_cast<long long>(edits[i].at));
+        json += ',';
+        put_number(json, "removed", static_cast<long long>(edits[i].removed));
+        json += ',';
+        put_number(json, "inserted", static_cast<long long>(edits[i].inserted.size()));
+        json += '}';
+    }
+    json += edits.empty() ? "]" : "\n]";
+    json += ",\n";
+    std::vector<std::string> reason_codes, reason_texts, warning_codes, warning_texts;
+    for (const auto& r : reasons) { reason_codes.push_back(r.first); reason_texts.push_back(r.second); }
+    for (const auto& w : warnings) { warning_codes.push_back(w.first); warning_texts.push_back(w.second); }
+    put_coded(json, "reasons", reason_codes, reason_texts);
+    json += ",\n";
+    put_coded(json, "warnings", warning_codes, warning_texts);
+    json += '}';
+    return framed(json, bytes.data(), bytes.size());
 }
 
 Result same_level_impl(const uint8_t* a, size_t size_a, const uint8_t* b, size_t size_b, Profile profile) {
@@ -484,6 +620,9 @@ Result blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uin
     return guarded([&] { return blank_of_kind(true, rows, columns, ground_tile, eggs, minutes, Profile::Extended); });
 }
 Result profile_limits(Profile profile) { return guarded([&] { return profile_limits_impl(profile); }); }
+Result set_properties(const uint8_t* data, size_t size, const uint8_t* description, size_t description_size, uint32_t minutes, uint32_t eggs, uint32_t default_ant_type, Profile profile) {
+    return guarded([&] { return set_properties_impl(data, size, description, description_size, minutes, eggs, default_ant_type, profile); });
+}
 Result same_level(const uint8_t* a, size_t size_a, const uint8_t* b, size_t size_b, Profile profile) {
     return guarded([&] { return same_level_impl(a, size_a, b, size_b, profile); });
 }

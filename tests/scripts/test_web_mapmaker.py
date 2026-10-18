@@ -8,6 +8,8 @@
     of starting ants and food piles after the layers: tests/scripts/web_mapmaker_blocks_check.js, with broken copies that it must refuse);
   - the page and the real map core together (tests/scripts/web_mapmaker_core_check.js) when a built module is there ($ANTS_LVL_CORE_DIR, or build_web/lvl_core); without one it says so, and
     the web job of the CI runs it from the image;
+  - the properties of the map (tests/scripts/web_mapmaker_props_check.js): the words of the dialog, the change that the history takes, the dialog on a small fake of the DOM with a stand-in for the
+    core, and broken copies of the scripts that it must refuse; with a built module also the 540 maps and the dialog on the real core (web_mapmaker_core_check.js, case I);
   - the page's side is read from the source: the markup, the scripts in their order, every id that the code asks for, what the buttons do, the refusal of a module of another interface
     version, that nothing in the page can write over a file or put a sentence in as markup, and that the image, the CI's check of the image and the local web build carry the page;
   - the opt-in browser check (tests/scripts/test_web_mapmaker.sh) is there and says what it covers.
@@ -26,12 +28,13 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 FRONT = os.path.join(REPO, "web", "front")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_check.js")
 DIALOG_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_dialog_check.js")
+PROPS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_props_check.js")
 EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
 BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check.js")
 OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
 
 
 def read(*parts):
@@ -191,12 +194,63 @@ class TheCodeRuns(unittest.TestCase):
                     done = run_check(tmp, DIALOG_CHECK)
                 self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
 
+    def test_the_properties_pass_their_checks_on_a_fake_dom(self):
+        done = run_check(script=PROPS_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the words", "B the change", "C the dialog on a Classic map", "C2 a description of 30 bytes", "C3 the numbers and the ants", "D the dialog on an Extended map", "D2 a text the core refuses",
+                     "E Apply and Cancel", "F text is text"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_properties_check_can_fail_on_broken_copies_of_the_scripts(self):
+        mutants = {
+            "a counter that counts letters, not bytes": ("mapmaker_props.js", "var b = bytes(), n = b.length, over", "var b = bytes(), n = Array.from(st.text).length, over"),
+            "a counter that always says letters count double": ("mapmaker_props.js", "(n > chars ? ' (letters like", "(true ? ' (letters like"),
+            "a counter that never says letters count double": ("mapmaker_props.js", "(n > chars ? ' (letters like", "(false ? ' (letters like"),
+            "a cut that is not told": ("mapmaker_props.js", "cutNote.hidden = value === typed;", "cutNote.hidden = true;"),
+            "a box that does not stop at what fits": ("mapmaker_props.js", "if (after > limit && after > before) value =", "if (false) value ="),
+            "a text that grows past a limit it came with": ("mapmaker_props.js", "before <= limit ? cutTo(value, limit) : st.text;", "cutTo(value, limit);"),
+            "a text cut in the middle of a letter": ("mapmaker_props.js", "if (used + n > limit) break;", "if (used > limit) break;"),
+            "a description of the file that is not kept as it came": ("mapmaker_props.js", "function bytes() { return st.text === now.description ? now.raw : encode(st.text); }", "function bytes() { return encode(st.text); }"),
+            "an old description read as UTF-8 with holes": ("mapmaker_props.js", "{ fatal: true }", "{ fatal: false }"),
+            "a change put on from the first piece to the last": ("mapmaker_props.js", "var made = splices.slice().reverse(), out = oldBytes;", "var made = splices.slice(), out = oldBytes;"),
+            "a change that is not held to the new file": ("mapmaker_props.js", "for (i = 0; i < out.length; i++) if (out[i] !== newBytes[i]) return null;", "void 0;"),
+            "a piece that is not cut down to what differs": ("mapmaker_props.js", "while (head < removed.length && head < inserted.length && removed[head] === inserted[head]) head++;", "void 0;"),
+            "an Apply that closes the dialog when the core refuses": ("mapmaker_props.js", "onClick: function (c) { if (apply()) c.close(); } }]", "onClick: function (c) { apply(); c.close(); } }]"),
+            "a Cancel that applies": ("mapmaker_props.js", "{ id: 'cancel', text: 'Cancel', ghost: true }", "{ id: 'cancel', text: 'Cancel', ghost: true, onClick: function () { apply(); } }"),
+            "minutes that can be 0": ("mapmaker_props.js", "minutes: { min: 1, max: 120 }", "minutes: { min: 0, max: 120 }"),
+            "eggs that can be any number": ("mapmaker_props.js", "eggs: { min: 0, max: 255 }", "eggs: { min: 0, max: 65535 }"),
+            "a value the map came with that is cut to the range": ("mapmaker_props.js", "(v === now[name] ? v : clamp(v, range))", "clamp(v, range)"),
+            "a number box that keeps letters": ("mapmaker_props.js", "var digits = input.value.replace(/\\D/g, '');", "var digits = input.value;"),
+            "a none that loses the none of the file": ("mapmaker_props.js", "(typeIndex(now.tile) === 0 ? now.tile : NONE)", "NONE"),
+            "ant types that stop at the ends": ("mapmaker_props.js", "var next = (i + step + TYPES.length) % TYPES.length;", "var next = Math.max(0, Math.min(TYPES.length - 1, i + step));"),
+            "a sentence of the core that is not finished with a full stop": ("mapmaker_props.js", "return /\\.$/.test(t) ? t : t + '.';", "return t;"),
+            "a Cut it to N that does not cut": ("mapmaker_props.js", "st.text = cutTo(st.text, limit); textBox.value = st.text;", "textBox.value = st.text;"),
+            "a line break that stays": ("mapmaker_props.js", "textBox.value.replace(/[\\r\\n]+/g, ' ')", "textBox.value"),
+            "an Apply that stays on when the core refuses": ("mapmaker_props.js", "if (ctl) ctl.setDisabled('apply', !verdict.ok);", "void 0;"),
+            "a core asked as a place that takes Classic maps only": ("mapmaker_props.js", "now.eggs, now.tile, 'extended');", "now.eggs, now.tile, 'new_map');"),
+            "a plural that says 1 minutes": ("mapmaker_props.js", "function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }", "function plural(n, one, many) { return n + ' ' + many; }"),
+            "a map that comes with no description shown with empty quotes": ("mapmaker_props.js", "props.description ? '\\u201c' + props.description + '\\u201d' : 'No description'", "'\\u201c' + props.description + '\\u201d'"),
+            "a dialog whose box of lines is not in the Tab trap": ("mapmaker_dialog.js", "textarea:not([disabled]), ", ""),
+        }
+        for what, (name, old, new) in mutants.items():
+            with self.subTest(what):
+                text = read("web", "front", name)
+                self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
+                with tempfile.TemporaryDirectory() as tmp:
+                    for script in SCRIPTS:
+                        shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                        f.write(text.replace(old, new))
+                    done = run_check(tmp, PROPS_CHECK)
+                self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
     def test_the_drawing_passes_its_checks(self):
         done = run_check(script=EDIT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
         for part in ("A the brush and the line", "B strokes", "C fill", "D undo and redo", "E the dictionary", "F the palette", "G the tools on a fake page", "H the canvas on a fake page", "H2 a tap tool on the canvas", "I hills",
-                     "J starting ants and food piles", "J2 the history of the lists is bounded", "K Hills, Ants and Food on a fake page", "L the Bigger tool on a fake page"):
+                     "J starting ants and food piles", "J2 the history of the lists is bounded", "K Hills, Ants and Food on a fake page", "L the Bigger tool on a fake page", "M the properties of the map as one step"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_drawing_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -242,11 +296,11 @@ class TheCodeRuns(unittest.TestCase):
             "a food list with a pile that has no stages that is changed": ("mapmaker_blocks.js", "if (stages === 0 || at + 10 + 4 * stages > b.length) return out;", "if (at + 10 + 4 * stages > b.length) return out;"),
             "an eraser that asks what else goes after it took the object away": ("mapmaker_edit.js", "var more = hooks.erase ? hooks.erase(f, idx) : null, n = tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx);", "var n = tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx), more = hooks.erase ? hooks.erase(f, idx) : null;"),
             "an undo that puts the splices back in the order they were made": ("mapmaker_edit.js", "var s = list[forward ? i : list.length - 1 - i],", "var s = list[i],"),
-            "a stroke that goes on with the bytes from before a splice": ("mapmaker_edit.js", "f = self.file = hooks.rebase(spliceAt(f.bytes, f.blocksAt + s.rel, s.removed.length, s.inserted));", "self.file = hooks.rebase(spliceAt(f.bytes, f.blocksAt + s.rel, s.removed.length, s.inserted));"),
+            "a stroke that goes on with the bytes from before a splice": ("mapmaker_edit.js", "f = self.file = hooks.rebase(spliceAt(f.bytes, spliceStart(f, s), s.removed.length, s.inserted));", "self.file = hooks.rebase(spliceAt(f.bytes, spliceStart(f, s), s.removed.length, s.inserted));"),
             "a patch that forgets its splices": ("mapmaker_edit.js", "if (splices.length) patch.splices = splices.slice();", "void 0;"),
             "a step with only a splice in it that is not kept": ("mapmaker_edit.js", "if (patch.keys.length || patch.splices) history.push(patch);", "if (patch.keys.length) history.push(patch);"),
             "a history that weighs a splice as nothing": ("mapmaker_edit.js", "n += 1 + ((patch.splices[i].removed.length + patch.splices[i].inserted.length + 15) >> 4);", "n += 0;"),
-            "a splice that is put at a place counted from the start of the file": ("mapmaker_edit.js", "at = self.file.blocksAt + s.rel,", "at = s.rel,"),
+            "a splice that is put at a place counted from the start of the file": ("mapmaker_edit.js", "at = spliceStart(self.file, s),", "at = s.rel,"),
             "a hill that takes another team's hill away without asking": ("mapmaker_blocks.js", "if (other >= 0 && other !== teamIndex) return {", "if (false) return {"),
             "ants whose start marker the dictionary is not told of": ("mapmaker_blocks.js", "addName(change, t.marker, t.markerName);", "void 0;"),
             "a pile whose stages are not kept in their range": ("mapmaker_blocks.js", "var set = FOOD[clampTo(stages, MIN_STAGES, MAX_STAGES)]", "var set = FOOD[stages]"),
@@ -309,6 +363,9 @@ class TheCodeRuns(unittest.TestCase):
             "a stroke that goes on after the page was hidden": ("mapmaker_canvas.js", "doc.addEventListener('visibilitychange', function () { if (stroke && doc.visibilityState === 'hidden') endStroke(); });", "void 0;"),
             "a finger that paints before it is known not to be the first of two": ("mapmaker_canvas.js", "if (mouse) startStroke(e.pointerId, cell); else pending = { id: e.pointerId, cell: cell };", "startStroke(e.pointerId, cell);"),
             "a brush that does not reach the painter": ("mapmaker_tools.js", "(paints() ? state.brush : (places()", "(paints() ? 1 : (places()"),
+            "a splice of the header counted from the end of layer 2": ("mapmaker_edit.js", "return s.abs ? s.at : file.blocksAt + s.rel;", "return file.blocksAt + (s.abs ? s.at : s.rel);"),
+            "a change of the properties that is not one step": ("mapmaker_tools.js", "var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; },", "var dirty = editor.act(change); if (dirty) changed(dirty); if (dirty) editor.act(change); return !!dirty; },"),
+            "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "act: function (change) { if (!editor || canvas.isStroking()) return false;", "act: function (change) { if (!editor) return false;"),
         }
         for what, (name, old, new) in mutants.items():
             with self.subTest(what):
@@ -536,11 +593,14 @@ class ThePage(unittest.TestCase):
 
     def test_every_button_that_the_page_has_is_wired_and_starts_off_until_the_core_is_there(self):
         acts = re.findall(r'data-act="([a-z-]+)"', self.page)
-        self.assertEqual(sorted(set(acts)), ["check", "download", "menu", "new", "open", "zoom-in", "zoom-out"])
+        self.assertEqual(sorted(set(acts)), ["check", "download", "menu", "new", "open", "props", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
         self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,", self.app)
         self.assertIn("menu: function () { dialogs.menu([{ text: 'New'", self.app)
+        self.assertIn("{ text: 'Properties...', onClick: ACTIONS.props }", self.app, "the phone's Menu has Properties...")
+        self.assertIn("props: openProps", self.app)
+        self.assertEqual(re.findall(r'<button class="(?:btn sm|link)" type="button" data-act="props" disabled>([A-Za-z]+)</button>', self.page), ["Properties", "Edit", "Edit"], "the top bar's button, the summary's Edit link and the one under the map")
         self.assertIn('<input class="nm" id="map-name" type="text" maxlength="40"', self.page)
         self.assertRegex(self.page, r'<label class="sr" for="map-name">Name of the map</label>')
         self.assertRegex(self.page, r'<input type="file" id="file-in" accept="\.lvl,\.LVL" hidden>')

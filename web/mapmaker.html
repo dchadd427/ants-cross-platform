@@ -21,6 +21,7 @@
     <div class="edmenu dsk">
         <button class="btn sm" type="button" data-act="new" disabled>New</button>
         <button class="btn sm" type="button" data-act="open" disabled>Open</button>
+        <button class="btn sm" type="button" data-act="props" disabled>Properties</button>
         <button class="btn sm" type="button" data-act="download" disabled>Download</button>
     </div>
     <div class="edmenu mob"><button class="btn sm" type="button" data-act="menu" disabled>Menu</button></div>
@@ -71,9 +72,11 @@
         <div class="sidetags tags" id="side-tags"></div>
         <dl class="kv"><dt>Rows</dt><dd id="s-rows"></dd><dt>Columns</dt><dd id="s-cols"></dd><dt>Cells</dt><dd id="s-cells"></dd><dt>File</dt><dd id="s-file"></dd></dl>
         <div class="meterbox"><div class="meter" id="meter" role="meter" aria-label="Cells of the most this kind of map can have" aria-valuemin="0"><i id="meter-fill"></i></div><div class="meter-cap" id="meter-cap"></div></div>
+        <div class="sumbox" id="sumbox"><div class="hd"><h3>Details</h3><button class="link" type="button" data-act="props" disabled>Edit</button></div><div class="desc" id="s-desc"></div><div id="s-time"></div><div id="s-ant"></div></div>
         <div class="checkline"><span class="dot" id="check-dot"></span><span id="check-line">Not checked</span></div>
         <div class="chkbtn"><button class="btn full" type="button" data-act="check" disabled>Check map</button></div>
         <div class="phone-row"><span id="size-line"></span><button class="btn sm" type="button" data-act="check" disabled>Check map</button></div>
+        <div class="phsum"><span class="t" id="phone-sum"></span><button class="link" type="button" data-act="props" disabled>Edit</button></div>
     </aside>
 </div>
 <div id="dialogs"></div>
@@ -93,6 +96,7 @@
 <script src="front/mapmaker_sizes.js"></script>
 <script src="front/mapmaker_checks.js"></script>
 <script src="front/mapmaker_dialog.js"></script>
+<script src="front/mapmaker_props.js"></script>
 <script src="front/mapmaker_canvas.js"></script>
 <script src="front/mapmaker_tools.js"></script>
 <script src="front/mapmaker_app.js"></script>

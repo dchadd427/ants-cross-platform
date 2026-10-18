@@ -242,7 +242,7 @@ if(EMSCRIPTEN)
     )
     target_include_directories(lvl_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_compile_options(lvl_core PRIVATE -Oz -flto -fwasm-exceptions)
-    set(ANTS_LVL_CORE_EXPORTS "_lvl_alloc,_lvl_free,_lvl_read_report,_lvl_check_original,_lvl_rewrite,_lvl_blank,_lvl_same_level,_lvl_check_map,_lvl_convert_to_extended,_lvl_convert_to_classic,_lvl_needs_extended,_lvl_blank_extended,_lvl_limits,_lvl_result_status,_lvl_result_size,_lvl_result_data,_lvl_interface_version")
+    set(ANTS_LVL_CORE_EXPORTS "_lvl_alloc,_lvl_free,_lvl_read_report,_lvl_check_original,_lvl_rewrite,_lvl_blank,_lvl_same_level,_lvl_check_map,_lvl_convert_to_extended,_lvl_convert_to_classic,_lvl_needs_extended,_lvl_blank_extended,_lvl_set_properties,_lvl_limits,_lvl_result_status,_lvl_result_size,_lvl_result_data,_lvl_interface_version")
     set_target_properties(lvl_core PROPERTIES
         OUTPUT_NAME "lvl_core"
         SUFFIX ".js"

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map core's Extended calls in the browser module (docs/MAP_FORMAT.md, \"In the browser\"): the Extended profile and its limits, the conversions and their reasons, the check by kind, the blank Extended map, the C interface and the JavaScript wrapper. Run: python3 tools/mutate.py tests/data/lvl_core_mutants.json --keep-going --jobs 1 (do not commit the .report.json). The first mutants are held by test_lvl_core, the last ones by tests/scripts/lvl_core_check.js (it needs build_web/lvl_core: emcmake cmake -B build_web -DBUILD_TESTS=OFF && cmake --build build_web --target lvl_core) and by tests/scripts/test_lvl_core.py.",
+ "note": "Mutants of the map core's Extended calls in the browser module (docs/MAP_FORMAT.md, \"In the browser\"): the Extended profile and its limits, the conversions and their reasons, the check by kind, the blank Extended map, the properties of a map (interface version 3), the C interface and the JavaScript wrapper. Run: python3 tools/mutate.py tests/data/lvl_core_mutants.json --keep-going --jobs 1 (do not commit the .report.json). The first mutants are held by test_lvl_core, the last ones by tests/scripts/lvl_core_check.js (it needs build_web/lvl_core: emcmake cmake -B build_web -DBUILD_TESTS=OFF && cmake --build build_web --target lvl_core) and by tests/scripts/test_lvl_core.py.",
  "defaults": {},
  "mutants": [
   {
@@ -193,10 +193,10 @@
    "test": "./build/tests/test_assets/test_lvl_core"
   },
   {
-   "id": "interface_version_stays_1",
+   "id": "interface_version_stays_2",
    "file": "src/ants_assets/lvl_core_c.cpp",
-   "old": "lvl_interface_version() { return 2; }",
-   "new": "lvl_interface_version() { return 1; }",
+   "old": "lvl_interface_version() { return 3; }",
+   "new": "lvl_interface_version() { return 2; }",
    "build": [
     "test_lvl_core"
    ],
@@ -223,18 +223,148 @@
    "test": "./build/tests/test_assets/test_lvl_core"
   },
   {
+   "id": "properties_description_never_changes",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "        if (text != level.description) {",
+   "new": "        if (false && text != level.description) {",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_eggs_land_in_the_minutes",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "PropertyEdit e{layout.eggs_at, 2, std::string()};",
+   "new": "PropertyEdit e{layout.minutes_at, 2, std::string()};",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_classic_description_fits_30",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "constexpr size_t kClassicDescription = 29;",
+   "new": "constexpr size_t kClassicDescription = 30;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_classic_field_holds_31",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "constexpr size_t kClassicField = 30;",
+   "new": "constexpr size_t kClassicField = 31;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_extended_length_word_is_forgotten",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (extended) put_word(e.inserted, static_cast<uint32_t>(text.size()));",
+   "new": "if (false) put_word(e.inserted, static_cast<uint32_t>(text.size()));",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_a_refusal_still_hands_out_a_file",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "    if (reasons.empty()) {\n        size_t grown = size;",
+   "new": "    if (true) {\n        size_t grown = size;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_zero_byte_in_a_description_is_fine",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (text.find('\\0') != std::string::npos) reasons.emplace_back(\"description_has_zero_byte\"",
+   "new": "if (false) reasons.emplace_back(\"description_has_zero_byte\"",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_edit_reports_its_old_size_as_new",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "put_number(json, \"inserted\", static_cast<long long>(edits[i].inserted.size()));",
+   "new": "put_number(json, \"inserted\", static_cast<long long>(edits[i].removed));",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_a_text_of_256_bytes_fits_an_extended_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "const size_t fits = extended ? limits.description_bytes() : kClassicDescription;",
+   "new": "const size_t fits = extended ? limits.description_bytes() + 1 : kClassicDescription;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_default_type_lands_in_the_first_word_of_block_3",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "p.layout.default_type_at = r.pos() + 2;",
+   "new": "p.layout.default_type_at = r.pos();",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_ignore_the_profile",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "default_ant_type, profile_of(profile)));",
+   "new": "default_ant_type, profile_of(profile == 0 ? 2 : profile)));",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_extended_sentence_is_not_the_checkers",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "bytes long: an Extended map holds at most \" + num(LVL_EXTENDED_MAX_DESCRIPTION);",
+   "new": "bytes long: an Extended map holds up to \" + num(LVL_EXTENDED_MAX_DESCRIPTION);",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "properties_text_copied_before_the_bounds_are_checked",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "description_size == 0 || description_size > most || description == nullptr ? std::string()",
+   "new": "description_size == 0 || description == nullptr ? std::string()",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
    "id": "export_list_loses_a_call",
    "file": "CMakeLists.txt",
-   "old": "_lvl_blank_extended,_lvl_limits,",
-   "new": "_lvl_blank_extended,",
+   "old": "_lvl_set_properties,_lvl_limits,",
+   "new": "_lvl_limits,",
    "build": [],
    "test": "python3 -m unittest tests/scripts/test_lvl_core.py"
   },
   {
-   "id": "wrapper_needs_the_first_interface",
+   "id": "wrapper_needs_the_second_interface",
    "file": "web/lvl_core_api.js",
-   "old": "var EXPECTED_INTERFACE = 2;",
-   "new": "var EXPECTED_INTERFACE = 1;",
+   "old": "var EXPECTED_INTERFACE = 3;",
+   "new": "var EXPECTED_INTERFACE = 2;",
    "build": [],
    "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
   },
@@ -267,6 +397,30 @@
    "file": "web/lvl_core_api.js",
    "old": "(bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);",
    "new": "(bytes[1] << 7) | (bytes[2] << 16) | (bytes[3] << 24);",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_set_properties_sends_no_description",
+   "file": "web/lvl_core_api.js",
+   "old": "ptr[1], text.length, minutes,",
+   "new": "ptr[1], 0, minutes,",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_set_properties_stores_a_letter_in_one_byte",
+   "file": "web/lvl_core_api.js",
+   "old": "encoder.encode(description)",
+   "new": "Uint8Array.from(Array.from(description), function (c) { return c.charCodeAt(0) & 255; })",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_set_properties_swaps_the_minutes_and_the_eggs",
+   "file": "web/lvl_core_api.js",
+   "old": "ptr[1], text.length, minutes, eggs, defaultAntType, p)",
+   "new": "ptr[1], text.length, eggs, minutes, defaultAntType, p)",
    "build": [],
    "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
   }

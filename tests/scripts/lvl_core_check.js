@@ -172,7 +172,7 @@ function main() {
         const hostile = hostileCases();
 
         await runCase('module: the interface', () => {
-            check(core.interfaceVersion === 2, 'interface version 2');
+            check(core.interfaceVersion === 3, 'interface version 3');
             check(typeof module._lvl_free === 'function' && typeof module._lvl_alloc === 'function', 'the buffer calls are exported');
             check(module.FS === undefined, 'no file system in the module');
         });
@@ -316,7 +316,7 @@ function main() {
             check(core.limits('extended').json.extended.rows === 1024 && core.limits('extended').json.extended.cells === 262144 && core.limits('extended').json.classic.rows === 256, 'the Extended profile: 1,024 a side, 262,144 cells, a Classic map keeps 256');
             check(core.limits('new_map').json.classic.rows === 90 && core.limits('new_map').json.extended === null, 'a new Classic map: 90 rows, no Extended map');
             check(core.limits('bogus').status === 1 && core.checkMap(new Uint8Array(0), 'bogus').status === 1 && core.convertToClassic(new Uint8Array(0), 'bogus').status === 1 && core.needsExtended(new Uint8Array(0), 'bogus').status === 1, 'an unknown profile is refused');
-            check(api.EXPECTED_INTERFACE === 2 && api.moduleVersion(module) === 2 && api.moduleVersion({}) === 0 && api.moduleVersion({ _lvl_interface_version: () => 1 }) === 1 && api.moduleVersion(null) === 0, 'the version a page can ask for before it wraps a module');
+            check(api.EXPECTED_INTERFACE === 3 && api.moduleVersion(module) === 3 && api.moduleVersion({}) === 0 && api.moduleVersion({ _lvl_interface_version: () => 1 }) === 1 && api.moduleVersion(null) === 0, 'the version a page can ask for before it wraps a module');
             const tiny = library.find((c) => c.id === 'tiny').bytes;
             const up = core.convertToExtended(tiny);
             check(up.status === 0 && up.json.ok === true, 'tiny goes up');
@@ -445,6 +445,64 @@ function main() {
             }
         });
 
+        await runCase('F the properties: the module sets them as the native core does; the values a file has give the same bytes; the edits are the pieces that changed', () => {
+            const profiles = ['new_map', 'game', 'extended'];
+            const lines = text('properties_index.txt').split('\n').filter(Boolean).map((l) => l.split('\t'));
+            check(lines.length >= 27, 'the stored cases: ' + lines.length);
+            for (const f of lines) {
+                const id = f[0], ext = f[1].startsWith('ext:');
+                let bytes = bytesOf(ext ? f[1].slice(4) : f[1]);
+                if (ext) bytes = core.convertToExtended(bytes).bytes;
+                const r = core.setProperties(bytes, Uint8Array.from(Buffer.from(f[2], 'hex')), Number(f[3]), Number(f[4]), Number(f[5]), profiles[Number(f[6])]);
+                check(r.status === Number(f[7]), id + ': status ' + f[7]);
+                if (Number(f[7]) !== 0) { check(r.error === f[9], id + ': the native refusal sentence'); continue; }
+                check(r.text === text('properties.' + id + '.json'), id + ': the answer is the native answer, byte for byte');
+                const made = r.bytes || new Uint8Array(0);
+                check(String(made.length) === f[8] && fnv(made) === f[9], id + ': the file is the native file (size and FNV-1a)');
+                check(r.json.ok === (made.length > 0), id + ': bytes come with ok, and only then');
+            }
+            // the string form of the description is its UTF-8 bytes
+            const tiny = library.find((c) => c.id === 'tiny').bytes;
+            const asText = core.setProperties(tiny, 'Café, tiny ants', 7, 3, 63, 'extended'), asBytes = core.setProperties(tiny, Uint8Array.from(Buffer.from('Café, tiny ants', 'utf8')), 7, 3, 63, 'extended');
+            check(asText.status === 0 && asText.json.ok && asText.json.description_bytes === 16 && Buffer.compare(Buffer.from(asText.bytes), Buffer.from(asBytes.bytes)) === 0, 'a string is stored as UTF-8 (the e acute takes 2 bytes)');
+            // a refusal is an answer, with the checker's sentence; the limits are the core's
+            const long30 = core.setProperties(tiny, 'x'.repeat(30), 12, 9, 0x7FFE), long31 = core.setProperties(tiny, 'x'.repeat(31), 12, 9, 0x7FFE);
+            check(long30.json.ok === true && long30.json.warnings.length === 1 && long30.json.warnings[0].code === 'description_too_long' && long30.json.description_limit === 29, 'a Classic description of 30 bytes is written, with the checker\'s warning');
+            check(long31.status === 0 && long31.json.ok === false && long31.bytes === undefined && long31.json.reasons[0].code === 'description_too_long' && /^the description is 31 bytes long: at most 29 fit/.test(long31.json.reasons[0].message), 'a Classic description of 31 bytes is refused, in the checker\'s words');
+            const up = core.convertToExtended(tiny).bytes;
+            const long256 = core.setProperties(up, 'x'.repeat(256), 12, 9, 0x7FFE, 'extended');
+            check(long256.json.ok === false && long256.json.reasons[0].message === 'the description is 256 bytes long: an Extended map holds at most 255' && core.setProperties(up, 'x'.repeat(255), 12, 9, 0x7FFE, 'extended').json.ok === true, 'an Extended description: 255 fit, 256 are refused, in the checker\'s words');
+            check(core.setProperties(tiny, 'x', 1, 1, 1, 'bogus').status === 1 && core.setProperties(tiny, 'x', -1, 1, 1).status === 1 && core.setProperties(tiny, 'x', 1.5, 1, 1).status === 1 && core.setProperties(tiny, 5, 1, 1, 1).status === 1 && core.setProperties(tiny, 'x', 1, 1, 1, 'extended').status === 0, 'bad arguments are refused, nothing is thrown');
+            check(core.setProperties(up, 'x', 1, 1, 1).status === 1 && /does not load/.test(core.setProperties(up, 'x', 1, 1, 1).error), 'an Extended map needs the Extended profile');
+            // the whole library, as Classic maps and as Extended maps: the values the file has (read by the core) set again give the same bytes; other values change only the pieces the edits name
+            let count = 0;
+            for (const dir of ['Original-Ants/Maps', 'Community-Maps']) {
+                for (const name of fs.readdirSync(path.join(ROOT, dir)).filter((n) => /\.lvl$/i.test(n)).sort()) {
+                    const classic = bytesOf(dir + '/' + name);
+                    const extended = core.convertToExtended(classic).bytes;
+                    for (const [bytes, profile] of [[classic, 'extended'], [extended, 'extended']]) {
+                        const read = core.readReport(bytes, profile).json;
+                        const same = core.setProperties(bytes, Uint8Array.from(Buffer.from(read.description, 'latin1')), read.minutes, read.eggs, read.default_type_tile, profile);
+                        check(same.status === 0 && same.json.ok && same.json.changed === false && same.json.edits.length === 0 && Buffer.compare(Buffer.from(same.bytes), Buffer.from(bytes)) === 0, dir + '/' + name + ': the values it has give the same bytes');
+                        const set = core.setProperties(bytes, 'Café test', read.minutes === 7 ? 8 : 7, read.eggs === 3 ? 4 : 3, 64, profile);
+                        if (set.json.reasons.length) { check(set.json.reasons.length === 1 && set.json.reasons[0].code === 'eggs_not_in_file', name + ': only a file without an egg word refuses the eggs'); continue; }
+                        let shift = 0, from = 0;
+                        const parts = [];
+                        for (const e of set.json.edits) {
+                            parts.push(bytes.subarray(from, e.at), set.bytes.subarray(e.at + shift, e.at + shift + e.inserted));
+                            from = e.at + e.removed; shift += e.inserted - e.removed;
+                        }
+                        parts.push(bytes.subarray(from));
+                        check(Buffer.compare(Buffer.concat(parts), Buffer.from(set.bytes)) === 0 && set.bytes.length === bytes.length + shift, dir + '/' + name + ': the old file with the edits put in is the new file');
+                        const after = core.readReport(set.bytes, profile).json;
+                        check(after.loaded && after.description === 'CafÃ© test' && after.minutes === (read.minutes === 7 ? 8 : 7) && after.default_type_tile === 64 && after.rows === read.rows && after.columns === read.columns, name + ': it reads back as asked');
+                        count++;
+                    }
+                }
+            }
+            check(count >= 1000, 'maps set: ' + count);
+        });
+
         await runCase('D memory: every buffer is given back (a fresh module, a baseline before anything large)', async () => {
             const fresh = await createLvlCore();
             const c2 = api.wrap(fresh);
@@ -454,6 +512,7 @@ function main() {
                 c2.blank(90, 90, 485, 6, 10);
                 const small = c2.convertToExtended(library[0].bytes); c2.checkMap(small.bytes, 'extended'); c2.convertToClassic(small.bytes); c2.needsExtended(small.bytes, 'extended');
                 c2.convertToClassic(c2.blankExtended(95, 20, 485, 6, 10).bytes); c2.limits('extended'); c2.checkMap(bomber);
+                c2.setProperties(bomber, 'A new text', 7, 3, 63); c2.setProperties(small.bytes, 'x'.repeat(256), 7, 3, 63, 'extended'); c2.setProperties(small.bytes, 'Caf\u00e9', 7, 3, 63, 'extended');
                 for (const c of hostile.filter((h) => h.bytes.length < 200000)) { c2.readReport(c.bytes); c2.rewrite(c.bytes); }
             };
             round(); round();                                              // warm-up: the allocator settles
@@ -472,7 +531,10 @@ function main() {
         await runCase('wrapper: a module of another interface version is refused, a trap kills the core', () => {
             let threw = '';
             try { api.wrap({ _lvl_interface_version: () => 1 }); } catch (e) { threw = e.message; }
-            check(/interface version 1/.test(threw) && /needs 2/.test(threw), 'a module of interface version 1 (the first one) is refused with a sentence: ' + threw);
+            check(/interface version 1/.test(threw) && /needs 3/.test(threw), 'a module of interface version 1 (the first one) is refused with a sentence: ' + threw);
+            threw = '';
+            try { api.wrap({ _lvl_interface_version: () => 2 }); } catch (e) { threw = e.message; }
+            check(/interface version 2/.test(threw) && /needs 3/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 2 (the one before the properties) is refused with a sentence that says to reload: ' + threw);
             threw = '';
             try { api.wrap({}); } catch (e) { threw = e.message; }
             check(/interface version 0/.test(threw), 'a module with no version call is refused');
@@ -486,12 +548,13 @@ function main() {
             check(first.status === 2 && /unreachable/.test(first.error), 'the trap is a status 2 with its sentence: ' + first.error);
             check(c3.isDead() === true, 'the core is dead after a trap');
             for (const r of [c3.readReport(new Uint8Array(1)), c3.checkOriginal(new Uint8Array(1)), c3.rewrite(new Uint8Array(1)), c3.sameLevel(new Uint8Array(1), new Uint8Array(1)), c3.blank(31, 31, 485, 6, 10),
-                c3.checkMap(new Uint8Array(1)), c3.convertToExtended(new Uint8Array(1)), c3.convertToClassic(new Uint8Array(1)), c3.needsExtended(new Uint8Array(1)), c3.blankExtended(31, 31, 485, 6, 10), c3.limits()]) {
+                c3.checkMap(new Uint8Array(1)), c3.convertToExtended(new Uint8Array(1)), c3.convertToClassic(new Uint8Array(1)), c3.needsExtended(new Uint8Array(1)), c3.blankExtended(31, 31, 485, 6, 10), c3.limits(), c3.setProperties(new Uint8Array(1), 'x', 1, 1, 1)]) {
                 check(r.status === 2 && /stopped/.test(r.error) && /create the module again/.test(r.error), 'every later call fails clearly: ' + r.error);
             }
             // a trap in a conversion, in the check by kind, in the limits: the same
             for (const [name, call] of [['_lvl_convert_to_extended', (c) => c.convertToExtended(new Uint8Array(4))], ['_lvl_convert_to_classic', (c) => c.convertToClassic(new Uint8Array(4))], ['_lvl_check_map', (c) => c.checkMap(new Uint8Array(4))],
-                ['_lvl_needs_extended', (c) => c.needsExtended(new Uint8Array(4))], ['_lvl_blank_extended', (c) => c.blankExtended(31, 31, 485, 6, 10)], ['_lvl_limits', (c) => c.limits()]]) {
+                ['_lvl_needs_extended', (c) => c.needsExtended(new Uint8Array(4))], ['_lvl_blank_extended', (c) => c.blankExtended(31, 31, 485, 6, 10)], ['_lvl_limits', (c) => c.limits()],
+                ['_lvl_set_properties', (c) => c.setProperties(new Uint8Array(4), 'x', 1, 1, 1)]]) {
                 const trap = Object.create(real);
                 trap[name] = () => { throw new WebAssembly.RuntimeError('unreachable'); };
                 const cc = api.wrap(trap);

@@ -21,13 +21,18 @@ Parts:
   * bigger   1280 x 800, the Bigger tool: the letter K chooses it, its palette is one button and a sheet of 29 objects with the game's names (on a desktop too), a click puts an object whole (the canvas is read
              pixel by pixel, and the marked box is the object's), the eraser takes it whole, undo and redo, an opened map keeps its verdict ("Works in the original game") with an object put on it, an
              Extended map takes one, and Download hands over what the core writes; then a touch screen (390 x 844): a tap puts one whole, a drag and two fingers do not, the sheet has 44 pixel buttons;
+  * props    1280 x 800, the properties of the map: the Properties button of the top bar and the summary of the side panel (with its Edit link) open one dialog; the mouse and the keyboard (Tab, the arrow
+             keys on the ant types, Enter, Escape) work it; the counter counts bytes ("letters like e acute count double"), a 30 byte description of a Classic map shows the core's sentence and Cut it to 29,
+             an Extended map has the larger box that stops at 255; Apply is ONE step of the history (Undo gives the old map back and the summary with it), Cancel and Escape change nothing, the
+             check line is run again, and Download hands over the map; then a touch screen (390 x 844): Menu, Properties..., the sheet, the line under the map with its Edit link;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
   * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
-             keeps a usable height, and the palette of a phone is one button that opens a sheet of tiles with their names (for Hills, Ants and Food: the teams, the steppers);
+             keeps a usable height, and the palette of a phone is one button that opens a sheet of tiles with their names (for Hills, Ants and Food: the teams, the steppers); the properties
+             sheet is inside the screen with Cancel and Apply in view, its controls are 44 pixels, and what does not fit scrolls inside it;
   * phone    390 x 844 (portrait) and 844 x 390 (landscape), a touch screen: no sideways scroll, the buttons and the New map dialog are inside the screen, two fingers zoom and one finger pans (Move) or
              paints (a tool), a tap paints a cell, two fingers do not paint;
-  * older    a map core of another interface version (the page is given a module that says it is version 1): the page says so and offers a reload, and no button works.
+  * older    a map core of another interface version (the page is given a module that says it is version 2, the one before the properties): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
 the address); 2 is the status of a bad command line.
@@ -46,7 +51,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "panel", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "panel", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -738,7 +743,8 @@ def run_part(part, tab, args, check, tiny, junk):
             touch("touchMove", {1: (cx - 30 - i * 5, cy), 2: (cx + 30 + i * 5, cy)})
         touch("touchEnd", {})
         time.sleep(0.2)
-        check(page.pixel(*page.cell_point(14, 14)) == grass and page.pixel(cx - 35, cy) == grass, "two fingers (a pinch) put nothing")
+        cell14 = page.cell_point(14, 14)
+        check(page.pixel(cell14[0] - 0.3 * page.state()["scale"], cell14[1] - 0.3 * page.state()["scale"]) == grass and page.pixel(cx - 35, cy) == grass, "two fingers (a pinch) put nothing")
         page.ev("document.getElementById('map').focus()")
         page.key("0")                                            # (the pinch zoomed in: the whole map again, so that the cells are where cell_point says)
         time.sleep(0.2)
@@ -892,7 +898,7 @@ def run_part(part, tab, args, check, tiny, junk):
         touch("touchStart", {1: p})
         touch("touchEnd", {})
         time.sleep(0.3)
-        check(all(at(r, c) == item for r, c in ((13, 12), (13, 16), (14, 12), (14, 16), (14, 14))), "a tap puts the object whole")
+        check(all(at(r, c) == item for r, c in ((13, 12), (13, 16), (14, 12), (14, 16))), "a tap puts the object whole %s %s" % ([at(r, c) for r, c in ((13, 12), (13, 16), (14, 12), (14, 16))], item))
         q = page.cell_point(22, 14)
         touch("touchStart", {1: q})
         for i in range(1, 9):
@@ -909,11 +915,172 @@ def run_part(part, tab, args, check, tiny, junk):
         page.ev("document.getElementById('map').focus()")
         page.key("0")
         time.sleep(0.2)
-        check(page.pixel(*page.cell_point(22, 14)) == grass, "two fingers (a pinch) put nothing")
+        check(at(22, 14) == grass, "two fingers (a pinch) put nothing")
         page.ev("document.getElementById('undo-btn').click()")
         time.sleep(0.2)
-        check(all(at(r, c) == grass for r, c in ((13, 12), (14, 14), (14, 16))), "Undo takes the object away whole")
+        check(all(at(r, c) == grass for r, c in ((13, 12), (14, 12), (14, 16))), "Undo takes the object away whole")
         page.shot(args.shots, "mapmaker-bigger-phone")
+    elif part == "props":
+        print("[web map maker] the properties of the map, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts")
+        page.choose_file(tiny)
+        wait_for(lambda: page.state()["name"] == "TINY")
+        check(wait_for(lambda: page.state()["check"] == "Works in the original game", 6), "TINY works in the original game")
+        summary = lambda: page.ev("JSON.stringify([document.getElementById('s-desc').textContent, document.getElementById('s-time').textContent, document.getElementById('s-ant').textContent])")
+        check(json.loads(summary()) == ["“Tiny map with no PowerUps”", "6 minutes · 3 eggs for each team", "No default ant type"], "the side panel says what the map has: %s" % summary())
+        top = page.ev("JSON.stringify([].map.call(document.querySelectorAll('.edmenu.dsk .btn'), function (b) { return b.textContent; }))")
+        check(json.loads(top) == ["New", "Open", "Properties", "Download"], "the top bar: New, Open, Properties, Download (%s)" % top)
+        check(page.ev("document.querySelector('#sumbox [data-act=props]').offsetParent !== null && document.querySelector('#sumbox [data-act=props]').textContent === 'Edit'"), "the summary has its Edit link")
+        page.shot(args.shots, "mapmaker-props-entry")
+        # the mouse: the button opens the dialog
+        page.click_selector(".edmenu.dsk [data-act=props]")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props h2')")), "the Properties button opens the dialog")
+        check(page.ev("document.querySelector('.dlg h2').textContent") == "Map properties" and page.ev("document.activeElement.id") == "p-desc", "named Map properties, with the focus in the description")
+        counter = lambda: page.ev("document.getElementById('p-count').firstChild.textContent")
+        check(counter() == "25 of 29 characters", "the counter: %s" % counter())
+        check(page.ev("[document.getElementById('p-minutes').value, document.getElementById('p-eggs').value, document.querySelector('.ant[aria-checked=true]').textContent].join('|')") == "6|3|None", "the numbers and the ant type of the map")
+        page.shot(args.shots, "mapmaker-props-classic")
+        box = page.ev("JSON.stringify((function () { var d = document.querySelector('.dlg.props').getBoundingClientRect(); return [d.top >= 0, d.bottom <= innerHeight, Math.round(d.width), document.querySelector('.dlg-in').scrollHeight <= document.querySelector('.dlg-in').clientHeight]; })())")
+        check(json.loads(box)[:2] == [True, True] and 700 <= json.loads(box)[2] <= 722 and json.loads(box)[3], "the box is inside the screen, 720 wide, and needs no scrollbar at 1280 x 800 (%s)" % box)
+        # typed text: bytes, not letters
+        page.type_into("#p-desc", "Café été des fourmis")
+        check(counter() == "23 of 29 characters (letters like é count double)", "accented letters count double: %s" % counter())
+        page.shot(args.shots, "mapmaker-props-accents")
+        page.type_into("#p-desc", "x" * 40)
+        check(counter() == "29 of 29 characters" and page.ev("document.getElementById('p-desc').value.length") == 29, "the box stops at 29: %s" % counter())
+        check(page.ev("var n = document.querySelector('.cutnote'); n.offsetParent !== null && n.textContent.indexOf('Cut to fit') === 0"), "and says Cut to fit")
+        page.type_into("#p-desc", "Café des fourmis")
+        # a number box, the plus button, the minimum
+        page.click_selector("#p-minutes + .stp")
+        check(page.ev("document.getElementById('p-minutes').value") == "7", "the plus button adds a minute")
+        page.type_into("#p-eggs", "999")
+        page.ev("document.getElementById('p-eggs').blur()")
+        check(page.ev("document.getElementById('p-eggs').value") == "255", "a number typed above the range goes to 255")
+        page.type_into("#p-eggs", "4")
+        page.ev("document.getElementById('p-eggs').blur()")
+        # the keyboard on the ant types: Tab to the group, the arrow keys choose
+        page.ev("document.querySelector('.ant[aria-checked=true]').focus()")
+        page.key("ArrowRight")
+        page.key("ArrowRight")
+        check(page.ev("document.querySelector('.ant[aria-checked=true]').textContent") == "Thief ant" and page.ev("document.activeElement.textContent") == "Thief ant", "the arrow keys choose the ant type and move the focus: %s" % page.ev("document.querySelector('.ant[aria-checked=true]').textContent"))
+        page.key("Tab")
+        check(page.ev("document.activeElement.textContent") in ("Cancel",), "Tab goes on to the buttons (the group is one stop): %s" % page.ev("document.activeElement.textContent"))
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Apply closes the dialog")
+        check(wait_for(lambda: json.loads(summary()) == ["“Café des fourmis”", "7 minutes · 4 eggs for each team", "Thief ant by default"]), "the side panel says what was set: %s" % summary())
+        check(page.state()["check"] in ("Checking…", "Works in the original game") and wait_for(lambda: page.state()["check"] == "Works in the original game", 6), "the check is run again: %s" % page.state()["check"])
+        check(not page.button_off("#undo-btn") and page.button_off("#redo-btn"), "Undo is on")
+        page.ev("document.getElementById('undo-btn').click()")
+        check(wait_for(lambda: json.loads(summary())[0] == "“Tiny map with no PowerUps”") and json.loads(summary())[1:] == ["6 minutes · 3 eggs for each team", "No default ant type"], "ONE Undo gives all four back: %s" % summary())
+        check(page.button_off("#undo-btn") and not page.button_off("#redo-btn"), "and the history is where it was")
+        page.ev("document.getElementById('redo-btn').click()")
+        check(wait_for(lambda: json.loads(summary())[2] == "Thief ant by default"), "Redo sets them again")
+        # the properties are a change: the page asks before the map is left (Stay here changes nothing)
+        page.press_act("new")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'Leave this map?'")), "a map whose properties were set is asked about before it is left")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Stay here'; })[0].click()")
+        wait_for(lambda: not page.ev("!!document.querySelector('.dlg')"))
+        # Download hands over the file as the core writes it
+        page.ev("window.__blobs = []; var make = URL.createObjectURL.bind(URL); URL.createObjectURL = function (b) { window.__blobs.push(b); return make(b); }")
+        page.press_act("download")
+        check(wait_for(lambda: page.ev("window.__blobs.length === 1")), "Download hands over the map")
+        head = page.ev("new Promise(function (ok) { window.__blobs[0].slice(0, 12).arrayBuffer().then(function (b) { ok(Array.prototype.join.call(new Uint8Array(b), ',')); }); })")
+        check(head.startswith("8,0,0,0,1,0,0,0,7,0"), "written by the core with 7 minutes: %s" % head)
+        # Cancel and Escape change nothing
+        page.press_act("props")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "the dialog opens again")
+        page.type_into("#p-desc", "Not saved")
+        page.ev("document.querySelectorAll('.ant')[4].click()")
+        page.click_selector(".dlg-foot .btn:first-child")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")) and json.loads(summary())[0] == "“Café des fourmis”" and json.loads(summary())[2] == "Thief ant by default", "Cancel changes nothing")
+        page.ev("document.querySelector('#sumbox [data-act=props]').focus()")
+        page.key("Enter", text="\r")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Enter on the Edit link of the summary opens it: the keyboard works")
+        page.type_into("#p-desc", "Not saved either")
+        page.key("Escape")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")) and json.loads(summary())[0] == "“Café des fourmis”", "Escape changes nothing")
+        check(page.ev("document.activeElement.getAttribute('data-act')") == "props", "and the focus goes back to the Edit link")
+        # a Classic map that came with 30 bytes: the core's sentence, Cut it to 29
+        party = os.path.join(REPO, "Community-Maps", "ANTS_PARTY-V.3.0.5.lvl")
+        page.choose_file(party)
+        if wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'Leave this map?'"), 2):
+            page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Leave without saving'; })[0].click()")
+            page.choose_file(party)
+        wait_for(lambda: page.state()["name"].upper().startswith("ANTS_PARTY"))
+        wait_for(lambda: page.state()["check"] != "Checking…", 6)
+        page.press_act("props")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "the properties of a map with 30 bytes open")
+        sentence = page.ev("(document.querySelector('.note.bad') || {textContent: ''}).textContent")
+        check(counter() == "30 of 29 characters" and sentence.startswith("!The description is 30 bytes long: at most 29 fit, because the original reads 30 bytes") and sentence.endswith("Cut it to 29"), "30 of 29, in red, with the core's sentence and Cut it to 29: %r" % sentence)
+        page.shot(args.shots, "mapmaker-props-too-long")
+        page.click_selector(".note.bad .btn")
+        check(counter() == "29 of 29 characters" and page.ev("!document.querySelector('.note.bad')"), "Cut it to 29 cuts the text and the note goes")
+        page.click_selector(".dlg-foot .btn:last-child")
+        wait_for(lambda: not page.ev("!!document.querySelector('.dlg')"))
+        page.press_act("check")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.ccard')")), "the checks card opens")
+        check("bytes long" not in page.ev("document.querySelector('.ccard').textContent"), "and it no longer warns about the description")
+        page.key("Escape")
+        # an Extended map: the larger box, 255
+        page.press_act("new")
+        if wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'Leave this map?'"), 2):
+            page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Leave without saving'; })[0].click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.kinds')")), "New map opens")
+        page.ev("document.querySelectorAll('.kind input')[1].click()")
+        page.type_into("#size-rows", "40")
+        page.type_into("#size-columns", "60")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+        check(wait_for(lambda: page.state()["rows"] == "40"), "an Extended map of 40 x 60 is made")
+        page.press_act("props")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "its properties open")
+        check(page.ev("document.getElementById('p-desc').tagName") == "TEXTAREA" and counter() == "0 of 255 characters", "the description is the larger box, room for 255: %s" % counter())
+        page.type_into("#p-desc", "y" * 300)
+        check(counter() == "255 of 255 characters" and page.ev("document.getElementById('p-desc').value.length") == 255, "the box stops at 255")
+        page.shot(args.shots, "mapmaker-props-extended")
+        page.click_selector(".dlg-foot .btn:last-child")
+        wait_for(lambda: not page.ev("!!document.querySelector('.dlg')"))
+        check(wait_for(lambda: page.ev("document.getElementById('s-desc').textContent.length") == 257), "the summary has the 255 letters (in quotes)")
+        check(wait_for(lambda: page.state()["check"] == "Does not work in the new version" or page.state()["check"] == "Works in the new version", 6), "the check is the new version's: %s" % page.state()["check"])
+        page.ev("document.getElementById('undo-btn').click()")
+        check(wait_for(lambda: page.ev("document.getElementById('s-desc').textContent") == "No description"), "Undo takes the description away")
+        # a touch screen
+        print("[web map maker] the properties of the map, a touch screen, 390 x 844")
+        tab.emulate(390, 844, 2, mobile=True)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts")
+        page.choose_file(tiny)
+        wait_for(lambda: page.state()["name"] == "TINY")
+        check(page.ev("document.getElementById('phone-sum').offsetParent !== null") and page.ev("document.getElementById('phone-sum').textContent") == "“Tiny map with no PowerUps” · 6 min", "the line under the map: %s" % page.ev("document.getElementById('phone-sum').textContent"))
+        check(page.ev("document.querySelector('.phsum [data-act=props]').offsetParent !== null") and page.ev("document.querySelector('.edmenu.dsk [data-act=props]').offsetParent") is None, "with its Edit link; the desktop's button is not there")
+        page.shot(args.shots, "mapmaker-props-phone-row")
+
+        def tap_selector(selector):
+            b = page.box(selector)
+            tab.tap(b["x"] + b["w"] / 2, b["y"] + b["h"] / 2)
+        tap_selector("[data-act=menu]")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
+        names = page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')")
+        check(names == "New|Open|Properties...|Download", "the menu: %s" % names)
+        page.shot(args.shots, "mapmaker-props-phone-menu")
+        page.ev("document.querySelectorAll('.menulist .btn')[2].click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Properties... opens the sheet")
+        check(page.ev("document.querySelector('.dlg').getBoundingClientRect().bottom") <= 844.5 and page.ev("[].every.call(document.querySelectorAll('.dlg-foot button'), function (b) { return b.getBoundingClientRect().bottom <= innerHeight + 1 && b.getBoundingClientRect().height >= 43.5; })"), "Cancel and Apply are in view, 44 pixels high")
+        small = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('.dlg button, .dlg input, .dlg textarea'), function (b) { var r = b.getBoundingClientRect(); return b.offsetParent !== null && !b.disabled && (r.width < 43.5 || r.height < 43.5); }).map(function (b) { return b.id || b.textContent; }))")
+        check(small == "[]", "every control of the sheet is at least 44 pixels each way (%s)" % small)
+        page.shot(args.shots, "mapmaker-props-phone-sheet")
+        tap_selector("#p-minutes + .stp")
+        tap_selector(".ant:nth-child(4)")
+        tap_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "tapping Apply closes the sheet")
+        check(wait_for(lambda: page.ev("document.getElementById('phone-sum').textContent") == "“Tiny map with no PowerUps” · 7 min"), "the line under the map says 7 min: %s" % page.ev("document.getElementById('phone-sum').textContent"))
+        tap_selector(".phsum [data-act=props]")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")) and page.ev("document.querySelector('.ant[aria-checked=true]').textContent") == "Bomber ant", "the Edit link opens the same sheet, with what was set")
+        tap_selector(".dlg-foot .btn:first-child")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Cancel closes it")
+        page.ev("document.getElementById('undo-btn').click()")
+        check(wait_for(lambda: page.ev("document.getElementById('phone-sum').textContent") == "“Tiny map with no PowerUps” · 6 min"), "Undo gives it back on a phone too")
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):
             print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))
@@ -936,6 +1103,29 @@ def run_part(part, tab, args, check, tiny, junk):
             if (w, h) == (1280, 720):
                 page.tool("ants")
                 page.shot(args.shots, "mapmaker-panel-1280x720-ants")
+            # the side panel with its summary, with the longest description a map can have: nothing is cut or hidden under a scrollbar, the Check button is inside it
+            page.press_act("new")
+            wait_for(lambda: page.ev("!!document.querySelector('.kinds')"))
+            page.ev("document.querySelectorAll('.kind input')[1].click()")
+            page.type_into("#size-rows", "40")
+            page.type_into("#size-columns", "60")
+            page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+            wait_for(lambda: page.state()["rows"] == "40")
+            page.press_act("props")
+            check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "%d x %d: the properties open" % (w, h))
+            dlg = json.loads(page.ev("JSON.stringify((function () { var d = document.querySelector('.dlg').getBoundingClientRect(), i = document.querySelector('.dlg-in'); return {top: d.top, bottom: d.bottom, tall: i.scrollHeight > i.clientHeight}; })())"))
+            check(dlg["top"] >= 0 and dlg["bottom"] <= h + 1 and not dlg["tall"], "%d x %d: the properties box fits the screen with no scrollbar (%s)" % (w, h, dlg))
+            page.type_into("#p-desc", "The longest text that an Extended map can hold is two hundred and fifty five bytes, so this one goes on and on and on: lots of ants, lots of food, a river with two bridges, and a hill for every team in each corner of a very big garden. It ends right here!")
+            page.click_selector(".dlg-foot .btn:last-child")
+            wait_for(lambda: not page.ev("!!document.querySelector('.dlg')"))
+            side = json.loads(page.ev("""JSON.stringify((function () {
+                var s = document.querySelector('.side'), r = s.getBoundingClientRect(), inside = [];
+                [].forEach.call(s.querySelectorAll('button'), function (b) { if (b.offsetParent === null) return; var q = b.getBoundingClientRect(); if (q.bottom > r.bottom || q.top < r.top) inside.push(b.textContent); });
+                return {tall: s.scrollHeight > s.clientHeight, wide: s.scrollWidth > s.clientWidth, outside: inside, len: document.getElementById('s-desc').textContent.length};
+            })())"""))
+            check(side["len"] > 200 and not side["tall"] and not side["wide"] and side["outside"] == [], "%d x %d: the side panel with a long description has no scrollbar and every button inside (%s)" % (w, h, side))
+            if (w, h) == (1280, 720):
+                page.shot(args.shots, "mapmaker-panel-1280x720-summary")
     elif part == "layout":
         for w, h in ((667, 375), (740, 360), (812, 375), (844, 390), (390, 844), (375, 667), (360, 640), (340, 700), (320, 568)):
             print("[web map maker] layout, %d x %d" % (w, h))
@@ -994,6 +1184,35 @@ def run_part(part, tab, args, check, tiny, junk):
                     check(page.ev("document.getElementById('tile-name').textContent") in ("Green \u00b7 5 ants", "5 stages"), "%d x %d: the stepper of the sheet changes the number that the button says: %s" % (w, h, page.ev("document.getElementById('tile-name').textContent")))
                 page.key("Escape")
                 check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "%d x %d: the sheet of %s closes" % (w, h, tool))
+            # the properties: Menu, Properties..., a sheet that is inside the screen with Cancel and Apply in view, 44 pixel controls, and what does not fit scrolls inside it
+            page.press_act("menu")
+            check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "%d x %d: the Menu opens" % (w, h))
+            page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent === 'Properties...'; })[0].click()")
+            check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "%d x %d: Properties... opens the sheet" % (w, h))
+            found = json.loads(page.ev("""JSON.stringify((function () {
+                var bad = [], small = [], dlg = document.querySelector('.dlg').getBoundingClientRect(), inner = document.querySelector('.dlg-in'), box = inner.getBoundingClientRect(), foot = [];
+                [].forEach.call(document.querySelectorAll('.dlg button, .dlg input, .dlg textarea'), function (n) {
+                    if (n.disabled || n.offsetParent === null) return;
+                    var b = n.getBoundingClientRect(), name = (n.id || n.textContent || n.className).slice(0, 14);
+                    if (b.width < 43.5 || b.height < 43.5) small.push(name + ' ' + Math.round(b.width) + 'x' + Math.round(b.height));
+                    if (b.left < box.left - 1 || b.right > box.right + 1 || b.right > innerWidth + 1 || b.left < -1) bad.push(name + ' sideways');
+                    if (n.closest('.dlg-foot') && (b.bottom > innerHeight + 1 || b.top < -1)) foot.push(name);
+                });
+                var before = inner.scrollTop; inner.scrollTop = inner.scrollHeight;
+                var last = document.querySelectorAll('.ant'), end = last[last.length - 1].getBoundingClientRect(), field = document.querySelector('.ants').getBoundingClientRect();
+                var reach = end.bottom <= box.bottom + 1 && end.right <= field.right + 1;
+                inner.scrollTop = before;
+                return {bad: bad, small: small, foot: foot, inside: dlg.bottom <= innerHeight + 1 && dlg.top >= -1 && dlg.right <= innerWidth + 1 && dlg.left >= -1, scrolls: inner.scrollHeight > inner.clientHeight + 1, reach: reach, sideways: document.documentElement.scrollWidth > innerWidth};
+            })())"""))
+            check(found["inside"] and found["foot"] == [] and not found["sideways"], "%d x %d: the properties sheet is inside the screen with Cancel and Apply in view (%s)" % (w, h, found))
+            check(found["small"] == [] and found["bad"] == [], "%d x %d: every control of the sheet is 44 pixels and inside it (%s %s)" % (w, h, found["small"], found["bad"]))
+            check(found["reach"], "%d x %d: the last row, the ant types, can be scrolled into view (the sheet %s)" % (w, h, "scrolls inside itself" if found["scrolls"] else "needs no scrolling"))
+            if h <= 400:
+                check(found["scrolls"], "%d x %d: a short screen scrolls inside the sheet" % (w, h))
+            if (w, h) in ((844, 390), (390, 844)):
+                page.shot(args.shots, "mapmaker-props-layout-%dx%d" % (w, h))
+            page.key("Escape")
+            check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "%d x %d: Escape closes it" % (w, h))
     elif part == "phone":
         for label, w, h in (("portrait", 390, 844), ("landscape", 844, 390), ("narrow", 340, 700)):
             print("[web map maker] phone, %s, %d x %d" % (label, w, h))
@@ -1067,7 +1286,7 @@ def run_part(part, tab, args, check, tiny, junk):
             touch("touchStart", {1: (tx, ty)})
             touch("touchEnd", {})
             time.sleep(0.3)
-            check(page.pixel(tx, ty) == water, "a tap paints a cell with the tile that is chosen")
+            check(any(page.pixel(tx + d, ty + e) == water for d in (-8, -3, 0, 3, 8) for e in (-8, -3, 0, 3, 8)), "a tap paints a cell with the tile that is chosen (the point can be on the edge of a cell: the cells beside it are looked at)")
             page.ev("document.getElementById('undo-btn').click()")
             time.sleep(0.2)
             check(page.pixel(tx, ty) != water and page.pixel(x1, y1) == dirt, "Undo takes the tap back and keeps the line")
@@ -1088,7 +1307,7 @@ def run_part(part, tab, args, check, tiny, junk):
         tab.emulate(1280, 800, 1)
         page = Page(tab, args.web)
         old = ("(function () { var real; Object.defineProperty(window, 'createLvlCore', { configurable: true, get: function () { return real && function () { "
-               "return real.apply(this, arguments).then(function (m) { m._lvl_interface_version = function () { return 1; }; return m; }); }; }, set: function (v) { real = v; } }); })();")
+               "return real.apply(this, arguments).then(function (m) { m._lvl_interface_version = function () { return 2; }; return m; }); }; }, set: function (v) { real = v; } }); })();")
         check(page.open(old), "the page answers")
         text = page.ev("document.getElementById('boot').textContent")
         check(not page.ev("document.getElementById('boot').hidden") and "out of date" in text and "Reload the page" in text, "it says that the map code is out of date and offers a reload: %r" % text)

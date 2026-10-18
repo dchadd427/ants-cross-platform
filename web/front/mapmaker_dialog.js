@@ -8,7 +8,7 @@
 })(this, function (Sizes, Checks) {
     'use strict';
 
-    var FOCUSABLE = 'button:not([disabled]), input:not([disabled]):not([type=hidden]), [tabindex]:not([tabindex="-1"])';
+    var FOCUSABLE = 'button:not([disabled]), input:not([disabled]):not([type=hidden]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
     var KIND_WORDS = {
         classic: { title: 'Classic map', line: 'Works in the original game and in the new version.' },
         extended: { title: 'Extended map', line: 'Bigger and taller. Works in the new version only: the original game cannot open it.' }

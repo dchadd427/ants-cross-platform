@@ -404,6 +404,8 @@
             // A map is open (a new one, or one from the disk): the history starts empty
             setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
+            // A CHANGE that is not a tap (mapmaker_props.js: the properties of the map) as one step of the history; false when a stroke is going on or the change did nothing
+            act: function (change) { if (!editor || canvas.isStroking()) return false; var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; },
             isClean: function () { return !editor || editor.history.isClean(); },
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },

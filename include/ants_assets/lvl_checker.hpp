@@ -139,6 +139,10 @@ struct MapCheckReport {
     std::string describe() const { return report.describe(); }
 };
 
+/// The checker's own sentence for a description of `bytes` bytes that is too long for the kind (the finding `description_too_long`: a warning for a Classic map of 30 bytes or more,
+/// fatal for an Extended map of more than 255), so that whoever sets a description says the same words as the check of the map.
+std::string description_too_long_text(MapKind kind, size_t bytes);
+
 /// The kind of a version word: 9 is an Extended map, anything else is judged as a Classic map (a file that says another version is a Classic map that fails `version_not_8`).
 MapKind kind_of_version(uint32_t version) noexcept;
 

@@ -2,7 +2,8 @@
 // it changed is kept as a small patch (the cells that changed with their old and new words, never a copy of the map: a copy is about 3 MB at 512 x 512), so that undo and redo are a patch
 // applied backwards or forwards. Nothing here touches a page: the stroke, the brush, the line between two cells, the fill, the removal of a whole object, the name that a tile needs in the
 // dictionary and the bounded history are all tested on their own (tests/scripts/web_mapmaker_edit_check.js). A patch also holds the splices of a CHANGE (mapmaker_blocks.js: a hill, the
-// starting ants, a food pile), the pieces of the file after the layers that it took out and put in, so that they go in the same history as the strokes. A plain ES5 script that a page and node can load.
+// starting ants, a food pile; mapmaker_props.js: the properties of the map), the pieces of the file that it took out and put in (after the layers, or in the header), so that they go in the same history
+// as the strokes. A plain ES5 script that a page and node can load.
 //
 // The cells (docs/MAP_FORMAT.md, "The layout"): six bytes each, three words: the tile id, the flags (bit 0 of a layer-2 cell: the cell is the origin of its object) and a third word (a
 // layer-1 cell: 0xCDCD or 0; a layer-2 cell: the anchor of its object, absolute in a version 8 file, a signed offset in a version 9 file). Bit 0 of a layer-1 cell's flags is the solid bit:
@@ -129,6 +130,8 @@
         out.set(bytes.subarray(0, at), 0); out.set(inserted, at); out.set(bytes.subarray(at + removeLength), at + inserted.length);
         return out;
     }
+    // Where a splice is in the file as it stands: a splice of the lists after the layers counts from the end of layer 2 (`rel`), one of the header counts from the start (`abs`, `at`)
+    function spliceStart(file, s) { return s.abs ? s.at : file.blocksAt + s.rel; }
     function sameBytes(bytes, at, want) { if (at < 0 || at + want.length > bytes.length) return false; for (var i = 0; i < want.length; i++) if (bytes[at + i] !== want[i]) return false; return true; }
 
     // `apply(patch, forward)` puts a patch on the map (cells and splices) and answers the cells to paint again
@@ -168,7 +171,7 @@
         function applyFull(patch, forward) {
             var dirty = applyPatch(self.file, patch, forward), list = patch.splices || [], i;
             for (i = 0; i < list.length; i++) {
-                var s = list[forward ? i : list.length - 1 - i], at = self.file.blocksAt + s.rel, out = forward ? s.removed : s.inserted, into = forward ? s.inserted : s.removed;
+                var s = list[forward ? i : list.length - 1 - i], at = spliceStart(self.file, s), out = forward ? s.removed : s.inserted, into = forward ? s.inserted : s.removed;
                 if (!sameBytes(self.file.bytes, at, out)) continue;                      // (cannot be: the patch is the exact inverse of what it was made from)
                 self.file = hooks.rebase(spliceAt(self.file.bytes, at, out.length, into));
             }
@@ -228,7 +231,7 @@
                 for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);                 // (the solid bits of layer 1 that go with the cells)
                 for (i = 0; i < ch.splices.length; i++) {
                     var s = ch.splices[i];
-                    f = self.file = hooks.rebase(spliceAt(f.bytes, f.blocksAt + s.rel, s.removed.length, s.inserted));
+                    f = self.file = hooks.rebase(spliceAt(f.bytes, spliceStart(f, s), s.removed.length, s.inserted));
                     splices.push(s); n++;
                 }
                 return n;

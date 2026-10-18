@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var doc = document, win = window;
-    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapCanvas', 'MapTools'];
+    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCanvas', 'MapTools'];
     var GROUND = 485, EGGS = 6, MINUTES = 10;          // a new map: plain grass (docs/MAP_FORMAT.md, "The blank map"), 6 eggs a team, 10 minutes
     var NEW_NAME = 'My map';
 
@@ -11,7 +11,7 @@
     function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
     var opening = 0;
-    var core = null, limits = null, dialogs = null, canvas = null, tools = null, map = null, checkTimer = 0;
+    var core = null, limits = null, dialogs = null, canvas = null, tools = null, map = null, checkTimer = 0, summed = null;
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
     function fatal(text) {
@@ -57,9 +57,30 @@
         $('meter').setAttribute('aria-valuemax', facts.max); $('meter').setAttribute('aria-valuenow', Math.min(f.cells, facts.max));
         $('meter-cap').textContent = facts.caption;
         showCheckLine();
+        showSummary();
         var line = $('size-line');
         line.textContent = f.rows + ' x ' + f.columns + ' ';
         if (kind === 'extended') line.appendChild(el('span', 'badge-nv', 'New version only'));
+    }
+
+    // The properties in a few words (the side panel, the line under the map of a phone). They change only with a new array of bytes (a stroke writes in place), so they are read again only then.
+    function showSummary() {
+        if (summed && summed.bytes === map.bytes) return;
+        var props = win.MapProps.read(core, map.bytes);
+        summed = { bytes: map.bytes, props: props };
+        var lines = props.error ? { description: '', time: '', ant: '', phone: '' } : win.MapProps.summary(props);
+        $('s-desc').textContent = lines.description; $('s-time').textContent = lines.time; $('s-ant').textContent = lines.ant; $('phone-sum').textContent = lines.phone;
+    }
+
+    // The properties dialog: the core makes the new file, the history takes the pieces that changed as one step (Cancel changes nothing)
+    function openProps() {
+        if (canvas.isStroking() || dialogs.isOpen()) return;
+        showSummary();
+        if (summed.props.error) return dialogs.message('The properties cannot be opened', MapChecks.capital(summed.props.error) + '.');
+        win.MapProps.open({
+            doc: doc, dialogs: dialogs, core: core, props: summed.props, bytes: function () { return map.bytes; },
+            apply: function (change) { return tools.act(change) ? '' : 'The properties could not be put into the map. Nothing was changed.'; }
+        });
     }
 
     function showCheckLine() {
@@ -178,8 +199,8 @@
     }
 
     var ACTIONS = {
-        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Download', onClick: download }]); }
+        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps,
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }]); }
     };
 
     function start(module) {

@@ -297,13 +297,10 @@ OriginalSafeReport profile_of(const LevelData& level, bool remake) {
         f.add(Code::ModeNot1, Severity::Info, "the mode word is " + num(level.game_mode) + ", not 1: the original never reads it (the map maker writes 1)");
     }
     if (remake && level.description.size() > LVL_EXTENDED_MAX_DESCRIPTION) {
-        f.add(Code::DescriptionTooLong, Severity::Fatal,
-              "the description is " + num(level.description.size()) + " bytes long: an Extended map holds at most " + num(LVL_EXTENDED_MAX_DESCRIPTION));
+        f.add(Code::DescriptionTooLong, Severity::Fatal, description_too_long_text(MapKind::Extended, level.description.size()));
     }
     if (original && level.description.size() > kLongestDescription) {
-        f.add(Code::DescriptionTooLong, Severity::Warning,
-              "the description is " + num(level.description.size()) + " bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end " +
-                  "(a letter outside a to z takes 2 or 3 bytes)");
+        f.add(Code::DescriptionTooLong, Severity::Warning, description_too_long_text(MapKind::Classic, level.description.size()));
     }
 
     // the grid (0x10068de: two 16-bit sizes; the remake hosts 256 a side) and the dictionary (0x1006795: one dword per name in a buffer of 0x1500 bytes)
@@ -613,6 +610,11 @@ OriginalSafeReport check_original_safe(const uint8_t* data, size_t size, const L
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // The checker per kind
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+std::string description_too_long_text(MapKind kind, size_t bytes) {
+    if (kind == MapKind::Extended) return "the description is " + num(bytes) + " bytes long: an Extended map holds at most " + num(LVL_EXTENDED_MAX_DESCRIPTION);
+    return "the description is " + num(bytes) + " bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)";
+}
 
 const char* to_string(MapKind kind) noexcept { return kind == MapKind::Extended ? "extended" : "classic"; }
 
