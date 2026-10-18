@@ -36,6 +36,7 @@ PROPS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_props_check.j
 CONVERT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_convert_check.js")
 SAVE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_save_check.js")
 MINE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_mine_check.js")
+SUBMIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_submit_check.js")
 EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
@@ -721,7 +722,7 @@ class ThePage(unittest.TestCase):
 
     def test_every_button_that_the_page_has_is_wired_and_starts_off_until_the_core_is_there(self):
         acts = re.findall(r'data-act="([a-z-]+)"', self.page)
-        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "mine", "new", "open", "props", "save", "zoom-in", "zoom-out"])
+        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "mine", "new", "open", "props", "save", "submit", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
         self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,", self.app)
@@ -750,8 +751,8 @@ class ThePage(unittest.TestCase):
         self.assertIn("createLvlCore", self.app.split("function boot()")[1], "a module that did not load at all is told too")
 
     def test_a_map_is_read_as_a_place_that_takes_both_kinds_and_the_limits_come_from_the_core(self):
-        self.assertEqual(self.app.count("core.checkMap("), 5, "the open map's three, and the two of My maps (a saved map is read as a place that takes both kinds too)")
-        self.assertEqual(len(re.findall(r"core\.(?:checkMap|readReport)\([^)]*'extended'\)", self.app)), 6)
+        self.assertEqual(self.app.count("core.checkMap("), 6, "the open map's three, the two of My maps (a saved map is read as a place that takes both kinds too) and the one of Submit for approval (the bytes that are sent are the bytes that were judged)")
+        self.assertEqual(len(re.findall(r"core\.(?:checkMap|readReport)\([^)]*'extended'\)", self.app)), 7)
         self.assertIn("core.limits('new_map')", self.app)
         self.assertIn("core.limits('extended')", self.app)
         self.assertNotRegex(self.code["mapmaker_dialog.js"], r"\b(10000|10,000|262144|262,144|130|512)\b", "a limit is the core's, never a number of the dialog")
@@ -807,6 +808,61 @@ class ThePage(unittest.TestCase):
                         shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
                     self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
+    def test_submit_for_approval_and_my_submissions_pass_their_checks_on_a_fake_dom_and_a_fake_server(self):
+        done = run_check(script=SUBMIT_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn(" 0 failed", done.stdout)
+        for part in ("A the words", "B the sent store", "C the dialog", "D what is sent, and the answers", "F My submissions"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_submit_check_can_fail_on_the_broken_copies_of_the_words_the_call_the_dialog_the_list_and_the_tabs(self):
+        """tests/data/mapmaker_submit_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`)"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_submit_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 40)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in SCRIPTS + ("mapmaker_submit.js",):
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    script = os.path.join(REPO, m["test"].split(" ", 1)[1])
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, script)
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_a_player_never_publishes_and_nothing_can_be_replaced_by_the_script_that_sends_maps(self):
+        submit = read("web", "front", "mapmaker_submit.js")
+        # the calls: a map goes to the owner's queue (POST /submissions), the list is read (GET), a waiting map is withdrawn: nothing else, nothing of the owner's side or the lobby's lists
+        self.assertEqual(sorted(re.findall(r"calls\('(GET|POST|PUT|DELETE|PATCH)', ([^,]+),", submit)), [("GET", "'/submissions'"), ("GET", "'/submissions'"), ("POST", "'/submissions' + q"), ("POST", "'/submissions/' + rec.id + '/withdraw'")])
+        self.assertNotRegex(submit, r"/admin|/maps|PUT|DELETE|PATCH|innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|localStorage|sessionStorage", "the owner's page and the lists are not touched, and text is text")
+        self.assertIn("function enc(t) { return encodeURIComponent(t); }", submit, "a space is %20 and a plus stays a plus")
+        self.assertIn("var ready = works && !big && door !== 'off' && door !== 'checking' && !bad() && !sending;", submit, "the button works only for a map that the checker says works, when the door is on")
+        self.assertIn("if (sending || bad() || !works) return;", submit)
+        # the bytes that are sent are the bytes the dialog judged: the dialog takes both from one answer of the page
+        self.assertIn("return { name: map.name, bytes: made.bytes, file: file, report: r.json };", self.app)
+        self.assertIn("tokens[0], bytes, function (res)", submit)
+        # the script is loaded when it is needed; nothing in the page fails without it
+        self.assertNotIn("mapmaker_submit.js", self.page)
+        self.assertIn("tag.src = 'front/mapmaker_submit.js';", self.app)
+        self.assertIn("submit: function () { if (!dialogs.isOpen() && !canvas.isStroking()) submitOr(function () { sent.open(); }); }", self.app)
+        self.assertIn("{ text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }", self.app, "the phone's Menu has both")
+        self.assertRegex(self.page, r'<button class="btn sm" type="button" data-act="submit" disabled>Submit for approval\.\.\.</button>')
+        self.assertIn('id="mine-tabs"', self.page)
+        self.assertIn("var NEEDED = [", self.app)
+        self.assertNotIn("'MapSubmit'", self.app.split("var NEEDED = [")[1].split("]")[0], "the page starts without the script that sends maps")
+        # a status link keeps the token in the fragment, never in a request line
+        self.assertIn("'#sent=' + tokens.join(',')", submit)
+        self.assertIn("win.history.replaceState(null, '', win.location.pathname + win.location.search)", self.app, "the address loses the token once it is taken in")
+
     def test_my_maps_is_in_the_page_and_the_menu_and_only_the_players_own_saved_copy_can_be_deleted(self):
         ids = re.findall(r'\bid="([^"]+)"', self.page)
         asked = set(re.findall(r"\$\('([^']+)'\)", self.code["mapmaker_mine.js"]))
@@ -824,11 +880,11 @@ class ThePage(unittest.TestCase):
         # a saved map is never written over and never published: the only calls on the drafts are add (Save), list and remove (this list); the page has no submit
         self.assertEqual(len(re.findall(r"store\.remove\(", self.code["mapmaker_mine.js"])), 1)
         self.assertNotIn("store.remove(", app)
-        self.assertEqual(len(re.findall(r"\.delete\(", self.code["mapmaker_store.js"])), 2, "two deletes: the slot of unsaved work, and a saved map of the drafts store")
+        self.assertEqual(len(re.findall(r"\.delete\(", self.code["mapmaker_store.js"])), 3, "three deletes: the slot of unsaved work, a saved map of the drafts store, and a submission record of the sent store (its own database)")
         self.assertIn("run('drafts', 'readwrite', function (s) { return s.delete(k); }", self.code["mapmaker_store.js"], "a saved map is deleted from the drafts store only")
         for name in ("mapmaker_mine.js", "mapmaker_app.js", "mapmaker_store.js"):
             self.assertNotRegex(self.code[name], r"\.put\(\{ key|\.clear\(\)|deleteDatabase|deleteObjectStore", name)
-        self.assertNotRegex(self.page + self.code["mapmaker_mine.js"], r"(?i)submit|publish|approval", "players never publish from the editor (a later step)")
+        self.assertNotRegex(self.code["mapmaker_mine.js"], r"(?i)publish|approval|fetch", "My maps sends nothing (the player\'s submissions are the other script\'s)")
         self.assertIn("'Delete this saved map?'", self.code["mapmaker_mine.js"], "a delete is asked about first")
 
     def test_nothing_can_write_over_a_file_and_no_sentence_is_put_in_as_markup(self):
@@ -842,7 +898,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("env.fetch('/maps')", store, "the one request is a read of the site's list of maps")
         self.assertNotRegex(store, r"method|POST|PUT|body:", "the page sends nothing to the site")
         self.assertNotIn("s.put({ key", store, "a draft is added, never put (put would replace one)")
-        self.assertEqual(len(re.findall(r"\.put\(", store)), 1, "the only put is the one slot of unsaved work")
+        self.assertEqual(len(re.findall(r"\.put\(", store)), 2, "the puts are the one slot of unsaved work and the sent store's own records (a submission is not a map of My maps)")
         self.assertNotIn("overwrite", self.app.lower())
         self.assertIn("a.download = win.MapFile.downloadName(map.name);", self.app, "a download is a new file the browser saves, named by the map")
 

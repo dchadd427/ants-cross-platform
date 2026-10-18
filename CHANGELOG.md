@@ -23,6 +23,11 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Map maker: "Submit for approval..." sends a map to the owner, and My submissions shows the answers. Nothing is public until approved. Off until switched on.
+
 ## v0.12.82 - 2026-10-18 - Map submissions: server and owner review page (S1)
 
 **For players:**
