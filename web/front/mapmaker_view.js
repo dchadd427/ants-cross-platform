@@ -128,12 +128,12 @@
         return cw * ch;
     }
 
-    // The start markers (a dot in the team's color) and the food piles (a gold square): drawn over the tiles when a tile is big enough to hold them
-    function drawMarks(ctx, view, file, w, h, vis) {
+    // The start markers (a dot in the team's color) and the food piles (a gold square): drawn over the tiles when a tile is big enough to hold them. `dots`: the dots only (the pictures show the food)
+    function drawMarks(ctx, view, file, w, h, vis, dots) {
         var s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, i;
         function inside(m) { return m.row >= vis.r0 && m.row <= vis.r1 && m.column >= vis.c0 && m.column <= vis.c1; }
         var pad = Math.max(1, Math.round(s * 0.2)), size = Math.max(2, Math.round(s) - 2 * pad);
-        for (i = 0; i < file.food.length; i++) {
+        for (i = 0; i < (dots ? 0 : file.food.length); i++) {
             var f = file.food[i];
             if (!inside(f)) continue;
             ctx.fillStyle = Tiles.FOOD; ctx.fillRect(Math.round(x0 + f.column * s) + pad, Math.round(y0 + f.row * s) + pad, size, size);
@@ -206,13 +206,21 @@
         ctx.drawImage(scratch, x, y, bw, bh, x, y, bw, bh);
     }
 
-    // One frame. `opts`: scratch (a canvas for the pixel way), cursor ({row, column} or null), brush (the size of the brush on the cursor). Returns {rects, pixels}: what was drawn, for the tests.
+    // Are the game's pictures drawn at this zoom (the atlas is loaded and a tile is at least 10 pixels: mapmaker_sprites.js)?
+    function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= sprites.FROM; }
+
+    // One frame. `opts`: scratch (a canvas for the pixel way), cursor ({row, column} or null), brush (the size of the brush on the cursor), sprites (mapmaker_sprites.js, when loaded), dpr, ghost ({id, row,
+    // column}: a bigger object's picture under the pointer). Returns {rects, pixels, sprites}: what was drawn, for the tests.
     function draw(ctx, view, file, w, h, opts) {
         opts = opts || {};
         ctx.fillStyle = '#0b1612'; ctx.fillRect(0, 0, w, h);
-        var vis = visible(view, file, w, h), done = { rects: 0, pixels: 0 };
+        var vis = visible(view, file, w, h), done = { rects: 0, pixels: 0, sprites: 0 };
         if (!vis) return done;
-        if (view.scale >= RECTS_FROM) {
+        if (useSprites(view, opts.sprites)) {
+            opts.sprites.draw(ctx, view, file, w, h, vis, opts);
+            if (view.scale < opts.sprites.ANT_FROM) drawMarks(ctx, view, file, w, h, vis, true);
+            done.sprites = 1;
+        } else if (view.scale >= RECTS_FROM) {
             done.rects = drawRects(ctx, view, file, w, h, vis);
             if (view.scale >= 6) drawMarks(ctx, view, file, w, h, vis);
         } else done.pixels = drawPixels(ctx, view, file, w, h, opts.scratch || document.createElement('canvas'));
@@ -252,6 +260,6 @@
 
     return {
         MAX_SCALE: MAX_SCALE, create: create, clamp: clamp, fitScale: fitScale, minScale: minScale, isWhole: isWhole, toScreen: toScreen, cellAt: cellAt, zoomAt: zoomAt, panBy: panBy,
-        centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, cursorRect: cursorRect, drawCursor: drawCursor, redrawCell: redrawCell, redrawPixelCell: redrawPixelCell, blitPixels: blitPixels, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
+        centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, useSprites: useSprites, cursorRect: cursorRect, drawCursor: drawCursor, redrawCell: redrawCell, redrawPixelCell: redrawPixelCell, blitPixels: blitPixels, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
     };
 });

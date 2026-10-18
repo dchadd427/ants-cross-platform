@@ -84,6 +84,13 @@ RUN cd /src/changelog && \
     BUILD_DATE="$(cat /src/build_date.txt)" && \
     python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"
 
+# The map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"): the game's pictures of the ground and of the objects that the editor offers, in two small sheets and an index, made by tools/map_atlas.py (Python
+# standard library only) from the public decoded sprites and the public animation table; the repository keeps no generated picture. After the compile layers, so that it does not rebuild the game.
+COPY asset_catalog/sprites/ /src/asset_catalog/sprites/
+COPY docs/chd_table4_animations.json /src/docs/chd_table4_animations.json
+COPY tools/map_atlas.py /src/tools/map_atlas.py
+RUN python3 tools/map_atlas.py mapmaker_atlas && test -s mapmaker_atlas/atlas.json && test -s mapmaker_atlas/ground.png && test -s mapmaker_atlas/objects.png
+
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
 # =============================================================================
@@ -140,6 +147,9 @@ COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
 
 # The map maker (docs/MAP_EDITOR.md): web/mapmaker.html with its scripts and style in web/front/ (copied above) and the map core's module (lvl_core.js, lvl_core.wasm and lvl_core_api.js, copied above)
 COPY web/mapmaker.html /usr/share/nginx/html/mapmaker.html
+
+# The map maker's sprite atlas (made in the builder stage; the page fetches it when the editor opens, and a few big toys one by one from /asset_catalog/sprites/, copied below): served at /mapmaker_atlas/
+COPY --from=builder /src/mapmaker_atlas/ /usr/share/nginx/html/mapmaker_atlas/
 
 # The Legal page (docs/PLAY_IN_BROWSER.md "The Legal page"): a page of its own in the changelog page's look, linked from every footer, with no placeholder to fill in
 COPY web/legal.html /usr/share/nginx/html/legal.html

@@ -35,11 +35,22 @@
         var doc = env.doc, canvas = env.canvas, host = env.host;
         var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4 };
         var editor = null, current = null, told = false, fits = '';                     // `fits`: a note when fewer ants than asked for found room, until the next choice
+        var ground = null, sprites = null;                                              // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js): the kinds' sheets and the game's pictures
+        var ICONS = { ground: [0, 485], objects: [1, 302], bigger: [1, 1323], hills: [1, 248], food: [1, 264] };           // the tool buttons' pictures: [layer 2?, tile]
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function paints() { return Palette.paints(state.tool); }
         function places() { return Palette.places(state.tool); }
         function hasTeams() { return state.tool === 'hills' || state.tool === 'ants'; }
+        // a picture in a chip (the atlas), or false when there is none yet (the chip keeps its flat color)
+        function picture(node, layer2, id, px) { return !!sprites && sprites.ready() && sprites.chip(node, layer2, id, px); }
+        // the palette's item of a tile, or any ground tile that the sheet of a kind offers (the game's own name goes into the map's dictionary)
+        function itemOf(tool, id) {
+            var item = Palette.itemOf(tool, id);
+            if (!item && tool === 'ground' && ground && ground.info(id)) item = { id: id, name: ground.name(id), label: ground.label(id), kind: ground.kindOf(id), color: Tiles.css(id, Tiles.EMPTY2), custom: true };
+            return item;
+        }
+        function kindItem(item) { return Palette.items('ground').filter(function (k) { return k.kind === item.kind; })[0]; }          // (the kind's chip: its plain tile)
         function tileOf() { return state.tool === 'ground' ? state.ground : (state.tool === 'objects' ? state.objects : null); }
         function teamNow() { return Palette.teams()[state.team]; }
         function bigNow() { return Palette.itemOf('bigger', state.big); }
@@ -101,7 +112,11 @@
 
         // What the map has of the thing that the tool puts, in a few words (the line under the palette)
         function infoText() {
-            if (state.tool === 'ground' || state.tool === 'objects') { var item = Palette.itemOf(state.tool, tileOf()); return item ? item.label : ''; }
+            if (state.tool === 'ground' || state.tool === 'objects') {
+                var item = itemOf(state.tool, tileOf());
+                if (!item) return '';
+                return state.tool === 'objects' ? item.label : (item.custom ? item.label + ' (' + item.name + ')' : item.label + (ground ? ': tap it again for all its tiles' : ''));
+            }
             if (state.tool === 'bigger') return bigText(bigNow());
             var file = env.file ? env.file() : null;
             if (!file || !(state.tool === 'hills' || state.tool === 'ants' || state.tool === 'food')) return '';
@@ -137,9 +152,10 @@
             var tool = state.tool, label = heading(tool);
             host.title.textContent = label;
             host.swatches.textContent = '';
+            host.tile.querySelector('i').style.border = '';
             host.stepper.hidden = !(tool === 'ants' || tool === 'food');
             host.swatches.hidden = tool === 'food' || tool === 'bigger';
-            host.swatches.className = hasTeams() ? 'swatches teams' : 'swatches';
+            host.swatches.className = hasTeams() ? 'swatches teams' : (tool === 'ground' ? 'swatches grounds' : 'swatches');
             var chip = host.tile.querySelector('i'), text = host.tile.querySelector('span');
             chip.textContent = '';
             if (hasTeams()) {
@@ -154,7 +170,7 @@
                 host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
             } else if (tool === 'bigger') {
                 var big = bigNow();
-                footprint(chip, big);
+                if (!picture(chip, true, big.id, 30)) footprint(chip, big);
                 bigLines(text, big);
                 host.tile.setAttribute('aria-label', label + ': ' + bigText(big) + '. Change');
             } else if (tool === 'food') {
@@ -162,18 +178,24 @@
                 text.textContent = plural(state.stages, 'stage', 'stages');
                 host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
             } else {
-                var list = Palette.items(tool), chosen = tileOf();
+                var list = Palette.items(tool), chosen = tileOf(), have = itemOf(tool, chosen), kinded = tool === 'ground';
                 host.swatches.setAttribute('aria-label', label + ' to paint with');
                 list.forEach(function (item) {
-                    var b = el('button', 'swatch'), on = item.id === chosen;
+                    var b = el('button', kinded ? 'swatch gk' : 'swatch'), on = kinded ? !!have && item.kind === have.kind : item.id === chosen;
                     b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(on)); b.tabIndex = on ? 0 : -1;
-                    b.setAttribute('aria-label', item.label); b.title = item.label + ' (' + item.name + ')';
+                    b.setAttribute('aria-label', item.label); b.title = item.label + ' (' + item.name + ')' + (kinded && on && ground ? '. Tap again for all its tiles.' : '');
                     b.setAttribute('data-tile', String(item.id));
-                    var swatchChip = el('i'); swatchChip.style.background = item.color; b.appendChild(swatchChip);
-                    b.addEventListener('click', function () { chooseTile(item.id); });
+                    var swatchChip = el('i'); swatchChip.style.background = item.color; picture(swatchChip, !kinded, item.id, kinded ? 34 : 26); b.appendChild(swatchChip);
+                    if (kinded) b.appendChild(el('span', '', item.label));
+                    b.addEventListener('click', function () { if (kinded) pickKind(item, on); else chooseTile(item.id); });
                     host.swatches.appendChild(b);
-                    if (on) { chip.className = ''; chip.style.background = item.color; text.textContent = item.label; host.tile.setAttribute('aria-label', label + ': ' + item.label + '. Change'); }
                 });
+                if (have) {
+                    chip.className = ''; chip.style.background = have.color;
+                    text.textContent = have.custom ? kindItem(have).label + ' \u00b7 ' + have.name : have.label;
+                    picture(chip, !kinded, have.id, 26);
+                    host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
+                }
             }
             if (!host.stepper.hidden) {
                 var r = stepRange();
@@ -212,20 +234,21 @@
                         });
                         body.appendChild(grid);
                     } else if (tool !== 'food') {
-                        var list = Palette.items(tool), chosen = tool === 'bigger' ? state.big : tileOf();
+                        var list = Palette.items(tool), chosen = tool === 'bigger' ? state.big : tileOf(), have = itemOf(tool, chosen);
                         grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', tool === 'bigger' ? label : label + ' to paint with');
                         list.forEach(function (item) {
-                            var b = el('button', 'pick'), chip = el('i');
-                            b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(item.id === chosen)); b.setAttribute('data-tile', String(item.id));
-                            if (tool === 'bigger') footprint(chip, item); else chip.style.background = item.color;
+                            var b = el('button', 'pick'), chip = el('i'), on = tool === 'ground' ? !!have && item.kind === have.kind : item.id === chosen;
+                            b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(on)); b.setAttribute('data-tile', String(item.id));
+                            if (tool === 'bigger') { if (!picture(chip, true, item.id, 30)) footprint(chip, item); } else { chip.style.background = item.color; picture(chip, tool !== 'ground', item.id, 30); }
                             b.appendChild(chip);
                             var who = el('span', '', ''); if (tool === 'bigger') { bigLines(who, item); b.setAttribute('aria-label', bigText(item)); } else who.textContent = item.label;
                             b.appendChild(who);
-                            b.addEventListener('click', function () { chooseTile(item.id); ctl.close(); });
+                            b.addEventListener('click', function () { if (tool === 'ground' && on && ground) return pickKind(item, true); chooseTile(item.id); ctl.close(); });
                             grid.appendChild(b);
                         });
                         body.appendChild(grid);
                         if (tool === 'bigger') body.appendChild(el('p', 'pickinfo', 'Each one covers several cells. A tap puts it whole, and Erase takes it away whole.'));
+                        if (tool === 'ground') body.appendChild(el('p', 'pickinfo', 'The ground changes how fast ants walk. Tap one to paint with it' + (ground ? ', or tap the chosen one again for all its tiles.' : '.')));
                     }
                     if (tool === 'ants' || tool === 'food') {
                         var about = el('p', 'pickinfo', infoText());
@@ -233,7 +256,26 @@
                         body.appendChild(about);
                     }
                 },
-                focus: tool === 'food' ? '.stp:not([disabled])' : '.pick[aria-checked="true"]', buttons: [{ text: 'Close', ghost: true }]
+                focus: tool === 'food' ? '.stp:not([disabled])' : '.pick[aria-checked="true"]',
+                buttons: (tool === 'ground' && ground && itemOf('ground', state.ground) ? [{ text: 'All ' + kindItem(itemOf('ground', state.ground)).label.toLowerCase() + ' tiles', onClick: function () { pickKind(kindItem(itemOf('ground', state.ground)), true); } }] : []).concat([{ text: 'Close', ghost: true }])
+            });
+        }
+
+        // A kind's chip: the first tap paints with its plain tile, a tap on the chosen kind opens the sheet of all its tiles (S5): any single tile can be painted
+        function pickKind(item, chosen) {
+            if (!chosen || !ground) return chooseTile(item.id);
+            var k = ground.kind(item.kind);
+            if (!env.dialogs) return;
+            env.dialogs.open({
+                title: k.label + ': all its tiles', cls: 'ksheetbox', focus: '.gt[aria-checked="true"], .gl[aria-checked="true"]',
+                build: function (body) {
+                    ground.sheet({
+                        doc: doc, kind: k.key, chosen: function () { return state.ground; }, choose: function (id) { state.ground = id; showPalette(); },
+                        pic: function (node, id, px) { node.style.background = Tiles.css(id, Tiles.EMPTY2); picture(node, false, id, px); },
+                        brush: function () { return state.brush; }, setBrush: function (n) { state.brush = n; showButtons(); canvas.refresh(); }
+                    }, body);
+                },
+                buttons: [{ text: 'Close', ghost: true }]
             });
         }
 
@@ -267,7 +309,7 @@
         function startStroke() {
             var kind = state.tool, id = tileOf();
             if (id !== null) {
-                var item = Palette.itemOf(kind, id), made = Edit.ensureTile(env.file(), id, item ? item.name : '');
+                var item = itemOf(kind, id), made = Edit.ensureTile(env.file(), id, item ? item.name : '');
                 if (made.error) { if (env.say) env.say('This tile cannot be used', 'The map already holds as many different tiles as a map file can name.'); return null; }
                 if (made.grew) editor.rebase(env.rebase(made.bytes));
                 if (made.named || made.grew) env.onEdit();
@@ -293,6 +335,8 @@
         var painter = {
             // the size of the square that the canvas marks under the pointer: the brush, a hill (4 x 4), a cell for ants and food (a bigger object marks its own box: shape); 0 for a tool that does not mark
             size: function () { return !editor ? 0 : (paints() ? state.brush : (places() ? (state.tool === 'hills' ? Blocks.HILL : 1) : 0)); },
+            // the picture that follows the pointer: a bigger object's tile id (0 for the other tools)
+            ghost: function () { return editor && state.tool === 'bigger' ? state.big : 0; },
             // a tool that puts one whole thing with a tap: a drag looks around instead of painting
             tapOnly: function () { return !!editor && places(); },
             // the box of a bigger object, counted from the cell that is tapped
@@ -404,6 +448,13 @@
             // A map is open (a new one, or one from the disk): the history starts empty
             setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
+            // The lazily loaded parts came in (mapmaker_ground.js: the sheets of the kinds; mapmaker_sprites.js: the pictures, or null when the atlas failed): the palette and the tool buttons show them
+            use: function (g, s) {
+                if (g) ground = g;
+                sprites = s || null;
+                Array.prototype.forEach.call(host.tools, function (b) { var icon = ICONS[b.getAttribute('data-tool')], i = b.querySelector('i'); if (icon && i) picture(i, !!icon[0], icon[1], 18); });
+                showPalette();
+            },
             // A CHANGE that is not a tap (mapmaker_props.js: the properties of the map) as one step of the history; false when a stroke is going on or the change did nothing
             act: function (change) { if (!editor || canvas.isStroking()) return false; var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; },
             isClean: function () { return !editor || editor.history.isClean(); },

@@ -19,7 +19,7 @@
     function create(env) {
         var doc = env.doc, win = env.win, canvas = env.canvas, file = null, view = null, cursor = null, hover = null, w = 0, h = 0, dpr = 1, frame = 0;
         var scratch = doc.createElement('canvas'), mini = null, pointers = {}, drag = null, pinch = null;
-        var painter = null, stroke = null, pending = null, spaceHeld = false, full = null, dirty = [], lastRect = null;
+        var painter = null, stroke = null, pending = null, spaceHeld = false, full = null, dirty = [], lastRect = null, sprites = null;       // (sprites: the game's pictures, once loaded: mapmaker_sprites.js)
 
         function makeCanvas(cw, ch) { var c = doc.createElement('canvas'); c.width = cw; c.height = ch; return c; }
 
@@ -53,6 +53,7 @@
         function brushNow() { return painter ? painter.size() : 0; }
         function tapOnly() { return !!painter && !!painter.tapOnly && painter.tapOnly(); }
         function doorNow() { return !!painter && !!painter.door && painter.door(); }
+        function ghostNow(cell) { var id = painter && painter.ghost ? painter.ghost() : 0; return id && cell ? { id: id, row: cell.row, column: cell.column } : null; }          // (a bigger object's own picture under the pointer)
         function shapeNow() { return painter && painter.shape ? painter.shape() : null; }          // (a bigger object marks its own box: {r0, r1, c0, c1} from the cell)
         function markedCell() { return brushNow() > 0 ? (hover || cursor) : cursor; }          // (a tool that paints shows the brush where the mouse is)
 
@@ -79,7 +80,7 @@
             if (!file) return;
             var t0 = win.performance ? win.performance.now() : 0, ctx = canvas.getContext('2d'), brush = brushNow(), cell = markedCell(), shape = shapeNow(), rect = View.cursorRect(file, cell, brush || 1, shape), kind = 'full', count = 0;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            var list = sameAsFull() ? cellsToPaint(rect) : null;
+            var list = sameAsFull() && !View.useSprites(view, sprites) ? cellsToPaint(rect) : null;          // (pictures reach beyond their cells: the sprite frame is always a whole one)
             if (list && list.length <= MANY && (view.scale >= SMALL_TILE || scratch.keptImage)) {
                 var vis = View.visible(view, file, w, h), pixels = view.scale < SMALL_TILE, box = { x0: 1e9, y0: 1e9, x1: -1, y1: -1 };
                 for (var i = 0; i < list.length; i++) {
@@ -92,7 +93,7 @@
                 if (cell) View.drawCursor(ctx, view, file, w, h, cell, brush || 1, doorNow(), shape);
                 kind = 'cells';
             } else {
-                View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1, door: doorNow(), shape: shape });
+                View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1, door: doorNow(), shape: shape, sprites: sprites, dpr: dpr, ghost: ghostNow(cell) });
                 full = { file: file, cx: view.cx, cy: view.cy, scale: view.scale, w: w, h: h, dpr: dpr };
                 count = -1;
             }
@@ -106,6 +107,7 @@
         function setFile(next) {
             file = next;
             cursor = null; hover = null; setStroke(null); pending = null; full = null; dirty = []; lastRect = null;
+            if (sprites) sprites.reset();
             measure();
             if (!file) { env.minimap.hidden = true; mini = null; return; }
             view = View.create(file, w, h);
@@ -303,13 +305,15 @@
         return {
             setFile: setFile, redraw: redraw,
             // The same map with other bytes (the dictionary grew): the view stays where it is
-            swapFile: function (next) { file = next; full = null; mini = View.miniBase(file, 168, 168, makeCanvas); redraw(); },
+            swapFile: function (next) { file = next; full = null; if (sprites) sprites.reset(); mini = View.miniBase(file, 168, 168, makeCanvas); redraw(); },
             // The small map again, after a stroke or an undo
             refreshMini: function () { if (file) { mini = View.miniBase(file, 168, 168, makeCanvas); redraw(); } },
-            // The painter (mapmaker_tools.js): {size() -> the brush in cells, 0 when the tool does not paint, shape() -> the box of a bigger object or null, begin(cell) -> true when a drag goes on, extend(from, to), end(), cancel()}
+            // The painter (mapmaker_tools.js): {size() -> the brush in cells, 0 when the tool does not paint, shape() -> the box of a bigger object or null, ghost() -> the tile id of a bigger object whose picture follows the pointer or 0, begin(cell) -> true when a drag goes on, extend(from, to), end(), cancel()}
             setPainter: function (p) { painter = p; cursorStyle(); },
             // The cells (indexes, row * columns + column) that changed: they are painted again in the next frame
-            markDirty: function (list) { for (var i = 0; i < list.length; i++) dirty.push(list[i]); redraw(); },
+            markDirty: function (list) { for (var i = 0; i < list.length; i++) dirty.push(list[i]); if (sprites) sprites.invalidate(list); redraw(); },
+            // The game's pictures are loaded (or not at all: null): they are drawn from now on
+            setSprites: function (s) { sprites = s; full = null; redraw(); },
             // The tool, the brush or the marked square changed: paint it again, and the pointer shows what the tool does
             refresh: function () { cursorStyle(); redraw(); },
             cancelStroke: function () { cancelStroke(); },
