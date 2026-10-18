@@ -84,6 +84,18 @@
 //                      lists and gives the files and the history too (all of them), and deletes them, behind its secret whatever this says
 //   --replay-any-interface
 //                      the replay port listens on every interface (for a container only, like --ws-any-interface)
+//   --submit-port N    the door of the MAP SUBMISSIONS (docs/MAP_SUBMISSIONS.md): a player sends a map (POST /submissions), finds their own again, withdraws one; the owner's review page asks /admin/api/...
+//                      0 = off, the default. This machine only; the site's nginx passes the paths to it and sets the real client address. It needs the database and a folder for the files
+//   --submit-any-interface
+//                      the submission door listens on every interface (for a container only)
+//   --submissions-dir DIR
+//                      where the submitted maps are kept (the files, in DIR/files). Default: the folder "submissions" in --results-dir
+//   --submit-max-waiting N, --submit-per-address N
+//                      how many maps may wait for the owner (default 200) and how many one address may send in a UTC day (default 3)
+//   --submit-ignore-client-header
+//                      count an address by the connection's own address instead of the X-Client-Address that the site's nginx sets (for a door that no proxy stands in front of)
+//   The owner's page needs two settings in the environment (never on the command line): ANTS_ADMIN_DISCORD_ID (the owner's Discord user id) and ANTS_ADMIN_SESSION_SECRET (32 or more characters,
+//   shared with the login helper tools/admin_login.py). Without both, every /admin/api path answers 404.
 //   --version, --help
 //
 // SIGTERM and SIGINT stop the server within a moment: the records of the running rooms are made durable (fsync) and left where they are (docker stop: give the container a grace period, the stack
@@ -98,6 +110,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <ctime>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -120,6 +133,8 @@
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
 #include "ants_server/site_stats.hpp"
+#include "ants_server/submissions.hpp"
+#include "ants_server/submissions_http.hpp"
 
 namespace {
 
@@ -168,6 +183,12 @@ struct Options {
     std::string db_file;                       // --db (empty: ants.db in the results folder, when there is one)
     bool no_db{false};
     bool no_history{false};                    // --no-history
+    uint16_t submit_port{0};                   // --submit-port: the door of the map submissions (0: none)
+    bool submit_any_interface{false};
+    std::string submissions_dir;               // --submissions-dir (empty: the folder "submissions" in the results folder)
+    size_t submit_max_waiting{200};
+    size_t submit_per_address{3};
+    bool submit_ignore_client_header{false};
 };
 
 void usage(FILE* to) {
@@ -180,6 +201,7 @@ void usage(FILE* to) {
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
+                 "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -241,6 +263,30 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "--replay-port takes a port number (0 - 65535)\n");
                 return 2;
             }
+        } else if (a == "--submit-port") {
+            if (!parse_port(value("--submit-port"), o.submit_port)) {
+                std::fprintf(stderr, "--submit-port takes a port number (0 - 65535)\n");
+                return 2;
+            }
+        } else if (a == "--submit-any-interface") {
+            o.submit_any_interface = true;
+        } else if (a == "--submit-ignore-client-header") {
+            o.submit_ignore_client_header = true;
+        } else if (a == "--submissions-dir") {
+            o.submissions_dir = value("--submissions-dir");
+            if (o.submissions_dir.empty()) {
+                std::fprintf(stderr, "--submissions-dir takes a folder\n");
+                return 2;
+            }
+        } else if (a == "--submit-max-waiting" || a == "--submit-per-address") {
+            const char* text = value(a.c_str());
+            char* end = nullptr;
+            const long n = std::strtol(text, &end, 10);
+            if (end == text || *end != '\0' || n < 1 || n > 100000) {
+                std::fprintf(stderr, "%s takes a whole number from 1 to 100000\n", a.c_str());
+                return 2;
+            }
+            (a == "--submit-max-waiting" ? o.submit_max_waiting : o.submit_per_address) = static_cast<size_t>(n);
         } else if (a == "--public") {
             o.is_public = true;
         } else if (a == "--ws-any-interface") {
@@ -422,6 +468,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<ants::net::WsListener> ws;
     std::unique_ptr<ants::ctl::HttpServer> http;
     std::unique_ptr<ants::ctl::HttpServer> replay_http;           // the public, read-only door of the replays (--replay-port)
+    std::unique_ptr<ants::ctl::HttpServer> submit_http;           // the door of the map submissions (--submit-port)
     if (o.port != 0) {
         tcp = ants::net::TcpListener::listen(o.port, !o.is_public);
         if (!tcp) {
@@ -447,6 +494,17 @@ int main(int argc, char** argv) {
         replay_http = ants::ctl::HttpServer::listen_public(o.replay_port, !o.replay_any_interface);
         if (!replay_http) {
             std::fprintf(stderr, "cannot listen on replay port %u\n", static_cast<unsigned>(o.replay_port));
+            return 1;
+        }
+    }
+    if (o.submit_port != 0) {
+        ants::ctl::DoorOptions door;
+        door.max_body_bytes = ants::server::SubmissionApi::max_body();
+        door.request_timeout_ms = 30000;                           // (an Extended map is up to 4 MiB: a slow line needs its time, and only four such bodies are read at once)
+        door.body_limit = [](const ants::ctl::HttpRequest& head) { return ants::server::SubmissionApi::body_limit(head); };
+        submit_http = ants::ctl::HttpServer::listen_door(o.submit_port, door, !o.submit_any_interface);
+        if (!submit_http) {
+            std::fprintf(stderr, "cannot listen on submission port %u\n", static_cast<unsigned>(o.submit_port));
             return 1;
         }
     }
@@ -653,6 +711,43 @@ int main(int argc, char** argv) {
             log(std::string("match history kept for good in the database") + (rooms.replay_store() != nullptr ? "; the matches of the replay store are counted while no match runs" : "; the server keeps no replays, so nothing is added"));
         }
     }
+    // The map submissions (submissions.hpp, docs/MAP_SUBMISSIONS.md): the store needs the database and a folder; the owner's page needs two settings of the environment. What is missing switches a part off with a line in
+    // the log; a door that was asked for and cannot work stops the server (the operator asked for it).
+    std::unique_ptr<ants::server::SubmissionStore> submissions;
+    std::unique_ptr<ants::server::SubmissionApi> submit_api;
+    if (submit_http) {
+        if (!database.is_open()) {
+            std::fprintf(stderr, "--submit-port needs the database (see --db and --no-db)\n");
+            return 1;
+        }
+        ants::server::SubmissionConfig sc;
+        sc.dir = !o.submissions_dir.empty() ? o.submissions_dir : o.results_dir.empty() ? std::string() : (std::filesystem::path(o.results_dir) / "submissions").string();
+        if (sc.dir.empty()) {
+            std::fprintf(stderr, "--submit-port needs --results-dir or --submissions-dir to keep the maps in\n");
+            return 1;
+        }
+        sc.max_waiting = o.submit_max_waiting;
+        sc.per_address_per_day = o.submit_per_address;
+        submissions = std::make_unique<ants::server::SubmissionStore>(database, sc, [&rooms](const std::string& key) { return rooms.store().library_has_name(key); });
+        std::string why;
+        if (!submissions->open(static_cast<int64_t>(std::time(nullptr)), why)) {
+            std::fprintf(stderr, "map submissions: %s\n", why.c_str());
+            return 1;
+        }
+        ants::server::SubmissionApiConfig ac;
+        if (const char* id = std::getenv("ANTS_ADMIN_DISCORD_ID")) ac.owner_id = id;
+        if (const char* session_key = std::getenv("ANTS_ADMIN_SESSION_SECRET")) ac.session_secret = session_key;
+        ac.trust_client_header = !o.submit_ignore_client_header;
+        submit_api = std::make_unique<ants::server::SubmissionApi>(*submissions, ac);
+        auto refresh = [&rooms, &submissions]() { rooms.mutable_store().set_approved(submissions->approved_maps()); };
+        refresh();
+        submissions->take_approved_changed();
+        submit_api->set_on_approved_changed(refresh);
+        log("map submissions on: files in " + sc.dir + ", at most " + std::to_string(sc.max_waiting) + " waiting and " + std::to_string(sc.per_address_per_day) + " a day from one address; " +
+            (submit_api->owner_api_on() ? "the owner's review page is on" : "the owner's review page is OFF (ANTS_ADMIN_DISCORD_ID and ANTS_ADMIN_SESSION_SECRET, 32 characters or more, are both needed)") +
+            "; " + std::to_string(submissions->approved_maps().size()) + " approved maps in the lobby's list");
+        for (const std::string& line : submissions->take_notices()) log(line);
+    }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
             " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
@@ -664,6 +759,7 @@ int main(int argc, char** argv) {
                                 : "no countdown before the first turn (--start-countdown-seconds 0): the plain 5 s dialog");
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));
+    if (submit_http) log("map submissions on port " + std::to_string(submit_http->port()) + (o.submit_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") + ": POST /submissions, GET /submissions, GET /submissions/<id>, POST /submissions/<id>/withdraw and /admin/api/..., no secret");
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
     if (replay_http) {
         log("public replays on port " + std::to_string(replay_http->port()) + (o.replay_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
@@ -682,6 +778,7 @@ int main(int argc, char** argv) {
         rooms.restore_rooms(now_ms(), []() { return g_stop.load(); });         // in slices from rooms.update() below, so that the server serves meanwhile (a stop that comes meanwhile leaves every record on disk)
         for (const std::string& line : rooms.take_notices()) log(line);
     }
+    uint32_t last_submission_upkeep_ms = now_ms();
     while (!g_stop) {
         const uint32_t now = now_ms();
         if (tcp) {
@@ -702,6 +799,14 @@ int main(int argc, char** argv) {
         }
         rooms.update(now);
         if (http) http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_control(rooms, request, now); });
+        if (submit_http && submit_api) {
+            submit_http->update(now, [&](const ants::ctl::HttpRequest& request) { return submit_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });
+            if (static_cast<uint32_t>(now - last_submission_upkeep_ms) >= 3600u * 1000u) {                 // (once an hour: the files of declined maps, old rows and counters)
+                last_submission_upkeep_ms = now;
+                submissions->maintenance(static_cast<int64_t>(std::time(nullptr)));
+            }
+            for (const std::string& line : submissions->take_notices()) log(line);
+        }
         if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
             stats.count_ended(s);                                  // (a match that ran 600 ticks counts, public rooms too; a shorter one, or a room that never began, counts nothing)

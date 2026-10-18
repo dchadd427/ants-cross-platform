@@ -14,6 +14,11 @@ add_library(ants_server_core STATIC
     history_details.cpp
     history_store.cpp
     db_schema.cpp
+    crypto.cpp
+    map_names.cpp
+    map_preview.cpp
+    submissions.cpp
+    submissions_http.cpp
 )
 target_include_directories(ants_server_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include

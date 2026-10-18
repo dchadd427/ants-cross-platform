@@ -91,6 +91,58 @@ const char* const kSiteStatsSql =
     " PRIMARY KEY (kind, hour)"
     ") WITHOUT ROWID;";
 
+// Version 5. The map submissions (docs/MAP_SUBMISSIONS.md). map_submissions: one row for each map that a player sent: `state` is waiting, approved, declined, taken_down or withdrawn; `token_hash` is
+// the SHA-256 of the maker's token (the token itself is never kept); `name` / `name_key` what the maker proposed, `final_name` / `final_key` the name the map has once it is approved (the owner's, which may
+// differ; NULL until then). The partial unique index on `final_key` is what keeps an approved or taken-down name protected, whatever the code does. `file` is the name of the canonical file in the
+// submissions folder (made by the server, never from the maker's text), `hash` its FNV-1a 64 as 16 hex digits. `findings` holds the checker's warnings as JSON text. submission_limits counts the
+// submissions of each address and UTC day by a keyed hash of the address, never the address; review_log is the owner's audit trail (who did what, when).
+const char* const kSubmissionsSql =
+    "CREATE TABLE map_submissions ("
+    " id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 32),"
+    " token_hash TEXT NOT NULL CHECK (length(token_hash) = 64),"
+    " state TEXT NOT NULL CHECK (state IN ('waiting', 'approved', 'declined', 'taken_down', 'withdrawn')),"
+    " kind TEXT NOT NULL CHECK (kind IN ('classic', 'extended')),"
+    " name TEXT NOT NULL,"
+    " name_key TEXT NOT NULL,"
+    " final_name TEXT,"
+    " final_key TEXT,"
+    " renamed INTEGER NOT NULL DEFAULT 0 CHECK (renamed IN (0, 1)),"
+    " maker TEXT NOT NULL,"
+    " note TEXT NOT NULL,"
+    " owner_message TEXT NOT NULL DEFAULT '',"
+    " width INTEGER NOT NULL,"
+    " height INTEGER NOT NULL,"
+    " minutes INTEGER NOT NULL,"
+    " players INTEGER NOT NULL,"
+    " description TEXT NOT NULL,"
+    " size INTEGER NOT NULL CHECK (size > 0),"
+    " hash TEXT NOT NULL CHECK (length(hash) = 16),"
+    " findings TEXT NOT NULL,"
+    " file TEXT NOT NULL,"
+    " file_kept INTEGER NOT NULL DEFAULT 1 CHECK (file_kept IN (0, 1)),"
+    " created_at INTEGER NOT NULL,"
+    " decided_at INTEGER,"
+    " CHECK ((state IN ('approved', 'taken_down')) = (final_key IS NOT NULL))"
+    ") WITHOUT ROWID;"
+    "CREATE UNIQUE INDEX map_submissions_final ON map_submissions (final_key) WHERE final_key IS NOT NULL;"
+    "CREATE INDEX map_submissions_state ON map_submissions (state, created_at, id);"
+    "CREATE INDEX map_submissions_token ON map_submissions (token_hash, created_at, id);"
+    "CREATE TABLE submission_limits ("
+    " addr_key TEXT NOT NULL,"
+    " day INTEGER NOT NULL,"
+    " submitted INTEGER NOT NULL CHECK (submitted >= 1),"
+    " PRIMARY KEY (addr_key, day)"
+    ") WITHOUT ROWID;"
+    "CREATE TABLE review_log ("
+    " id INTEGER PRIMARY KEY,"
+    " at INTEGER NOT NULL,"
+    " actor_id TEXT NOT NULL,"
+    " actor_name TEXT NOT NULL,"
+    " action TEXT NOT NULL,"
+    " submission TEXT NOT NULL,"
+    " detail TEXT NOT NULL"
+    ");";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -101,6 +153,7 @@ const std::vector<db::Migration>& db_migrations() {
         {2, "history", kHistorySql},
         {3, "map_plays", kMapPlaysSql},
         {4, "site_stats", kSiteStatsSql},
+        {5, "map_submissions", kSubmissionsSql},
     };
     return list;
 }

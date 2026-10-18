@@ -206,6 +206,7 @@ public:
     std::vector<std::string> take_notices();
 
     const MapStore& store() const noexcept { return store_; }
+    MapStore& mutable_store() noexcept { return store_; }      // (the main loop gives it the approved maps of the players when they change: docs/MAP_SUBMISSIONS.md)
     /// What a lobby room asks of this server (room.hpp: LobbyServices): choosing a map by name (every map of the store: the maps folder and the community folder; the --demo-maps and --demo-map keep their
     /// spelling), loading a map, a place for a match. Public for the tests (tests/test_server/test_map_list.cpp).
     LobbyServices lobby_services();

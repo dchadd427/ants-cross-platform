@@ -210,3 +210,55 @@ target_include_directories(test_history_rooms PRIVATE
 
 add_test(NAME test_history_rooms COMMAND test_history_rooms)
 set_tests_properties(test_history_rooms PROPERTIES COST 15)
+
+# The map submissions' store (ants_server/submissions.hpp, docs/MAP_SUBMISSIONS.md): the server's own check and the canonical file, the limits, the names that are protected, the maker's token, the owner's decisions,
+# what an old row or file becomes, a database that fails, the lists that the lobby reads. No network, no room that runs a match
+add_executable(test_submissions
+    test_submissions.cpp
+)
+
+target_link_libraries(test_submissions PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_submissions PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_submissions COMMAND test_submissions)
+set_tests_properties(test_submissions PROPERTIES COST 6)
+
+# The pieces under the submissions: the rules for the text a player sends, SHA-256 and HMAC-SHA-256 (published vectors), base64url, the address a request counts under. Pure functions
+add_executable(test_map_names
+    test_map_names.cpp
+)
+
+target_link_libraries(test_map_names PRIVATE
+    ants_server_core
+)
+
+target_include_directories(test_map_names PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_map_names COMMAND test_map_names)
+set_tests_properties(test_map_names PROPERTIES COST 1)
+
+# The routes of the map submissions (ants_server/submissions_http.hpp): what a player may do and how it is limited by address, the owner's cookie that the login helper signs (forged, changed, aged), the CSRF
+# token, the answer of a path that does not exist for everything of the owner's that a visitor asks, the owner's decisions through the API. Requests made by hand: no network
+add_executable(test_submissions_api
+    test_submissions_api.cpp
+)
+
+target_link_libraries(test_submissions_api PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_submissions_api PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_submissions_api COMMAND test_submissions_api)
+set_tests_properties(test_submissions_api PROPERTIES COST 8)

@@ -61,6 +61,7 @@ cp -f "${SCRIPT_DIR}/web/countdown_button.js" "${DIST_DIR}/"                    
 cp -f "${BUILD_DIR}/lvl_core/lvl_core.js" "${BUILD_DIR}/lvl_core/lvl_core.wasm" "${DIST_DIR}/"                                                                                    # the map core for the browser (docs/MAP_FORMAT.md, "In the browser")
 cp -f "${SCRIPT_DIR}/web/lvl_core_api.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/mapmaker.html" "${DIST_DIR}/"                                                                                                                                             # the map maker (docs/MAP_EDITOR.md); its scripts are in front/
+cp -f "${SCRIPT_DIR}/web/admin.html" "${SCRIPT_DIR}/web/admin.css" "${SCRIPT_DIR}/web/admin_page.js" "${DIST_DIR}/"   # the owner's page (docs/MAP_SUBMISSIONS.md): typed by hand, nothing links to it
 cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"

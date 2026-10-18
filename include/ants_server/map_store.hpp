@@ -37,6 +37,19 @@ struct MapListing {
     std::string description;
     bool original{false};      // one of the six maps of the original game
     std::string thumb;         // the address of its preview picture on the site, "" when it has none
+    bool approved{false};      // a map that a player sent and the owner approved (docs/MAP_SUBMISSIONS.md): its file is in the submissions folder
+    std::string maker;         // the maker's display name (an approved map only)
+    std::string kind{"classic"};     // "classic" or "extended" (an Extended map is only ever listed by list_json(.., true))
+};
+
+/// An approved map as the submissions store hands it over: the file is the canonical one in the submissions folder, `name` the file name that the game knows the map by ("<Name>.lvl")
+struct ApprovedMap {
+    std::string name;
+    std::string path;
+    uint64_t hash{0};          // FNV-1a 64 of the file (net::hash_file)
+    uint64_t size{0};
+    uint32_t width{0}, height{0}, minutes{0}, players{0};
+    std::string description, maker, kind;
 };
 
 class MapStore {
@@ -61,15 +74,28 @@ public:
     bool scanned() const noexcept { return scanned_; }
     /// The name under which the scanned list knows `name` (the same name, or the one that differs in letter case only); "" when it does not
     std::string listed_name(const std::string& name) const;
-    /// The body of GET /maps: {"format":1,"maps":[{file,width,height,minutes,players,description,plays,thumb[,original]}]}. `plays` is how many times each map was played (map_plays of the database, keyed
-    /// by file name and hash); null when the server keeps none: every count is 0 then.
-    std::string list_json(const std::vector<MapPlays>* plays) const;
+    /// The body of GET /maps: {"format":1,"maps":[{file,width,height,minutes,players,description,plays,thumb[,original][,maker]}]}. `plays` is how many times each map was played (map_plays of the database, keyed
+    /// by file name and hash); null when the server keeps none: every count is 0 then. With `with_extended` (GET /maps/all, for the newest version only) the body is format 2: every entry also has "kind",
+    /// and the approved Extended maps are in it, which no other list and no lobby choice ever holds (the game and the server do not load Extended maps yet).
+    std::string list_json(const std::vector<MapPlays>* plays, bool with_extended = false) const;
+
+    /// The approved maps of the submissions store (Classic ones join the list and can be chosen and found by name; Extended ones are only in list_json(.., true)). Replaces the set that was given before;
+    /// the list is rebuilt at once, the folders are not scanned again.
+    void set_approved(std::vector<ApprovedMap> maps);
+    /// Whether `key` (the lower-case name without ".lvl") is the name of a map of the library: one of the six originals or a file of the maps or the community folder. Approved maps do not count.
+    bool library_has_name(const std::string& key) const;
+    /// The approved Classic map that has this file name (exactly), or nullptr. Used to serve its file and picture; a name that is not approved or is taken down is not found.
+    const ApprovedMap* approved(const std::string& file_name) const;
 
 private:
     std::string dir_;
     std::string community_dir_;
     std::vector<MapListing> listing_;
+    std::vector<MapListing> extended_listing_;         // the approved Extended maps (never in listing_)
+    std::vector<ApprovedMap> approved_;
     bool scanned_{false};
+    void add_approved_to_listing();
+    void sort_listing();
 };
 
 }  // namespace ants::server

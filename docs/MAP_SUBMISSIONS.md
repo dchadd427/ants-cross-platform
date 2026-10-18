@@ -1,0 +1,114 @@
+# Map submissions: the server and the owner's page
+
+A player makes a map in the map maker ([`MAP_EDITOR.md`](MAP_EDITOR.md)) and may **send it for approval**. Nothing a player sends is public: it waits until the owner approves it on his own page. This page is the home of the server half (S1: the store, the API, the owner's page, the lists that the lobby reads, how to switch it on). The player's half (the Submit button of the editor and the My submissions page, S2) is built on the API below and is not part of S1.
+
+## The rules (the owner's)
+
+- Players never publish. A submission **waits**; the owner approves, renames and approves, or declines (with a short reason that the maker can read). An approved map can be **taken down** (hidden from the lobby, its file kept) and **put back**.
+- The server **checks every map itself** (`check_map` of the map core, [`MAP_FORMAT.md`](MAP_FORMAT.md)): what a client says about its map is never believed. Only a map that works (and fits the place: a new Classic map, 90 x 130 cells at most; an Extended map, 512 x 512 cells) is accepted. What is kept is the **canonical file** (the core's rewrite), never the bytes that came, under a name of the server's own making (32 random hex digits).
+- **Names are protected**: the name of a library map, of an **approved** map and of a **taken-down** one (taking down keeps the name) can never be given to another map, whatever the letter case. A submission with a taken name may be sent (the maker is told that the owner may change it), but **approving never replaces a map**. Only the owner renames, only when he approves; the maker sees `Approved as X (renamed by the owner)` and the owner's short message.
+- **Limits against spam**: 3 submissions for each address and UTC day, 300 for all addresses together, 200 waiting at most; only maps that pass. A **withdrawn** submission frees its place in the queue (not its place in the day's count).
+- **No accounts.** The maker is a display name. The player finds their submissions again by a **token** that the server makes (256 random bits, one for each browser) and keeps only as a SHA-256 hash.
+- **Extended maps** are listed only for the newest version: `GET /maps` never has one, and no room can choose one (the game does not load Extended maps yet). The list for the newest version is `GET /maps/all`.
+
+## The pieces
+
+```
+browser --> site's nginx (docker/nginx.conf) --+--> ants_server submission door  (--submit-port 4030)   /submissions, /admin/api/...
+                                               +--> ants_server replay door      (--replay-port 4020)   /maps, /maps/all, files and pictures of approved maps
+                                               +--> ants-admin-login (tools/admin_login.py, 4040)       /admin/login, /admin/callback, /admin/logout
+                                               +--> static files: /admin (the owner's page), /maps/files, /maps/previews
+```
+
+The state is in the server's database (`ants.db`, schema version 5: `map_submissions`, `submission_limits`, `review_log`) and in the folder `submissions/files/<id>.lvl` of the results volume. The door has **no secret**: it is meant to be reached through the site's nginx only (nothing publishes it on the host), and it believes the headers that nginx sets.
+
+## For the player's half (S2): the API
+
+All paths are the site's own; every answer is JSON with `Cache-Control: no-store`. Times are seconds since 1970 (UTC). A refusal is `{"error": "<code>", "message": "<a sentence in plain words>"}` and sometimes more members (below); the codes are stable, the messages are for the person.
+
+**The token.** The first successful send answers with `token`; keep it in the browser and send it as `Authorization: Bearer <token>` with every later call. The same token makes the player's submissions one list. A status link is any page address of S2's choosing that carries the token (in the fragment, so that it is never sent in a request line or logged), and opens the list with `GET /submissions`. A token that this server did not make is never accepted as a browser's: a send with one gets a new token.
+
+**`POST /submissions?kind=classic|extended&name=...&maker=...&note=...`** (the query is percent-encoded UTF-8, at most 4,096 characters). The body is the `.lvl` file as it is, `Content-Type: application/octet-stream`; at most **512 KB** for `kind=classic` and **4 MiB** for `kind=extended` (a bigger `Content-Length` is a 413 on the head, the body is never read). `kind` must be the kind of the file (its version word says: 8 Classic, 9 Extended). `Authorization` is optional (the token of this browser).
+- 201: `{"submission": {...}, "name_taken": bool, "token_is_new": bool, "token": "..."}`; `token` is there only when it is new. `name_taken` is **not an error**: the name is a map's name already, and the owner may change it or add a number (S2 shows the yellow note). `submission` is the maker's view (below).
+- Refusals: 400 `bad_kind`, `not_a_map` (not an Ants map, empty, truncated), `kind_mismatch`, `bad_name` / `bad_maker` / `bad_note` (with `reason`: `empty`, `too_short`, `too_long`, `characters`, `control`, `reserved`, `not_utf8`), `bad_token`, `no_address`; 413 `too_large`; 414 `query_too_long`; 415 `bad_content_type`; 403 `cross_site`; **422 `map_fails_checks`** or `map_too_big` with `findings`: `[{"severity": "fatal"|"warning", "message": "Blue has no hill"}]` (the sentences of the map core, to show as the editor's checks card does); 429 `address_limit` (3 a day), `day_limit`, `queue_full` (200 waiting, or the room for waiting files), `too_many_requests` (more than 20 tries in an hour, whatever came of them); 503 `busy` (the server is checking other maps: try again in a minute), `storage_full`, `storage_error`, `submissions_off`.
+
+**`GET /submissions`**: `{"submissions": [maker's view, newest first, at most 500]}`. 401 `no_token` without a well formed token (any token that no submission has is an empty list).
+**`GET /submissions/<id>`**: `{"submission": {...}}`. 404 `not_found` for an id that does not exist **and** for one that another token owns: nothing is learned from the difference.
+**`POST /submissions/<id>/withdraw`** (empty body): the submission is `withdrawn` and its file deleted. 409 `not_waiting` when it was already decided or withdrawn.
+
+**The maker's view** of a submission: `id`, `state`, `kind`, `name` (as sent, cleaned), `width`, `height`, `sent_at`; after a decision also `decided_at`; for `approved` and `taken_down` also `approved_name` and `renamed_by_owner`; `message` when the owner wrote one (the reason of a decline, or a note with an approval). **States**: `waiting` (can be withdrawn), `approved`, `taken_down` (S2 may say "approved" or "no longer in the list"), `declined`, `withdrawn`. The maker's view has nothing of the owner's side (no note, no findings, no maker field). A declined or withdrawn submission's row is deleted 90 days after the decision; a declined map's file after 30 days.
+
+**The error codes** (`error`; the status is the same everywhere):
+
+| Code | Status | Meaning |
+|---|---|---|
+| `bad_kind` | 400 | `kind` is not `classic` or `extended` |
+| `not_a_map` | 400 | no file, not an Ants map, cut off, or it could not be written in its standard form |
+| `kind_mismatch` | 400 | the file is not the kind that `kind` says |
+| `bad_name`, `bad_maker`, `bad_note` | 400 | the text is refused; `reason` is `empty`, `too_short`, `too_long`, `characters`, `control`, `reserved` (a device name) or `not_utf8` |
+| `bad_token` | 400 | the `Authorization` token is not shaped like one |
+| `no_address` | 400 | the server cannot tell where the request came from |
+| `no_token` | 401 | `GET /submissions` without a token |
+| `cross_site` | 403 | the browser says the request is from another site |
+| `not_found` | 404 | no such submission, or not yours, or not a path |
+| `not_waiting` | 409 | withdraw, approve or decline of a map that is not waiting |
+| `too_large` | 413 | over the size of its kind (512 KB, 4 MiB); a body over that is a 413 before it is read |
+| `query_too_long` | 414 | the query is over 4,096 characters |
+| `bad_content_type` | 415 | a map is `application/octet-stream`, the owner's calls `application/json` |
+| `map_fails_checks`, `map_too_big` | 422 | the check says no; `findings` has the sentences |
+| `address_limit`, `day_limit`, `queue_full`, `too_many_requests` | 429 | the limits of the table below |
+| `busy`, `storage_full`, `storage_error`, `submissions_off` | 503 | the server's checking budget, the disk or database, or the door is off (nginx answers `submissions_off` as 503 too when the game server is not there) |
+
+The owner's calls add `name_taken` (409, `suggestion`), `bad_state`, `bad_message`, `bad_reason`, `bad_json` (400), `csrf` (403), `not_approved`, `not_taken_down`, `file_gone` and `no_free_name` (409).
+
+## The text
+
+- **Strict UTF-8.** Invisible characters (zero width, bidirectional marks, soft hyphen, byte order mark, variation selectors, tags) are removed before anything is judged; other spaces become one space; runs of spaces become one; the ends are trimmed. A control character refuses the text.
+- **The map's name** is the game's file name in the network protocol, so it is ASCII: letters, digits, spaces and `' - _ . ! & ( ) ,`; 3 to 60 characters; it starts with a letter or digit and has at least two; no `..`, no trailing dot, no name that Windows reserves for a device (`CON`, `NUL`, `COM1`, ...). The file `<name>.lvl` is what an approved map is called in the lobby. Two names are the same name when they are equal in lower case.
+- **The maker's name** (1 to 24 characters, one line) and **the note** (0 to 280, line ends kept, at most two in a row) may hold printable ASCII except `<` and `>`, the Latin letters of U+00C0 to U+024F, Greek, Cyrillic, kana, the unified CJK ideographs, Hangul syllables and a few typographic marks. This is **NFC without tables**: every allowed character is its own NFC form and none starts a combining sequence, so a combining mark, a compatibility form (the "fi" ligature, the Angstrom sign) or an emoji is refused rather than changed, and there is no second spelling of one text.
+- The owner's decline reason and message: 200 characters, the same rules as the note.
+
+## The lists the lobby reads
+
+- `GET /maps` (public, as before): the six originals, the community maps and the **approved Classic maps**. An approved map has `"maker"` and a `"thumb"` of `/maps/previews/<name>.png`; every other member is as it was ([`SERVER.md`](SERVER.md), "The list of maps"). A lobby may choose an approved Classic map like any map of the list; its file is `GET /maps/files/<name>.lvl` (nginx asks the game server when its own folder has no such file).
+- `GET /maps/all` (public, for the newest version): `{"format": 2, "maps": [...]}`, the same entries each with `"kind"` (`classic` or `extended`) and the approved **Extended** maps. A page that does not know Extended maps never asks it; `/maps` stays as it was, so an older page or program never sees an Extended map, whatever it caches. How the version is known: the server does not know a page's version (the list has no parameter), so the **address** is the version: the newer code asks `/maps/all`. The file of an Extended map is not served yet (nothing loads it); it comes with the change that loads Extended maps in a game.
+- A **taken-down** map is in none of the lists and its file and picture are a 404 (a replay of a match on it cannot fetch the map any more until it is put back); its file is kept. The pictures are small PNGs (at most 128 pixels, the map maker's colors), made by the server.
+
+## The owner's page
+
+- **The address is `/admin`**, typed by the owner. No page, button or link of the site, the lobby or the editor points to it (`tests/scripts/test_web_admin.py` checks that no other file of `web/` names it), it is not in a sitemap, and it asks search engines to stay away. It is the shell of a few owner sections; today there is one, **Maps players sent**, with the tabs Waiting, Approved, Declined and Taken down: Waiting has Approve, Rename and approve (a name box, "Use next name", a taken name is never replaced) and Decline with a short reason; Approved has a large Take down with a question; Taken down has Put back. A later section is one more entry of `SECTIONS` in `web/admin_page.js` and a route of its own in the server: the shell, the logon and the checks do not change. The pictures it was built from are the owner's approved ones ([`MAP_EDITOR.md`](MAP_EDITOR.md) has the editor's).
+- **Sign in with Discord.** The page's button goes to `/admin/login`; the login helper (`tools/admin_login.py`, its own container) sends the browser to Discord (scope `identify` only), takes the answer at `/admin/callback`, asks who the person is, throws the token away and sets the cookie `ants_admin`: `v1.<base64url of {"id", "name", "exp", "n"}>.<hex HMAC-SHA-256 of "v1.<payload>">`, `HttpOnly`, `SameSite=Lax`, `Secure` behind https, path `/admin`, 8 hours. **The helper decides nothing about who the owner is**: the game server checks the signature with the secret it shares with the helper (`ANTS_ADMIN_SESSION_SECRET`) and compares the id with `ANTS_ADMIN_DISCORD_ID`, on every call. Anybody may sign in; only the owner's id is the owner. A session cannot be revoked before it ends (change the shared secret to end all of them).
+- **What a person sees.** Nobody signed in: "Owner logon" with the Discord button. Somebody else signed in: "This page is for the owner only" and who they signed in as; nothing about what the page holds. The owner: the sections. For **everything under `/admin/api` but `/me`**, a visitor, a stranger and an expired cookie get the answer of a path that does not exist (404 `not_found`, the same bytes), and so does every `/admin/api` call when the two settings are not both set; so nothing is learned about what exists.
+- **The API** (the owner's cookie; a change also needs the header `X-Ants-Csrf` with the token of `GET /admin/api/me`, which is derived from the session, `Content-Type: application/json`, and a `Sec-Fetch-Site` of `same-origin` when the browser sends one; a request from another site is a 404):
+  - `GET /admin/api/me` → `{"signed_in", "name", "owner", "csrf"}` (`name` and `owner` when signed in, `csrf` for the owner only).
+  - `GET /admin/api/maps?state=waiting|approved|declined|taken_down` → `{"state", "counts": {...four numbers}, "maps": [owner's view]}`. The owner's view is the maker's view plus `maker`, `note`, `minutes`, `players`, `description`, `size`, `findings` (the warnings of the check), `has_picture` and, for a waiting map, `name_taken`.
+  - `GET /admin/api/maps/<id>/picture` → the PNG. `GET /admin/api/next-name?name=...` → `{"name": "Treasure 3"}`, the first free `<name> N` from 2.
+  - `POST /admin/api/maps/<id>/approve` `{"name"?, "message"?}`: 409 `name_taken` (with `suggestion`) when the name is taken, never replacing; `decline` `{"reason"}` (required); `take-down`; `put-back`. 409 `not_waiting`, `not_approved`, `not_taken_down` for the wrong state, `file_gone` when a file was lost. Every decision is written to `review_log` (who, what, when).
+- **Everything shown is text**: the page puts names, makers, notes and reasons in with `textContent`, its script has no way to make markup from text, and the nginx block sends a content security policy (no inline script or style, no other site, no frame, no keeping by a cache). The server also refuses `<` and `>` in what it stores.
+
+## Limits, in one table
+
+| What | Limit |
+|---|---|
+| Classic upload | 512 KB (canonical at most 144 KB), 90 rows, 130 columns, 10,000 cells |
+| Extended upload | 4 MiB, at most 512 x 512 cells (1,024 a side) |
+| For one address | 3 submissions a UTC day; 20 tries an hour (nginx: 10 a minute, burst 3) |
+| All addresses | 300 submissions a day; 200 waiting; 256 MiB of waiting files; 1 GiB of kept files; 256 MiB of disk left free |
+| Checking | 6 maps and 1.5 s of checking in 10 s for the whole server (its one thread also runs the matches); 4 bodies above 64 KB read at once |
+| Text | map name 3 to 60, maker 1 to 24, note 280, reason 200 characters |
+
+The address is the real client address: `X-Client-Address`, which the site's nginx sets from `$remote_addr` (a header of that name from a visitor is never passed on). Behind another reverse proxy, name it in `docker/trusted-proxies.conf` (below), or every visitor has the proxy's address and the limit of three a day is three for the whole site. An IPv6 address counts as its /64. The database holds only a keyed hash of the address and the day (a random salt of its own), never the address.
+
+## Deploying: what to set, and what is not live until then
+
+Nothing of this is live after the merge until the stack is told. The door (`ANTS_SUBMIT_PORT`, default **0 = off**), the owner's page (`ANTS_ADMIN_DISCORD_ID` and `ANTS_ADMIN_SESSION_SECRET`, both) and the logon (`ANTS_DISCORD_CLIENT_ID`, `ANTS_DISCORD_CLIENT_SECRET`, `ANTS_PUBLIC_URL`) are each off without their settings, and say so (the server's log line `map submissions on: ...` names what is off; the helper answers 503). The lists work without any of it: `/maps/all` and the fallback for approved files answer from an empty set.
+
+1. **The stack** (`docker-compose.stack.yml`, and `docker-compose.staging.yml` for staging): the new service `ants-admin-login`, and these variables of the stack: `ANTS_SUBMIT_PORT=4030`, `ANTS_ADMIN_DISCORD_ID` (the owner's Discord user id: Developer Mode, right-click the profile, Copy User ID), `ANTS_ADMIN_SESSION_SECRET` (the same long random text for the server and the helper: `openssl rand -hex 32`), `ANTS_DISCORD_CLIENT_ID` and `ANTS_DISCORD_CLIENT_SECRET` (an application of the Discord developer portal), `ANTS_PUBLIC_URL` (`https://<the site>`, no path). In the application's settings add the redirect `<ANTS_PUBLIC_URL>/admin/callback`.
+2. **nginx** is `docker/nginx.conf`, built into the web image: nothing to edit, but behind a reverse proxy **mount a file over `/etc/nginx/ants-trusted-proxies/proxies.conf`** of the web container with `set_real_ip_from <the proxy's network>; real_ip_header X-Forwarded-For; real_ip_recursive on;` (the image's file is all comments). A staging or test copy that is not behind a proxy needs nothing.
+3. **The database** is migrated by the server itself at its start (schema version 4 to 5: three new tables, nothing changed). **A program of an older version refuses a database of version 5**: a rollback to a build before this one needs the copy of `ants.db` that was made before the first start (copy the file while the server is stopped; `docs/SERVER.md`, "The database").
+4. **The disk**: `/results/submissions/files` on the volume `ants-server-results` (at most 256 MiB waiting, 1 GiB kept, and the server stops accepting at 256 MiB free).
+5. **The player's half** (S2) is separate: until it exists nothing links to the API, and the owner's page shows nothing to review. The owner's page and the API work as soon as the settings are there (a map can be sent with `curl` for a trial: `docs/MAP_SUBMISSIONS.md` has the call above).
+
+## Tests
+
+`test_map_names` (the text rules, SHA-256 and HMAC against the published vectors, the address), `test_submissions` (the store: the check, the canonical file, the limits, names, tokens, decisions, old files, a failing database, the lobby's lists), `test_submissions_api` (the routes, the owner's cookie forged, changed and aged, CSRF, the answer for a visitor), the door cases CTL2.24 to CTL2.27 of `test_ctl`, `tests/scripts/submissions_server_check.py` (the real program, the real helper and a fake Discord, a restart), `test_admin_login.py`, `test_nginx_submissions.py` (the real nginx blocks), `test_web_admin.py` (the page's code, run) and the mutation lists `tests/data/submissions_mutants.json` ([`TESTING.md`](TESTING.md), "Mutation checks"; the page's own mutants are the broken copies of `test_web_admin.py`).

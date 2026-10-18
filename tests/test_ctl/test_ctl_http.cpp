@@ -1259,4 +1259,114 @@ void run_http_tests() {
         Client reach;
         ASSERT_TRUE(reach.connect_to(open_door->port(), other.c_str()));                                        // ... and the door that was opened to the network answers on it
     } TEST_END();
+
+    // ---- the door of the map submissions (listen_door): no secret, GET and POST, a body up to the door's own limit that the handler may lower on the head ----
+    TEST_CASE("CTL2.24 HTTP door (listen_door): a POST body reaches the handler with the peer's address, GET and POST only, a POST needs its length, a chunked body and a body on a GET are refused") {
+        Rig rig(true);
+        DoorOptions options;
+        options.max_body_bytes = 1024 * 1024;
+        rig.server = HttpServer::listen_door(0, options, true);
+        ASSERT_TRUE(rig.ok());
+        const std::string body = body_pattern(100 * 1000);
+        Reply r = rig.exchange("POST /submissions?kind=classic HTTP/1.1\r\nContent-Type: application/octet-stream\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body);
+        ASSERT_TRUE(r.complete && r.status == 200 && rig.calls == 1);
+        ASSERT_TRUE(rig.seen[0].method == "POST" && rig.seen[0].path == "/submissions" && rig.seen[0].query == "kind=classic" && rig.seen[0].body == body);
+        ASSERT_EQ(rig.seen[0].peer, std::string("127.0.0.1"));
+        ASSERT_TRUE(rig.seen[0].header("content-type") != nullptr && *rig.seen[0].header("content-type") == "application/octet-stream");
+        ASSERT_EQ(rig.exchange("GET /submissions HTTP/1.1\r\nAuthorization: Bearer abc\r\n\r\n").status, 200);
+        ASSERT_EQ(rig.calls, 2);
+        for (const char* method : {"PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE", "CONNECT"}) {
+            r = rig.exchange(std::string(method) + " /submissions HTTP/1.1\r\nContent-Length: 0\r\n\r\n");
+            ASSERT_MSG(r.status == 405 && r.header("allow") != nullptr && *r.header("allow") == "GET, POST", method);
+        }
+        ASSERT_EQ(rig.exchange("POST /submissions HTTP/1.1\r\n\r\n").status, 411);                                  // (a POST without a length)
+        ASSERT_EQ(rig.exchange("POST /submissions HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n").status, 411);
+        ASSERT_EQ(rig.exchange("GET /submissions HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello").status, 400);          // (a GET has no body)
+        ASSERT_EQ(rig.exchange("POST /submissions HTTP/1.1\r\nContent-Length: 0\r\n\r\n").status, 200);              // (an empty body is none: the handler judges it)
+        ASSERT_EQ(rig.calls, 3);
+        r = rig.exchange("GET /healthz HTTP/1.1\r\n\r\n");
+        ASSERT_TRUE(r.status == 200 && r.body == "{\"ok\":true}" && rig.calls == 3);
+    } TEST_END();
+
+    TEST_CASE("CTL2.25 HTTP door: a Content-Length above the limit is answered 413 on the head and the body is never read; the handler's own limit for a request can only lower the door's") {
+        Rig rig(true);
+        DoorOptions options;
+        options.max_body_bytes = 600 * 1000;
+        options.body_limit = [](const HttpRequest& head) { return head.path == "/small" ? size_t{1000} : size_t{1} << 40; };     // (asked for more than the door has: the door's limit still holds)
+        rig.server = HttpServer::listen_door(0, options, true);
+        ASSERT_TRUE(rig.ok());
+        // only the head is sent: the answer comes at once, with no body waited for
+        Client c;
+        ASSERT_TRUE(rig.connect(c));
+        c.send_all("POST /small HTTP/1.1\r\nContent-Length: 1001\r\n\r\n");
+        Reply r = rig.read_reply(c);
+        ASSERT_TRUE(r.complete && r.status == 413 && rig.calls == 0);
+        Client d;
+        ASSERT_TRUE(rig.connect(d));
+        d.send_all("POST /big HTTP/1.1\r\nContent-Length: 600001\r\n\r\n");
+        r = rig.read_reply(d);
+        ASSERT_TRUE(r.complete && r.status == 413 && rig.calls == 0);
+        ASSERT_EQ(rig.exchange("POST /big HTTP/1.1\r\nContent-Length: 4294967296\r\n\r\n").status, 413);
+        ASSERT_EQ(rig.exchange("POST /small HTTP/1.1\r\nContent-Length: 1000\r\n\r\n" + std::string(1000, 'x')).status, 200);
+        ASSERT_EQ(rig.exchange("POST /big HTTP/1.1\r\nContent-Length: 600000\r\n\r\n" + std::string(600000, 'y')).status, 200);
+        ASSERT_EQ(rig.calls, 2);
+    } TEST_END();
+
+    TEST_CASE("CTL2.26 HTTP door: only max_large_bodies bodies above 64 KB are read at once (the next is answered 503 on its head), a body that does not come in time is 408, bad options make no door") {
+        Rig rig(true);
+        DoorOptions options;
+        options.max_body_bytes = 300 * 1000;
+        options.max_large_bodies = 1;
+        options.request_timeout_ms = 3000;
+        rig.server = HttpServer::listen_door(0, options, true);
+        ASSERT_TRUE(rig.ok());
+        const std::string body = body_pattern(100 * 1000);
+        const std::string head = "POST /x HTTP/1.1\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n";
+        Client slow;
+        ASSERT_TRUE(rig.connect(slow));
+        slow.send_all(head + body.substr(0, 10 * 1000));                                                         // (a large body that is half way)
+        rig.pump_n(20);
+        Reply busy = rig.exchange(head + body);
+        ASSERT_TRUE(busy.status == 503 && rig.calls == 0);                                                       // the second one is turned away on its head
+        slow.send_all(body.substr(10 * 1000));
+        Reply done = rig.read_reply(slow);
+        ASSERT_TRUE(done.status == 200 && rig.calls == 1);
+        ASSERT_EQ(rig.exchange(head + body).status, 200);                                                        // (the place is free again)
+        slow.close();
+        Client stalled;
+        ASSERT_TRUE(rig.connect_accepted(stalled));
+        stalled.send_all(head + body.substr(0, 1000));
+        rig.pump_n(5);
+        rig.now += 3001;                                                                                         // the clock of the test: the time of the whole request is over
+        Reply late = rig.read_reply(stalled);
+        ASSERT_EQ(late.status, 408);
+        DoorOptions bad;
+        bad.max_body_bytes = 0;
+        ASSERT_TRUE(HttpServer::listen_door(0, bad, true) == nullptr);
+        bad.max_body_bytes = size_t{1} << 29;
+        ASSERT_TRUE(HttpServer::listen_door(0, bad, true) == nullptr);
+        bad = DoorOptions();
+        bad.max_large_bodies = 0;
+        ASSERT_TRUE(HttpServer::listen_door(0, bad, true) == nullptr);
+    } TEST_END();
+
+    TEST_CASE("CTL2.27 HTTP door: an answer is at most the door's max_response_bytes (a map file is bigger than the control interface's 1 MiB)") {
+        Rig rig(true);
+        DoorOptions options;
+        options.max_response_bytes = 3 * 1024 * 1024;
+        rig.server = HttpServer::listen_door(0, options, true);
+        ASSERT_TRUE(rig.ok());
+        rig.handler = [](const HttpRequest&) {
+            HttpResponse resp;
+            resp.content_type = "application/octet-stream";
+            resp.body = std::string(2 * 1024 * 1024, 'm');
+            return resp;
+        };
+        const Reply big = rig.exchange("GET /f HTTP/1.1\r\n\r\n");
+        ASSERT_TRUE(big.status == 200 && big.body.size() == 2 * 1024 * 1024);
+        Rig plain(true);
+        ASSERT_TRUE(plain.ok());
+        plain.handler = rig.handler;
+        ASSERT_EQ(plain.exchange("GET /f HTTP/1.1\r\n\r\n").status, 500);                                       // (the public door keeps its 1 MiB)
+    } TEST_END();
 }

@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Nothing changes on the site yet: this is the server half of sending a map for approval (the Submit button comes next). A sent map waits for the owner and is public only when he approves it. Off until switched on.
+
+**Rules / network:** none (protocol 21). The database goes to schema version 5.
+
 ## v0.12.79 - 2026-10-18 - Map maker: save as a new map and drafts (E5)
 
 **For players:**

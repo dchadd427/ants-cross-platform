@@ -39,6 +39,11 @@ const RAW = {
     same('entries that are no map are left out', dirty.map((m) => m.file), ['ok.lvl', 'ok2.lvl', 'ok3.lvl', 'ok4.lvl', 'ok5.lvl', 'dots..lvl']);
     same('numbers that are not whole counts become 0, a control character becomes a blank', [dirty[0].width, dirty[0].minutes, dirty[0].plays, dirty[0].description], [0, 0, 0, 'a b']);
     same('a picture is the site\'s own path or none', dirty.map((m) => m.thumb), ['', '', '', '', '/front/preview_tiny.png', '/maps/previews/dots..webp']);
+    {   // a map that a player sent and the owner approved has a picture of the site's own, a PNG: the same name rules as the others
+        const approved = P.parseList({ format: 1, maps: [{ file: 'Run One.lvl', thumb: '/maps/previews/Run%20One.png', maker: 'Mia' }, { file: 'a.lvl', thumb: '/maps/previews/%2e%2e%2fx.png' }, { file: 'b.lvl', thumb: '/maps/previews/x.gif' },
+            { file: 'c.lvl', thumb: '/maps/previews/a%2Fb.png' }, { file: 'd.lvl', thumb: '/maps/previews/.png' }, { file: 'e.lvl', thumb: '/maps/previews/x.png?y=1' }, { file: 'f.lvl', thumb: 'https://evil.example/maps/previews/x.png' }] });
+        same('a picture of an approved map is a PNG of the site, and no other address passes', approved.map((m) => m.thumb), ['/maps/previews/Run%20One.png', '', '', '', '', '', '']);
+    }
     // sorts
     const names = (mode) => P.sortMaps(list, mode).map((m) => m.name);
     same('default: the originals first in the server\'s order, then the others by plays most first, ties by name', names('default'), ['Tiny', 'Treasure', 'Mango tree', 'apple', 'Zebra', 'Alpha', 'Dune']);
@@ -351,7 +356,7 @@ function rig(options) {
         const good = ['/maps/previews/Bomb%20Island.webp', '/maps/previews/dots..webp', '/maps/previews/%C3%A9.webp', '/front/preview_tiny.png', '/maps/previews/!a.webp'.replace('!', '%21')];
         same('the two shapes of picture the server writes are kept', good.map(pic), good);
         const bad = ['/maps/previews/a%2Fb.webp', '/maps/previews/a%2fb.webp', '/maps/previews/a%5Cb.webp', '/maps/previews/a%5cb.webp', '/maps/previews/a%00b.webp', '/maps/previews/a%2.webp', '/maps/previews/a.webp?x=1', '/maps/previews/a.webp#x',
-            '/maps/previews/../a.webp', '/maps/previews/a/b.webp', '/maps/previews/.webp', '/maps/previews/.hidden.webp', '/maps/previews/a b.webp', '/maps/previews/a.png', '/front/preview_TINY.png', '/front/preview_tiny.png?v=1', '/front/preview_.png',
+            '/maps/previews/../a.webp', '/maps/previews/a/b.webp', '/maps/previews/.webp', '/maps/previews/.hidden.webp', '/maps/previews/a b.webp', '/maps/previews/a.gif', '/front/preview_TINY.png', '/front/preview_tiny.png?v=1', '/front/preview_.png',
             '/front/logo.png', '/maps/files/a.webp', 'https://x.example/maps/previews/a.webp', '//x.example/maps/previews/a.webp', 'maps/previews/a.webp', '/front/preview_a.svg', '/maps/previews/a.svg', '/front/preview_a/b.png', '/maps/previews/%5Ca.webp', '/maps/previews/%5ca.webp', '/maps/previews/%2Fa.webp', '/maps/previews/%00a.webp', 'javascript:alert(1)', '/maps/previews/a\\b.webp', '/maps/previews/a"b.webp', 5, null];
         same('everything else is no picture', bad.map(pic), bad.map(() => ''));
     }

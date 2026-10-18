@@ -136,7 +136,7 @@ int main() {
         }
         db::Database database;
         ASSERT_TRUE(open_db_file(database, path));
-        ASSERT_EQ(scalar(database, "SELECT max(version) FROM schema_version"), 4);
+        ASSERT_EQ(scalar(database, "SELECT max(version) FROM schema_version"), db_schema_version());       // (the newest version: the later migrations ran too)
         ASSERT_EQ(scalar(database, "SELECT count(*) FROM site_stats"), 0);
         ASSERT_EQ(scalar(database, "SELECT count(*) FROM site_stats_hours"), 0);
         ASSERT_EQ(scalar(database, "SELECT plays FROM map_plays"), 4);                                  // (the older data is as it was)

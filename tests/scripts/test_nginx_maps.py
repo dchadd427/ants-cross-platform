@@ -68,7 +68,7 @@ def quote(name):
 class TheLocations(unittest.TestCase):
     def test_the_four_locations_of_the_name_are_the_only_ones_and_no_pattern_location_could_catch_them(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
-        self.assertEqual([l for l in locations if "maps" in l], ["= /maps", "^~ /maps/previews/", "^~ /maps/files/", "^~ /maps/", "@maps_off"])
+        self.assertEqual([l for l in locations if "maps" in l], ["= /maps", "^~ /maps/previews/", "^~ /maps/files/", "^~ /maps/", "@maps_off", "= /maps/all"])       # (/maps/all: the newest version's list, docs/MAP_SUBMISSIONS.md)
         # (a regular-expression location would win over a prefix one only without ^~; the three prefix locations all have it, and an extension rule such as the one of images cannot answer first)
         for header in ("location ^~ /maps/previews/ {", "location ^~ /maps/files/ {", "location ^~ /maps/ {"):
             self.assertEqual(CONF.count(header), 1)
