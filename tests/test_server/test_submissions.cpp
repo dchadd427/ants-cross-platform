@@ -743,6 +743,8 @@ int main() {
         Failure why;
         ASSERT_TRUE(rig.store->take_down(ids[2], "42", "Dave", rig.now, s, why));
         const fs::path root = fs::path(rig.config.dir);
+        const auto ninety_days = fs::file_time_type::clock::now() - std::chrono::hours(24 * 90);       // (maps that were approved long ago: the files are older than the purge)
+        for (const std::string& id : ids) fs::last_write_time(root / "files" / (id + ".lvl"), ninety_days);
         db::Database fresh;                                                                           // (the database file is gone: a new one, with no rows)
         open_server_db(fresh, "");
         SubmissionStore again(fresh, rig.config, [](const std::string& key) { return library().library_has_name(key); });
@@ -752,11 +754,50 @@ int main() {
         for (const std::string& id : ids) ASSERT_TRUE(fs::exists(root / "orphans" / (id + ".lvl")) && fs::file_size(root / "orphans" / (id + ".lvl")) > 100);          // (all three, the taken-down one too)
         const std::vector<std::string> notices = again.take_notices();
         ASSERT_TRUE(notices.size() == 1 && notices[0].find("3 file") != std::string::npos);
+        for (const std::string& id : ids) {                                                           // (moved at this very start: the 30 days count from the move, not from the age of the file)
+            ASSERT_TRUE(fs::file_time_type::clock::now() - fs::last_write_time(root / "orphans" / (id + ".lvl")) < std::chrono::hours(24));
+        }
         // nothing is lost at once; after 30 days the quarantine is emptied at the next start
         fs::last_write_time(root / "orphans" / (ids[0] + ".lvl"), fs::file_time_type::clock::now() - std::chrono::hours(24 * 31));
         SubmissionStore later(fresh, rig.config, [](const std::string& key) { return library().library_has_name(key); });
         ASSERT_TRUE(later.open(rig.now, reason));
         ASSERT_TRUE(!fs::exists(root / "orphans" / (ids[0] + ".lvl")) && fs::exists(root / "orphans" / (ids[1] + ".lvl")) && fs::exists(root / "orphans" / (ids[2] + ".lvl")));
+    } TEST_END();
+
+    TEST_CASE("SUB7.4 The quarantine never replaces a file (a second file of the same name gets a number) and its purge touches only regular files with a name this server makes") {
+        Sub rig;
+        const fs::path root = fs::path(rig.config.dir);
+        const std::string name = std::string(32, 'c') + ".lvl";
+        const auto old = fs::file_time_type::clock::now() - std::chrono::hours(24 * 90);
+        const auto reopen = [&] {
+            SubmissionStore again(rig.database, rig.config, [](const std::string& key) { return library().library_has_name(key); });
+            std::string reason;
+            return again.open(rig.now, reason);
+        };
+        std::ofstream(root / "files" / name, std::ios::binary) << "first";
+        ASSERT_TRUE(reopen());
+        std::ofstream(root / "files" / name, std::ios::binary) << "second";
+        ASSERT_TRUE(reopen());
+        std::ofstream(root / "files" / name, std::ios::binary) << "third";
+        ASSERT_TRUE(reopen());
+        const auto read = [&](const fs::path& p) { std::ifstream in(p, std::ios::binary); return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()); };
+        ASSERT_TRUE(read(root / "orphans" / name) == "first" && read(root / "orphans" / (name + ".1")) == "second" && read(root / "orphans" / (name + ".2")) == "third");
+        ASSERT_EQ(rig.files().size(), size_t{0});
+        // the purge: old regular files of the made names go (numbered ones too); everything else stays, however old
+        const std::string numbered = name + ".1";
+        const std::string stranger = "notes.txt", upper = std::string(32, 'C') + ".lvl", longer = name + ".1234", odd = name + ".x";
+        for (const std::string& f : {stranger, upper, longer, odd}) std::ofstream(root / "orphans" / f, std::ios::binary) << "keep";
+        fs::create_directories(root / "orphans" / (std::string(32, 'd') + ".lvl"));                      // (a folder with a good name)
+        std::error_code link_made;
+        fs::create_symlink("/etc/hostname", root / "orphans" / (std::string(32, 'e') + ".lvl"), link_made);          // (a link with a good name)
+        for (const std::string& f : {name, numbered, stranger, upper, longer, odd}) fs::last_write_time(root / "orphans" / f, old);
+        fs::last_write_time(root / "orphans" / (std::string(32, 'd') + ".lvl"), old);
+        ASSERT_TRUE(reopen());
+        ASSERT_TRUE(!fs::exists(root / "orphans" / name) && !fs::exists(root / "orphans" / numbered));
+        ASSERT_TRUE(fs::exists(root / "orphans" / (name + ".2")));                                       // (not old: stays)
+        for (const std::string& f : {stranger, upper, longer, odd}) ASSERT_TRUE(fs::exists(root / "orphans" / f));
+        ASSERT_TRUE(fs::is_directory(root / "orphans" / (std::string(32, 'd') + ".lvl")));
+        if (!link_made) ASSERT_TRUE(fs::is_symlink(root / "orphans" / (std::string(32, 'e') + ".lvl")));
     } TEST_END();
 
     TEST_CASE("SUB8.1 A database that fails is a clean 503 with nothing half done: no file stays, the server does not stop") {

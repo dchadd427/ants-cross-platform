@@ -640,6 +640,36 @@
    "file": "src/ants_server/submissions.cpp",
    "old": "if (!stamp && written < old) remove_quietly",
    "new": "if (false && !stamp && written < old) remove_quietly"
+  },
+  {
+   "id": "moved_orphan_keeps_its_old_time",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "        fs::last_write_time(target, fs::file_time_type::clock::now(), probe);\n",
+   "new": ""
+  },
+  {
+   "id": "orphan_replaces_the_one_before",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "for (int n = 1; n < 1000 && fs::symlink_status(target, probe).type() != fs::file_type::not_found; ++n)",
+   "new": "for (int n = 1; false && n < 1000; ++n)"
+  },
+  {
+   "id": "purge_touches_any_old_thing",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (!quarantined_name(it->path().filename().string()) || !fs::is_regular_file(fs::symlink_status(it->path(), stamp)) || stamp) continue;",
+   "new": "if (false) continue;"
+  },
+  {
+   "id": "purge_follows_links_and_folders",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "|| !fs::is_regular_file(fs::symlink_status(it->path(), stamp)) || stamp) continue;",
+   "new": "|| stamp) continue;"
+  },
+  {
+   "id": "purge_takes_any_name",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (!quarantined_name(it->path().filename().string()) ||",
+   "new": "if ("
   }
  ]
 }
