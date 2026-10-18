@@ -23,11 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.80 - 2026-10-18 - Map maker: My maps (E6)
 
 **For players:**
 - The map maker page (/mapmaker.html, not linked yet) has My maps: the maps you saved in this browser, newest first. Open one, copy it, or delete it after a question.
 - The top bar wraps up to 1,150 pixels so all its buttons stay in view.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c30c9a4a...f6d1f011)
 
 ## v0.12.79 - 2026-10-18 - Map maker: save as a new map and drafts (E5)
 
@@ -664,15 +666,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9889d7d...0a6a7cf4)
 
-## v0.12.4 - 2026-10-11 - A link to a missing room says so
+## Older versions (v0.12.4 and before)
 
-**For players:**
-- A link to a room that does not exist now says so and offers to start a room of your own, instead of putting you alone in a made-up room.
-
-**Rules / network:** none: the simulation and the protocol are untouched.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/893ef3c...9889d7d4)
-
-## Older versions (v0.12.3 and before)
-
-Every release before v0.12.4, and the long notes of v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.5, and the long notes of v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
