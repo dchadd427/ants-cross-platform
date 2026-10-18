@@ -783,9 +783,9 @@ int main() {
         const auto read = [&](const fs::path& p) { std::ifstream in(p, std::ios::binary); return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()); };
         ASSERT_TRUE(read(root / "orphans" / name) == "first" && read(root / "orphans" / (name + ".1")) == "second" && read(root / "orphans" / (name + ".2")) == "third");
         ASSERT_EQ(rig.files().size(), size_t{0});
-        // the purge: old regular files of the made names go (numbered ones too); everything else stays, however old
+        // the purge: old regular files of the made names go (numbered ones too); everything else stays, however old (an upper-case digit is no made name; its name differs from the others by more than the case, because Windows folds the case of file names)
         const std::string numbered = name + ".1";
-        const std::string stranger = "notes.txt", upper = std::string(32, 'C') + ".lvl", longer = name + ".1234", odd = name + ".x";
+        const std::string stranger = "notes.txt", upper = std::string(31, 'a') + "F.lvl", longer = name + ".1234", odd = name + ".x";
         for (const std::string& f : {stranger, upper, longer, odd}) std::ofstream(root / "orphans" / f, std::ios::binary) << "keep";
         fs::create_directories(root / "orphans" / (std::string(32, 'd') + ".lvl"));                      // (a folder with a good name)
         std::error_code link_made;
