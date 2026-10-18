@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21). The database goes to schema version 5.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac0ad9d3...a76d8c37)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac0ad9d3...a8c59336)
 
 ## v0.12.81 - 2026-10-18 - Lobby: Map maker link
 
