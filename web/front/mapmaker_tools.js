@@ -409,6 +409,7 @@
             isClean: function () { return !editor || editor.history.isClean(); },
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },
+            markUnsaved: function () { if (editor) editor.history.markUnsaved(); },
             state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, team: state.team, ants: state.ants, stages: state.stages, big: state.big, history: editor ? editor.history.size() : null }; }
         };
     }

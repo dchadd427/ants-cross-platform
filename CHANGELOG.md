@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- The map maker page (not linked from the site yet: /mapmaker.html) can save a map now. Save as new... (in the top bar, or in the Menu on a phone) keeps the map in your browser as a new map under a free name, and shows it, so the next Save makes one more new map. A map is never written over: if the name is already used by the map you opened, one of your saved maps or one of the game's maps, it says so and offers the next free name in one click ("Use Sunny Picnic 3").
+- Copy and Start an Extended map use the same name check, so a copy can no longer take the name of a game map or a saved map.
+- What you draw is kept in the browser while you work. If you close the page without saving, the next visit offers to pick the work up or throw it away, and the question before you leave a map offers Save as a new map first. A browser that cannot keep files says so, offers Download, and asks before the page is closed as before.
+- Saved maps cannot be opened again from the page yet: the list of your maps comes next.
+
 ## v0.12.78 - 2026-10-17 - Map maker: convert, crop and copy (E4)
 
 **For players:**

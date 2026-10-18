@@ -30,6 +30,11 @@ Parts:
              reasons, Crop it to fit opens the screen with the frame (dragged with the mouse, pulled at a handle: wider is shorter by itself, the arrow keys, the readout counts from 0), Use this
              part gives a Classic map of the part; then a touch screen (390 x 844 and 844 x 390): the sheets are inside the screen with their buttons, every control is 44 pixels, the crop screen has
              no sideways scroll and its corners and buttons are 44 pixels;
+  * save     1280 x 800 and a touch screen (390 x 844, 844 x 390), Save as a new map and the drafts (the page's own list of maps is stood in for by a fake of /maps): the name offered is the next free
+             one; the open map's name, a draft's and a library map's are refused (capitals and blanks do not count) with the one-click next name; a free name is saved as a NEW draft in the browser's
+             database (its bytes are the file's) and the saved map takes the screen, so the next Save offers the next number; a name that exists is never written over; drawing is kept in the
+             browser's one slot (a reload asks to pick it up or throw it away, and the browser's own question is not asked while the work is safe); the question before a map is left offers Save as a
+             new map first; a browser that keeps nothing says so, offers Download, and the browser's question comes back; the sheets are inside the screen and every control is 44 pixels;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
   * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
@@ -56,7 +61,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "panel", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "panel", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -100,6 +105,14 @@ def tiny_free(size=6):
                    for i in range(size) for j in range(size)):
                 return r, c
     raise RuntimeError("TINY has no free square")
+
+
+def idb_read(page, store, key):
+    """what the page's own database holds under a key, read from the page: None, or {name, kind, length} (the bytes are not carried over, only their length)"""
+    page.ev("window.__idb = undefined; (function () { var q = indexedDB.open('ants-mapmaker', 1); q.onerror = function () { window.__idb = null; }; q.onsuccess = function () { var g = q.result.transaction(%s, 'readonly').objectStore(%s).get(%s); "
+            "g.onsuccess = function () { var r = g.result; window.__idb = r ? {name: r.name, kind: r.kind, length: r.bytes.length} : null; }; g.onerror = function () { window.__idb = null; }; }; })()" % (json.dumps(store), json.dumps(store), json.dumps(key)))
+    wait_for(lambda: page.ev("window.__idb !== undefined"), 5, 0.05)
+    return page.ev("window.__idb") or None
 
 
 def wait_for(condition, timeout=8.0, step=0.1):
@@ -250,6 +263,8 @@ def main():
                 continue
             tab = Tab(browser)
             DIALOGS[:] = []
+            origin = "/".join(args.web.split("/")[:3])
+            tab.call("Storage.clearDataForOrigin", {"origin": origin, "storageTypes": "indexeddb"})          # (the work that an earlier part left in the browser's database is not this part's to pick up)
 
             def on_dialog(msg, tab=tab):
                 # a page that holds a map that was drawn on asks before it is left (a "beforeunload" question): the check answers yes, and notes it
@@ -936,7 +951,7 @@ def run_part(part, tab, args, check, tiny, junk):
         summary = lambda: page.ev("JSON.stringify([document.getElementById('s-desc').textContent, document.getElementById('s-time').textContent, document.getElementById('s-ant').textContent])")
         check(json.loads(summary()) == ["“Tiny map with no PowerUps”", "6 minutes · 3 eggs for each team", "No default ant type"], "the side panel says what the map has: %s" % summary())
         top = page.ev("JSON.stringify([].map.call(document.querySelectorAll('.edmenu.dsk .btn'), function (b) { return b.textContent; }))")
-        check(json.loads(top) == ["New", "Open", "Copy...", "Properties", "Download"], "the top bar: New, Open, Copy..., Properties, Download (%s)" % top)
+        check(json.loads(top) == ["New", "Open", "Copy...", "Save as new...", "Properties", "Download"], "the top bar: New, Open, Copy..., Save as new..., Properties, Download (%s)" % top)
         check(page.ev("document.querySelector('#sumbox [data-act=props]').offsetParent !== null && document.querySelector('#sumbox [data-act=props]').textContent === 'Edit'"), "the summary has its Edit link")
         page.shot(args.shots, "mapmaker-props-entry")
         # the mouse: the button opens the dialog
@@ -1067,9 +1082,9 @@ def run_part(part, tab, args, check, tiny, junk):
         tap_selector("[data-act=menu]")
         check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
         names = page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')")
-        check(names == "New|Open|Copy...|Properties...|Download", "the menu: %s" % names)
+        check(names == "New|Open|Copy...|Save as new...|Properties...|Download", "the menu: %s" % names)
         page.shot(args.shots, "mapmaker-props-phone-menu")
-        page.ev("document.querySelectorAll('.menulist .btn')[3].click()")
+        page.ev("document.querySelectorAll('.menulist .btn')[4].click()")
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Properties... opens the sheet")
         check(page.ev("document.querySelector('.dlg').getBoundingClientRect().bottom") <= 844.5 and page.ev("[].every.call(document.querySelectorAll('.dlg-foot button'), function (b) { return b.getBoundingClientRect().bottom <= innerHeight + 1 && b.getBoundingClientRect().height >= 43.5; })"), "Cancel and Apply are in view, 44 pixels high")
         small = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('.dlg button, .dlg input, .dlg textarea'), function (b) { var r = b.getBoundingClientRect(); return b.offsetParent !== null && !b.disabled && (r.width < 43.5 || r.height < 43.5); }).map(function (b) { return b.id || b.textContent; }))")
@@ -1240,6 +1255,138 @@ def run_part(part, tab, args, check, tiny, junk):
             check(vis["cancel"] and vis["ur"], "%d x %d: Use this part and Cancel are inside the width (%s)" % (w, h, vis))
             page.ev("document.getElementById('crop-cancel').click()")
             check(wait_for(lambda: page.ev("!!document.querySelector('.creasons')")), "%d x %d: Cancel comes back to the reasons" % (w, h))
+    elif part == "save":
+        fake = ("window.__real = window.fetch; window.fetch = function (u) { if (String(u) === '/maps') return Promise.resolve(new Response(JSON.stringify({format: 1, maps: [{file: 'POPcOrN.lvl'}, {file: 'TINY.LVL'}]}), {status: 200})); "
+                "return window.__real.apply(this, arguments); };")
+        blocked = "Object.defineProperty(window, 'indexedDB', { get: function () { throw new Error('blocked'); } });"
+        title = lambda page: page.ev("(document.querySelector('.dlg h2') || {}).textContent || ''")
+        dialog = lambda page, text: wait_for(lambda: title(page) == text)
+        draft = lambda page, key: idb_read(page, "drafts", key)
+        print("[web map maker] save as a new map and the drafts, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open(fake) and page.ready(), "the page starts")
+        wait_for(lambda: page.ev("!!window.__listed") or True)
+        page.press_act("save")
+        check(dialog(page, "Save as a new map") and page.ev("document.querySelector('.cname input').value") == "My map 2", "Save as new... opens the dialog with the next free name (My map 2)")
+        page.press_act("save") if False else None
+        page.ev("document.querySelector('.dlg-foot .btn:first-child').click()")
+        page.choose_file(tiny)
+        check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
+        page.press_act("save")
+        dialog(page, "Save as a new map")
+        check(page.ev("document.querySelector('.cname input').value") == "TINY 2" and "is free" in page.ev("document.querySelector('.cname').textContent"), "the name offered is TINY 2, and it is free")
+        check(page.ev("document.querySelector('.dlg .lead').textContent") == "Your changes are saved as a new map. The map you opened, \u201cTINY\u201d, stays exactly as it was: no map is ever replaced.", "the words of the picture")
+        page.shot(args.shots, "mapmaker-save-free")
+        page.type_into(".cname input", "tiny")
+        check(page.ev("!!document.querySelector('.cname .note.bad')") and page.button_off(".dlg-foot .btn:last-child") and "already exists. A map is never replaced" in page.ev("document.querySelector('.cname .note').textContent"), "the open map's name is refused (capitals do not matter) and Save is off")
+        check(page.ev("document.querySelector('.cname .note .btn').textContent") == "Use \u201ctiny 2\u201d", "with the next free name in one click")
+        page.shot(args.shots, "mapmaker-save-taken")
+        page.click_selector(".cname .note .btn")
+        check(page.ev("document.querySelector('.cname input').value") == "tiny 2" and not page.button_off(".dlg-foot .btn:last-child"), "the button puts it in the box and Save is on")
+        page.type_into(".cname input", "  popcorn ")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.cname .note.bad')")) and page.button_off(".dlg-foot .btn:last-child"), "a library map's name is refused (the site's list of maps)")
+        page.type_into(".cname input", "Picnic")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: page.state()["name"] == "Picnic") and not page.ev("!!document.querySelector('.dlg')"), "a free name is saved and the saved map is on the screen")
+        s = page.state()
+        check(s["tags"] == ["Classic map"] and s["check"] == "Works in the original game", "it is the same Classic map: %s" % s)
+        saved = draft(page, "picnic")
+        check(saved and saved["name"] == "Picnic" and saved["kind"] == "classic" and saved["length"] == os.path.getsize(tiny), "the draft is in the browser's database with the file's bytes: %s" % saved)
+        page.press_act("save")
+        dialog(page, "Save as a new map")
+        check(page.ev("document.querySelector('.cname input').value") == "Picnic 2", "the next Save offers the next number")
+        page.type_into(".cname input", "PICNIC")
+        check(page.button_off(".dlg-foot .btn:last-child") and page.ev("document.querySelector('.cname .note .btn').textContent") == "Use \u201cPICNIC 2\u201d", "the name of the draft is taken")
+        page.key("Escape")
+        check(draft(page, "picnic")["length"] == os.path.getsize(tiny) and not draft(page, "picnic 2"), "nothing else was saved, and the draft is as it was")
+        # drawing is kept in the browser's one slot
+        page.tool("ground")
+        page.tile(487)
+        a, b = page.cell_point(3, 3), page.cell_point(3, 12)
+        page.drag(a[0], a[1], b[0], b[1], steps=8)
+        check(not page.button_off("#undo-btn"), "a line is drawn")
+        check(wait_for(lambda: bool(idb_read(page, "work", "current")), 6), "after a rest the drawing is kept in the browser's slot")
+        DIALOGS[:] = []
+        tab.call("Page.reload", {})
+        check(page.ready() or wait_for(page.ready, 20), "the page starts again")
+        check(DIALOGS == [], "the browser's own question was not asked: the work is safe in the browser (%s)" % DIALOGS)
+        check(dialog(page, "Pick up your unsaved work?") and "Last time you drew on \u201cPicnic\u201d" in page.ev("document.querySelector('.dlg').textContent"), "the next visit asks to pick the work up")
+        page.shot(args.shots, "mapmaker-save-pick-up")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg button'), function (b) { return b.textContent === 'Pick it up'; })[0].click()")
+        check(wait_for(lambda: page.state()["name"] == "Picnic") and page.pixel(*page.cell_point(3, 7)) == page.color_of(487), "the work is back, with the line")
+        # the question before a map is left offers Save as a new map first
+        page.press_act("new")
+        check(dialog(page, "Leave this map?") and page.ev("[].map.call(document.querySelectorAll('.dlg-foot button'), function (b) { return b.textContent; }).join('|')") == "Save as a new map first|Download it first|Leave without saving|Stay here", "picked-up work is not saved: the question offers Save as a new map first")
+        page.shot(args.shots, "mapmaker-save-leave")
+        page.ev("document.querySelector('.dlg-foot button').click()")
+        check(dialog(page, "Save as a new map") and page.ev("document.querySelector('.cname input').value") == "Picnic 2", "it opens Save as a new map")
+        page.type_into(".cname input", "Picnic Lines")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(dialog(page, "New map") and page.state()["name"] == "Picnic Lines", "the map is saved first, then what was asked for goes on (New map)")
+        lines = draft(page, "picnic lines")
+        check(lines and lines["length"] > 0 and draft(page, "picnic")["length"] == os.path.getsize(tiny), "a second draft; the first is as it was")
+        page.key("Escape")
+        check(wait_for(lambda: not idb_read(page, "work", "current"), 6), "a saved map leaves nothing in the slot")
+        DIALOGS[:] = []
+        tab.call("Page.reload", {})
+        wait_for(page.ready, 20)
+        check(not page.ev("!!document.querySelector('.dlg')") and DIALOGS == [], "the next visit asks nothing")
+        # throw it away
+        page.tile(487)
+        page.drag(a[0], a[1], b[0], b[1], steps=8)
+        wait_for(lambda: bool(idb_read(page, "work", "current")), 6)
+        tab.call("Page.reload", {})
+        wait_for(page.ready, 20)
+        dialog(page, "Pick up your unsaved work?")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg button'), function (b) { return b.textContent === 'Throw it away'; })[0].click()")
+        check(wait_for(lambda: not idb_read(page, "work", "current"), 6) and page.state()["name"] == "My map", "Throw it away empties the slot and the new map stays")
+        # a touch screen
+        for w, h in ((390, 844), (844, 390)):
+            print("[web map maker] save as a new map on a touch screen, %d x %d" % (w, h))
+            tab.emulate(w, h, 2, mobile=True)
+            page = Page(tab, args.web)
+            check(page.open() and page.ready(), "the page starts")
+            page.choose_file(tiny)
+            wait_for(lambda: page.state()["name"] == "TINY")
+            page.ev("document.querySelector('[data-act=menu]').click()")
+            wait_for(lambda: page.ev("!!document.querySelector('.menulist')"))
+            page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent === 'Save as new...'; })[0].click()")
+            check(dialog(page, "Save as a new map"), "Menu, Save as new... opens the sheet")
+            for what in ("free", "taken"):
+                if what == "taken":
+                    page.type_into(".cname input", "TINY")
+                    wait_for(lambda: page.ev("!!document.querySelector('.cname .note.bad')"))
+                fit = json.loads(page.ev("""JSON.stringify((function () {
+                    var d = document.querySelector('.dlg').getBoundingClientRect(), bad = [];
+                    [].forEach.call(document.querySelectorAll('.dlg-foot button'), function (b) { var r = b.getBoundingClientRect(); if (r.bottom > innerHeight + 1 || r.right > innerWidth + 1 || r.left < -1) bad.push(b.textContent); });
+                    var small = [].filter.call(document.querySelectorAll('.dlg button, .dlg input[type=text]'), function (b) { var r = b.getBoundingClientRect(); return b.offsetParent !== null && !b.disabled && (r.width < 43.5 || r.height < 43.5); }).map(function (b) { return b.textContent; });
+                    return {bottom: d.bottom, right: d.right, bad: bad, small: small, scrollX: document.documentElement.scrollWidth > innerWidth};
+                })())"""))
+                check(fit["bad"] == [] and fit["bottom"] <= h + 1 and fit["right"] <= w + 1 and not fit["scrollX"], "%d x %d, name %s: the sheet is inside the screen with Cancel and Save in view (%s)" % (w, h, what, fit))
+                check(fit["small"] == [], "%d x %d, name %s: every control of the sheet is at least 44 pixels each way (%s)" % (w, h, what, fit["small"]))
+                page.shot(args.shots, "mapmaker-save-phone-%s-%dx%d" % (what, w, h))
+            page.key("Escape")
+        # a browser that keeps nothing
+        print("[web map maker] a browser that keeps nothing")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open(blocked) and page.ready(), "the page starts although the database is refused")
+        page.press_act("save")
+        check(dialog(page, "This browser cannot keep maps") and page.ev("[].map.call(document.querySelectorAll('.dlg-foot button'), function (b) { return b.textContent; }).join('|')") == "Download|Close", "Save as new... says so and offers Download")
+        page.shot(args.shots, "mapmaker-save-unavailable")
+        page.key("Escape")
+        a, b = page.cell_point(3, 3), page.cell_point(3, 12)
+        page.tool("ground")
+        page.tile(487)
+        page.drag(a[0], a[1], b[0], b[1], steps=8)
+        page.press_act("new")
+        check(dialog(page, "Leave this map?") and page.ev("[].map.call(document.querySelectorAll('.dlg-foot button'), function (b) { return b.textContent; }).join('|')") == "Download it first|Leave without saving|Stay here", "the question has no Save as a new map first")
+        page.key("Escape")
+        DIALOGS[:] = []
+        tab.call("Page.reload", {})
+        wait_for(lambda: bool(DIALOGS), 6)
+        check(DIALOGS == ["beforeunload"], "the browser's own question comes back when nothing can be kept (%s)" % DIALOGS)
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):
             print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))

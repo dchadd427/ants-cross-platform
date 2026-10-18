@@ -1,16 +1,16 @@
 // Copy and convert (docs/MAP_EDITOR.md): each way makes a NEW map under a free name and never touches the open one; the core says what fits and why not. A plain ES5 script.
 (function (root, factory) {
     'use strict';
-    if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_sizes.js'), require('./mapmaker_checks.js'), require('./mapmaker_props.js'));
-    else root.MapConvert = factory(root.MapSizes, root.MapChecks, root.MapProps);
-})(this, function (Sizes, Checks, Props) {
+    if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_sizes.js'), require('./mapmaker_checks.js'), require('./mapmaker_props.js'), require('./mapmaker_store.js'));
+    else root.MapConvert = factory(root.MapSizes, root.MapChecks, root.MapProps, root.MapStore);
+})(this, function (Sizes, Checks, Props, Store) {
     'use strict';
 
     var MAX_NAME = 40;
     var capital = Checks.capital;
     function sentence(t) { var c = capital(String(t)); return /[.!?]$/.test(c) ? c : c + '.'; }
-    function clean(name) { return String(name).replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
-    function same(a, b) { return clean(a).toLowerCase() === clean(b).toLowerCase(); }
+    var clean = Store.clean;
+    function same(a, b) { return Store.key(a) === Store.key(b); }
     function room(name, tail) { return Array.from(name).slice(0, MAX_NAME - tail).join('').replace(/ +$/, ''); }
     // "Treasure" -> "Treasure 2" -> "Treasure 3", never over 40 characters, never a taken name
     function numbered(name, taken) {
@@ -51,23 +51,31 @@
             return h('div', 'srccard', [pic ? h('span', 'cthumb', pic) : '', h('div', 'st', [h('div', 'sh', [h('span', 'sn', cur.name), tags]),
                 h('div', 'sl', cur.file.rows + ' x ' + cur.file.columns + (head ? ' · ' + head.charAt(0).toLowerCase() + head.slice(1) : ''))])]);
         }
-        // a map is never replaced: the name of the open map is taken
-        function nameField(label, value, cur, onChange) {
+        // a map is never replaced: a name that the open map, a library map or a draft has is taken (`taken`), and the next free one is offered in one click
+        function nameField(label, value, taken, onChange) {
             var id = 'convert-name-' + (++count), input = h('input', '', [], { id: id, type: 'text', maxlength: MAX_NAME, autocomplete: 'off' }), status = h('div', '', [], { 'aria-live': 'polite' });
             var f = { box: h('div', 'cname', [h('label', '', label, { 'for': id }), input, status]), ok: false, edited: false };
             input.value = value;
             f.name = function () { return clean(input.value); };
             f.check = function () {
-                var name = f.name();
+                var name = f.name(), next;
                 status.textContent = ''; input.removeAttribute('aria-invalid');
-                f.ok = !!name && !same(name, cur.name);
-                if (f.ok) status.appendChild(h('div', 'cfree', [h('i', 'dot ok'), 'The name “' + name + '” is free.']));
-                else { input.setAttribute('aria-invalid', 'true'); status.appendChild(note('bad', '!', name ? 'A map called “' + name + '” already exists. A map is never replaced, so please pick another name.' : 'Give the new map a name.')); }
+                f.ok = !!name && !taken(name);
+                if (f.ok) status.appendChild(h('div', 'cfree', [h('i', 'dot ok'), 'The name \u201c' + name + '\u201d is free.']));
+                else {
+                    input.setAttribute('aria-invalid', 'true');
+                    next = name && numbered(name, taken);
+                    status.appendChild(note('bad', '!', name ? 'A map called \u201c' + name + '\u201d already exists. A map is never replaced, so please pick another name.' : 'Give the new map a name.',
+                        next ? [button('btn sm', 'Use \u201c' + next + '\u201d', function () { input.value = next; f.edited = true; f.check(); input.focus(); })] : []));
+                }
                 onChange();
             };
             input.addEventListener('input', function () { f.edited = true; f.check(); });
             return f;
         }
+        function takenFor(cur) { return env.taken || function (n) { return same(n, cur.name); }; }
+        // a default name that is taken becomes the next free one
+        function free(name, taken) { return taken(name) ? numbered(name, taken) : name; }
         function work(cur, name) { return { bytes: cur.bytes, sourceName: cur.name, name: name, crop: null }; }
 
         function copy() {
@@ -91,7 +99,7 @@
                 build: function (body) {
                     var other = ext ? card('other', 'Classic map', ' (convert)', fits ? 'Works in the original game and in the new version.' : ['Not yet: ' + shortReason(ordered(down.json.reasons)[0].message) + '. ', button('link', 'See why and what to do', function () { ctl.close(); classic(work(cur, null)); })], !fits)
                         : card('other', 'Extended map', ' (start an Extended map from this one)', 'Bigger limits. Works in the new version only. Any Classic map can be the start.');
-                    nm = nameField('Name of the new map', numbered(cur.name, function (n) { return same(n, cur.name); }), cur, function () { if (ctl) show(); });
+                    nm = nameField('Name of the new map', numbered(cur.name, takenFor(cur)), takenFor(cur), function () { if (ctl) show(); });
                     body.appendChild(sourceCard(cur));
                     body.appendChild(h('p', 'lead', 'Make a new map as:', { id: 'copy-lead' }));
                     body.appendChild(h('div', 'kinds stacked', [card('same', ext ? 'Extended map' : 'Classic map', ' (same kind)', ext ? 'Works in the new version only.' : 'Works in the original game and in the new version.'), other],
@@ -101,7 +109,9 @@
                     nm.check();
                 },
                 buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'make', text: 'Make new map', keepOpen: true, onClick: function (c) {
+                    nm.check();
                     if (choice === 'same') { if (nm.ok) { c.close(); env.onMade(cur.bytes.slice(), nm.name()); } return; }
+                    if (!nm.ok) return;
                     c.close();
                     if (ext) classic(work(cur, nm.edited ? nm.name() : null)); else startExtended(nm.edited ? nm.name() : null);
                 } }]
@@ -115,13 +125,14 @@
             ctl = dialogs.open({
                 title: 'Start an Extended map from this one?', focus: 'input',
                 build: function (body) {
-                    nm = nameField('Name of the new Extended map', carried || suffixed(cur.name, 'Extended'), cur, function () { if (ctl) ctl.setDisabled('make', !nm.ok); });
+                    nm = nameField('Name of the new Extended map', carried || free(suffixed(cur.name, 'Extended'), takenFor(cur)), takenFor(cur), function () { if (ctl) ctl.setDisabled('make', !nm.ok); });
                     body.appendChild(h('p', 'lead', cur.name + ' (' + cur.file.rows + ' x ' + cur.file.columns + ') will be the start of a new Extended map.'));
                     body.appendChild(two(['What stays the same', ['How the map plays. Every tile, hill, food pile and ant stays where it is.', 'Your Classic map “' + cur.name + '”. It is never touched.']],
                         ['What changes', ['The new map is an Extended map: the original game cannot open it.', 'The limits get bigger: up to ' + side + ' x ' + side + ' cells.']]));
                     body.appendChild(nm.box); nm.check();
                 },
                 buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'make', text: 'Make the new Extended map', keepOpen: true, onClick: function (c) {
+                    nm.check();
                     if (!nm.ok) return;
                     var made = core.convertToExtended(cur.bytes);
                     c.close();
@@ -141,7 +152,7 @@
         }
 
         function fits(w, res) {
-            var name = w.name || suffixed(w.sourceName, 'Classic'), cr = w.crop, r = core.readReport(w.bytes, 'extended').json, c = limits.classic;
+            var name = w.name || free(suffixed(w.sourceName, 'Classic'), takenFor(env.current())), cr = w.crop, r = core.readReport(w.bytes, 'extended').json, c = limits.classic;
             var right = ['The copy keeps the limits of a Classic map: at most ' + c.rows + ' rows and ' + c.columns + ' columns.', 'The “New version only” badge goes away.'];
             if (cr) right.unshift('Only the part you chose is kept: rows ' + cr.row + ' to ' + (cr.row + cr.rows - 1) + ', columns ' + cr.column + ' to ' + (cr.column + cr.columns - 1) + '.');
             return dialogs.open({
@@ -196,8 +207,52 @@
             });
         }
 
+        // Save as a new map: the map on the screen goes into the browser as a NEW draft under a free name (`keep` adds it and never replaces one); `done` runs after it was kept
+        function save(done) {
+            var cur = env.current(), taken = takenFor(cur), nm, ctl, tail, busy = false, lib = env.libraryState();
+            if (!env.canKeep()) {
+                return dialogs.open({
+                    title: 'This browser cannot keep maps', cls: 'narrow',
+                    build: function (body) { body.appendChild(h('p', 'fatalmsg', 'This browser does not let the page keep files, so the map cannot be saved here. Download it to keep it on your device.')); },
+                    buttons: [{ id: 'download', text: 'Download', onClick: env.download }, { id: 'close', text: 'Close', ghost: true }]
+                });
+            }
+            function after() {                                  // the Save after this one: the next free number of the name that is chosen (or offered)
+                var base = nm.ok ? nm.name() : numbered(nm.name() || cur.name, taken);
+                tail.textContent = 'The editor then shows the new map, so the next Save makes one more new map (\u201c' + numbered(base, taken) + '\u201d).';
+                if (ctl) ctl.setDisabled('make', !nm.ok);
+            }
+            ctl = dialogs.open({
+                title: 'Save as a new map', focus: 'input',
+                build: function (body) {
+                    tail = h('p', 'cnever');
+                    nm = nameField('Name of the new map', numbered(cur.name, taken), taken, after);
+                    body.appendChild(h('p', 'lead', ['Your changes are saved as a ', h('b', '', 'new map'), '. The map you opened, \u201c' + cur.name + '\u201d, stays exactly as it was: no map is ever replaced.']));
+                    body.appendChild(nm.box);
+                    body.appendChild(tail);
+                    if (lib === 'failed') body.appendChild(h('p', 'cnever', 'The list of the game\u2019s maps could not be loaded, so a name that one of them has cannot be checked.'));
+                    nm.check();
+                },
+                buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'make', text: 'Save as a new map', keepOpen: true, onClick: function (c) {
+                    nm.check();
+                    if (!nm.ok || busy) return;
+                    busy = true;
+                    env.keep(nm.name(), function (error, bytes) {
+                        busy = false;
+                        if (error === 'exists') return nm.check();                  // another window made it first: the name is taken now
+                        c.close();
+                        if (error) return say('The map could not be saved', error);
+                        env.onKept(bytes, nm.name());
+                        if (done) done();
+                    });
+                } }]
+            });
+            ctl.setDisabled('make', !nm.ok);
+            return ctl;
+        }
+
         function convert() { var cur = env.current(); return cur.kind === 'classic' ? startExtended(null) : classic(work(cur, null)); }
-        return { copy: copy, startExtended: startExtended, classic: classic, convert: convert, shorten: shorten, crop: crop };
+        return { copy: copy, save: save, startExtended: startExtended, classic: classic, convert: convert, shorten: shorten, crop: crop };
     }
 
     return { create: create, numbered: numbered, suffixed: suffixed, shortReason: shortReason, ordered: ordered };

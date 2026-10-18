@@ -19,6 +19,7 @@
 """
 import array
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -33,12 +34,13 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_check.js")
 DIALOG_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_dialog_check.js")
 PROPS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_props_check.js")
 CONVERT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_convert_check.js")
+SAVE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_save_check.js")
 EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
 BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check.js")
 OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
 
 
 def read(*parts):
@@ -293,11 +295,11 @@ class TheCodeRuns(unittest.TestCase):
             "a copy that does not count on from the number": (convert, "n = m ? parseInt(m[2], 10) + 1 : 2", "n = m ? parseInt(m[2], 10) : 2"),
             "a name that is taken and used again": (convert, "while (taken(tried));", "while (false);"),
             "a name that goes over 40 characters": (convert, "Array.from(name).slice(0, MAX_NAME - tail)", "Array.from(name).slice(0, MAX_NAME)"),
-            "names that differ in capitals": (convert, ".toLowerCase() === clean(b).toLowerCase()", ".toLowerCase() === clean(b)"),
-            "a name with blanks round it": (convert, ".replace(/^ | $/g, '')", ""),
+            "names that differ in capitals": ("mapmaker_store.js", "function key(name) { return clean(name).toLowerCase(); }", "function key(name) { return clean(name); }"),
+            "a name with blanks round it": ("mapmaker_store.js", ".replace(/^ | $/g, '')", ""),
             "reasons in the order of the core": (convert, "return rank(a) - rank(b); });", "return 0; });"),
             "a short reason that keeps the semicolon": (convert, ".replace('; ', ' and ')", ".replace('; ', ', ')"),
-            "a name of the open map that is free": (convert, "f.ok = !!name && !same(name, cur.name);", "f.ok = !!name;"),
+            "a name of the open map that is free": (convert, "f.ok = !!name && !taken(name);", "f.ok = !!name;"),
             "a copy that is the open map's own array": (convert, "env.onMade(cur.bytes.slice(), nm.name());", "env.onMade(cur.bytes, nm.name());"),
             "a Make new map that stays on for a taken name": (convert, "'Next: what changes';\n                ctl.setDisabled('make', !nm.ok);", "'Next: what changes';\n                ctl.setDisabled('make', false);"),
             "a Make the new Extended map that stays on for a taken name": (convert, "if (ctl) ctl.setDisabled('make', !nm.ok); });", "if (ctl) ctl.setDisabled('make', false); });"),
@@ -325,6 +327,36 @@ class TheCodeRuns(unittest.TestCase):
                         f.write(text.replace(old, new))
                     done = run_check(tmp, CONVERT_CHECK)
                 self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
+    def test_save_as_a_new_map_and_the_drafts_pass_their_checks_on_a_fake_dom(self):
+        done = run_check(script=SAVE_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the names", "B the store on a fake database", "C the site's list of maps", "D the Save dialog", "E the name check in the other dialogs", "F a Classic name that is taken"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_save_check_can_fail_on_the_broken_copies_of_the_list(self):
+        """tests/data/mapmaker_save_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy of the store or of the name check must fail the check"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_save_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 40)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, SAVE_CHECK)
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
     def test_the_drawing_passes_its_checks(self):
         done = run_check(script=EDIT_CHECK)
@@ -682,13 +714,13 @@ class ThePage(unittest.TestCase):
         self.assertIn("busy: function () { return dialogs.isOpen() || !$('crop').hidden; }", self.app, "the tools' keys do nothing while the crop screen is open")
         self.assertIn("MapCrop.open({ doc: doc, $: $, host: $('crop'), editor: $('editor'), limits: limits.classic,", self.app, "the limits of the frame are the core's")
         self.assertIn("{ text: 'Copy...', onClick: ACTIONS.copy }", self.app, "the phone's Menu has Copy...")
-        self.assertIn("copy: convertWith('copy'), convert: convertWith('convert')", self.app)
+        self.assertIn("copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert')", self.app)
         self.assertIn("onMade: function (bytes, name) { leave(function () {", self.app, "the new map takes the place of the open one only after the question about unsaved drawing")
         self.assertEqual(re.findall(r'<button class="(?:link)" type="button" id="convert-link" data-act="convert" disabled></button>', self.page), ['<button class="link" type="button" id="convert-link" data-act="convert" disabled></button>'])
 
     def test_every_button_that_the_page_has_is_wired_and_starts_off_until_the_core_is_there(self):
         acts = re.findall(r'data-act="([a-z-]+)"', self.page)
-        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "new", "open", "props", "zoom-in", "zoom-out"])
+        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "new", "open", "props", "save", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
         self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,", self.app)
@@ -724,10 +756,36 @@ class ThePage(unittest.TestCase):
         self.assertNotRegex(self.code["mapmaker_dialog.js"], r"\b(10000|10,000|262144|262,144|130|512)\b", "a limit is the core's, never a number of the dialog")
         self.assertNotRegex(self.code["mapmaker_sizes.js"], r"\b(10000|10,000|262144|262,144|130|512)\b")
 
+    def test_save_as_a_new_map_is_in_the_top_bar_and_the_menu_and_the_page_keeps_work_in_the_browser_only_when_it_may(self):
+        self.assertEqual(re.findall(r'data-act="(new|open|copy|save|props|download)" disabled>([^<]+)</button>', self.page)[:6],
+                         [("new", "New"), ("open", "Open"), ("copy", "Copy..."), ("save", "Save as new..."), ("props", "Properties"), ("download", "Download")], "the top bar is in the order of the picture, with Properties as before")
+        app = self.app
+        self.assertIn("{ text: 'Save as new...', onClick: ACTIONS.save }", app, "the phone's Menu has it")
+        self.assertIn("save: convertWith('save')", app)
+        self.assertIn("store.open(restoreWork);", app, "the work of the last visit is looked for once the database is open")
+        self.assertIn("store.keepWork(map.name, map.file.kind, map.bytes,", app, "the open map's own bytes are kept (the one copy)")
+        self.assertIn("if (tools.isSaved()) store.clearWork(", app, "a map that is saved or downloaded leaves nothing in the slot")
+        self.assertIn("if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending))", app, "the browser's question only when the work is not safe in the browser")
+        self.assertIn("else tools.markUnsaved();", app, "work picked up is still not saved")
+        self.assertIn("store.add(name, map.file.kind, made.bytes,", app)
+        self.assertEqual(len(re.findall(r"store\.(add|keepWork)\(", app)), 2, "the page writes to the store in two places only")
+        self.assertIn("MapStore.create({ idb: (function () { try { return win.indexedDB || null; } catch (e) { return null; } })()", app, "a browser that refuses the database does not stop the page")
+        self.assertIn("taken: function (name) { return MapStore.key(name) === MapStore.key(map.name) || store.has(name); },", app, "the open map, a draft and a library map are taken")
+        self.assertIn("canvas.setFile(file);\n        tools.setMap(file);\n        keepSoon();", app, "a map that takes the screen leaves the slot as it should")
+        self.assertIn("buttons: (can ? [{ id: 'save', text: 'Save as a new map first'", app, "the question before a map is left offers Save as a new map when the browser keeps maps")
+
     def test_nothing_can_write_over_a_file_and_no_sentence_is_put_in_as_markup(self):
         for name, text in self.code.items():
             for word in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "showSaveFilePicker", "showOpenFilePicker", "createWritable", "FileSystemFileHandle", "XMLHttpRequest", "fetch("):
+                if word == "fetch(" and name == "mapmaker_store.js":
+                    continue                # (the one read of the site's own list of maps: the next lines pin it)
                 self.assertNotIn(word, text, "%s has %s" % (name, word))
+        store = self.code["mapmaker_store.js"]
+        self.assertEqual(store.count("fetch("), 1)
+        self.assertIn("env.fetch('/maps')", store, "the one request is a read of the site's list of maps")
+        self.assertNotRegex(store, r"method|POST|PUT|body:", "the page sends nothing to the site")
+        self.assertNotIn("s.put({ key", store, "a draft is added, never put (put would replace one)")
+        self.assertEqual(len(re.findall(r"\.put\(", store)), 1, "the only put is the one slot of unsaved work")
         self.assertNotIn("overwrite", self.app.lower())
         self.assertIn("a.download = win.MapFile.downloadName(map.name);", self.app, "a download is a new file the browser saves, named by the map")
 
@@ -752,7 +810,7 @@ class ThePage(unittest.TestCase):
     def test_a_map_that_was_drawn_on_is_asked_about_and_handed_over_as_the_core_writes_it(self):
         app = self.app
         self.assertIn("core.rewrite(map.bytes, 'extended')", app)
-        self.assertLess(app.index("if (!tools.isClean()) {\n            var written = core.rewrite("), app.index("a.download = win.MapFile.downloadName(map.name);"))
+        self.assertLess(app.index("if (tools.isClean()) return { bytes: map.bytes };\n        var written = core.rewrite("), app.index("a.download = win.MapFile.downloadName(map.name);"))
         self.assertIn("function leave(then) {", app)
         self.assertIn("'new': function () { leave(newMap); }", app)
         self.assertIn("open: function () { leave(function () { $('file-in').click(); }); }", app)

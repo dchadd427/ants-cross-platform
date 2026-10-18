@@ -215,6 +215,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .sl, .kn, .cnever, .chelp, .crwhole, .crshapes p, .crrange { font-size: 14.5px; color: var(--muted); } .cnever { margin-top: 6px; } .chelp { margin-top: 8px; }
 .kinds.stacked { grid-template-columns: 1fr; gap: 10px; } .kind.off { opacity: .7; cursor: default; } .kind.off input { pointer-events: none; }
 .cname label { display: block; margin: 10px 0 3px; font-size: 14px; color: var(--muted); } .cname input[type=text] { max-width: 340px; min-height: 44px; font-size: 18px; background: #000; }
+.dlg .lead b { font-weight: 400; color: var(--gold); } .cname .note .btn { min-height: 44px; }
 .cname input[aria-invalid="true"] { border-color: var(--bad-edge); } .cfree { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--ok); }
 .cboxes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 6px 0 14px; } .cbox { padding: 12px 14px; background: #0a1511; border: 1px solid var(--rule); border-radius: 6px; }
 .ch, .crlab { margin-bottom: 6px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
