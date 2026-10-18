@@ -30,10 +30,10 @@
     function validMapFile(name) {
         return typeof name === 'string' && name.length >= 5 && name.length <= 64 && /^[\x20-\x7e]+$/.test(name) && !/[\/\\:*?"<>|]/.test(name) && name.charAt(0) !== '.' && /\.(lvl|LVL)$/.test(name);
     }
-    // A picture's address is the site's own and exactly one of the two shapes the server writes: /maps/previews/<percent-encoded name>.webp or /front/preview_<word>.png. A name holds unreserved characters and
+    // A picture's address is the site's own and exactly one of the shapes the server writes: /maps/previews/<percent-encoded name>.webp (the library's), /maps/previews/<percent-encoded name>.png (a map that a player sent and the owner approved, docs/MAP_SUBMISSIONS.md) or /front/preview_<word>.png. A name holds unreserved characters and
     // %XX escapes (never an escaped slash, backslash or NUL), no query, no leading dot
     var NAME_PART = "(?:[A-Za-z0-9_~-]|%(?!2[fF]|5[cC]|00)[0-9A-Fa-f]{2})(?:[A-Za-z0-9._~-]|%(?!2[fF]|5[cC]|00)[0-9A-Fa-f]{2})*";
-    var PICTURE = new RegExp('^(?:/maps/previews/' + NAME_PART + '\\.webp|/front/preview_[a-z]+\\.png)$');
+    var PICTURE = new RegExp('^(?:/maps/previews/' + NAME_PART + '\\.(?:webp|png)|/front/preview_[a-z]+\\.png)$');
     function ownPath(url) { return typeof url === 'string' && PICTURE.test(url) ? url : ''; }
     // A character string as an address part, as the server writes it (map_store.cpp percent_encode): everything but the unreserved characters is %XX (encodeURIComponent leaves ! ' ( ) * as they are, which the server never does)
     function percentEncode(s) {

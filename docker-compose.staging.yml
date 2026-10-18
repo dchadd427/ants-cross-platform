@@ -44,9 +44,12 @@ services:
     stop_grace_period: 15s
     # as in docker-compose.stack.yml: the demo rooms of web/lobby.html are on (ANTS_DEMO_ROOMS is 1 to 255, see that file's header), a room's turn log is at most 4 MiB (--log-mb 4: see the note there),
     # and the matches are kept as replays (--replay-demo, ANTS_REPLAY_DAYS, ANTS_REPLAY_MAX_MB) with their public list and files on the replay port (ANTS_REPLAY_PORT, 0 = off): see the note there
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
+      # the owner's page (docs/MAP_SUBMISSIONS.md): both are needed, else every /admin/api path answers 404
+      ANTS_ADMIN_DISCORD_ID: ${ANTS_ADMIN_DISCORD_ID:-}
+      ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-staging-maps}:/maps:ro
       - ants-staging-results:/results
@@ -61,6 +64,26 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 64
+
+  # The login helper of the owner's page (tools/admin_login.py, docs/MAP_SUBMISSIONS.md "Deploying"): Sign in with Discord, then a signed cookie. Without its settings it answers 503 to everything. The site's
+  # nginx passes /admin/login, /admin/callback and /admin/logout to it by the name "ants-admin-login"; it publishes nothing on the host and keeps nothing.
+  ants-admin-login:
+    build:
+      context: .
+      dockerfile: Dockerfile.login
+    container_name: ants-admin-login-staging
+    restart: unless-stopped
+    environment:
+      ANTS_DISCORD_CLIENT_ID: ${ANTS_DISCORD_CLIENT_ID:-}
+      ANTS_DISCORD_CLIENT_SECRET: ${ANTS_DISCORD_CLIENT_SECRET:-}
+      ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}
+      ANTS_PUBLIC_URL: ${ANTS_PUBLIC_URL:-}
+    networks:
+      - staging
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 32
 
 volumes:
   ants-staging-results:

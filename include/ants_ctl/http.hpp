@@ -62,6 +62,7 @@ struct HttpRequest {
     std::string query;                                         // after the first '?', without it (not decoded); empty when there is none
     std::map<std::string, std::string, std::less<>> headers;   // names in lower case, values without the white space around them
     std::string body;                                          // exactly Content-Length bytes (empty without one)
+    std::string peer;                                          // the address of the other end of the connection as text ("172.18.0.4"), "" when unknown. Behind a reverse proxy this is the proxy's.
 
     /// The value of a header (the name in lower case), or nullptr
     const std::string* header(std::string_view lower_case_name) const {
@@ -73,7 +74,18 @@ struct HttpRequest {
 struct HttpResponse {
     int status{200};                                           // 200 - 599; anything else is answered as 500
     std::string content_type{"application/json"};              // visible ASCII only, else replaced by application/json
-    std::string body;                                          // at most HttpServer::kMaxResponseBytes, else 500
+    std::string body;                                          // at most HttpServer::kMaxResponseBytes (a door's own limit, DoorOptions::max_response_bytes), else 500
+};
+
+/// What a door (HttpServer::listen_door) allows beyond the public read-only door. A door has no secret: the handler decides who may do what, so it is only for a program that checks every request itself.
+struct DoorOptions {
+    size_t max_body_bytes{64 * 1024};                          // the largest body that is read; a Content-Length above it is answered 413 on the head, and the body is never read
+    size_t max_response_bytes{1024 * 1024};
+    uint32_t request_timeout_ms{5000};                         // from accept to a complete request: a body of some megabytes from a slow line needs more than the default
+    /// The limit for one request, asked on its head (method, path, query and headers; no body yet): a Content-Length above it is answered 413 and the body is never read. Empty: max_body_bytes for all.
+    /// It can only lower the limit, never raise it above max_body_bytes.
+    std::function<size_t(const HttpRequest&)> body_limit;
+    size_t max_large_bodies{4};                                // how many bodies above 64 KB are read at the same time (a further one is answered 503 on its head: memory stays bounded)
 };
 
 class HttpServer {
@@ -98,6 +110,10 @@ public:
     /// for a Content-Length above 0; 411 for a chunked one, 413 for one that is too large, 417 for an `Expect` that is not 100-continue), and `GET /healthz` is answered by the server itself as before. The handler has no authority to check: it must decide for itself what may be seen, and change nothing. nullptr on failure.
     static std::unique_ptr<HttpServer> listen_public(uint16_t port, bool loopback_only = true);
 
+    /// A door that needs no secret and takes GET and POST (a POST must have a Content-Length; chunked bodies are refused as everywhere), with a body up to `options.max_body_bytes`. The same parser, limits and
+    /// timeouts as listen_public() otherwise; `GET /healthz` is answered by the server itself. The handler has the whole responsibility for who may do what (the map submissions: docs/MAP_SUBMISSIONS.md).
+    static std::unique_ptr<HttpServer> listen_door(uint16_t port, const DoorOptions& options, bool loopback_only = true);
+
     ~HttpServer();
     HttpServer(const HttpServer&) = delete;
     HttpServer& operator=(const HttpServer&) = delete;
@@ -120,7 +136,8 @@ public:
 private:
     struct Impl;
     explicit HttpServer(std::unique_ptr<Impl> impl);
-    static std::unique_ptr<HttpServer> open(uint16_t port, std::string bearer_secret, bool loopback_only, bool read_only);
+    enum class Mode { Control, ReadOnly, Door };
+    static std::unique_ptr<HttpServer> open(uint16_t port, std::string bearer_secret, bool loopback_only, Mode mode, const DoorOptions& options);
     std::unique_ptr<Impl> impl_;
 };
 
@@ -138,8 +155,8 @@ struct HttpHead {
 
 /// Parses the request line and the headers: `head` is everything up to and including the blank line (CRLF CRLF). Returns 0 when it is well formed
 /// (`out` is filled), else the status to answer with (400 malformed, 431 too large, 505 version) and a fixed text in `error` (when not null).
-/// Whether the method is allowed and whether the sender is authenticated are not asked here.
-int parse_http_head(std::string_view head, HttpHead& out, std::string* error);
+/// Whether the method is allowed and whether the sender is authenticated are not asked here. A Content-Length above `max_body_bytes` is body_status 413.
+int parse_http_head(std::string_view head, HttpHead& out, std::string* error, size_t max_body_bytes = HttpServer::kMaxBodyBytes);
 
 /// True when the two texts are equal; the time depends on the longer of them and not on where they differ
 bool constant_time_equal(std::string_view a, std::string_view b);

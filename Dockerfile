@@ -151,8 +151,14 @@ COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 
-# Copy custom Nginx configuration
+# The owner's page (docs/MAP_SUBMISSIONS.md "The owner's page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
+COPY web/admin.html /usr/share/nginx/html/admin.html
+COPY web/admin.css /usr/share/nginx/html/admin.css
+COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
+
+# Copy custom Nginx configuration, and the list of the reverse proxies whose X-Forwarded-For is believed (none: the address of the connection counts; a mounted file of the same name replaces it)
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/trusted-proxies.conf /etc/nginx/ants-trusted-proxies/proxies.conf
 
 EXPOSE 80
 

@@ -227,6 +227,8 @@ struct Conn {
     std::string out;                  // bytes to write (the interim 100 and then the answer)
     size_t out_pos{0};
     HttpHead head;
+    std::string peer;                 // the address of the other end, as text
+    bool large_body{false};           // counted against DoorOptions::max_large_bodies while its body is read
 };
 
 // Reads what is there (bounded). False on a hard error; `eof` says the client has closed its sending side.
@@ -308,7 +310,7 @@ bool constant_time_equal(std::string_view a, std::string_view b) {
     return diff == 0;
 }
 
-int parse_http_head(std::string_view head, HttpHead& out, std::string* error) {
+int parse_http_head(std::string_view head, HttpHead& out, std::string* error, size_t max_body_bytes) {
     out = HttpHead();
     const auto bad = [&](int status, const char* what) {
         if (error != nullptr) *error = what;
@@ -399,7 +401,7 @@ int parse_http_head(std::string_view head, HttpHead& out, std::string* error) {
             for (size_t i = first; i < length->size(); ++i) v = v * 10 + static_cast<size_t>((*length)[i] - '0');
             out.content_length = std::min(v, kMaxExpectedLength);
         }
-        if (out.content_length > HttpServer::kMaxBodyBytes) {
+        if (out.content_length > max_body_bytes) {
             out.body_status = 413;
             out.body_error = "request body too large";
         }
@@ -441,7 +443,13 @@ struct HttpServer::Impl {
     socket_t listen_fd{kBadSocket};
     uint16_t port{0};
     std::string secret;
-    bool read_only{false};                                        // listen_public(): no secret, GET only, no body
+    Mode mode{Mode::Control};                                     // ReadOnly (listen_public): no secret, GET only, no body; Door (listen_door): no secret, GET and POST
+    DoorOptions door;                                             // the limits of a Door (the defaults are the control interface's)
+    size_t large_bodies() const {
+        size_t n = 0;
+        for (const auto& c : conns) if (c->large_body && c->phase == Phase::Body) ++n;
+        return n;
+    }
     uint32_t request_timeout_ms{HttpServer::kRequestTimeoutMs};
     int send_buffer_bytes{0};
     std::vector<std::unique_ptr<Conn>> conns;
@@ -483,7 +491,10 @@ bool HttpServer::Impl::evict_for_new_connection() {
 
 void HttpServer::Impl::accept_new(uint32_t now) {
     for (int n = 0; n < kMaxAcceptsPerUpdate; ++n) {
-        const socket_t s = ::accept(listen_fd, nullptr, nullptr);
+        sockaddr_in from;
+        std::memset(&from, 0, sizeof(from));
+        socklen_t from_len = sizeof(from);
+        const socket_t s = ::accept(listen_fd, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (s == kBadSocket) break;                               // nothing waiting (or an error that the next update will meet again)
         if ((conns.size() >= HttpServer::kMaxConnections && !evict_for_new_connection()) || !set_nonblocking(s)) {
             close_socket(s);                                      // too many and none that may give way: closed at once, without an answer
@@ -495,6 +506,10 @@ void HttpServer::Impl::accept_new(uint32_t now) {
             setsockopt(s, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&send_buffer_bytes), sizeof(send_buffer_bytes));
         }
         conns.push_back(std::make_unique<Conn>(s, now));
+        if (from_len >= sizeof(from) && from.sin_family == AF_INET) {
+            char text[INET_ADDRSTRLEN] = {0};
+            if (inet_ntop(AF_INET, &from.sin_addr, text, sizeof(text)) != nullptr) conns.back()->peer = text;
+        }
     }
 }
 
@@ -508,14 +523,32 @@ void HttpServer::Impl::advance_head(Conn& c, uint32_t now, const Handler& handle
     const size_t head_len = end + 4;
     std::string error;
     HttpHead head;
-    const int status = parse_http_head(std::string_view(c.in).substr(0, head_len), head, &error);
+    const int status = parse_http_head(std::string_view(c.in).substr(0, head_len), head, &error, mode == Mode::Door ? door.max_body_bytes : HttpServer::kMaxBodyBytes);
     if (status != 0) return respond_error(c, now, status, error.c_str());
     c.head = std::move(head);
+    c.head.request.peer = c.peer;
     c.in.erase(0, head_len);                                      // what is left is the body, and then whatever follows the request (ignored)
 
     const HttpRequest& r = c.head.request;
     const bool health = r.method == "GET" && r.path == "/healthz";
-    if (read_only) {                                              // the public door: nobody is asked for a secret, and nothing but a plain GET gets as far as the handler
+    if (mode == Mode::Door) {                                     // a door: no secret; GET and POST; what is allowed is the handler's business
+        if (health) return respond(c, now, 200, "application/json", "{\"ok\":true}");
+        if (r.method != "GET" && r.method != "POST") return respond_error(c, now, 405, "method not allowed", "Allow: GET, POST\r\n");
+        if (c.head.body_status != 0) return respond_error(c, now, c.head.body_status, c.head.body_error);
+        if (r.method == "GET" && c.head.has_content_length && c.head.content_length > 0) return respond_error(c, now, 400, "a request here has no body");
+        if (c.head.has_content_length && door.body_limit && c.head.content_length > std::min(door.body_limit(r), door.max_body_bytes)) return respond_error(c, now, 413, "request body too large");
+        if (c.head.has_content_length && c.head.content_length > 0) {
+            if (c.head.content_length > HttpServer::kMaxBodyBytes) {
+                if (large_bodies() >= door.max_large_bodies) return respond_error(c, now, 503, "busy: too many uploads at the moment");
+                c.large_body = true;
+            }
+            c.phase = Phase::Body;
+            if (c.head.expect_continue && c.in.size() < c.head.content_length) c.out += "HTTP/1.1 100 Continue\r\n\r\n";
+            return;
+        }
+        return dispatch(c, now, handler);
+    }
+    if (mode == Mode::ReadOnly) {                                 // the public door: nobody is asked for a secret, and nothing but a plain GET gets as far as the handler
         if (health) return respond(c, now, 200, "application/json", "{\"ok\":true}");
         if (r.method != "GET") return respond_error(c, now, 405, "method not allowed", "Allow: GET\r\n");
         if (c.head.body_status != 0) return respond_error(c, now, c.head.body_status, c.head.body_error);
@@ -551,7 +584,7 @@ void HttpServer::Impl::dispatch(Conn& c, uint32_t now, const Handler& handler) {
     } catch (...) {
         ok = false;
     }
-    if (!ok || response.status < 200 || response.status > 599 || response.body.size() > HttpServer::kMaxResponseBytes) {
+    if (!ok || response.status < 200 || response.status > 599 || response.body.size() > (mode == Mode::Door ? door.max_response_bytes : HttpServer::kMaxResponseBytes)) {
         return respond_error(c, now, 500, "internal error");
     }
     const std::string_view type = safe_header_value(response.content_type) ? std::string_view(response.content_type) : std::string_view("application/json");
@@ -608,12 +641,17 @@ HttpServer::~HttpServer() = default;
 
 std::unique_ptr<HttpServer> HttpServer::listen(uint16_t port, std::string bearer_secret, bool loopback_only) {
     if (!valid_secret(bearer_secret)) return nullptr;             // no secret, no server
-    return open(port, std::move(bearer_secret), loopback_only, false);
+    return open(port, std::move(bearer_secret), loopback_only, Mode::Control, DoorOptions());
 }
 
-std::unique_ptr<HttpServer> HttpServer::listen_public(uint16_t port, bool loopback_only) { return open(port, std::string(), loopback_only, true); }
+std::unique_ptr<HttpServer> HttpServer::listen_public(uint16_t port, bool loopback_only) { return open(port, std::string(), loopback_only, Mode::ReadOnly, DoorOptions()); }
 
-std::unique_ptr<HttpServer> HttpServer::open(uint16_t port, std::string bearer_secret, bool loopback_only, bool read_only) {
+std::unique_ptr<HttpServer> HttpServer::listen_door(uint16_t port, const DoorOptions& options, bool loopback_only) {
+    if (options.max_body_bytes == 0 || options.max_body_bytes > (size_t{1} << 28) || options.max_large_bodies == 0) return nullptr;
+    return open(port, std::string(), loopback_only, Mode::Door, options);
+}
+
+std::unique_ptr<HttpServer> HttpServer::open(uint16_t port, std::string bearer_secret, bool loopback_only, Mode mode, const DoorOptions& options) {
     ensure_sockets();
     const socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
     if (s == kBadSocket) return nullptr;
@@ -643,7 +681,9 @@ std::unique_ptr<HttpServer> HttpServer::open(uint16_t port, std::string bearer_s
     impl->listen_fd = s;
     impl->port = actual;
     impl->secret = std::move(bearer_secret);
-    impl->read_only = read_only;
+    impl->mode = mode;
+    impl->door = options;
+    if (mode == Mode::Door) impl->request_timeout_ms = options.request_timeout_ms;
     return std::unique_ptr<HttpServer>(new HttpServer(std::move(impl)));
 }
 

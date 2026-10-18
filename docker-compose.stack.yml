@@ -34,6 +34,13 @@
 #                                                   map, at the normal speed (6 to 12 minutes), so that the site's list of matches that are being played always has one to watch and the match is kept
 #                                                   as a replay afterwards. A value out of range makes the server exit at its start (see ANTS_REPLAY_DAYS). The first match begins a minute after the
 #                                                   server starts. (docs/SERVER.md "Matches of computer players")
+#   ANTS_SUBMIT_PORT=0                              the port, inside the container, of the map submissions' door (docs/MAP_SUBMISSIONS.md): 0 = OFF, the default. Set 4030, the one that docker/nginx.conf
+#                                                   passes /submissions and /admin/api to, to switch it on; it needs the database. Not published on the host. The maps wait in the folder submissions of the volume
+#                                                   ants-server-results, and the database ants.db there grows to schema version 5 (a program of an older version refuses that file: keep a copy of ants.db before the first start)
+#   ANTS_ADMIN_DISCORD_ID=<digits>                  the owner's Discord user id (the owner's page; both this and the session secret are needed, else /admin/api answers 404)
+#   ANTS_ADMIN_SESSION_SECRET=<32+ characters>      the secret that signs the owner's cookie: the SAME value for ants-server and ants-admin-login (a long random text: openssl rand -hex 32)
+#   ANTS_DISCORD_CLIENT_ID, ANTS_DISCORD_CLIENT_SECRET, ANTS_PUBLIC_URL    the Discord application of the owner's logon (developer portal; its redirect address is <ANTS_PUBLIC_URL>/admin/callback) and the
+#                                                   site's own address, https://example.org (no path). Without them ants-admin-login answers 503 and nobody can sign in.
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
@@ -80,9 +87,12 @@ services:
     # matches of the demo rooms too (the front page's games). --replay-port opens the PUBLIC, read-only door of the list and the files (GET /replays, GET /replays/<file>; the site's nginx passes both to it
     # over the network below): ON here, with the port that docker/nginx.conf uses; ANTS_REPLAY_PORT=0 switches it off. The program's own default is off.
     # The files and the list hold the names that the players typed (a player with no name shows as a color), so those names are public here; no address, room code or chat is in them.
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
+      # the owner's page (docs/MAP_SUBMISSIONS.md): both are needed, else every /admin/api path answers 404
+      ANTS_ADMIN_DISCORD_ID: ${ANTS_ADMIN_DISCORD_ID:-}
+      ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
       - ants-server-results:/results
@@ -97,6 +107,26 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 64
+
+  # The login helper of the owner's page (tools/admin_login.py, docs/MAP_SUBMISSIONS.md "Deploying"): Sign in with Discord, then a signed cookie. Without its settings it answers 503 to everything. The site's
+  # nginx passes /admin/login, /admin/callback and /admin/logout to it by the name "ants-admin-login"; it publishes nothing on the host and keeps nothing.
+  ants-admin-login:
+    build:
+      context: .
+      dockerfile: Dockerfile.login
+    container_name: ants-admin-login
+    restart: unless-stopped
+    environment:
+      ANTS_DISCORD_CLIENT_ID: ${ANTS_DISCORD_CLIENT_ID:-}
+      ANTS_DISCORD_CLIENT_SECRET: ${ANTS_DISCORD_CLIENT_SECRET:-}
+      ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}
+      ANTS_PUBLIC_URL: ${ANTS_PUBLIC_URL:-}
+    networks:
+      - proxy-network
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 32
 
 volumes:
   ants-server-results:

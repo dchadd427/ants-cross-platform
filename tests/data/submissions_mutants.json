@@ -1,0 +1,675 @@
+{
+ "note": "Mutants of the map submissions (src/ants_server/submissions.cpp, submissions_http.cpp, map_names.cpp, crypto.cpp, the submissions part of map_store.cpp and the door of src/ants_ctl/http.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/submissions_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md (the server's own check, the canonical file, a limit, a protected name, the token, the owner's cookie, CSRF, what a visitor is told, a text rule, the door's size and method rules). The test command runs the three suites of the store, the routes and the text rules, and the door cases of test_ctl. Not listed on purpose: a longer-than-45-characters address text (inet_pton refuses any such text anyway, so the cap is a second lock and the mutant is equivalent). The two mutants fits_not_required and canonical_not_rechecked are second locks behind check_map's own 'works' and the canonical rewrite: a map that works but does not fit the place cannot be built from the map maker's output, and the rewritten file is checked again only as defense in depth; they are expected to survive. short_secret_accepted is not listed either: the owner's API is off in two places (the constructor and owner_api_on(), both at 32 characters), so changing one of them changes nothing a caller can see; the tests of a 31-character secret hold the pair.",
+ "defaults": {
+  "build": "test_submissions test_submissions_api test_map_names test_ctl test_map_list",
+  "test": "./build/tests/test_server/test_submissions && ./build/tests/test_server/test_submissions_api && ./build/tests/test_server/test_map_names && ./build/tests/test_ctl/test_ctl && ./build/tests/test_server/test_map_list"
+ },
+ "mutants": [
+  {
+   "id": "kind_claim_believed",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (real_kind != in.kind) return refuse(400, \"kind_mismatch\", \"The file is not the kind of map that the request says.\");\n",
+   "new": ""
+  },
+  {
+   "id": "works_not_required",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "!report.get(\"judged\").as_bool_or(false) || !report.get(\"works\").as_bool_or(false) ||",
+   "new": "!report.get(\"judged\").as_bool_or(false) ||"
+  },
+  {
+   "id": "fits_not_required",
+   "file": "src/ants_server/submissions.cpp",
+   "old": " || !report.get(\"fits_the_place\").as_bool_or(false)) {\n        const bool too_big",
+   "new": ") {\n        const bool too_big"
+  },
+  {
+   "id": "upload_kept_as_sent",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "const std::string& canonical = rewritten.payload;",
+   "new": "const std::string& canonical = in.bytes;"
+  },
+  {
+   "id": "version_word_not_checked",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (version != 8 && version != 9) return refuse(400, \"not_a_map\", \"This file is not an Ants map.\");\n",
+   "new": ""
+  },
+  {
+   "id": "extended_judged_as_classic",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "const core::Profile profile = real_kind == \"extended\" ? core::Profile::Extended : core::Profile::NewMap;",
+   "new": "const core::Profile profile = core::Profile::NewMap;"
+  },
+  {
+   "id": "size_not_capped",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, \"too_large\", \"This map file is bigger than a map of this kind may be.\");\n",
+   "new": ""
+  },
+  {
+   "id": "canonical_not_rechecked",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "|| !report2.get(\"works\").as_bool_or(false) || !report2.get(\"fits_the_place\").as_bool_or(false)) {",
+   "new": "|| false) {"
+  },
+  {
+   "id": "address_limit_off_by_one",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (static_cast<size_t>(from_address) >= config_.per_address_per_day) {",
+   "new": "if (static_cast<size_t>(from_address) > config_.per_address_per_day) {"
+  },
+  {
+   "id": "address_not_counted",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "lim.bind_text(1, akey).ok() &&",
+   "new": "lim.bind_text(1, \"same\").ok() &&"
+  },
+  {
+   "id": "address_key_without_the_day",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "hmac_sha256(salt_, address + \"|\" + std::to_string(day))",
+   "new": "hmac_sha256(salt_, address + std::string(static_cast<size_t>(day) * 0, 'x'))"
+  },
+  {
+   "id": "day_limit_off",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (static_cast<size_t>(from_all) >= config_.per_day_total) return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "queue_limit_off_by_one",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (static_cast<size_t>(waiting) >= config_.max_waiting ||",
+   "new": "if (static_cast<size_t>(waiting) > config_.max_waiting ||"
+  },
+  {
+   "id": "waiting_budget_off",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "static_cast<uint64_t>(waiting_bytes) + in.bytes.size() > config_.max_waiting_bytes) {",
+   "new": "false) {"
+  },
+  {
+   "id": "kept_budget_off",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (static_cast<uint64_t>(kept_bytes) + in.bytes.size() > config_.max_kept_bytes) return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "free_space_not_asked",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return",
+   "new": "if (ec || space.available < 1) return"
+  },
+  {
+   "id": "withdrawn_still_waiting_in_queue",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "\"SELECT COUNT(*) FROM map_submissions WHERE state = 'waiting'\"",
+   "new": "\"SELECT COUNT(*) FROM map_submissions WHERE state IN ('waiting', 'withdrawn')\""
+  },
+  {
+   "id": "failed_try_uses_the_day",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (in.bytes.empty()) return refuse(400, \"not_a_map\", \"No map file came with the request.\");\n",
+   "new": "    if (in.bytes.empty()) return refuse(400, \"not_a_map\", \"No map file came with the request.\");\n    scalar(\"INSERT INTO submission_limits (addr_key, day, submitted) VALUES ('x', 1, 1) ON CONFLICT (addr_key, day) DO UPDATE SET submitted = submitted + 1\", {});\n"
+  },
+  {
+   "id": "check_window_ignored",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (in.allow_check && !in.allow_check()) return",
+   "new": "    if (false) return"
+  },
+  {
+   "id": "token_kept_plain",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "ins.bind_text(2, thash).ok()",
+   "new": "ins.bind_text(2, token + std::string(21, 'x')).ok()"
+  },
+  {
+   "id": "token_compare_always_true",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "return ctl::constant_time_equal(st.column_text(0), token_hash(token));",
+   "new": "(void)token; return true;"
+  },
+  {
+   "id": "wrong_token_says_so",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "        why = missing;                                         // (the same answer",
+   "new": "        why = make_failure(403, \"wrong_token\", \"That is not your map.\");                    // ("
+  },
+  {
+   "id": "withdraw_without_the_token",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (!get_for_token(id, token, out, why)) return false;\n    if (out.state != \"waiting\") {",
+   "new": "    (void)token;\n    if (!get(id, out)) return false;\n    if (out.state != \"waiting\") {"
+  },
+  {
+   "id": "any_token_is_the_browsers",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (!token.empty() && scalar(\"SELECT COUNT(*) FROM map_submissions WHERE token_hash = ?\", {token_hash(token)}) > 0) fresh = false;",
+   "new": "if (!token.empty()) fresh = false;"
+  },
+  {
+   "id": "list_for_any_token",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (!fetch_many(\"token_hash\", token_hash(token), out)) return database_failed(why, \"a read\");",
+   "new": "if (!fetch_many(\"state\", \"waiting\", out)) return database_failed(why, \"a read\");"
+  },
+  {
+   "id": "library_names_free",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (library_has_ && library_has_(key)) return true;\n",
+   "new": ""
+  },
+  {
+   "id": "approved_names_free",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "return scalar(\"SELECT COUNT(*) FROM map_submissions WHERE final_key = ?\", {key}) != 0;",
+   "new": "return false;"
+  },
+  {
+   "id": "approve_checks_no_name",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (name_taken(key)) {\n        why = make_failure(409, \"name_taken\"",
+   "new": "    if (false) {\n        why = make_failure(409, \"name_taken\""
+  },
+  {
+   "id": "approve_when_not_waiting",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (out.state != \"waiting\") {\n        why = make_failure(409, \"not_waiting\", \"This map is not waiting any more.\");\n        return false;\n    }\n    if (!out.file_kept",
+   "new": "    if (!out.file_kept"
+  },
+  {
+   "id": "renamed_flag_never_set",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "const bool renamed = chosen != out.name;",
+   "new": "const bool renamed = false;"
+  },
+  {
+   "id": "owner_message_dropped",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "!st.bind_text(4, note.text).ok() || !st.bind_int64(5, now).ok() || !st.bind_text(6, id).ok()) {",
+   "new": "!st.bind_text(4, \"\").ok() || !st.bind_int64(5, now).ok() || !st.bind_text(6, id).ok()) {"
+  },
+  {
+   "id": "decline_needs_no_reason",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "names::clean_note(reason, names::kMaxReasonChars, true);",
+   "new": "names::clean_note(reason, names::kMaxReasonChars, false);"
+  },
+  {
+   "id": "take_down_from_any_state",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (!decide(id, \"approved\", out, why)) return false;\n    db::Statement st;\n    if (!db_.prepare(st, \"UPDATE map_submissions SET state = 'taken_down'",
+   "new": "    if (!get(id, out)) return false;\n    db::Statement st;\n    if (!db_.prepare(st, \"UPDATE map_submissions SET state = 'taken_down'"
+  },
+  {
+   "id": "approved_list_has_taken_down",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "FROM map_submissions WHERE state = 'approved' ORDER BY final_key",
+   "new": "FROM map_submissions WHERE state IN ('approved', 'taken_down') ORDER BY final_key"
+  },
+  {
+   "id": "lobby_not_told_of_a_change",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    approved_changed_ = true;\n    return fetch_one(\"id\", id, out) || database_failed(why, \"a read\");\n}\n\nbool SubmissionStore::decline",
+   "new": "    return fetch_one(\"id\", id, out) || database_failed(why, \"a read\");\n}\n\nbool SubmissionStore::decline"
+  },
+  {
+   "id": "withdraw_keeps_the_file",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    remove_quietly(path_of(config_, out.file));             // (the place in the queue",
+   "new": "    // (the place in the queue"
+  },
+  {
+   "id": "maker_sees_the_owners_note",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    o.set(\"sent_at\", JsonValue::make_int(s.created_at));\n",
+   "new": "    o.set(\"sent_at\", JsonValue::make_int(s.created_at));\n    o.set(\"note\", JsonValue::make_string(s.note));\n"
+  },
+  {
+   "id": "old_declined_file_kept_for_ever",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "AND file_kept = 1 AND decided_at < ?\").ok() && old.bind_int64(1, file_cutoff).ok()",
+   "new": "AND file_kept = 1 AND decided_at < ?\").ok() && old.bind_int64(1, file_cutoff * 0).ok()"
+  },
+  {
+   "id": "old_rows_deleted_at_once",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "rows.bind_int64(1, now - static_cast<int64_t>(config_.old_row_days) * kDay).ok()",
+   "new": "rows.bind_int64(1, now + 1).ok()"
+  },
+  {
+   "id": "next_name_starts_at_one",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "for (int n = 2; n < 1000; ++n) {",
+   "new": "for (int n = 1; n < 1000; ++n) {"
+  },
+  {
+   "id": "extended_in_the_old_list",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "        if (a.kind == \"extended\") {\n            extended_listing_.push_back(std::move(m));",
+   "new": "        if (false) {\n            extended_listing_.push_back(std::move(m));"
+  },
+  {
+   "id": "extended_found_by_a_room",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "if (approved_map == nullptr || approved_map->kind != \"classic\") return fail(\"no such map on this server\");",
+   "new": "if (approved_map == nullptr) return fail(\"no such map on this server\");"
+  },
+  {
+   "id": "extended_never_in_the_new_list",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "    if (with_extended) {\n        for (const MapListing& m : extended_listing_) shown.push_back(&m);",
+   "new": "    if (false) {\n        for (const MapListing& m : extended_listing_) shown.push_back(&m);"
+  },
+  {
+   "id": "library_wins_no_more",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "        } else if (seen.insert(lower(a.name)).second) {",
+   "new": "        } else {"
+  },
+  {
+   "id": "invisible_characters_kept",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "        if (is_invisible(c)) continue;\n        if (c == U'\\r' && i + 1",
+   "new": "        if (false && is_invisible(c)) continue;\n        if (c == U'\\r' && i + 1"
+  },
+  {
+   "id": "controls_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "        if (is_control(c)) {\n            reason = \"control\";",
+   "new": "        if (false && is_control(c)) {\n            reason = \"control\";"
+  },
+  {
+   "id": "name_may_hold_a_slash",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "return c == U' ' || c == U'\\'' ||",
+   "new": "return c == U'/' || c == U' ' || c == U'\\'' ||"
+  },
+  {
+   "id": "name_may_start_with_a_dot",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (!is_alnum(v.front()) || v.back() == U'.' ||",
+   "new": "    if (v.back() == U'.' ||"
+  },
+  {
+   "id": "double_dot_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (out.text.find(\"..\") != std::string::npos) return fail(\"characters\");\n",
+   "new": ""
+  },
+  {
+   "id": "device_names_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (windows_reserved(out.text)) return fail(\"reserved\");\n",
+   "new": "    if (false && windows_reserved(out.text)) return fail(\"reserved\");\n"
+  },
+  {
+   "id": "name_longer_than_a_file_name",
+   "file": "include/ants_server/map_names.hpp",
+   "old": "constexpr size_t kMaxNameChars = 60;",
+   "new": "constexpr size_t kMaxNameChars = 70;"
+  },
+  {
+   "id": "names_in_other_scripts",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    for (const char32_t c : v) {\n        if (!is_name_char(c)) return fail(\"characters\");",
+   "new": "    for (const char32_t c : v) {\n        if (!allowed_display_char(c) || (false && !is_name_char(c))) return fail(\"characters\");"
+  },
+  {
+   "id": "angle_brackets_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (c >= 0x20 && c <= 0x7E) return c != U'<' && c != U'>';",
+   "new": "    if (c >= 0x20 && c <= 0x7E) return true;"
+  },
+  {
+   "id": "combining_marks_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "(c >= 0x0100 && c <= 0x024F) ||",
+   "new": "(c >= 0x0100 && c <= 0x036F) ||"
+  },
+  {
+   "id": "overlong_utf8_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "        if (extra == 2 && c < 0x800) return false;           // overlong\n",
+   "new": ""
+  },
+  {
+   "id": "surrogates_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "        if (c >= 0xD800 && c <= 0xDFFF) return false;        // a surrogate\n",
+   "new": ""
+  },
+  {
+   "id": "utf8_above_unicode_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "if (extra == 3 && (c < 0x10000 || c > 0x10FFFF)) return false;",
+   "new": "if (extra == 3 && c < 0x10000) return false;"
+  },
+  {
+   "id": "name_key_keeps_the_case",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "std::string name_key(std::string_view cleaned_name) { return lower_ascii(std::string(cleaned_name)); }",
+   "new": "std::string name_key(std::string_view cleaned_name) { return std::string(cleaned_name); }"
+  },
+  {
+   "id": "text_longer_than_the_limit",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (v.size() > max_chars) return fail(\"too_long\");",
+   "new": ""
+  },
+  {
+   "id": "cookie_signature_not_checked",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!ctl::constant_time_equal(mac, expected)) return none;\n",
+   "new": ""
+  },
+  {
+   "id": "cookie_never_expires",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (exp <= now_s || exp > now_s + kMaxSessionLifeS) return none;",
+   "new": "    if (exp > now_s + kMaxSessionLifeS) return none;"
+  },
+  {
+   "id": "cookie_may_last_for_ever",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (exp <= now_s || exp > now_s + kMaxSessionLifeS) return none;",
+   "new": "    if (exp <= now_s) return none;"
+  },
+  {
+   "id": "everybody_is_the_owner",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    s.owner = ctl::constant_time_equal(s.id, config_.owner_id);",
+   "new": "    s.owner = true;"
+  },
+  {
+   "id": "owner_id_prefix_is_enough",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    s.owner = ctl::constant_time_equal(s.id, config_.owner_id);",
+   "new": "    s.owner = s.id.compare(0, config_.owner_id.size(), config_.owner_id) == 0;"
+  },
+  {
+   "id": "csrf_not_checked",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_of(who))) return error_reply(403, \"csrf\", \"The page's token is missing or old. Reload the page.\");\n",
+   "new": "    (void)token;\n"
+  },
+  {
+   "id": "csrf_of_any_session",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "hex_encode(hmac_sha256(config_.session_secret, \"csrf1|\" + s.nonce + \"|\" + s.id)).substr(0, 32)",
+   "new": "hex_encode(hmac_sha256(config_.session_secret, \"csrf1|\" + s.id)).substr(0, 32)"
+  },
+  {
+   "id": "other_site_may_change",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (site != nullptr && *site != \"same-origin\") return error_reply(403, \"csrf\", \"The page's token is missing or old. Reload the page.\");\n",
+   "new": "    (void)site;\n"
+  },
+  {
+   "id": "other_site_may_read",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (cross_site(request) || request.path.size() < 11) return not_found();",
+   "new": "    if (request.path.size() < 11) return not_found();"
+  },
+  {
+   "id": "a_stranger_is_told_no",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!who.valid || !who.owner) return not_found();",
+   "new": "    if (!who.valid || !who.owner) return error_reply(403, \"owner_only\", \"Owner only.\");"
+  },
+  {
+   "id": "json_not_required",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!content_type_is(request, \"application/json\")) return error_reply(415, \"bad_content_type\", \"Send JSON.\");\n",
+   "new": ""
+  },
+  {
+   "id": "any_content_type_for_a_map",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!content_type_is(request, \"application/octet-stream\")) return error_reply(415,",
+   "new": "    if (false) return error_reply(415,"
+  },
+  {
+   "id": "cross_site_may_send",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (cross_site(request)) return error_reply(403, \"cross_site\", \"This request must come from the site's own page.\");\n    if (!content_type_is",
+   "new": "    if (!content_type_is"
+  },
+  {
+   "id": "tries_not_limited",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (times.size() >= config_.attempts_per_hour) return false;",
+   "new": ""
+  },
+  {
+   "id": "tries_table_unbounded",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        if (attempts_.size() >= kMaxAddressesKept) return false;           // (that many",
+   "new": "        if (false) return false;           // (that many"
+  },
+  {
+   "id": "visitors_header_believed_always",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (trust_header) {\n        const std::string* h = request.header(\"x-client-address\");",
+   "new": "    if (true || trust_header) {\n        const std::string* h = request.header(\"x-client-address\");"
+  },
+  {
+   "id": "ipv6_counted_whole",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "std::string(reinterpret_cast<const char*>(b), 8)",
+   "new": "std::string(reinterpret_cast<const char*>(b), 16)"
+  },
+  {
+   "id": "extended_limit_for_all",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "return query_value(head.query, \"kind\", kind) && kind == \"extended\" ? SubmissionStore::max_upload_bytes(\"extended\") : SubmissionStore::max_upload_bytes(\"classic\");",
+   "new": "return SubmissionStore::max_upload_bytes(\"extended\");"
+  },
+  {
+   "id": "other_calls_take_a_map",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    return kSmallBody;\n}",
+   "new": "    return SubmissionStore::max_upload_bytes(\"extended\");\n}"
+  },
+  {
+   "id": "window_budget_ignored",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "if (window_count_ >= config_.checks_per_window || window_spent_ms_ >= config_.check_budget_ms) return false;",
+   "new": "if (window_count_ >= config_.checks_per_window) return false;"
+  },
+  {
+   "id": "window_count_ignored",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "if (window_count_ >= config_.checks_per_window || window_spent_ms_ >= config_.check_budget_ms) return false;",
+   "new": "if (window_spent_ms_ >= config_.check_budget_ms) return false;"
+  },
+  {
+   "id": "picture_for_anybody",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!who.valid || !who.owner) return not_found();",
+   "new": "    if (!who.valid || !who.owner) { if (request.path.size() < 8 || request.path.compare(request.path.size() - 8, 8, \"/picture\") != 0) return not_found(); }"
+  },
+  {
+   "id": "token_returned_always",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (out.token_is_new) o.set(\"token\", JsonValue::make_string(out.token));",
+   "new": "    o.set(\"token\", JsonValue::make_string(out.token));"
+  },
+  {
+   "id": "sha256_round_constant",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "0x428a2f98, 0x71374491,",
+   "new": "0x428a2f99, 0x71374491,"
+  },
+  {
+   "id": "hmac_long_key_not_hashed",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "std::string k = key.size() > 64 ? sha256(key) : std::string(key);",
+   "new": "std::string k = std::string(key);"
+  },
+  {
+   "id": "base64_alphabet",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_\"",
+   "new": "\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\""
+  },
+  {
+   "id": "base64_decode_accepts_padding",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "        else return false;\n        acc = (acc << 6) | v;",
+   "new": "        else if (c == '=') continue;\n        else return false;\n        acc = (acc << 6) | v;"
+  },
+  {
+   "id": "door_body_limit_not_asked",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "if (c.head.has_content_length && door.body_limit && c.head.content_length > std::min(door.body_limit(r), door.max_body_bytes)) return respond_error(c, now, 413, \"request body too large\");",
+   "new": ""
+  },
+  {
+   "id": "door_large_bodies_unbounded",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "if (large_bodies() >= door.max_large_bodies) return respond_error(c, now, 503, \"busy: too many uploads at the moment\");",
+   "new": ""
+  },
+  {
+   "id": "door_takes_put",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "if (r.method != \"GET\" && r.method != \"POST\") return respond_error(c, now, 405, \"method not allowed\", \"Allow: GET, POST\\r\\n\");",
+   "new": ""
+  },
+  {
+   "id": "door_get_with_body",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "        if (r.method == \"GET\" && c.head.has_content_length && c.head.content_length > 0) return respond_error(c, now, 400, \"a request here has no body\");\n",
+   "new": ""
+  },
+  {
+   "id": "door_peer_not_set",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "    c.head.request.peer = c.peer;\n",
+   "new": ""
+  },
+  {
+   "id": "door_response_cap_of_the_control_door",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "(mode == Mode::Door ? door.max_response_bytes : HttpServer::kMaxResponseBytes)",
+   "new": "HttpServer::kMaxResponseBytes"
+  },
+  {
+   "id": "door_ceiling_not_applied_to_head",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "head, &error, mode == Mode::Door ? door.max_body_bytes : HttpServer::kMaxBodyBytes);",
+   "new": "head, &error, HttpServer::kMaxBodyBytes);"
+  },
+  {
+   "id": "picture_chunk_check_wrong",
+   "file": "src/ants_server/map_preview.cpp",
+   "old": "put32(out, ~crc32_of(reinterpret_cast<const unsigned char*>(body.data()), body.size()));",
+   "new": "put32(out, crc32_of(reinterpret_cast<const unsigned char*>(body.data()), body.size()));"
+  },
+  {
+   "id": "cheap_refusals_after_the_window",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    const uint32_t version = version_word(in.bytes);\n    if (version != 8 && version != 9) return refuse(400, \"not_a_map\", \"This file is not an Ants map.\");\n    const std::string real_kind = version == 9 ? \"extended\" : \"classic\";\n    if (real_kind != in.kind) return refuse(400, \"kind_mismatch\", \"The file is not the kind of map that the request says.\");\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n",
+   "new": "    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n    const uint32_t version = version_word(in.bytes);\n    if (version != 8 && version != 9) return refuse(400, \"not_a_map\", \"This file is not an Ants map.\");\n    const std::string real_kind = version == 9 ? \"extended\" : \"classic\";\n    if (real_kind != in.kind) return refuse(400, \"kind_mismatch\", \"The file is not the kind of map that the request says.\");\n"
+  },
+  {
+   "id": "one_address_uses_the_whole_window",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (used != window_by_address_.end() && used->second >= config_.checks_per_address_window) return false;",
+   "new": "    if (false && used != window_by_address_.end() && used->second >= config_.checks_per_address_window) return false;"
+  },
+  {
+   "id": "decline_keeps_the_file",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    remove_quietly(path_of(config_, out.file));                // (a declined map",
+   "new": "    // remove_quietly(path_of(config_, out.file));                // (a declined map"
+  },
+  {
+   "id": "decline_counts_the_file_still",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "SET state = 'declined', owner_message = ?, decided_at = ?, file_kept = 0 WHERE id = ? AND state = 'waiting'",
+   "new": "SET state = 'declined', owner_message = ?, decided_at = ? WHERE id = ? AND state = 'waiting'"
+  },
+  {
+   "id": "finding_message_not_shortened",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "JsonValue::make_string(shortened(f.get(\"message\").str()))",
+   "new": "JsonValue::make_string(f.get(\"message\").str())"
+  },
+  {
+   "id": "admin_api_short_path_throws",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (cross_site(request) || request.path.size() < 11) return not_found();",
+   "new": "    if (cross_site(request)) return not_found();"
+  },
+  {
+   "id": "extended_thumb_that_404s",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "        if (a.kind != \"extended\") m.thumb =",
+   "new": "        m.thumb ="
+  },
+  {
+   "id": "owned_files_are_orphans",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "{name}) != 0) continue;",
+   "new": "{name}) < 0) continue;"
+  },
+  {
+   "id": "com0_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "stem[3] >= '0' && stem[3] <= '9';",
+   "new": "stem[3] >= '1' && stem[3] <= '9';"
+  },
+  {
+   "id": "orphans_stay",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "        fs::rename(it->path(), target, renamed);\n",
+   "new": "        renamed = std::error_code();\n"
+  },
+  {
+   "id": "orphans_deleted_not_moved",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "        fs::rename(it->path(), target, renamed);\n",
+   "new": "        remove_quietly(it->path().string());\n"
+  },
+  {
+   "id": "quarantine_kept_for_ever",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (!stamp && written < old) remove_quietly",
+   "new": "if (false && !stamp && written < old) remove_quietly"
+  },
+  {
+   "id": "moved_orphan_keeps_its_old_time",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "        fs::last_write_time(target, fs::file_time_type::clock::now(), probe);\n",
+   "new": ""
+  },
+  {
+   "id": "orphan_replaces_the_one_before",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "for (int n = 1; n < 1000 && fs::symlink_status(target, probe).type() != fs::file_type::not_found; ++n)",
+   "new": "for (int n = 1; false && n < 1000; ++n)"
+  },
+  {
+   "id": "purge_touches_any_old_thing",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (!quarantined_name(it->path().filename().string()) || !fs::is_regular_file(fs::symlink_status(it->path(), stamp)) || stamp) continue;",
+   "new": "if (false) continue;"
+  },
+  {
+   "id": "purge_follows_links_and_folders",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "|| !fs::is_regular_file(fs::symlink_status(it->path(), stamp)) || stamp) continue;",
+   "new": "|| stamp) continue;"
+  },
+  {
+   "id": "purge_takes_any_name",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (!quarantined_name(it->path().filename().string()) ||",
+   "new": "if ("
+  }
+ ]
+}

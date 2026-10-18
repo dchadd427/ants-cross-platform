@@ -105,6 +105,12 @@ bool MapStore::find(const std::string& name, MapEntry& out, std::string* why) co
         ec.clear();
         path = fs::path(community_dir_) / name;
     }
+    if (!fs::is_regular_file(path, ec) || ec) {
+        ec.clear();
+        const ApprovedMap* approved_map = approved(name);              // (the approved maps of the players: Classic ones only; the owner's take-down removes one from here)
+        if (approved_map == nullptr || approved_map->kind != "classic") return fail("no such map on this server");
+        path = approved_map->path;
+    }
     if (!fs::is_regular_file(path, ec) || ec) return fail("no such map on this server");
     const uint64_t size = static_cast<uint64_t>(fs::file_size(path, ec));
     if (ec || size == 0 || size > kMaxMapBytes) return fail("the map file has an impossible size");
@@ -199,6 +205,12 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
     };
     for (const auto& f : files_of(dir_)) add(f.first, false);
     for (const auto& f : files_of(community_dir_)) add(f.first, true);
+    add_approved_to_listing();
+    sort_listing();
+    return listing_.size();
+}
+
+void MapStore::sort_listing() {
     std::sort(listing_.begin(), listing_.end(), [](const MapListing& a, const MapListing& b) {
         const auto rank = [](const MapListing& m) -> size_t {
             if (!m.original) return originals().size();
@@ -208,7 +220,61 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
         const size_t rb = rank(b);
         return ra != rb ? ra < rb : a.file < b.file;
     });
-    return listing_.size();
+}
+
+// The approved maps of the players join the list after the library: a name that the maps or the community folder has already wins (it cannot be approved any more, but a map added to the library later
+// could clash), and a file that is gone is left out.
+void MapStore::add_approved_to_listing() {
+    listing_.erase(std::remove_if(listing_.begin(), listing_.end(), [](const MapListing& m) { return m.approved; }), listing_.end());
+    extended_listing_.clear();
+    std::set<std::string> seen;
+    for (const MapListing& m : listing_) seen.insert(lower(m.file));
+    for (const ApprovedMap& a : approved_) {
+        if (!net::valid_map_name(a.name)) continue;
+        MapListing m;
+        m.file = a.name;
+        m.hash = a.hash;
+        m.size = a.size;
+        m.width = a.width;
+        m.height = a.height;
+        m.minutes = a.minutes;
+        m.players = a.players;
+        m.description = a.description;
+        m.approved = true;
+        m.maker = a.maker;
+        m.kind = a.kind;
+        if (a.kind != "extended") m.thumb = std::string(kCommunityPreviewDir) + percent_encode(a.name.substr(0, a.name.size() - 4)) + ".png";          // (the picture route serves Classic maps only: an Extended map has none yet)
+        if (a.kind == "extended") {
+            extended_listing_.push_back(std::move(m));
+        } else if (seen.insert(lower(a.name)).second) {
+            listing_.push_back(std::move(m));
+        }
+    }
+    std::sort(extended_listing_.begin(), extended_listing_.end(), [](const MapListing& a, const MapListing& b) { return a.file < b.file; });
+}
+
+void MapStore::set_approved(std::vector<ApprovedMap> maps) {
+    approved_ = std::move(maps);
+    if (!scanned_) return;
+    add_approved_to_listing();
+    sort_listing();
+}
+
+bool MapStore::library_has_name(const std::string& key) const {
+    for (const auto& o : originals()) {
+        if (lower(o.first.substr(0, o.first.size() - 4)) == key) return true;
+    }
+    for (const MapListing& m : listing_) {
+        if (!m.approved && m.file.size() > 4 && lower(m.file.substr(0, m.file.size() - 4)) == key) return true;
+    }
+    return false;
+}
+
+const ApprovedMap* MapStore::approved(const std::string& file_name) const {
+    for (const ApprovedMap& a : approved_) {
+        if (a.name == file_name) return &a;
+    }
+    return nullptr;
 }
 
 std::string MapStore::listed_name(const std::string& name) const {
@@ -222,13 +288,19 @@ std::string MapStore::listed_name(const std::string& name) const {
     return std::string();
 }
 
-std::string MapStore::list_json(const std::vector<MapPlays>* plays) const {
+std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_extended) const {
     std::map<std::pair<std::string, std::string>, int64_t> counts;
     if (plays != nullptr) {
         for (const MapPlays& p : *plays) counts[{p.map, p.hash}] = p.plays;
     }
     ctl::JsonValue maps = ctl::JsonValue::make_array();
-    for (const MapListing& m : listing_) {
+    std::vector<const MapListing*> shown;
+    for (const MapListing& m : listing_) shown.push_back(&m);
+    if (with_extended) {
+        for (const MapListing& m : extended_listing_) shown.push_back(&m);
+    }
+    for (const MapListing* mp : shown) {
+        const MapListing& m = *mp;
         ctl::JsonValue o = ctl::JsonValue::make_object();
         o.set("file", ctl::JsonValue::make_string(m.file));
         o.set("width", ctl::JsonValue::make_int(m.width));
@@ -240,10 +312,12 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays) const {
         o.set("plays", ctl::JsonValue::make_int(found == counts.end() ? 0 : found->second));
         if (!m.thumb.empty()) o.set("thumb", ctl::JsonValue::make_string(m.thumb));
         if (m.original) o.set("original", ctl::JsonValue::make_bool(true));
+        if (m.approved) o.set("maker", ctl::JsonValue::make_string(m.maker));
+        if (with_extended) o.set("kind", ctl::JsonValue::make_string(m.kind));
         maps.push_back(std::move(o));
     }
     ctl::JsonValue root = ctl::JsonValue::make_object();
-    root.set("format", ctl::JsonValue::make_int(1));
+    root.set("format", ctl::JsonValue::make_int(with_extended ? 2 : 1));
     root.set("maps", std::move(maps));
     return ctl::to_json(root);
 }

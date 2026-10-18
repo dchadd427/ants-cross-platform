@@ -66,5 +66,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/4001"]
 
 # Every interface inside the container (a published port does not reach the container's loopback address): the published ports decide who can reach it, see the header
-ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--community-maps", "/community-maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--replay-any-interface", "--results-dir", "/results"]
+ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--community-maps", "/community-maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--replay-any-interface", "--submit-any-interface", "--results-dir", "/results"]
 CMD ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010"]

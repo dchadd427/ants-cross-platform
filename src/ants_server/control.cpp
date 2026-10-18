@@ -1,8 +1,13 @@
 #include "ants_server/control.hpp"
 
 #include <algorithm>
+#include <fstream>
 
+#include "ants_assets/lvl_parser.hpp"
+#include "ants_net/protocol.hpp"
 #include "ants_replay/replay.hpp"
+#include "ants_server/map_preview.hpp"
+#include "ants_server/submissions_http.hpp"
 
 namespace ants::server {
 
@@ -446,11 +451,54 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
 
 }  // namespace
 
+// The file and the picture of an APPROVED map of the players (the site's nginx asks here only when its own folder of the library's maps has no file of that name): a GET of "/maps/files/<name>.lvl" or
+// "/maps/previews/<name>.png", the name percent-encoded as the lists write it. Only a Classic map that is approved now is served (a taken-down map, an Extended map and every other name are a 404).
+static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::HttpRequest& request) {
+    if (request.method != "GET" || !request.query.empty()) return error_response(404, "not found");
+    const bool picture = request.path.compare(0, 15, "/maps/previews/") == 0;
+    std::string name;
+    if (!percent_decode_text(request.path.substr(picture ? 15 : 12), name)) return error_response(404, "not found");
+    if (picture) {
+        if (name.size() < 5 || name.compare(name.size() - 4, 4, ".png") != 0) return error_response(404, "not found");
+        name = name.substr(0, name.size() - 4) + ".lvl";
+    }
+    const ApprovedMap* map = net::valid_map_name(name) ? store.approved(name) : nullptr;
+    if (map == nullptr || map->kind != "classic" || map->size > 1024 * 1024) return error_response(404, "not found");
+    std::ifstream in(map->path, std::ios::binary);
+    const std::string bytes = in ? std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()) : std::string();
+    if (bytes.empty()) return error_response(404, "not found");
+    ctl::HttpResponse r;
+    r.status = 200;
+    if (!picture) {
+        r.content_type = "application/octet-stream";
+        r.body = bytes;
+        return r;
+    }
+    assets::LevelData level;
+    if (!assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level)) return error_response(404, "not found");
+    r.body = render_preview_png(level);
+    if (r.body.empty()) return error_response(404, "not found");
+    r.content_type = "image/png";
+    return r;
+}
+
 // The public door (ants_server --replay-port): the list and the files of the replays, and the matches that run now, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read. The
 // players' names are public here (the names that were typed, "Green (Ann)"); no address or room code is in the list or in a file.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request) {
     if (request.path == "/history" || request.path.compare(0, 9, "/history/") == 0) return handle_public_history(rooms, request);
     if (request.path == "/live" || request.path.compare(0, 6, "/live/") == 0) return handle_public_live(rooms, request);
+    if (request.path == "/maps/all") {                                                       // the newest version's list: the same and the approved Extended maps (docs/MAP_SUBMISSIONS.md "The lists")
+        if (request.method != "GET" || !request.query.empty()) return error_response(404, "not found");
+        std::vector<MapPlays> plays;
+        const HistoryStore* history = rooms.history_store();
+        const bool counted = history != nullptr && history->available() && history->map_plays(plays);
+        ctl::HttpResponse r;
+        r.status = 200;
+        r.content_type = "application/json";
+        r.body = rooms.store().list_json(counted ? &plays : nullptr, true);
+        return r;
+    }
+    if (request.path.compare(0, 12, "/maps/files/") == 0 || request.path.compare(0, 15, "/maps/previews/") == 0) return approved_map_file(rooms.store(), request);
     if (request.path == "/maps") {                                                          // the list of the maps (map_store.hpp): the same with and without a database, plays 0 without one
         if (request.method != "GET" || !request.query.empty()) return error_response(404, "not found");
         std::vector<MapPlays> plays;
