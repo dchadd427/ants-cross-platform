@@ -17,6 +17,8 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
   material is planned as a separate, later project.
 - Pictures made from it: the sprites in `asset_catalog/sprites/` and the pictures of the front page in `web/front/` (cut out of that artwork and of screenshots of the game by
   `tools/front_page_art/make_art.py`) are the original's artwork too, not this project's.
+  The map maker's sprite atlas (`mapmaker_atlas/`: two sheets and an index that `tools/map_atlas.py` makes from those sprites and `docs/chd_table4_animations.json` when the web image is built; no
+  copy is committed) is the original's artwork too.
 - Rights holders: if you hold rights to something here and want it removed, open an issue at the project's repository and it will be taken out.
 
 ## Included in the repository

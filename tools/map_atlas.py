@@ -123,9 +123,9 @@ class Sheet:
                     if a < 128:
                         continue
                     colors.setdefault((r, g, b), len(colors) + 1)
+                    if len(colors) > MAX_COLORS:
+                        raise SystemExit("%s holds more than %d colors: more than a 256-color PNG can name" % (what, MAX_COLORS))
                     pixels[(y0 + y) * w + x0 + x] = colors[(r, g, b)]
-        if len(colors) > MAX_COLORS:
-            raise SystemExit("%s holds %d colors: more than a 256-color PNG can name" % (what, len(colors)))
         palette = [(0, 0, 0, 0)] + [c + (255,) for c, _i in sorted(colors.items(), key=lambda t: t[1])]
         return w, h, bytes(pixels), palette
 

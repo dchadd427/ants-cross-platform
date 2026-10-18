@@ -199,6 +199,13 @@ async function caseC() {
     for (const [scale, sprites] of [[48, true], [20, true], [12, true], [10, true], [9.99, false], [8, false], [6, false], [5, false], [3, false]]) {
         const view = { scale, cx: f.columns / 2, cy: f.rows / 2 }, out = frame(rig, f, view, w, h);
         check((out.done.sprites === 1) === sprites && (sprites ? out.done.rects + out.done.pixels === 0 : out.done.rects + out.done.pixels > 0), scale + ' pixels a cell: ' + (sprites ? 'pictures' : 'flat colors') + ' (' + JSON.stringify(out.done) + ')');
+        const squares = out.calls.filter((c) => (c.op === 'fillRect' && c.fill === Tiles.FOOD) || c.op === 'strokeRect').length;
+        check(sprites || scale < 6 ? squares === 0 : squares > 0, scale + ' pixels a cell: ' + (sprites ? 'no gold square for the food pile (the picture shows it)' : (scale >= 6 ? 'the food pile is its gold square' : 'no square at all')));
+        if (sprites && scale === 20) {
+            const T = 20, g = INDEX.ground, prepared = new Set(out.calls.filter((c) => c.op === 'drawImage' && c.img && c.img.url && /ground\.png/.test(c.img.url)).map((c) => (c.a[5] / T) * g.columns + c.a[4] / T));
+            const used = new Set(out.calls.filter((c) => isTile(c, w, h)).map((c) => (c.a[1] / T) * g.columns + c.a[0] / T));
+            check(used.size > 3 && Array.from(used).every((k) => prepared.has(k)), 'every tile of the scaled sheet that is drawn from was scaled first (' + used.size + ' tiles)');
+        }
     }
     const flat = Sprites.create({ doc: rig.env.doc, win: rig.env.win });
     const out = frame({ env: rig.env, sprites: flat }, f, { scale: 20, cx: 30, cy: 30 }, w, h);
@@ -222,6 +229,15 @@ async function caseD() {
     const shift = moved.calls.filter((c) => c.op === 'drawImage' && c.a.length === 2 && c.a[0] !== 0);
     check(shift.length === 1 && shift[0].a[0] === -7 && shift[0].a[1] === 0, 'after the layer was moved by 7 pixels: ' + JSON.stringify(shift.map((c) => c.a)));
     check(strip.every((c) => c.a[4] + c.a[6] > w - 7 - T - 1), 'all of those cells are at the strip on the right (give or take the cell beside it)');
+    // a bigger pan: the exposed strips (37 pixels at the right, 29 at the bottom) are covered by the tiles that were painted, pixel for pixel, and nothing else was painted
+    const big = frame(rig, f, { scale: T, cx: 30 + 44 / T, cy: 30 + 29 / T }, w, h), covered = new Uint8Array(w * h);
+    for (const c of big.calls.filter(isGround)) for (let y = Math.max(0, c.a[5]); y < Math.min(h, c.a[5] + c.a[7]); y++) for (let x = Math.max(0, c.a[4]); x < Math.min(w, c.a[4] + c.a[6]); x++) covered[y * w + x] = 1;
+    let holes = 0, extra = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const exposed = x >= w - 44 || y >= h - 29; if (exposed && !covered[y * w + x]) holes++; if (!exposed && covered[y * w + x] && x < w - 44 - T - 1 && y < h - 29 - T - 1) extra++; }
+    check(holes === 0, 'a pan of 44 and 29 pixels: the strips that came into view are painted whole (' + holes + ' pixels left)');
+    check(extra === 0, 'and the part that was only moved is not painted again (' + extra + ' pixels)');
+    const back = frame(rig, f, { scale: T, cx: 30 + 7 / T, cy: 30 }, w, h);       // (return to the view of the next checks)
+    check(back.calls.filter(isGround).length > 0, 'a pan back paints the strip on the other side');
     // the same pan, up and down
     const down = frame(rig, f, { scale: T, cx: 30 + 7 / T, cy: 30 + 9 / T }, w, h);
     check(down.calls.filter(isGround).length <= (Math.ceil(w / T) + 2) * 2 && down.calls.filter((c) => c.op === 'drawImage' && c.a.length === 2 && c.a[0] === 0 && c.a[1] === -9).length === 1, 'a pan down paints a strip along the bottom');
@@ -235,6 +251,14 @@ async function caseD() {
     rig.sprites.invalidate([0]);
     const far = frame(rig, f, { scale: T, cx: 30 + 7 / T, cy: 30 + 9 / T }, w, h);
     check(far.calls.filter(isGround).length === 0, 'a change far outside the view paints nothing');
+    // a hill anchored 3 cells to the left of a changed cell reaches it (its picture is 4 cells wide, from one cell before its anchor): the mend paints the hill again
+    let hill = null;
+    for (let r = 0; r < f.rows && !hill; r++) for (let c = 0; c < f.columns && !hill; c++) { const at = f.layer2 + 6 * (r * f.columns + c), id = f.bytes[at] | (f.bytes[at + 1] << 8); if (id >= 245 && id <= 248 && (f.bytes[at + 2] & 1)) hill = [r, c]; }
+    check(!!hill, 'Treasure has a hill');
+    const near = frame(rig, f, { scale: T, cx: hill[1] + 0.5, cy: hill[0] + 0.5 }, w, h);                 // (the hill's anchor is in the middle of the view)
+    rig.sprites.invalidate([hill[0] * f.columns + hill[1] + 3]);
+    const hillAgain = frame(rig, f, { scale: T, cx: hill[1] + 0.5, cy: hill[0] + 0.5 }, w, h).calls.filter((c) => isObject(c) && c.a[2] === 128 && c.a[3] === 128);
+    check(near.calls.filter((c) => isObject(c) && c.a[2] === 128).length >= 1 && hillAgain.length >= 1, 'a change next to a picture that reaches it paints the picture again, though its anchor is elsewhere (' + hillAgain.length + ' hill)');
     // another map, a reset, another size, a zoom beyond a third: everything
     const other = treasure();
     const again = frame(rig, other, { scale: T, cx: 30, cy: 30 }, w, h).calls.filter(isGround).length;
@@ -244,11 +268,12 @@ async function caseD() {
     check(frame(rig, other, { scale: T, cx: 30, cy: 30 }, w + 20, h).calls.filter(isGround).length > base, 'another size paints it all');
     rig.env.clock.t += 1000;
     const bigger = frame(rig, other, { scale: T * 1.5, cx: 30, cy: 30 }, w + 20, h);
-    check(bigger.calls.filter((c) => c.op === 'drawImage' && c.a.length === 8 && c.a[2] === 30).length > 0, 'a zoom beyond a third paints it all, with tiles of the new size');
+    const bv = View.visible({ scale: T * 1.5, cx: 30, cy: 30 }, other, w + 20, h), seen = (bv.r1 - bv.r0 + 1) * (bv.c1 - bv.c0 + 1);
+    check(bigger.calls.filter((c) => isTile(c, w + 20, h) && c.a[2] === 30).length === seen, 'a zoom beyond a third paints it all, with tiles of the new size (' + seen + ' cells)');
     // many changed cells at once
     const many = []; for (let i = 0; i < 70000; i++) many.push(i % 3600);
     rig.sprites.invalidate(many);
-    check(frame(rig, other, { scale: T * 1.5, cx: 30, cy: 30 }, w + 20, h).calls.filter((c) => c.op === 'drawImage' && c.a.length === 8 && c.a[2] === 30).length > 0, 'a flood of changed cells is a whole frame, not a long list');
+    check(frame(rig, other, { scale: T * 1.5, cx: 30, cy: 30 }, w + 20, h).calls.filter((c) => isTile(c, w + 20, h) && c.a[2] === 30).length > 100, 'a flood of changed cells is a whole frame, not a long list');
 }
 
 async function caseE() {
@@ -261,10 +286,10 @@ async function caseE() {
     check(rig.env.timers.length === 1 && rig.env.timers[0].ms > 140, 'and a crisp frame is asked for when it rests');
     rig.env.clock.t += 500;
     const crisp = frame(rig, f, { scale: T * 1.1, cx: 30, cy: 30 }, w, h);
-    check(crisp.calls.filter((c) => c.op === 'drawImage' && c.a.length === 8 && c.a[2] === 22).length > 100, 'after it rested the frame is made again, crisp (tiles of 22)');
+    check(crisp.calls.filter((c) => isTile(c, w, h) && c.a[2] === 22).length > 100, 'after it rested the frame is made again, crisp (tiles of 22)');
     rig.env.clock.t += 20;
     const jump = frame(rig, f, { scale: T * 1.1 * 1.6, cx: 30, cy: 30 }, w, h);
-    check(jump.calls.filter((c) => c.op === 'drawImage' && c.a.length === 8 && c.a[2] === 35).length > 100, 'a zoom that is more than a third at once is never stretched');
+    check(jump.calls.filter((c) => isTile(c, w, h) && c.a[2] === 35).length > 100, 'a zoom that is more than a third at once is never stretched');
 }
 
 async function caseF() {
@@ -291,6 +316,7 @@ async function caseF() {
     put2(g, 20, 25, 410, 1);
     frame(lost, g, view, w, h);
     lost.env.settle();
+    lost.sprites.reset();
     const after = frame(lost, g, view, w, h);
     check(after.calls.filter((c) => c.op === 'drawImage' && c.img && c.img.url === mineUrl).length === 0 && lost.env.images.filter((i) => i.url === mineUrl).length === 0, 'a missing picture draws nothing and is not asked for again');
 }
@@ -307,8 +333,8 @@ async function caseG() {
     check(inView.length > 6 && ants.length === inView.length, 'at 24 pixels a cell each ant in view is drawn: ' + ants.length + ' of ' + inView.length);
     const rings = big.calls.filter((c) => c.op === 'ellipse');
     check(rings.length === inView.length, 'with a ring at its feet');
-    const colors = big.calls.filter((c) => c.op === 'stroke').length;
-    check(colors >= inView.length * 1, 'in the color of its team');
+    const strokes = big.calls.filter((c) => c.op === 'stroke').length, blacks = inView.filter((m) => m.team === 'black').length;
+    check(blacks > 0 && strokes === inView.length + blacks, 'in the color of its team, and the black one with a thin white edge (' + strokes + ' lines for ' + inView.length + ' rings and ' + blacks + ' black ones)');
     const small = frame(rig, f, { scale: 11, cx: f.columns / 2, cy: f.rows / 2 }, w, h);
     check(small.calls.filter((c) => c.op === 'drawImage' && c.a[0] === ant[0] && c.a[1] === ant[1] && c.a[2] === 23).length === 0 && small.calls.filter((c) => c.op === 'arc').length >= 20, 'below 12 pixels a cell the ants are dots in the team\'s color');
     const ghosted = frame(rig, f, view, w, h, { ghost: { id: 346, row: 30, column: 30 } }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1);

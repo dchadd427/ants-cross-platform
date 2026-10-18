@@ -135,6 +135,7 @@ function caseD() {
     for (const id of ids) check(/^#[0-9a-f]{6}$/.test(Tiles.css(id, Tiles.EMPTY2)), 'tile ' + id + ' has a flat color');
     // the pictures' averages replace the flat colors, and nothing else: hex digits for each ground id, and the objects' own
     const keep = Tiles.css(487, Tiles.EMPTY2), keepObject = Tiles.css(0, 302);
+    Tiles.packedTables();                  // (made before the averages come, as the canvas has made them by then)
     Tiles.setAverages('010203' + '0a0b0c', { 302: 0x102030 });
     check(Tiles.css(431, Tiles.EMPTY2) === '#010203' && Tiles.css(432, Tiles.EMPTY2) === '#0a0b0c' && Tiles.css(487, Tiles.EMPTY2) === keep && Tiles.css(0, 302) === '#102030', 'average colors replace the flat ones for the ids that they name');
     const p = Tiles.packedTables();
