@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var doc = document, win = window;
-    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCanvas', 'MapTools'];
+    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCrop', 'MapConvert', 'MapCanvas', 'MapTools'];
     var GROUND = 485, EGGS = 6, MINUTES = 10;          // a new map: plain grass (docs/MAP_FORMAT.md, "The blank map"), 6 eggs a team, 10 minutes
     var NEW_NAME = 'My map';
 
@@ -33,8 +33,7 @@
     }
 
     // The tags of a kind: "Classic map", or "Extended map" and the neutral badge (and the joined tag that mapmaker.css shows instead of the two below 360 px)
-    function setTags(id, kind) {
-        var host = $(id);
+    function fillTags(host, kind) {
         host.textContent = '';
         if (kind === 'extended') {
             host.appendChild(el('span', 'tag tag-ext', 'Extended map'));
@@ -42,6 +41,7 @@
             host.appendChild(el('span', 'tag tag-join', 'Extended map \u00b7 New version only'));
         } else host.appendChild(el('span', 'tag tag-classic', 'Classic map'));
     }
+    function setTags(id, kind) { fillTags($(id), kind); }
 
     // The numbers of the open map: the name, the kind, the size, the meter and the one line of the check (not the canvas: a view of the map stays where it is)
     function showFacts() {
@@ -58,6 +58,7 @@
         $('meter-cap').textContent = facts.caption;
         showCheckLine();
         showSummary();
+        $('convert-link').textContent = kind === 'classic' ? 'Start an Extended map from this one...' : 'Make a Classic map from this one...';
         var line = $('size-line');
         line.textContent = f.rows + ' x ' + f.columns + ' ';
         if (kind === 'extended') line.appendChild(el('span', 'badge-nv', 'New version only'));
@@ -198,9 +199,27 @@
         dialogs.checks(report.json, { onShow: function (row, column) { canvas.showCell(row, column); $('map').focus(); } });
     }
 
+    // Copy and convert (mapmaker_convert.js): the new map replaces the open one after the question about unsaved drawing
+    function thumb(file) { return MapView.miniBase(file, 64, 64, canvasOf); }
+    function canvasOf(w, h) { var c = el('canvas'); c.width = w; c.height = h; return c; }
+    function openCrop(spec) {
+        var file = win.MapFile.parse(spec.bytes);
+        MapCrop.open({ doc: doc, $: $, host: $('crop'), editor: $('editor'), limits: limits.classic, rows: spec.rows, columns: spec.columns, name: spec.name, tags: function (h) { fillTags(h, 'extended'); },
+            picture: function () { return MapView.miniBase(file, 640, 640, canvasOf); }, onUse: spec.onUse, onCancel: spec.onCancel });
+    }
+    function convertEnv() {
+        return {
+            doc: doc, dialogs: dialogs, core: core, limits: limits, thumb: thumb, tags: fillTags, crop: openCrop,
+            current: function () { var r = core.checkMap(map.bytes, 'extended'); return { name: map.name, bytes: map.bytes, file: map.file, kind: map.file.kind, report: r.status === 0 ? r.json : map.report }; },
+            onMade: function (bytes, name) { leave(function () { var error = setMap(bytes, name); if (error) dialogs.message('The map could not be made', error); }); }
+        };
+    }
+    var converter;
+    function convertWith(name) { return function () { if (!dialogs.isOpen() && !canvas.isStroking()) (converter = converter || MapConvert.create(convertEnv()))[name](); }; }
+
     var ACTIONS = {
-        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps,
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }]); }
+        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, copy: convertWith('copy'), convert: convertWith('convert'),
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }]); }
     };
 
     function start(module) {
@@ -221,7 +240,7 @@
                 tile: $('tile-btn'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn'),
                 stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more')
             },
-            file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen(); }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
+            file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
         win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved()) { e.preventDefault(); e.returnValue = ''; } });         // (a drawn map is not kept anywhere yet)
         Array.prototype.forEach.call(doc.querySelectorAll('[data-act]'), function (b) {

@@ -13,6 +13,8 @@
 //   C10 the blank Extended map, the reasons a map needs to be Extended, hostile Extended files
 //   C11 the properties (interface version 3): the values a file has set again give the very same bytes (the whole library, as Classic and as Extended maps), setting and restoring, the
 //       edits, the limits of the description (the checker's own sentence), every refusal, the check of the map after it
+//   C12 the crop (interface version 4): the whole window is the canonical file, every other window is held to an independent reading of the rules (an object whole or not at all, the solid bits
+//       that go with it, the records that move) on the whole library as Classic and as Extended maps, the stored answers, the refusals, bounds before anything is allocated
 // `test_lvl_core --write-expected` writes the expectation again (after a change of the core that is meant), `--print-tile-names` prints src/ants_assets/lvl_tile_names.inc.
 #include "ants_assets/chd_parser.hpp"
 #include "ants_assets/lvl_checker.hpp"
@@ -31,6 +33,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <new>
 #include <sstream>
 #include <string>
@@ -50,6 +53,7 @@ uint8_t* lvl_convert_to_classic(const uint8_t* data, uint32_t size, uint32_t pro
 uint8_t* lvl_needs_extended(const uint8_t* data, uint32_t size, uint32_t profile);
 uint8_t* lvl_blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes);
 uint8_t* lvl_set_properties(const uint8_t* data, uint32_t size, const uint8_t* description, uint32_t description_size, uint32_t minutes, uint32_t eggs, uint32_t default_ant_type, uint32_t profile);
+uint8_t* lvl_crop(const uint8_t* data, uint32_t size, uint32_t row, uint32_t column, uint32_t rows, uint32_t columns, uint32_t profile);
 uint8_t* lvl_limits(uint32_t profile);
 uint32_t lvl_result_status(const uint8_t* result);
 uint32_t lvl_result_size(const uint8_t* result);
@@ -199,6 +203,11 @@ Conv unpack(const Answer& a) {
     return c;
 }
 
+// The crop call: the window (row, column, rows, columns), counted from 0
+Conv c_crop(const Bytes& b, uint32_t row, uint32_t column, uint32_t rows, uint32_t columns, uint32_t profile = 2) {
+    return unpack(take(lvl_crop(b.data(), static_cast<uint32_t>(b.size()), row, column, rows, columns, profile)));
+}
+
 Conv c_to_extended(const Bytes& b) { return unpack(take(lvl_convert_to_extended(b.data(), static_cast<uint32_t>(b.size())))); }
 Conv c_to_classic(const Bytes& b, uint32_t profile = 0) { return unpack(take(lvl_convert_to_classic(b.data(), static_cast<uint32_t>(b.size()), profile))); }
 
@@ -338,7 +347,7 @@ void c1_names() {
 
 // ---- C2 ----
 void c2_interface() {
-    CHECK(lvl_interface_version() == 3);
+    CHECK(lvl_interface_version() == 4);
     lvl_free(nullptr);
     uint8_t* zero = lvl_alloc(0);
     CHECK(zero != nullptr);
@@ -448,7 +457,7 @@ void c6_no_memory() {
     const std::string too_long(256, 'x');
     int faults = 0;
     for (long allow = 0; allow < 400; allow += (allow < 60 ? 1 : 7)) {
-        for (int call = 0; call < 14; ++call) {
+        for (int call = 0; call < 16; ++call) {
             g_allow = allow;
             lvl_core::Result r;
             switch (call) {
@@ -465,6 +474,8 @@ void c6_no_memory() {
                 case 10: r = lvl_core::profile_limits(lvl_core::Profile::Extended); break;
                 case 11: r = lvl_core::set_properties(tiny.data(), tiny.size(), reinterpret_cast<const uint8_t*>(new_text.data()), new_text.size(), 7, 3, 63, lvl_core::Profile::NewMap); break;
                 case 12: r = lvl_core::set_properties(tiny9.data(), tiny9.size(), reinterpret_cast<const uint8_t*>(too_long.data()), too_long.size(), 7, 3, 63, lvl_core::Profile::Extended); break;     // (refused: too long)
+                case 13: r = lvl_core::crop(tiny.data(), tiny.size(), 3, 4, 20, 18, lvl_core::Profile::NewMap); break;
+                case 14: r = lvl_core::crop(tiny9.data(), tiny9.size(), 3, 4, 20, 18, lvl_core::Profile::Extended); break;
                 default: r = lvl_core::check_map(tiny.data(), tiny.size(), lvl_core::Profile::NewMap); break;
             }
             g_allow = -1;
@@ -1088,6 +1099,250 @@ void c11_properties() {
     CHECK_MSG(refused_eggs == no_egg_word, "the maps without an egg word were asked for eggs: " + std::to_string(refused_eggs));
 }
 
+
+// ---- C12 ----
+struct Window {
+    uint32_t row, column, rows, columns;
+};
+
+// What a crop must make of a file, worked out here a second way (every object is a group of the cells that share an anchor; the group is whole when every cell and the anchor are in the
+// window), and compared with what the core made. Returns "" when the part is right, else the first thing that is not; counts what it saw
+struct CropSeen {
+    uint64_t cut_cells{0}, left_out{0}, kept_objects{0}, solid_cleared{0};
+};
+
+std::string crop_is_right(const Bytes& source, const Window& w, const Conv& made, CropSeen& seen) {
+    LevelData from, part;
+    LevelValidation report;
+    if (!from.load_from_memory(source.data(), source.size(), &report, LevelLimits::for_extended_maps())) return "the source does not load";
+    if (!part.load_from_memory(made.bytes.data(), made.bytes.size(), &report, LevelLimits::for_extended_maps())) return "the part does not load: " + report.reason();
+    if (part.version != from.version) return "the kind changed";
+    if (part.height != w.rows || part.width != w.columns) return "the grid is not the window";
+    if (part.description != from.description || part.default_minutes != from.default_minutes || part.tile_dictionary != from.tile_dictionary || part.boundary_param != from.boundary_param ||
+        part.ambient_tile_or_sound != from.ambient_tile_or_sound || part.rules != from.rules || part.game_mode != from.game_mode) return "a property of the file changed";
+    const auto in_window = [&](int64_t r, int64_t c) { return r >= w.row && r < static_cast<int64_t>(w.row) + w.rows && c >= w.column && c < static_cast<int64_t>(w.column) + w.columns; };
+    // every object: the cells that have this anchor AND the tile of the anchor's own cell (a stray word that points at an object is no piece of it)
+    std::map<std::pair<int32_t, int32_t>, std::vector<std::pair<uint32_t, uint32_t>>> groups;
+    const auto anchor_tile = [&](int32_t ar, int32_t ac) -> int64_t { return ar >= 0 && ac >= 0 && static_cast<uint32_t>(ar) < from.height && static_cast<uint32_t>(ac) < from.width ? from.get_cell_layer2(static_cast<uint32_t>(ac), static_cast<uint32_t>(ar)).tile_index : -1; };
+    for (uint32_t r = 0; r < from.height; ++r) {
+        for (uint32_t c = 0; c < from.width; ++c) {
+            int32_t ar = 0, ac = 0;
+            if (from.object_anchor(r, c, ar, ac) && anchor_tile(ar, ac) == from.get_cell_layer2(c, r).tile_index) groups[{ar, ac}].emplace_back(r, c);
+        }
+    }
+    const bool whole_map = w.row == 0 && w.column == 0 && w.rows == from.height && w.columns == from.width;
+    const auto whole = [&](int32_t ar, int32_t ac, uint16_t tile) {
+        if (whole_map) return true;
+        if (!in_window(ar, ac)) return false;
+        if (anchor_tile(ar, ac) != tile) return true;                     // (a stray: it stands or goes by its anchor alone)
+        for (const auto& cell : groups[{ar, ac}]) if (!in_window(cell.first, cell.second)) return false;
+        return true;
+    };
+    std::vector<uint8_t> dropped(static_cast<size_t>(w.rows) * w.columns, 0);
+    for (uint32_t r = 0; r < w.rows; ++r) {
+        for (uint32_t c = 0; c < w.columns; ++c) {
+            const uint32_t fr = w.row + r, fc = w.column + c;
+            const MapCell& a1 = from.get_cell_layer1(fc, fr);        // (x, y)
+            const MapCell& b1 = part.get_cell_layer1(c, r);
+            const MapCell& a2 = from.get_cell_layer2(fc, fr);
+            const MapCell& b2 = part.get_cell_layer2(c, r);
+            int32_t ar = 0, ac = 0;
+            const std::string at = " at row " + std::to_string(r) + ", column " + std::to_string(c);
+            if (!from.object_anchor(fr, fc, ar, ac)) {
+                if (b1.tile_index != a1.tile_index || b1.flags != a1.flags || b1.properties != a1.properties) return "layer 1 differs" + at;
+                if (b2.tile_index != a2.tile_index || b2.flags != a2.flags || b2.properties != a2.properties) return "layer 2 differs (no object)" + at;
+                continue;
+            }
+            if (whole(ar, ac, a2.tile_index)) {
+                int32_t pr = 0, pc = 0;
+                if (b1.tile_index != a1.tile_index || b1.flags != a1.flags || b1.properties != a1.properties) return "layer 1 differs under a kept object" + at;
+                if (b2.tile_index != a2.tile_index || b2.flags != a2.flags) return "a kept object differs" + at;
+                if (!part.object_anchor(r, c, pr, pc) || static_cast<int64_t>(pr) + w.row != ar || static_cast<int64_t>(pc) + w.column != ac) return "the anchor of a kept object is not where it was" + at;
+                if (!whole_map) ++seen.kept_objects;
+            } else {
+                dropped[static_cast<size_t>(r) * w.columns + c] = 1;
+                ++seen.cut_cells;
+                uint16_t flags = a1.flags;
+                if (r != 0 && !(a2.tile_index >= 245 && a2.tile_index <= 248)) { if (flags & 1) ++seen.solid_cleared; flags = static_cast<uint16_t>(flags & ~1u); }
+                if (b1.tile_index != a1.tile_index || b1.flags != flags || b1.properties != a1.properties) return "layer 1 under a taken out object is wrong (the solid bit)" + at;
+                if (!b2.is_empty() || b2.flags != 0 || b2.properties != 0) return "a cell of a taken out object is not empty" + at;
+            }
+        }
+    }
+    const auto record_kept = [&](uint32_t y, uint32_t x) { return in_window(y, x) && dropped[static_cast<size_t>(y - w.row) * w.columns + (x - w.column)] == 0; };
+    size_t at_spawn = 0, at_food = 0, at_way = 0;
+    for (const AnthillSpawn& sp : from.anthill_spawns) {
+        if (!record_kept(sp.y, sp.x)) { ++seen.left_out; continue; }
+        if (at_spawn >= part.anthill_spawns.size()) return "a starting ant is missing";
+        const AnthillSpawn& got = part.anthill_spawns[at_spawn++];
+        if (got.tile_id != sp.tile_id || got.team_id != sp.team_id || got.y != sp.y - w.row || got.x != sp.x - w.column) return "a starting ant is not where it should be";
+    }
+    for (const FoodSchedule& f : from.food_schedules) {
+        if (!record_kept(f.y, f.x)) { ++seen.left_out; continue; }
+        if (at_food >= part.food_schedules.size()) return "a food pile is missing";
+        const FoodSchedule& got = part.food_schedules[at_food++];
+        if (got.y != f.y - w.row || got.x != f.x - w.column || got.initial_delay != f.initial_delay || got.respawn_interval != f.respawn_interval || got.variants.size() != f.variants.size()) return "a food pile is not as it was";
+    }
+    for (const Waypoint& wp : from.waypoints) {
+        if (!record_kept(wp.y, wp.x)) { ++seen.left_out; continue; }
+        if (at_way >= part.waypoints.size()) return "a waypoint is missing";
+        const Waypoint& got = part.waypoints[at_way++];
+        if (got.y != wp.y - w.row || got.x != wp.x - w.column || got.flag != wp.flag || got.param != wp.param) return "a waypoint is not as it was";
+    }
+    if (at_spawn != part.anthill_spawns.size() || at_food != part.food_schedules.size() || at_way != part.waypoints.size()) return "the part has a record that the window does not have";
+    return "";
+}
+
+uint64_t number_in(const std::string& json, const std::string& key) {
+    const size_t at = json.find("\"" + key + "\":");
+    return at == std::string::npos ? ~0ull : std::strtoull(json.c_str() + at + key.size() + 3, nullptr, 10);
+}
+
+void c12_crop() {
+    const std::vector<std::pair<std::string, Bytes>> library = whole_library();
+    CHECK_MSG(library.size() == 540, "the library has 540 maps: " + std::to_string(library.size()));
+    // the whole window is the canonical file of the map (as a Classic map and as an Extended map), and every other window is what the independent reading says
+    uint32_t x = 2463534242u;
+    const auto next = [&](uint32_t n) { x ^= x << 13; x ^= x >> 17; x ^= x << 5; return n == 0 ? 0u : x % n; };
+    CropSeen seen;
+    int windows = 0, whole_checked = 0, cut_windows = 0, left_out_windows = 0;
+    for (const auto& file : library) {
+        for (int kind = 0; kind < 2; ++kind) {
+            const Bytes source = kind == 0 ? file.second : up_of(file.second);
+            LevelData level;
+            LevelValidation report;
+            if (!level.load_from_memory(source.data(), source.size(), &report, LevelLimits::for_extended_maps())) continue;
+            const uint32_t rows = level.height, columns = level.width;
+            // the whole map
+            const Conv all = c_crop(source, 0, 0, rows, columns);
+            const LevelWriteResult canonical = write_level(level, LevelLimits::for_extended_maps());
+            CHECK_MSG(all.status == 0 && contains(all.json, "\"ok\":true") && canonical.ok && all.bytes == canonical.bytes && contains(all.json, "\"removed_cells\":0") && contains(all.json, "\"removed_records\":0"), file.first + ": the whole map is its canonical file: " + all.json.substr(0, 160));
+            ++whole_checked;
+            // the middle half, a corner, a thin strip, and a window from the random numbers
+            const Window picks[] = {{rows / 4, columns / 4, std::max(1u, rows / 2), std::max(1u, columns / 2)}, {0, 0, std::max(1u, rows / 3), std::max(1u, columns / 3)},
+                                    {rows - 1, 0, 1, columns}, {0, columns - 1, rows, 1},
+                                    {0, 0, rows - (rows > 1 ? 1 : 0), columns},                                   // (one row less at the bottom: cuts what stands across it)
+                                    {next(rows), next(columns), 1, 1}, {0, 0, 1, 1}};
+            std::vector<Window> list(std::begin(picks), std::end(picks));
+            for (int k = 0; k < 3; ++k) {
+                const uint32_t r0 = next(rows), c0 = next(columns);
+                list.push_back({r0, c0, 1 + next(rows - r0), 1 + next(columns - c0)});
+            }
+            for (const Window& w : list) {
+                if (w.row + w.rows > rows || w.column + w.columns > columns) { CHECK_MSG(false, file.first + ": a window outside the map was made by the test"); continue; }
+                const Conv part = c_crop(source, w.row, w.column, w.rows, w.columns);
+                CHECK_MSG(part.status == 0 && contains(part.json, "\"ok\":true") && contains(part.json, "\"bytes\":" + std::to_string(part.bytes.size())), file.first + ": " + part.json.substr(0, 200));
+                if (part.status != 0 || part.bytes.empty()) continue;
+                CropSeen here;
+                const std::string wrong = crop_is_right(source, w, part, here);
+                CHECK_MSG(wrong.empty(), file.first + (kind ? " (Extended)" : "") + " window " + std::to_string(w.row) + "," + std::to_string(w.column) + " " + std::to_string(w.rows) + "x" + std::to_string(w.columns) + ": " + wrong);
+                CHECK_MSG(number_in(part.json, "removed_cells") == here.cut_cells && number_in(part.json, "removed_records") == here.left_out, file.first + ": the counts of the answer are those of the second reading: " + part.json.substr(0, 200));
+                CHECK_MSG(contains(part.json, "\"objects_cut\"") == (here.cut_cells != 0) && contains(part.json, "\"records_left_out\"") == (here.left_out != 0), file.first + ": the notes say what was left out: " + part.json.substr(0, 400));
+                seen.cut_cells += here.cut_cells; seen.left_out += here.left_out; seen.kept_objects += here.kept_objects; seen.solid_cleared += here.solid_cleared;
+                cut_windows += here.cut_cells != 0;
+                left_out_windows += here.left_out != 0;
+                ++windows;
+                // the part is a map that the core can check and, when it is small enough, turn into a Classic map as it does any other
+                CHECK_MSG(take(lvl_check_map(part.bytes.data(), static_cast<uint32_t>(part.bytes.size()), 2)).status == 0, file.first + ": the part can be checked");
+            }
+        }
+    }
+    CHECK_MSG(whole_checked > 1000, "whole windows: " + std::to_string(whole_checked));
+    CHECK_MSG(windows > 8000 && seen.cut_cells > 1000 && seen.left_out > 100 && seen.kept_objects > 10000 && seen.solid_cleared > 100 && cut_windows > 500 && left_out_windows > 500,
+              "the windows had something to cut: " + std::to_string(windows) + " windows, " + std::to_string(seen.cut_cells) + " cells taken out, " + std::to_string(seen.left_out) + " records left out, " +
+                  std::to_string(seen.kept_objects) + " cells kept, " + std::to_string(seen.solid_cleared) + " solid bits cleared");
+    std::cout << "(" << windows << " windows, " << seen.cut_cells << " cells of cut objects taken out, " << seen.left_out << " records left out) " << std::flush;
+
+    // ---- the nine maps of the set, the stored answers ----
+    const Bytes tiny = read_checked("Original-Ants/Maps/TINY.LVL");
+    const Bytes tiny9 = up_of(tiny);
+    std::ostringstream index;
+    struct Case { std::string id, from; uint32_t row, column, rows, columns, profile; };
+    std::vector<Case> cases;
+    for (const FileCase& c : library_cases()) {
+        LevelData level;
+        LevelValidation report;
+        CHECK(level.load_from_memory(c.bytes.data(), c.bytes.size(), &report, LevelLimits::for_extended_maps()));
+        const uint32_t r = level.height, w = level.width;
+        cases.push_back({c.id + "_half", c.path, r / 4, w / 4, std::max(1u, r / 2), std::max(1u, w / 2), 2});
+        cases.push_back({c.id + "_corner", c.path, 0, 0, std::max(1u, r / 3), std::max(1u, w / 3), 2});
+        cases.push_back({c.id + "_ext_half", "ext:" + c.path, r / 4, w / 4, std::max(1u, r / 2), std::max(1u, w / 2), 2});
+        cases.push_back({c.id + "_ext_last_row", "ext:" + c.path, r - 1, 0, 1, w, 2});
+    }
+    cases.push_back({"tiny_whole", "Original-Ants/Maps/TINY.LVL", 0, 0, 31, 31, 2});
+    cases.push_back({"tiny_ext_whole", "ext:Original-Ants/Maps/TINY.LVL", 0, 0, 31, 31, 2});
+    cases.push_back({"tiny_one_cell", "Original-Ants/Maps/TINY.LVL", 15, 15, 1, 1, 2});
+    cases.push_back({"tiny_new_map_profile", "Original-Ants/Maps/TINY.LVL", 3, 4, 20, 18, 0});
+    cases.push_back({"tiny_game_profile", "Original-Ants/Maps/TINY.LVL", 3, 4, 20, 18, 1});
+    cases.push_back({"tiny_no_rows", "Original-Ants/Maps/TINY.LVL", 3, 4, 0, 18, 2});
+    cases.push_back({"tiny_no_columns", "Original-Ants/Maps/TINY.LVL", 3, 4, 20, 0, 2});
+    cases.push_back({"tiny_beyond_rows", "Original-Ants/Maps/TINY.LVL", 12, 0, 20, 31, 2});
+    cases.push_back({"tiny_beyond_columns", "Original-Ants/Maps/TINY.LVL", 0, 12, 31, 20, 2});
+    cases.push_back({"tiny_starts_outside", "Original-Ants/Maps/TINY.LVL", 31, 0, 1, 1, 2});
+    cases.push_back({"tiny_overflow", "Original-Ants/Maps/TINY.LVL", 0xFFFFFFFFu, 0, 2, 1, 2});
+    cases.push_back({"tiny_huge", "Original-Ants/Maps/TINY.LVL", 0, 0, 0xFFFFFFFFu, 0xFFFFFFFFu, 2});
+    cases.push_back({"tiny_ext_under_new_map", "ext:Original-Ants/Maps/TINY.LVL", 3, 4, 20, 18, 0});
+    cases.push_back({"tiny_unknown_profile", "Original-Ants/Maps/TINY.LVL", 3, 4, 20, 18, 9});
+    int cut_in_stored = 0;
+    for (const Case& c : cases) {
+        const bool ext = c.from.rfind("ext:", 0) == 0;
+        Bytes from = read_checked(ext ? c.from.substr(4) : c.from);
+        if (ext) from = up_of(from);
+        const Answer a = take(lvl_crop(from.data(), static_cast<uint32_t>(from.size()), c.row, c.column, c.rows, c.columns, c.profile));
+        const Conv r = unpack(a);
+        expect_text("crop." + c.id + ".json", r.status == 0 ? r.json : a.payload);
+        if (r.status == 0 && number_in(r.json, "removed_cells") != 0 && number_in(r.json, "removed_cells") != ~0ull) ++cut_in_stored;
+        index << c.id << "\t" << c.from << "\t" << c.row << "\t" << c.column << "\t" << c.rows << "\t" << c.columns << "\t" << c.profile << "\t" << r.status << "\t"
+              << (r.status == 0 ? std::to_string(r.bytes.size()) + "\t" + fnv(std::string(r.bytes.begin(), r.bytes.end())) : "-\t" + a.payload) << "\n";
+    }
+    if (g_write) write_text(expected_dir() + "/crop_index.txt", index.str());
+    else {
+        std::string stored;
+        CHECK(read_text(expected_dir() + "/crop_index.txt", stored));
+        CHECK_MSG(stored == index.str(), "the answers of lvl_crop are the stored ones (crop_index.txt)");
+    }
+    CHECK_MSG(cut_in_stored >= 3, "the stored cases cut objects: " + std::to_string(cut_in_stored));
+
+    {   // a stray word that points at a hill is no piece of it: in Bridge.lvl a power-up (tile 63, row 20, column 37) has the anchor of the blue hill (row 32, column 32; known by hand, not
+        // by the rule of the code). A window that holds the whole hill keeps all its 16 cells; one that misses its last row keeps none
+        const Bytes bridge = up_of(read_checked("Community-Maps/Bridge.lvl"));
+        auto hill_cells = [&](const Conv& part) { LevelData l; LevelValidation v; int n = 0; if (l.load_from_memory(part.bytes.data(), part.bytes.size(), &v, LevelLimits::for_extended_maps())) for (const MapCell& c : l.layer2_interactive) n += c.tile_index == 246; return n; };
+        const Conv whole_hill = c_crop(bridge, 30, 30, 6, 6), cut_hill = c_crop(bridge, 30, 30, 4, 6);
+        CHECK_MSG(whole_hill.status == 0 && hill_cells(whole_hill) == 16, "the whole hill stays: " + std::to_string(hill_cells(whole_hill)));
+        CHECK_MSG(cut_hill.status == 0 && hill_cells(cut_hill) == 0, "a hill that the window cuts goes whole: " + std::to_string(hill_cells(cut_hill)));
+    }
+    // the refusals are sentences (status 1), made before anything of the window is allocated
+    CHECK_MSG(c_crop(tiny, 3, 4, 0, 18).status == 1 && c_crop(tiny, 3, 4, 0, 18).json == "the part to keep needs at least one row and one column", "an empty window");
+    CHECK_MSG(c_crop(tiny, 12, 0, 20, 31).status == 1 && contains(c_crop(tiny, 12, 0, 20, 31).json, "is not inside the map, which has 31 rows and 31 columns"), "a window below the map: " + c_crop(tiny, 12, 0, 20, 31).json);
+    CHECK_MSG(c_crop(tiny, 0xFFFFFFFFu, 0, 2, 1).status == 1 && c_crop(tiny, 0, 0xFFFFFFFFu, 1, 0xFFFFFFFFu).status == 1, "numbers that would wrap round are refused, not added up in 32 bits");
+    CHECK_MSG(c_crop(tiny, 3, 4, 20, 18, 9).status == 1 && c_crop(tiny, 3, 4, 20, 18, 9).json == "unknown profile", "a profile that does not exist");
+    CHECK_MSG(c_crop(tiny9, 3, 4, 20, 18, 0).status == 1 && contains(c_crop(tiny9, 3, 4, 20, 18, 0).json, "does not load"), "an Extended map needs the Extended profile");
+    CHECK(c_crop(Bytes{8}, 0, 0, 1, 1).status == 1 && c_crop(Bytes{}, 0, 0, 1, 1).status == 1);
+    CHECK(take(lvl_crop(nullptr, 0, 0, 0, 1, 1, 2)).status == 1);
+    CHECK_MSG(c_crop(tiny, 3, 4, 20, 18).json == c_crop(tiny, 3, 4, 20, 18).json && c_crop(tiny, 3, 4, 20, 18).bytes == c_crop(tiny, 3, 4, 20, 18).bytes, "the same call twice gives the same answer (no state)");
+    // the part of a Classic map is a Classic map, the part of an Extended map an Extended one, and the source is never touched
+    const Bytes tiny_before = tiny;
+    const Conv classic_part = c_crop(tiny, 3, 4, 20, 18);
+    const Conv extended_part = c_crop(tiny9, 3, 4, 20, 18);
+    CHECK_MSG(props_of(classic_part.bytes).version == 8 && props_of(extended_part.bytes).version == 9 && contains(classic_part.json, "\"from\":\"classic\"") && contains(extended_part.json, "\"from\":\"extended\"") && tiny == tiny_before, "the kind stays");
+    // the part is then turned into a Classic map by the call that exists for it: a 90 x 130 part of a 300 x 400 Extended map fits, a 100 x 100 one does not (the wall at row 90)
+    const Answer blank300 = take(lvl_blank_extended(300, 400, 485, 6, 10));
+    const Bytes wide(blank300.payload.begin(), blank300.payload.end());
+    const Conv fits = c_crop(wide, 100, 100, 90, 111);
+    CHECK_MSG(fits.status == 0 && contains(fits.json, "\"ok\":true") && contains(c_to_classic(fits.bytes).json, "\"ok\":true"), "a 90 x 111 part of a 300 x 400 map becomes a Classic map: " + c_to_classic(fits.bytes).json.substr(0, 200));
+    const Conv tall = c_crop(wide, 100, 100, 100, 100);
+    CHECK_MSG(tall.status == 0 && contains(tall.json, "\"ok\":true") && contains(c_to_classic(tall.bytes).json, "rows_beyond_wall"), "a 100 x 100 part is still too tall for a Classic map, and the core says why");
+    // bounds before allocation: a window of four billion cells asks the heap for nothing near its size (only the map that was read and the file that comes out are made)
+    const unsigned long long before_huge = g_bytes;
+    const Conv huge = c_crop(wide, 0, 0, 0xFFFFFFFFu, 0xFFFFFFFFu);
+    CHECK_MSG(huge.status == 1, huge.json.substr(0, 100));
+    CHECK_MSG(g_bytes - before_huge < 24ull * (1u << 20), "a refused window is not made: " + std::to_string(g_bytes - before_huge) + " bytes asked");
+    const unsigned long long before_one = g_bytes;
+    const Conv one = c_crop(wide, 299, 399, 1, 1);
+    CHECK_MSG(one.status == 0 && one.bytes.size() < 20000, "one cell of a large map is a small file: " + std::to_string(one.bytes.size()));
+    CHECK_MSG(g_bytes - before_one < 24ull * (1u << 20), "one cell of a large map asks for the map that is read and nothing more: " + std::to_string(g_bytes - before_one) + " bytes asked");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -1118,6 +1373,7 @@ int main(int argc, char* argv[]) {
     run_case("C10 the blank Extended map", c10_blank_extended);
     run_case("C10 hostile Extended files", c10_hostile_extended);
     run_case("C11 the properties", c11_properties);
+    run_case("C12 the crop", c12_crop);
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

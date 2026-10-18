@@ -172,7 +172,7 @@ function main() {
         const hostile = hostileCases();
 
         await runCase('module: the interface', () => {
-            check(core.interfaceVersion === 3, 'interface version 3');
+            check(core.interfaceVersion === 4, 'interface version 4');
             check(typeof module._lvl_free === 'function' && typeof module._lvl_alloc === 'function', 'the buffer calls are exported');
             check(module.FS === undefined, 'no file system in the module');
         });
@@ -316,7 +316,7 @@ function main() {
             check(core.limits('extended').json.extended.rows === 1024 && core.limits('extended').json.extended.cells === 262144 && core.limits('extended').json.classic.rows === 256, 'the Extended profile: 1,024 a side, 262,144 cells, a Classic map keeps 256');
             check(core.limits('new_map').json.classic.rows === 90 && core.limits('new_map').json.extended === null, 'a new Classic map: 90 rows, no Extended map');
             check(core.limits('bogus').status === 1 && core.checkMap(new Uint8Array(0), 'bogus').status === 1 && core.convertToClassic(new Uint8Array(0), 'bogus').status === 1 && core.needsExtended(new Uint8Array(0), 'bogus').status === 1, 'an unknown profile is refused');
-            check(api.EXPECTED_INTERFACE === 3 && api.moduleVersion(module) === 3 && api.moduleVersion({}) === 0 && api.moduleVersion({ _lvl_interface_version: () => 1 }) === 1 && api.moduleVersion(null) === 0, 'the version a page can ask for before it wraps a module');
+            check(api.EXPECTED_INTERFACE === 4 && api.moduleVersion(module) === 4 && api.moduleVersion({}) === 0 && api.moduleVersion({ _lvl_interface_version: () => 1 }) === 1 && api.moduleVersion(null) === 0, 'the version a page can ask for before it wraps a module');
             const tiny = library.find((c) => c.id === 'tiny').bytes;
             const up = core.convertToExtended(tiny);
             check(up.status === 0 && up.json.ok === true, 'tiny goes up');
@@ -503,6 +503,64 @@ function main() {
             check(count >= 1000, 'maps set: ' + count);
         });
 
+        await runCase('G the crop: the module cuts a window as the native core does; the whole map is its canonical file; an object is whole or gone; a refusal is a sentence', () => {
+            const profiles = ['new_map', 'game', 'extended'];
+            const lines = text('crop_index.txt').split('\n').filter(Boolean).map((l) => l.split('\t'));
+            check(lines.length >= 50, 'the stored cases: ' + lines.length);
+            let cutCases = 0;
+            for (const f of lines) {
+                const id = f[0], ext = f[1].startsWith('ext:');
+                let bytes = bytesOf(ext ? f[1].slice(4) : f[1]);
+                if (ext) bytes = core.convertToExtended(bytes).bytes;
+                const r = core.crop(bytes, Number(f[2]), Number(f[3]), Number(f[4]), Number(f[5]), profiles[Number(f[6])] || 'bogus');
+                check(r.status === Number(f[7]), id + ': status ' + f[7]);
+                if (Number(f[7]) !== 0) { check(r.error === f[9], id + ': the native refusal sentence'); continue; }
+                check(r.text === text('crop.' + id + '.json'), id + ': the answer is the native answer, byte for byte');
+                const made = r.bytes || new Uint8Array(0);
+                check(String(made.length) === f[8] && fnv(made) === f[9], id + ': the file is the native file (size and FNV-1a)');
+                check(r.json.ok === (made.length > 0), id + ': bytes come with ok, and only then');
+                if (r.json.removed_cells > 0) cutCases++;
+            }
+            check(cutCases >= 3, 'stored cases that cut objects: ' + cutCases);
+            // the whole map is its canonical file, as a Classic and as an Extended map, on the whole library
+            let whole = 0, parts = 0;
+            for (const dir of ['Original-Ants/Maps', 'Community-Maps']) {
+                for (const name of fs.readdirSync(path.join(ROOT, dir)).filter((n) => /\.lvl$/i.test(n)).sort()) {
+                    const classic = bytesOf(dir + '/' + name);
+                    for (const bytes of [classic, core.convertToExtended(classic).bytes]) {
+                        const read = core.readReport(bytes, 'extended').json;
+                        const all = core.crop(bytes, 0, 0, read.rows, read.columns, 'extended');
+                        const canonical = core.sameLevel(bytes, all.bytes || new Uint8Array(0), 'extended');
+                        check(all.status === 0 && all.json.ok && all.json.removed_cells === 0 && all.json.removed_records === 0 && canonical.status === 0 && canonical.json.same === true, dir + '/' + name + ': the whole map is the same level');
+                        whole++;
+                        // a window of the middle: the part reads back with the size of the window, keeps its kind, and the check can judge it
+                        const half = core.crop(bytes, read.rows >> 2, read.columns >> 2, Math.max(1, read.rows >> 1), Math.max(1, read.columns >> 1), 'extended');
+                        const back = half.status === 0 && half.json.ok ? core.readReport(half.bytes, 'extended').json : null;
+                        check(back && back.loaded && back.rows === Math.max(1, read.rows >> 1) && back.columns === Math.max(1, read.columns >> 1) && back.version === read.version && core.checkMap(half.bytes, 'extended').status === 0, dir + '/' + name + ': the middle half reads back');
+                        parts++;
+                    }
+                }
+            }
+            check(whole >= 1000 && parts >= 1000, 'maps cropped: ' + whole + ', ' + parts);
+            // the call is the wrapper's: whole numbers only, a profile that exists, every refusal a sentence
+            const tiny = library.find((c) => c.id === 'tiny').bytes;
+            check(core.crop(tiny, 3, 4, 20, 18, 'bogus').status === 1 && core.crop(tiny, -1, 4, 20, 18).status === 1 && core.crop(tiny, 3, 4.5, 20, 18).status === 1 && core.crop(tiny, 3, 4, '20', 18).status === 1 &&
+                core.crop(tiny, 3, 4, 20, 4294967296).status === 1 && core.crop(tiny, 3, 4, NaN, 18).status === 1 && core.crop([1, 2], 0, 0, 1, 1).status === 1, 'numbers that are not whole numbers of a dword are refused by the wrapper');
+            check(/whole numbers/.test(core.crop(tiny, -1, 4, 20, 18).error) && /whole numbers/.test(core.crop(tiny, 3, 4, 20.5, 18).error) && /whole numbers/.test(core.crop(tiny, 3, 4, 20, 4294967296).error), 'the wrapper says why a number is refused');
+            const none = core.crop(tiny, 3, 4, 0, 18), below = core.crop(tiny, 12, 0, 20, 31), wrap = core.crop(tiny, 4294967295, 0, 2, 1);
+            check(none.status === 1 && /at least one row and one column/.test(none.error) && below.status === 1 && /is not inside the map, which has 31 rows and 31 columns/.test(below.error) && wrap.status === 1, 'an empty window and one outside the map are refused with a sentence: ' + below.error);
+            const up = core.convertToExtended(tiny).bytes;
+            check(core.crop(up, 3, 4, 20, 18).status === 1 && /does not load/.test(core.crop(up, 3, 4, 20, 18, 'new_map').error), 'an Extended map needs the Extended profile');
+            // a part of a large Extended map is turned into a Classic map by the call that exists for it
+            const wide = core.blankExtended(300, 400, 485, 6, 10).bytes;
+            const fit = core.crop(wide, 100, 100, 90, 111, 'extended'), tall = core.crop(wide, 100, 100, 100, 100, 'extended');
+            check(fit.json.ok && core.convertToClassic(fit.bytes).json.ok && tall.json.ok && core.convertToClassic(tall.bytes).json.reasons.map((r) => r.code).join() === 'rows_beyond_wall', 'a 90 x 111 part becomes a Classic map, a 100 x 100 part is still too tall, as the core says');
+            // the source is never touched
+            const copy = wide.slice();
+            core.crop(wide, 1, 1, 50, 50, 'extended');
+            check(Buffer.compare(Buffer.from(copy), Buffer.from(wide)) === 0, 'the bytes that were given are as they were');
+        });
+
         await runCase('D memory: every buffer is given back (a fresh module, a baseline before anything large)', async () => {
             const fresh = await createLvlCore();
             const c2 = api.wrap(fresh);
@@ -513,6 +571,7 @@ function main() {
                 const small = c2.convertToExtended(library[0].bytes); c2.checkMap(small.bytes, 'extended'); c2.convertToClassic(small.bytes); c2.needsExtended(small.bytes, 'extended');
                 c2.convertToClassic(c2.blankExtended(95, 20, 485, 6, 10).bytes); c2.limits('extended'); c2.checkMap(bomber);
                 c2.setProperties(bomber, 'A new text', 7, 3, 63); c2.setProperties(small.bytes, 'x'.repeat(256), 7, 3, 63, 'extended'); c2.setProperties(small.bytes, 'Caf\u00e9', 7, 3, 63, 'extended');
+                c2.crop(small.bytes, 3, 4, 20, 18, 'extended'); c2.crop(bomber, 5, 5, 60, 60, 'extended'); c2.crop(small.bytes, 0, 0, 0, 1, 'extended');
                 for (const c of hostile.filter((h) => h.bytes.length < 200000)) { c2.readReport(c.bytes); c2.rewrite(c.bytes); }
             };
             round(); round();                                              // warm-up: the allocator settles
@@ -531,10 +590,13 @@ function main() {
         await runCase('wrapper: a module of another interface version is refused, a trap kills the core', () => {
             let threw = '';
             try { api.wrap({ _lvl_interface_version: () => 1 }); } catch (e) { threw = e.message; }
-            check(/interface version 1/.test(threw) && /needs 3/.test(threw), 'a module of interface version 1 (the first one) is refused with a sentence: ' + threw);
+            check(/interface version 1/.test(threw) && /needs 4/.test(threw), 'a module of interface version 1 (the first one) is refused with a sentence: ' + threw);
             threw = '';
             try { api.wrap({ _lvl_interface_version: () => 2 }); } catch (e) { threw = e.message; }
-            check(/interface version 2/.test(threw) && /needs 3/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 2 (the one before the properties) is refused with a sentence that says to reload: ' + threw);
+            check(/interface version 2/.test(threw) && /needs 4/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 2 (the one before the properties) is refused with a sentence that says to reload: ' + threw);
+            threw = '';
+            try { api.wrap({ _lvl_interface_version: () => 3 }); } catch (e) { threw = e.message; }
+            check(/interface version 3/.test(threw) && /needs 4/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 3 (the one before the crop) is refused with a sentence that says to reload: ' + threw);
             threw = '';
             try { api.wrap({}); } catch (e) { threw = e.message; }
             check(/interface version 0/.test(threw), 'a module with no version call is refused');
@@ -548,13 +610,13 @@ function main() {
             check(first.status === 2 && /unreachable/.test(first.error), 'the trap is a status 2 with its sentence: ' + first.error);
             check(c3.isDead() === true, 'the core is dead after a trap');
             for (const r of [c3.readReport(new Uint8Array(1)), c3.checkOriginal(new Uint8Array(1)), c3.rewrite(new Uint8Array(1)), c3.sameLevel(new Uint8Array(1), new Uint8Array(1)), c3.blank(31, 31, 485, 6, 10),
-                c3.checkMap(new Uint8Array(1)), c3.convertToExtended(new Uint8Array(1)), c3.convertToClassic(new Uint8Array(1)), c3.needsExtended(new Uint8Array(1)), c3.blankExtended(31, 31, 485, 6, 10), c3.limits(), c3.setProperties(new Uint8Array(1), 'x', 1, 1, 1)]) {
+                c3.checkMap(new Uint8Array(1)), c3.convertToExtended(new Uint8Array(1)), c3.convertToClassic(new Uint8Array(1)), c3.needsExtended(new Uint8Array(1)), c3.blankExtended(31, 31, 485, 6, 10), c3.limits(), c3.setProperties(new Uint8Array(1), 'x', 1, 1, 1), c3.crop(new Uint8Array(1), 0, 0, 1, 1)]) {
                 check(r.status === 2 && /stopped/.test(r.error) && /create the module again/.test(r.error), 'every later call fails clearly: ' + r.error);
             }
             // a trap in a conversion, in the check by kind, in the limits: the same
             for (const [name, call] of [['_lvl_convert_to_extended', (c) => c.convertToExtended(new Uint8Array(4))], ['_lvl_convert_to_classic', (c) => c.convertToClassic(new Uint8Array(4))], ['_lvl_check_map', (c) => c.checkMap(new Uint8Array(4))],
                 ['_lvl_needs_extended', (c) => c.needsExtended(new Uint8Array(4))], ['_lvl_blank_extended', (c) => c.blankExtended(31, 31, 485, 6, 10)], ['_lvl_limits', (c) => c.limits()],
-                ['_lvl_set_properties', (c) => c.setProperties(new Uint8Array(4), 'x', 1, 1, 1)]]) {
+                ['_lvl_set_properties', (c) => c.setProperties(new Uint8Array(4), 'x', 1, 1, 1)], ['_lvl_crop', (c) => c.crop(new Uint8Array(4), 0, 0, 1, 1)]]) {
                 const trap = Object.create(real);
                 trap[name] = () => { throw new WebAssembly.RuntimeError('unreachable'); };
                 const cc = api.wrap(trap);

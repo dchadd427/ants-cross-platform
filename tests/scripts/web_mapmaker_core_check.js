@@ -20,6 +20,8 @@
 //      255 and 256) as the checker says them, and the dialog on the real core
 //   G  hills, starting ants and food piles (web/front/mapmaker_blocks.js): the core's checker says "Blue has no hill" until the hill is there and then says nothing of it, counts the ants and the piles
 //      as they were put, writes the edited file as the same bytes, and every hill of the 540 maps taken away and put back is the same level (version 8 and 9)
+//   J  copy, convert and crop (web/front/mapmaker_convert.js, mapmaker_crop.js) on the real core: every map of the library goes up and comes back through the dialogs (the bytes are the core's, the open map is
+//      never touched), the reasons are the converter's own words in the order of the picture, a part cropped out of a large map goes through the conversion again, and the description is shortened on the copy
 // Exit status 0 when everything passes (or there is no module and --require is not given), 1 otherwise.
 'use strict';
 
@@ -155,7 +157,10 @@ function caseE() {
     let thrown = null;
     try { LvlCore.wrap({ _lvl_interface_version: () => 1 }); } catch (e) { thrown = e; }
     check(thrown && /interface version 1/.test(thrown.message), 'an older module is refused by wrap(): ' + (thrown && thrown.message));
-    check(LvlCore.EXPECTED_INTERFACE === 3, 'the page needs interface version 3');
+    check(LvlCore.EXPECTED_INTERFACE === 4, 'the page needs interface version 4');
+    let three = null;
+    try { LvlCore.wrap({ _lvl_interface_version: () => 3 }); } catch (e) { three = e; }
+    check(three && /interface version 3/.test(three.message) && /reload the page/.test(three.message), 'a module of the version before the crop is refused too, with the advice to reload: ' + (three && three.message));
 }
 
 // The page's drawing, then the core: what the page writes into the bytes is a map that the core reads, checks and writes again as the same level
@@ -520,6 +525,92 @@ function caseI(core) {
     check(!cut.findings.some((f) => f.code === 'description_too_long') && Props.read(core, ed.file.bytes).description.length === 29, 'Cut it to 29 and Apply: 29 bytes, and the check has no warning about it');
 }
 
+
+// Copy, convert and crop on the real core: the dialogs run on the fake DOM, the answers are the module's
+function caseJ(core) {
+    const Convert = require(path.join(FRONT, 'mapmaker_convert.js')), Crop = require(path.join(FRONT, 'mapmaker_crop.js')), Dialog = require(path.join(FRONT, 'mapmaker_dialog.js'));
+    const { makeDocument } = require('./web_mapmaker_fake_dom.js');
+    const limits = Sizes.limitsOf(core.limits('new_map').json, core.limits('extended').json);
+    function page(name, bytes) {
+        const doc = makeDocument(), host = doc.createElement('div'), top = doc.createElement('header');
+        doc.body.appendChild(host); doc.body.appendChild(top);
+        const made = [], crops = [], dialogs = Dialog.create(doc, host, [top]), report = core.checkMap(bytes, 'extended').json, f = core.readReport(bytes, 'extended').json;
+        const cur = { name, bytes, file: { rows: f.rows, columns: f.columns }, kind: f.version === 9 ? 'extended' : 'classic', report };
+        const env = { doc, dialogs, core, limits, current: () => cur, thumb: () => null, tags: (el, kind) => { el.textContent = kind; }, onMade: (b, n) => made.push({ bytes: b, name: n }), crop: (spec) => crops.push(spec) };
+        const convert = Convert.create(env);
+        return { doc, host, dialogs, made, crops, convert, cur, button: (label) => host.querySelectorAll('button').filter((b) => b.textContent === label)[0], all: (s) => host.querySelectorAll(s), q: (s) => host.querySelector(s) };
+    }
+    let up = 0, down = 0, refused = 0, same = 0;
+    for (const file of libraryFiles()) {
+        const classic = new Uint8Array(fs.readFileSync(file)), keep = classic.slice(), name = path.basename(file).replace(/\.[^.]*$/, '');
+        // a Classic map: Start an Extended map from this one
+        let p = page(name, classic);
+        p.convert.convert();
+        p.button('Make the new Extended map').click();
+        const want = core.convertToExtended(classic);
+        check(p.made.length === 1 && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(want.bytes)) === 0 && /Extended$/.test(p.made[0].name) && Buffer.compare(Buffer.from(classic), Buffer.from(keep)) === 0, name + ': the Extended map is the core\'s, a new map, and the Classic bytes are as they were');
+        const ext = p.made[0].bytes;
+        up++;
+        // the same map as a copy of its own kind
+        p = page(name, classic); p.convert.copy(); p.button('Make new map').click();
+        check(p.made.length === 1 && p.made[0].bytes !== classic && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(classic)) === 0 && p.made[0].name !== name, name + ': a copy of the same kind is the same bytes under another name');
+        same++;
+        // the Extended map: Make a Classic map, or the reasons
+        p = page(name + ' Extended', ext);
+        p.convert.convert();
+        const back = core.convertToClassic(ext, 'new_map');
+        if (back.json.ok) {
+            const notes = p.all('.note').map((n) => n.textContent);
+            p.button('Make the new Classic map').click();
+            check(p.made.length === 1 && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(back.bytes)) === 0 && core.readReport(p.made[0].bytes, 'new_map').json.loaded, name + ': the Classic map is the core\'s and loads as a new Classic map');
+            check(JSON.stringify(notes) === JSON.stringify(back.json.notes.map((n) => 'i' + Checks.capital(n.message) + '.')), name + ': what the core says to tell is told');
+            down++;
+        } else {
+            const shown = p.all('.creasons .note').map((n) => n.textContent.slice(1));
+            const sorted = Convert.ordered(back.json.reasons).map((r) => Checks.capital(r.message));
+            check(JSON.stringify(shown) === JSON.stringify(sorted) && p.made.length === 0, name + ': the reasons are the core\'s words, rows first');
+            refused++;
+        }
+    }
+    check(up === 540 && same === 540 && down + refused === 540, 'every map of the library went up and came back: ' + up + ', ' + down + ' fit again, ' + refused + ' give reasons');
+    console.log('(' + down + ' fit a Classic map again, ' + refused + ' give reasons) ');
+
+    // a large Extended map: the Classic choice is dimmed with the rows reason, Crop it to fit, Shorten the description
+    const blank = core.blankExtended(120, 400, 485, 6, 10).bytes, tall = core.setProperties(blank, 'The tall valley has many ants!!', 10, 6, 0x7FFE, 'extended').bytes;
+    let p = page('Tall Valley', tall);
+    p.convert.copy();
+    check(p.all('.kind')[1].textContent === 'Classic map (convert)Not yet: this map has 120 rows and a Classic map made now has at most 90. See why and what to do', 'the dimmed choice: ' + p.all('.kind')[1].textContent);
+    p.button('See why and what to do').click();
+    check(p.all('.creasons .note').length === 3 && /^✕This map has 120 rows;/.test(p.all('.creasons .note')[0].textContent) && /columns wide/.test(p.all('.creasons .note')[1].textContent) && /description is 31 bytes/.test(p.all('.creasons .note')[2].textContent), 'the three reasons, rows first');
+    p.button('Crop it to fit...').click();
+    const spec = p.crops[0];
+    check(spec && spec.rows === 120 && spec.columns === 400, 'the crop screen is given the map');
+    const start = Crop.start(limits.classic, spec.rows, spec.columns);
+    equal(start, { row: 15, column: 144, rows: 90, columns: 111 }, 'the frame starts as the picture says, from the core\'s limits');
+    spec.onUse(start);
+    check(/cannot be a Classic map yet/.test(p.q('h2').textContent) && p.all('.creasons .note').length === 1 && /description is 31 bytes/.test(p.all('.creasons .note')[0].textContent), 'the part still has the long description');
+    p.button('Shorten the description...').click();
+    check(p.q('h2').textContent === 'Map properties', 'the properties box opens on the copy');
+    const box = p.q('#p-desc'); box.value = 'The tall valley'; box.fire('input', {});
+    p.button('Apply').click();
+    check(/Make a Classic map from this one\?/.test(p.q('h2').textContent) && /cropped to 90 x 111/.test(p.q('.lead').textContent), 'after Apply the part fits: ' + p.q('h2').textContent);
+    p.button('Make the new Classic map').click();
+    check(p.made.length === 1 && p.made[0].name === 'Tall Valley Classic', 'a Classic map is made');
+    const made = core.readReport(p.made[0].bytes, 'new_map').json;
+    check(made.loaded && made.version === 8 && made.rows === 90 && made.columns === 111 && made.description === 'The tall valley', 'it is a Classic map of 90 x 111 with the shortened description');
+    check(Buffer.compare(Buffer.from(tall), Buffer.from(core.setProperties(blank, 'The tall valley has many ants!!', 10, 6, 0x7FFE, 'extended').bytes)) === 0 && core.readReport(tall, 'extended').json.description.length === 31, 'the Extended map that was open is as it was');
+    // Cancel of the properties box, and Escape: the reasons come back, with the copy as it was
+    p = page('Tall Valley', tall); p.convert.convert(); p.button('Shorten the description...').click(); p.doc.key('Escape');
+    check(/cannot be a Classic map yet/.test(p.q('h2').textContent) && p.all('.creasons .note').length === 3, 'Escape in the properties box comes back to the reasons');
+    // a part that cuts objects says so, in the core's words
+    const treasure = core.convertToExtended(new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', 'TREASURE.LVL')))).bytes;
+    const wide = core.blankExtended(200, 300, 485, 6, 10).bytes;
+    p = page('Wide', wide); p.convert.convert(); p.button('Crop it to fit...').click();
+    p.crops[0].onUse({ row: 100, column: 100, rows: 50, columns: 50 });
+    check(/Make a Classic map from this one\?/.test(p.q('h2').textContent) && /cropped to 50 x 50/.test(p.q('.lead').textContent) && /rows 100 to 149, columns 100 to 149/.test(p.q('.cboxes').textContent), 'a part of a blank map: rows and columns count from 0');
+    check(treasure.length > 0, 'treasure converts');
+}
+
 async function main() {
     const o = parseArgs(process.argv.slice(2));
     const js = path.join(o.module, 'lvl_core.js');
@@ -528,7 +619,7 @@ async function main() {
         process.exit(o.require ? 1 : 0);
     }
     const core = LvlCore.wrap(await require(path.resolve(js))());
-    for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE], ['F drawing and the core', caseF], ['G hills, ants and food with the core', caseG], ['H bigger objects with the core', caseH], ['I the properties of the map', caseI]]) {
+    for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE], ['F drawing and the core', caseF], ['G hills, ants and food with the core', caseG], ['H bigger objects with the core', caseH], ['I the properties of the map', caseI], ['J copy, convert and crop', caseJ]]) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');
         const before = failures;
         try { fn(core); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }
