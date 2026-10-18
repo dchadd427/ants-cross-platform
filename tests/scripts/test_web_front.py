@@ -47,10 +47,13 @@ STYLE_FILES = ("classic.css",)          # the look of the other pages (the front
 SCRIPT_FILES = ("map_maker_link.js", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py), the rematch's strip (tests/scripts/test_web_rematch.py; the game page loads it too) the game type's rows and control (tests/scripts/test_web_game_type.py) and the map list: scripts, not pictures
 MAPMAKER_FILES = ("mapmaker.css", "mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_palette.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")      # the map maker page's own style and scripts (web/mapmaker.html; tests/scripts/test_web_mapmaker.py): not the lobby's, not pictures
 LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py), the chat box's and the rematch's (the game page links it too)
+MAPMAKER_LAZY = ("mapmaker_ground.js", "mapmaker_sprites.js")      # the two scripts that the map maker loads after its page is up (mapmaker_app.js, loadParts): the sheets of the kinds of ground and the game's pictures; measured apart (LAZY_BUDGET), not part of the editor's own budget
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 BUDGET = 1300 * 1000        # bytes: the whole folder (about 0.98 MB: some 427 KB of pictures, the font, the lobby's scripts and the map maker's); a picture that grows past this is a decision, not an accident
 EDITOR_BUDGET = 340 * 1000        # bytes: the map maker's own scripts and style (mapmaker_*.js, mapmaker.css), measured apart from the pictures so that the editor's growth is seen (raised from 260,000 in E5: saving, drafts and the lists of E6 need the room; the gzipped cap below stays)
+LAZY_BUDGET = 36 * 1000        # bytes: the two lazily loaded map maker scripts together (about 28,500 now), and gzipped below (about 9,300): added with the sprites (docs/MAP_EDITOR.md, "Sprites"), so the editor's own caps did not have to move
+LAZY_GZIP_BUDGET = 12 * 1000
 EDITOR_GZIP_BUDGET = 90 * 1000      # bytes: the same, gzipped file by file (what a player downloads); raised from 80,000 in E5: the files already summed 76,973 before it (the 68 KB that was quoted is another way of counting) and E5 adds about 4,300
 
 
@@ -221,7 +224,7 @@ class Sheet:
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_exactly_the_files_that_the_tool_makes_the_shared_stylesheet_the_lobbys_stylesheets_and_the_scripts(self):
-        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS) + list(MAPMAKER_FILES)))
+        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS) + list(MAPMAKER_FILES) + list(MAPMAKER_LAZY)))
 
     def test_every_picture_is_a_png_of_the_size_that_the_page_gives_it(self):
         for name, size in PICTURES.items():
@@ -240,6 +243,16 @@ class TheFolder(unittest.TestCase):
             zipped += len(gzip.compress(data, 9))
         self.assertLess(raw, EDITOR_BUDGET, "the map maker's scripts and style are %d bytes" % raw)
         self.assertLess(zipped, EDITOR_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
+
+    def test_the_lazily_loaded_map_maker_scripts_stay_small_too(self):
+        import gzip
+        raw = zipped = 0
+        for name in MAPMAKER_LAZY:
+            data = read_bytes("web", "front", name)
+            raw += len(data)
+            zipped += len(gzip.compress(data, 9))
+        self.assertLess(raw, LAZY_BUDGET, "the lazily loaded map maker scripts are %d bytes" % raw)
+        self.assertLess(zipped, LAZY_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
 
     def test_the_font_is_a_byte_copy_of_the_games_own_with_its_licence_beside_it(self):
         for name in FONT_FILES:
@@ -631,7 +644,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)

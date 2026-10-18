@@ -48,6 +48,10 @@ Parts:
              sheet is inside the screen with Cancel and Apply in view, its controls are 44 pixels, and what does not fit scrolls inside it;
   * phone    390 x 844 (portrait) and 844 x 390 (landscape), a touch screen: no sideways scroll, the buttons and the New map dialog are inside the screen, two fingers zoom and one finger pans (Move) or
              paints (a tool), a tap paints a cell, two fingers do not paint;
+  * sprites  1280 x 800, a touch screen (390 x 844), the game's own pictures (the other parts run with the atlas refused, so that their pixel checks read the flat colors): the atlas comes in, a gravel cell
+             shows a texture, the Ground tool has five chips (Gravel, Dirt, Slate, Mud, Water), a second tap on a kind opens "all its tiles" (the plain tile and 3 x 8 edge pieces, the brush row, the gold ring),
+             a tile of the sheet paints, Undo takes it back, a map under 10 pixels a cell is drawn in the pictures' average colors, a 512 x 512 map is panned with the processor 4 times slower and frames keep
+             the screen's pace; with the atlas refused the page says so in a plain line and draws flat colors; the tools column has no scrollbar; a phone has the sheets with 52 pixel chips and 44 pixel buttons;
   * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -67,7 +71,8 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "narrow", "panel", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "narrow", "panel", "layout", "phone", "older", "sprites")
+WITH_ATLAS = ("panel", "sprites")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -219,7 +224,8 @@ class Page:
         self.ev("document.querySelector('[data-tool=%s]').click()" % name)
 
     def tile(self, tile):
-        self.ev("document.querySelector('[data-tile=\"%d\"]').click()" % tile)
+        """choose a tile's chip; a kind of ground that is chosen already is left alone (a second tap on it opens the sheet of its tiles)"""
+        self.ev("(function () { var b = document.querySelector('[data-tile=\"%d\"]'); if (!(b.classList.contains('gk') && b.getAttribute('aria-checked') === 'true')) b.click(); })()" % tile)
 
     def cell_point(self, row, column):
         """where the middle of a cell is on the page, when the whole map is shown (the middle of the canvas is the middle of the map)"""
@@ -282,6 +288,9 @@ def main():
                         pass
 
             tab.dt.handlers.append(on_dialog)
+            if part not in WITH_ATLAS:
+                tab.call("Network.enable")
+                tab.call("Network.setBlockedURLs", {"urls": ["*mapmaker_atlas/*"]})
             try:
                 run_part(part, tab, args, check, tiny, junk)
             finally:
@@ -300,6 +309,174 @@ def main():
             browser.close()
     print("[web map maker] %d checks, %d failed" % (count[0], len(failures)))
     return 1 if failures else 0
+
+
+def spread(page, row, column, size=8):
+    """how many different colors the canvas shows in a small square of pixels inside a cell (a flat color: one; a picture: many)"""
+    x, y = page.cell_point(row, column)
+    return len({tuple(page.pixel(x + dx, y + dy)) for dx in range(-size // 2, size // 2, 2) for dy in range(-size // 2, size // 2, 2)})
+
+
+def make_extended(page, rows, columns):
+    page.press_act("new")
+    wait_for(lambda: page.ev("!!document.querySelector('.kinds')"))
+    page.ev("document.querySelectorAll('.kind input')[1].click()")
+    page.type_into("#size-rows", str(rows))
+    page.type_into("#size-columns", str(columns))
+    page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+    return wait_for(lambda: page.state()["rows"] == str(rows), 15)
+
+
+def run_sprites(tab, args, check):
+    """the game's own pictures (docs/MAP_EDITOR.md, "Sprites"): the atlas loads, the canvas draws pictures from 10 pixels a cell up and average colors below, the Ground tool has five kinds and a sheet of every
+    tile of a kind, the page works and says so when the atlas does not load, a phone has the sheets, the tools column has no scrollbar, and a pan of a big map does not stutter"""
+    print("[web map maker] sprites, 1280 x 800")
+    tab.emulate(1280, 800, 1)
+    page = Page(tab, args.web)
+    check(page.open() and page.ready(), "the page starts")
+    check(wait_for(lambda: page.ev("document.querySelectorAll('#palette .gk canvas').length") == 5, 10), "the atlas comes in: the five kinds of ground show their pictures")
+    check(page.ev("[].map.call(document.querySelectorAll('#palette .gk'), function (b) { return b.textContent; }).join('|')") == "Gravel|Dirt|Slate|Mud|Water", "Gravel, Dirt, Slate, Mud, Water: five chips, no grass, no sand")
+    check(page.ev("document.getElementById('atlas-note').hidden") is True, "no notice when the pictures are there")
+    page.choose_file(os.path.join(REPO, "Original-Ants", "Maps", "TREASURE.LVL"))
+    check(wait_for(lambda: page.state()["name"] == "TREASURE"), "Treasure is opened")
+    time.sleep(0.5)
+    s = page.state()
+    check(s["scale"] >= 10, "the whole map is 10 pixels a cell or more (%s)" % s["scale"])
+    gravel_cell = (5, 5)
+    check(spread(page, *gravel_cell) >= 4, "a gravel cell shows the picture (a texture, not one flat color: %d colors)" % spread(page, *gravel_cell))
+    page.shot(args.shots, "mapmaker-sprites-desktop")
+    # the Ground tool: a kind's chip chooses it, the same chip again opens the sheet of its tiles
+    page.tile(487)
+    check(page.ev("document.getElementById('palette-name').textContent") == "Dirt: tap it again for all its tiles" and not page.ev("!!document.querySelector('.dlg')"), "the first tap on a kind chooses its plain tile")
+    page.tile(487)
+    check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.ksheetbox')")) and page.ev("document.querySelector('.dlg h2').textContent") == "Dirt: all its tiles", "the second tap opens Dirt: all its tiles")
+    got = json.loads(page.ev("""JSON.stringify((function () {
+        var d = document.querySelector('.dlg'), t = d.querySelectorAll('.gt:not(.mid)'), g = d.querySelectorAll('.kgroup h3');
+        return {chips: t.length, pictures: d.querySelectorAll('.gt canvas').length, heads: [].map.call(g, function (h) { return h.textContent; }), brush: [].map.call(d.querySelectorAll('.kbrush button'), function (b) { return b.textContent; }).join(''),
+                small: [].filter.call(t, function (b) { var r = b.querySelector('i').getBoundingClientRect(); return r.width < 51 || r.height < 51; }).length, on: d.querySelectorAll('.gt[aria-checked=true]').length};
+    })())"""))
+    check(got["chips"] == 1 + 3 * 8 and got["pictures"] == got["chips"] + 3 and got["heads"] == ["Plain dirt", "Dirt next to Gravel", "Dirt next to Slate", "Dirt next to Mud"], "the sheet: the plain tile and 3 x 8 edge pieces, each with its picture: %s" % got)
+    check(got["brush"] == "1359" and got["small"] == 0 and got["on"] == 1, "the brush row, chips of 52 pixels, and the chosen tile has the gold ring (%s)" % got)
+    page.shot(args.shots, "mapmaker-sprites-sheet-dirt")
+    page.ev("document.querySelector('.dlg .gt[data-tile=\"541\"]').click()")              # dg03a: dirt next to gravel, the gravel on the north side
+    check(page.ev("document.querySelector('.dlg .gt[aria-checked=true]').getAttribute('data-tile')") == "541", "a tile of the sheet is chosen")
+    page.key("Escape")
+    check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Escape closes the sheet")
+    check(page.ev("document.getElementById('palette-name').textContent") == "Dirt next to gravel: north edge (dg03a)", "the line under the palette names it: %s" % page.ev("document.getElementById('palette-name').textContent"))
+    before = spread(page, *gravel_cell)
+    a = page.cell_point(*gravel_cell)
+    page.tab.click(*a)
+    time.sleep(0.4)
+    check(page.ev("document.getElementById('undo-btn').disabled") is False, "a tap paints the chosen tile (Undo is on)")
+    page.ctrl_key("z", "KeyZ", 90)
+    time.sleep(0.3)
+    check(page.ev("document.getElementById('undo-btn').disabled") is True, "and Undo takes it back")
+    # the Bigger tool: the picture of the object follows the pointer
+    page.tool("bigger")
+    bx = page.box("#map")
+    page.tab.mouse("mouseMoved", bx["x"] + 300, bx["y"] + 300, button="none")
+    time.sleep(0.4)
+    page.shot(args.shots, "mapmaker-sprites-bigger-ghost")
+    # a map that is whole at under 10 pixels a cell is drawn in the pictures' average colors
+    page.tool("ground")
+    page.tile(485)
+    check(make_extended(page, 100, 100), "an Extended map of 100 x 100 is made")
+    time.sleep(0.4)
+    s = page.state()
+    check(s["scale"] < 10, "whole, it is under 10 pixels a cell (%s)" % s["scale"])
+    check(spread(page, 50, 50, 4) == 1 and page.pixel(*page.cell_point(50, 50)) == page.color_of(485), "so it is drawn in the average color of the picture, one color for a gravel cell")
+    page.shot(args.shots, "mapmaker-sprites-zoomed-out")
+    page.ev("document.querySelector('[data-act=zoom-in]').click()"); page.ev("document.querySelector('[data-act=zoom-in]').click()")
+    time.sleep(0.4)
+    s = page.state()
+    check(s["scale"] >= 10 and spread(page, 50, 50) >= 3, "zoomed in again it draws the pictures (%s pixels a cell)" % s["scale"])
+    # a map of 512 x 512, panned: frames come at the screen's pace even with the processor slowed down 4 times
+    check(make_extended(page, 512, 512), "an Extended map of 512 x 512 is made")
+    page.ev("document.getElementById('map').focus()")
+    page.ev("window.__fr = []; (function () { var l = performance.now(); function f(n) { window.__fr.push(n - l); l = n; requestAnimationFrame(f); } requestAnimationFrame(f); })()")
+    page.tab.call("Emulation.setCPUThrottlingRate", {"rate": 4})
+    cx, cy = bx["x"] + bx["w"] / 2, bx["y"] + bx["h"] / 2
+    for i in range(60):
+        page.wheel(cx, cy, -40)
+        if page.state()["scale"] >= 14:
+            break
+        time.sleep(0.03)
+    time.sleep(0.4)
+    page.ev("window.__fr = []")
+    page.tab.mouse("mouseMoved", cx, cy, button="none")
+    page.tab.mouse("mousePressed", cx, cy)
+    for i in range(1, 61):
+        page.tab.mouse("mouseMoved", cx - i * 5, cy - i * 2, buttons=1)
+        time.sleep(0.016)
+    page.tab.mouse("mouseReleased", cx - 300, cy - 120)
+    frames = sorted(json.loads(page.ev("JSON.stringify(window.__fr)")))
+    page.tab.call("Emulation.setCPUThrottlingRate", {"rate": 1})
+    s = page.state()
+    check(s["scale"] >= 10 and len(frames) >= 30 and frames[len(frames) // 2] <= 34 and frames[int(len(frames) * 0.9)] <= 100, "a pan of the 512 x 512 map at %.1f pixels a cell with the processor 4 times slower: %d frames, median %.1f ms, 90%% under %.1f ms" % (s["scale"], len(frames), frames[len(frames) // 2], frames[int(len(frames) * 0.9)]))
+    # the same page when the atlas does not load: flat colors, a plain notice, nothing else changes
+    print("[web map maker] sprites, the atlas refused")
+    tab2 = Tab(tab_browser(tab))
+    try:
+        tab2.emulate(1280, 800, 1)
+        tab2.call("Network.enable")
+        tab2.call("Network.setBlockedURLs", {"urls": ["*mapmaker_atlas/*"]})
+        flat = Page(tab2, args.web)
+        check(flat.open() and flat.ready(), "the page starts without its atlas")
+        check(wait_for(lambda: flat.ev("document.getElementById('atlas-note').hidden") is False, 10), "a plain notice says the pictures could not be loaded: %s" % flat.ev("document.getElementById('atlas-note').textContent"))
+        flat.choose_file(os.path.join(REPO, "Original-Ants", "Maps", "TREASURE.LVL"))
+        wait_for(lambda: flat.state()["name"] == "TREASURE")
+        time.sleep(0.4)
+        check(spread(flat, 5, 5, 4) == 1 and flat.pixel(*flat.cell_point(5, 5)) == flat.color_of(485), "the map is drawn in flat colors")
+        check(flat.ev("document.querySelectorAll('#palette .gk').length") == 5 and flat.ev("document.querySelectorAll('#palette .gk canvas').length") == 0, "the five kinds are there as flat chips")
+        flat.tile(487); flat.tile(487)
+        check(wait_for(lambda: flat.ev("!!document.querySelector('.dlg.ksheetbox')")), "and the sheet of a kind opens, with flat tiles")
+        flat.shot(args.shots, "mapmaker-sprites-atlas-refused")
+    finally:
+        tab2.close()
+    # the tools column has no scrollbar with the pictures (the other parts run without them)
+    for w, h in ((1280, 800), (1366, 768), (1280, 720)):
+        tab.emulate(w, h, 1)
+        page = Page(tab, args.web)
+        page.open()
+        page.ready()
+        wait_for(lambda: page.ev("document.querySelectorAll('#palette .gk canvas').length") == 5, 10)
+        page.ev("(function () { var s = document.createElement('style'); s.textContent = '*::-webkit-scrollbar { width: 15px; height: 15px; }'; document.head.appendChild(s); })()")
+        found = json.loads(page.ev("JSON.stringify((function () { var p = document.querySelector('.tools'); return {tall: p.scrollHeight > p.clientHeight, wide: p.scrollWidth > p.clientWidth}; })())"))
+        check(not found["tall"] and not found["wide"], "%d x %d with the pictures: the tools column has no scrollbar (%s)" % (w, h, found))
+    # a phone
+    print("[web map maker] sprites, 390 x 844, a touch screen")
+    tab.emulate(390, 844, 2, mobile=True)
+    page = Page(tab, args.web)
+    page.open()
+    page.ready()
+    wait_for(lambda: page.ev("document.querySelectorAll('#palette .gk canvas').length") == 5, 10)
+    page.choose_file(os.path.join(REPO, "Original-Ants", "Maps", "TREASURE.LVL"))
+    wait_for(lambda: page.state()["name"] == "TREASURE")
+    page.shot(args.shots, "mapmaker-sprites-phone")
+    page.click_selector("#tile-btn")
+    check(wait_for(lambda: page.ev("!!document.querySelector('.dlg')")) and page.ev("document.querySelectorAll('.dlg .pick canvas').length") == 5, "the phone's one button opens the sheet of five kinds, with their pictures")
+    check(page.ev("[].every.call(document.querySelectorAll('.dlg .pick'), function (b) { return b.getBoundingClientRect().height >= 44; })"), "every kind is a target of 44 pixels or more")
+    page.shot(args.shots, "mapmaker-sprites-phone-ground")
+    page.ev("document.querySelector('.dlg .pick[aria-checked=true]').click()")
+    check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.ksheetbox')")), "the chosen kind again opens its sheet")
+    got = json.loads(page.ev("""JSON.stringify((function () {
+        var d = document.querySelector('.dlg').getBoundingClientRect(), i = document.querySelector('.dlg-in'), t = document.querySelectorAll('.dlg .gt:not(.mid)'),
+            b = [].map.call(document.querySelectorAll('.dlg .kbrush button'), function (n) { var r = n.getBoundingClientRect(); return Math.min(r.width, r.height); }),
+            l = [].map.call(document.querySelectorAll('.dlg .gl'), function (n) { return n.getBoundingClientRect().height; });
+        return {inside: d.top >= 0 && d.bottom <= window.innerHeight + 1 && d.left >= -1 && d.right <= window.innerWidth + 1, scrolls: i.scrollHeight > i.clientHeight, wide: document.documentElement.scrollWidth > window.innerWidth,
+                chip: Math.min.apply(null, [].map.call(t, function (n) { return n.querySelector('i').getBoundingClientRect().width; })), brush: Math.min.apply(null, b), look: Math.min.apply(null, l)};
+    })())"""))
+    check(got["inside"] and got["scrolls"] and not got["wide"] and got["chip"] >= 52 and got["brush"] >= 44 and got["look"] >= 44, "the phone's sheet is inside the screen and scrolls, chips of 52 pixels, buttons of 44 or more (%s)" % got)
+    page.shot(args.shots, "mapmaker-sprites-phone-sheet")
+
+
+def tab_browser(tab):
+    """the Browser object of a Tab's DevTools connection (a second tab of the same browser)"""
+    class Same:
+        pass
+    same = Same()
+    same.devtools = tab.dt
+    return same
 
 
 def run_part(part, tab, args, check, tiny, junk):
@@ -412,23 +589,23 @@ def run_part(part, tab, args, check, tiny, junk):
         check(tools == [["ground", False, "true"], ["objects", False, "false"], ["bigger", False, "false"], ["hills", False, "false"], ["ants", False, "false"], ["food", False, "false"], ["erase", False, "false"], ["move", False, "false"]],
               "Ground is chosen, the other seven tools are on: %s" % tools)
         check(page.button_off("#undo-btn") and page.button_off("#redo-btn"), "Undo and Redo are off with nothing drawn")
-        grass, dirt, water, rock, sand = page.color_of(485), page.color_of(487), page.color_of(476), page.color_of(0, 302), page.color_of(571)
+        gravel, dirt, water, rock, slate = page.color_of(485), page.color_of(487), page.color_of(476), page.color_of(0, 302), page.color_of(571)
         page.tile(487)
-        check(page.ev("document.getElementById('palette-name').textContent") == "Dirt", "the palette names the tile that is chosen")
+        check(page.ev("document.getElementById('palette-name').textContent") == "Dirt: tap it again for all its tiles", "the palette names the tile that is chosen")
         a, b = page.cell_point(3, 3), page.cell_point(3, 20)
-        check(page.pixel(*a) == grass, "the map starts as grass")
+        check(page.pixel(*a) == gravel, "the map starts as gravel")
         page.drag(a[0], a[1], b[0], b[1], steps=14)
         time.sleep(0.2)
         mid = page.cell_point(3, 12)
         check(page.pixel(*a) == dirt and page.pixel(*mid) == dirt and page.pixel(*b) == dirt, "a drag of the mouse paints a line of dirt, with no gap")
-        check(page.pixel(*page.cell_point(4, 12)) == grass and page.pixel(*page.cell_point(2, 12)) == grass, "and only the cells it went over")
+        check(page.pixel(*page.cell_point(4, 12)) == gravel and page.pixel(*page.cell_point(2, 12)) == gravel, "and only the cells it went over")
         way, cells, ms = page.paint_info()
         check(way == "cells" and 0 < cells < 80, "only the cells that changed were painted again (%s: %d cells, %.1f ms)" % (way, cells, ms))
         check(not page.button_off("#undo-btn") and page.button_off("#redo-btn"), "Undo is on, Redo is off")
         page.shot(args.shots, "mapmaker-draw-ground")
         page.ev("document.getElementById('undo-btn').click()")
         time.sleep(0.2)
-        check(page.pixel(*a) == grass and page.pixel(*mid) == grass and page.pixel(*b) == grass, "Undo takes the whole stroke back at once")
+        check(page.pixel(*a) == gravel and page.pixel(*mid) == gravel and page.pixel(*b) == gravel, "Undo takes the whole stroke back at once")
         check(page.button_off("#undo-btn") and not page.button_off("#redo-btn"), "Undo is off again and Redo is on")
         page.ev("document.getElementById('redo-btn').click()")
         time.sleep(0.2)
@@ -436,7 +613,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.ev("document.getElementById('map').focus()")
         page.ctrl_key("z", "KeyZ", 90)
         time.sleep(0.2)
-        check(page.pixel(*mid) == grass, "Control+Z undoes")
+        check(page.pixel(*mid) == gravel, "Control+Z undoes")
         page.ctrl_key("z", "KeyZ", 90, shift=True)
         time.sleep(0.2)
         check(page.pixel(*mid) == dirt, "Control+Shift+Z redoes")
@@ -447,7 +624,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.tab.click(*c)
         time.sleep(0.2)
         check(all(page.pixel(*page.cell_point(10 + dr, 10 + dc)) == water for dr in (-1, 0, 1) for dc in (-1, 0, 1)), "a click with a brush of 3 paints 3 x 3 cells")
-        check(page.pixel(*page.cell_point(12, 10)) == grass and page.pixel(*page.cell_point(10, 8)) == grass, "and not the cells beside them")
+        check(page.pixel(*page.cell_point(12, 10)) == gravel and page.pixel(*page.cell_point(10, 8)) == gravel, "and not the cells beside them")
         # the keys choose the tools
         page.ev("document.getElementById('map').focus()")
         page.key("o")
@@ -461,7 +638,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.key("e")
         page.tab.click(*r)
         time.sleep(0.2)
-        check(page.pixel(*r) == grass, "the eraser takes it away (the letter E)")
+        check(page.pixel(*r) == gravel, "the eraser takes it away (the letter E)")
         # fill
         page.key("g")
         page.tile(571)
@@ -470,15 +647,15 @@ def run_part(part, tab, args, check, tiny, junk):
         f = page.cell_point(25, 25)
         page.tab.click(*f)
         time.sleep(0.3)
-        check(page.pixel(*f) == sand and page.pixel(*page.cell_point(30, 0)) == sand and page.pixel(*page.cell_point(10, 10)) == water and page.pixel(*mid) == dirt,
-              "Fill paints the field of grass round the click and stops at the water and the dirt")
+        check(page.pixel(*f) == slate and page.pixel(*page.cell_point(30, 0)) == slate and page.pixel(*page.cell_point(10, 10)) == water and page.pixel(*mid) == dirt,
+              "Fill paints the field of gravel round the click and stops at the water and the dirt")
         page.shot(args.shots, "mapmaker-draw-fill")
         page.ctrl_key("z", "KeyZ", 90)
         time.sleep(0.2)
-        check(page.pixel(*f) == grass, "and one Undo takes the whole fill back")
+        check(page.pixel(*f) == gravel, "and one Undo takes the whole fill back")
         check(page.ev("document.getElementById('fill-btn').getAttribute('aria-pressed')") == "false", "Fill is for one click: it is off again")
         # looking around instead of painting
-        page.ev("document.querySelector('[data-tile=\"487\"]').click()")
+        page.tile(487)
         box = page.box("#map")
         mx, my = box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
         for _ in range(6):
@@ -585,7 +762,7 @@ def run_part(part, tab, args, check, tiny, junk):
         rgb = lambda hexa: [int(hexa[i:i + 2], 16) for i in (1, 3, 5)]
         team_color = {k: rgb(page.ev("MapTiles.TEAMS.%s" % k)) for k in ("green", "red", "blue", "black")}
         food_color = rgb(page.ev("MapTiles.FOOD"))
-        grass = page.color_of(485)
+        gravel = page.color_of(485)
         card = lambda: (page.press_act("check"), wait_for(lambda: page.ev("!!document.querySelector('.ccard')")), page.ev("document.querySelector('.ccard').textContent"), page.key("Escape"))[2]
         page.ev("document.getElementById('map').focus()")
         page.key("h")
@@ -610,7 +787,7 @@ def run_part(part, tab, args, check, tiny, junk):
         time.sleep(0.2)
         # (the cell that was clicked is the hill's door: it holds the marked square's dot, so it is not read)
         check(all(page.pixel(*page.cell_point(24 + dr, 5 + dc)) == team_color["blue"] for dr in (-1, 0, 1, 2) for dc in (-1, 0, 1, 2) if (dr, dc) != (0, 0)), "a click puts the Blue hill: 4 x 4 cells in blue, the clicked cell its door")
-        check(page.pixel(*page.cell_point(22, 5)) == grass and page.pixel(*page.cell_point(24, 8)) == grass and page.pixel(*page.cell_point(27, 5)) == grass, "and nothing round it")
+        check(page.pixel(*page.cell_point(22, 5)) == gravel and page.pixel(*page.cell_point(24, 8)) == gravel and page.pixel(*page.cell_point(27, 5)) == gravel, "and nothing round it")
         check(page.ev("document.getElementById('palette-name').textContent") == "Blue: has a hill" and not page.button_off("#undo-btn"), "the line says that Blue has a hill; Undo is on")
         # moving it
         m = page.cell_point(14, 14)
@@ -618,13 +795,13 @@ def run_part(part, tab, args, check, tiny, junk):
         time.sleep(0.3)
         page.tab.mouse("mouseMoved", 5, 5, button="none")
         time.sleep(0.2)
-        check(page.pixel(*page.cell_point(15, 15)) == team_color["blue"] and page.pixel(*page.cell_point(25, 6)) == grass and page.pixel(*page.cell_point(26, 7)) == grass, "a click somewhere else moves the Blue hill: only one for a team")
+        check(page.pixel(*page.cell_point(15, 15)) == team_color["blue"] and page.pixel(*page.cell_point(25, 6)) == gravel and page.pixel(*page.cell_point(26, 7)) == gravel, "a click somewhere else moves the Blue hill: only one for a team")
         # at the edge: no room, in words, nothing changes
         e = page.cell_point(0, 0)
         page.tab.click(*e)
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')")) and "no room" in page.ev("document.querySelector('.dlg').textContent"), "a click at the top left corner says that there is no room for a whole hill")
         page.key("Escape")
-        check(page.pixel(*page.cell_point(3, 3)) == grass and page.pixel(*page.cell_point(1, 1)) == grass, "and nothing was put")
+        check(page.pixel(*page.cell_point(3, 3)) == gravel and page.pixel(*page.cell_point(1, 1)) == gravel, "and nothing was put")
         # a drag looks around
         box = page.box("#map")
         mx, my = box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
@@ -632,7 +809,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.drag(d0[0], d0[1], d0[0] + 60, d0[1] + 40)
         page.tab.mouse("mouseMoved", 5, 5, button="none")
         time.sleep(0.2)
-        check(page.pixel(*d0) == grass and page.pixel(*page.cell_point(10, 20)) == grass, "a drag of the mouse looks around and puts no hill where it began")
+        check(page.pixel(*d0) == gravel and page.pixel(*page.cell_point(10, 20)) == gravel, "a drag of the mouse looks around and puts no hill where it began")
         for team in order:
             page.ev("document.querySelector('#palette .swatch:nth-child(%d)').click()" % (order.index(team) + 1))
             p = page.cell_point(*spots[team])
@@ -698,13 +875,13 @@ def run_part(part, tab, args, check, tiny, junk):
         page.key("e")
         page.tab.click(*page.cell_point(15, 15))
         time.sleep(0.2)
-        check(page.pixel(*page.cell_point(15, 15)) == grass, "the eraser takes the pile away")
+        check(page.pixel(*page.cell_point(15, 15)) == gravel, "the eraser takes the pile away")
         page.tab.click(*page.cell_point(spots["red"][0] + 5, spots["red"][1] + 1))
         time.sleep(0.2)
-        check(page.pixel(*page.cell_point(spots["red"][0] + 5, spots["red"][1] + 1)) == grass and page.pixel(*page.cell_point(spots["red"][0] + 4, spots["red"][1] + 1)) == grass, "the eraser on one ant of Red takes all of Red's ants away")
+        check(page.pixel(*page.cell_point(spots["red"][0] + 5, spots["red"][1] + 1)) == gravel and page.pixel(*page.cell_point(spots["red"][0] + 4, spots["red"][1] + 1)) == gravel, "the eraser on one ant of Red takes all of Red's ants away")
         page.tab.click(*page.cell_point(spots["black"][0] + 1, spots["black"][1] + 1))
         time.sleep(0.2)
-        check(all(page.pixel(*page.cell_point(24 + dr, 24 + dc)) == grass for dr in (-1, 0, 1, 2) for dc in (-1, 0, 1, 2)), "the eraser on a cell of the Black hill takes the whole hill")
+        check(all(page.pixel(*page.cell_point(24 + dr, 24 + dc)) == gravel for dr in (-1, 0, 1, 2) for dc in (-1, 0, 1, 2)), "the eraser on a cell of the Black hill takes the whole hill")
         check(wait_for(lambda: "Does not work" in page.state()["check"], 4), "the check is run again by itself")
         text = card()
         check("Red has no starting ants" in text and "Black has no hill" in text, "and the card says which: %s" % text[:140])
@@ -762,7 +939,7 @@ def run_part(part, tab, args, check, tiny, junk):
             touch("touchMove", {1: (q[0] + i * 6, q[1] + i * 3)})
         touch("touchEnd", {})
         time.sleep(0.3)
-        check(page.pixel(*q) == grass and page.pixel(*page.cell_point(14, 14)) == grass, "a finger that is dragged looks around: no hill")
+        check(page.pixel(*q) == gravel and page.pixel(*page.cell_point(14, 14)) == gravel, "a finger that is dragged looks around: no hill")
         cx, cy = q
         touch("touchStart", {1: (cx - 30, cy), 2: (cx + 30, cy)})
         for i in range(1, 6):
@@ -770,7 +947,7 @@ def run_part(part, tab, args, check, tiny, junk):
         touch("touchEnd", {})
         time.sleep(0.2)
         cell14 = page.cell_point(14, 14)
-        check(page.pixel(cell14[0] - 0.3 * page.state()["scale"], cell14[1] - 0.3 * page.state()["scale"]) == grass and page.pixel(cx - 35, cy) == grass, "two fingers (a pinch) put nothing")
+        check(page.pixel(cell14[0] - 0.3 * page.state()["scale"], cell14[1] - 0.3 * page.state()["scale"]) == gravel and page.pixel(cx - 35, cy) == gravel, "two fingers (a pinch) put nothing")
         page.ev("document.getElementById('map').focus()")
         page.key("0")                                            # (the pinch zoomed in: the whole map again, so that the cells are where cell_point says)
         time.sleep(0.2)
@@ -801,7 +978,7 @@ def run_part(part, tab, args, check, tiny, junk):
         tab.emulate(1280, 800, 1)
         page = Page(tab, args.web)
         check(page.open() and page.ready(), "the page starts with its map core")
-        grass = page.color_of(485)
+        gravel = page.color_of(485)
         # (the anchor's cell has a dot in its middle: cells are read a little above and to the left of it)
 
         def at(r, c):
@@ -825,7 +1002,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.ev("document.querySelector('.pick[data-tile=\"1324\"]').click()")
         check(not page.ev("!!document.querySelector('.dlg')") and page.ev("document.getElementById('tile-name').textContent") == "10 cells, 5 x 2grassmed1", "a pick is chosen and the sheet closes")
         item = page.color_of(0, 1324)
-        check(item != grass, "an object's color is not the ground's")
+        check(item != gravel, "an object's color is not the ground's")
         # the marked box: 2 rows and 5 columns round the cell (rows -1 to 0, columns -2 to 2)
         scale = float(page.ev("document.getElementById('map').getAttribute('data-scale')"))
         c10 = page.cell_point(10, 10)
@@ -841,19 +1018,19 @@ def run_part(part, tab, args, check, tiny, junk):
         time.sleep(0.3)
         cells = [(r, c) for r in (9, 10) for c in range(8, 13)]
         check(all(at(r, c) == item for r, c in cells), "a click puts the object whole: its 10 cells are its color")
-        check(all(at(r, c) == grass for r, c in ((8, 10), (11, 10), (10, 7), (10, 13), (9, 13))), "and nothing round it")
+        check(all(at(r, c) == gravel for r, c in ((8, 10), (11, 10), (10, 7), (10, 13), (9, 13))), "and nothing round it")
         check(not page.button_off("#undo-btn"), "Undo is on")
         page.shot(args.shots, "mapmaker-bigger-placed")
         page.key("e")
         page.tab.click(*page.cell_point(9, 12))
         time.sleep(0.2)
-        check(all(at(r, c) == grass for r, c in cells), "the eraser on one cell takes the whole object away")
+        check(all(at(r, c) == gravel for r, c in cells), "the eraser on one cell takes the whole object away")
         page.ctrl_key("z", "KeyZ", 90)
         time.sleep(0.2)
         check(all(at(r, c) == item for r, c in cells), "Control+Z gives it back whole")
         page.ctrl_key("z", "KeyZ", 90)
         time.sleep(0.2)
-        check(all(at(r, c) == grass for r, c in cells), "and the next one takes it away")
+        check(all(at(r, c) == gravel for r, c in cells), "and the next one takes it away")
         page.ctrl_key("y", "KeyY", 89)
         time.sleep(0.2)
         check(all(at(r, c) == item for r, c in cells), "Control+Y puts it back")
@@ -914,7 +1091,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.ev("document.querySelector('.pick[data-tile=\"1324\"]').click()")
         check(page.ev("document.getElementById('tile-name').textContent") == "10 cells, 5 x 2grassmed1", "grassmed1 is chosen")
         item = page.color_of(0, 1324)
-        grass = page.color_of(485)
+        gravel = page.color_of(485)
 
         def at(r, c):
             x, y = page.cell_point(r, c)
@@ -931,7 +1108,7 @@ def run_part(part, tab, args, check, tiny, junk):
             touch("touchMove", {1: (q[0] + i * 6, q[1] + i * 3)})
         touch("touchEnd", {})
         time.sleep(0.3)
-        check(page.pixel(*page.cell_point(22, 14)) == grass, "a finger that is dragged looks around: nothing is put")
+        check(page.pixel(*page.cell_point(22, 14)) == gravel, "a finger that is dragged looks around: nothing is put")
         cx, cy = q
         touch("touchStart", {1: (cx - 30, cy), 2: (cx + 30, cy)})
         for i in range(1, 6):
@@ -941,10 +1118,10 @@ def run_part(part, tab, args, check, tiny, junk):
         page.ev("document.getElementById('map').focus()")
         page.key("0")
         time.sleep(0.2)
-        check(at(22, 14) == grass, "two fingers (a pinch) put nothing")
+        check(at(22, 14) == gravel, "two fingers (a pinch) put nothing")
         page.ev("document.getElementById('undo-btn').click()")
         time.sleep(0.2)
-        check(all(at(r, c) == grass for r, c in ((13, 12), (14, 12), (14, 16))), "Undo takes the object away whole")
+        check(all(at(r, c) == gravel for r, c in ((13, 12), (14, 12), (14, 16))), "Undo takes the object away whole")
         page.shot(args.shots, "mapmaker-bigger-phone")
     elif part == "props":
         print("[web map maker] the properties of the map, 1280 x 800")
@@ -1537,6 +1714,8 @@ def run_part(part, tab, args, check, tiny, junk):
             })())"""))
             check(found["n"] == 7 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: seven buttons, none cut, none over the name box, no sideways scroll (%s)" % (w, h, found))
             page.shot(args.shots, "mapmaker-topbar-%dx%d" % (w, h))
+    elif part == "sprites":
+        run_sprites(tab, args, check)
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):
             print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))
