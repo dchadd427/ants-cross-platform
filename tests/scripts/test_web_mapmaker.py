@@ -25,6 +25,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -937,7 +938,7 @@ class TheGroundAndTheSprites(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.atlas = cls.tmp.name
-        made = subprocess.run(["python3", os.path.join(REPO, "tools", "map_atlas.py"), cls.atlas], capture_output=True, text=True)
+        made = subprocess.run([sys.executable, os.path.join(REPO, "tools", "map_atlas.py"), cls.atlas], capture_output=True, text=True)
         if made.returncode != 0:
             raise AssertionError("the atlas could not be made: " + made.stdout + made.stderr)
         cls.page = read("web", "mapmaker.html")

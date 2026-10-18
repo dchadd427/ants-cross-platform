@@ -92,7 +92,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .kbrush span { margin-right: 4px; }
 .swatches.teams { grid-template-columns: 1fr; gap: 3px; }
 .swatch.team { justify-content: flex-start; gap: 8px; min-height: 30px; padding: 0 8px; font-size: 14.5px; color: var(--cream); text-align: left; }
-.swatch.team i { flex: none; width: 20px; height: 20px; }
+.swatch.team i { flex: none; width: 20px; height: 20px; } .swatch.team i.pic { width: 26px; height: 26px; box-shadow: none; }
 .tc { box-shadow: 0 0 0 1px rgba(244, 236, 226, .5); }
 .stepper { display: flex; flex-direction: column; gap: 4px; }
 .stl { font-size: 13px; line-height: 1.2; color: var(--muted); }

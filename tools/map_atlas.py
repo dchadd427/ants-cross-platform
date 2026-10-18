@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """The map maker's sprite atlas: the game's own pictures of the tiles, in two small files and an index, made from the public decoded sprites and the public animation table.
 
-usage: map_atlas.py [--sprites DIR] [--table FILE] OUT_DIR
+usage: map_atlas.py [--sprites DIR] [--catalog FILE] OUT_DIR
 
-Reads asset_catalog/sprites/sprite_NNNN.png (every sprite of ants.chd, decoded) and docs/chd_table4_animations.json (every animation: its frames, the sprite of each and its x/y offset), nothing
-else: never the original program (AGENTS.md rule 4). A tile id of the map IS the animation number; its picture is frame 0 of the animation's first sub-item, drawn with that frame's x/y offset
+Reads asset_catalog/sprites/sprite_NNNN.png (every sprite of ants.chd, decoded) and asset_catalog/catalog_data.js (the sprite viewer's data: every animation with its frames, the sprite of each and its
+x/y offset; it is the table of docs/chd_table4_animations.json, which the image's build does not carry, and tests/scripts/test_map_atlas.py holds the two equal), nothing else: never the original
+program (AGENTS.md rule 4). A tile id of the map IS the animation number; its picture is frame 0 of the animation's first sub-item, drawn with that frame's x/y offset
 from the top-left corner of the cell (docs/MAP_EDITOR.md, "Sprites"). Writes, with the Python standard library only (zlib, struct: the image build has no more than that):
 
   ground.png    the 239 ground tiles (ids 431 to 669, all 32 x 32, offset 0,0), 16 to a row, a 256-color PNG
@@ -17,6 +18,7 @@ It runs when the web image is built (Dockerfile, build_web.sh), so the repositor
 import argparse
 import json
 import os
+import re
 import struct
 import sys
 import zlib
@@ -139,20 +141,32 @@ def average(rgba):
     return 0x808080 if not n else ((r + n // 2) // n << 16) | ((g + n // 2) // n << 8) | ((b + n // 2) // n)
 
 
+def read_catalog(path):
+    """{animation number: (sprite number, dx, dy)} of frame 0 of the first sub-item of every animation of the viewer's data (a JavaScript file: `{ id: N, name: "...", subitems: [ { ... frames: [ { dx: X, dy: Y, sprite_id: S, ...`)."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    start = text.find("animations: [")
+    if start < 0:
+        raise SystemExit("%s has no animations" % path)
+    found = list(re.finditer(r'\n\s*\{ id: (\d+), name: "[^"]*", subitems: \[', text[start:]))
+    table = {}
+    for k, m in enumerate(found):
+        block = text[start + m.end():start + (found[k + 1].start() if k + 1 < len(found) else len(text) - start)]
+        frame = re.search(r"frames: \[\s*\{ dx: (-?\d+), dy: (-?\d+), sprite_id: (\d+),", block)
+        if frame:
+            table[int(m.group(1))] = (int(frame.group(3)), int(frame.group(1)), int(frame.group(2)))
+    if sorted(table) != list(range(1344)):
+        raise SystemExit("%s: the animations 0 to 1343 were expected, found %d" % (path, len(table)))
+    return table
+
+
 def first_frame(table, ident):
     """(sprite number, dx, dy) of frame 0 of the first sub-item of animation `ident`, or None when it has no picture."""
-    entry = table[ident]
-    if entry["entry_index"] != ident:
-        raise SystemExit("the animation table is not in order at %d" % ident)
-    if not entry["subitems"] or not entry["subitems"][0]["frames"]:
-        return None
-    frame = entry["subitems"][0]["frames"][0]
-    return frame["sprite_index"], frame["dx"], frame["dy"]
+    return table.get(ident)
 
 
-def build(sprites, table_path, out):
-    with open(table_path, encoding="utf-8") as f:
-        table = json.load(f)
+def build(sprites, catalog_path, out):
+    table = read_catalog(catalog_path)
 
     def sprite(number):
         return read_png(os.path.join(sprites, "sprite_%04d.png" % number))
@@ -217,9 +231,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("out")
     parser.add_argument("--sprites", default=os.path.join(REPO, "asset_catalog", "sprites"))
-    parser.add_argument("--table", default=os.path.join(REPO, "docs", "chd_table4_animations.json"))
+    parser.add_argument("--catalog", default=os.path.join(REPO, "asset_catalog", "catalog_data.js"))
     args = parser.parse_args()
-    index, sizes = build(args.sprites, args.table, args.out)
+    index, sizes = build(args.sprites, args.catalog, args.out)
     print("map atlas: " + ", ".join("%s %d bytes" % (k, v) for k, v in sorted(sizes.items())) + "; %d ground tiles, %d pictures in the sheet, %d fetched one by one" % (index["ground"]["count"], len(index["objects"]["items"]), len(index["far"])))
     return 0
 

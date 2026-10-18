@@ -31,7 +31,7 @@ const FRONT = argv.includes('--front') ? path.resolve(argv[argv.indexOf('--front
 let ATLAS = argv.includes('--atlas') ? path.resolve(argv[argv.indexOf('--atlas') + 1]) : '';
 if (!ATLAS) {
     ATLAS = fs.mkdtempSync(path.join(os.tmpdir(), 'ants_atlas_'));
-    const made = spawnSync('python3', [path.join(ROOT, 'tools', 'map_atlas.py'), ATLAS], { encoding: 'utf8' });
+    const made = spawnSync(process.env.PYTHON || 'python3', [path.join(ROOT, 'tools', 'map_atlas.py'), ATLAS], { encoding: 'utf8' });
     if (made.status !== 0) { console.log('the atlas could not be made: ' + made.stdout + made.stderr); process.exit(1); }
 }
 const load = (name) => require(path.join(FRONT, name));

@@ -143,7 +143,7 @@
         function teamButton(team, cls, onPick) {
             var b = el('button', cls), chip = el('i'), on = team.id === state.team;
             b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(on)); b.setAttribute('data-tile', String(team.id));
-            chip.className = 'tc'; chip.style.background = team.color; b.appendChild(chip); b.appendChild(el('span', '', team.label));
+            chip.className = 'tc'; chip.style.background = team.color; if (state.tool === 'hills' && picture(chip, true, team.hill, 26)) chip.className = 'tc pic'; b.appendChild(chip); b.appendChild(el('span', '', team.label));
             b.addEventListener('click', function () { onPick(team.id); });
             return b;
         }
@@ -165,7 +165,7 @@
                     b.tabIndex = on ? 0 : -1; b.title = team.label;
                     host.swatches.appendChild(b);
                 });
-                chip.className = 'tc'; chip.style.background = teamNow().color;
+                chip.className = 'tc'; chip.style.background = teamNow().color; if (tool === 'hills' && picture(chip, true, teamNow().hill, 26)) chip.className = 'tc pic';
                 text.textContent = tool === 'ants' ? teamNow().label + ' · ' + plural(state.ants, 'ant', 'ants') : teamNow().label;
                 host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
             } else if (tool === 'bigger') {
@@ -174,7 +174,7 @@
                 bigLines(text, big);
                 host.tile.setAttribute('aria-label', label + ': ' + bigText(big) + '. Change');
             } else if (tool === 'food') {
-                chip.className = ''; chip.style.background = Tiles.FOOD;
+                chip.className = ''; chip.style.background = Tiles.FOOD; picture(chip, true, Blocks.FOOD[state.stages].stages[0][1], 26);
                 text.textContent = plural(state.stages, 'stage', 'stages');
                 host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
             } else {

@@ -85,9 +85,10 @@ RUN cd /src/changelog && \
     python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"
 
 # The map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"): the game's pictures of the ground and of the objects that the editor offers, in two small sheets and an index, made by tools/map_atlas.py (Python
-# standard library only) from the public decoded sprites and the public animation table; the repository keeps no generated picture. After the compile layers, so that it does not rebuild the game.
+# standard library only) from the public decoded sprites and the animation table that the sprite viewer's data holds (asset_catalog/catalog_data.js); the repository keeps no generated picture. After the
+# compile layers, so that it does not rebuild the game.
 COPY asset_catalog/sprites/ /src/asset_catalog/sprites/
-COPY docs/chd_table4_animations.json /src/docs/chd_table4_animations.json
+COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js
 COPY tools/map_atlas.py /src/tools/map_atlas.py
 RUN python3 tools/map_atlas.py mapmaker_atlas && test -s mapmaker_atlas/atlas.json && test -s mapmaker_atlas/ground.png && test -s mapmaker_atlas/objects.png
 

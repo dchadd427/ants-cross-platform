@@ -227,6 +227,10 @@ class Page:
         """choose a tile's chip; a kind of ground that is chosen already is left alone (a second tap on it opens the sheet of its tiles)"""
         self.ev("(function () { var b = document.querySelector('[data-tile=\"%d\"]'); if (!(b.classList.contains('gk') && b.getAttribute('aria-checked') === 'true')) b.click(); })()" % tile)
 
+    def tap(self, tile):
+        """a tap on a tile's chip, whatever is chosen (on a kind of ground that is chosen it opens the sheet of its tiles)"""
+        self.ev("document.querySelector('[data-tile=\"%d\"]').click()" % tile)
+
     def cell_point(self, row, column):
         """where the middle of a cell is on the page, when the whole map is shown (the middle of the canvas is the middle of the map)"""
         box = self.box("#map")
@@ -346,9 +350,9 @@ def run_sprites(tab, args, check):
     check(spread(page, *gravel_cell) >= 4, "a gravel cell shows the picture (a texture, not one flat color: %d colors)" % spread(page, *gravel_cell))
     page.shot(args.shots, "mapmaker-sprites-desktop")
     # the Ground tool: a kind's chip chooses it, the same chip again opens the sheet of its tiles
-    page.tile(487)
+    page.tap(487)
     check(page.ev("document.getElementById('palette-name').textContent") == "Dirt: tap it again for all its tiles" and not page.ev("!!document.querySelector('.dlg')"), "the first tap on a kind chooses its plain tile")
-    page.tile(487)
+    page.tap(487)
     check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.ksheetbox')")) and page.ev("document.querySelector('.dlg h2').textContent") == "Dirt: all its tiles", "the second tap opens Dirt: all its tiles")
     got = json.loads(page.ev("""JSON.stringify((function () {
         var d = document.querySelector('.dlg'), t = d.querySelectorAll('.gt:not(.mid)'), g = d.querySelectorAll('.kgroup h3');
@@ -428,7 +432,7 @@ def run_sprites(tab, args, check):
         time.sleep(0.4)
         check(spread(flat, 5, 5, 4) == 1 and flat.pixel(*flat.cell_point(5, 5)) == flat.color_of(485), "the map is drawn in flat colors")
         check(flat.ev("document.querySelectorAll('#palette .gk').length") == 5 and flat.ev("document.querySelectorAll('#palette .gk canvas').length") == 0, "the five kinds are there as flat chips")
-        flat.tile(487); flat.tile(487)
+        flat.tap(487); flat.tap(487)
         check(wait_for(lambda: flat.ev("!!document.querySelector('.dlg.ksheetbox')")), "and the sheet of a kind opens, with flat tiles")
         flat.shot(args.shots, "mapmaker-sprites-atlas-refused")
     finally:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The map maker's sprite atlas (tools/map_atlas.py; docs/MAP_EDITOR.md, "Sprites"; run by ./run_tests.sh --tools and by the CI): the game's pictures of the ground and of the objects that the editor offers,
-made from the public decoded sprites and the public animation table, and the places that carry them.
+made from the public decoded sprites and the animation table of the sprite viewer's data, and the places that carry them.
 
   - the atlas is built here (standard library only, as the image's build does it) and read back with a PNG reader of this file: every one of the 239 ground tiles (ids 431 to 669) has its picture, pixel for
     pixel the sprite of frame 0 of its animation; every object that the editor offers (rocks, power-ups, bombs, hills, the food piles' stages, the 29 bigger objects, the starting ant) is in the sheet with the
@@ -25,7 +25,8 @@ spec = importlib.util.spec_from_file_location("map_atlas", os.path.join(REPO, "t
 map_atlas = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(map_atlas)
 SPRITES = os.path.join(REPO, "asset_catalog", "sprites")
-TABLE = os.path.join(REPO, "docs", "chd_table4_animations.json")
+TABLE = os.path.join(REPO, "docs", "chd_table4_animations.json")                     # the table as the docs keep it: the truth that the tool's own input (the viewer's data) is held to
+CATALOG = os.path.join(REPO, "asset_catalog", "catalog_data.js")
 EMPTY2 = 0x7FFE
 # the ids that the library anchors on layer 2 and the page draws nothing for: elements of the game's menus and screens (ids below 34 and a few others), a cursor, two ground ids that stray onto layer 2
 NOT_DRAWN = {0, 1, 46, 47, 48, 55, 59, 60, 61, 69, 70, 80, 88, 97, 98, 135, 154, 164, 227, 243, 244, 476, 485}
@@ -115,7 +116,7 @@ class TheAtlas(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.out = cls.tmp.name
-        cls.index, cls.sizes = map_atlas.build(SPRITES, TABLE, cls.out)
+        cls.index, cls.sizes = map_atlas.build(SPRITES, CATALOG, cls.out)
         with open(TABLE, encoding="utf-8") as f:
             cls.table = json.load(f)
         cls.ground = indexed(os.path.join(cls.out, "ground.png"))
@@ -129,6 +130,13 @@ class TheAtlas(unittest.TestCase):
         entry = self.table[ident]
         frame = entry["subitems"][0]["frames"][0]
         return frame["sprite_index"], frame["dx"], frame["dy"]
+
+    def test_the_viewers_table_is_the_animation_table_of_the_docs(self):
+        """the image's build has no docs/, so the tool reads the animation table from asset_catalog/catalog_data.js: for all 1,344 tiles it gives the sprite and the offset of frame 0 that the docs' table gives"""
+        found = map_atlas.read_catalog(CATALOG)
+        self.assertEqual(sorted(found), list(range(1344)))
+        for ident in range(1344):
+            self.assertEqual(found[ident], self.frame0(ident), "tile %d (%s)" % (ident, self.table[ident]["name"]))
 
     def test_every_ground_tile_has_its_picture_pixel_for_pixel(self):
         g = self.index["ground"]
@@ -216,7 +224,7 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), bigger: pick(P.BIGGER), h
         self.assertLess(self.sizes["objects.png"], 135000, "objects.png (about 123 KB)")
         self.assertLess(self.sizes["atlas.json"], 12000, "atlas.json (about 8 KB)")
         with tempfile.TemporaryDirectory() as again:
-            map_atlas.build(SPRITES, TABLE, again)
+            map_atlas.build(SPRITES, CATALOG, again)
             for name in ("ground.png", "objects.png", "atlas.json"):
                 with open(os.path.join(self.out, name), "rb") as a, open(os.path.join(again, name), "rb") as b:
                     self.assertEqual(a.read(), b.read(), name + " differs between two builds")
@@ -235,10 +243,10 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), bigger: pick(P.BIGGER), h
     def test_the_tool_reads_the_two_public_inputs_and_nothing_else(self):
         text = read("tools", "map_atlas.py")
         self.assertNotRegex(text, r"Ants\.exe|Ants\.exe\.c|decompil|disassembl|Original-Ants", "the original program, its decompilation or the game's folder")
-        self.assertIn("asset_catalog", text)
-        self.assertIn("chd_table4_animations.json", text)
+        self.assertIn("asset_catalog/sprites", text)
+        self.assertIn("asset_catalog/catalog_data.js", text)
         imports = set(re.findall(r"^import (\w+)", text, re.M)) | set(re.findall(r"^from (\w+) import", text, re.M))
-        self.assertEqual(imports, {"argparse", "json", "os", "struct", "sys", "zlib"}, "the standard library only: the image's build has no more")
+        self.assertEqual(imports, {"argparse", "json", "os", "re", "struct", "sys", "zlib"}, "the standard library only: the image's build has no more")
 
 
 class ThePlacesThatCarryIt(unittest.TestCase):
@@ -247,16 +255,16 @@ class ThePlacesThatCarryIt(unittest.TestCase):
         make = text.index("RUN python3 tools/map_atlas.py mapmaker_atlas")
         self.assertGreater(make, text.index("RUN cmake --build build_web"), "after the game is compiled, so that it does not rebuild it")
         self.assertLess(make, text.index("FROM nginx:alpine AS runner"))
-        for line in ("COPY asset_catalog/sprites/ /src/asset_catalog/sprites/", "COPY docs/chd_table4_animations.json /src/docs/chd_table4_animations.json", "COPY tools/map_atlas.py /src/tools/map_atlas.py",
+        for line in ("COPY asset_catalog/sprites/ /src/asset_catalog/sprites/", "COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js", "COPY tools/map_atlas.py /src/tools/map_atlas.py",
                      "COPY --from=builder /src/mapmaker_atlas/ /usr/share/nginx/html/mapmaker_atlas/"):
             self.assertIn(line, text)
         self.assertIn("test -s mapmaker_atlas/atlas.json", text, "an atlas that is empty stops the build")
 
-    def test_the_dockerignore_lets_the_animation_table_in_and_nothing_else_of_docs(self):
+    def test_the_image_build_still_has_nothing_of_docs(self):
         lines = read(".dockerignore").splitlines()
         self.assertIn("docs", lines)
-        self.assertEqual([l for l in lines if l.startswith("!docs")], ["!docs/chd_table4_animations.json"])
-        self.assertLess(lines.index("docs"), lines.index("!docs/chd_table4_animations.json"), "the exception comes after the folder it brings a file back from")
+        self.assertEqual([l for l in lines if l.startswith("!docs")], [], "the atlas reads the viewer's data, not docs/ (no image copies a document: tests/scripts/test_deploy_filter.py)")
+        self.assertNotRegex(read("Dockerfile"), r"(?m)^COPY\s+(--\S+\s+)*docs")
 
     def test_the_local_web_build_makes_the_atlas_and_nginx_revalidates_it(self):
         self.assertIn('python3 "${SCRIPT_DIR}/tools/map_atlas.py" "${DIST_DIR}/mapmaker_atlas"', read("build_web.sh"))

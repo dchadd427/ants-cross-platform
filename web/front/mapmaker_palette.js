@@ -96,7 +96,7 @@
     // can the tool be chosen
     function usable(id) { var t = tool(id); return !!(t && (t.draws || t.places || t.pans)); }
     // the four teams of Hills and Ants, as the swatches show them: [{id: 0..3 (the game's seat), label, color}]
-    function teams() { return Blocks.TEAMS.map(function (t, i) { return { id: i, key: t.key, label: t.label, color: Tiles.TEAMS[t.key] }; }); }
+    function teams() { return Blocks.TEAMS.map(function (t, i) { return { id: i, key: t.key, label: t.label, color: Tiles.TEAMS[t.key], hill: t.hill }; }); }
     // the tile that an item stands for, for a painting tool (null for Erase)
     function itemOf(id, tileId) { var list = items(id); for (var i = 0; i < list.length; i++) if (list[i].id === tileId) return list[i]; return null; }
 
