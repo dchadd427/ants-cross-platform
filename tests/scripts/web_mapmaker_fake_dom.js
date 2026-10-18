@@ -56,7 +56,7 @@ function makeDocument() {
         n.click = () => { if (!n.disabled) n.fire('click', {}); };
         n.fire = (type, e) => { e.type = type; e.target = e.target || n; for (const f of n.listeners[type] || []) f(e); };
         Object.defineProperty(n, 'offsetParent', { get: () => (doc.body.contains(n) ? doc.body : null) });
-        Object.defineProperty(n, 'textContent', { get: () => n.own + n.children.map((c) => c.textContent).join(''), set: (v) => { n.own = String(v); n.children = []; } });
+        Object.defineProperty(n, 'textContent', { get: () => n.own + n.children.map((c) => c.textContent).join(''), set: (v) => { n.own = String(v); n.children.forEach((c) => { c.parentNode = null; }); n.children = []; } });
         return n;
     }
     doc.createElement = node;

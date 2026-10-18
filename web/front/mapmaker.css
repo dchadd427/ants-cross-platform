@@ -237,8 +237,8 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 /* a desktop that is not tall: the note under the palette goes (the palette and the tools need the room) */
 @media (min-width: 601px) and (min-height: 451px) and (max-height: 780px) { .side { gap: 8px; } .toolnote { display: none; } .tools { padding: 8px 10px; gap: 4px; } .toolbtns { gap: 4px; } .tool { min-height: 34px; padding: 4px 10px; } .swatch.team { min-height: 28px; } }
 
-/* a narrow desktop window (601 to 1000 pixels): the top bar wraps, the name box on a line of its own, so no button is cut and none covers the name */
-@media (min-width: 601px) and (max-width: 1000px) and (min-height: 451px) {
+/* a narrow desktop window (601 to 1150 pixels): the top bar wraps, the name box on a line of its own, so no button is cut and none covers the name (seven buttons since My maps) */
+@media (min-width: 601px) and (max-width: 1150px) and (min-height: 451px) {
     .edtop { flex-wrap: wrap; } .edtop .edmenu { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; } .edtop .edname { order: 3; flex: 1 1 100%; }
 }
 
@@ -338,4 +338,31 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .crhelp, .crshapes, .crwhole, .srccard { display: none; } .crstage { width: min(100%, max(calc(120px * var(--k)), calc((100dvh - 170px) * var(--k)))); } .crbtns { grid-template-columns: 1fr 1fr; gap: 6px; }
     .crside { gap: 6px; } .crside .note { margin: 0; font-size: 12.5px; } .crread { padding: 8px 12px; } .crbig { font-size: 19px; margin: 2px 0 4px; } .crrange, .crnothing { font-size: 12.5px; } .kinds.stacked { grid-template-columns: 1fr 1fr; }
     .crbtns .btn { min-height: 44px; font-size: 15px; padding: 4px 8px; } .cdo, .chelp { margin: 4px 0; } .creasons .note { margin: 3px 0; }
+}
+
+/* My maps (mapmaker_mine.js): a screen over the editor's place, with the list of the maps saved in this browser */
+.mine { position: absolute; inset: 0; z-index: 8; overflow: auto; }
+.mine .mhead { display: flex; align-items: center; gap: 16px; padding: 16px 28px 6px; } .mine .edlogo { width: 130px; } .mine .mhead .banner { flex: 1; margin: 0; font-size: 26px; padding: 8px 16px; }
+.mwrap { padding: 10px 28px 28px; } .mtools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; } .mtools #mine-back { margin-left: auto; }
+.mchips { display: inline-flex; gap: 8px; flex-wrap: wrap; } .mchips[hidden] { display: none; }
+.mchip { min-height: 44px; display: inline-flex; align-items: center; padding: 4px 14px; font-size: 15px; cursor: pointer; color: var(--cream); background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
+.mchip.on { background: var(--pressed); color: var(--pressed-ink); box-shadow: var(--btn-shadow-chosen); transform: translate(1px, 2px); }
+.mnote { margin: 4px 0 12px; padding: 12px 16px; font-size: 16px; color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-radius: 4px; } .mnote:empty { display: none; }
+.mlist { display: grid; gap: 14px; }
+.mrow { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 16px; color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-bevel); border-radius: 4px; box-shadow: var(--box-shadow); }
+.mthumb { display: block; width: 84px; height: 84px; border: 2px solid var(--frame); border-radius: 3px; background: #000; overflow: hidden; } .mthumb canvas { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.mrow .t1 { font-size: 21px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; overflow-wrap: anywhere; } .mrow .t2 { font-size: 15px; color: var(--muted); margin-top: 3px; line-height: 1.35; } .mrow .t3 { font-size: 15px; margin-top: 3px; display: flex; gap: 8px; align-items: center; min-height: 20px; }
+.macts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; } .macts .btn.sm, .mine .btn.sm { min-height: 44px; } .macts .btn.ghost, .mtools .btn.ghost { background: #0d1b16; box-shadow: none; border-color: var(--frame-hi); color: var(--cream); }
+.st-ok { color: var(--ok); } .st-no { color: var(--bad); }
+@media (max-width: 600px) {
+    .mine { position: static; overflow: visible; flex: 1 0 auto; } .hidem { display: none; }
+    .mine .mhead { padding: 12px 14px 4px; gap: 10px; } .mine .edlogo { width: 76px; } .mine .mhead .banner { font-size: 20px; padding: 6px 10px; }
+    .mwrap { padding: 8px 14px 20px; } .mtools { gap: 8px; margin-bottom: 10px; } .mtools #mine-back { order: 1; } .mtools .mchips { order: 2; width: 100%; } .mtools .btn.big { min-height: 44px; font-size: 17px; padding: 6px 16px; } .mchip { padding: 2px 10px; font-size: 14px; }
+    .mlist { gap: 10px; } .mrow { grid-template-columns: 64px minmax(0, 1fr); gap: 6px 12px; padding: 8px 10px; } .mthumb { width: 64px; height: 64px; } .macts { grid-column: 1 / -1; justify-content: flex-start; } .mrow .t1 { font-size: 19px; }
+}
+@media (min-width: 601px) and (max-height: 450px) {
+    .mine .mhead { padding: 8px 16px 2px; } .mine .edlogo { width: 70px; } .mine .mhead .banner { font-size: 18px; padding: 4px 10px; }
+    .mwrap { padding: 6px 16px 10px; } .mtools { margin-bottom: 8px; } .mtools .btn.big { min-height: 44px; font-size: 17px; padding: 6px 16px; }
+    .mlist { grid-template-columns: 1fr 1fr; gap: 10px; } .mrow { grid-template-columns: 52px minmax(0, 1fr); gap: 2px 10px; padding: 8px 10px; } .mthumb { width: 52px; height: 52px; }
+    .mrow .t1 { font-size: 16px; } .mrow .t2, .mrow .t3 { font-size: 13px; } .macts { grid-column: 1 / -1; justify-content: flex-start; }
 }

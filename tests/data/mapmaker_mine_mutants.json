@@ -1,0 +1,236 @@
+{
+ "note": "Mutants of My maps for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the list and delete calls of the store (web/front/mapmaker_store.js) the list screen (web/front/mapmaker_mine.js) and the saved map that Copy is given (web/front/mapmaker_convert.js) against tests/scripts/web_mapmaker_mine_check.js. Run from the checkout: tools/mutate.py tests/data/mapmaker_mine_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+ "mutants": [
+  {
+   "id": "store_list_is_oldest_first",
+   "file": "web/front/mapmaker_store.js",
+   "old": "(b.saved || 0) - (a.saved || 0)",
+   "new": "(a.saved || 0) - (b.saved || 0)",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "store_remove_hits_the_work_slot",
+   "file": "web/front/mapmaker_store.js",
+   "old": "run('drafts', 'readwrite', function (s) { return s.delete(k); }",
+   "new": "run('work', 'readwrite', function (s) { return s.delete(k); }",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "store_remove_keeps_the_name_taken",
+   "file": "web/front/mapmaker_store.js",
+   "old": "if (!error) delete drafts[k];",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "store_remove_uses_the_raw_name",
+   "file": "web/front/mapmaker_store.js",
+   "old": "return s.delete(k);",
+   "new": "return s.delete(name);",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "store_list_hides_a_failure",
+   "file": "web/front/mapmaker_store.js",
+   "old": "done(error ? 'failed' : '', (result",
+   "new": "done('', (result",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "store_remove_hides_a_failure",
+   "file": "web/front/mapmaker_store.js",
+   "old": "delete drafts[k]; done(error ? 'failed' : ''); });",
+   "new": "delete drafts[k]; done(''); });",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_delete_without_a_question",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "function () { confirmDelete(r); }",
+   "new": "function () { remove(r); }",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_delete_is_the_first_choice",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "buttons: [{ id: 'keep', text: 'Keep it', ghost: true }, { id: 'delete', text: 'Delete it', onClick: function () { remove(r); } }]",
+   "new": "buttons: [{ id: 'delete', text: 'Delete it', onClick: function () { remove(r); } }, { id: 'keep', text: 'Keep it', ghost: true }]",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_keep_it_deletes",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "{ id: 'keep', text: 'Keep it', ghost: true }",
+   "new": "{ id: 'keep', text: 'Keep it', ghost: true, onClick: function () { remove(r); } }",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_a_refused_delete_is_silent",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "if (error) return env.dialogs.message('The map could not be deleted'",
+   "new": "if (false) return env.dialogs.message('The map could not be deleted'",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_a_deleted_row_stays",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "rows.splice(rows.indexOf(r), 1);",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_counts_are_not_refreshed",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "                showList();\n                say('“'",
+   "new": "                say('“'",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_filter_shows_all",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "var shownRows = rows.filter(function (r) { return filter === 'all' || (r.file && r.file.kind === filter); });",
+   "new": "var shownRows = rows.filter(function (r) { return true; });",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_count_of_the_wrong_kind",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "(r.file && r.file.kind === kind)",
+   "new": "(r.file && r.file.kind !== kind)",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_open_gives_the_copy",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "env.onOpen(rec)",
+   "new": "env.onCopy(rec)",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_copy_gives_the_open",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "env.onCopy(rec); }, 'Copy '",
+   "new": "env.onOpen(rec); }, 'Copy '",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_unreadable_map_has_open",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "            if (file) {\n                acts.appendChild",
+   "new": "            if (true) {\n                acts.appendChild",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_unreadable_map_has_no_delete",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "            acts.appendChild(button('btn sm ghost', 'Delete…'",
+   "new": "            if (file) acts.appendChild(button('btn sm ghost', 'Delete…'",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_escape_ignores_a_question",
+   "file": "web/front/mapmaker_mine.js",
+   "old": " && !env.dialogs.isOpen()) env.onBack(); });",
+   "new": ") env.onBack(); });",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_escape_when_closed",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "if (shown && e.key === 'Escape'",
+   "new": "if (e.key === 'Escape'",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_a_late_answer_is_shown",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "if (mine !== token || !shown) return;\n                if (error)",
+   "new": "if (error)",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_empty_says_nothing",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "note.textContent = !rows.length ? NONE :",
+   "new": "note.textContent = !rows.length ? '' :",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_no_storage_says_nothing",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "{ note.textContent = OFF; return say(OFF); }",
+   "new": "{ return; }",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_no_picture",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "if (pic) r.thumb.appendChild(pic);",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_every_map_works",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "got && got.works ? 'ok' : 'bad'",
+   "new": "'ok'",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_the_question_leaves_out_the_game_maps",
+   "file": "web/front/mapmaker_mine.js",
+   "old": " and the game’s own maps are never touched.",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_hide_does_not_tell",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "if (env.onHide) env.onHide();",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_the_filter_is_not_reset",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "shown = true; filter = 'all';",
+   "new": "shown = true;",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_a_store_that_is_not_open_is_not_waited_for",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "if (env.store.status() === 'pending') return env.later(",
+   "new": "if (false) return env.later(",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "mine_an_unreadable_map_is_listed_as_a_kind",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "if (file) env.tags(tags, file.kind);",
+   "new": "env.tags(tags, file ? file.kind : 'classic');",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "convert_copy_ignores_the_saved_map",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "function copy(given) {                    // (a saved map of My maps is given: the open map is not the one that is copied)\n            var cur = given || env.current(),",
+   "new": "function copy(given) {                    // (a saved map of My maps is given: the open map is not the one that is copied)\n            var cur = env.current(),",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "convert_extended_ignores_the_saved_map",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "var cur = given || env.current(), nm, ctl, side",
+   "new": "var cur = env.current(), nm, ctl, side",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "convert_extended_is_not_given_the_saved_map",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "else startExtended(nm.edited ? nm.name() : null, cur);",
+   "new": "else startExtended(nm.edited ? nm.name() : null);",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  }
+ ]
+}

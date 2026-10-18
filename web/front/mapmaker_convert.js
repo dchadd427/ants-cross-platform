@@ -83,8 +83,8 @@
         function free(name, taken) { return taken(name) ? numbered(name, taken) : name; }
         function work(cur, name) { return { bytes: cur.bytes, sourceName: cur.name, name: name, crop: null }; }
 
-        function copy() {
-            var cur = env.current(), ext = cur.kind === 'extended', choice = 'same', nm, cards = {}, ctl;
+        function copy(given) {                    // (a saved map of My maps is given: the open map is not the one that is copied)
+            var cur = given || env.current(), ext = cur.kind === 'extended', choice = 'same', nm, cards = {}, ctl;
             var down = ext ? core.convertToClassic(cur.bytes, 'new_map') : null, fits = !ext || (down.status === 0 && down.json.ok);
             if (down && down.status !== 0) return say('The copy cannot be made', down.error);
             function card(which, title, kind, line, off) {
@@ -118,15 +118,15 @@
                     if (choice === 'same') { if (nm.ok) { c.close(); env.onMade(cur.bytes.slice(), nm.name()); } return; }
                     if (!nm.ok) return;
                     c.close();
-                    if (ext) classic(work(cur, nm.edited ? nm.name() : null)); else startExtended(nm.edited ? nm.name() : null);
+                    if (ext) classic(work(cur, nm.edited ? nm.name() : null)); else startExtended(nm.edited ? nm.name() : null, cur);
                 } }]
             });
             show();
             return ctl;
         }
 
-        function startExtended(carried) {
-            var cur = env.current(), nm, ctl, side = Math.round(Math.sqrt(limits.extended.cells));
+        function startExtended(carried, given) {
+            var cur = given || env.current(), nm, ctl, side = Math.round(Math.sqrt(limits.extended.cells));
             ctl = dialogs.open({
                 title: 'Start an Extended map from this one?', focus: 'input',
                 build: function (body) {

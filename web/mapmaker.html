@@ -21,6 +21,7 @@
     <div class="edmenu dsk">
         <button class="btn sm" type="button" data-act="new" disabled>New</button>
         <button class="btn sm" type="button" data-act="open" disabled>Open</button>
+        <button class="btn sm" type="button" data-act="mine" disabled>My maps</button>
         <button class="btn sm" type="button" data-act="copy" disabled>Copy...</button>
         <button class="btn sm" type="button" data-act="save" disabled>Save as new...</button>
         <button class="btn sm" type="button" data-act="props" disabled>Properties</button>
@@ -83,6 +84,14 @@
     </aside>
 </div>
 <div id="dialogs"></div>
+<section class="mine" id="mine" hidden aria-labelledby="mine-title">
+    <header class="mhead"><a class="edlogo" href="/" aria-label="ants! - the front page"><img src="/front/logo.png" alt="ants!" width="581" height="218"></a><h1 class="banner gold" id="mine-title" tabindex="-1">My maps</h1></header>
+    <div class="mwrap">
+        <div class="mtools"><button class="btn big" type="button" id="mine-new">New map</button><span class="mchips" id="mine-chips" role="group" aria-label="Which maps to show" hidden></span><button class="btn sm ghost" type="button" id="mine-back">Back to the map</button></div>
+        <p class="sr" id="mine-status" role="status"></p><p class="mnote" id="mine-note"></p>
+        <div class="mlist" id="mine-list"></div>
+    </div>
+</section>
 </div>
 <div class="screen crop" id="crop" hidden>
 <header class="crtop"><a class="edlogo" href="/" aria-label="ants! - the front page"><img src="/front/logo.png" alt="ants!" width="581" height="218"></a><h1 class="banner gold" id="crop-title">Crop to fit</h1></header>
@@ -120,6 +129,7 @@
 <script src="front/mapmaker_props.js"></script>
 <script src="front/mapmaker_crop.js"></script>
 <script src="front/mapmaker_store.js"></script>
+<script src="front/mapmaker_mine.js"></script>
 <script src="front/mapmaker_convert.js"></script>
 <script src="front/mapmaker_canvas.js"></script>
 <script src="front/mapmaker_tools.js"></script>
