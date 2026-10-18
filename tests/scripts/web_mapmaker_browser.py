@@ -35,6 +35,8 @@ Parts:
              database (its bytes are the file's) and the saved map takes the screen, so the next Save offers the next number; a name that exists is never written over; drawing is kept in the
              browser's one slot (a reload asks to pick it up or throw it away, and the browser's own question is not asked while the work is safe); the question before a map is left offers Save as a
              new map first; a browser that keeps nothing says so, offers Download, and the browser's question comes back; the sheets are inside the screen and every control is 44 pixels;
+  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700, 700 x 600, 767 x 700, 1024 x 768, 1280 x 800): the top bar's six buttons are all inside the window, none covers the name box,
+             and the page does not scroll sideways;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
   * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
@@ -61,7 +63,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "panel", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "narrow", "panel", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -143,7 +145,7 @@ class Page:
         return wait_for(lambda: self.ev("!!document.getElementById('boot') && (document.getElementById('boot').hidden || document.getElementById('boot').textContent.length > 30)"), timeout, 0.3)
 
     def ready(self):
-        return bool(self.ev("document.getElementById('boot').hidden && !document.querySelector('[data-act=check]').disabled"))
+        return bool(self.ev("!!document.getElementById('boot') && document.getElementById('boot').hidden && !document.querySelector('[data-act=check]').disabled"))
 
     def state(self):
         return json.loads(self.ev("""JSON.stringify({
@@ -1309,7 +1311,7 @@ def run_part(part, tab, args, check, tiny, junk):
         check(wait_for(lambda: bool(idb_read(page, "work", "current")), 6), "after a rest the drawing is kept in the browser's slot")
         DIALOGS[:] = []
         tab.call("Page.reload", {})
-        check(page.ready() or wait_for(page.ready, 20), "the page starts again")
+        check(wait_for(page.ready, 20), "the page starts again")
         check(DIALOGS == [], "the browser's own question was not asked: the work is safe in the browser (%s)" % DIALOGS)
         check(dialog(page, "Pick up your unsaved work?") and "Last time you drew on \u201cPicnic\u201d" in page.ev("document.querySelector('.dlg').textContent"), "the next visit asks to pick the work up")
         page.shot(args.shots, "mapmaker-save-pick-up")
@@ -1387,6 +1389,24 @@ def run_part(part, tab, args, check, tiny, junk):
         tab.call("Page.reload", {})
         wait_for(lambda: bool(DIALOGS), 6)
         check(DIALOGS == ["beforeunload"], "the browser's own question comes back when nothing can be kept (%s)" % DIALOGS)
+    elif part == "narrow":
+        for w, h in ((620, 700), (700, 600), (767, 700), (1024, 768), (1280, 800)):
+            print("[web map maker] the top bar, %d x %d" % (w, h))
+            tab.emulate(w, h, 1)
+            page = Page(tab, args.web)
+            check(page.open() and page.ready(), "the page starts")
+            found = json.loads(page.ev("""JSON.stringify((function () {
+                var name = document.getElementById('map-name').getBoundingClientRect(), out = [], hit = [];
+                [].forEach.call(document.querySelectorAll('.edmenu .btn'), function (b) {
+                    if (b.offsetParent === null) return;
+                    var r = b.getBoundingClientRect();
+                    if (r.left < -0.5 || r.right > innerWidth + 0.5) out.push(b.textContent);
+                    if (r.left < name.right && r.right > name.left && r.top < name.bottom && r.bottom > name.top) hit.push(b.textContent);
+                });
+                return {out: out, hit: hit, scrollX: document.documentElement.scrollWidth > innerWidth, n: [].filter.call(document.querySelectorAll('.edmenu .btn'), function (b) { return b.offsetParent !== null; }).length};
+            })())"""))
+            check(found["n"] == 6 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: six buttons, none cut, none over the name box, no sideways scroll (%s)" % (w, h, found))
+            page.shot(args.shots, "mapmaker-topbar-%dx%d" % (w, h))
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):
             print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))

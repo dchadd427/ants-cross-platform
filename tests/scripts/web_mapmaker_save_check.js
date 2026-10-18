@@ -65,6 +65,10 @@ function caseA() {
     equal([Store.clean('  Sunny   Picnic '), Store.key('  Sunny   PICNIC ')], ['Sunny Picnic', 'sunny picnic'], 'blanks round a name and between words count once, capitals not at all');
     equal(Object.keys(Store.libraryNames({ format: 1, maps: [{ file: 'POPcOrN.lvl' }, { file: 'TINY.LVL' }, { file: 5 }, null, { file: '!!!Bridges v4!!!.lvl' }] })).sort(), ['!!!bridges v4!!!', 'popcorn', 'tiny'], 'the names of the site\'s maps are the file names without .lvl');
     equal([Store.libraryNames(null), Store.libraryNames({ format: 2, maps: [] }), Store.libraryNames({ format: 1, maps: 5 })], [null, null, null], 'what is no list is none');
+    equal([Store.key('Caf\u0065\u0301'), Store.key('Caf\u00e9')].every((k) => k === 'caf\u00e9'), true, 'a letter written in two ways is one name (NFC)');
+    equal([Store.key('Sunny\u200bPicnic'), Store.key('\ufeffSunny Picnic\u200d'), Store.key('Sunny\u00a0\u00a0Picnic')], ['sunnypicnic', 'sunny picnic', 'sunny picnic'], 'zero-width characters count for nothing and a no-break space is a blank');
+    equal([Convert.numbered('Heaven 0105', () => false), Convert.numbered('Heaven 0009', () => false), Convert.numbered('Name 9', () => false), Convert.numbered('Name 099', () => false), Convert.numbered('Name', () => false), Convert.numbered('Big 12345678901234567890', () => false)],
+        ['Heaven 0106', 'Heaven 0010', 'Name 10', 'Name 100', 'Name 2', 'Big 12345678901234567890 2'], 'a number keeps its leading zeros, and a number too long to count is part of the name');
     equal(Store.ORIGINALS, ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands'], 'the six originals');
 }
 
@@ -97,6 +101,10 @@ async function caseB() {
     await new Promise((res) => late.open(() => { calls++; res(); }));
     await later();
     equal([calls, late.status()], [1, 'unavailable'], 'the answer of open comes once');
+    // the words of the object's own prototype are not taken names
+    const own = await opened(fakeIdb());
+    equal(['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf'].map((n) => own.has(n)), [false, false, false, false, false], 'a name that is a word of Object is free');
+    check(Object.getPrototypeOf(Store.libraryNames({ format: 1, maps: [] })) === null, 'the table of library names has no prototype');
     // the slot of unsaved work
     store = await opened(fakeIdb());
     equal(await new Promise((res) => store.readWork(res)), null, 'no work at first');
@@ -132,6 +140,28 @@ async function caseC() {
     store.loadLibrary(); store.loadLibrary();
     await later();
     equal([asked, store.libraryState(), store.has('popcorn'), store.has('POPCORN'), store.has('Unknown')], [['/maps'], 'ready', true, true, false], 'the list is asked once, from the site itself, and its names are taken');
+    // asking: the answer comes, or does not come (the timer says so)
+    let fired = [], timer = null;
+    const waits = Store.create({ idb: null, fetch: () => new Promise(() => {}), later: (f, ms) => { timer = [f, ms]; } });
+    let heard = 0;
+    waits.loadLibrary();
+    waits.onLibrary(() => heard++);
+    equal([waits.libraryState(), heard, timer && timer[1]], ['pending', 0, 8000], 'while the list is awaited the state is pending and a timer of 8 seconds runs');
+    timer[0]();
+    equal([waits.libraryState(), heard], ['failed', 1], 'a list that never answers is a list that did not come, and who waited is told');
+    let n = 0; waits.onLibrary(() => n++);
+    equal(n, 1, 'asking after the answer is answered at once');
+    let late = null;
+    store = await opened(fakeIdb(), () => Promise.resolve({ ok: true, json: () => Promise.resolve(list) }));
+    store = Store.create({ idb: null, fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(list) }), later: (f) => { late = f; } });
+    store.loadLibrary();
+    await later();
+    late();
+    equal(store.libraryState(), 'ready', 'the timer that fires after the list came changes nothing');
+    store = await opened(fakeIdb(), () => Promise.resolve({ ok: true, json: () => Promise.resolve(list) }));
+    let got = 0; store.loadLibrary(); store.onLibrary(() => got++);
+    await later();
+    equal([store.libraryState(), got], ['ready', 1], 'a list that comes tells who waited, once');
     for (const [what, fn] of [['a 404', () => Promise.resolve({ ok: false, json: () => Promise.resolve(list) })], ['a network error', () => Promise.reject(new Error('x'))], ['a throw', () => { throw new Error('y'); }], ['a bad body', () => Promise.resolve({ ok: true, json: () => Promise.resolve({ nope: 1 }) })], ['bad json', () => Promise.resolve({ ok: true, json: () => Promise.reject(new Error('z')) })]]) {
         store = await opened(fakeIdb(), fn);
         store.loadLibrary();
@@ -146,12 +176,12 @@ function page(over) {
     [host, top, body].forEach((n) => doc.body.appendChild(n));
     const dialogs = Dialog.create(doc, host, [top, body]), taken = new Set(['sunny picnic 2', 'treasure']), made = [], kept = [], downloaded = [], done = [];
     const cur = { name: 'Sunny Picnic', bytes: new Uint8Array([1, 2, 3]), file: { rows: 31, columns: 31 }, kind: (over && over.kind) || 'classic', report: { headline: 'Works' } };
-    const state = Object.assign({ canKeep: true, library: 'ready', keepAnswer: '' }, over);
+    const state = Object.assign({ canKeep: true, library: 'ready', keepAnswer: '', waiters: [] }, over);
     const env = {
         doc, dialogs, core: { convertToExtended() { return { status: 0, json: { ok: true, reasons: [], notes: [] }, bytes: new Uint8Array([7]) }; }, convertToClassic() { return { status: 0, json: { ok: true, reasons: [], notes: [] }, bytes: new Uint8Array([8]) }; }, readReport() { return { status: 0, json: { rows: 31, columns: 31 } }; } }, limits: { classic: { rows: 90, columns: 130, cells: 10000 }, extended: { side: 512, cells: 262144, longest: 1024 } },
         thumb: () => null, tags: (el, kind) => { el.textContent = kind; }, onMade: (b, n) => made.push(n), crop() {},
         current: () => cur, taken: (n) => Store.key(n) === Store.key(cur.name) || taken.has(Store.key(n)),
-        canKeep: () => state.canKeep, libraryState: () => state.library, download: () => downloaded.push(1),
+        canKeep: () => state.canKeep, libraryState: () => state.library, onLibrary: (f) => state.waiters.push(f), download: () => downloaded.push(1),
         keep: (name, cb) => { kept.push(name); if (state.keepAnswer === 'exists') taken.add(Store.key(name)); cb(state.keepAnswer, new Uint8Array([4, 5])); },
         onKept: (b, n) => kept.push('shown ' + n)
     };
@@ -159,6 +189,7 @@ function page(over) {
     const q = (s) => host.querySelector(s), all = (s) => host.querySelectorAll(s);
     return {
         doc, host, dialogs, convert, made, kept, taken, downloaded, done, q, all, state,
+        arrive(to) { state.library = to; state.waiters.splice(0).forEach((f) => f()); },
         title: () => (q('h2') ? q('h2').textContent : ''), button: (label) => all('button').filter((b) => b.textContent === label)[0],
         input: () => all('input').filter((i) => i.getAttribute('type') === 'text')[0],
         type(value) { const box = this.input(); box.value = value; box.fire('input', {}); }
@@ -229,6 +260,22 @@ function caseD() {
     p = page();
     p.convert.save();
     check(!/could not be loaded/.test(p.host.textContent), 'and not otherwise');
+    // the list of the game's maps has not answered yet: no name is called free
+    p = page({ library: 'pending' });
+    p.convert.save(() => p.done.push(1));
+    check(p.button('Save as a new map').disabled && /Checking the game\u2019s map names\u2026/.test(p.q('.cfree').textContent) && !/is free/.test(p.host.textContent), 'while the list is awaited Save is off and says it is checking');
+    p.button('Save as a new map').click();
+    equal(p.kept, [], 'and a press does nothing');
+    p.type('Treasure');
+    check(/already exists/.test(p.q('.note.bad').textContent), 'a name that is known to be taken is refused as before');
+    p.type('Heaven 0105');
+    check(p.button('Save as a new map').disabled, 'a name that may be a game map is not saved');
+    p.arrive('ready');
+    check(!p.button('Save as a new map').disabled && /is free/.test(p.q('.cfree').textContent), 'when the list has come the name is checked again and is free');
+    p = page({ library: 'pending' });
+    p.convert.save();
+    p.arrive('failed');
+    check(!p.button('Save as a new map').disabled && /could not be loaded/.test(p.host.textContent), 'when the list does not come the name is free and the note says it was not checked');
     // a browser that keeps nothing
     p = page({ canKeep: false });
     p.convert.save();
@@ -257,6 +304,11 @@ function caseE() {
     p.type('Fresh'); p.taken.add('fresh');
     p.button('Make new map').click();
     check(p.dialogs.isOpen() && p.made.length === 0 && /already exists/.test(p.q('.note.bad').textContent), 'Copy checks the name again when Make new map is pressed');
+    p = page({ library: 'pending' });
+    p.convert.copy();
+    check(p.button('Make new map').disabled && /Checking/.test(p.host.textContent), 'Copy waits for the list too');
+    p.arrive('ready');
+    check(!p.button('Make new map').disabled, 'and goes on when it has come');
     p = page();
     p.taken.add('sunny picnic extended');
     p.convert.startExtended();

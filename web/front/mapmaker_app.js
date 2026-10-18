@@ -271,7 +271,7 @@
         return {
             doc: doc, dialogs: dialogs, core: core, limits: limits, thumb: thumb, tags: fillTags, crop: openCrop,
             taken: function (name) { return MapStore.key(name) === MapStore.key(map.name) || store.has(name); },
-            canKeep: function () { return store.status() === 'ready'; }, libraryState: function () { return store.libraryState(); },
+            canKeep: function () { return store.status() === 'ready'; }, libraryState: function () { return store.libraryState(); }, onLibrary: function (f) { store.onLibrary(f); },
             keep: keepAs, onKept: kept, download: download,
             current: function () { var r = core.checkMap(map.bytes, 'extended'); return { name: map.name, bytes: map.bytes, file: map.file, kind: map.file.kind, report: r.status === 0 ? r.json : map.report }; },
             onMade: function (bytes, name) { leave(function () { var error = setMap(bytes, name); if (error) dialogs.message('The map could not be made', error); }); }
@@ -288,7 +288,7 @@
 
     function start(module) {
         core = LvlCore.wrap(module);
-        store = MapStore.create({ idb: (function () { try { return win.indexedDB || null; } catch (e) { return null; } })(), fetch: win.fetch ? win.fetch.bind(win) : null });
+        store = MapStore.create({ idb: (function () { try { return win.indexedDB || null; } catch (e) { return null; } })(), fetch: win.fetch ? win.fetch.bind(win) : null, later: function (f, ms) { win.setTimeout(f, ms); } });
         var small = core.limits('new_map'), big = core.limits('extended');
         if (small.status !== 0 || big.status !== 0) return fatal('The map code did not answer. Reload the page.');
         limits = MapSizes.limitsOf(small.json, big.json);

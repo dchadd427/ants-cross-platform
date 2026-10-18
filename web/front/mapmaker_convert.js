@@ -12,10 +12,10 @@
     var clean = Store.clean;
     function same(a, b) { return Store.key(a) === Store.key(b); }
     function room(name, tail) { return Array.from(name).slice(0, MAX_NAME - tail).join('').replace(/ +$/, ''); }
-    // "Treasure" -> "Treasure 2" -> "Treasure 3", never over 40 characters, never a taken name
+    // "Treasure" -> "Treasure 2" -> "Treasure 3" ("Heaven 0105" -> "Heaven 0106"), never over 40 characters, never a taken name
     function numbered(name, taken) {
-        var m = /^(.*\S) (\d+)$/.exec(clean(name)), base = m ? m[1] : clean(name), n = m ? parseInt(m[2], 10) + 1 : 2, tried;
-        do { tried = room(base, String(n).length + 1) + ' ' + n; n++; } while (taken(tried));
+        var m = /^(.*\S) (\d{1,9})$/.exec(clean(name)), base = m ? m[1] : clean(name), n = m ? parseInt(m[2], 10) + 1 : 2, width = m ? m[2].length : 0, tried, digits;
+        do { digits = ('000000000' + n).slice(-Math.max(width, String(n).length)); tried = room(base, digits.length + 1) + ' ' + digits; n++; } while (taken(tried));
         return tried;
     }
     function suffixed(name, word) { return room(name, word.length + 1) + ' ' + word; }
@@ -61,8 +61,11 @@
                 var name = f.name(), next;
                 status.textContent = ''; input.removeAttribute('aria-invalid');
                 f.ok = !!name && !taken(name);
-                if (f.ok) status.appendChild(h('div', 'cfree', [h('i', 'dot ok'), 'The name \u201c' + name + '\u201d is free.']));
-                else {
+                if (f.ok && lib() === 'pending') { f.ok = false; status.appendChild(h('div', 'cfree', 'Checking the game\u2019s map names\u2026')); }       // (a game map's name cannot be known until its list has come)
+                else if (f.ok) {
+                    status.appendChild(h('div', 'cfree', [h('i', 'dot ok'), 'The name \u201c' + name + '\u201d is free.']));
+                    if (lib() === 'failed') status.appendChild(h('div', 'cnever', 'The list of the game\u2019s maps could not be loaded, so a name that one of them has cannot be checked.'));
+                } else {
                     input.setAttribute('aria-invalid', 'true');
                     next = name && numbered(name, taken);
                     status.appendChild(note('bad', '!', name ? 'A map called \u201c' + name + '\u201d already exists. A map is never replaced, so please pick another name.' : 'Give the new map a name.',
@@ -71,8 +74,10 @@
                 onChange();
             };
             input.addEventListener('input', function () { f.edited = true; f.check(); });
+            if (lib() === 'pending') env.onLibrary(function () { f.check(); });
             return f;
         }
+        function lib() { return env.libraryState ? env.libraryState() : 'ready'; }
         function takenFor(cur) { return env.taken || function (n) { return same(n, cur.name); }; }
         // a default name that is taken becomes the next free one
         function free(name, taken) { return taken(name) ? numbered(name, taken) : name; }
@@ -209,7 +214,7 @@
 
         // Save as a new map: the map on the screen goes into the browser as a NEW draft under a free name (`keep` adds it and never replaces one); `done` runs after it was kept
         function save(done) {
-            var cur = env.current(), taken = takenFor(cur), nm, ctl, tail, busy = false, lib = env.libraryState();
+            var cur = env.current(), taken = takenFor(cur), nm, ctl, tail, busy = false;
             if (!env.canKeep()) {
                 return dialogs.open({
                     title: 'This browser cannot keep maps', cls: 'narrow',
@@ -230,7 +235,6 @@
                     body.appendChild(h('p', 'lead', ['Your changes are saved as a ', h('b', '', 'new map'), '. The map you opened, \u201c' + cur.name + '\u201d, stays exactly as it was: no map is ever replaced.']));
                     body.appendChild(nm.box);
                     body.appendChild(tail);
-                    if (lib === 'failed') body.appendChild(h('p', 'cnever', 'The list of the game\u2019s maps could not be loaded, so a name that one of them has cannot be checked.'));
                     nm.check();
                 },
                 buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'make', text: 'Save as a new map', keepOpen: true, onClick: function (c) {

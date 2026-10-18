@@ -18,8 +18,8 @@
   {
    "id": "store_clean_drops_inner_blanks",
    "file": "web/front/mapmaker_store.js",
-   "old": "String(name).replace(/\\s+/g, ' ')",
-   "new": "String(name).replace(/\\s+/g, '')",
+   "old": ".replace(/\\s+/g, ' ')",
+   "new": ".replace(/\\s+/g, '')",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },
   {
@@ -137,14 +137,14 @@
   {
    "id": "store_library_never_ready",
    "file": "web/front/mapmaker_store.js",
-   "old": "libraryState = 'ready';",
-   "new": "libraryState = 'pending';",
+   "old": "done('ready');",
+   "new": "done('pending');",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },
   {
    "id": "store_library_failure_not_said",
    "file": "web/front/mapmaker_store.js",
-   "old": "var bad = function () { libraryState = 'failed'; };",
+   "old": "var bad = function () { done('failed'); };",
    "new": "var bad = function () {};",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },
@@ -317,20 +317,6 @@
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },
   {
-   "id": "save_library_failure_not_said",
-   "file": "web/front/mapmaker_convert.js",
-   "old": "if (lib === 'failed')",
-   "new": "if (lib === 'never')",
-   "test": "node tests/scripts/web_mapmaker_save_check.js"
-  },
-  {
-   "id": "save_library_note_always",
-   "file": "web/front/mapmaker_convert.js",
-   "old": "if (lib === 'failed')",
-   "new": "if (lib !== 'never')",
-   "test": "node tests/scripts/web_mapmaker_save_check.js"
-  },
-  {
    "id": "save_words_of_the_picture",
    "file": "web/front/mapmaker_convert.js",
    "old": "stays exactly as it was: no map is ever replaced.",
@@ -349,6 +335,104 @@
    "file": "web/front/mapmaker_store.js",
    "old": "if (!over) { over = true; status",
    "new": "if (true) { over = true; status",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_key_without_nfc",
+   "file": "web/front/mapmaker_store.js",
+   "old": ".normalize('NFC')",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_key_keeps_zero_width",
+   "file": "web/front/mapmaker_store.js",
+   "old": ".replace(/[\\u200B-\\u200D\\uFEFF]/g, '')",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_drafts_table_has_a_prototype",
+   "file": "web/front/mapmaker_store.js",
+   "old": "drafts = Object.create(null), library",
+   "new": "drafts = {}, library",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_library_table_has_a_prototype",
+   "file": "web/front/mapmaker_store.js",
+   "old": "library = Object.create(null), libraryState",
+   "new": "library = {}, libraryState",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_library_names_table_has_a_prototype",
+   "file": "web/front/mapmaker_store.js",
+   "old": "var out = Object.create(null);",
+   "new": "var out = {};",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_library_waiters_never_told",
+   "file": "web/front/mapmaker_store.js",
+   "old": "waiting.splice(0).forEach(function (f) { f(); });",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_library_answer_twice",
+   "file": "web/front/mapmaker_store.js",
+   "old": "if (libraryState !== 'pending') return; libraryState = state;",
+   "new": "libraryState = state;",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_library_no_timer",
+   "file": "web/front/mapmaker_store.js",
+   "old": "if (env.later) env.later(bad, 8000);",
+   "new": "if (false) env.later(bad, 8000);",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "store_on_library_waits_when_answered",
+   "file": "web/front/mapmaker_store.js",
+   "old": "if (libraryState === 'pending') waiting.push(fn); else fn();",
+   "new": "waiting.push(fn);",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "name_pending_is_free",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "if (f.ok && lib() === 'pending') {",
+   "new": "if (f.ok && lib() === 'never') {",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "name_pending_is_never_rechecked",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "if (lib() === 'pending') env.onLibrary(function () { f.check(); });",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "name_failed_list_not_said",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "if (lib() === 'failed') status.appendChild",
+   "new": "if (lib() === 'never') status.appendChild",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "name_number_loses_its_zeros",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "Math.max(width, String(n).length)",
+   "new": "String(n).length",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "name_number_too_long_is_counted",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "(\\d{1,9})",
+   "new": "(\\d+)",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   }
  ]

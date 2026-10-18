@@ -10,13 +10,14 @@
     var ORIGINALS = ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands'];     // the six maps of the game's data (the site's list holds them too)
 
     // A name as people compare it: blanks round it and between words count once, capitals do not count
-    function clean(name) { return String(name).replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
+    // (a no-break space counts as a blank, zero-width characters count for nothing, and a letter written in two ways is one: NFC)
+    function clean(name) { return String(name).normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
     function key(name) { return clean(name).toLowerCase(); }
 
     // The names in the list that GET /maps sends ({"format":1,"maps":[{file}]}): the file names without .lvl, or null when it is no list
     function libraryNames(data) {
         if (!data || data.format !== 1 || !Array.isArray(data.maps)) return null;
-        var out = {};
+        var out = Object.create(null);
         data.maps.forEach(function (m) { if (m && typeof m.file === 'string') out[key(m.file.replace(/\.lvl$/i, ''))] = true; });
         return out;
     }
@@ -25,7 +26,7 @@
 
     // env: {idb (the browser's indexedDB or null), fetch (or null)}
     function create(env) {
-        var db = null, status = 'pending', drafts = {}, library = {}, libraryState = env.fetch ? 'pending' : 'failed', asked = false;
+        var db = null, status = 'pending', drafts = Object.create(null), library = Object.create(null), libraryState = env.fetch ? 'pending' : 'failed', asked = false, waiting = [];
         ORIGINALS.forEach(function (n) { library[n] = true; });
 
         // Opens the database and reads the names of the drafts (keys only); done(status) says 'ready' or 'unavailable'
@@ -67,20 +68,24 @@
             has: function (name) { var k = key(name); return !!(drafts[k] || library[k]); },
             // The site's list of maps, asked once (the page works when it does not come, and says so): 'pending', 'ready' or 'failed'
             loadLibrary: function () {
-                var bad = function () { libraryState = 'failed'; };
+                var bad = function () { done('failed'); };
+                function done(state) { if (libraryState !== 'pending') return; libraryState = state; waiting.splice(0).forEach(function (f) { f(); }); }
                 if (asked || !env.fetch) return;
                 asked = true;
+                if (env.later) env.later(bad, 8000);                  // (a list that never answers is a list that did not come)
                 if (guard(function () {
                     env.fetch('/maps').then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
                         var names = libraryNames(data);
                         if (!names) return bad();
                         for (var k in names) library[k] = true;
-                        libraryState = 'ready';
+                        done('ready');
                     }).then(null, bad);
                     return true;
                 }) !== true) bad();
             },
             libraryState: function () { return libraryState; },
+            // fn is called once when the answer has come (at once when it has)
+            onLibrary: function (fn) { if (libraryState === 'pending') waiting.push(fn); else fn(); },
             // A new draft under a name that no draft has ('exists' when it is there: it is never written over)
             add: function (name, kind, bytes, done) {
                 var k = key(name);
