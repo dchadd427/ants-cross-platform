@@ -2,12 +2,32 @@
 
 What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page.
 
-An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## Next
+An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## Next`, above the newest release) in its own pull request, and `tools/release.py` turns it into the entry when `VERSION` moves (each such change bumps the version, by default the patch number).
+
+<!--
+Template of an entry (copy it, keep the labels and the order, leave out a paragraph that has nothing to say):
+
+## vX.Y.Z - YYYY-MM-DD - title
 
 **For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) has My maps now (top bar, or Menu on a phone): the maps you saved in this browser, newest first, with picture, kind tag, size and whether they work; filters All, Classic, Extended.
-- Open puts a saved map on the screen (saving it again always makes a new map), Copy... copies it, and Delete... removes your own saved copy after a clear question (downloaded files and the game's maps are never touched).
-- A browser that keeps nothing says so, and the top bar wraps up to 1,150 pixels so all seven buttons stay in view.
+- one bullet: what a player or a server owner sees or can do now
+
+**Rules / network:** only when the rules or the protocol changed: what, and "network protocol N: a vA.B.C game cannot join"
+
+**Fixes:**
+- one line each (optional)
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
+
+Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
+`tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
+-->
+
+## Next
+
+**For players:**
+- The map maker page (/mapmaker.html, not linked yet) has My maps: the maps you saved in this browser, newest first. Open one, copy it, or delete it after a question.
+- The top bar wraps up to 1,150 pixels so all its buttons stay in view.
 
 ## v0.12.79 - 2026-10-18 - Map maker: save as a new map and drafts (E5)
 
