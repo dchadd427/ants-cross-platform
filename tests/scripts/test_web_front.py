@@ -45,11 +45,13 @@ PICTURES = {
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
 SCRIPT_FILES = ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py), the rematch's strip (tests/scripts/test_web_rematch.py; the game page loads it too) the game type's rows and control (tests/scripts/test_web_game_type.py) and the map list: scripts, not pictures
-MAPMAKER_FILES = ("mapmaker.css", "mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_palette.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")      # the map maker page's own style and scripts (web/mapmaker.html; tests/scripts/test_web_mapmaker.py): not the lobby's, not pictures
+MAPMAKER_FILES = ("mapmaker.css", "mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_palette.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")      # the map maker page's own style and scripts (web/mapmaker.html; tests/scripts/test_web_mapmaker.py): not the lobby's, not pictures
 LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py), the chat box's and the rematch's (the game page links it too)
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
-BUDGET = 1000 * 1000        # bytes: the whole folder (about 0.66 MB: the pictures, the font and the scripts); a picture that grows past this is a decision, not an accident
+BUDGET = 1300 * 1000        # bytes: the whole folder (about 0.98 MB: some 427 KB of pictures, the font, the lobby's scripts and the map maker's); a picture that grows past this is a decision, not an accident
+EDITOR_BUDGET = 260 * 1000        # bytes: the map maker's own scripts and style (mapmaker_*.js, mapmaker.css), measured apart from the pictures so that the editor's growth is seen
+EDITOR_GZIP_BUDGET = 80 * 1000      # bytes: the same, gzipped (what a player downloads)
 
 
 def read(*parts):
@@ -228,6 +230,16 @@ class TheFolder(unittest.TestCase):
     def test_the_whole_folder_stays_small(self):
         total = sum(os.path.getsize(os.path.join(FRONT, name)) for name in os.listdir(FRONT))
         self.assertLess(total, BUDGET, "web/front/ is %d bytes" % total)
+
+    def test_the_map_maker_stays_small_apart_from_the_pictures(self):
+        import gzip
+        raw = zipped = 0
+        for name in MAPMAKER_FILES:
+            data = read_bytes("web", "front", name)
+            raw += len(data)
+            zipped += len(gzip.compress(data, 9))
+        self.assertLess(raw, EDITOR_BUDGET, "the map maker's scripts and style are %d bytes" % raw)
+        self.assertLess(zipped, EDITOR_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
 
     def test_the_font_is_a_byte_copy_of_the_games_own_with_its_licence_beside_it(self):
         for name in FONT_FILES:

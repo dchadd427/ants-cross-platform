@@ -1,17 +1,19 @@
 // The map maker's tools in the page (docs/MAP_EDITOR.md): which tool is chosen, the palette of the tool (tiles, or the team and the number of ants, or the stages of a pile), the brush, the
 // fill, undo and redo, the keys for them, and the painter that the canvas calls while a mouse or a finger paints or taps (web/front/mapmaker_canvas.js). The arithmetic of a stroke, the patches
-// and the history are web/front/mapmaker_edit.js; hills, ants and food piles are web/front/mapmaker_blocks.js; the tools and their tiles are web/front/mapmaker_palette.js. This script only
+// and the history are web/front/mapmaker_edit.js; hills, ants and food piles are web/front/mapmaker_blocks.js; bigger objects are web/front/mapmaker_objects.js; the tools and their tiles are
+// web/front/mapmaker_palette.js. This script only
 // joins them to the buttons. A browser script (it needs a document).
 (function (root, factory) {
     'use strict';
-    if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_edit.js'), require('./mapmaker_palette.js'), require('./mapmaker_blocks.js'), require('./mapmaker_tiles.js'));
-    else root.MapTools = factory(root.MapEdit, root.MapPalette, root.MapBlocks, root.MapTiles);
-})(this, function (Edit, Palette, Blocks, Tiles) {
+    if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_edit.js'), require('./mapmaker_palette.js'), require('./mapmaker_blocks.js'), require('./mapmaker_tiles.js'), require('./mapmaker_objects.js'));
+    else root.MapTools = factory(root.MapEdit, root.MapPalette, root.MapBlocks, root.MapTiles, root.MapObjects);
+})(this, function (Edit, Palette, Blocks, Tiles, Objects) {
     'use strict';
 
     var HINTS = {
         ground: 'Tap or click to paint the ground. Drag to paint a line. Fill works for one click.',
         objects: 'Tap or click to put an object. Drag to put a line of them.',
+        bigger: 'Tap or click to put the object whole. The dot is the cell you tap. Erase takes it away whole.',
         hills: 'Tap or click to put the hill. The dot is its door. Put it again to move it.',
         ants: 'Tap or click to start the team\u2019s ants here. Put them again to move them.',
         food: 'Tap or click to put a food pile.',
@@ -19,7 +21,7 @@
         move: 'Drag to look around. Wheel or two fingers to zoom.'
     };
     var PHONE_HINTS = {
-        ground: 'Tap to paint. Drag for a line.', objects: 'Tap to put one. Drag for a line.', hills: 'Tap to put the hill. Tap again to move it.', ants: 'Tap to start the ants here.',
+        ground: 'Tap to paint. Drag for a line.', objects: 'Tap to put one. Drag for a line.', bigger: 'Tap to put one whole. Erase takes it whole.', hills: 'Tap to put the hill. Tap again to move it.', ants: 'Tap to start the ants here.',
         food: 'Tap to put a food pile.', erase: 'Tap to take something away.', move: 'Drag to look around.'
     };
 
@@ -31,8 +33,8 @@
     //       dialogs (MapDialog.create: the palette of a phone is a sheet), say(title, text) -> a plain message}
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
-        var state = { tool: 'ground', ground: 485, objects: 302, brush: 1, fill: false, team: 0, ants: 4, stages: 4 };
-        var editor = null, current = null, fits = '';                     // `fits`: a note when fewer ants than asked for found room, until the next choice
+        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4 };
+        var editor = null, current = null, told = false, fits = '';                     // `fits`: a note when fewer ants than asked for found room, until the next choice
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function paints() { return Palette.paints(state.tool); }
@@ -40,6 +42,29 @@
         function hasTeams() { return state.tool === 'hills' || state.tool === 'ants'; }
         function tileOf() { return state.tool === 'ground' ? state.ground : (state.tool === 'objects' ? state.objects : null); }
         function teamNow() { return Palette.teams()[state.team]; }
+        function bigNow() { return Palette.itemOf('bigger', state.big); }
+        function bigText(item) { return item.label + ' \u00b7 ' + plural(item.cells.length, 'cell', 'cells'); }
+        // the name and, under it, the cells, in a node (a button or a pick): two lines, so that a long name does not break in the middle
+        function bigLines(node, item) {
+            var b = item.box;
+            node.textContent = '';
+            node.appendChild(el('b', 'pkn', plural(item.cells.length, 'cell', 'cells') + ', ' + (b.c1 - b.c0 + 1) + ' x ' + (b.r1 - b.r0 + 1)));
+            node.appendChild(el('small', 'pkc', item.label));
+        }
+        // (the squares are <em>, not <span>: the text of the palette button is the first <span> in it)
+        // the shape of a bigger object in its chip: a small square for each cell of its box, filled where the object stands, the anchor outlined
+        function footprint(chip, item) {
+            var b = item.box, rows = b.r1 - b.r0 + 1, cols = b.c1 - b.c0 + 1, size = Math.max(3, Math.min(9, Math.floor(26 / Math.max(rows, cols))));
+            chip.textContent = ''; chip.className = 'fp';
+            chip.style.background = 'none';
+            chip.style.gridTemplateColumns = 'repeat(' + cols + ', ' + size + 'px)'; chip.style.gridAutoRows = size + 'px';
+            for (var r = b.r0; r <= b.r1; r++) for (var c = b.c0; c <= b.c1; c++) {
+                var cell = el('em', r === 0 && c === 0 ? 'org' : '');
+                if (item.cells.some(function (rc) { return rc[0] === r && rc[1] === c; })) cell.style.background = item.color;
+                chip.appendChild(cell);
+            }
+        }
+        function heading(tool) { return tool === 'bigger' ? 'Bigger objects' : Palette.tool(tool).label; }
 
         // ---- the buttons ----
         function showButtons() {
@@ -62,7 +87,8 @@
                 b.disabled = !(tool && Palette.usable(tool.id));
                 b.setAttribute('aria-pressed', String(tool.id === state.tool));
             });
-            var hasPalette = !!(Palette.tool(state.tool) || {}).palette;
+            var hasPalette = !!(Palette.tool(state.tool) || {}).palette, panel = host.box.parentNode;
+            if (panel && panel.classList) panel.classList.toggle('tilemode', state.tool === 'bigger');          // (a long list: the one button and its sheet, on a desktop too)
             host.box.hidden = !hasPalette;
             host.tile.hidden = !hasPalette;
             host.hint.textContent = '';
@@ -76,6 +102,7 @@
         // What the map has of the thing that the tool puts, in a few words (the line under the palette)
         function infoText() {
             if (state.tool === 'ground' || state.tool === 'objects') { var item = Palette.itemOf(state.tool, tileOf()); return item ? item.label : ''; }
+            if (state.tool === 'bigger') return bigText(bigNow());
             var file = env.file ? env.file() : null;
             if (!file || !(state.tool === 'hills' || state.tool === 'ants' || state.tool === 'food')) return '';
             var facts = Blocks.facts(file, state.tool === 'hills'), who = teamNow().label, set = Blocks.FOOD[state.stages];
@@ -107,13 +134,14 @@
         }
 
         function showPalette() {
-            var tool = state.tool, label = Palette.tool(tool).label;
+            var tool = state.tool, label = heading(tool);
             host.title.textContent = label;
             host.swatches.textContent = '';
             host.stepper.hidden = !(tool === 'ants' || tool === 'food');
-            host.swatches.hidden = tool === 'food';
+            host.swatches.hidden = tool === 'food' || tool === 'bigger';
             host.swatches.className = hasTeams() ? 'swatches teams' : 'swatches';
             var chip = host.tile.querySelector('i'), text = host.tile.querySelector('span');
+            chip.textContent = '';
             if (hasTeams()) {
                 host.swatches.setAttribute('aria-label', 'Team of the ' + (tool === 'hills' ? 'hill' : 'ants'));
                 Palette.teams().forEach(function (team) {
@@ -124,6 +152,11 @@
                 chip.className = 'tc'; chip.style.background = teamNow().color;
                 text.textContent = tool === 'ants' ? teamNow().label + ' · ' + plural(state.ants, 'ant', 'ants') : teamNow().label;
                 host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
+            } else if (tool === 'bigger') {
+                var big = bigNow();
+                footprint(chip, big);
+                bigLines(text, big);
+                host.tile.setAttribute('aria-label', label + ': ' + bigText(big) + '. Change');
             } else if (tool === 'food') {
                 chip.className = ''; chip.style.background = Tiles.FOOD;
                 text.textContent = plural(state.stages, 'stage', 'stages');
@@ -167,7 +200,7 @@
         // A phone has no room for the palette beside the map: its one button opens the same choices as a sheet, with their names
         function openPicker() {
             if (!env.dialogs || env.busy()) return;
-            var tool = state.tool, label = Palette.tool(tool).label;
+            var tool = state.tool, label = heading(tool);
             env.dialogs.open({
                 title: label, cls: 'narrow',
                 build: function (body, ctl) {
@@ -179,16 +212,20 @@
                         });
                         body.appendChild(grid);
                     } else if (tool !== 'food') {
-                        var list = Palette.items(tool), chosen = tileOf();
-                        grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', label + ' to paint with');
+                        var list = Palette.items(tool), chosen = tool === 'bigger' ? state.big : tileOf();
+                        grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', tool === 'bigger' ? label : label + ' to paint with');
                         list.forEach(function (item) {
                             var b = el('button', 'pick'), chip = el('i');
                             b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(item.id === chosen)); b.setAttribute('data-tile', String(item.id));
-                            chip.style.background = item.color; b.appendChild(chip); b.appendChild(el('span', '', item.label));
+                            if (tool === 'bigger') footprint(chip, item); else chip.style.background = item.color;
+                            b.appendChild(chip);
+                            var who = el('span', '', ''); if (tool === 'bigger') { bigLines(who, item); b.setAttribute('aria-label', bigText(item)); } else who.textContent = item.label;
+                            b.appendChild(who);
                             b.addEventListener('click', function () { chooseTile(item.id); ctl.close(); });
                             grid.appendChild(b);
                         });
                         body.appendChild(grid);
+                        if (tool === 'bigger') body.appendChild(el('p', 'pickinfo', 'Each one covers several cells. A tap puts it whole, and Erase takes it away whole.'));
                     }
                     if (tool === 'ants' || tool === 'food') {
                         var about = el('p', 'pickinfo', infoText());
@@ -201,7 +238,7 @@
         }
 
         function chooseTile(id) {
-            if (state.tool === 'ground') state.ground = id; else state.objects = id;
+            if (state.tool === 'ground') state.ground = id; else if (state.tool === 'bigger') state.big = id; else state.objects = id;
             showPalette();
         }
 
@@ -238,11 +275,12 @@
             return editor.begin(kind, id);
         }
 
-        // A whole hill, a team's ants or a food pile, put with one tap
+        // A whole hill, a team's ants, a food pile or a bigger object, put with one tap
         function place(cell) {
             var file = env.file(), change;
             if (state.tool === 'hills') change = Blocks.placeHill(file, state.team, cell.row, cell.column);
             else if (state.tool === 'ants') change = Blocks.placeStart(file, state.team, cell.row, cell.column, state.ants);
+            else if (state.tool === 'bigger') change = Objects.place(file, bigNow(), cell.row, cell.column);
             else change = Blocks.placePile(file, cell.row, cell.column, state.stages);
             if (change.error) { if (env.say) env.say('It cannot be put there', change.error); return; }
             var was = env.file(), dirty = editor.act(change);
@@ -253,17 +291,20 @@
         }
 
         var painter = {
-            // the size of the square that the canvas marks under the pointer: the brush, a hill (4 x 4), a cell for ants and food; 0 for a tool that does not mark
+            // the size of the square that the canvas marks under the pointer: the brush, a hill (4 x 4), a cell for ants and food (a bigger object marks its own box: shape); 0 for a tool that does not mark
             size: function () { return !editor ? 0 : (paints() ? state.brush : (places() ? (state.tool === 'hills' ? Blocks.HILL : 1) : 0)); },
             // a tool that puts one whole thing with a tap: a drag looks around instead of painting
             tapOnly: function () { return !!editor && places(); },
-            // the hill's door is marked in the square
-            door: function () { return !!editor && state.tool === 'hills'; },
+            // the box of a bigger object, counted from the cell that is tapped
+            shape: function () { return editor && state.tool === 'bigger' ? bigNow().box : null; },
+            // the hill's door is marked in the square, and the cell that anchors a bigger object
+            door: function () { return !!editor && (state.tool === 'hills' || state.tool === 'bigger'); },
             begin: function (cell) {
                 if (!editor) return false;
                 if (places()) { place(cell); return false; }
                 if (!paints()) return false;
                 current = startStroke();
+                told = false;
                 if (!current) return false;
                 if (state.fill && state.tool !== 'erase') {
                     current.fill(cell.row, cell.column);
@@ -273,14 +314,22 @@
                     showButtons();
                     return false;
                 }
-                current.stamp(cell.row, cell.column, state.brush);
+                var changed = current.stamp(cell.row, cell.column, state.brush);
                 canvas.markDirty(current.takeDirty());
+                var why = current.refusal();
+                if (why) {
+                    told = true;
+                    if (env.say) env.say('It cannot be put there', why);
+                    if (!changed) { current.end(); current = null; return false; }
+                }
                 return true;
             },
             extend: function (from, to) {
                 if (!current) return;
                 current.segment(from.row, from.column, to.row, to.column, state.brush);
                 canvas.markDirty(current.takeDirty());
+                var why = current.refusal();
+                if (why && !told) { told = true; if (env.say) env.say('It cannot be put there', why); }
             },
             end: function () {
                 if (!current) return;
@@ -353,12 +402,12 @@
 
         return {
             // A map is open (a new one, or one from the disk): the history starts empty
-            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt }); current = null; showButtons(); showInfo(); },
+            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
             isClean: function () { return !editor || editor.history.isClean(); },
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },
-            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, team: state.team, ants: state.ants, stages: state.stages, history: editor ? editor.history.size() : null }; }
+            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, team: state.team, ants: state.ants, stages: state.stages, big: state.big, history: editor ? editor.history.size() : null }; }
         };
     }
 

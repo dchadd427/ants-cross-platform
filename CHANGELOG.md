@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.76 - 2026-10-17 - Map maker: bigger objects (E3b)
+
+**For players:**
+- The map maker page (not linked from the site yet: /mapmaker.html) has a new tool, Bigger (or press K), for the objects that cover several cells: grass, leaves, rocks, toys, cans and glasses, 29 of them, named as the game names them (grass4, grassmed1, bearbod ...), each drawn as its shape. They are the ones that the game's own maps use most. Tap or click and the whole object appears, the same shape that the game's maps have; the eraser takes it away whole; undo and redo work for it.
+- Rocks and power-ups put with the Objects tool now block ants and work in the game, as the ones in the game's maps do (before, the map file did not say that they are solid).
+- A hill, a team's starting ants or a food pile are never taken away by an object, big or small: the page says what is in the way and puts nothing. The list shows the shape of each object.
+- Putting objects does not change what the check says about a map.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3906df6f...54418041)
+
 ## v0.12.75 - 2026-10-17 - Map maker: hills, ants and food (E3a)
 
 **For players:**

@@ -147,16 +147,18 @@
         }
     }
 
-    // The marked square (a black line under a gold one), as wide as the brush that is on it: the cells that the brush would cover when it is put on `cur` ({row, column}), cut by the map's edge
-    function cursorRect(file, cur, brush) {
+    // The marked square (a black line under a gold one), as wide as the brush that is on it: the cells that the brush would cover when it is put on `cur` ({row, column}), cut by the map's edge.
+    // `shape` ({r0, r1, c0, c1}: the rows and columns, counted from the cell, that a bigger object covers) marks the box of that object instead.
+    function cursorRect(file, cur, brush, shape) {
         if (!cur || cur.row < 0 || cur.column < 0 || cur.row >= file.rows || cur.column >= file.columns) return null;
+        if (shape) return { r0: Math.max(0, cur.row + shape.r0), r1: Math.min(file.rows - 1, cur.row + shape.r1), c0: Math.max(0, cur.column + shape.c0), c1: Math.min(file.columns - 1, cur.column + shape.c1) };
         var size = brush || 1, lo = Math.floor((size - 1) / 2), hi = size - 1 - lo;
         return { r0: Math.max(0, cur.row - lo), r1: Math.min(file.rows - 1, cur.row + hi), c0: Math.max(0, cur.column - lo), c1: Math.min(file.columns - 1, cur.column + hi) };
     }
 
     // `door`: a dot in the cell itself (a hill's entrance is the cell that is tapped, in the second row and column of its 4 x 4 square)
-    function drawCursor(ctx, view, file, w, h, cur, brush, door) {
-        var rect = cursorRect(file, cur, brush);
+    function drawCursor(ctx, view, file, w, h, cur, brush, door, shape) {
+        var rect = cursorRect(file, cur, brush, shape);
         if (!rect) return;
         var p = toScreen(view, w, h, rect.r0, rect.c0), s = view.scale, bw = Math.max((rect.c1 - rect.c0 + 1) * s, 6), bh = Math.max((rect.r1 - rect.r0 + 1) * s, 6);
         ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeRect(p.x - 1.5, p.y - 1.5, bw + 3, bh + 3);
@@ -214,7 +216,7 @@
             done.rects = drawRects(ctx, view, file, w, h, vis);
             if (view.scale >= 6) drawMarks(ctx, view, file, w, h, vis);
         } else done.pixels = drawPixels(ctx, view, file, w, h, opts.scratch || document.createElement('canvas'));
-        if (opts.cursor) drawCursor(ctx, view, file, w, h, opts.cursor, opts.brush, opts.door);
+        if (opts.cursor) drawCursor(ctx, view, file, w, h, opts.cursor, opts.brush, opts.door, opts.shape);
         return done;
     }
 

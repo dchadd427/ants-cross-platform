@@ -288,6 +288,30 @@
         return sortSplices(change);
     }
 
+    // What stands on the cell `idx` that another tool owns and that nothing may be put over without being asked: 'hill' (a cell of a team's hill), 'ants' (a start of a team is on the cell) and
+    // 'pile' (the cell is a food pile's, or part of the object that a pile's cell anchors); '' when there is none. A list that does not read has none to find.
+    function inTheWay(file, idx) {
+        var t = Edit.tile(file, 2, idx);
+        if (teamOfHill(t) >= 0) return 'hill';
+        var lay = layout(file), ix = indexOf(file, lay);
+        if (lay.ok1 && ix.markers[idx]) return 'ants';
+        if (lay.ok2 && lay.piles.length) {
+            var anchor = t !== EMPTY2 ? Edit.anchorIndex(file, idx) : -1;
+            if (ix.piles[idx] || (anchor >= 0 && ix.piles[anchor])) return 'pile';
+        }
+        return '';
+    }
+
+    // The sentence for what is in the way of an object (inTheWay) on the cell `idx`, or '' when nothing is: the Objects tool and the Bigger tool refuse to take a hill, a team's starting ants or a food
+    // pile away, and say so in these words
+    function blockedText(file, idx) {
+        var why = inTheWay(file, idx);
+        if (!why) return '';
+        if (why === 'hill') return TEAMS[teamOfHill(Edit.tile(file, 2, idx))].label + '\u2019s hill is here. Move it first, or take it away with Erase.';
+        if (why === 'ants') return 'Starting ants are in the way. Move them first, or take them away with Erase.';
+        return 'A food pile is in the way. Take it away with Erase first.';
+    }
+
     // What the map has now, for the palette's line: the cells of each team's hill and the ants and food piles on the map (-1 for a list that cannot be read)
     function facts(file, scanHills) {
         var lay = layout(file), out = { hills: [0, 0, 0, 0], ants: [0, 0, 0, 0], piles: lay.ok2 ? lay.piles.length : -1, listsOk: lay.ok1 && lay.ok2 }, i;
@@ -300,6 +324,6 @@
         EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES,
         team: team, teamOfMarker: teamOfMarker, teamOfHill: teamOfHill, clampTo: clampTo,
         layout: layout, block1Bytes: block1Bytes, block2Bytes: block2Bytes, diffSplice: diffSplice,
-        hillCells: hillCells, placeHill: placeHill, startCells: startCells, placeStart: placeStart, eraseStart: eraseStart, placePile: placePile, eraseAt: eraseAt, facts: facts
+        hillCells: hillCells, placeHill: placeHill, startCells: startCells, placeStart: placeStart, eraseStart: eraseStart, placePile: placePile, eraseAt: eraseAt, inTheWay: inTheWay, blockedText: blockedText, facts: facts
     };
 });

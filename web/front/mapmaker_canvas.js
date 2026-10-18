@@ -53,6 +53,7 @@
         function brushNow() { return painter ? painter.size() : 0; }
         function tapOnly() { return !!painter && !!painter.tapOnly && painter.tapOnly(); }
         function doorNow() { return !!painter && !!painter.door && painter.door(); }
+        function shapeNow() { return painter && painter.shape ? painter.shape() : null; }          // (a bigger object marks its own box: {r0, r1, c0, c1} from the cell)
         function markedCell() { return brushNow() > 0 ? (hover || cursor) : cursor; }          // (a tool that paints shows the brush where the mouse is)
 
         // The whole frame can be skipped for a few cells only when the picture is the one of the last whole frame: the same view, the same size, the same map
@@ -76,7 +77,7 @@
         function paint() {
             frame = 0;
             if (!file) return;
-            var t0 = win.performance ? win.performance.now() : 0, ctx = canvas.getContext('2d'), brush = brushNow(), cell = markedCell(), rect = View.cursorRect(file, cell, brush || 1), kind = 'full', count = 0;
+            var t0 = win.performance ? win.performance.now() : 0, ctx = canvas.getContext('2d'), brush = brushNow(), cell = markedCell(), shape = shapeNow(), rect = View.cursorRect(file, cell, brush || 1, shape), kind = 'full', count = 0;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             var list = sameAsFull() ? cellsToPaint(rect) : null;
             if (list && list.length <= MANY && (view.scale >= SMALL_TILE || scratch.keptImage)) {
@@ -88,10 +89,10 @@
                     count++;
                 }
                 if (pixels) View.blitPixels(ctx, scratch, box);
-                if (cell) View.drawCursor(ctx, view, file, w, h, cell, brush || 1, doorNow());
+                if (cell) View.drawCursor(ctx, view, file, w, h, cell, brush || 1, doorNow(), shape);
                 kind = 'cells';
             } else {
-                View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1, door: doorNow() });
+                View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1, door: doorNow(), shape: shape });
                 full = { file: file, cx: view.cx, cy: view.cy, scale: view.scale, w: w, h: h, dpr: dpr };
                 count = -1;
             }
@@ -305,7 +306,7 @@
             swapFile: function (next) { file = next; full = null; mini = View.miniBase(file, 168, 168, makeCanvas); redraw(); },
             // The small map again, after a stroke or an undo
             refreshMini: function () { if (file) { mini = View.miniBase(file, 168, 168, makeCanvas); redraw(); } },
-            // The painter (mapmaker_tools.js): {size() -> the brush in cells, 0 when the tool does not paint, begin(cell) -> true when a drag goes on, extend(from, to), end(), cancel()}
+            // The painter (mapmaker_tools.js): {size() -> the brush in cells, 0 when the tool does not paint, shape() -> the box of a bigger object or null, begin(cell) -> true when a drag goes on, extend(from, to), end(), cancel()}
             setPainter: function (p) { painter = p; cursorStyle(); },
             // The cells (indexes, row * columns + column) that changed: they are painted again in the next frame
             markDirty: function (list) { for (var i = 0; i < list.length; i++) dirty.push(list[i]); redraw(); },

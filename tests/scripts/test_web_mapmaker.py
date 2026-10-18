@@ -30,7 +30,8 @@ EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js"
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
 BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check.js")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
 
 
 def read(*parts):
@@ -108,6 +109,50 @@ def read_blocks(path):
     return (1, 1, count, tuple(marks), len(piles), ";".join(piles))
 
 
+def read_objects(path):
+    """{tile: (objects, {footprint: count})} of the objects that stand on more than one cell in a version 8 file, read here with struct: the layer-2 cells of one tile and one anchor, where the anchor cell is
+    one of them and is flagged. A footprint is the tuple of the (row, column) offsets from the anchor."""
+    with open(os.path.join(REPO, path), "rb") as f:
+        data = f.read()
+    names = struct.unpack_from("<H", data, 40)[0] + 1
+    at = 42 + 11 * names
+    rows, columns = struct.unpack_from("<II", data, at)
+    rows &= 0xFFFF
+    columns &= 0xFFFF
+    layer2 = at + 8 + 6 * rows * columns
+    groups = {}
+    for i in range(rows * columns):
+        tile, flags, third = struct.unpack_from("<HHH", data, layer2 + 6 * i)
+        if tile == 0x7FFE:
+            continue
+        row, column = divmod(i, columns)
+        group = groups.setdefault((tile, third & 255, third >> 8), [[], False])
+        group[0].append((row - (third & 255), column - (third >> 8)))
+        if row == (third & 255) and column == (third >> 8) and flags & 1:
+            group[1] = True
+    out = {}
+    for (tile, _, _), (cells, origin) in groups.items():
+        if origin and len(cells) > 1 and not (245 <= tile <= 248 or 129 <= tile <= 132) and not tile_flags()[tile] & 0x16:
+            objects, shapes = out.setdefault(tile, (0, {}))
+            key = tuple(sorted(cells))
+            shapes[key] = shapes.get(key, 0) + 1
+            out[tile] = (objects + 1, shapes)
+    return out
+
+
+_FLAGS = []
+
+
+def tile_flags():
+    """kTileFlags of src/ants_sim/movement_tables_data.inc: the flag bits of the game's 1,344 tile ids (0x01 solid, 0x02 food, 0x04 power-up, 0x10 plant)"""
+    if not _FLAGS:
+        text = read("src", "ants_sim", "movement_tables_data.inc")
+        start = text.index("kTileFlags[1344] = {")
+        body = re.sub(r"/\*.*?\*/", "", text[text.index("{", start) + 1:text.index("};", start)], flags=re.S)
+        _FLAGS.extend(int(v, 0) for v in re.findall(r"0x[0-9a-fA-F]+|\d+", body))
+    return _FLAGS
+
+
 @unittest.skipUnless(NODE, "node is not installed")
 class TheCodeRuns(unittest.TestCase):
     def test_the_checks_pass(self):
@@ -151,7 +196,7 @@ class TheCodeRuns(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
         for part in ("A the brush and the line", "B strokes", "C fill", "D undo and redo", "E the dictionary", "F the palette", "G the tools on a fake page", "H the canvas on a fake page", "H2 a tap tool on the canvas", "I hills",
-                     "J starting ants and food piles", "J2 the history of the lists is bounded", "K Hills, Ants and Food on a fake page"):
+                     "J starting ants and food piles", "J2 the history of the lists is bounded", "K Hills, Ants and Food on a fake page", "L the Bigger tool on a fake page"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_drawing_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -212,13 +257,29 @@ class TheCodeRuns(unittest.TestCase):
             "ants that do not all fit and say nothing": ("mapmaker_tools.js", "if (put < state.ants) fits = ' (only ' + put + ' fit)';", "void 0;"),
             "a tap tool that begins a stroke": ("mapmaker_tools.js", "tapOnly: function () { return !!editor && places(); },", "tapOnly: function () { return false; },"),
             "a hill whose square is one cell": ("mapmaker_tools.js", "(state.tool === 'hills' ? Blocks.HILL : 1)", "1"),
-            "a hill without its door marked": ("mapmaker_tools.js", "door: function () { return !!editor && state.tool === 'hills'; },", "door: function () { return false; },"),
+            "a hill without its door marked": ("mapmaker_tools.js", "door: function () { return !!editor && (state.tool === 'hills' || state.tool === 'bigger'); },", "door: function () { return false; },"),
+            "a brush that takes a hill away": ("mapmaker_edit.js", "if (kind === 'objects' && hooks.guard) {", "if (false) {"),
+            "a brush that is refused only on the cells that are in the way": ("mapmaker_edit.js", "if (why) { refused = why; return 0; } }\n                    }", "if (why) { refused = why; } }\n                    }"),
+            "a refusal that is said to nobody": ("mapmaker_tools.js", "told = true;\n                    if (env.say) env.say('It cannot be put there', why);", "told = true;"),
+            "an editor that is not given the guard": ("mapmaker_tools.js", "erase: Blocks.eraseAt, guard: Blocks.blockedText }", "erase: Blocks.eraseAt }"),
+            "a hill refused in the words of nobody": ("mapmaker_blocks.js", "TEAMS[teamOfHill(Edit.tile(file, 2, idx))].label + '\\u2019s hill is here. Move it first, or take it away with Erase.'", "'Something is here.'"),
+            "a bigger object put by the path of a food pile": ("mapmaker_tools.js", "else if (state.tool === 'bigger') change = Objects.place(file, bigNow(), cell.row, cell.column);", "void 0;"),
+            "a sheet of bigger objects that marks no one as chosen": ("mapmaker_tools.js", "chosen = tool === 'bigger' ? state.big : tileOf();", "chosen = tileOf();"),
+            "a bigger object picked that is not kept": ("mapmaker_tools.js", "else if (state.tool === 'bigger') state.big = id; else state.objects = id;", "else state.objects = id;"),
+            "a bigger object whose box the canvas is not told": ("mapmaker_tools.js", "shape: function () { return editor && state.tool === 'bigger' ? bigNow().box : null; },", "shape: function () { return null; },"),
+            "a palette of bigger objects that shows swatches beside the map": ("mapmaker_tools.js", "host.swatches.hidden = tool === 'food' || tool === 'bigger';", "host.swatches.hidden = tool === 'food';"),
+            "a button that does not say how many cells": ("mapmaker_tools.js", "plural(item.cells.length, 'cell', 'cells') + ', ' + (b.c1 - b.c0 + 1)", "'' + (b.c1 - b.c0 + 1)"),
+            "a chip whose squares are all filled": ("mapmaker_tools.js", "if (item.cells.some(function (rc) { return rc[0] === r && rc[1] === c; })) cell.style.background = item.color;", "cell.style.background = item.color;"),
+            "a chip of a bigger object that is only a color": ("mapmaker_tools.js", "if (tool === 'bigger') footprint(chip, item); else chip.style.background = item.color;", "chip.style.background = item.color;"),
+            "a sheet that does not say the whole name to a screen reader": ("mapmaker_tools.js", "b.setAttribute('aria-label', bigText(item)); } else who.textContent = item.label;", "} else who.textContent = item.label;"),
+            "a rock put without its solid bit": ("mapmaker_edit.js", "if (Solid.sets(tileId)) setSolid(idx, true);", "void 0;"),
+            "a change whose solid bits are not applied": ("mapmaker_edit.js", "for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);", "void 0;"),
             "a pile of one stage": ("mapmaker_tools.js", "[Blocks.MIN_STAGES, Blocks.MAX_STAGES]", "[1, Blocks.MAX_STAGES]"),
             "a team that cannot be chosen": ("mapmaker_tools.js", "function chooseTeam(id) { state.team = id; fits = ''; showPalette(); }", "function chooseTeam(id) { fits = ''; showPalette(); }"),
             "a place with no room that is refused in silence": ("mapmaker_tools.js", "if (change.error) { if (env.say) env.say(", "if (change.error) { if (false) env.say("),
             "a thing put that the canvas is not told of": ("mapmaker_tools.js", "if (dirty) changed(dirty);\n            else {", "if (false) changed(dirty);\n            else {"),
             "a change that only gave the dictionary a name that the page is not told of": ("mapmaker_tools.js", "if (env.file() !== was) env.onEdit();", "void 0;"),
-            "an eraser that does not take ants and piles": ("mapmaker_tools.js", "Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt })", "Edit.create(file, { rebase: env.rebase })"),
+            "an eraser that does not take ants and piles": ("mapmaker_tools.js", "Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText })", "Edit.create(file, { rebase: env.rebase })"),
             "a stepper that goes past the most ants": ("mapmaker_tools.js", "return state.tool === 'ants' ? [Blocks.MIN_ANTS, Blocks.MAX_ANTS]", "return state.tool === 'ants' ? [Blocks.MIN_ANTS, 99]"),
             "a sheet whose stepper does not change the page's number": ("mapmaker_tools.js", "more.addEventListener('click', function () { stepBy(1); show(); onChange(); });", "more.addEventListener('click', function () { show(); onChange(); });"),
             "a line under the palette that does not say what the map has": ("mapmaker_tools.js", "if (state.tool === 'ants') return who + ': ' + (facts.ants[state.team]", "if (state.tool === 'ants') return who + ': ' + (false"),
@@ -260,6 +321,75 @@ class TheCodeRuns(unittest.TestCase):
                         f.write(text.replace(old, new))
                     done = run_check(tmp, EDIT_CHECK)
                 self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
+    def test_the_bigger_objects_pass_their_checks_on_the_library_and_on_made_up_maps(self):
+        done = run_check(script=OBJECTS_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A solid tiles are the game's", "B the list is what the library says", "C put and taken away on the library", "D what is in the way", "E edges, a wide map, the dictionary", "F small objects are solid too"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_bigger_objects_check_can_fail_on_broken_copies_of_the_scripts(self):
+        mutants = {
+            "a footprint that is one cell short": ("mapmaker_palette.js", "[1324, 'grassmed1', '-1,-2 -1,-1 -1,0 -1,1 -1,2 0,-2 0,-1 0,0 0,1 0,2']", "[1324, 'grassmed1', '-1,-2 -1,-1 -1,0 -1,1 -1,2 0,-2 0,-1 0,0 0,1']"),
+            "a name that is not the game's": ("mapmaker_palette.js", "[1323, 'grass4',", "[1323, 'grass5',"),
+            "a tile that is not the one that the library uses": ("mapmaker_palette.js", "[354, 'yelcray',", "[355, 'yelcray',"),
+            "a footprint without its anchor cell": ("mapmaker_palette.js", "[315, 'pin3', '0,0 1,0']", "[315, 'pin3', '1,0 2,0']"),
+            "a list that is not the most used first": ("mapmaker_palette.js", "        [1323, 'grass4', '-1,-1 -1,0 0,-1 0,0'],\n        [1324,", "        [1324, 'grassmed1', '-1,-2 -1,-1 -1,0 -1,1 -1,2 0,-2 0,-1 0,0 0,1 0,2'],\n        [1323, 'grass4', '-1,-1 -1,0 0,-1 0,0'],\n        [1324x,"),
+            "a table of solid tiles with one wrong digit": ("mapmaker_solid.js", "'000000000000000c7", "'000000000000000c6"),
+            "a hill that owns solid bits": ("mapmaker_solid.js", "return is(id) && !(id >= 245 && id <= 248);", "return is(id);"),
+            "an anchor in a version 9 map that only version 8 means": ("mapmaker_objects.js", "file.version === 8 ? ((row & 255) | ((column & 255) << 8))", "file.version === 0 ? ((row & 255) | ((column & 255) << 8))"),
+            "an origin that is not flagged": ("mapmaker_objects.js", "put(cell.idx, item.id, origin ? 1 : 0,", "put(cell.idx, item.id, 0,"),
+            "every cell flagged as the origin": ("mapmaker_objects.js", "put(cell.idx, item.id, origin ? 1 : 0,", "put(cell.idx, item.id, 1,"),
+            "an object under the new one that goes in halves": ("mapmaker_objects.js", "var gone = Edit.objectCells(file, idx);", "var gone = [idx];"),
+            "an object that takes a hill away without asking": ("mapmaker_blocks.js", "if (teamOfHill(t) >= 0) return 'hill';", "void 0;"),
+            "an object that is put over starting ants": ("mapmaker_blocks.js", "if (lay.ok1 && ix.markers[idx]) return 'ants';", "void 0;"),
+            "an object that is put over the body of a food pile": ("mapmaker_blocks.js", "if (ix.piles[idx] || (anchor >= 0 && ix.piles[anchor])) return 'pile';", "if (ix.piles[idx]) return 'pile';"),
+            "a tile that the dictionary is not told of": ("mapmaker_objects.js", "names: [[item.id, item.name]],", "names: [],"),
+            "an object without its solid bits": ("mapmaker_objects.js", "if (Solid.sets(item.id)) change.solid.push([cell.idx, true]);", "void 0;"),
+            "an object that is not cut by the edge of the map": ("mapmaker_objects.js", "if (r >= 0 && c >= 0 && r < file.rows && c < file.columns) out.push(", "out.push("),
+            "an eraser that leaves the solid bit of a tile that is not in the table": ("mapmaker_edit.js", "if (Solid.clears(gone)) setSolid(cells[i], false);", "if (Solid.sets(gone)) setSolid(cells[i], false);"),
+            "a pile taken away that leaves the solid bits of its cells": ("mapmaker_edit.js", "if (c[1] === EMPTY2 && Solid.clears(was)) setSolid(c[0], false);", "void 0;"),
+            "a solid bit cleared under a hill": ("mapmaker_solid.js", "function clears(id) { return id !== 0x7FFE && !(id >= 245 && id <= 248); }", "function clears(id) { return id !== 0x7FFE; }"),
+            "the same object on the same place that is a new step": ("mapmaker_objects.js", "w[2]) continue;      // (already so)", "w[2] && false) continue;      // (already so)"),
+            "a box that the canvas does not take from the object": ("mapmaker_view.js", "if (shape) return {", "if (false) return {"),
+            "an eraser that takes one cell of a bigger object": ("mapmaker_edit.js", "var cells = objectCells(f, idx), n = 0;", "var cells = [idx], n = 0;"),
+            "a rock whose solid bit is not set by the Objects tool": ("mapmaker_edit.js", "if (Solid.sets(tileId)) setSolid(idx, true);", "void 0;"),
+            "a solid bit that row 0 loses": ("mapmaker_edit.js", "if (!on && idx < f.columns) return;", "void 0;"),
+            "a solid bit that takes the other flags with it": ("mapmaker_edit.js", "on ? (was | 1) : (was & ~1)", "on ? 1 : 0"),
+        }
+        for what, (name, old, new) in mutants.items():
+            with self.subTest(what):
+                text = read("web", "front", name)
+                self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
+                with tempfile.TemporaryDirectory() as tmp:
+                    for script in SCRIPTS:
+                        shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                        f.write(text.replace(old, new))
+                    done = run_check(tmp, OBJECTS_CHECK)
+                self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
+    def test_the_objects_that_stand_on_several_cells_are_counted_as_a_second_reading_does(self):
+        done = subprocess.run([NODE, OBJECTS_CHECK, "--list-objects"], capture_output=True, text=True, timeout=300)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        seen = {}
+        for line in done.stdout.splitlines():
+            tile, maps, objects, cells, share = (int(v) for v in line.split("\t"))
+            seen[tile] = (maps, objects, cells, share)
+        wanted = {}
+        for path in library():
+            for tile, (objects, shapes) in read_objects(path).items():
+                total = wanted.setdefault(tile, [0, 0, {}])
+                total[0] += 1
+                total[1] += objects
+                for shape, count in shapes.items():
+                    total[2][shape] = total[2].get(shape, 0) + count
+        expect = {}
+        for tile, (maps, objects, shapes) in wanted.items():
+            best = max(shapes.items(), key=lambda kv: (kv[1], len(kv[0])))
+            expect[tile] = (maps, objects, len(best[0]), best[1])
+        self.assertEqual(seen, expect)
 
     def test_the_lists_of_the_library_pass_their_checks(self):
         done = run_check(script=BLOCKS_CHECK)
@@ -415,6 +545,14 @@ class ThePage(unittest.TestCase):
         self.assertRegex(self.page, r'<label class="sr" for="map-name">Name of the map</label>')
         self.assertRegex(self.page, r'<input type="file" id="file-in" accept="\.lvl,\.LVL" hidden>')
 
+    def test_a_script_that_did_not_load_is_told_for_every_script_of_the_page(self):
+        needed = re.search(r"var NEEDED = \[([^\]]*)\]", self.app).group(1)
+        for name, text in self.code.items():
+            if name == "mapmaker_app.js":
+                continue
+            for global_name in re.findall(r"root\.(Map[A-Za-z]+) = factory", text):
+                self.assertIn("'%s'" % global_name, needed, "%s makes %s, which the app must list in NEEDED" % (name, global_name))
+
     def test_the_page_refuses_a_module_of_another_interface_version_before_it_asks_it_anything(self):
         self.assertIn("var found = LvlCore.moduleVersion(module);", self.app)
         self.assertIn("if (found !== LvlCore.EXPECTED_INTERFACE) return fatal(", self.app)
@@ -438,13 +576,13 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("overwrite", self.app.lower())
         self.assertIn("a.download = win.MapFile.downloadName(map.name);", self.app, "a download is a new file the browser saves, named by the map")
 
-    def test_the_tools_are_in_the_page_in_the_order_of_the_picture_and_all_seven_work(self):
+    def test_the_tools_are_in_the_page_in_the_order_of_the_picture_and_all_eight_work(self):
         tools = re.findall(r'<button class="tool" type="button" data-tool="([a-z]+)"[^>]*>', self.page)
-        self.assertEqual(tools, ["ground", "objects", "hills", "ants", "food", "erase", "move"])
+        self.assertEqual(tools, ["ground", "objects", "bigger", "hills", "ants", "food", "erase", "move"])
         for button in re.findall(r'<button class="tool"[^>]*>', self.page):
             self.assertIn(" disabled", button, "every button starts off until the core is there: " + button)
         self.assertNotIn("Comes in the next update", self.page)
-        for tool, letter in (("ground", "G"), ("objects", "O"), ("hills", "H"), ("ants", "A"), ("food", "F"), ("erase", "E"), ("move", "M")):
+        for tool, letter in (("ground", "G"), ("objects", "O"), ("bigger", "K"), ("hills", "H"), ("ants", "A"), ("food", "F"), ("erase", "E"), ("move", "M")):
             self.assertRegex(self.page, r'data-tool="%s"[^>]*aria-keyshortcuts="%s"' % (tool, letter))
         for part in ('id="stepper"', 'id="step-less"', 'id="step-more"', 'id="step-val"', 'aria-label="Fewer"', 'aria-label="More"'):
             self.assertIn(part, self.page, part)
@@ -454,7 +592,7 @@ class ThePage(unittest.TestCase):
             self.assertIn(part, self.page, part)
         self.assertEqual(re.findall(r'data-brush="(\d+)"', self.page), ["1", "3", "5", "9"])
         palette = self.code["mapmaker_palette.js"]
-        self.assertEqual(re.findall(r"key: '([a-z])'", palette), ["g", "o", "h", "a", "f", "e", "m"])
+        self.assertEqual(re.findall(r"key: '([a-z])'", palette), ["g", "o", "k", "h", "a", "f", "e", "m"])
 
     def test_a_map_that_was_drawn_on_is_asked_about_and_handed_over_as_the_core_writes_it(self):
         app = self.app
