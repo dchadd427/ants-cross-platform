@@ -233,6 +233,60 @@ function noMarkup(label, app) {
         same('the red Take down of the box sends the call', [w.calls[0].method, w.calls[0].url, w.calls[0].body], ['POST', '/admin/api/maps/' + 'c'.repeat(32) + '/take-down', {}]);
         same('and the question is gone, the list is asked again', [all(app, '.dlg').length, w.calls[1].url], [0, '/admin/api/maps?state=approved']);
     }
+    // ---- the buttons stay locked until the list is drawn again; the focus stays in the question and goes back
+    {
+        const second = map('f'.repeat(32), { state: 'approved', approved_name: 'Second Map', name: 'Second', decided_at: at('2026-10-18T21:20:00Z') - 7200 });
+        const w = world();
+        w.lists.approved.push(second);
+        let release = null;
+        const { app, doc } = await open(w);
+        await press(app, 'Approved (1)');
+        await press(app, 'Take down');
+        const dlg = all(app, '.dlg')[0];
+        const cancelButton = all(app, '.dlg-foot button')[0], goButton = all(app, '.dlg-foot button')[1];
+        check('the question starts with the focus on Cancel', doc.activeElement === cancelButton);
+        const tabAt = (node, shift) => { node.focus(); const e = { key: 'Tab', shiftKey: !!shift, prevented: false, preventDefault() { this.prevented = true; } }; all(app, '.scrim')[0].fire('keydown', e); return e; };
+        let e = tabAt(goButton, false);
+        check('Tab from the last button goes to the first and is held', e.prevented && doc.activeElement === cancelButton);
+        e = tabAt(cancelButton, true);
+        check('Shift+Tab from the first button goes to the last and is held', e.prevented && doc.activeElement === goButton);
+        e = tabAt(cancelButton, false);
+        check('Tab between the two buttons is left alone', !e.prevented);
+        const outside = doc.createElement('button');
+        doc.body.appendChild(outside);
+        e = tabAt(outside, false);
+        check('a focus that got outside the question is brought back in', e.prevented && doc.activeElement === cancelButton);
+        await press(app, 'Cancel');
+        check('Cancel gives the focus back to the button that opened the question', doc.activeElement && doc.activeElement.getAttribute('data-take') === 'c'.repeat(32));
+        await press(app, 'Take down');
+        all(app, '.scrim')[0].fire('keydown', { key: 'Escape' });
+        await settle();
+        check('Escape gives it back too', doc.activeElement && doc.activeElement.getAttribute('data-take') === 'c'.repeat(32));
+        // the list is held back after the change
+        w.calls.length = 0;
+        w.replies['GET /admin/api/maps?state=approved'] = () => new Promise((resolve) => { release = () => resolve({ status: 200, json: async () => ({ state: 'approved', counts: w.counts, maps: [second] }) }); });
+        await press(app, 'Take down');
+        const go = all(app, '.dlg-foot button')[1];
+        go.click();
+        await settle();
+        same('the call went once and the list is being asked again', w.calls.map((c) => c.method + ' ' + c.url), ['POST /admin/api/maps/' + 'c'.repeat(32) + '/take-down', 'GET /admin/api/maps?state=approved']);
+        go.click();                                                                  // (a late second tap on the old button, before the list is drawn)
+        await settle();
+        same('a late second tap sends nothing while the list is not drawn', w.calls.length, 2);
+        release();
+        await settle();
+        same('the list is drawn again with the next map in the place', texts(app, '.t1'), ['Second MapClassic map']);
+        await press(app, 'Take down');
+        await press(app, 'Take down', 1);
+        same('and the buttons work again once it is drawn', w.calls.filter((c) => c.method === 'POST').length, 2);
+    }
+    // ---- the sign-out stays on a phone: its own element, apart from the words that CSS hides
+    {
+        const w = world();
+        const { app } = await open(w);
+        same('the sign-out is in the signed-in line, apart from the words', [all(app, '.signed .who').length, all(app, '.signed form button').map((b) => b.textContent)], [1, ['Sign out']]);
+        check('the words are the part that can be hidden', all(app, '.signed .who')[0].textContent.indexOf('Dave') >= 0 && all(app, '.signed form')[0].parentNode.className === 'signed');
+    }
     // ---- Declined (with the reason) and Taken down (C6) with Put back
     {
         const w = world();

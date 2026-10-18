@@ -294,6 +294,23 @@ int main() {
         ASSERT_EQ(timed.submit("Map%20One").status, 503);
     } TEST_END();
 
+    TEST_CASE("API1.6b One address cannot use the checking window of the others: after its share (two) it is told busy while another address is still checked; junk that is no map by its version word uses none of the window") {
+        Api t;
+        const core::Result blank = core::blank(31, 31, 485, 10, 10, core::Profile::NewMap);       // (a map that does not pass: it takes a real check)
+        ASSERT_EQ(blank.status, 0);
+        ASSERT_EQ(t.submit("Bad%20One", "203.0.113.1", "", blank.payload).status, 422);
+        ASSERT_EQ(t.submit("Bad%20Two", "203.0.113.1", "", blank.payload).status, 422);
+        const HttpResponse third = t.submit("Bad%20Three", "203.0.113.1", "", blank.payload);
+        ASSERT_TRUE(third.status == 503 && parse_text(third.body).get("error").str() == "busy");
+        ASSERT_EQ(t.submit("Good%20Map", "203.0.113.2").status, 201);                           // (the window of the others is whole)
+        Api flood;
+        for (int i = 0; i < 30; ++i) {
+            const HttpResponse junk = flood.submit("Junk%20" + std::to_string(i), "198.51.100." + std::to_string(i + 1), "", std::string("\x01\x00\x00\x00junk", 8));
+            ASSERT_TRUE(junk.status == 400 && parse_text(junk.body).get("error").str() == "not_a_map");
+        }
+        ASSERT_EQ(flood.submit("Good%20Map", "203.0.113.2").status, 201);                       // (thirty junk files from thirty addresses did not make the server busy)
+    } TEST_END();
+
     TEST_CASE("API2.1 The owner's cookie: the one the helper makes is the owner; a signed cookie of another person is a visitor who signed in, and shown as such; everything else is nobody") {
         Api t;
         ctl::JsonValue m = t.me("");
@@ -400,6 +417,8 @@ int main() {
         ASSERT_EQ(t.call(t.req("GET", picture, "", {{"cookie", t.cookie("999")}})).body, nothing.body);
         ASSERT_EQ(t.call(t.req("GET", picture)).status, 404);
         ASSERT_EQ(t.call(t.req("GET", picture, "", {{"cookie", t.cookie()}})).status, 200);
+        ASSERT_EQ(t.call(t.req("GET", "/admin/api", "", {{"cookie", t.cookie()}})).body, nothing.body);        // ("/admin/api" itself, 10 characters: no route, and no exception for the owner)
+        ASSERT_EQ(t.call(t.req("GET", "/admin/api/", "", {{"cookie", t.cookie()}})).status, 404);
     } TEST_END();
 
     TEST_CASE("API2.3 A change by the owner needs the CSRF token of that very session, a same-origin request, the JSON type and a JSON object; a read does not come from another site") {

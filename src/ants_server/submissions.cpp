@@ -30,6 +30,7 @@ constexpr size_t kClassicUploadBytes = 512u * 1024u;               // LevelLimit
 constexpr size_t kExtendedUploadBytes = 4u * 1024u * 1024u;        // LevelLimits::for_extended_maps()
 constexpr size_t kListLimit = 500;                                 // rows of one list of the owner page
 constexpr size_t kMaxFindingsKept = 20;
+constexpr size_t kMaxFindingChars = 240;           // one finding's message at most (a map full of hills would name every one of them: the answer stays small)
 constexpr int64_t kDay = 86400;
 
 const char* const kColumns =
@@ -86,6 +87,14 @@ Submission read_row(db::Statement& st) {
     return s;
 }
 
+// A message cut to kMaxFindingChars bytes, never inside a UTF-8 sequence, with "..." at the cut
+std::string shortened(const std::string& text) {
+    if (text.size() <= kMaxFindingChars) return text;
+    size_t cut = kMaxFindingChars - 3;
+    while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;
+    return text.substr(0, cut) + "...";
+}
+
 // The warnings of a check, as the owner's page shows them (the notes are not kept)
 JsonValue kept_findings(const JsonValue& report) {
     JsonValue out = JsonValue::make_array();
@@ -95,7 +104,7 @@ JsonValue kept_findings(const JsonValue& report) {
         if (f.get("severity").str() == "note") continue;
         JsonValue o = JsonValue::make_object();
         o.set("severity", JsonValue::make_string(f.get("severity").str()));
-        o.set("message", JsonValue::make_string(f.get("message").str()));
+        o.set("message", JsonValue::make_string(shortened(f.get("message").str())));
         out.push_back(std::move(o));
     }
     return out;
@@ -158,6 +167,7 @@ bool SubmissionStore::open(int64_t now, std::string& why) {
         salt_ = fresh;
     }
     open_ = true;
+    remove_orphans();
     approved_changed_ = true;
     maintenance(now);
     return true;
@@ -276,13 +286,14 @@ SubmitOutcome SubmissionStore::submit(const SubmitInput& in, int64_t now) {
     const fs::space_info space = fs::space(fs::path(config_.dir), ec);
     if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return refuse(503, "storage_full", "The server has no room for more maps right now. Please try again later.");
 
-    if (in.allow_check && !in.allow_check()) return refuse(503, "busy", "The server is busy checking other maps. Please try again in a minute.");
-
-    // the check: the real one, whatever the sender says. The kind comes from the version word of the file.
+    // the cheap refusals first (they cost no checking, so they use none of the checking window that every other sender shares): the kind comes from the version word of the file
     const uint32_t version = version_word(in.bytes);
     if (version != 8 && version != 9) return refuse(400, "not_a_map", "This file is not an Ants map.");
     const std::string real_kind = version == 9 ? "extended" : "classic";
     if (real_kind != in.kind) return refuse(400, "kind_mismatch", "The file is not the kind of map that the request says.");
+    if (in.allow_check && !in.allow_check()) return refuse(503, "busy", "The server is busy checking other maps. Please try again in a minute.");
+
+    // the check: the real one, whatever the sender says
     const core::Profile profile = real_kind == "extended" ? core::Profile::Extended : core::Profile::NewMap;
     const auto* data = reinterpret_cast<const uint8_t*>(in.bytes.data());
     const core::Result checked = core::check_map(data, in.bytes.size(), profile);
@@ -550,10 +561,11 @@ bool SubmissionStore::decline(const std::string& id, const std::string& reason, 
         return false;
     }
     db::Statement st;
-    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'declined', owner_message = ?, decided_at = ? WHERE id = ? AND state = 'waiting'").ok() || !st.bind_text(1, text.text).ok() || !st.bind_int64(2, now).ok() ||
+    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'declined', owner_message = ?, decided_at = ?, file_kept = 0 WHERE id = ? AND state = 'waiting'").ok() || !st.bind_text(1, text.text).ok() || !st.bind_int64(2, now).ok() ||
         !st.bind_text(3, id).ok() || st.step() != db::Statement::Step::Done) {
         return database_failed(why, "a write");
     }
+    remove_quietly(path_of(config_, out.file));                // (a declined map is never shown again: its file does not use the kept budget for 30 days)
     audit(now, actor_id, actor_name, "decline", id, "");
     return fetch_one("id", id, out) || database_failed(why, "a read");
 }
@@ -653,6 +665,22 @@ bool SubmissionStore::take_approved_changed() {
     const bool changed = approved_changed_;
     approved_changed_ = false;
     return changed;
+}
+
+void SubmissionStore::remove_orphans() {
+    std::error_code ec;
+    size_t removed = 0;
+    for (fs::directory_iterator it(fs::path(config_.dir) / "files", ec), end; !ec && it != end; it.increment(ec)) {
+        const std::string name = it->path().filename().string();
+        bool ours = name.size() == 36 && name.compare(32, 4, ".lvl") == 0;                 // (only a name this server makes: 32 hex digits and .lvl)
+        for (size_t i = 0; ours && i < 32; ++i) ours = (name[i] >= '0' && name[i] <= '9') || (name[i] >= 'a' && name[i] <= 'f');
+        if (!ours) continue;
+        if (scalar("SELECT COUNT(*) FROM map_submissions WHERE file = ? AND file_kept = 1", {name}) == 0) {          // (a read that fails is -1: nothing is deleted on a doubt)
+            remove_quietly(it->path().string());
+            ++removed;
+        }
+    }
+    if (removed > 0) notices_.push_back("submissions: " + std::to_string(removed) + " file(s) that no submission owned were deleted at the start");
 }
 
 void SubmissionStore::maintenance(int64_t now) {

@@ -151,10 +151,11 @@ int main() {
         for (const char* bad : {"a/b", "a\\b", "..", "../x", "a/../b", "x..y", "a:b", "a*b", "a?b", "a\"b", "a<b", "a>b", "a|b", ".hidden", "name.", "-- --", "!! !", "<script>", "a%2Fb", "a;b", "a=b", "a#b", "a$b", "a~b", "a+b", "a@b", "a[b]", "a{b}", "a^b", "a`b"}) {
             ASSERT_TRUE(!clean(bad).ok);
         }
-        for (const char* reserved : {"CON", "con", "Prn", "AUX", "nul", "COM1", "com9", "LPT1", "lpt9", "CON.txt", "nul.x", "con ", "Clock$"}) {
+        for (const char* reserved : {"CON", "con", "Prn", "AUX", "nul", "COM0", "com0", "LPT0", "COM1", "com9", "LPT1", "lpt9", "CON.txt", "nul.x", "con ", "Clock$"}) {
             ASSERT_TRUE(!clean(reserved).ok);
         }
-        ASSERT_TRUE(clean("COM0").ok && clean("Console").ok && clean("Communal").ok);               // (only the devices' own names)
+        ASSERT_TRUE(!clean("COM0").ok && !clean("lpt0").ok);                                       // (COM0 and LPT0 are refused too)
+        ASSERT_TRUE(clean("Console").ok && clean("Communal").ok);               // (only the devices' own names)
     } TEST_END();
 
     TEST_CASE("NM2.3 Every name that is kept is a safe file name in the game's protocol, with nothing a path or a shell could use") {

@@ -4,7 +4,7 @@
 # It is configured by its environment only (docker-compose.stack.yml lists the variables) and listens on 4040 inside the network of the stack; the site's nginx passes /admin/login, /admin/callback
 # and /admin/logout to it. It keeps nothing: no file, no database.
 # =============================================================================
-FROM python:3.12-alpine
+FROM python:3.12.7-alpine3.20
 RUN adduser -S -H -s /sbin/nologin ants
 COPY tools/admin_login.py /app/admin_login.py
 USER ants

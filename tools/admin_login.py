@@ -37,6 +37,7 @@ STATE_COOKIE = "ants_admin_state"
 SESSION_COOKIE = "ants_admin"
 STATE_SECONDS = 600
 TIMEOUT_SECONDS = 10
+SOCKET_SECONDS = 15
 MAX_NAME_CHARS = 64
 USER_AGENT = "AntsAdminLogin/1 (+https://github.com/dchadd427/ants-cross-platform)"
 
@@ -151,6 +152,7 @@ def make_handler(cfg):
         server_version = "ants-admin-login"
         sys_version = ""
         protocol_version = "HTTP/1.0"
+        timeout = SOCKET_SECONDS            # (a client that sends nothing is let go: it does not keep a thread for ever)
 
         def log_message(self, *args):       # (the default line holds the address and the query, which holds the code: nothing is logged)
             pass
@@ -177,8 +179,7 @@ def make_handler(cfg):
             url = urllib.parse.urlsplit(self.path)
             if url.path == "/admin/login":
                 state = b64url(secrets.token_bytes(32))
-                query = urllib.parse.urlencode({"client_id": cfg["client_id"], "response_type": "code", "redirect_uri": cfg["redirect_uri"], "scope": "identify", "state": state,
-                                                "prompt": "none"})
+                query = urllib.parse.urlencode({"client_id": cfg["client_id"], "response_type": "code", "redirect_uri": cfg["redirect_uri"], "scope": "identify", "state": state})
                 self.redirect(cfg["authorize"] + "?" + query, [("Set-Cookie", cookie_header(STATE_COOKIE, state, cfg, STATE_SECONDS))])
             elif url.path == "/admin/callback":
                 args = urllib.parse.parse_qs(url.query, keep_blank_values=True)
@@ -214,14 +215,20 @@ def make_off_handler():
         server_version = "ants-admin-login"
         sys_version = ""
         protocol_version = "HTTP/1.0"
+        timeout = SOCKET_SECONDS
 
         def log_message(self, *args):
             pass
 
         def answer(self):
-            body = b'{"error":"admin_login_off"}'
+            if self.command == "GET" and urllib.parse.urlsplit(self.path).path in ("/admin/login", "/admin/callback"):          # (a person's browser: words, not JSON)
+                body = (PAGE % "Signing in is not set up on this site yet.").encode("utf-8")
+                content_type = "text/html; charset=utf-8"
+            else:
+                body = b'{"error":"admin_login_off"}'
+                content_type = "application/json"
             self.send_response(503)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()

@@ -24,6 +24,7 @@ struct SubmissionApiConfig {
     bool trust_client_header{true};          // take the client's address from X-Client-Address (the proxy sets it, and removes one the visitor sent); false: the address of the connection
     size_t attempts_per_hour{20};            // POST /submissions calls for one address and hour, whatever came of them (checking a map costs time)
     size_t checks_per_window{6};             // maps that are checked at the same time window for all addresses together
+    size_t checks_per_address_window{2};     // ... of which one address may use this many (an address that has used them is told busy and costs the others nothing)
     uint32_t check_window_ms{10000};
     uint32_t check_budget_ms{1500};          // the time that checking maps may take in one window: the server's one thread also runs the matches, so a window that has used it up answers 503 busy
 };
@@ -58,7 +59,7 @@ private:
     Session session_of(const ctl::HttpRequest& request, int64_t now_s) const;
     std::string csrf_of(const Session& s) const;
     bool address_allowed(const std::string& identity, int64_t now_s);
-    bool check_window_open(uint32_t now_ms);
+    bool check_window_open(uint32_t now_ms, const std::string& identity);
 
     SubmissionStore& store_;
     SubmissionApiConfig config_;
@@ -66,6 +67,7 @@ private:
     std::map<std::string, std::vector<int64_t>> attempts_;      // address identity -> the seconds of its recent POSTs
     uint32_t window_start_ms_{0};
     size_t window_count_{0};
+    std::map<std::string, size_t> window_by_address_;           // address identity -> the checks it used in this window (at most checks_per_window entries)
     uint32_t window_spent_ms_{0};
     bool window_started_{false};
 };

@@ -120,6 +120,8 @@ public:
     bool take_approved_changed();
     /// Deletes what is old (files of declined maps, rows of declined and withdrawn ones, the day counters); cheap, call it once an hour
     void maintenance(int64_t now);
+    /// At open: deletes the files of the submissions folder that no row owns (a crash between the rename of a file and the commit of its row), and says how many in the notices
+    void remove_orphans();
     /// Lines for the server's log (no address, no token, no text of a person)
     std::vector<std::string> take_notices();
 

@@ -145,13 +145,13 @@
             var host = el('div');
             add(app, header(section.title), add(wrap, host));
             var signed = el('span', 'signed');
-            add(signed, doc.createTextNode('Signed in with Discord as '), el('b', null, me.name), doc.createTextNode(' · '), signOutForm('linkbtn'));
+            add(signed, add(el('span', 'who'), doc.createTextNode('Signed in with Discord as '), el('b', null, me.name), doc.createTextNode(' · ')), signOutForm('linkbtn'));
             section.render(host, signed);
         }
 
         // ---- the section "Maps players sent" ----
         function renderMaps(host, signed) {
-            var st = { tab: 'waiting', data: null, open: null, busy: false, dialog: null };
+            var st = { tab: 'waiting', data: null, open: null, busy: false, dialog: null, focusBack: null };
 
             function load(tab) {
                 st.tab = tab || st.tab;
@@ -168,13 +168,19 @@
             function act(id, action, body, done) {
                 if (st.busy) return;
                 st.busy = true;
+                function release() { st.busy = false; }
                 call('POST', '/admin/api/maps/' + id + '/' + action, body).then(function (r) {
-                    st.busy = false;
-                    if (r.status === 200) { st.dialog = null; load(); return; }
+                    if (r.status === 200) {
+                        st.focusBack = st.dialog ? st.dialog.id : null;
+                        st.dialog = null;
+                        Promise.resolve(load()).then(release, release);          // (the buttons stay locked until the list is drawn again: a late second tap cannot land on the map that moved into the place of this one)
+                        return;
+                    }
+                    release();
                     if (r.status === 404) return start();
                     if (done && done(r)) return;
                     toast(r.json && r.json.message ? r.json.message : 'That did not work. Reload the page.');
-                }, function () { st.busy = false; toast('The server did not answer. Try again.'); });
+                }, function () { release(); toast('The server did not answer. Try again.'); });
             }
 
             function tags(m) {
@@ -281,7 +287,9 @@
                     }));
                     add(acts, button('Decline', 'big bad', function () { st.open = { id: m.id, kind: 'decline' }; draw(); }));
                 } else if (st.tab === 'approved') {
-                    add(acts, button('Take down', 'big bad', function () { st.dialog = m; draw(); }));
+                    var td = button('Take down', 'big bad', function () { st.dialog = m; draw(); });
+                    td.setAttribute('data-take', m.id);
+                    add(acts, td);
                 } else if (st.tab === 'taken_down') {
                     add(acts, button('Put back', 'big', function () { act(m.id, 'put-back', {}); }));
                 }
@@ -308,10 +316,17 @@
                 img.height = 56;
                 add(src, img, info);
                 add(inner, h, src, el('div', 'lead', 'Players will no longer find it. It can be put back later.'));
-                var cancel = button('Cancel', 'ghost', function () { st.dialog = null; draw(); });
+                function closeDialog() { st.focusBack = m.id; st.dialog = null; draw(); }
+                var cancel = button('Cancel', 'ghost', closeDialog);
                 var go = button('Take down', 'bad', function () { act(m.id, 'take-down', {}); });
                 add(dlg, inner, add(el('div', 'dlg-foot'), cancel, go));
-                scrim.addEventListener('keydown', function (e) { if (e.key === 'Escape') { st.dialog = null; draw(); } });
+                scrim.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') { closeDialog(); return; }
+                    if (e.key !== 'Tab') return;                                  // (the focus stays inside the box: Tab from the last button goes to the first, Shift+Tab the other way)
+                    var now = doc.activeElement;
+                    if (!dlg.contains(now) || (e.shiftKey && now === cancel)) { e.preventDefault(); (e.shiftKey ? go : cancel).focus(); }
+                    else if (!e.shiftKey && now === go) { e.preventDefault(); cancel.focus(); }
+                });
                 add(scrim, dlg);
                 return { node: scrim, focus: cancel };
             }
@@ -348,6 +363,10 @@
                     var d = takeDownDialog(st.dialog);
                     add(host, d.node);
                     d.focus.focus();
+                } else if (st.focusBack) {                                       // (the box is gone: the focus goes back to the button that opened it, else to the chosen tab)
+                    var back = host.querySelector('[data-take="' + st.focusBack + '"]') || host.querySelector('.chip.on');
+                    st.focusBack = null;
+                    if (back) back.focus();
                 }
             }
 

@@ -203,15 +203,19 @@ bool SubmissionApi::address_allowed(const std::string& identity, int64_t now_s) 
     return true;
 }
 
-bool SubmissionApi::check_window_open(uint32_t now_ms) {
+bool SubmissionApi::check_window_open(uint32_t now_ms, const std::string& identity) {
     if (!window_started_ || static_cast<uint32_t>(now_ms - window_start_ms_) >= config_.check_window_ms) {
         window_started_ = true;
         window_start_ms_ = now_ms;
         window_count_ = 0;
         window_spent_ms_ = 0;
+        window_by_address_.clear();
     }
+    const auto used = window_by_address_.find(identity);
+    if (used != window_by_address_.end() && used->second >= config_.checks_per_address_window) return false;          // (this address has had its share: it cannot use up the window of the others)
     if (window_count_ >= config_.checks_per_window || window_spent_ms_ >= config_.check_budget_ms) return false;
     ++window_count_;
+    ++window_by_address_[identity];
     return true;
 }
 
@@ -240,7 +244,7 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
     in.bytes = request.body;
     in.address = identity;
     in.token = bearer_of(request);
-    in.allow_check = [this, now_ms]() { return check_window_open(now_ms); };            // (asked only when a map is really going to be checked: a refusal that costs nothing uses none of the window)
+    in.allow_check = [this, now_ms, identity]() { return check_window_open(now_ms, identity); };            // (asked only when a map is really going to be checked, after every refusal that costs nothing: those use none of the window)
     const auto began = std::chrono::steady_clock::now();
     const SubmitOutcome out = store_.submit(in, now_s);
     window_spent_ms_ += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
@@ -351,7 +355,7 @@ HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now
         return json_reply(200, o);
     }
     if (!who.valid || !who.owner) return not_found();                              // (a visitor and a stranger who signed in get what an unknown path gets)
-    if (cross_site(request)) return not_found();
+    if (cross_site(request) || request.path.size() < 11) return not_found();                  // ("/admin/api" itself has no route)
     const std::string tail = request.path.substr(11);
     if (request.method == "GET") {
         Failure why;

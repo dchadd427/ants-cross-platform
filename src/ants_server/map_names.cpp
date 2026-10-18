@@ -52,7 +52,7 @@ bool windows_reserved(const std::string& name) {
     std::string stem = lower_ascii(name.substr(0, name.find('.')));
     while (!stem.empty() && stem.back() == ' ') stem.pop_back();
     if (stem == "con" || stem == "prn" || stem == "aux" || stem == "nul" || stem == "clock$") return true;
-    return stem.size() == 4 && (stem.compare(0, 3, "com") == 0 || stem.compare(0, 3, "lpt") == 0) && stem[3] >= '1' && stem[3] <= '9';
+    return stem.size() == 4 && (stem.compare(0, 3, "com") == 0 || stem.compare(0, 3, "lpt") == 0) && stem[3] >= '0' && stem[3] <= '9';
 }
 
 Cleaned fail(const char* reason) {

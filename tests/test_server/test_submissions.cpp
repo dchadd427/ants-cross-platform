@@ -502,7 +502,7 @@ int main() {
         ASSERT_EQ(rig.store->approved_maps().size(), size_t{1});
         ASSERT_TRUE(rig.store->take_down(b.submission.id, "42", "Dave", rig.now, s, why));
         ASSERT_TRUE(rig.store->approved_maps().empty());                                 // (hidden from the lobby's list ...)
-        ASSERT_EQ(rig.files().size(), size_t{2});                                        // (... and nothing was deleted)
+        ASSERT_EQ(rig.files().size(), size_t{1});                                        // (... and nothing was deleted)
         ASSERT_FALSE(rig.store->take_down(b.submission.id, "42", "Dave", rig.now, s, why));
         ASSERT_TRUE(rig.store->put_back(b.submission.id, "42", "Dave", rig.now, s, why) && s.state == "approved");
         ASSERT_EQ(rig.store->approved_maps().size(), size_t{1});
@@ -545,7 +545,7 @@ int main() {
             if (m.get("file").str() == "Fresh Classic.lvl") {
                 ASSERT_TRUE(m.get("maker").str() == "Mia" && m.get("kind").str() == "classic" && m.get("thumb").str() == "/maps/previews/Fresh%20Classic.png");
             }
-            if (m.get("file").str() == "Fresh Extended.lvl") ASSERT_EQ(m.get("kind").str(), std::string("extended"));
+            if (m.get("file").str() == "Fresh Extended.lvl") ASSERT_TRUE(m.get("kind").str() == "extended" && !m.has("thumb"));        // (the picture route serves Classic maps only: no thumb that always 404s)
         }
         MapEntry entry;
         ASSERT_TRUE(store.find("Fresh Classic.lvl", entry));
@@ -620,6 +620,11 @@ int main() {
         Failure why;
         ASSERT_TRUE(rig.store->decline(a.submission.id, "No", "42", "Dave", rig.now, s, why));
         ASSERT_TRUE(rig.approve(b.submission.id));
+        ASSERT_EQ(rig.files().size(), size_t{2});                                       // (a declined map's file went at once)
+        {                                                                               // (the file of a declined map that an older server kept: it goes after 30 days)
+            std::ofstream(fs::path(rig.config.dir) / "files" / (a.submission.id + ".lvl"), std::ios::binary) << tiny();
+            rig.database.exec("UPDATE map_submissions SET file_kept = 1 WHERE id = '" + a.submission.id + "'");
+        }
         rig.store->maintenance(rig.now + 29 * 86400);
         ASSERT_EQ(rig.files().size(), size_t{3});
         rig.store->maintenance(rig.now + 31 * 86400);
@@ -631,6 +636,98 @@ int main() {
         ASSERT_EQ(rig.text("SELECT COUNT(*) FROM map_submissions"), std::string("2"));
         ASSERT_EQ(rig.text("SELECT COUNT(*) FROM map_submissions WHERE id = '" + b.submission.id + "' OR id = '" + c.submission.id + "'"), std::string("2"));
         ASSERT_EQ(rig.text("SELECT COUNT(*) FROM submission_limits"), std::string("0"));
+    } TEST_END();
+
+    TEST_CASE("SUB1.4c A refusal that costs no checking (not a map by its version word, the other kind) never asks for the shared checking window; only a map that is going to be checked does") {
+        Sub rig;
+        int asked = 0;
+        const auto count = [&] { ++asked; return true; };
+        for (int i = 0; i < 10; ++i) {
+            SubmitInput junk = rig.input(std::string("\x01\x00\x00\x00junk", 8), "Junk " + std::to_string(i));
+            junk.allow_check = count;
+            const SubmitOutcome o = rig.store->submit(junk, rig.now);
+            ASSERT_TRUE(!o.ok && o.fail.code == "not_a_map");
+        }
+        SubmitInput wrong = rig.input(extended_tiny(), "Wrong Kind");                    // (an Extended file said to be Classic)
+        wrong.allow_check = count;
+        ASSERT_TRUE(!rig.store->submit(wrong, rig.now).ok);
+        ASSERT_EQ(asked, 0);
+        SubmitInput busy = rig.input(tiny(), "Busy Server");
+        busy.allow_check = [&] { ++asked; return false; };
+        const SubmitOutcome o = rig.store->submit(busy, rig.now);
+        ASSERT_TRUE(!o.ok && o.fail.status == 503 && o.fail.code == "busy");
+        ASSERT_EQ(asked, 1);
+        SubmitInput fine = rig.input(tiny(), "Fine Map");
+        fine.allow_check = count;
+        ASSERT_TRUE(rig.store->submit(fine, rig.now).ok);
+        ASSERT_EQ(asked, 2);
+    } TEST_END();
+
+    TEST_CASE("SUB4.3 A declined map's file is deleted at once and stops using the kept budget; a taken-down map keeps its file (it can be put back)") {
+        const size_t size = tiny().size();
+        Sub tight([&](SubmissionConfig& c) { c.max_kept_bytes = size * 2 + 100; c.per_address_per_day = 100; c.per_day_total = 1000; c.max_waiting = 100; });
+        const SubmitOutcome a = tight.send("Kept One");
+        const SubmitOutcome b = tight.send("Kept Two");
+        ASSERT_TRUE(a.ok && b.ok);
+        const SubmitOutcome full = tight.send("Kept Three");
+        ASSERT_TRUE(!full.ok && full.fail.code == "storage_full");
+        Submission s;
+        Failure why;
+        ASSERT_TRUE(tight.store->decline(a.submission.id, "No", "42", "Dave", tight.now, s, why));
+        ASSERT_EQ(tight.files().size(), size_t{1});
+        ASSERT_EQ(tight.text("SELECT file_kept FROM map_submissions WHERE id = '" + a.submission.id + "'"), std::string("0"));
+        ASSERT_TRUE(tight.send("Kept Three").ok);                                       // (the declined map's bytes are free again)
+        ASSERT_TRUE(tight.approve(b.submission.id));
+        ASSERT_TRUE(tight.store->take_down(b.submission.id, "42", "Dave", tight.now, s, why));
+        ASSERT_EQ(tight.files().size(), size_t{2});
+        ASSERT_TRUE(tight.store->put_back(b.submission.id, "42", "Dave", tight.now, s, why));
+        ASSERT_FALSE(tight.store->preview_png(b.submission.id).empty());
+    } TEST_END();
+
+    TEST_CASE("SUB4.4 A finding's message is cut short (a map with thousands of hills would name every one): the answer to the sender stays small and the text ends in ...") {
+        Sub rig;
+        const std::string small = extended_tiny();
+        assets::LevelData t;
+        ASSERT_TRUE(assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(small.data()), small.size(), t, nullptr, assets::LevelLimits::for_extended_maps()));
+        for (size_t i = 0; i < t.layer2_interactive.size(); ++i) {
+            t.layer2_interactive[i].tile_index = 248;                                   // (the hill of the first team ...)
+            t.layer2_interactive[i].flags = 1;                                          // (... and every cell an entrance)
+        }
+        const assets::LevelWriteResult w = assets::write_level(t, assets::LevelLimits::for_extended_maps());
+        ASSERT_TRUE(w.ok);
+        SubmitInput in = rig.input(std::string(w.bytes.begin(), w.bytes.end()), "Hills Everywhere");
+        in.kind = "extended";
+        const SubmitOutcome o = rig.store->submit(in, rig.now);
+        ASSERT_TRUE(!o.ok && o.fail.status == 422);
+        const ctl::JsonValue& findings = o.fail.extra.get("findings");
+        ASSERT_TRUE(findings.size() >= 1 && findings.size() <= 20);
+        bool cut = false;
+        for (size_t i = 0; i < findings.size(); ++i) {
+            const std::string m = findings.at(i).get("message").str();
+            ASSERT_TRUE(m.size() <= 240);
+            if (m.size() > 200 && m.compare(m.size() - 3, 3, "...") == 0) cut = true;
+        }
+        ASSERT_TRUE(cut);
+    } TEST_END();
+
+    TEST_CASE("SUB7.2 At open, a file that no row owns (a crash between the rename and the commit) is deleted and counted; a file that a row owns, a temporary file and a name the server does not make are left alone") {
+        Sub rig;
+        const SubmitOutcome a = rig.send("Owned Map");
+        ASSERT_TRUE(a.ok);
+        const fs::path dir = fs::path(rig.config.dir) / "files";
+        const std::string orphan = std::string(32, 'a') + ".lvl";
+        const std::string stranger = "notes.txt";
+        std::ofstream(dir / orphan, std::ios::binary) << tiny();
+        std::ofstream(dir / stranger, std::ios::binary) << "keep me";
+        std::ofstream(dir / ("." "tmp-" + std::string(32, 'b')), std::ios::binary) << "half";
+        SubmissionStore again(rig.database, rig.config, [](const std::string& key) { return library().library_has_name(key); });
+        std::string why;
+        ASSERT_TRUE(again.open(rig.now, why));
+        const std::vector<std::string> left = rig.files();
+        ASSERT_EQ(left.size(), size_t{2});
+        ASSERT_TRUE(fs::exists(dir / (a.submission.id + ".lvl")) && fs::exists(dir / stranger) && !fs::exists(dir / orphan));
+        const std::vector<std::string> notices = again.take_notices();
+        ASSERT_TRUE(notices.size() == 1 && notices[0].find("1 file") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("SUB8.1 A database that fails is a clean 503 with nothing half done: no file stays, the server does not stop") {

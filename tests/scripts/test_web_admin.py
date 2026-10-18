@@ -44,20 +44,23 @@ class ThePagesOwnCode(unittest.TestCase):
             "a text becomes markup": ("if (text !== undefined && text !== null) n.textContent = text;", "if (text !== undefined && text !== null) n.innerHTML = text;"),
             "a stranger gets the owner's page": ("if (!me.owner) return showNotOwner();\n                return showShell();", "return showShell();"),
             "a page that is off says who is signed in": ("return me ? showLogon() : showNotOwner();", "return showLogon();"),
-            "Take down asks no question": ("add(acts, button('Take down', 'big bad', function () { st.dialog = m; draw(); }));", "add(acts, button('Take down', 'big bad', function () { act(m.id, 'take-down', {}); }));"),
+            "Take down asks no question": ("var td = button('Take down', 'big bad', function () { st.dialog = m; draw(); });", "var td = button('Take down', 'big bad', function () { act(m.id, 'take-down', {}); });"),
             "Decline needs no reason": ("if (!area.value.replace(/\\s+/g, '')) { why.textContent = 'Please write a short reason.'; why.hidden = false; area.className = 'err'; return; }", ""),
             "Use next name asks for the wrong name": ("'/admin/api/next-name?name=' + encodeURIComponent(input.value)", "'/admin/api/next-name?name=' + encodeURIComponent(m.name)"),
             "Save sends no name": ("act(m.id, 'approve', { name: input.value }, function (r) {", "act(m.id, 'approve', {}, function (r) {"),
             "a taken name does not open the box": ("if (res.json && res.json.error === 'name_taken') { st.open = { id: m.id, kind: 'rename', suggestion: res.json.suggestion || '' }; m.name_taken = true; draw(); return true; }", ""),
             "the times are not Pacific": ("var TIME_ZONE = 'America/Los_Angeles';", "var TIME_ZONE = 'UTC';"),
             "yesterday is two days": ("if (days === 1) return 'yesterday';", "if (days === 2) return 'yesterday';"),
-            "Escape does not close the question": ("if (e.key === 'Escape') { st.dialog = null; draw(); }", ""),
+            "Escape does not close the question": ("if (e.key === 'Escape') { closeDialog(); return; }", ""),
+            "the focus is not held in the question": ("else if (!e.shiftKey && now === go) { e.preventDefault(); cancel.focus(); }", ""),
+            "the focus is lost when the question closes": ("if (back) back.focus();", ""),
+            "the buttons unlock before the list is drawn": ("Promise.resolve(load()).then(release, release);", "load(); release();"),
             "Put back sends the wrong call": ("act(m.id, 'put-back', {})", "act(m.id, 'take-down', {})"),
             "an approved map shows the maker's first name": ("return m.state === 'approved' || m.state === 'taken_down' ? m.approved_name : m.name;", "return m.name;"),
             "the empty Approved tab has no way to the waiting maps": ("if (st.tab === 'approved' && counts.waiting > 0)", "if (false)"),
             "an expired session is not noticed": ("if (r.status === 404) return start();\n                    if (done && done(r)) return;", "if (done && done(r)) return;"),
             "a list that fails shows nothing and says nothing": ("if (r.status !== 200) { toast('The list could not be loaded. Reload the page.'); return null; }", "if (r.status !== 200) { st.data = { counts: {}, maps: [] }; draw(); return null; }"),
-            "the list is not asked again after a change": ("if (r.status === 200) { st.dialog = null; load(); return; }", "if (r.status === 200) { st.dialog = null; return; }"),
+            "the list is not asked again after a change": ("Promise.resolve(load()).then(release, release);", "release();"),
             "a link leads out of the owner's page": ("add(app, header(section.title), add(wrap, host));", "add(app, header(section.title), add(wrap, host), el('a'));"),
             "the sign-out is a link, not a post": ("f.method = 'post';", "f.method = 'get';"),
             "the textarea has no limit": ("area.maxLength = 200;", ""),
@@ -99,6 +102,11 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         self.assertNotRegex(page, r"<script>|<style|onclick|onload|javascript:")
         css = read("web", "admin.css")
         self.assertNotRegex(css, r"url\(|@import")
+        for rule in re.findall(r"\.adm \.(?:chip|linkbtn) \{[^}]*\}", css):                   # (a finger: the tabs and the sign-out are 44 px tall at least, on a phone too)
+            self.assertRegex(rule, r"min-height: (4[4-9]|[5-9][0-9])px", rule)
+        self.assertEqual(len(re.findall(r"\.adm \.(?:chip|linkbtn) \{", css)), 3)           # (chip twice: wide and phone; the sign-out once)
+        self.assertNotRegex(css, r"\.adm \.signed \{ display: none")
+        self.assertIn(".adm .signed .who { display: none; }", css)               # (on a phone the words go, the small Sign out stays)
         script = read("web", "admin_page.js")
         self.assertEqual(sorted(set(re.findall(r"""['"](/[A-Za-z][^'"\s]*)""", script))), ["/admin/api/maps/", "/admin/api/maps?state=", "/admin/api/me", "/admin/api/next-name?name=", "/admin/login", "/admin/logout", "/front/logo.png", "/picture"])
         self.assertNotRegex(script, r"https?://")

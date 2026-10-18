@@ -195,6 +195,13 @@ class TheStart(unittest.TestCase):
 
 
 class TheSettings(unittest.TestCase):
+    def test_the_logon_does_not_ask_discord_to_skip_the_screen_and_a_silent_client_is_let_go(self):
+        module = load_module()
+        cfg = module.load_config({"ANTS_DISCORD_CLIENT_ID": CLIENT_ID, "ANTS_DISCORD_CLIENT_SECRET": "s", "ANTS_ADMIN_SESSION_SECRET": SECRET, "ANTS_PUBLIC_URL": "https://example.test"})
+        self.assertEqual(module.make_handler(cfg).timeout, module.SOCKET_SECONDS)
+        self.assertEqual(module.make_off_handler().timeout, module.SOCKET_SECONDS)
+        self.assertTrue(0 < module.SOCKET_SECONDS <= 30)
+
     def test_a_missing_or_wrong_setting_is_said_in_one_sentence(self):
         module = load_module()
         good = {"ANTS_DISCORD_CLIENT_ID": CLIENT_ID, "ANTS_DISCORD_CLIENT_SECRET": "s", "ANTS_ADMIN_SESSION_SECRET": SECRET, "ANTS_PUBLIC_URL": "https://example.test"}
@@ -221,7 +228,10 @@ class TheSettings(unittest.TestCase):
         try:
             for method, path in (("GET", "/admin/login"), ("GET", "/admin/callback?code=x&state=y"), ("POST", "/admin/logout"), ("GET", "/other")):
                 status, headers, body, cookies = ask(port, method, path, body="" if method == "POST" else None)
-                self.assertEqual((status, json.loads(body)["error"], cookies), (503, "admin_login_off", []), path)
+                if path.startswith(("/admin/login", "/admin/callback")):                 # (a person's browser gets words, not JSON)
+                    self.assertTrue(status == 503 and "text/html" in headers["content-type"] and "not set up" in body.decode() and b"admin_login_off" not in body and cookies == [], path)
+                else:
+                    self.assertEqual((status, json.loads(body)["error"], cookies), (503, "admin_login_off", []), path)
             self.assertIsNone(proc.poll())
         finally:
             _, err = stop_helper(proc)
@@ -251,6 +261,7 @@ class TheLogon(unittest.TestCase):
         self.assertTrue(headers["location"].startswith("http://127.0.0.1:%d/authorize?" % self.discord.port))
         self.assertEqual(args["client_id"], [CLIENT_ID])
         self.assertEqual(args["response_type"], ["code"])
+        self.assertNotIn("prompt", args)                                                       # (prompt=none would make a first logon fail: Discord must be free to ask)
         self.assertEqual(args["scope"], ["identify"])                                                   # (nothing more is asked of Discord)
         self.assertEqual(args["redirect_uri"], ["https://example.test/admin/callback"])
         self.assertTrue(re.fullmatch(r"[A-Za-z0-9_-]{43}", args["state"][0]))

@@ -410,8 +410,8 @@
   {
    "id": "other_site_may_read",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (cross_site(request)) return not_found();\n    const std::string tail",
-   "new": "    const std::string tail"
+   "old": "    if (cross_site(request) || request.path.size() < 11) return not_found();",
+   "new": "    if (request.path.size() < 11) return not_found();"
   },
   {
    "id": "a_stranger_is_told_no",
@@ -568,6 +568,66 @@
    "file": "src/ants_server/map_preview.cpp",
    "old": "put32(out, ~crc32_of(reinterpret_cast<const unsigned char*>(body.data()), body.size()));",
    "new": "put32(out, crc32_of(reinterpret_cast<const unsigned char*>(body.data()), body.size()));"
+  },
+  {
+   "id": "cheap_refusals_after_the_window",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    const uint32_t version = version_word(in.bytes);\n    if (version != 8 && version != 9) return refuse(400, \"not_a_map\", \"This file is not an Ants map.\");\n    const std::string real_kind = version == 9 ? \"extended\" : \"classic\";\n    if (real_kind != in.kind) return refuse(400, \"kind_mismatch\", \"The file is not the kind of map that the request says.\");\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n",
+   "new": "    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n    const uint32_t version = version_word(in.bytes);\n    if (version != 8 && version != 9) return refuse(400, \"not_a_map\", \"This file is not an Ants map.\");\n    const std::string real_kind = version == 9 ? \"extended\" : \"classic\";\n    if (real_kind != in.kind) return refuse(400, \"kind_mismatch\", \"The file is not the kind of map that the request says.\");\n"
+  },
+  {
+   "id": "one_address_uses_the_whole_window",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (used != window_by_address_.end() && used->second >= config_.checks_per_address_window) return false;",
+   "new": "    if (false && used != window_by_address_.end() && used->second >= config_.checks_per_address_window) return false;"
+  },
+  {
+   "id": "decline_keeps_the_file",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    remove_quietly(path_of(config_, out.file));                // (a declined map",
+   "new": "    // remove_quietly(path_of(config_, out.file));                // (a declined map"
+  },
+  {
+   "id": "decline_counts_the_file_still",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "SET state = 'declined', owner_message = ?, decided_at = ?, file_kept = 0 WHERE id = ? AND state = 'waiting'",
+   "new": "SET state = 'declined', owner_message = ?, decided_at = ? WHERE id = ? AND state = 'waiting'"
+  },
+  {
+   "id": "finding_message_not_shortened",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "JsonValue::make_string(shortened(f.get(\"message\").str()))",
+   "new": "JsonValue::make_string(f.get(\"message\").str())"
+  },
+  {
+   "id": "admin_api_short_path_throws",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (cross_site(request) || request.path.size() < 11) return not_found();",
+   "new": "    if (cross_site(request)) return not_found();"
+  },
+  {
+   "id": "extended_thumb_that_404s",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "        if (a.kind != \"extended\") m.thumb =",
+   "new": "        m.thumb ="
+  },
+  {
+   "id": "orphans_stay",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "            remove_quietly(it->path().string());\n            ++removed;",
+   "new": "            ++removed;"
+  },
+  {
+   "id": "owned_files_are_orphans",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "AND file_kept = 1\", {name}) == 0) {",
+   "new": "AND file_kept = 1\", {name}) >= 0) {"
+  },
+  {
+   "id": "com0_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "stem[3] >= '0' && stem[3] <= '9';",
+   "new": "stem[3] >= '1' && stem[3] <= '9';"
   }
  ]
 }

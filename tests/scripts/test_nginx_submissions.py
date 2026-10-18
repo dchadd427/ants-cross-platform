@@ -178,6 +178,22 @@ class TheText(unittest.TestCase):
         # (a regular-expression location would win over a prefix one only without ^~; the extension rule of scripts and styles must not answer for /admin.js either: /admin_page.js is a file of the page)
         self.assertNotRegex(CONF, r"location\s+~\*?\s+[^\n]*admin")
 
+    def test_the_hardening_of_the_owner_paths(self):
+        admin = block_of(CONF, "location = /admin ")
+        self.assertIn('add_header Permissions-Policy "camera=(), microphone=(), geolocation=()', admin)
+        self.assertIn("access_log off;", block_of(CONF, "location = /admin/callback "))                  # (the address holds Discord's one-time code)
+        api = block_of(CONF, "location ^~ /admin/api/ ")
+        self.assertIn("proxy_pass http://$ants_submit$uri$is_args$args;", api)                            # (the normalized path goes on, never the raw request line)
+        self.assertRegex(api, r'if \(\$uri !~ "\^/admin/api/\[A-Za-z0-9/_-\]\{0,120\}\\z"\) \{ return 404; \}')
+        for header in ("location = /admin/login ", "location = /admin/callback "):
+            self.assertIn("error_page 502 504 = @login_off;", block_of(CONF, header))                   # (a person's browser gets words, not JSON)
+        self.assertRegex(open(os.path.join(REPO, "Dockerfile.login"), encoding="utf-8").read(), r"(?m)^FROM python:3\.\d+\.\d+-alpine3\.\d+$")          # (a fixed tag, like the other images)
+        # the size of a map is decided from the raw query exactly as the game server reads it, and the small limit is the Classic one
+        head = CONF[:CONF.index("server {")]
+        self.assertIn("map $args $submit_extended", head)
+        self.assertNotIn("$arg_kind", head)
+        self.assertIn("52428[0-8]", head)
+
     def test_the_zones_are_outside_the_server_and_sized_for_the_whole_site(self):
         head = CONF[:CONF.index("server {")]
         for zone, rate in (("ants_submit_post", "10r/m"), ("ants_submit_read", "10r/s"), ("ants_admin_api", "20r/s"), ("ants_admin_login", "6r/m")):
@@ -321,17 +337,39 @@ class TheBlocksRun(unittest.TestCase):
     def test_the_size_of_a_map_is_held_before_the_game_server_is_asked(self):
         rig = self.rig
         before = self.count(rig.door)
-        self.assertEqual(rig.ask_head_only("POST", "/submissions?kind=classic&name=Abc&maker=Mia", 1000000), 413)         # (a Classic map is far below a million bytes)
+        self.assertEqual(rig.ask_head_only("POST", "/submissions?kind=classic&name=Abc&maker=Mia", 524289), 413)          # (a Classic map is 512 KB at most: one byte more is turned away here)
+        self.assertEqual(rig.ask_head_only("POST", "/submissions?kind=classic&name=Abc&maker=Mia", 1000000), 413)
+        for same_as_none in ("KIND=extended", "Kind=extended", "kind=Extended", "kind=extended%20", "kind=classic&kind=extended", "xkind=extended", "name=kind=extended", "kind=extendedx"):          # (only the exact kind the server reads gets 4 MiB)
+            self.assertEqual(rig.ask_head_only("POST", "/submissions?" + same_as_none + "&name=Abc", 600000), 413, same_as_none)
+        self.assertEqual(rig.ask_head_only("POST", "/submissions?name=Abc&kind=extended", 4 * 1024 * 1024 + 1), 413)
         self.assertEqual(rig.ask_head_only("POST", "/submissions?name=Abc&maker=Mia", 2000000), 413)                      # (no kind: the Classic limit)
         self.assertEqual(rig.ask_head_only("POST", "/submissions?kind=huge&name=Abc", 2000000), 413)
         self.assertEqual(rig.ask_head_only("POST", "/submissions?kind=extended&name=Abc&maker=Mia", 4 * 1024 * 1024 + 1), 413)
         self.assertEqual(rig.ask_head_only("POST", "/submissions?kind=extended&name=Abc&maker=Mia", 10 * 1024 * 1024), 413)
         self.assertEqual(self.count(rig.door), before)
-        self.assertEqual(rig.ask("POST", "/submissions?kind=classic&name=Abc&maker=Mia", {"Content-Type": "application/octet-stream"}, b"c" * 999999)[0], 201)
-        self.assertEqual(self.last(rig.door)[3], 999999)
+        self.assertEqual(rig.ask("POST", "/submissions?kind=classic&name=Abc&maker=Mia", {"Content-Type": "application/octet-stream"}, b"c" * 524288)[0], 201)
+        self.assertEqual(self.last(rig.door)[3], 524288)
+        self.assertEqual(rig.ask("POST", "/submissions?kind=extended&name=Abc&maker=Mia", {"Content-Type": "application/octet-stream"}, b"e" * 600000)[0], 201)       # (the same size is fine as Extended)
+        self.assertEqual(rig.ask("POST", "/submissions?name=Abc&kind=extended", {"Content-Type": "application/octet-stream"}, b"e" * 600000)[0], 201)
         self.assertEqual(rig.ask("POST", "/submissions?kind=extended&name=Abc&maker=Mia", {"Content-Type": "application/octet-stream"}, b"e" * (3 * 1024 * 1024))[0], 201)
         self.assertEqual(self.last(rig.door)[3], 3 * 1024 * 1024)
         self.assertEqual(rig.ask("POST", "/submissions?kind=extended&name=Abc&maker=Mia", {"Content-Type": "application/octet-stream"}, b"e" * (4 * 1024 * 1024))[0], 201)
+
+    def test_the_owner_api_gets_the_normalized_path_and_only_plain_characters_pass(self):
+        rig = self.rig
+        before = self.count(rig.door)
+        for target in ("/admin/api/maps/%41%42/approve", "/admin/api/./maps", "/admin/api/maps//x"):          # (decoded and cleaned up by nginx: the game server sees the clean path)
+            self.assertIn(rig.ask("GET", target)[0], (200, 404), target)
+        method, path, seen, length = self.last(rig.door)
+        self.assertEqual(path, "/admin/api/maps/x")                                                       # (the last of them: "//" is one "/")
+        rig.ask("GET", "/admin/api/maps/%41%42/approve")
+        self.assertEqual(self.last(rig.door)[1], "/admin/api/maps/AB/approve")
+        after = self.count(rig.door)
+        for target in ("/admin/api/a%20b", "/admin/api/a%0d%0ab", "/admin/api/a%00b", "/admin/api/a.b", "/admin/api/maps?state=x%0d%0a", "/admin/api/" + "a" * 130, "/admin/api/%2e%2e/x"):
+            status = rig.ask("GET", target)[0]
+            if "?" not in target:
+                self.assertIn(status, (400, 404), target)                                                  # (a NUL is a bad request for nginx itself)
+        self.assertEqual(self.count(rig.door), after + 1)                                                   # (only the one with a query got through: nginx cleans a query's line breaks away itself)
 
     def test_a_players_own_calls_by_id_are_only_the_shape_of_an_id(self):
         rig = self.rig
@@ -453,7 +491,10 @@ class TheDoorIsDown(unittest.TestCase):
                                          ("POST", "/admin/logout", b"")):
                 status, headers, text = rig.ask(method, target, {"Content-Type": "application/octet-stream"} if body else None, body)
                 self.assertEqual(status, 503, target)
-                self.assertEqual(json.loads(text)["error"], "submissions_off")
+                if target.startswith("/admin/login"):                                   # (a person's browser gets words)
+                    self.assertTrue("text/html" in names(headers, "content-type")[0] and b"Signing in is not available" in text and b"submissions_off" not in text)
+                else:
+                    self.assertEqual(json.loads(text)["error"], "submissions_off")
                 self.assertEqual(names(headers, "cache-control"), ["no-store"])
             self.assertEqual(rig.ask("GET", "/admin")[0], 200)                                   # (the page is a file: it still opens, and says what it can)
         finally:

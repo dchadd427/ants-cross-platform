@@ -243,7 +243,7 @@ void MapStore::add_approved_to_listing() {
         m.approved = true;
         m.maker = a.maker;
         m.kind = a.kind;
-        m.thumb = std::string(kCommunityPreviewDir) + percent_encode(a.name.substr(0, a.name.size() - 4)) + ".png";
+        if (a.kind != "extended") m.thumb = std::string(kCommunityPreviewDir) + percent_encode(a.name.substr(0, a.name.size() - 4)) + ".png";          // (the picture route serves Classic maps only: an Extended map has none yet)
         if (a.kind == "extended") {
             extended_listing_.push_back(std::move(m));
         } else if (seen.insert(lower(a.name)).second) {
