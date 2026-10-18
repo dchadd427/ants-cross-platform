@@ -23,12 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.82 - 2026-10-18 - Map submissions: server and owner review page (S1)
 
 **For players:**
 - Nothing changes yet: this is the server half of sending a map for approval (the Submit button comes next). A sent map waits for the owner. Off until switched on.
 
 **Rules / network:** none (protocol 21). The database goes to schema version 5.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac0ad9d3...a76d8c37)
 
 ## v0.12.81 - 2026-10-18 - Lobby: Map maker link
 
@@ -662,15 +664,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46f7b115...f0eaf2de)
 
-## v0.12.6 - 2026-10-11 - The picture shape is chosen next to the map
+## Older versions (v0.12.6 and before)
 
-**For players:**
-- The picture shape (4:3, 16:10, 16:9, 21:9) is chosen next to the map, above START!, instead of at the bottom of the page.
-
-**Rules / network:** none: the simulation and the protocol are untouched.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0a6a7cf...46f7b115)
-
-## Older versions (v0.12.5 and before)
-
-Every release before v0.12.6, and the long notes of v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.7, and the long notes of v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
