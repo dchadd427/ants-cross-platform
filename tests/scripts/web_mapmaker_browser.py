@@ -936,7 +936,7 @@ def run_part(part, tab, args, check, tiny, junk):
         summary = lambda: page.ev("JSON.stringify([document.getElementById('s-desc').textContent, document.getElementById('s-time').textContent, document.getElementById('s-ant').textContent])")
         check(json.loads(summary()) == ["“Tiny map with no PowerUps”", "6 minutes · 3 eggs for each team", "No default ant type"], "the side panel says what the map has: %s" % summary())
         top = page.ev("JSON.stringify([].map.call(document.querySelectorAll('.edmenu.dsk .btn'), function (b) { return b.textContent; }))")
-        check(json.loads(top) == ["New", "Open", "Properties", "Download"], "the top bar: New, Open, Properties, Download (%s)" % top)
+        check(json.loads(top) == ["New", "Open", "Copy...", "Properties", "Download"], "the top bar: New, Open, Copy..., Properties, Download (%s)" % top)
         check(page.ev("document.querySelector('#sumbox [data-act=props]').offsetParent !== null && document.querySelector('#sumbox [data-act=props]').textContent === 'Edit'"), "the summary has its Edit link")
         page.shot(args.shots, "mapmaker-props-entry")
         # the mouse: the button opens the dialog
@@ -1466,7 +1466,7 @@ def run_part(part, tab, args, check, tiny, junk):
         tab.emulate(1280, 800, 1)
         page = Page(tab, args.web)
         old = ("(function () { var real; Object.defineProperty(window, 'createLvlCore', { configurable: true, get: function () { return real && function () { "
-               "return real.apply(this, arguments).then(function (m) { m._lvl_interface_version = function () { return 2; }; return m; }); }; }, set: function (v) { real = v; } }); })();")
+               "return real.apply(this, arguments).then(function (m) { m._lvl_interface_version = function () { return 3; }; return m; }); }; }, set: function (v) { real = v; } }); })();")
         check(page.open(old), "the page answers")
         text = page.ev("document.getElementById('boot').textContent")
         check(not page.ev("document.getElementById('boot').hidden") and "out of date" in text and "Reload the page" in text, "it says that the map code is out of date and offers a reload: %r" % text)

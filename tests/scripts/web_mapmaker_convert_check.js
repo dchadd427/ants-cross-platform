@@ -153,6 +153,7 @@ function caseC() {
     s.ctl.use();
     equal(s.log.used, [{ row: 28, column: 175, rows: 71, columns: 120 }], 'Use this part hands the frame over');
     check(s.host.hidden && !s.editor.hidden, 'and the editor is back');
+    equal(s.nodes['crop-stage'].children.length, 1, 'the picture goes with the screen: only the frame is left in the stage');
     check((s.doc.listeners.keydown || []).length === keydowns - 1, 'the screen stops listening to the keys when it goes');
     equal([s.nodes['crop-use'].listeners.click.length, s.nodes['crop-cancel'].listeners.click.length], [0, 0], 'the buttons are given back as they were');
     // Cancel and Escape

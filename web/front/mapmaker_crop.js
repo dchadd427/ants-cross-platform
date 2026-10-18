@@ -56,7 +56,8 @@
         var doc = env.doc, host = env.host, $ = env.$, L = env.limits, R = env.rows, C = env.columns, frame = start(L, R, C), grab = null;
         var stage = $('crop-stage'), box = $('crop-frame'), fill = $('crop-fill'), notes = $('crop-note'), use = $('crop-use'), cancel = $('crop-cancel');
         function el(tag, cls, text) { var n = doc.createElement(tag); n.className = cls; n.textContent = text; return n; }
-        stage.insertBefore(env.picture(), stage.children[0]);
+        var pic = env.picture();
+        stage.insertBefore(pic, stage.children[0]);
         $('crop-name').textContent = env.name; env.tags($('crop-tags'));
         $('crop-whole').textContent = 'Whole map: ' + R + ' rows x ' + C + ' columns. The dim part is left out.';
         $('crop-shapes').textContent = 'The frame can be any of these shapes, or smaller. It never has more than ' + L.rows + ' rows, ' + L.columns + ' columns or ' + Sizes.number(L.cells) + ' cells:';
@@ -102,7 +103,7 @@
         function leave(then) {
             doc.removeEventListener('keydown', onKey, true);
             use.removeEventListener('click', onUse); cancel.removeEventListener('click', onCancel);
-            host.hidden = true; if (env.editor) env.editor.hidden = false;
+            stage.removeChild(pic); host.hidden = true; if (env.editor) env.editor.hidden = false;
             then();
         }
         function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); leave(env.onCancel); } }
