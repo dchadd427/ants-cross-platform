@@ -434,6 +434,7 @@ int main() {
         ASSERT_EQ(post({{"x-ants-csrf", other_session}}).status, 403);                            // (the token of another session)
         ASSERT_EQ(post({{"x-ants-csrf", csrf}, {"sec-fetch-site", "cross-site"}}).status, 404);       // (from another site: the answer of a path that is not there)
         ASSERT_EQ(post({{"x-ants-csrf", csrf}, {"sec-fetch-site", "same-site"}}).status, 404);
+        ASSERT_EQ(post({{"x-ants-csrf", csrf}, {"sec-fetch-site", "none"}}).status, 403);                 // (a typed address may read, but a change is made by the page itself: same-origin)
         ASSERT_EQ(post({{"x-ants-csrf", csrf}, {"content-type", "text/plain"}}).status, 415);
         ASSERT_EQ(post({{"x-ants-csrf", csrf}, {"content-type", "<erase>"}}).status, 415);
         ASSERT_EQ(post({{"x-ants-csrf", csrf}}, "[1]").status, 400);

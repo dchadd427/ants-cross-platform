@@ -279,6 +279,9 @@ int main() {
         while (st.step() == db::Statement::Step::Row) {
             ASSERT_TRUE(st.column_text(0).size() == 32 && st.column_text(0).find("203.0.113") == std::string::npos);        // (a keyed hash)
         }
+        db::Statement keys;
+        rig.database.prepare(keys, "SELECT COUNT(DISTINCT addr_key) FROM submission_limits");
+        ASSERT_TRUE(keys.step() == db::Statement::Step::Row && keys.column_int64(0) == 3);          // (the same address on two days is two keys: one day's key cannot be matched with the next day's)
     } TEST_END();
 
     TEST_CASE("SUB1.6 All addresses together are limited too (a flood from many addresses fills the day, not the disk)") {
