@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Nothing changes yet: the game's grid can now read the new Extended maps (taller than 90 rows), ready for the next steps. Every existing map plays exactly as before.
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c418fafb...HEAD)
+
 ## v0.12.82 - 2026-10-18 - Map submissions: server and owner review page (S1)
 
 **For players:**

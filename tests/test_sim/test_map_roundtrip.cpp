@@ -8,15 +8,17 @@
 //      have the same full state hash at the start and after every game second, for kPlayTicks ticks.
 //   5. the Extended map (version 9, docs/MAP_FORMAT.md): convert_to_extended, written, read again (the same level, written twice the same bytes, refused by a reader of
 //      Classic maps only), convert_to_classic: the same bytes as the rewrite of step 1 (so a map goes up and comes back unchanged);
-//   6. the converted map (rules 0) PLAYS as its source does: the simulation does not read version 9 yet (and a reader of Classic maps refuses it), so the level that it
-//      gets is the converted one with its anchors turned absolute again by LevelData::object_anchor (as_sim_level below), which is all a version 9 loader will do;
-//      the hashes are the source's, at the start and after every game second.
+//   6. the converted map (rules 0) is read by the simulation as it is (Grid::init_from_level takes the relative anchors of version 9 through LevelData::object_anchor): its
+//      Grid is equal to the Grid of its source cell by cell (every field, the anchors included, the hills, the plants, the food, the default ant type), and it PLAYS as its
+//      source does, with the hashes of the source at the start and after every game second;
+//   7. the rules word (the Grid carries it, the state hash mixes it when it is not 0): see the_rules_word_is_in_the_hash.
 // The counts of the library (and of the dictionaries by the rule of the original maps) are those of docs/MAP_FORMAT.md. `test_map_roundtrip --ticks N` plays N ticks
 // instead (the time of a CI run is the reason for the default), `--only TEXT` only the maps whose names hold TEXT (and checks no count).
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
+#include "map_library.hpp"
 #include "scripted_players.hpp"
 
 #include <algorithm>
@@ -38,13 +40,12 @@ using ants::assets::LevelProblemKind;
 using ants::assets::LevelWriteResult;
 using ants::assets::RewriteChange;
 using ants::assets::RewriteChangeKind;
+using ants_test::play_hashes;
 
 namespace {
 
 constexpr uint32_t kPlayTicks = 200;        // 10 game seconds: every map's start, its first orders, hatches and fights (all 540 maps, two plays each, in a few seconds of CI)
-constexpr uint32_t kSeed = 20240229u;       // the engine's seed (the map sweep's)
-constexpr uint32_t kScriptSeed = 0x5EEDu;   // the scripted players' generator (the map sweep's)
-constexpr uint32_t kTicksPerSecond = 20;
+constexpr uint32_t kTicksPerSecond = ants_test::kLibraryTicksPerSecond;
 
 int g_checks = 0;
 int g_failures = 0;
@@ -57,80 +58,51 @@ void check(bool ok, const std::string& what) {
     }
 }
 
-std::vector<uint8_t> read_bytes(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+// Every field of two cells (TileCell has no operator==; the fields are those that hash_cell of src/ants_sim/state_hash.cpp mixes, and the grid's other tables)
+bool same_cell(const ants::sim::TileCell& a, const ants::sim::TileCell& b) {
+    return a.terrain_id == b.terrain_id && a.terrain_type == b.terrain_type && a.surface_type == b.surface_type && a.flags == b.flags && a.interactive_id == b.interactive_id &&
+           a.interactive_owner == b.interactive_owner && a.timer_ticks == b.timer_ticks && a.anchor_x == b.anchor_x && a.anchor_y == b.anchor_y && a.is_food == b.is_food &&
+           a.is_mud == b.is_mud && a.is_powerup == b.is_powerup && a.powerup_type == b.powerup_type && a.is_obstacle_overlay == b.is_obstacle_overlay &&
+           a.is_thief_only == b.is_thief_only && a.is_corridor_team_locked == b.is_corridor_team_locked && a.is_base_hole == b.is_base_hole &&
+           a.base_owner_team == b.base_owner_team && a.occupant_ant_id == b.occupant_ant_id && a.static_solid == b.static_solid;
 }
 
-// The file names that maps.json lists ("file": "..."; the names hold no quote or backslash, which tools/community_maps.py would escape)
-std::vector<std::string> listed_community_maps(const std::string& folder) {
-    std::ifstream in(folder + "/maps.json");
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    std::vector<std::string> names;
-    const std::string key = "\"file\": \"";
-    for (size_t at = text.find(key); at != std::string::npos; at = text.find(key, at)) {
-        at += key.size();
-        const size_t end = text.find('"', at);
-        if (end == std::string::npos) break;
-        names.push_back(text.substr(at, end - at));
-        at = end;
-    }
-    return names;
-}
-
-struct Map {
-    std::string name;
-    std::string path;
-};
-
-std::vector<Map> library() {
-    std::vector<Map> maps;
-    for (const char* name : {"GAUNTLET.LVL", "ISLANDS.LVL", "MEDIUM.LVL", "SMALL.LVL", "TINY.LVL", "TREASURE.LVL"}) {
-        maps.push_back({name, std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + name});
-    }
-    const std::string folder = std::string(ANTS_SOURCE_DIR) + "/Community-Maps";
-    for (const std::string& name : listed_community_maps(folder)) maps.push_back({name, folder + "/" + name});
-    return maps;
-}
-
-// The full state hash at the start and after every game second of a play of `level` (the four teams, the map sweep's scripted players and seeds)
-std::vector<ants::sim::StateHash> play(const LevelData& level, uint32_t ticks) {
-    ants::sim::SimulationEngine engine;
-    engine.init(level, kSeed, 0x0F);
-    ants_test::ScriptedPlayers script(level, 0x0F, kScriptSeed, true);
-    std::vector<ants::sim::StateHash> hashes{engine.state_hash()};
-    std::vector<ants::sim::Command> commands;
-    for (uint32_t t = 0; t < ticks && !engine.is_match_over(); ++t) {
-        if (t % kTicksPerSecond == 0) {
-            commands.clear();
-            script.orders(engine, commands);
-            for (const ants::sim::Command& c : commands) engine.apply_command(c);
-        }
-        engine.tick();
-        engine.clear_audio_events();
-        engine.clear_news_events();
-        if ((t + 1) % kTicksPerSecond == 0 || t + 1 == ticks) hashes.push_back(engine.state_hash());
-    }
-    return hashes;
-}
-
-// The level that the simulation plays for a version 9 map of rules 0: the same grid, with every object anchor in the absolute form of version 8 (the sum that
-// LevelData::object_anchor makes), and nothing else changed. Test-only: the simulation's loader takes version 8 maps only in this version of the game.
-LevelData as_sim_level(const LevelData& extended) {
-    LevelData out = extended;
-    out.version = ants::assets::LVL_EXPECTED_VERSION;
-    out.format_flags = 0;
-    out.rules = 0;
-    for (uint32_t row = 0; row < extended.height; ++row) {
-        for (uint32_t column = 0; column < extended.width; ++column) {
-            int32_t anchor_row = 0;
-            int32_t anchor_column = 0;
-            if (!extended.object_anchor(row, column, anchor_row, anchor_column)) continue;
-            out.layer2_interactive[static_cast<size_t>(row) * extended.width + column].properties =
-                static_cast<uint16_t>((static_cast<uint32_t>(anchor_row) & 0xFFu) | ((static_cast<uint32_t>(anchor_column) & 0xFFu) << 8));
+// The two grids are the same grid: the size, every cell, the hills, the plants, the food piles, the default ant type and the solid-bit source. "" when they are, else the first
+// difference in words.
+std::string grid_difference(const ants::assets::LevelData& a, const ants::assets::LevelData& b) {
+    ants::sim::Grid ga;
+    ants::sim::Grid gb;
+    if (!ga.init_from_level(a) || !gb.init_from_level(b)) return "a grid did not load";
+    if (ga.width() != gb.width() || ga.height() != gb.height()) return "the size";
+    for (size_t i = 0; i < ga.cells().size(); ++i) {
+        if (!same_cell(ga.cells()[i], gb.cells()[i])) {
+            return "the cell at row " + std::to_string(i / ga.width()) + ", column " + std::to_string(i % ga.width());
         }
     }
-    return out;
+    if (ga.anthills().size() != gb.anthills().size()) return "the number of start markers";
+    for (size_t i = 0; i < ga.anthills().size(); ++i) {
+        const auto& x = ga.anthills()[i];
+        const auto& y = gb.anthills()[i];
+        if (x.tile_id != y.tile_id || x.x != y.x || x.y != y.y || x.team_id != y.team_id) return "a start marker";
+    }
+    if (ga.plants().size() != gb.plants().size()) return "the number of plants";
+    for (size_t i = 0; i < ga.plants().size(); ++i) {
+        const auto& x = ga.plants()[i];
+        const auto& y = gb.plants()[i];
+        if (x.tile_id != y.tile_id || x.x != y.x || x.y != y.y) return "a plant";
+    }
+    if (ga.food_objects().size() != gb.food_objects().size()) return "the number of food piles";
+    for (size_t i = 0; i < ga.food_objects().size(); ++i) {
+        const auto& x = ga.food_objects()[i];
+        const auto& y = gb.food_objects()[i];
+        if (x.row != y.row || x.col != y.col || x.units != y.units || x.value != y.value || x.remaining != y.remaining || x.thresholds != y.thresholds ||
+            x.stage_tiles != y.stage_tiles) {
+            return "a food pile";
+        }
+    }
+    if (ga.default_ant_tile() != gb.default_ant_tile()) return "the default ant type";
+    if (ga.exact_solid_bits() != gb.exact_solid_bits()) return "the source of the solid bits";
+    return "";
 }
 
 bool same_hash(const ants::sim::StateHash& a, const ants::sim::StateHash& b) {
@@ -146,7 +118,7 @@ void the_fingerprint_sees_a_changed_map(uint32_t ticks) {
         check(false, "TINY.LVL loads");
         return;
     }
-    const std::vector<ants::sim::StateHash> plain = play(tiny, ticks);
+    const std::vector<ants::sim::StateHash> plain = play_hashes(tiny, ticks);
     const size_t inner = static_cast<size_t>(15) * tiny.width + 15;              // a cell in the middle of the map
     struct Change {
         const char* what;
@@ -166,7 +138,7 @@ void the_fingerprint_sees_a_changed_map(uint32_t ticks) {
     for (const Change& c : changes) {
         LevelData changed = tiny;
         c.apply(changed, inner);
-        check(play(changed, ticks) != plain, std::string("the plays of TINY and of TINY with another ") + c.what + " differ");
+        check(play_hashes(changed, ticks) != plain, std::string("the plays of TINY and of TINY with another ") + c.what + " differ");
     }
 }
 
@@ -189,8 +161,115 @@ void the_fingerprint_sees_a_misplaced_anchor(uint32_t ticks) {
             word = static_cast<uint16_t>((word & 0xFF00u) | ((word + 1u) & 0xFFu));                // one row further
         }
     }
-    check(play(as_sim_level(misplaced), ticks) != play(tiny, ticks), "TINY with every anchor one row off plays otherwise than TINY");
-    check(play(as_sim_level(up.level), ticks) == play(tiny, ticks), "TINY as an Extended map plays as TINY does");
+    check(play_hashes(misplaced, ticks) != play_hashes(tiny, ticks), "TINY with every anchor one row off plays otherwise than TINY");
+    check(play_hashes(up.level, ticks) == play_hashes(tiny, ticks), "TINY as an Extended map plays as TINY does");
+}
+
+
+// The rules word is state: a hand-made level at rules 1 hashes otherwise than the same level at rules 0 (the Grid carries it and the state hash mixes it), while the version 8
+// level and the Extended level of rules 0 hash as they always did (the word is mixed in only when it is not 0). The play is the same level, so only the word differs.
+void the_rules_word_is_in_the_hash(uint32_t ticks) {
+    LevelData tiny;
+    if (!tiny.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) {
+        check(false, "TINY.LVL loads");
+        return;
+    }
+    const LevelConversion up = ants::assets::convert_to_extended(tiny);
+    check(up.ok, "TINY.LVL goes up to an Extended map (rules)");
+    if (!up.ok) return;
+    LevelData rules_one = up.level;
+    rules_one.rules = ants::assets::LVL_RULES_EXTENDED;
+    ants::sim::Grid zero;
+    ants::sim::Grid one;
+    ants::sim::Grid classic;
+    check(zero.init_from_level(up.level) && one.init_from_level(rules_one) && classic.init_from_level(tiny), "the three TINY levels load into a Grid");
+    check(zero.rules() == 0 && one.rules() == 1 && classic.rules() == 0, "the Grid carries the rules word of its level (0, 1, and 0 for a Classic map)");
+    const std::vector<ants::sim::StateHash> classic_play = play_hashes(tiny, ticks);
+    const std::vector<ants::sim::StateHash> zero_play = play_hashes(up.level, ticks);
+    const std::vector<ants::sim::StateHash> one_play = play_hashes(rules_one, ticks);
+    check(classic_play.size() == zero_play.size() && classic_play.size() == one_play.size() && classic_play.size() > 1, "the three plays have the same number of checkpoints");
+    bool classic_is_zero = classic_play.size() == zero_play.size();
+    bool one_moves_every_checkpoint = classic_play.size() == one_play.size();
+    for (size_t i = 0; i < classic_play.size() && i < zero_play.size() && i < one_play.size(); ++i) {
+        classic_is_zero = classic_is_zero && same_hash(classic_play[i], zero_play[i]);
+        one_moves_every_checkpoint = one_moves_every_checkpoint && classic_play[i].total != one_play[i].total && classic_play[i].grid != one_play[i].grid;
+    }
+    // v8 does not move: the total hashes of TINY at the start and at tick 200 are those of main before the grid read version 9 (the hash ledger of tests/test_sim/hash_ledger.cpp)
+    check(classic_play[0].total == 0x54d30843a600048bULL, "TINY's state hash at tick 0 is the one it always had");
+    check(classic_play.size() <= 10 || classic_play[10].total == 0x6fa24979434adcd3ULL, "TINY's state hash at tick 200 is the one it always had");
+    ants::sim::Grid reused;
+    check(reused.init_from_level(rules_one) && reused.rules() == 1 && reused.init_empty(4, 4) && reused.rules() == 0, "a Grid emptied by init_empty is at rules 0 again");
+    check(classic_is_zero, "TINY as a Classic map and as an Extended map of rules 0 have the same hash at every checkpoint");
+    check(one_moves_every_checkpoint, "TINY at rules 1 has another total hash and another grid hash than at rules 0 at every checkpoint");
+    // only the grid part carries the word: the ants, the food, the players and the rest of the state are those of rules 0 at the start
+    check(one_play[0].players == zero_play[0].players && one_play[0].food == zero_play[0].food && one_play[0].ants == zero_play[0].ants && one_play[0].engine == zero_play[0].engine,
+          "at the start, only the grid hash of rules 1 differs from rules 0");
+    // the word is mixed with its value: another word is another hash (the format allows 0 and 1 today; the Grid takes any)
+    LevelData rules_two = up.level;
+    rules_two.rules = 2;
+    ants::sim::SimulationEngine e1;
+    ants::sim::SimulationEngine e2;
+    e1.init(rules_one, ants_test::kLibrarySeed, 0x0F);
+    e2.init(rules_two, ants_test::kLibrarySeed, 0x0F);
+    check(e1.state_hash().grid != e2.state_hash().grid, "a rules word of 2 hashes otherwise than a rules word of 1");
+}
+
+// The anchors of a version 9 map are relative to the cell and, in a map of more than 256 rows or columns, the plain sum (which a byte of version 8 cannot hold); the Grid takes
+// them through LevelData::object_anchor, and a bomb tile (whose third word is the owner) and an empty cell have none.
+void the_grid_reads_relative_anchors() {
+    std::vector<std::string> names(1344, ".");
+    LevelData tall = ants::assets::blank_extended_level(300, 20, names);
+    check(tall.version == 9 && tall.height == 300, "a blank Extended map of 300 rows");
+    const size_t width = tall.width;
+    auto at = [&](uint32_t row, uint32_t column) -> ants::assets::MapCell& { return tall.layer2_interactive[row * width + column]; };
+    // a cell of an object whose first cell is at row 287, column 4: three rows up and one column left of (290, 5)
+    at(290, 5).tile_index = 97;
+    at(290, 5).properties = static_cast<uint16_t>(0xFDu | (0xFFu << 8));
+    // a cell below its anchor in a lower row of the map: anchor far to the right and down
+    at(10, 2).tile_index = 97;
+    at(10, 2).properties = static_cast<uint16_t>(0x05u | (0x03u << 8));
+    // a bomb tile: the third word is the owner (here the team 2), no anchor
+    at(20, 7).tile_index = 129;
+    at(20, 7).properties = 2;
+    ants::sim::Grid g;
+    check(g.init_from_level(tall), "the tall Extended map loads into a Grid");
+    const ants::sim::TileCell& far = g.get_cell(5, 290);
+    check(far.anchor_y == 287 && far.anchor_x == 4, "an anchor above 255 is the sum of the cell and the signed offset: (287, 4), got (" + std::to_string(far.anchor_y) + ", " + std::to_string(far.anchor_x) + ")");
+    const ants::sim::TileCell& down = g.get_cell(2, 10);
+    check(down.anchor_y == 15 && down.anchor_x == 5, "a positive offset goes down and right: (15, 5), got (" + std::to_string(down.anchor_y) + ", " + std::to_string(down.anchor_x) + ")");
+    const ants::sim::TileCell& bomb = g.get_cell(7, 20);
+    check(bomb.anchor_y == -1 && bomb.anchor_x == -1 && bomb.interactive_owner == 2, "a bomb tile has no anchor and keeps its owner");
+    const ants::sim::TileCell& empty = g.get_cell(1, 1);
+    check(empty.anchor_y == -1 && empty.anchor_x == -1, "an empty cell has no anchor");
+    check(g.rules() == tall.rules && tall.rules == ants::assets::LVL_RULES_EXTENDED, "a blank Extended map above 90 rows is at rules 1 and the Grid says so");
+}
+
+// LevelLimits::for_play_extended() (used by no loader yet): Extended maps, up to 128 a side and 16,384 cells.
+void the_play_limits() {
+    constexpr LevelLimits play = LevelLimits::for_play_extended();
+    check(play.allow_extended, "the play limits allow Extended maps");
+    check(play.rows() == 128 && play.columns() == 128 && play.cells() == 16384, "the play limits are 128 a side and 16,384 cells");
+    check(play.rows() < LevelLimits::for_extended_maps().rows() && play.cells() < LevelLimits::for_extended_maps().cells(), "the play limits are tighter than those of an Extended map");
+    check(play.read_bytes() == 4u * 1024u * 1024u && play.write_bytes() == 3584u * 1024u, "a file of at most 4 MiB is read and a canonical file of 3.5 MiB written");
+    std::vector<std::string> names(1344, ".");
+    for (const uint32_t side : {100u, 128u}) {
+        const LevelData level = ants::assets::blank_extended_level(side, side, names, LevelLimits::for_extended_maps());
+        const LevelWriteResult w = ants::assets::write_level(level, play);
+        LevelData back;
+        check(w.ok && back.load_from_memory(w.bytes.data(), w.bytes.size(), nullptr, play) && back.version == 9 && back.height == side, "a blank Extended map of " + std::to_string(side) + " a side passes the play limits");
+    }
+    const LevelData wide = ants::assets::blank_extended_level(129, 100, names, LevelLimits::for_extended_maps());
+    check(!ants::assets::write_level(wide, play).ok, "129 rows are beyond the play limits");
+    const LevelWriteResult wide_file = ants::assets::write_level(wide, LevelLimits::for_extended_maps());
+    LevelData refused;
+    check(wide_file.ok && !refused.load_from_memory(wide_file.bytes.data(), wide_file.bytes.size(), nullptr, play), "and a file of 129 rows is refused by the play limits");
+    // 128 x 129 cells (a side within, the product above) is refused by the cell limit, not by a side
+    const LevelData dense = ants::assets::blank_extended_level(128, 129, names, LevelLimits::for_extended_maps());
+    check(!ants::assets::write_level(dense, play).ok, "128 x 129 cells are beyond the play limits");
+    // a Classic level keeps the limits of the game under them
+    LevelData tiny;
+    check(tiny.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL"), "TINY.LVL loads (play limits)");
+    check(ants::assets::write_level(tiny, play).ok, "a Classic map is written under the play limits too");
 }
 
 }  // namespace
@@ -213,7 +292,7 @@ int main(int argc, char* argv[]) {
               << " The round-trip law of the map writer: every map of the library\n"
               << "=======================================================\n";
     const auto started = std::chrono::steady_clock::now();
-    const std::vector<Map> maps = library();
+    const std::vector<ants_test::LibraryMap> maps = ants_test::library();
     std::map<RewriteChangeKind, int> maps_with;     // how many maps have a change of each kind
     int total = 0;
     int same_map = 0;
@@ -223,6 +302,7 @@ int main(int argc, char* argv[]) {
     int extended_same_level = 0;                    // the version 9 file reads back as the converted level, and writes twice the same bytes
     int extended_same_bytes = 0;                    // and converts back to the bytes of the rewrite
     int extended_refused = 0;                       // and a reader of Classic maps only refuses it (version_not_supported)
+    int extended_same_grid = 0;                     // and the simulation's Grid of it is the Grid of the Classic map, cell by cell
     int extended_same_play = 0;
     uint64_t ticks_played = 0;
     size_t largest = 0;
@@ -232,15 +312,15 @@ int main(int argc, char* argv[]) {
     size_t largest_file_rewrite = 0;
     std::vector<std::string> beyond_new_limits;     // the maps whose rewrite LevelLimits::for_new_maps() refuses, with the reason
     std::vector<std::string> files_beyond;          // the files that a reader with those limits refuses as they are (before a rewrite), with the reason
-    const std::vector<uint8_t> archive = read_bytes(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd");
+    const std::vector<uint8_t> archive = ants_test::read_file_bytes(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd");
     const std::vector<std::string> tile_names = ants::assets::tile_names_from_chd(archive.data(), archive.size());
     check(tile_names.size() == 1344u, "the tile names of ants.chd");
     int originals_rule = 0;                         // maps whose dictionary is the one of the original maps' rule (dictionary_of_used_tiles)
     int players_rule = 0;
-    for (const Map& m : maps) {
+    for (const ants_test::LibraryMap& m : maps) {
         if (!only.empty() && m.name.find(only) == std::string::npos) continue;
         ++total;
-        const std::vector<uint8_t> source = read_bytes(m.path);
+        const std::vector<uint8_t> source = ants_test::read_file_bytes(m.path);
         LevelData a;
         if (!a.load_from_memory(source.data(), source.size())) {
             check(false, m.name + ": the library map does not load");
@@ -300,8 +380,8 @@ int main(int argc, char* argv[]) {
         // the dictionary: by the rule of the original maps?
         if (ants::assets::dictionary_of_used_tiles(a, tile_names) == a.tile_dictionary) ++(m.path.find("Community-Maps") == std::string::npos ? originals_rule : players_rule);
         // 4. the same play
-        const std::vector<ants::sim::StateHash> pa = play(a, ticks);
-        const std::vector<ants::sim::StateHash> pb = play(b, ticks);
+        const std::vector<ants::sim::StateHash> pa = play_hashes(a, ticks);
+        const std::vector<ants::sim::StateHash> pb = play_hashes(b, ticks);
         bool equal = pa.size() == pb.size();
         size_t first = 0;
         for (; equal && first < pa.size(); ++first) equal = same_hash(pa[first], pb[first]);
@@ -332,8 +412,11 @@ int main(int argc, char* argv[]) {
         const bool bytes8 = down.ok && w8.ok && w8.bytes == w.bytes;
         check(bytes8, m.name + ": the Extended map converts back to the bytes of the rewrite" + (down.reasons.empty() ? "" : " (" + down.reasons[0] + ")"));
         extended_same_bytes += bytes8 ? 1 : 0;
-        // 6. the same play
-        const std::vector<ants::sim::StateHash> pc = read9 ? play(as_sim_level(r9), ticks) : std::vector<ants::sim::StateHash>{};
+        // 6. the same grid, the same play: the simulation reads the Extended map as it is
+        const std::string grid_diff = read9 ? grid_difference(a, r9) : "the Extended map did not read";
+        check(grid_diff.empty(), m.name + ": the Extended map (rules 0) gives the Grid of the Classic map (differs in " + grid_diff + ")");
+        extended_same_grid += grid_diff.empty() ? 1 : 0;
+        const std::vector<ants::sim::StateHash> pc = read9 ? play_hashes(r9, ticks) : std::vector<ants::sim::StateHash>{};
         bool equal9 = pa.size() == pc.size();
         size_t first9 = 0;
         for (; equal9 && first9 < pa.size(); ++first9) equal9 = same_hash(pa[first9], pc[first9]);
@@ -343,10 +426,13 @@ int main(int argc, char* argv[]) {
     }
     if (only.empty()) the_fingerprint_sees_a_changed_map(ticks);
     if (only.empty()) the_fingerprint_sees_a_misplaced_anchor(ticks);
+    if (only.empty()) the_rules_word_is_in_the_hash(ticks);
+    if (only.empty()) the_grid_reads_relative_anchors();
+    if (only.empty()) the_play_limits();
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
     std::cout << "  maps " << total << ": the same map " << same_map << ", the same play " << same_play << " (" << ticks << " ticks, all four teams)\n"
               << "  as Extended maps (version 9): the same level " << extended_same_level << ", back to the same bytes " << extended_same_bytes << ", refused by Classic-only readers "
-              << extended_refused << ", the same play " << extended_same_play << "\n"
+              << extended_refused << ", the same Grid " << extended_same_grid << ", the same play " << extended_same_play << "\n"
               << "  byte-identical rewrites " << byte_identical << "; the same bytes where the original reads " << same_where_read << "; restructured "
               << maps_with[RewriteChangeKind::Restructured] << "\n"
               << "  maps with name leftovers " << maps_with[RewriteChangeKind::NamePadding] << ", description leftovers " << maps_with[RewriteChangeKind::DescriptionPadding]
@@ -357,9 +443,9 @@ int main(int argc, char* argv[]) {
         // The numbers of docs/MAP_FORMAT.md ("The round-trip law"): a change of the library or of the writer that moves them updates the document with them.
         check(total == 540, "the library has 540 maps (6 originals and the 534 of maps.json): " + std::to_string(total));
         check(same_map == total && same_play == total, "every map reads back and plays the same as its rewrite");
-        check(extended_same_level == total && extended_same_bytes == total && extended_refused == total && extended_same_play == total,
-              "every map goes up to an Extended map, comes back as the same bytes, is refused by a reader of Classic maps only, and plays the same: " + std::to_string(extended_same_level) + " / " +
-                  std::to_string(extended_same_bytes) + " / " + std::to_string(extended_refused) + " / " + std::to_string(extended_same_play));
+        check(extended_same_level == total && extended_same_bytes == total && extended_refused == total && extended_same_grid == total && extended_same_play == total,
+              "every map goes up to an Extended map, comes back as the same bytes, is refused by a reader of Classic maps only, gives the same Grid and plays the same: " + std::to_string(extended_same_level) + " / " +
+                  std::to_string(extended_same_bytes) + " / " + std::to_string(extended_refused) + " / " + std::to_string(extended_same_grid) + " / " + std::to_string(extended_same_play));
         check(byte_identical == 0, "no map of the library is rewritten byte for byte: every one has leftovers after the end of its dictionary names");
         check(maps_with[RewriteChangeKind::NamePadding] == 540, "540 maps have leftovers after their names: " + std::to_string(maps_with[RewriteChangeKind::NamePadding]));
         check(maps_with[RewriteChangeKind::DescriptionPadding] == 14, "14 maps have leftovers after their description: " + std::to_string(maps_with[RewriteChangeKind::DescriptionPadding]));

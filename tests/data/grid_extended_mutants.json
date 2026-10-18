@@ -1,0 +1,93 @@
+{
+ "note": "Mutants of the grid's reading of Extended levels (docs/MAP_FORMAT.md, 'Version 9: the Extended map'): the rules word of the Grid and of the state hash, the relative anchor of a layer-2 cell, and the play limits of LevelLimits::for_play_extended(). Run: python3 tools/mutate.py tests/data/grid_extended_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Every mutant must be caught by test_map_roundtrip.",
+ "defaults": {
+  "build": ["test_map_roundtrip"],
+  "test": "./build/tests/test_sim/test_map_roundtrip"
+ },
+ "mutants": [
+  {
+   "id": "grid_ignores_the_rules_word",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "    rules_ = level.rules;",
+   "new": "    rules_ = 0;"
+  },
+  {
+   "id": "empty_world_keeps_the_old_rules_word",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "        rules_ = 0;\n        return true;",
+   "new": "        return true;"
+  },
+  {
+   "id": "anchor_row_and_column_swapped",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "cell.anchor_y = has_anchor ? static_cast<int16_t>(anchor_row) : int16_t{-1};",
+   "new": "cell.anchor_y = has_anchor ? static_cast<int16_t>(anchor_column) : int16_t{-1};"
+  },
+  {
+   "id": "anchor_read_as_the_absolute_bytes_of_version_8",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "            const bool has_anchor = level.object_anchor(y, x, anchor_row, anchor_column);",
+   "new": "            const bool has_anchor = level.object_anchor(y, x, anchor_row, anchor_column);\n            if (has_anchor) {\n                anchor_row = static_cast<int32_t>(c2.properties & 0xFFu);\n                anchor_column = static_cast<int32_t>((c2.properties >> 8) & 0xFFu);\n            }"
+  },
+  {
+   "id": "cell_without_anchor_gets_column_zero",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "cell.anchor_x = has_anchor ? static_cast<int16_t>(anchor_column) : int16_t{-1};",
+   "new": "cell.anchor_x = has_anchor ? static_cast<int16_t>(anchor_column) : int16_t{0};"
+  },
+  {
+   "id": "hash_mixes_the_rules_word_at_rules_0",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "        if (e.grid_.rules() != 0) h.u16(e.grid_.rules());",
+   "new": "        h.u16(e.grid_.rules());"
+  },
+  {
+   "id": "hash_never_mixes_the_rules_word",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "        if (e.grid_.rules() != 0) h.u16(e.grid_.rules());",
+   "new": "        if (e.grid_.rules() == 0xFFFF) h.u16(e.grid_.rules());"
+  },
+  {
+   "id": "hash_mixes_a_one_for_any_rules_word",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "        if (e.grid_.rules() != 0) h.u16(e.grid_.rules());",
+   "new": "        if (e.grid_.rules() != 0) h.u16(1);"
+  },
+  {
+   "id": "play_limits_allow_129_rows",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{129, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+  },
+  {
+   "id": "play_limits_allow_129_columns",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 129, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+  },
+  {
+   "id": "play_limits_allow_more_cells",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16385, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+  },
+  {
+   "id": "play_limits_refuse_extended_maps",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};"
+  },
+  {
+   "id": "play_limits_read_a_smaller_file",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+  },
+  {
+   "id": "play_limits_write_a_smaller_file",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3000u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+  }
+ ]
+}

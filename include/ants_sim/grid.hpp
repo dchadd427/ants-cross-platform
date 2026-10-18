@@ -255,6 +255,7 @@ public:
         plants_.clear();
         food_objects_.clear();
         default_ant_tile_ = TILE_EMPTY;
+        rules_ = 0;
         return true;
     }
 
@@ -283,6 +284,10 @@ public:
     void set_default_ant_tile(uint16_t tile) noexcept {
         default_ant_tile_ = movement::is_powerup_tile(tile) ? tile : TILE_EMPTY;
     }
+
+    /// The rules word of the level that was loaded (LevelData::rules: 0 = the original's rules, 1 = extended rules; 0 for a world made by hand and for every version 8 map).
+    /// Nothing in the simulation acts on it yet; it is part of the state hash when it is not 0.
+    uint16_t rules() const noexcept { return rules_; }
 
     uint32_t width() const noexcept { return width_; }
     uint32_t height() const noexcept { return height_; }
@@ -522,6 +527,7 @@ private:
     std::vector<MapPlant> plants_;
     std::vector<FoodObject> food_objects_;
     uint16_t default_ant_tile_{TILE_EMPTY};   // level+0x70 (block 3), 0x7FFE = none
+    uint16_t rules_{0};                       // LevelData::rules (version 9; 0 for version 8)
 };
 
 } // namespace ants::sim
