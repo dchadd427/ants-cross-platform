@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map core's Extended calls in the browser module (docs/MAP_FORMAT.md, \"In the browser\"): the Extended profile and its limits, the conversions and their reasons, the check by kind, the blank Extended map, the properties of a map (interface version 3), the C interface and the JavaScript wrapper. Run: python3 tools/mutate.py tests/data/lvl_core_mutants.json --keep-going --jobs 1 (do not commit the .report.json). The first mutants are held by test_lvl_core, the last ones by tests/scripts/lvl_core_check.js (it needs build_web/lvl_core: emcmake cmake -B build_web -DBUILD_TESTS=OFF && cmake --build build_web --target lvl_core) and by tests/scripts/test_lvl_core.py.",
+ "note": "Mutants of the map core's Extended calls in the browser module (docs/MAP_FORMAT.md, \"In the browser\"): the Extended profile and its limits, the conversions and their reasons, the check by kind, the blank Extended map, the properties of a map (interface version 3), the crop of a map (interface version 4), the C interface and the JavaScript wrapper. Run: python3 tools/mutate.py tests/data/lvl_core_mutants.json --keep-going --jobs 1 (do not commit the .report.json). The first mutants are held by test_lvl_core, the last ones by tests/scripts/lvl_core_check.js (it needs build_web/lvl_core: emcmake cmake -B build_web -DBUILD_TESTS=OFF && cmake --build build_web --target lvl_core) and by tests/scripts/test_lvl_core.py.",
  "defaults": {},
  "mutants": [
   {
@@ -195,7 +195,7 @@
   {
    "id": "interface_version_stays_2",
    "file": "src/ants_assets/lvl_core_c.cpp",
-   "old": "lvl_interface_version() { return 3; }",
+   "old": "lvl_interface_version() { return 4; }",
    "new": "lvl_interface_version() { return 2; }",
    "build": [
     "test_lvl_core"
@@ -355,15 +355,15 @@
   {
    "id": "export_list_loses_a_call",
    "file": "CMakeLists.txt",
-   "old": "_lvl_set_properties,_lvl_limits,",
-   "new": "_lvl_limits,",
+   "old": "_lvl_set_properties,_lvl_crop,_lvl_limits,",
+   "new": "_lvl_set_properties,_lvl_limits,",
    "build": [],
    "test": "python3 -m unittest tests/scripts/test_lvl_core.py"
   },
   {
    "id": "wrapper_needs_the_second_interface",
    "file": "web/lvl_core_api.js",
-   "old": "var EXPECTED_INTERFACE = 3;",
+   "old": "var EXPECTED_INTERFACE = 4;",
    "new": "var EXPECTED_INTERFACE = 2;",
    "build": [],
    "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
@@ -423,6 +423,464 @@
    "new": "ptr[1], text.length, eggs, minutes, defaultAntType, p)",
    "build": [],
    "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "crop_whole_window_goes_through_the_cut",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "const bool whole = row == 0 && column == 0 &&",
+   "new": "const bool whole = false && row == 0 && column == 0 &&",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_window_bounds_added_in_32_bits",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (static_cast<uint64_t>(row) + rows > source_rows || static_cast<uint64_t>(column) + columns > source_columns) {",
+   "new": "if (static_cast<uint32_t>(row + rows) > source_rows || static_cast<uint32_t>(column + columns) > source_columns) {",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_window_not_held_to_the_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (static_cast<uint64_t>(row) + rows > source_rows || static_cast<uint64_t>(column) + columns > source_columns) {",
+   "new": "if (false) {",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_empty_window_is_made",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (rows == 0 || columns == 0) return refused(",
+   "new": "if (false) return refused(",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_leaves_the_rest_of_a_cut_object",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (!inside(ar, ac) || cut.count(anchor_key(ar, ac)) != 0) {",
+   "new": "if (!inside(ar, ac)) {",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_keeps_an_object_whose_anchor_is_outside",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (!inside(ar, ac) || cut.count(anchor_key(ar, ac)) != 0) {",
+   "new": "if (cut.count(anchor_key(ar, ac)) != 0) {",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_cuts_only_the_objects_that_cross_the_top",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (level.object_anchor(r, c, ar, ac) && inside(ar, ac)) cut.insert(anchor_key(ar, ac));",
+   "new": "if (level.object_anchor(r, c, ar, ac) && inside(ar, ac) && r < row) cut.insert(anchor_key(ar, ac));",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_keeps_the_solid_bit_of_a_taken_out_object",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (r != 0 && !(cell.tile_index >= 245 && cell.tile_index <= 248)) part.layer1_terrain[to].flags",
+   "new": "if (false && !(cell.tile_index >= 245 && cell.tile_index <= 248)) part.layer1_terrain[to].flags",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_clears_the_solid_bit_in_the_first_row",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (r != 0 && !(cell.tile_index >= 245 && cell.tile_index <= 248)) part.layer1_terrain[to].flags",
+   "new": "if (!(cell.tile_index >= 245 && cell.tile_index <= 248)) part.layer1_terrain[to].flags",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_clears_the_solid_bit_of_a_hill",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (r != 0 && !(cell.tile_index >= 245 && cell.tile_index <= 248)) part.layer1_terrain[to].flags",
+   "new": "if (r != 0) part.layer1_terrain[to].flags",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_clears_every_flag_of_a_taken_out_object",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "part.layer1_terrain[to].flags = static_cast<uint16_t>(part.layer1_terrain[to].flags & ~1u);",
+   "new": "part.layer1_terrain[to].flags = 0;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_does_not_move_the_anchors_of_a_classic_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (!extended) kept.properties =",
+   "new": "if (false) kept.properties =",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_moves_the_anchors_of_an_extended_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (!extended) kept.properties =",
+   "new": "if (true) kept.properties =",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_anchor_columns_are_not_moved",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "(((static_cast<uint32_t>(ac) - column) & 0xFFu) << 8)",
+   "new": "(((static_cast<uint32_t>(ac)) & 0xFFu) << 8)",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_a_starting_ant_stays_where_it_was",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "moved.y = static_cast<uint16_t>(s.y - row);",
+   "new": "moved.y = s.y;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_a_starting_ant_column_stays",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "moved.x = static_cast<uint16_t>(s.x - column);",
+   "new": "moved.x = s.x;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_a_food_pile_stays_where_it_was",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "moved.y = static_cast<uint16_t>(f.y - row);",
+   "new": "moved.y = f.y;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_a_food_pile_column_stays",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "moved.x = static_cast<uint16_t>(f.x - column);",
+   "new": "moved.x = f.x;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_a_waypoint_stays_where_it_was",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "moved.y = static_cast<uint16_t>(w.y - row);",
+   "new": "moved.y = w.y;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_a_waypoint_column_stays",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "moved.x = static_cast<uint16_t>(w.x - column);",
+   "new": "moved.x = w.x;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_keeps_a_record_of_a_taken_out_object",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "return gone[static_cast<size_t>(y - row) * columns + (x - column)] == 0;",
+   "new": "return true;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_keeps_a_record_outside_the_window",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (!inside(y, x)) return false;\n            return gone",
+   "new": "if (false) return false;\n            return gone",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_forgets_the_food",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "for (const FoodSchedule& f : level.food_schedules) {\n            if (!kept_at(f.y, f.x)) { ++removed_records; continue; }",
+   "new": "for (const FoodSchedule& f : level.food_schedules) {\n            if (true) { ++removed_records; continue; }",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_does_not_count_the_records_it_leaves_out",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (!kept_at(s.y, s.x)) { ++removed_records; continue; }",
+   "new": "if (!kept_at(s.y, s.x)) { continue; }",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_does_not_count_the_cells_it_takes_out",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "gone[to] = 1;\n                        ++removed_cells;",
+   "new": "gone[to] = 1;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_says_nothing_of_a_cut_object",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (reason_codes.empty() && removed_cells != 0) {",
+   "new": "if (reason_codes.empty() && removed_cells > 100000) {",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_says_nothing_of_the_records_it_left_out",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (reason_codes.empty() && removed_records != 0) {",
+   "new": "if (reason_codes.empty() && removed_records > 100000) {",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_drops_the_description",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "part.description = level.description;",
+   "new": "part.description = std::string();",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_forgets_the_eggs",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "part.boundary_param = level.boundary_param;",
+   "new": "part.boundary_param = 0;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_forgets_the_dictionary",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "part.tile_type_count = level.tile_type_count; part.tile_dictionary = level.tile_dictionary;",
+   "new": "part.tile_type_count = level.tile_type_count;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_makes_the_part_a_classic_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "part.version = level.version; part.format_flags",
+   "new": "part.version = LVL_EXPECTED_VERSION; part.format_flags",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_swaps_the_window_sides",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "part.width.val = columns;\n        part.height.val = rows;",
+   "new": "part.width.val = rows;\n        part.height.val = columns;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_reads_the_cells_from_the_wrong_row",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "const size_t from = static_cast<size_t>(row + r) * width + (column + c);",
+   "new": "const size_t from = static_cast<size_t>(r) * width + (column + c);",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_reads_the_cells_from_the_wrong_column",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "const size_t from = static_cast<size_t>(row + r) * width + (column + c);",
+   "new": "const size_t from = static_cast<size_t>(row + r) * width + c;",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_copies_the_layer_two_of_an_empty_cell_as_empty",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "if (!cell.is_empty() && level.object_anchor(row + r, column + c, ar, ac)) {",
+   "new": "if (cell.is_empty()) continue;\n                if (level.object_anchor(row + r, column + c, ar, ac)) {",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_is_not_guarded",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "return guarded([&] { return crop_impl(",
+   "new": "return ([&] { return crop_impl(",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_unknown_profile_is_a_guess",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "Result crop_impl(const uint8_t* data, size_t size, uint32_t row, uint32_t column, uint32_t rows, uint32_t columns, Profile profile) {\n    LevelLimits limits;\n    if (!limits_of(profile, limits)) return refused(\"unknown profile\");",
+   "new": "Result crop_impl(const uint8_t* data, size_t size, uint32_t row, uint32_t column, uint32_t rows, uint32_t columns, Profile profile) {\n    LevelLimits limits = LevelLimits::for_extended_maps();\n    limits_of(profile, limits);",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_c_interface_swaps_rows_and_columns",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "crop(data, size, row, column, rows, columns, profile_of(profile))",
+   "new": "crop(data, size, row, column, columns, rows, profile_of(profile))",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_c_interface_swaps_the_corner",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "crop(data, size, row, column, rows, columns, profile_of(profile))",
+   "new": "crop(data, size, column, row, rows, columns, profile_of(profile))",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_c_interface_ignores_the_profile",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "crop(data, size, row, column, rows, columns, profile_of(profile))",
+   "new": "crop(data, size, row, column, rows, columns, Profile::Extended)",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "wrapper_crop_swaps_the_corner",
+   "file": "web/lvl_core_api.js",
+   "old": "module._lvl_crop(ptr[0], bytes.length, row, column, rows, columns, p)",
+   "new": "module._lvl_crop(ptr[0], bytes.length, column, row, rows, columns, p)",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_crop_swaps_the_size",
+   "file": "web/lvl_core_api.js",
+   "old": "module._lvl_crop(ptr[0], bytes.length, row, column, rows, columns, p)",
+   "new": "module._lvl_crop(ptr[0], bytes.length, row, column, columns, rows, p)",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_crop_ignores_the_profile",
+   "file": "web/lvl_core_api.js",
+   "old": "module._lvl_crop(ptr[0], bytes.length, row, column, rows, columns, p)",
+   "new": "module._lvl_crop(ptr[0], bytes.length, row, column, rows, columns, 2)",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_crop_takes_a_fraction",
+   "file": "web/lvl_core_api.js",
+   "old": "var numbers = [row, column, rows, columns];",
+   "new": "var numbers = [row, column, rows, columns].map(Math.floor);",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_crop_takes_a_negative_number",
+   "file": "web/lvl_core_api.js",
+   "old": "numbers[i] < 0 || numbers[i] > 4294967295 || Math.floor(numbers[i]) !== numbers[i]) return fault(1, 'the window is made of whole numbers');",
+   "new": "numbers[i] > 4294967295 || Math.floor(numbers[i]) !== numbers[i]) return fault(1, 'the window is made of whole numbers');",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_crop_does_not_read_the_file_as_a_conversion",
+   "file": "web/lvl_core_api.js",
+   "old": "module._lvl_crop(ptr[0], bytes.length, row, column, rows, columns, p), 'conversion')",
+   "new": "module._lvl_crop(ptr[0], bytes.length, row, column, rows, columns, p), 'bytes')",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "interface_version_is_not_raised_for_the_crop",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "lvl_interface_version() { return 4; }",
+   "new": "lvl_interface_version() { return 3; }",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
   }
  ]
 }

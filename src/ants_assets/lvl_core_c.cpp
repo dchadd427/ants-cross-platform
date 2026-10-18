@@ -14,13 +14,14 @@
 //   uint8_t* lvl_needs_extended(data, size, profile)               JSON: why a map cannot be a Classic map (lvl_core::needs_extended)
 //   uint8_t* lvl_blank_extended(rows, columns, ground_tile, eggs, minutes)   a new Extended map's bytes (lvl_core::blank_extended)
 //   uint8_t* lvl_set_properties(data, size, description, description_size, minutes, eggs, default_ant_type, profile)   a conversion: the JSON of the answer and the file with the new properties (lvl_core::set_properties)
+//   uint8_t* lvl_crop(data, size, row, column, rows, columns, profile)   a conversion: the JSON of the answer and the file of the part inside the window (lvl_core::crop)
 //   uint8_t* lvl_limits(profile)                                   JSON of the limits of a profile (lvl_core::profile_limits)
 //   uint32_t lvl_result_status(const uint8_t* result)              0 the answer, 1 a refusal (the payload is a sentence), 2 a fault or no memory (a sentence, empty when even that did not fit); a null block reads as 2
 //   uint32_t lvl_result_size(const uint8_t* result)                the bytes of the payload
 //   const uint8_t* lvl_result_data(const uint8_t* result)          the payload (valid until lvl_free(result))
-//   uint32_t lvl_interface_version()                               3 (1: the five calls of the first version; 2 adds the Extended profile and the calls that follow them; 3 adds lvl_set_properties)
+//   uint32_t lvl_interface_version()                               4 (1: the five calls of the first version; 2 adds the Extended profile and the calls that follow them; 3 adds lvl_set_properties; 4 adds lvl_crop)
 //
-// A conversion's payload (and lvl_set_properties's) is a dword (the size of the JSON), the JSON, then the new file: lvl_core.hpp, convert_to_extended.
+// A conversion's payload (and lvl_set_properties's and lvl_crop's) is a dword (the size of the JSON), the JSON, then the new file: lvl_core.hpp, convert_to_extended.
 // `profile`: 0 the limits of a new Classic map (LevelLimits::for_new_maps()), 1 the game's own (LevelLimits{}), 2 a place that takes Extended maps too (LevelLimits::for_extended_maps()). A call returns 0 only when there is no memory left for its answer.
 #include "ants_assets/lvl_core.hpp"
 
@@ -83,6 +84,9 @@ LVL_CORE_EXPORT uint8_t* lvl_blank_extended(uint32_t rows, uint32_t columns, uin
 LVL_CORE_EXPORT uint8_t* lvl_set_properties(const uint8_t* data, uint32_t size, const uint8_t* description, uint32_t description_size, uint32_t minutes, uint32_t eggs, uint32_t default_ant_type, uint32_t profile) {
     return block_of(ants::assets::lvl_core::set_properties(data, size, description, description_size, minutes, eggs, default_ant_type, profile_of(profile)));
 }
+LVL_CORE_EXPORT uint8_t* lvl_crop(const uint8_t* data, uint32_t size, uint32_t row, uint32_t column, uint32_t rows, uint32_t columns, uint32_t profile) {
+    return block_of(ants::assets::lvl_core::crop(data, size, row, column, rows, columns, profile_of(profile)));
+}
 LVL_CORE_EXPORT uint8_t* lvl_limits(uint32_t profile) { return block_of(ants::assets::lvl_core::profile_limits(profile_of(profile))); }
 LVL_CORE_EXPORT uint8_t* lvl_same_level(const uint8_t* a, uint32_t size_a, const uint8_t* b, uint32_t size_b, uint32_t profile) {
     return block_of(ants::assets::lvl_core::same_level(a, size_a, b, size_b, profile_of(profile)));
@@ -92,4 +96,4 @@ LVL_CORE_EXPORT uint8_t* lvl_same_level(const uint8_t* a, uint32_t size_a, const
 LVL_CORE_EXPORT uint32_t lvl_result_status(const uint8_t* result) { return result == nullptr ? 2 : get_u32(result); }
 LVL_CORE_EXPORT uint32_t lvl_result_size(const uint8_t* result) { return result == nullptr ? 0 : get_u32(result + 4); }
 LVL_CORE_EXPORT const uint8_t* lvl_result_data(const uint8_t* result) { return result == nullptr ? nullptr : result + kHeader; }
-LVL_CORE_EXPORT uint32_t lvl_interface_version() { return 3; }
+LVL_CORE_EXPORT uint32_t lvl_interface_version() { return 4; }

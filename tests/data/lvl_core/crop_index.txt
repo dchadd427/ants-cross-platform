@@ -1,0 +1,50 @@
+tiny_half	Original-Ants/Maps/TINY.LVL	7	7	15	15	2	0	10396	24da0948da775bf0
+tiny_corner	Original-Ants/Maps/TINY.LVL	0	0	10	10	2	0	8650	9a37d4dac850e005
+tiny_ext_half	ext:Original-Ants/Maps/TINY.LVL	7	7	15	15	2	0	10399	22dc1ab1ce734003
+tiny_ext_last_row	ext:Original-Ants/Maps/TINY.LVL	30	0	1	31	2	0	7807	ec2bc6137385244b
+small_half	Original-Ants/Maps/SMALL.LVL	10	10	20	20	2	0	19474	0606cc60361ae70e
+small_corner	Original-Ants/Maps/SMALL.LVL	0	0	13	13	2	0	16700	d1ab6819fe5fc19c
+small_ext_half	ext:Original-Ants/Maps/SMALL.LVL	10	10	20	20	2	0	19475	a3a0f9fcb64c4e46
+small_ext_last_row	ext:Original-Ants/Maps/SMALL.LVL	39	0	1	40	2	0	15129	c443d9886d3e0222
+medium_half	Original-Ants/Maps/MEDIUM.LVL	15	15	30	30	2	0	25845	cd4f359508c213ca
+medium_corner	Original-Ants/Maps/MEDIUM.LVL	0	0	20	20	2	0	19467	443ac0ca72d82d83
+medium_ext_half	ext:Original-Ants/Maps/MEDIUM.LVL	15	15	30	30	2	0	25839	9053a829cd3b5944
+medium_ext_last_row	ext:Original-Ants/Maps/MEDIUM.LVL	59	0	1	60	2	0	15351	7fbe3cacdc46d85b
+turtleworld_half	Community-Maps/!TurtleWorld.lvl	15	15	30	30	2	0	25839	f2e5ad9e8112377d
+turtleworld_corner	Community-Maps/!TurtleWorld.lvl	0	0	20	20	2	0	19467	7e3efeda0381093f
+turtleworld_ext_half	ext:Community-Maps/!TurtleWorld.lvl	15	15	30	30	2	0	25838	3c9647208e9776d4
+turtleworld_ext_last_row	ext:Community-Maps/!TurtleWorld.lvl	59	0	1	60	2	0	15362	928dcb91bda2aedc
+party_half	Community-Maps/ANTS_PARTY-V.3.0.5.lvl	7	7	15	15	2	0	17798	d63c1758dfb92df1
+party_corner	Community-Maps/ANTS_PARTY-V.3.0.5.lvl	0	0	10	10	2	0	16018	2c87e12e52958ebe
+party_ext_half	ext:Community-Maps/ANTS_PARTY-V.3.0.5.lvl	7	7	15	15	2	0	17806	6eedefb721e984a6
+party_ext_last_row	ext:Community-Maps/ANTS_PARTY-V.3.0.5.lvl	30	0	1	31	2	0	15116	1bfe5e75de32b551
+conquer_half	Community-Maps/Conquer.lvl	7	7	15	15	2	0	10246	7303a08a87d1d1fe
+conquer_corner	Community-Maps/Conquer.lvl	0	0	10	10	2	0	8658	f1d0960fc5870377
+conquer_ext_half	ext:Community-Maps/Conquer.lvl	7	7	15	15	2	0	10254	f7a45d6004441dfd
+conquer_ext_last_row	ext:Community-Maps/Conquer.lvl	30	0	1	31	2	0	7812	a05b3835b689d543
+bomberworld_half	Community-Maps/BOMBERWORLD.lvl	15	15	30	30	2	0	26081	5acfd20ac89bbe43
+bomberworld_corner	Community-Maps/BOMBERWORLD.lvl	0	0	20	20	2	0	19629	841d72896b01bfd3
+bomberworld_ext_half	ext:Community-Maps/BOMBERWORLD.lvl	15	15	30	30	2	0	26080	6641f16b7f851dda
+bomberworld_ext_last_row	ext:Community-Maps/BOMBERWORLD.lvl	59	0	1	60	2	0	15520	c328b1d83da6f704
+easyjungle_half	Community-Maps/Easy jungle.lvl	20	25	40	50	2	0	39618	48267812fcb5e3e5
+easyjungle_corner	Community-Maps/Easy jungle.lvl	0	0	27	33	2	0	25398	47a93b5dada5ab8c
+easyjungle_ext_half	ext:Community-Maps/Easy jungle.lvl	20	25	40	50	2	0	39618	2b78af4b5c3d1f89
+easyjungle_ext_last_row	ext:Community-Maps/Easy jungle.lvl	80	0	1	100	2	0	15826	db37468e3c6c983a
+icon_half	Community-Maps/IcoN.LVL	7	7	15	15	2	0	10204	e4f93bada16a8d62
+icon_corner	Community-Maps/IcoN.LVL	0	0	10	10	2	0	8650	a10df1ebeb6919d8
+icon_ext_half	ext:Community-Maps/IcoN.LVL	7	7	15	15	2	0	10209	6e8cc927c016cc84
+icon_ext_last_row	ext:Community-Maps/IcoN.LVL	30	0	1	31	2	0	7809	abb6276ce7f3fb3b
+tiny_whole	Original-Ants/Maps/TINY.LVL	0	0	31	31	2	0	19312	71a9b7dac68be3a3
+tiny_ext_whole	ext:Original-Ants/Maps/TINY.LVL	0	0	31	31	2	0	19315	733cb6b54139213a
+tiny_one_cell	Original-Ants/Maps/TINY.LVL	15	15	1	1	2	0	7444	f087b40eb72b7ad2
+tiny_new_map_profile	Original-Ants/Maps/TINY.LVL	3	4	20	18	0	0	12058	19ce15178e3d636a
+tiny_game_profile	Original-Ants/Maps/TINY.LVL	3	4	20	18	1	0	12058	19ce15178e3d636a
+tiny_no_rows	Original-Ants/Maps/TINY.LVL	3	4	0	18	2	1	-	the part to keep needs at least one row and one column
+tiny_no_columns	Original-Ants/Maps/TINY.LVL	3	4	20	0	2	1	-	the part to keep needs at least one row and one column
+tiny_beyond_rows	Original-Ants/Maps/TINY.LVL	12	0	20	31	2	1	-	the part to keep (rows 12 to 31, columns 0 to 30) is not inside the map, which has 31 rows and 31 columns
+tiny_beyond_columns	Original-Ants/Maps/TINY.LVL	0	12	31	20	2	1	-	the part to keep (rows 0 to 30, columns 12 to 31) is not inside the map, which has 31 rows and 31 columns
+tiny_starts_outside	Original-Ants/Maps/TINY.LVL	31	0	1	1	2	1	-	the part to keep (rows 31 to 31, columns 0 to 0) is not inside the map, which has 31 rows and 31 columns
+tiny_overflow	Original-Ants/Maps/TINY.LVL	4294967295	0	2	1	2	1	-	the part to keep (rows 4294967295 to 4294967296, columns 0 to 0) is not inside the map, which has 31 rows and 31 columns
+tiny_huge	Original-Ants/Maps/TINY.LVL	0	0	4294967295	4294967295	2	1	-	the part to keep (rows 0 to 4294967294, columns 0 to 4294967294) is not inside the map, which has 31 rows and 31 columns
+tiny_ext_under_new_map	ext:Original-Ants/Maps/TINY.LVL	3	4	20	18	0	1	-	does not load: header version 9 is an Extended map: version 9 is not supported here, this place reads Classic maps (version 8) only; nothing of the file is read (the original game refuses it too: "the MAP you tried to play is the wrong version")
+tiny_unknown_profile	Original-Ants/Maps/TINY.LVL	3	4	20	18	9	1	-	unknown profile

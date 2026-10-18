@@ -35,7 +35,7 @@ class TheWiring(unittest.TestCase):
         self.assertTrue(listed)
         exported = {name.lstrip("_") for name in listed.group(1).split(",")}
         self.assertEqual(exported, defined)
-        self.assertEqual(len(defined), 18)
+        self.assertEqual(len(defined), 19)
 
     def test_the_module_is_a_target_of_the_web_build_only_and_has_no_game_code(self):
         text = read("CMakeLists.txt")
@@ -93,6 +93,15 @@ class TheWiring(unittest.TestCase):
         for i in hostile:
             for suffix in (".map.json", ".read.json"):
                 self.assertTrue(os.path.isfile(os.path.join(folder, i + suffix)), i + suffix)
+
+    def test_the_expectation_of_the_crop_is_complete(self):
+        folder = os.path.join(REPO, "tests", "data", "lvl_core")
+        cases = [line.split("\t") for line in read("tests", "data", "lvl_core", "crop_index.txt").splitlines() if line]
+        self.assertGreaterEqual(len(cases), 50)
+        for case in cases:
+            if case[7] == "0":
+                self.assertTrue(os.path.isfile(os.path.join(folder, "crop." + case[0] + ".json")), case[0])
+        self.assertTrue(any(c[7] == "0" for c in cases) and any(c[7] == "1" for c in cases))
 
     def test_the_wrapper_has_a_call_for_every_export_and_asks_for_the_version_it_was_written_for(self):
         wrapper = read("web", "lvl_core_api.js")

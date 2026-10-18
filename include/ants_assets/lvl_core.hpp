@@ -89,6 +89,18 @@ Result blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uin
 /// bytes is written, with the checker's warning `description_too_long`). Status 1 when the file does not load or the profile does not exist.
 Result set_properties(const uint8_t* data, size_t size, const uint8_t* description, size_t description_size, uint32_t minutes, uint32_t eggs, uint32_t default_ant_type, Profile profile);
 
+/// The part of the map inside a window (interface version 4): `rows` x `columns` cells from the cell (`row`, `column`), counted from 0, as a new map of the same kind (the file is read and
+/// the part written under `profile`; an Extended map needs Profile::Extended). Both layers are cut out; an object is kept whole or not at all (one that has a cell outside the window, or an
+/// anchor outside it, goes with every cell it has inside, and its solid bits with it, except in the first row of the part, as the editor's eraser does); a starting ant, a food pile and a waypoint
+/// are kept when they are in the window and their object was kept, and move with it; the dictionary, the description, the minutes, the eggs, the version and the rules word stay as they are. A window
+/// that is the whole map gives the canonical bytes of the file. The arguments are checked against the grid before anything is made: an empty window, or one that is not inside the map, is
+/// status 1 (a sentence), as is a file that does not load or a profile that does not exist. The payload (status 0) is that of the conversions: a dword (the size of the JSON), the JSON, then the bytes
+/// of the part (none when "ok" is false). The JSON: "from" (the kind of the file), "ok", "row", "column", "rows", "columns" (the window), "bytes" (the size of the new file, 0 when not ok),
+/// "removed_cells" (cells of objects taken out because the window cuts them), "removed_records" (starting ants, food piles and waypoints left out), "reasons" ({"code", "message"}:
+/// `not_writable`, the part is not a map that can be written) and "notes" (`objects_cut` and `records_left_out`, when there is something to say). The part is NOT turned into a Classic map: ask
+/// convert_to_classic for that, with the same profile, as for any Extended map.
+Result crop(const uint8_t* data, size_t size, uint32_t row, uint32_t column, uint32_t rows, uint32_t columns, Profile profile);
+
 /// Do two files hold the same map (same_level of the two levels the reader makes)? JSON {"same": true} or {"same": false, "difference": "..."}; status 1 when either file
 /// does not load.
 Result same_level(const uint8_t* a, size_t size_a, const uint8_t* b, size_t size_b, Profile profile);

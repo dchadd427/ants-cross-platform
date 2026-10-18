@@ -1,0 +1,6 @@
+{"from":"classic","ok":true,"row":15,"column":15,"rows":30,"columns":30,"bytes":26081,"removed_cells":51,"removed_records":15,
+"reasons":[],
+"notes":[
+{"code":"objects_cut","message":"51 cells of objects were taken out because the frame cuts the object (an object is kept whole or not at all)"},
+{"code":"records_left_out","message":"15 starting ants, food piles and waypoints lie outside the part and are left out"}
+]}

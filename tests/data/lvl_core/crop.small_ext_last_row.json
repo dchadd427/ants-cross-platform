@@ -1,0 +1,5 @@
+{"from":"extended","ok":true,"row":39,"column":0,"rows":1,"columns":40,"bytes":15129,"removed_cells":0,"removed_records":25,
+"reasons":[],
+"notes":[
+{"code":"records_left_out","message":"25 starting ants, food piles and waypoints lie outside the part and are left out"}
+]}

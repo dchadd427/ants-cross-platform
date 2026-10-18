@@ -5,7 +5,7 @@
 //   createLvlCore().then(function (module) { var core = LvlCore.wrap(module); var r = core.readReport(bytes); if (r.status === 0) console.log(r.json.findings); });
 //
 // Every call answers {status, text, bytes, json, error}: status 0 is the answer (`json` is the parsed report for readReport, checkOriginal, checkMap, needsExtended, limits and
-// sameLevel, `bytes` is the file for rewrite, blank and blankExtended, and for convertToExtended, convertToClassic and setProperties when `json.ok`, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
+// sameLevel, `bytes` is the file for rewrite, blank and blankExtended, and for convertToExtended, convertToClassic, setProperties and crop when `json.ok`, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
 // wrap() throws when the module is not the interface version the wrapper needs; after a call made the module throw (a trap) `isDead()` is true and every later call answers
 // status 2 until the module is created again. A sentence can hold text of the file: show it with textContent, never innerHTML.
 // `profile`: "new_map" (the default: the limits of a new Classic map, at most 90 rows, 130 columns and 10,000 cells, 512 KB read), "game" (the game's own limits) or "extended" (a place that also takes
@@ -20,7 +20,7 @@
     'use strict';
 
     var PROFILES = { new_map: 0, game: 1, extended: 2 };
-    var EXPECTED_INTERFACE = 3;     // lvl_interface_version() of the module this wrapper was written for
+    var EXPECTED_INTERFACE = 4;     // lvl_interface_version() of the module this wrapper was written for
 
     function profileOf(profile) {
         if (profile === undefined || profile === null) return 0;
@@ -169,6 +169,20 @@
                 var text = typeof description === 'string' ? encoder.encode(description) : description;
                 if (!(text instanceof Uint8Array)) return fault(1, 'the description must be a string or a Uint8Array');
                 return withBuffers([bytes, text], function (ptr) { return take(module._lvl_set_properties(ptr[0], bytes.length, ptr[1], text.length, minutes, eggs, defaultAntType, p), 'conversion'); });
+            },
+            // The part of a map inside a window (interface version 4): rows x columns cells from the cell (row, column), counted from 0, as a new map of the same kind; the file is read and the part
+            // written under the profile ("extended" for an Extended map). Answers a conversion's shape: json.ok, json.from, json.row, json.column, json.rows, json.columns, json.bytes,
+            // json.removed_cells (cells of objects taken out because the window cuts them: an object is kept whole or not at all), json.removed_records (starting ants, food piles and waypoints
+            // outside the window), json.reasons and json.notes (each {code, message}), and bytes (the part) when json.ok. A window that is empty or not inside the map, a file that does not load
+            // and a profile that does not exist are status 1. The part is not made a Classic map: give it to convertToClassic.
+            crop: function (bytes, row, column, rows, columns, profile) {
+                var p = profileOf(profile);
+                if (p < 0) return fault(1, 'unknown profile');
+                var numbers = [row, column, rows, columns];
+                for (var i = 0; i < numbers.length; i++) {
+                    if (typeof numbers[i] !== 'number' || !isFinite(numbers[i]) || numbers[i] < 0 || numbers[i] > 4294967295 || Math.floor(numbers[i]) !== numbers[i]) return fault(1, 'the window is made of whole numbers');
+                }
+                return withBuffers([bytes], function (ptr) { return take(module._lvl_crop(ptr[0], bytes.length, row, column, rows, columns, p), 'conversion'); });
             },
             // The limits of a profile as the code applies them: json.classic and json.extended (rows, columns, cells), json.read_bytes, json.write_bytes (null: no limit)
             limits: function (profile) {
