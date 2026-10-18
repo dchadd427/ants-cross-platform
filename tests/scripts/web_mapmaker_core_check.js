@@ -15,6 +15,9 @@
 //   E  an older module is refused by its interface version, before anything is asked of it
 //   F  a map that has been drawn on (web/front/mapmaker_edit.js): the core reads it, checks it, writes it as the same level, and the objects keep the anchors of their kind (version 8 and 9)
 //   H  bigger objects (web/front/mapmaker_objects.js): all of them on a blank map of each kind and three on each of the 540 maps; the core finds nothing new, writes the same bytes, and the anchors survive a conversion
+//   I  the properties of the map (web/front/mapmaker_props.js): on all 540 maps, as Classic and as Extended maps, the values a file has set again give the same bytes, other values go through
+//      the page's change into one step of the history (the core's bytes, the grid as it was, the check as it said, undo and redo byte for byte), the limits of the description (29 and 30 bytes,
+//      255 and 256) as the checker says them, and the dialog on the real core
 //   G  hills, starting ants and food piles (web/front/mapmaker_blocks.js): the core's checker says "Blue has no hill" until the hill is there and then says nothing of it, counts the ants and the piles
 //      as they were put, writes the edited file as the same bytes, and every hill of the 540 maps taken away and put back is the same level (version 8 and 9)
 // Exit status 0 when everything passes (or there is no module and --require is not given), 1 otherwise.
@@ -152,7 +155,7 @@ function caseE() {
     let thrown = null;
     try { LvlCore.wrap({ _lvl_interface_version: () => 1 }); } catch (e) { thrown = e; }
     check(thrown && /interface version 1/.test(thrown.message), 'an older module is refused by wrap(): ' + (thrown && thrown.message));
-    check(LvlCore.EXPECTED_INTERFACE === 2, 'the page needs interface version 2');
+    check(LvlCore.EXPECTED_INTERFACE === 3, 'the page needs interface version 3');
 }
 
 // The page's drawing, then the core: what the page writes into the bytes is a map that the core reads, checks and writes again as the same level
@@ -414,6 +417,109 @@ function caseH(core) {
     }
 }
 
+// ---- I: the properties of the map ----
+function codesOf(report) { return report.findings.map((f) => f.code).sort().join(','); }
+function caseI(core) {
+    const Props = require(path.join(FRONT, 'mapmaker_props.js')), Dialog = require(path.join(FRONT, 'mapmaker_dialog.js'));
+    const { makeDocument } = require('./web_mapmaker_fake_dom.js');
+    let maps = 0, noops = 0, restored = 0, leftover = 0, missingEgg = 0, mostBytes = 0;
+    for (const file of libraryFiles()) {
+        const classic = new Uint8Array(fs.readFileSync(file)), up = core.convertToExtended(classic);
+        check(up.status === 0 && up.json.ok, path.basename(file) + ': it goes up');
+        for (const bytes of [classic, up.bytes]) {
+            const label = path.basename(file) + (bytes === classic ? '' : ' (Extended)');
+            const props = Props.read(core, bytes);
+            if (props.error) { check(false, label + ': read: ' + props.error); continue; }
+            maps++;
+            // the values the file has, set again: the very same bytes, and nothing for the history
+            const same = core.setProperties(bytes, props.raw, props.minutes, props.eggs, props.tile, 'extended');
+            const none = same.status === 0 ? Props.changeOf(bytes, same.json.edits, same.bytes) : null;
+            check(same.status === 0 && same.json.ok && !same.json.changed && Buffer.compare(Buffer.from(same.bytes), Buffer.from(bytes)) === 0 && none !== null && none.splices.length === 0, label + ': the values it has give the same bytes, no change');
+            noops++;
+            // other values, through the page's own path: the core's answer, the change, one step of the history
+            const text = 'Café of the ants', minutes = props.minutes === 7 ? 8 : 7;
+            let eggs = props.eggs === 3 ? 4 : 3, answer = core.setProperties(bytes, text, minutes, eggs, 64, 'extended');
+            if (!answer.json.ok) {
+                check(answer.json.reasons.length === 1 && answer.json.reasons[0].code === 'eggs_not_in_file', label + ': only a file with no egg word refuses the eggs');
+                missingEgg++; eggs = props.eggs; answer = core.setProperties(bytes, text, minutes, eggs, 64, 'extended');
+            }
+            check(answer.status === 0 && answer.json.ok && answer.json.changed, label + ': the properties are set');
+            const change = Props.changeOf(bytes, answer.json.edits, answer.bytes);
+            check(change !== null, label + ': the core\'s edits make its new file out of the old one');
+            if (!change) continue;
+            const ed = Edit.create(File.parse(bytes), { rebase: (b) => File.parse(b) }), f0 = ed.file, cells = digestOf(f0.bytes.slice(f0.layer1, f0.layer2 + 6 * f0.cells)), rows = f0.rows, columns = f0.columns;
+            check(ed.act(change) !== null && ed.history.size().strokes === 1, label + ': one step of the history');
+            const f1 = ed.file;
+            check(Buffer.compare(Buffer.from(f1.bytes), Buffer.from(answer.bytes)) === 0, label + ': the history made the core\'s bytes');
+            check(f1.ok && f1.rows === rows && f1.columns === columns && digestOf(f1.bytes.slice(f1.layer1, f1.layer2 + 6 * f1.cells)) === cells, label + ': the page reads the same grid in the new file');
+            const patch = change.splices.reduce((n, s) => n + s.removed.length + s.inserted.length, 0);
+            mostBytes = Math.max(mostBytes, patch);
+            check(patch <= props.raw.length + 30 + 17 + 12, label + ': the step holds only the bytes that changed (' + patch + ')');
+            // the check of the map says what it said, less the warning for a long description
+            const before = core.checkMap(bytes, 'extended').json, after = core.checkMap(f1.bytes, 'extended').json;
+            const wanted = before.findings.map((f) => f.code).filter((c) => c !== 'description_too_long').sort().join(',');
+            check(codesOf(after) === wanted, label + ': the check says what it said (' + wanted + ') less a long description: ' + codesOf(after));
+            const read = core.readReport(f1.bytes, 'extended').json;
+            check(read.loaded && read.minutes === minutes && read.eggs === eggs && read.default_type_tile === 64 && read.description === 'CafÃ© of the ants' && read.rows === rows, label + ': the core reads what was set');
+            // back through the core: the same file (a description field that held bytes after its end is zeroed by the first change, and is the one thing that does not come back)
+            const back = core.setProperties(f1.bytes, props.raw, props.minutes, props.eggs, props.tile, 'extended');
+            if (Buffer.compare(Buffer.from(back.bytes), Buffer.from(bytes)) === 0) restored++;
+            else { leftover++; check(bytes === classic && back.bytes.length === bytes.length && Array.from(bytes).every((b, i) => b === back.bytes[i] || (i >= 10 && i < 40)), label + ': what does not come back is inside the description field'); }
+            // undo and redo are exact, byte for byte, and the history of the page and the core agree
+            check(ed.undo() !== null && Buffer.compare(Buffer.from(ed.file.bytes), Buffer.from(bytes)) === 0, label + ': undo gives the old file back, byte for byte');
+            check(ed.redo() !== null && Buffer.compare(Buffer.from(ed.file.bytes), Buffer.from(answer.bytes)) === 0, label + ': redo gives the new one');
+        }
+    }
+    check(maps === 1080 && noops === 1080, 'every map of the library, as a Classic and as an Extended map: ' + maps);
+    check(restored > 1000 && leftover <= 20 && missingEgg <= 30, 'set and set back: ' + restored + ' give the file back (' + leftover + ' have bytes after the description\'s end; ' + missingEgg + ' have no egg word)');
+    check(mostBytes < 300, 'the largest step holds ' + mostBytes + ' bytes');
+
+    // the limits and the checker: 29 and 30 bytes on a Classic map, 255 and 256 on an Extended map
+    const tiny = new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', 'TINY.LVL'))), tinyUp = core.convertToExtended(tiny).bytes;
+    for (const n of [0, 1, 29, 30]) {
+        const r = core.setProperties(tiny, 'x'.repeat(n), 12, 9, 0x7FFE, 'extended'), verdict = core.checkMap(r.bytes, 'extended').json, long = verdict.findings.filter((f) => f.code === 'description_too_long');
+        check(r.json.ok && (n < 30 ? r.json.warnings.length === 0 && long.length === 0 : r.json.warnings.length === 1 && long.length === 1 && long[0].severity === 'warning'), 'Classic, ' + n + ' bytes: ' + (n === 30 ? 'the check warns' : 'the check says nothing of it'));
+        if (n === 30) check(long[0].message === r.json.warnings[0].message, 'the warning is the core\'s own sentence, set and checked');
+    }
+    check(core.setProperties(tiny, 'x'.repeat(31), 12, 9, 0x7FFE, 'extended').json.ok === false, 'Classic, 31 bytes: refused');
+    for (const n of [0, 255]) {
+        const r = core.setProperties(tinyUp, 'x'.repeat(n), 12, 9, 0x7FFE, 'extended'), verdict = core.checkMap(r.bytes, 'extended').json;
+        check(r.json.ok && verdict.kind === 'extended' && !verdict.findings.some((f) => f.code === 'description_too_long'), 'Extended, ' + n + ' bytes: accepted, the check says nothing of it');
+    }
+    const refused = core.setProperties(tinyUp, 'x'.repeat(256), 12, 9, 0x7FFE, 'extended');
+    check(refused.json.ok === false && refused.json.reasons[0].code === 'description_too_long' && refused.json.reasons[0].message === 'the description is 256 bytes long: an Extended map holds at most 255', 'Extended, 256 bytes: refused with the checker\'s sentence');
+    check(core.setProperties(tiny, 'x', 1, 1, 1, 'new_map').status === 0 && core.setProperties(tinyUp, 'x', 1, 1, 1, 'new_map').status === 1, 'a Classic place sets a Classic map and does not read an Extended one');
+
+    // the dialog on the real core: a Classic map and an Extended map, Apply, undo
+    for (const [kind, bytes] of [['Classic', tiny], ['Extended', tinyUp]]) {
+        const doc = makeDocument(), host = doc.createElement('div'), top = doc.createElement('header'), opener = doc.createElement('button');
+        doc.body.appendChild(host); doc.body.appendChild(top); top.appendChild(opener);
+        const dialogs = Dialog.create(doc, host, [top]), ed = Edit.create(File.parse(bytes), { rebase: (b) => File.parse(b) }), applied = [];
+        const props = Props.read(core, bytes);
+        Props.open({ doc, dialogs, core, props, bytes: () => ed.file.bytes, apply: (change) => { applied.push(change); return ed.act(change) ? '' : 'no'; } });
+        const q = (s) => host.querySelector(s), all = (s) => host.querySelectorAll(s), type = (v) => { q('#p-desc').value = v; q('#p-desc').fire('input', {}); };
+        check(q('#p-desc').value === 'Tiny map with no PowerUps' && q('#p-count').children[0].textContent === '25 of ' + (kind === 'Classic' ? 29 : 255) + ' characters', kind + ': the dialog opens on the map\'s own description, with the core\'s limit');
+        type('Café des fourmis'); all('.ant')[2].click(); q('#p-minutes').parentNode.children[2].click();
+        all('button').filter((b) => b.textContent === 'Apply')[0].click();
+        check(applied.length === 1 && !dialogs.isOpen() && ed.history.size().strokes === 1, kind + ': Apply is one step of the history');
+        const now = Props.read(core, ed.file.bytes);
+        check(now.description === 'Café des fourmis' && now.minutes === props.minutes + 1 && now.tile === 63 && now.eggs === props.eggs, kind + ': the map says what the dialog said');
+        check(core.checkMap(ed.file.bytes, 'extended').json.findings.every((f) => f.code !== 'description_too_long'), kind + ': and the check is run on it');
+        ed.undo();
+        check(Buffer.compare(Buffer.from(ed.file.bytes), Buffer.from(bytes)) === 0, kind + ': undo gives the map back, byte for byte');
+    }
+    // a map that came with 30 bytes (a Classic one): the core's sentence, Cut it to 29, and the map written as asked
+    const party = new Uint8Array(fs.readFileSync(path.join(ROOT, 'Community-Maps', 'ANTS_PARTY-V.3.0.5.lvl')));
+    const doc = makeDocument(), host = doc.createElement('div'), dialogs = Dialog.create(doc, host, []), ed = Edit.create(File.parse(party), { rebase: (b) => File.parse(b) });
+    Props.open({ doc, dialogs, core, props: Props.read(core, party), bytes: () => ed.file.bytes, apply: (change) => (ed.act(change) ? '' : 'no') });
+    const note = host.querySelector('.note.bad');
+    check(note !== null && /^!The description is 30 bytes long: at most 29 fit, because the original reads 30 bytes/.test(note.textContent) && host.querySelector('#p-count').children[0].textContent === '30 of 29 characters', 'a map with a description of 30 bytes: the core\'s sentence in red');
+    host.querySelectorAll('button').filter((b) => b.textContent === 'Cut it to 29')[0].click();
+    host.querySelectorAll('button').filter((b) => b.textContent === 'Apply')[0].click();
+    const cut = core.checkMap(ed.file.bytes, 'extended').json;
+    check(!cut.findings.some((f) => f.code === 'description_too_long') && Props.read(core, ed.file.bytes).description.length === 29, 'Cut it to 29 and Apply: 29 bytes, and the check has no warning about it');
+}
+
 async function main() {
     const o = parseArgs(process.argv.slice(2));
     const js = path.join(o.module, 'lvl_core.js');
@@ -422,7 +528,7 @@ async function main() {
         process.exit(o.require ? 1 : 0);
     }
     const core = LvlCore.wrap(await require(path.resolve(js))());
-    for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE], ['F drawing and the core', caseF], ['G hills, ants and food with the core', caseG], ['H bigger objects with the core', caseH]]) {
+    for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE], ['F drawing and the core', caseF], ['G hills, ants and food with the core', caseG], ['H bigger objects with the core', caseH], ['I the properties of the map', caseI]]) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');
         const before = failures;
         try { fn(core); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }

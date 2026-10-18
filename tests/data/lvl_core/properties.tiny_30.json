@@ -1,0 +1,10 @@
+{"ok":true,"changed":true,"bytes":19312,"description_bytes":30,"description_limit":29,
+"edits":[
+{"at":8,"removed":2,"inserted":2},
+{"at":10,"removed":30,"inserted":30},
+{"at":19310,"removed":2,"inserted":2}
+],
+"reasons":[],
+"warnings":[
+{"code":"description_too_long","message":"the description is 30 bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)"}
+]}

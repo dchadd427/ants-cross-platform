@@ -1,0 +1,6 @@
+{"ok":false,"changed":false,"bytes":0,"description_bytes":5,"description_limit":29,
+"edits":[],
+"reasons":[
+{"code":"description_has_zero_byte","message":"the description holds a zero byte (at 2): a reader would end it there"}
+],
+"warnings":[]}

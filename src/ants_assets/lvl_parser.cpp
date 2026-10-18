@@ -459,6 +459,7 @@ struct Parse {
     LevelData lvl;
     std::vector<LevelProblem> fatal;
     bool completed{false};
+    HeaderLayout layout;
 };
 
 void fail_truncated(Parse& p, const char* where, size_t pos, size_t size) {
@@ -513,11 +514,15 @@ void parse_level(const uint8_t* data, size_t size, const LevelLimits& limits, Pa
             return;
         }
         if (r.remaining() < description_bytes) { fail_truncated(p, "description", size, size); return; }
+        p.layout.description_at = 16;
+        p.layout.description_field_bytes = 2 + static_cast<size_t>(description_bytes);
         std::string text(description_bytes, '\0');
         if (description_bytes != 0) r.read_bytes(&text[0], description_bytes);
         const size_t end = text.find('\0');
         lvl.description = end == std::string::npos ? text : text.substr(0, end);
     } else {
+        p.layout.description_at = r.pos();
+        p.layout.description_field_bytes = 30;
         char desc_buf[30] = {};
         const size_t take = std::min<size_t>(30, r.remaining());                 // unchecked read in the original
         r.read_bytes(desc_buf, take);
@@ -621,6 +626,7 @@ void parse_level(const uint8_t* data, size_t size, const LevelLimits& limits, Pa
     }
 
     // block 3 (0x1007025): two words
+    p.layout.default_type_at = r.pos() + 2;
     if (!r.read_u16(lvl.ambient_flag) || !r.read_u16(lvl.ambient_tile_or_sound)) { fail_truncated(p, "block 3 (ambient parameters)", r.pos(), size); return; }
 
     // From here the original is inside its try block: the loader returns 1 whatever the rest of the file holds.
@@ -680,7 +686,10 @@ void parse_level(const uint8_t* data, size_t size, const LevelLimits& limits, Pa
         add_problem(lvl.load_notes, Severity::Warning, Kind::WaypointBlockTruncated, std::move(text), static_cast<uint32_t>(b4_count - std::min<size_t>(b4_count, complete_records)));
         add_problem(lvl.load_notes, Severity::Warning, Kind::EggStockMissing,
                     "the egg stock word was not read: the original leaves that field uninitialised (heap memory), the remake gives every team 0 eggs");
-    } else if (!r.read_u16(lvl.boundary_param)) {
+    } else if (r.remaining() >= 2) {
+        p.layout.eggs_at = r.pos();
+        r.read_u16(lvl.boundary_param);
+    } else {
         add_problem(lvl.load_notes, Severity::Warning, Kind::EggStockMissing,
                     "the file ends before the egg stock word: the original leaves that field uninitialised (heap memory), the remake gives every team 0 eggs");
     }
@@ -689,7 +698,7 @@ void parse_level(const uint8_t* data, size_t size, const LevelLimits& limits, Pa
 
 }  // anonymous namespace
 
-bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& out_level, LevelValidation* report, const LevelLimits& limits) {
+bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& out_level, LevelValidation* report, const LevelLimits& limits, HeaderLayout* where) {
     out_level = LevelData{};
     if (report) *report = LevelValidation{};
     try {
@@ -720,6 +729,7 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
             return false;
         }
         out_level = std::move(p.lvl);
+        if (where) *where = p.layout;
         if (report) *report = out_level.validate(0x0F, limits);
         return true;
     } catch (...) {

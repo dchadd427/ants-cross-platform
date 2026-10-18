@@ -11,6 +11,8 @@
 //   C8 the check by kind (check_map): the library as Classic maps and as Extended maps, an Extended map in a place that takes Classic maps only
 //   C9 the conversions: a Classic map goes up and comes back as its canonical bytes (the library), the reasons and the notes with their codes, a copy that is another file
 //   C10 the blank Extended map, the reasons a map needs to be Extended, hostile Extended files
+//   C11 the properties (interface version 3): the values a file has set again give the very same bytes (the whole library, as Classic and as Extended maps), setting and restoring, the
+//       edits, the limits of the description (the checker's own sentence), every refusal, the check of the map after it
 // `test_lvl_core --write-expected` writes the expectation again (after a change of the core that is meant), `--print-tile-names` prints src/ants_assets/lvl_tile_names.inc.
 #include "ants_assets/chd_parser.hpp"
 #include "ants_assets/lvl_checker.hpp"
@@ -47,6 +49,7 @@ uint8_t* lvl_convert_to_extended(const uint8_t* data, uint32_t size);
 uint8_t* lvl_convert_to_classic(const uint8_t* data, uint32_t size, uint32_t profile);
 uint8_t* lvl_needs_extended(const uint8_t* data, uint32_t size, uint32_t profile);
 uint8_t* lvl_blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes);
+uint8_t* lvl_set_properties(const uint8_t* data, uint32_t size, const uint8_t* description, uint32_t description_size, uint32_t minutes, uint32_t eggs, uint32_t default_ant_type, uint32_t profile);
 uint8_t* lvl_limits(uint32_t profile);
 uint32_t lvl_result_status(const uint8_t* result);
 uint32_t lvl_result_size(const uint8_t* result);
@@ -201,6 +204,11 @@ Conv c_to_classic(const Bytes& b, uint32_t profile = 0) { return unpack(take(lvl
 
 Bytes up_of(const Bytes& classic) { return c_to_extended(classic).bytes; }
 
+// The properties call: the description as bytes
+Conv c_set(const Bytes& b, const std::string& description, uint32_t minutes, uint32_t eggs, uint32_t type, uint32_t profile = 2) {
+    return unpack(take(lvl_set_properties(b.data(), static_cast<uint32_t>(b.size()), reinterpret_cast<const uint8_t*>(description.data()), static_cast<uint32_t>(description.size()), minutes, eggs, type, profile)));
+}
+
 bool contains(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
 
 // ---- the set of files ----
@@ -330,7 +338,7 @@ void c1_names() {
 
 // ---- C2 ----
 void c2_interface() {
-    CHECK(lvl_interface_version() == 2);
+    CHECK(lvl_interface_version() == 3);
     lvl_free(nullptr);
     uint8_t* zero = lvl_alloc(0);
     CHECK(zero != nullptr);
@@ -436,9 +444,11 @@ void c4_hostile() {
 void c6_no_memory() {
     const Bytes tiny = read_checked("Original-Ants/Maps/TINY.LVL");
     const Bytes tiny9 = up_of(tiny);
+    const std::string new_text = "A new text, 20 bytes";
+    const std::string too_long(256, 'x');
     int faults = 0;
     for (long allow = 0; allow < 400; allow += (allow < 60 ? 1 : 7)) {
-        for (int call = 0; call < 12; ++call) {
+        for (int call = 0; call < 14; ++call) {
             g_allow = allow;
             lvl_core::Result r;
             switch (call) {
@@ -453,6 +463,8 @@ void c6_no_memory() {
                 case 8: r = lvl_core::needs_extended(tiny9.data(), tiny9.size(), lvl_core::Profile::NewMap); break;
                 case 9: r = lvl_core::blank_extended(31, 31, 485, 6, 10); break;
                 case 10: r = lvl_core::profile_limits(lvl_core::Profile::Extended); break;
+                case 11: r = lvl_core::set_properties(tiny.data(), tiny.size(), reinterpret_cast<const uint8_t*>(new_text.data()), new_text.size(), 7, 3, 63, lvl_core::Profile::NewMap); break;
+                case 12: r = lvl_core::set_properties(tiny9.data(), tiny9.size(), reinterpret_cast<const uint8_t*>(too_long.data()), too_long.size(), 7, 3, 63, lvl_core::Profile::Extended); break;     // (refused: too long)
                 default: r = lvl_core::check_map(tiny.data(), tiny.size(), lvl_core::Profile::NewMap); break;
             }
             g_allow = -1;
@@ -477,6 +489,12 @@ void c6_no_memory() {
         CHECK_MSG(r.status == 1 || r.status == 2, "refused or out of memory, never an answer: " + std::to_string(r.status));
     }
     CHECK_MSG(faults > 200, "the injected failures were met: " + std::to_string(faults));
+    // a text beyond what a file can hold is refused before it is copied: its size is all the sentence needs (a megabyte of it asks the heap for no megabyte)
+    const std::string long_text(1u << 20, 'x');
+    const unsigned long long asked = g_bytes;
+    const lvl_core::Result many = lvl_core::set_properties(tiny9.data(), tiny9.size(), reinterpret_cast<const uint8_t*>(long_text.data()), long_text.size(), 7, 3, 63, lvl_core::Profile::Extended);
+    CHECK_MSG(many.status == 0 && contains(many.payload, "\"ok\":false") && contains(many.payload, "description_too_long"), many.payload.substr(0, 80));
+    CHECK_MSG(g_bytes - asked < 2u * (1u << 20) , "a refused text is not copied: " + std::to_string(g_bytes - asked) + " bytes");
 }
 
 // ---- C5 ----
@@ -857,6 +875,212 @@ void c10_hostile_extended() {
     }
 }
 
+
+// ---- C11 ----
+std::string hex_of(const std::string& bytes) {
+    static const char* const digits = "0123456789abcdef";
+    std::string out;
+    for (const char c : bytes) {
+        out += digits[(static_cast<uint8_t>(c) >> 4) & 15];
+        out += digits[static_cast<uint8_t>(c) & 15];
+    }
+    return out;
+}
+
+// Every file of the library (Original-Ants/Maps and Community-Maps), as bytes, in the order of the names
+std::vector<std::pair<std::string, Bytes>> whole_library() {
+    std::vector<std::pair<std::string, Bytes>> files;
+    for (const std::string& dir : {std::string("Original-Ants/Maps"), std::string("Community-Maps")}) {
+        std::vector<std::string> names;
+        for (const auto& entry : std::filesystem::directory_iterator(std::string(ANTS_SOURCE_DIR) + "/" + dir)) {
+            const std::string ext = entry.path().extension().string();
+            if (entry.is_regular_file() && (ext == ".lvl" || ext == ".LVL")) names.push_back(entry.path().string());
+        }
+        std::sort(names.begin(), names.end());
+        for (const std::string& n : names) {
+            Bytes b;
+            if (read_file(n, b)) files.emplace_back(n, std::move(b));
+        }
+    }
+    return files;
+}
+
+// The properties a file holds, by the reader (the Extended profile reads both kinds)
+struct Props {
+    bool loaded{false};
+    std::string description;
+    uint32_t minutes{0}, eggs{0}, type{0};
+    HeaderLayout layout;
+    uint32_t version{0};
+};
+
+Props props_of(const Bytes& b) {
+    Props p;
+    LevelData level;
+    LevelValidation report;
+    p.loaded = LVLParser::load_from_memory(b.data(), b.size(), level, &report, LevelLimits::for_extended_maps(), &p.layout);
+    if (p.loaded) {
+        p.description = level.description;
+        p.minutes = level.default_minutes;
+        p.eggs = level.boundary_param;
+        p.type = level.ambient_tile_or_sound;
+        p.version = level.version;
+    }
+    return p;
+}
+
+// Does the file say these four things, and is everything else of it as it was? The two levels are compared as levels after the four values are put into the first one
+bool says(const Bytes& b, const Bytes& before, const std::string& description, uint32_t minutes, uint32_t eggs, uint32_t type, std::string* why) {
+    LevelData now, was;
+    LevelValidation report;
+    if (!now.load_from_memory(b.data(), b.size(), &report, LevelLimits::for_extended_maps()) || !was.load_from_memory(before.data(), before.size(), &report, LevelLimits::for_extended_maps())) { *why = "does not load"; return false; }
+    if (now.description != description || now.default_minutes != minutes || now.ambient_tile_or_sound != type) { *why = "the values are not the asked ones"; return false; }
+    if (was.boundary_param != now.boundary_param && now.boundary_param != eggs) { *why = "the eggs are not the asked ones"; return false; }
+    was.description = description;
+    was.default_minutes = static_cast<uint16_t>(minutes);
+    was.ambient_tile_or_sound = static_cast<uint16_t>(type);
+    was.boundary_param = now.boundary_param;
+    return same_level(was, now, why);
+}
+
+void c11_properties() {
+    const std::vector<std::pair<std::string, Bytes>> library = whole_library();
+    CHECK_MSG(library.size() == 540, "the library has 540 maps: " + std::to_string(library.size()));
+    int same_count = 0, restored = 0, dirty_field = 0, no_egg_word = 0, noop_checked = 0, ext_checked = 0, shifted = 0;
+    for (const auto& file : library) {
+        const Bytes& b = file.second;
+        const Props p = props_of(b);
+        if (!p.loaded) continue;                                        // (a map that the Extended place does not read: none of the 540)
+        // asking for the values the file has gives the very same bytes: no edit, nothing changed, whatever the file holds (a quirk, bytes after the egg word)
+        const Conv same = c_set(b, p.description, p.minutes, p.eggs, p.type);
+        CHECK_MSG(same.status == 0 && contains(same.json, "\"ok\":true") && contains(same.json, "\"changed\":false") && contains(same.json, "\"edits\":[]") && same.bytes == b, file.first + ": " + same.json.substr(0, 120));
+        ++noop_checked;
+        // the same on the Extended copy of it
+        const Conv up = c_to_extended(b);
+        const Props q = props_of(up.bytes);
+        const Conv same9 = c_set(up.bytes, q.description, q.minutes, q.eggs, q.type);
+        CHECK_MSG(same9.status == 0 && contains(same9.json, "\"changed\":false") && same9.bytes == up.bytes, file.first + ": the Extended copy: " + same9.json.substr(0, 120));
+        ++ext_checked;
+        if (p.layout.eggs_at == HeaderLayout::kNone) ++no_egg_word;
+        // setting other values: the file says them, everything else is as it was, and setting the old values again gives the file back (a field that holds more than the text after its
+        // zero byte is zeroed by the first change, which is the one thing the second change cannot give back)
+        const std::string text = "Caf\xC3\xA9 of the ants";
+        const uint32_t minutes = p.minutes == 7 ? 8 : 7, type = p.type == 63 ? 64 : 63, eggs = p.layout.eggs_at == HeaderLayout::kNone ? p.eggs : (p.eggs == 3 ? 4 : 3);
+        for (int kind = 0; kind < 2; ++kind) {
+            const Bytes& from = kind == 0 ? b : up.bytes;
+            const Props now = kind == 0 ? p : q;
+            const Conv set = c_set(from, text, minutes, eggs, type);
+            std::string why;
+            CHECK_MSG(set.status == 0 && contains(set.json, "\"ok\":true") && contains(set.json, "\"changed\":true") && contains(set.json, "\"bytes\":" + std::to_string(set.bytes.size())), file.first + ": " + set.json.substr(0, 160));
+            CHECK_MSG(says(set.bytes, from, text, minutes, eggs, type, &why), file.first + ": " + why);
+            if (kind == 1) { CHECK_MSG(set.bytes.size() == from.size() - now.description.size() + text.size(), file.first + ": a version 9 description is as long as its text"); if (set.bytes.size() != from.size()) ++shifted; }
+            else CHECK_MSG(set.bytes.size() == from.size(), file.first + ": a version 8 file keeps its size");
+            const Conv back = c_set(set.bytes, now.description, now.minutes, now.eggs, now.type);
+            CHECK_MSG(back.status == 0 && contains(back.json, "\"ok\":true"), file.first + ": " + back.json.substr(0, 160));
+            bool clean = true;
+            if (kind == 0) for (size_t i = p.layout.description_at + p.description.size() + (p.description.size() < 30 ? 1 : 0); i < p.layout.description_at + 30; ++i) clean = clean && b[i] == 0;
+            if (clean) { CHECK_MSG(back.bytes == from, file.first + ": setting back gives the file back"); ++restored; }
+            else { ++dirty_field; CHECK_MSG(back.bytes.size() == from.size(), file.first + ": a dirty field"); }
+        }
+        ++same_count;
+    }
+    CHECK_MSG(same_count == 540 && noop_checked == 540 && ext_checked == 540, "all 540 maps: " + std::to_string(same_count));
+    CHECK_MSG(restored > 1000, "setting back was checked: " + std::to_string(restored) + " (field with leftover bytes: " + std::to_string(dirty_field) + ")");
+    CHECK_MSG(shifted > 500, "an Extended file grows and shrinks with its text: " + std::to_string(shifted));
+    std::cout << "(" << dirty_field << " description fields have leftover bytes, " << no_egg_word << " maps have no egg word) " << std::flush;
+
+    // ---- the nine maps of the set, and the limits, with the stored answers ----
+    const Bytes tiny = read_checked("Original-Ants/Maps/TINY.LVL");
+    const Bytes tiny9 = up_of(tiny);
+    std::ostringstream index;
+    struct Case { std::string id, from, text; uint32_t minutes, eggs, type, profile; };
+    std::vector<Case> cases;
+    const std::string cafe = "Caf\xC3\xA9, tiny ants";
+    for (const FileCase& c : library_cases()) {
+        cases.push_back({c.id, c.path, cafe, 7, 3, 63, 2});
+        cases.push_back({c.id + "_ext", "ext:" + c.path, cafe, 7, 3, 63, 2});
+    }
+    cases.push_back({"tiny_29", "Original-Ants/Maps/TINY.LVL", std::string(29, 'a'), 12, 9, 0x7FFE, 0});
+    cases.push_back({"tiny_30", "Original-Ants/Maps/TINY.LVL", std::string(30, 'b'), 12, 9, 0x7FFE, 0});
+    cases.push_back({"tiny_31", "Original-Ants/Maps/TINY.LVL", std::string(31, 'c'), 12, 9, 0x7FFE, 0});
+    cases.push_back({"tiny_ext_255", "ext:Original-Ants/Maps/TINY.LVL", std::string(255, 'd'), 120, 255, 66, 2});
+    cases.push_back({"tiny_ext_256", "ext:Original-Ants/Maps/TINY.LVL", std::string(256, 'e'), 120, 255, 66, 2});
+    cases.push_back({"tiny_zero_byte", "Original-Ants/Maps/TINY.LVL", std::string("ab\0cd", 5), 12, 9, 0x7FFE, 2});
+    cases.push_back({"tiny_numbers", "Original-Ants/Maps/TINY.LVL", "x", 65536, 65536, 65536, 2});
+    cases.push_back({"tiny_largest", "Original-Ants/Maps/TINY.LVL", "", 65535, 65535, 65535, 2});
+    cases.push_back({"tiny_ext_under_new_map", "ext:Original-Ants/Maps/TINY.LVL", "x", 12, 9, 0x7FFE, 0});
+    for (const Case& c : cases) {
+        Bytes from;
+        const bool ext = c.from.rfind("ext:", 0) == 0;
+        from = read_checked(ext ? c.from.substr(4) : c.from);
+        if (ext) from = up_of(from);
+        const Answer a = take(lvl_set_properties(from.data(), static_cast<uint32_t>(from.size()), reinterpret_cast<const uint8_t*>(c.text.data()), static_cast<uint32_t>(c.text.size()), c.minutes, c.eggs, c.type, c.profile));
+        const Conv r = unpack(a);
+        const std::string name = "properties." + c.id + ".json";
+        expect_text(name, r.status == 0 ? r.json : a.payload);
+        index << c.id << "\t" << c.from << "\t" << hex_of(c.text) << "\t" << c.minutes << "\t" << c.eggs << "\t" << c.type << "\t" << c.profile << "\t" << r.status << "\t"
+              << (r.status == 0 ? std::to_string(r.bytes.size()) + "\t" + fnv(std::string(r.bytes.begin(), r.bytes.end())) : "-\t" + a.payload) << "\n";
+    }
+    if (g_write) write_text(expected_dir() + "/properties_index.txt", index.str());
+    else {
+        std::string stored;
+        CHECK(read_text(expected_dir() + "/properties_index.txt", stored));
+        CHECK_MSG(stored == index.str(), "the answers of lvl_set_properties are the stored ones (properties_index.txt)");
+    }
+
+    // the description's limit, the checker's own sentence, and the check of the map after it
+    auto set_text = [&](const Bytes& from, size_t n, uint32_t profile) { return c_set(from, std::string(n, 'z'), 12, 9, 0x7FFE, profile); };
+    const Conv ok29 = set_text(tiny, 29, 0);
+    CHECK_MSG(ok29.status == 0 && contains(ok29.json, "\"ok\":true") && codes_of(ok29.json, "warnings") == "" && contains(ok29.json, "\"description_limit\":29"), ok29.json);
+    CHECK_MSG(!contains(take(lvl_check_map(ok29.bytes.data(), static_cast<uint32_t>(ok29.bytes.size()), 0)).payload, "description_too_long"), "29 bytes: the check says nothing of the description");
+    const Conv ok30 = set_text(tiny, 30, 0);
+    CHECK_MSG(ok30.status == 0 && contains(ok30.json, "\"ok\":true") && codes_of(ok30.json, "warnings") == "description_too_long" && contains(ok30.json, description_too_long_text(MapKind::Classic, 30)), ok30.json);
+    const std::string verdict30 = take(lvl_check_map(ok30.bytes.data(), static_cast<uint32_t>(ok30.bytes.size()), 0)).payload;
+    CHECK_MSG(contains(verdict30, "\"severity\":\"warning\",\"code\":\"description_too_long\"") && contains(verdict30, description_too_long_text(MapKind::Classic, 30)), "30 bytes: the check warns, in the same words: " + verdict30.substr(0, 300));
+    const Conv no31 = set_text(tiny, 31, 0);
+    CHECK_MSG(no31.status == 0 && contains(no31.json, "\"ok\":false") && contains(no31.json, "\"bytes\":0") && no31.bytes.empty() && codes_of(no31.json, "reasons") == "description_too_long" && contains(no31.json, description_too_long_text(MapKind::Classic, 31)), no31.json);
+    const Conv ok255 = set_text(tiny9, 255, 2);
+    CHECK_MSG(ok255.status == 0 && contains(ok255.json, "\"ok\":true") && codes_of(ok255.json, "warnings") == "" && contains(ok255.json, "\"description_limit\":255"), ok255.json.substr(0, 200));
+    CHECK_MSG(!contains(take(lvl_check_map(ok255.bytes.data(), static_cast<uint32_t>(ok255.bytes.size()), 2)).payload, "description_too_long"), "255 bytes: the check says nothing of the description");
+    const Conv no256 = set_text(tiny9, 256, 2);
+    CHECK_MSG(no256.status == 0 && contains(no256.json, "\"ok\":false") && no256.bytes.empty() && codes_of(no256.json, "reasons") == "description_too_long" && contains(no256.json, description_too_long_text(MapKind::Extended, 256)), no256.json);
+    CHECK_MSG(description_too_long_text(MapKind::Extended, 256) == "the description is 256 bytes long: an Extended map holds at most 255", "the checker's sentence for an Extended map");
+    // a letter outside a to z takes 2 bytes: 15 of them are 30 bytes
+    const Conv accents = c_set(tiny, std::string("\xC3\xA9", 2) + std::string(28, 'a'), 12, 9, 0x7FFE, 0);
+    CHECK_MSG(accents.status == 0 && contains(accents.json, "\"description_bytes\":30") && codes_of(accents.json, "warnings") == "description_too_long", accents.json);
+    // the other refusals
+    const Conv bad = c_set(tiny, std::string("a\0b", 3), 65536, 65536, 65536, 2);
+    CHECK_MSG(bad.status == 0 && codes_of(bad.json, "reasons") == "description_has_zero_byte,minutes_out_of_range,eggs_out_of_range,default_ant_type_out_of_range", bad.json);
+    const Conv top = c_set(tiny, "", 65535, 65535, 65535, 2);
+    CHECK_MSG(top.status == 0 && contains(top.json, "\"ok\":true") && props_of(top.bytes).minutes == 65535 && props_of(top.bytes).eggs == 65535 && props_of(top.bytes).type == 65535 && props_of(top.bytes).description.empty(), top.json);
+    CHECK(c_set(Bytes{8}, "x", 1, 1, 1).status == 1 && c_set(Bytes{}, "x", 1, 1, 1).status == 1);
+    CHECK_MSG(c_set(tiny, "x", 1, 1, 1, 9).status == 1 && c_set(tiny, "x", 1, 1, 1, 9).json == "unknown profile", "a profile that does not exist");
+    CHECK_MSG(c_set(tiny9, "x", 1, 1, 1, 0).status == 1 && contains(c_set(tiny9, "x", 1, 1, 1, 0).json, "does not load") && c_set(tiny9, "x", 1, 1, 1, 1).status == 1, "an Extended map needs the Extended profile");
+    CHECK(take(lvl_set_properties(nullptr, 0, nullptr, 0, 1, 1, 1, 2)).status == 1);
+    CHECK(take(lvl_set_properties(tiny.data(), static_cast<uint32_t>(tiny.size()), nullptr, 5, 1, 1, 1, 2)).status == 1);
+    CHECK_MSG(take(lvl_set_properties(tiny.data(), static_cast<uint32_t>(tiny.size()), nullptr, 0, 12, 9, 0x7FFE, 2)).status == 0, "an empty description needs no bytes");
+    // the same call twice gives the same answer (no state)
+    CHECK(c_set(tiny, cafe, 7, 3, 63).json == c_set(tiny, cafe, 7, 3, 63).json && c_set(tiny, cafe, 7, 3, 63).bytes == c_set(tiny, cafe, 7, 3, 63).bytes);
+    // the edits: the old file's pieces, in order, and nothing else differs
+    const Conv three = c_set(tiny, cafe, 7, 3, 63);
+    CHECK_MSG(codes_of(three.json, "reasons") == "" && contains(three.json, "\"at\":8,\"removed\":2,\"inserted\":2") && contains(three.json, "\"at\":10,\"removed\":30,\"inserted\":30"), three.json);
+    size_t different = 0;
+    for (size_t i = 0; i < tiny.size(); ++i) different += tiny[i] != three.bytes[i];
+    CHECK_MSG(different < 30 + 6, "only the four places differ: " + std::to_string(different) + " bytes");
+    const Conv grown = c_set(tiny9, cafe, 12, 9, 0x7FFE);
+    CHECK_MSG(contains(grown.json, "\"at\":16,\"removed\":" + std::to_string(2 + props_of(tiny9).description.size()) + ",\"inserted\":" + std::to_string(2 + cafe.size())), grown.json);
+    // a file that ends before its egg word has no place for the eggs: refused, unless the eggs are what it reads (0)
+    int refused_eggs = 0;
+    for (const auto& file : library) {
+        const Props p = props_of(file.second);
+        if (!p.loaded || p.layout.eggs_at != HeaderLayout::kNone) continue;
+        const Conv more = c_set(file.second, p.description, p.minutes, p.eggs + 1, p.type);
+        CHECK_MSG(more.status == 0 && codes_of(more.json, "reasons") == "eggs_not_in_file" && more.bytes.empty(), file.first + ": " + more.json.substr(0, 200));
+        ++refused_eggs;
+    }
+    CHECK_MSG(refused_eggs == no_egg_word, "the maps without an egg word were asked for eggs: " + std::to_string(refused_eggs));
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -886,6 +1110,7 @@ int main(int argc, char* argv[]) {
     run_case("C9 the conversions", c9_conversions);
     run_case("C10 the blank Extended map", c10_blank_extended);
     run_case("C10 hostile Extended files", c10_hostile_extended);
+    run_case("C11 the properties", c11_properties);
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

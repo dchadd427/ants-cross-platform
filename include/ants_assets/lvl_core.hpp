@@ -77,6 +77,18 @@ Result needs_extended(const uint8_t* data, size_t size, Profile profile);
 /// argument out of range or a grid beyond the Extended limits (1,024 a side, 262,144 cells).
 Result blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes);
 
+/// The properties of the map set in its own bytes (interface version 3): the match length in `minutes`, the `description` (bytes, as typed: UTF-8 text is stored as it is, a letter
+/// outside a to z takes 2 or 3 bytes), the `eggs` of every team and the default ant type (`default_ant_type`: the tile id of the file's block 3, 62 combat, 63 thief, 64 bomber,
+/// 65 swimmer, 66 fire, any other id is none). Only the places of those four values change (the bytes after the egg word, the dictionary and the layers stay as they are), so a call that
+/// asks for the values the file already has returns the very same bytes. The file is read under `profile` (an Extended map needs Profile::Extended). The payload (status 0) is that of
+/// the conversions: a dword (the size of the JSON), the JSON, then the bytes of the new file (none when "ok" is false). The JSON: "ok", "changed" (false when the bytes are the same),
+/// "bytes" (the size of the new file, 0 when not ok), "description_bytes" (the bytes of the text asked for), "description_limit" (the bytes that fit without a warning: 29 for a Classic
+/// map, 255 for an Extended map), "edits" (the pieces of the old file that changed, in the order of the file: "at", "removed", "inserted" (the bytes that take their place, which are in the
+/// new file at `at` plus the growth of the edits before)), "reasons" (why not: each {"code", "message"}: `description_too_long` with the checker's sentence (a Classic map holds 30 bytes, an
+/// Extended map 255), `description_has_zero_byte`, `minutes_out_of_range`, `eggs_out_of_range`, `default_ant_type_out_of_range`, `eggs_not_in_file`) and "warnings" (a Classic description of 30
+/// bytes is written, with the checker's warning `description_too_long`). Status 1 when the file does not load or the profile does not exist.
+Result set_properties(const uint8_t* data, size_t size, const uint8_t* description, size_t description_size, uint32_t minutes, uint32_t eggs, uint32_t default_ant_type, Profile profile);
+
 /// Do two files hold the same map (same_level of the two levels the reader makes)? JSON {"same": true} or {"same": false, "difference": "..."}; status 1 when either file
 /// does not load.
 Result same_level(const uint8_t* a, size_t size_a, const uint8_t* b, size_t size_b, Profile profile);

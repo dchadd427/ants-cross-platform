@@ -18,6 +18,7 @@
 //   J  starting ants and food piles: the records of blocks 1 and 2, spliced exactly, everything else as it was; the eraser takes them away; one history with the strokes
 //   K  Hills, Ants and Food on a fake page: the team swatches, the steppers, the sheets of a phone, the letters H, A and F, a tap that puts, undo
 //   L  the Bigger tool on a fake page: the letter K, the one button and its sheet of 29 named objects, a tap that puts one whole, a hill in the way, Erase and undo, and the solid bit of a rock
+//   M  the properties of the map (mapmaker_props.js) as ONE step of the history: splices of the header and the eggs, the layers that move when the description grows, undo and redo byte for byte
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -1118,7 +1119,61 @@ function caseL() {
     check(r.said.length === 1 && Edit.tile(r.file(), 2, 8 * 24 + 2) === 302 && Edit.tile(r.file(), 2, 8 * 24 + 8) === 246 && hillFootprint(r.file(), 246).length === 16, 'a drag over the hill says it once and leaves the hill whole');
 }
 
-const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL]];
+// ---- M: the properties of the map as one step of the history ----
+// A CHANGE of mapmaker_props.js: splices with absolute places (the header, the eggs at the end), put on from the last to the first; made here by hand, as the core's answer would make it
+function propertiesChange(f) {
+    const n = f.bytes.length, version = f.version, desc = version === 8 ? { at: 10, removed: [0, 0, 0], inserted: [97, 98, 99] } : { at: 16, removed: [0, 0], inserted: [3, 0, 97, 98, 99] };
+    return { names: [], cells: [], splices: [
+        { abs: true, at: n - 2, removed: Uint8Array.from([6, 0]), inserted: Uint8Array.from([9, 0]) },
+        { abs: true, at: desc.at, removed: Uint8Array.from(desc.removed), inserted: Uint8Array.from(desc.inserted) },
+        { abs: true, at: 8, removed: Uint8Array.from([10, 0]), inserted: Uint8Array.from([7, 0]) }] };
+}
+function caseM() {
+    for (const version of [8, 9]) {
+        const tag = 'version ' + version;
+        const ed = editorOn(makeMap(version, 12, 12)), before = Array.from(ed.file.bytes), f0 = ed.file, grow = version === 9 ? 3 : 0, digestBefore = digest(f0.bytes.subarray(f0.layer1, f0.layer2 + 6 * f0.cells));
+        const dirty = ed.act(propertiesChange(f0));
+        check(dirty !== null && ed.history.size().strokes === 1, tag + ': the properties are ONE step of the history');
+        const f1 = ed.file, now = Array.from(f1.bytes);
+        check(now.length === before.length + grow && now[8] === 7 && now[now.length - 2] === 9 && now[now.length - 1] === 0, tag + ': the bytes say what the splices say (' + now.length + ' bytes)');
+        check(f1.ok && f1.rows === 12 && f1.columns === 12 && f1.layer1 === f0.layer1 + grow && f1.blocksAt === f0.blocksAt + grow, tag + ': the file is read again: the layers moved by what the description grew');
+        equal(digest(f1.bytes.subarray(f1.layer1, f1.layer2 + 6 * f1.cells)), digestBefore, tag + ': the cells are the cells they were');
+        const weight = Edit.weight({ keys: [], splices: propertiesChange(f0).splices });
+        check(weight <= 12, tag + ': a step that holds only the changed bytes weighs ' + weight);
+        // a stroke after it, on the moved layers, then undo of both and redo of both: byte for byte
+        const stroke = ed.begin('ground', 487); stroke.stamp(2, 3, 1); stroke.end();
+        const drawn = Array.from(ed.file.bytes);
+        check(Edit.tile(ed.file, 1, 2 * 12 + 3) === 487 && ed.history.size().strokes === 2, tag + ': a stroke after the properties paints on the layers where they now are');
+        check(ed.undo() !== null && Array.from(ed.file.bytes).join() === now.join(), tag + ': undo takes the stroke back');
+        check(ed.undo() !== null && Array.from(ed.file.bytes).join() === before.join(), tag + ': undo of the properties gives the old file back, byte for byte');
+        check(ed.undo() === null && !ed.history.canUndo(), tag + ': nothing more to undo');
+        check(ed.redo() !== null && Array.from(ed.file.bytes).join() === now.join() && ed.redo() !== null && Array.from(ed.file.bytes).join() === drawn.join(), tag + ': redo brings both back, byte for byte');
+        check(ed.history.isClean() === false && ed.file.version === version, tag + ': a map with properties changed is not clean');
+        // a list of the blocks after the layers and the header in ONE patch: the places are counted from the start of the file and from the end of layer 2, in the order they were made
+        const g = editorOn(makeMap(version, 12, 12));
+        const change = propertiesChange(g.file);
+        change.splices.push({ rel: 0, removed: new Uint8Array(0), inserted: Uint8Array.from([0, 0]) });          // (a list that grows by a word at the start of block 1)
+        check(g.act(change) !== null, tag + ': a change with both kinds of places is one step');
+        const both = Array.from(g.file.bytes);
+        check(g.undo() !== null && Array.from(g.file.bytes).join() === Array.from(makeMap(version, 12, 12)).join(), tag + ': and undo gives the old file back');
+        check(g.redo() !== null && Array.from(g.file.bytes).join() === both.join(), tag + ': and redo the new one');
+    }
+    // the tools: one step, the buttons, the page told, the canvas given the new file
+    const p = toolsPage(open(9, 12, 12));
+    const start = p.log.edits;
+    check(p.tools.act(propertiesChange(p.file())) === true && p.log.edits === start + 1 && !p.host.undo.disabled && p.log.rebased >= 1, 'the tools take the change as one step: the page is told once, undo is on, the canvas got the new bytes');
+    check(p.file().bytes[8] === 7 && p.file().bytes.length > 0, 'and the page\'s file has them');
+    p.tools.undo();
+    check(p.file().bytes[8] === 10 && p.host.undo.disabled && !p.host.redo.disabled, 'undo through the tools gives the old file back');
+    p.tools.redo();
+    check(p.file().bytes[8] === 7, 'redo through the tools');
+    p.stroking(true);
+    check(p.tools.act(propertiesChange(p.file())) === false, 'while a stroke is going on nothing is put into the history');
+    p.stroking(false);
+    check(p.tools.act({ names: [], cells: [], splices: [] }) === false, 'a change of nothing is no step');
+}
+
+const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM]];
 for (const [name, fn] of cases) {
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

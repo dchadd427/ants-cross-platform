@@ -1,0 +1,6 @@
+{"ok":false,"changed":false,"bytes":0,"description_bytes":256,"description_limit":255,
+"edits":[],
+"reasons":[
+{"code":"description_too_long","message":"the description is 256 bytes long: an Extended map holds at most 255"}
+],
+"warnings":[]}

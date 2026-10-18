@@ -410,13 +410,25 @@ inline uint16_t LevelData::Layer1TerrainProp::operator()(uint32_t x, uint32_t y)
 }
 
 
+/// Where the loader read the properties of a map from, in the bytes of the file it loaded (docs/MAP_FORMAT.md, "The layout"): the places that an edit of the minutes, the
+/// description, the default ant type or the eggs changes, so that a caller changes those bytes and no others. Filled by a load that succeeds; every offset is of the file's own bytes.
+struct HeaderLayout {
+    static constexpr size_t kNone = static_cast<size_t>(-1);
+    size_t minutes_at{8};                    ///< the word of the match length
+    size_t description_at{0};                ///< the description's field: version 8 the 30 bytes at 10, version 9 the length word at 16 and its bytes
+    size_t description_field_bytes{0};       ///< the size of that field in the file (version 8: 30; version 9: 2 + the length word)
+    size_t default_type_at{kNone};           ///< the word of block 3 that holds the default ant type (the second word of the block)
+    size_t eggs_at{kNone};                   ///< the egg word at the end; kNone when the file ends before it (the original leaves that stock uninitialized, the remake reads 0)
+};
+
 /**
  * @brief Deserializer for Maps/ *.LVL files.
  */
 class LVLParser {
 public:
     static bool load_from_file(const std::string& filepath, LevelData& out_level, LevelValidation* report = nullptr, const LevelLimits& limits = LevelLimits{});
-    static bool load_from_memory(const uint8_t* data, size_t size, LevelData& out_level, LevelValidation* report = nullptr, const LevelLimits& limits = LevelLimits{});
+    /// `layout`, when given, says where the properties are in `data` (only for a file that loads).
+    static bool load_from_memory(const uint8_t* data, size_t size, LevelData& out_level, LevelValidation* report = nullptr, const LevelLimits& limits = LevelLimits{}, HeaderLayout* layout = nullptr);
 
     /// The question of a server: may this file be hosted for the teams of `roster_mask`? One call, a yes or no (`playable`) and the reasons (`problems`).
     static LevelValidation check_file(const std::string& filepath, uint8_t roster_mask = 0x0F, const LevelLimits& limits = LevelLimits{});

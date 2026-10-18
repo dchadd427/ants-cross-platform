@@ -1,0 +1,8 @@
+{"ok":false,"changed":false,"bytes":0,"description_bytes":1,"description_limit":29,
+"edits":[],
+"reasons":[
+{"code":"minutes_out_of_range","message":"the minutes are a number from 0 to 65535"},
+{"code":"eggs_out_of_range","message":"the eggs are a number from 0 to 65535"},
+{"code":"default_ant_type_out_of_range","message":"the default ant type is a tile id from 0 to 65535"}
+],
+"warnings":[]}

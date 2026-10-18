@@ -1,0 +1,6 @@
+{"ok":false,"changed":false,"bytes":0,"description_bytes":16,"description_limit":29,
+"edits":[],
+"reasons":[
+{"code":"eggs_not_in_file","message":"the file ends before its egg word, so it has no place to keep the eggs"}
+],
+"warnings":[]}
