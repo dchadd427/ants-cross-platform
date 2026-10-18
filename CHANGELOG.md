@@ -23,14 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.78 - 2026-10-17 - Map maker: convert, crop and copy (E4)
 
 **For players:**
 - The map maker page (not linked from the site yet: /mapmaker.html) can copy and convert a map now. Copy... (in the top bar, or in the Menu on a phone) makes a new map of the same kind or of the other kind. Under the size numbers of the side panel, "Start an Extended map from this one..." makes an Extended map from any Classic map, and "Make a Classic map from this one..." brings an Extended map back when it fits. Every way makes a new map under a name that is free; the map you opened is never changed or replaced.
 - An Extended map that does not fit a Classic map shows the reasons in the converter's own words, and two ways out. Crop it to fit... opens a screen with a movable frame (never bigger than a new Classic map): drag it with the mouse or a finger, pull a corner or an edge, and a wider frame gets shorter by itself. Shorten the description... opens the map properties on the copy.
 - A part that is cropped out keeps every object whole or leaves it out (never half a hill), moves the starting ants and food piles inside it, and says what it left out.
 
-**Details:** the map core (interface version 4) has a new call, `lvl_crop`; the page needs the new module, so reload it once.
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e47cec0b...3ab82b75); the map core (interface version 4) has a new call, `lvl_crop`; the page needs the new module, so reload it once.
 
 ## v0.12.77 - 2026-10-17 - Map maker: map properties (E3c)
 
@@ -666,16 +666,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/166ccc6...d9a8fb0)
 
-## v0.12.2 - 2026-10-10 - Housekeeping: the page of old releases is gone
+## Older versions (v0.12.2 and before)
 
-**For players:**
-- **The page of old releases is gone.** The detailed history (every release before v0.0.90, and the long notes of v0.0.90 to v0.1.0) was a second changelog page of the site, `/changelog_archive.html`, with a "Detailed history" button on the changelog page. It is no longer on the site or among the repository's files; the git history keeps it. The changelog page is the only one.
-- Nothing else changes in the game or on the site. The rest is housekeeping: the notes in the code say what was reported or decided, not who.
-
-**Rules / network:** none: the simulation and the protocol are untouched.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/288c7de...221b7b3)
-
-## Older versions (v0.12.1 and before)
-
-Every release before v0.12.2, and the long notes of v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.3, and the long notes of v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
