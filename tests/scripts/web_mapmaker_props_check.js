@@ -151,7 +151,7 @@ function caseC() {
     equal(p.q('.help').textContent, 'A Classic map has room for 29 characters (the original reads 30 and needs the last one to end the text).', 'the help of a Classic map, with the core\'s number');
     equal([p.number('#p-minutes'), p.number('#p-eggs')], ['12', '9'], 'the numbers of the map');
     equal(p.all('.unit').map((u) => u.textContent), ['minutes', 'for each team'], 'with their units');
-    equal(p.all('.pfield .help').map((u) => u.textContent).slice(1, 3), ['What the lobby offers as the length of a game on this map.', 'Every team starts with the same number of eggs.'], 'and their help');
+    equal(p.all('.pfield .help').map((u) => u.textContent).slice(2, 4), ['What the lobby offers as the length of a game on this map.', 'Every team starts with the same number of eggs.'], 'and their help');
     equal(p.all('.ant').map((b) => b.textContent), ['None', 'Combat ant', 'Thief ant', 'Bomber ant', 'Swimmer ant', 'Fire ant'], 'six ant types');
     equal([p.ant(), p.q('.ants').getAttribute('role'), p.all('.ant')[0].getAttribute('role')], [['none'], 'radiogroup', 'radio'], 'one is chosen: none');
     equal(p.all('.dlg-foot button').map((b) => b.textContent), ['Cancel', 'Apply'], 'Cancel and Apply');
@@ -165,11 +165,15 @@ function caseC() {
     equal(p.counter(), '23 of 29 characters (letters like é count double)', 'accented letters count double, and the counter says so');
     p.type('Cafe ete des fourmis');
     equal(p.counter(), '20 of 29 characters', 'plain letters say nothing of it');
+    check(p.q('.cutnote').hidden === true, 'no "Cut to fit" note while nothing was cut');
     const more = p.asked.length;
     p.type('x'.repeat(29));
     equal([p.counter(), p.q('#p-count').className, p.note()], ['29 of 29 characters', 'pcount full', null], 'the 29th byte fits (the number turns gold)');
     p.type('x'.repeat(29) + 'y');
     equal([p.q('#p-desc').value.length, p.counter()], [29, '29 of 29 characters'], 'a 30th byte is not taken: the box stops at 29');
+    check(p.q('.cutnote').hidden === false && p.q('.cutnote').textContent === 'Cut to fit: the text was longer than the box holds.', 'a text that was cut says "Cut to fit"');
+    p.type('short');
+    check(p.q('.cutnote').hidden === true, 'and the note goes with the next key that cuts nothing');
     p.type('x'.repeat(28) + 'é');
     equal([p.q('#p-desc').value, p.counter()], ['x'.repeat(28), '28 of 29 characters'], 'a letter that would take the text past 29 bytes is not taken whole nor in half');
     p.type('x'.repeat(28) + 'yééé');

@@ -165,6 +165,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .pfield .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pfield .unit { font-size: 16px; color: var(--muted); }
 .pfield .over { border-color: var(--bad-edge); }
+.pfield .cutnote { color: var(--warn); }
 .pcount { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 13.5px; color: var(--muted); }
 .pcount b { font-weight: 500; color: var(--cream); }
 .pcount.full b { color: var(--gold); }

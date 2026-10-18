@@ -950,6 +950,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.shot(args.shots, "mapmaker-props-accents")
         page.type_into("#p-desc", "x" * 40)
         check(counter() == "29 of 29 characters" and page.ev("document.getElementById('p-desc').value.length") == 29, "the box stops at 29: %s" % counter())
+        check(page.ev("var n = document.querySelector('.cutnote'); n.offsetParent !== null && n.textContent.indexOf('Cut to fit') === 0"), "and says Cut to fit")
         page.type_into("#p-desc", "Café des fourmis")
         # a number box, the plus button, the minimum
         page.click_selector("#p-minutes + .stp")

@@ -495,6 +495,13 @@ void c6_no_memory() {
     const lvl_core::Result many = lvl_core::set_properties(tiny9.data(), tiny9.size(), reinterpret_cast<const uint8_t*>(long_text.data()), long_text.size(), 7, 3, 63, lvl_core::Profile::Extended);
     CHECK_MSG(many.status == 0 && contains(many.payload, "\"ok\":false") && contains(many.payload, "description_too_long"), many.payload.substr(0, 80));
     CHECK_MSG(g_bytes - asked < 2u * (1u << 20) , "a refused text is not copied: " + std::to_string(g_bytes - asked) + " bytes");
+    {   // bounds are checked before anything is allocated for the text: 5 MB of it asks the heap for far less than 5 MB and is refused with the checker's code
+        const std::string five_mb(5u << 20, 'x');
+        const unsigned long long before_huge = g_bytes;
+        const lvl_core::Result big = lvl_core::set_properties(tiny.data(), tiny.size(), reinterpret_cast<const uint8_t*>(five_mb.data()), five_mb.size(), 7, 3, 63, lvl_core::Profile::NewMap);
+        CHECK_MSG(big.status == 0 && contains(big.payload, "description_too_long") && contains(big.payload, "\"ok\":false"), big.payload.substr(0, 80));
+        CHECK_MSG(g_bytes - before_huge < (1u << 20), "a text of 5 MB is not copied: " + std::to_string(g_bytes - before_huge) + " bytes asked");
+    }
 }
 
 // ---- C5 ----

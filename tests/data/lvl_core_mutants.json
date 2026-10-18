@@ -343,6 +343,16 @@
    "test": "./build/tests/test_assets/test_lvl_core"
   },
   {
+   "id": "properties_text_copied_before_the_bounds_are_checked",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "description_size == 0 || description_size > most || description == nullptr ? std::string()",
+   "new": "description_size == 0 || description == nullptr ? std::string()",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
    "id": "export_list_loses_a_call",
    "file": "CMakeLists.txt",
    "old": "_lvl_set_properties,_lvl_limits,",

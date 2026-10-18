@@ -207,6 +207,7 @@ class TheCodeRuns(unittest.TestCase):
             "a counter that counts letters, not bytes": ("mapmaker_props.js", "var b = bytes(), n = b.length, over", "var b = bytes(), n = Array.from(st.text).length, over"),
             "a counter that always says letters count double": ("mapmaker_props.js", "(n > chars ? ' (letters like", "(true ? ' (letters like"),
             "a counter that never says letters count double": ("mapmaker_props.js", "(n > chars ? ' (letters like", "(false ? ' (letters like"),
+            "a cut that is not told": ("mapmaker_props.js", "cutNote.hidden = value === typed;", "cutNote.hidden = true;"),
             "a box that does not stop at what fits": ("mapmaker_props.js", "if (after > limit && after > before) value =", "if (false) value ="),
             "a text that grows past a limit it came with": ("mapmaker_props.js", "before <= limit ? cutTo(value, limit) : st.text;", "cutTo(value, limit);"),
             "a text cut in the middle of a letter": ("mapmaker_props.js", "if (used + n > limit) break;", "if (used > limit) break;"),

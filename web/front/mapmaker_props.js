@@ -137,7 +137,7 @@
         if (first.status !== 0 || !first.json || !first.json.ok) return env.dialogs.message('The properties cannot be opened', capital(first.error || 'The map code did not answer') + '.');
         var kind = now.kind, limit = first.json.description_limit;
         var st = { text: now.description, minutes: now.minutes, eggs: now.eggs, tile: now.tile };
-        var textBox, countEl, countText, kindText, warnBox, helpEl, minutesBox, eggsBox, antButtons = [], ctl, verdict = { ok: true };
+        var cutNote, textBox, countEl, countText, kindText, warnBox, helpEl, minutesBox, eggsBox, antButtons = [], ctl, verdict = { ok: true };
 
         function bytes() { return st.text === now.description ? now.raw : encode(st.text); }
         function lengthOf(text) { return text === now.description ? now.raw.length : utf8Length(text); }       // (the bytes that the text is in the file)
@@ -172,15 +172,16 @@
                 else if (answer.status !== 0) { verdict = { ok: false }; say = answer.error; }
                 var cut = el('button', 'btn sm', 'Cut it to ' + limit);
                 cut.type = 'button';
-                cut.addEventListener('click', function () { st.text = cutTo(st.text, limit); textBox.value = st.text; showText(); textBox.focus(); });
+                cut.addEventListener('click', function () { cutNote.hidden = true; st.text = cutTo(st.text, limit); textBox.value = st.text; showText(); textBox.focus(); });
                 setNote(warnBox, 'bad', '!', sentence(say), cut);
             }
             if (ctl) ctl.setDisabled('apply', !verdict.ok);
         }
 
         function onInput() {
-            var value = textBox.value.replace(/[\r\n]+/g, ' '), before = lengthOf(st.text), after = lengthOf(value);
+            var value = textBox.value.replace(/[\r\n]+/g, ' '), typed = value, before = lengthOf(st.text), after = lengthOf(value);
             if (after > limit && after > before) value = before <= limit ? cutTo(value, limit) : st.text;      // the box stops at what fits (a text that came in too long can be cut or made shorter)
+            cutNote.hidden = value === typed;                                                                  // a pasted text that was cut says so
             st.text = value;
             if (textBox.value !== value) textBox.value = value;
             showText();
@@ -248,8 +249,9 @@
                 countEl = el('div', 'pcount'); countEl.id = 'p-count';
                 countText = el('span'); countEl.appendChild(countText);
                 kindText = el('span', '', kind === 'extended' ? 'Extended map' : 'Classic map'); countEl.appendChild(kindText);
+                cutNote = el('div', 'help cutnote', 'Cut to fit: the text was longer than the box holds.'); cutNote.hidden = true; cutNote.setAttribute('role', 'status');
                 helpEl = el('div', 'help', (kind === 'extended' ? EXTENDED_HELP : CLASSIC_HELP).replace('{n}', String(limit)));
-                field.appendChild(label); field.appendChild(textBox); field.appendChild(countEl); field.appendChild(helpEl);
+                field.appendChild(label); field.appendChild(textBox); field.appendChild(countEl); field.appendChild(helpEl); field.appendChild(cutNote);
                 body.appendChild(field);
                 warnBox = el('div'); warnBox.setAttribute('aria-live', 'polite');
                 body.appendChild(warnBox);
