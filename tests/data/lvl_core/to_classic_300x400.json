@@ -1,6 +1,6 @@
 {"to":"classic","from":"extended","ok":false,"bytes":0,
 "reasons":[
-{"code":"columns_beyond_classic","message":"this map is 400 columns wide; a Classic map has at most 256 columns"},
+{"code":"columns_beyond_classic","message":"this map is 400 columns wide; a Classic map made now has at most 130 columns"},
 {"code":"rows_beyond_classic","message":"this map is 300 rows tall; a Classic map has at most 256 rows"},
 {"code":"rows_beyond_wall","message":"this map has 300 rows; a Classic map made now has at most 90 (ants cannot enter or cross the 91st row of a taller map, in the original game too): crop it to 90 rows first, or keep it an Extended map"},
 {"code":"description_too_long","message":"the description is 100 bytes; a Classic map holds 30 (29 characters end with the zero byte that the original needs)"}

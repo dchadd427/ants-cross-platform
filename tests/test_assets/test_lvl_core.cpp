@@ -1121,17 +1121,20 @@ std::string crop_is_right(const Bytes& source, const Window& w, const Conv& made
     if (part.description != from.description || part.default_minutes != from.default_minutes || part.tile_dictionary != from.tile_dictionary || part.boundary_param != from.boundary_param ||
         part.ambient_tile_or_sound != from.ambient_tile_or_sound || part.rules != from.rules || part.game_mode != from.game_mode) return "a property of the file changed";
     const auto in_window = [&](int64_t r, int64_t c) { return r >= w.row && r < static_cast<int64_t>(w.row) + w.rows && c >= w.column && c < static_cast<int64_t>(w.column) + w.columns; };
-    std::map<std::pair<int32_t, int32_t>, std::vector<std::pair<uint32_t, uint32_t>>> groups;      // every object: the cells that have this anchor
+    // every object: the cells that have this anchor AND the tile of the anchor's own cell (a stray word that points at an object is no piece of it)
+    std::map<std::pair<int32_t, int32_t>, std::vector<std::pair<uint32_t, uint32_t>>> groups;
+    const auto anchor_tile = [&](int32_t ar, int32_t ac) -> int64_t { return ar >= 0 && ac >= 0 && static_cast<uint32_t>(ar) < from.height && static_cast<uint32_t>(ac) < from.width ? from.get_cell_layer2(static_cast<uint32_t>(ac), static_cast<uint32_t>(ar)).tile_index : -1; };
     for (uint32_t r = 0; r < from.height; ++r) {
         for (uint32_t c = 0; c < from.width; ++c) {
             int32_t ar = 0, ac = 0;
-            if (from.object_anchor(r, c, ar, ac)) groups[{ar, ac}].emplace_back(r, c);
+            if (from.object_anchor(r, c, ar, ac) && anchor_tile(ar, ac) == from.get_cell_layer2(c, r).tile_index) groups[{ar, ac}].emplace_back(r, c);
         }
     }
     const bool whole_map = w.row == 0 && w.column == 0 && w.rows == from.height && w.columns == from.width;
-    const auto whole = [&](int32_t ar, int32_t ac) {
+    const auto whole = [&](int32_t ar, int32_t ac, uint16_t tile) {
         if (whole_map) return true;
         if (!in_window(ar, ac)) return false;
+        if (anchor_tile(ar, ac) != tile) return true;                     // (a stray: it stands or goes by its anchor alone)
         for (const auto& cell : groups[{ar, ac}]) if (!in_window(cell.first, cell.second)) return false;
         return true;
     };
@@ -1150,7 +1153,7 @@ std::string crop_is_right(const Bytes& source, const Window& w, const Conv& made
                 if (b2.tile_index != a2.tile_index || b2.flags != a2.flags || b2.properties != a2.properties) return "layer 2 differs (no object)" + at;
                 continue;
             }
-            if (whole(ar, ac)) {
+            if (whole(ar, ac, a2.tile_index)) {
                 int32_t pr = 0, pc = 0;
                 if (b1.tile_index != a1.tile_index || b1.flags != a1.flags || b1.properties != a1.properties) return "layer 1 differs under a kept object" + at;
                 if (b2.tile_index != a2.tile_index || b2.flags != a2.flags) return "a kept object differs" + at;
@@ -1300,6 +1303,14 @@ void c12_crop() {
     }
     CHECK_MSG(cut_in_stored >= 3, "the stored cases cut objects: " + std::to_string(cut_in_stored));
 
+    {   // a stray word that points at a hill is no piece of it: in Bridge.lvl a power-up (tile 63, row 20, column 37) has the anchor of the blue hill (row 32, column 32; known by hand, not
+        // by the rule of the code). A window that holds the whole hill keeps all its 16 cells; one that misses its last row keeps none
+        const Bytes bridge = up_of(read_checked("Community-Maps/Bridge.lvl"));
+        auto hill_cells = [&](const Conv& part) { LevelData l; LevelValidation v; int n = 0; if (l.load_from_memory(part.bytes.data(), part.bytes.size(), &v, LevelLimits::for_extended_maps())) for (const MapCell& c : l.layer2_interactive) n += c.tile_index == 246; return n; };
+        const Conv whole_hill = c_crop(bridge, 30, 30, 6, 6), cut_hill = c_crop(bridge, 30, 30, 4, 6);
+        CHECK_MSG(whole_hill.status == 0 && hill_cells(whole_hill) == 16, "the whole hill stays: " + std::to_string(hill_cells(whole_hill)));
+        CHECK_MSG(cut_hill.status == 0 && hill_cells(cut_hill) == 0, "a hill that the window cuts goes whole: " + std::to_string(hill_cells(cut_hill)));
+    }
     // the refusals are sentences (status 1), made before anything of the window is allocated
     CHECK_MSG(c_crop(tiny, 3, 4, 0, 18).status == 1 && c_crop(tiny, 3, 4, 0, 18).json == "the part to keep needs at least one row and one column", "an empty window");
     CHECK_MSG(c_crop(tiny, 12, 0, 20, 31).status == 1 && contains(c_crop(tiny, 12, 0, 20, 31).json, "is not inside the map, which has 31 rows and 31 columns"), "a window below the map: " + c_crop(tiny, 12, 0, 20, 31).json);

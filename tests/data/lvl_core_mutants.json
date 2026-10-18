@@ -467,7 +467,7 @@
   {
    "id": "crop_leaves_the_rest_of_a_cut_object",
    "file": "src/ants_assets/lvl_core.cpp",
-   "old": "if (!inside(ar, ac) || cut.count(anchor_key(ar, ac)) != 0) {",
+   "old": "if (!inside(ar, ac) || (cut.count(anchor_key(ar, ac)) != 0 && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == cell.tile_index)) {",
    "new": "if (!inside(ar, ac)) {",
    "build": [
     "test_lvl_core"
@@ -477,8 +477,8 @@
   {
    "id": "crop_keeps_an_object_whose_anchor_is_outside",
    "file": "src/ants_assets/lvl_core.cpp",
-   "old": "if (!inside(ar, ac) || cut.count(anchor_key(ar, ac)) != 0) {",
-   "new": "if (cut.count(anchor_key(ar, ac)) != 0) {",
+   "old": "if (!inside(ar, ac) || (cut.count(anchor_key(ar, ac)) != 0 && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == cell.tile_index)) {",
+   "new": "if ((cut.count(anchor_key(ar, ac)) != 0 && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == cell.tile_index)) {",
    "build": [
     "test_lvl_core"
    ],
@@ -487,8 +487,8 @@
   {
    "id": "crop_cuts_only_the_objects_that_cross_the_top",
    "file": "src/ants_assets/lvl_core.cpp",
-   "old": "if (level.object_anchor(r, c, ar, ac) && inside(ar, ac)) cut.insert(anchor_key(ar, ac));",
-   "new": "if (level.object_anchor(r, c, ar, ac) && inside(ar, ac) && r < row) cut.insert(anchor_key(ar, ac));",
+   "old": "inside(ar, ac) && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == level.layer2_interactive[static_cast<size_t>(r) * width + c].tile_index) cut.insert",
+   "new": "inside(ar, ac) && r < row && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == level.layer2_interactive[static_cast<size_t>(r) * width + c].tile_index) cut.insert",
    "build": [
     "test_lvl_core"
    ],
@@ -877,6 +877,46 @@
    "file": "src/ants_assets/lvl_core_c.cpp",
    "old": "lvl_interface_version() { return 4; }",
    "new": "lvl_interface_version() { return 3; }",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_a_stray_word_cuts_the_object",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "inside(ar, ac) && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == level.layer2_interactive[static_cast<size_t>(r) * width + c].tile_index) cut.insert",
+   "new": "inside(ar, ac)) cut.insert",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "crop_a_stray_word_is_cut_with_the_object",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "(cut.count(anchor_key(ar, ac)) != 0 && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == cell.tile_index)",
+   "new": "cut.count(anchor_key(ar, ac)) != 0",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "conversion_says_256_columns_for_a_new_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "c.conversion.reason_codes[i] == \"columns_beyond_classic\" && most < 256 &&",
+   "new": "false &&",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "conversion_says_130_for_the_game_profile",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "most < 256 && text.size()",
+   "new": "most <= 256 && text.size()",
    "build": [
     "test_lvl_core"
    ],

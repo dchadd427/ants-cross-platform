@@ -373,6 +373,15 @@ bool convert_file(bool to_extended, const uint8_t* data, size_t size, const Leve
     if (!load(data, size, LevelLimits::for_extended_maps(), level, why)) return false;
     c.from_extended = level.version == LVL_EXTENDED_VERSION;
     c.conversion = to_extended ? ants::assets::convert_to_extended(level) : ants::assets::convert_to_classic(level);
+    // a new Classic map is held to fewer columns than the format's 256: the sentence names the limit that the place will apply
+    const uint32_t most = place.columns_for(LVL_EXPECTED_VERSION);
+    for (size_t i = 0; i < c.conversion.reasons.size() && i < c.conversion.reason_codes.size(); ++i) {
+        std::string& text = c.conversion.reasons[i];
+        const std::string old = "a Classic map has at most 256 columns";
+        if (!to_extended && c.conversion.reason_codes[i] == "columns_beyond_classic" && most < 256 && text.size() >= old.size() && text.compare(text.size() - old.size(), old.size(), old) == 0) {
+            text.replace(text.size() - old.size(), old.size(), "a Classic map made now has at most " + std::to_string(most) + " columns");
+        }
+    }
     level = LevelData{};                                                         // (the source is not needed any more: less memory at the peak)
     if (c.conversion.ok) {
         LevelWriteResult w = write_level(c.conversion.level, place);
@@ -594,13 +603,14 @@ Result crop_impl(const uint8_t* data, size_t size, uint32_t row, uint32_t column
     } else {
         const uint32_t width = level.width;
         auto inside = [&](int64_t r, int64_t c) { return r >= row && r < static_cast<int64_t>(row) + rows && c >= column && c < static_cast<int64_t>(column) + columns; };
-        // the objects that have a cell outside the window and an anchor inside it are cut: their other cells must go too
+        // the objects that have a cell outside the window and an anchor inside it are cut: their other cells must go too. A cell belongs to the object of its anchor only when it holds the
+        // same tile as the anchor's cell (a stray word that points at a hill is not a piece of the hill: the page's objectCells has the same rule)
         std::unordered_set<uint64_t> cut;
         for (uint32_t r = 0; r < level.height; ++r) {
             for (uint32_t c = 0; c < width; ++c) {
                 if (inside(r, c)) continue;
                 int32_t ar = 0, ac = 0;
-                if (level.object_anchor(r, c, ar, ac) && inside(ar, ac)) cut.insert(anchor_key(ar, ac));
+                if (level.object_anchor(r, c, ar, ac) && inside(ar, ac) && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == level.layer2_interactive[static_cast<size_t>(r) * width + c].tile_index) cut.insert(anchor_key(ar, ac));
             }
         }
         part.version = level.version; part.format_flags = level.format_flags; part.rules = level.rules; part.game_mode = level.game_mode; part.default_minutes = level.default_minutes;
@@ -620,7 +630,7 @@ Result crop_impl(const uint8_t* data, size_t size, uint32_t row, uint32_t column
                 const MapCell& cell = level.layer2_interactive[from];
                 int32_t ar = 0, ac = 0;
                 if (!cell.is_empty() && level.object_anchor(row + r, column + c, ar, ac)) {
-                    if (!inside(ar, ac) || cut.count(anchor_key(ar, ac)) != 0) {
+                    if (!inside(ar, ac) || (cut.count(anchor_key(ar, ac)) != 0 && level.layer2_interactive[static_cast<size_t>(ar) * width + static_cast<size_t>(ac)].tile_index == cell.tile_index)) {
                         gone[to] = 1;
                         ++removed_cells;
                         if (r != 0 && !(cell.tile_index >= 245 && cell.tile_index <= 248)) part.layer1_terrain[to].flags = static_cast<uint16_t>(part.layer1_terrain[to].flags & ~1u);   // (no hill's bit; row 0 keeps its bit)

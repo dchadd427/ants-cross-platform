@@ -19,19 +19,19 @@ party_corner	Community-Maps/ANTS_PARTY-V.3.0.5.lvl	0	0	10	10	2	0	16018	2c87e12e5
 party_ext_half	ext:Community-Maps/ANTS_PARTY-V.3.0.5.lvl	7	7	15	15	2	0	17806	6eedefb721e984a6
 party_ext_last_row	ext:Community-Maps/ANTS_PARTY-V.3.0.5.lvl	30	0	1	31	2	0	15116	1bfe5e75de32b551
 conquer_half	Community-Maps/Conquer.lvl	7	7	15	15	2	0	10246	7303a08a87d1d1fe
-conquer_corner	Community-Maps/Conquer.lvl	0	0	10	10	2	0	8658	f1d0960fc5870377
+conquer_corner	Community-Maps/Conquer.lvl	0	0	10	10	2	0	8658	7c303d8f5f246e37
 conquer_ext_half	ext:Community-Maps/Conquer.lvl	7	7	15	15	2	0	10254	f7a45d6004441dfd
 conquer_ext_last_row	ext:Community-Maps/Conquer.lvl	30	0	1	31	2	0	7812	a05b3835b689d543
 bomberworld_half	Community-Maps/BOMBERWORLD.lvl	15	15	30	30	2	0	26081	5acfd20ac89bbe43
 bomberworld_corner	Community-Maps/BOMBERWORLD.lvl	0	0	20	20	2	0	19629	841d72896b01bfd3
 bomberworld_ext_half	ext:Community-Maps/BOMBERWORLD.lvl	15	15	30	30	2	0	26080	6641f16b7f851dda
 bomberworld_ext_last_row	ext:Community-Maps/BOMBERWORLD.lvl	59	0	1	60	2	0	15520	c328b1d83da6f704
-easyjungle_half	Community-Maps/Easy jungle.lvl	20	25	40	50	2	0	39618	48267812fcb5e3e5
-easyjungle_corner	Community-Maps/Easy jungle.lvl	0	0	27	33	2	0	25398	47a93b5dada5ab8c
-easyjungle_ext_half	ext:Community-Maps/Easy jungle.lvl	20	25	40	50	2	0	39618	2b78af4b5c3d1f89
+easyjungle_half	Community-Maps/Easy jungle.lvl	20	25	40	50	2	0	39618	acc78c54726acb0d
+easyjungle_corner	Community-Maps/Easy jungle.lvl	0	0	27	33	2	0	25398	73a706ff136f46ff
+easyjungle_ext_half	ext:Community-Maps/Easy jungle.lvl	20	25	40	50	2	0	39618	dd99771b8d6eab62
 easyjungle_ext_last_row	ext:Community-Maps/Easy jungle.lvl	80	0	1	100	2	0	15826	db37468e3c6c983a
 icon_half	Community-Maps/IcoN.LVL	7	7	15	15	2	0	10204	e4f93bada16a8d62
-icon_corner	Community-Maps/IcoN.LVL	0	0	10	10	2	0	8650	a10df1ebeb6919d8
+icon_corner	Community-Maps/IcoN.LVL	0	0	10	10	2	0	8650	b82b3a4b33cb86ce
 icon_ext_half	ext:Community-Maps/IcoN.LVL	7	7	15	15	2	0	10209	6e8cc927c016cc84
 icon_ext_last_row	ext:Community-Maps/IcoN.LVL	30	0	1	31	2	0	7809	abb6276ce7f3fb3b
 tiny_whole	Original-Ants/Maps/TINY.LVL	0	0	31	31	2	0	19312	71a9b7dac68be3a3
