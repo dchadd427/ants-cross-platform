@@ -153,6 +153,7 @@
             isClean: function () { return undo.length === 0 && dropped === 0; },
             // the map was handed over (downloaded) as it is now; it is saved until another change, or an undo, moves it
             markSaved: function () { savedId = lastId(); savedDropped = dropped; },
+            markUnsaved: function () { savedId = -1; },           // the map came from work that was not saved (the kept work of an earlier visit)
             isSaved: function () { return lastId() === savedId && dropped === savedDropped; },
             size: function () { return { strokes: undo.length, redo: redo.length, records: records, dropped: dropped }; }
         };

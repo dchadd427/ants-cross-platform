@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var doc = document, win = window;
-    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCrop', 'MapConvert', 'MapCanvas', 'MapTools'];
+    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCrop', 'MapConvert', 'MapStore', 'MapCanvas', 'MapTools'];
     var GROUND = 485, EGGS = 6, MINUTES = 10;          // a new map: plain grass (docs/MAP_FORMAT.md, "The blank map"), 6 eggs a team, 10 minutes
     var NEW_NAME = 'My map';
 
@@ -11,7 +11,8 @@
     function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
     var opening = 0;
-    var core = null, limits = null, dialogs = null, canvas = null, tools = null, map = null, checkTimer = 0, summed = null;
+    var core = null, limits = null, dialogs = null, canvas = null, tools = null, store = null, map = null, checkTimer = 0, summed = null;
+    var keepTimer = 0, keepReady = false, keepPending = false, keepEdits = 0;      // the unsaved work kept in the browser: a rest of 1.5 s after a change, and not before the work of the last visit was dealt with
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
     function fatal(text) {
@@ -107,6 +108,7 @@
 
     // The map has changed (a stroke, an undo, a name written in the dictionary): the numbers, and the check again soon
     function edited() {
+        keepSoon();
         showFacts();
         $('check-dot').className = 'dot wait'; $('check-line').textContent = 'Checking\u2026';          // (not the old answer for the moment it takes)
         checkSoon();
@@ -131,6 +133,7 @@
         showFacts();
         canvas.setFile(file);
         tools.setMap(file);
+        keepSoon();
         return '';
     }
 
@@ -154,27 +157,84 @@
     }
 
     // A map that has been drawn on is handed over as the core writes it (so that it stays a valid file); one that has not been changed goes as it came
+    function fileBytes() {
+        if (tools.isClean()) return { bytes: map.bytes };
+        var written = core.rewrite(map.bytes, 'extended');
+        if (written.status !== 0) { alive(); return { error: MapChecks.capital(written.error) + '.' }; }
+        return { bytes: written.bytes };
+    }
     function download() {
-        var bytes = map.bytes;
-        if (!tools.isClean()) {
-            var written = core.rewrite(map.bytes, 'extended');
-            if (written.status !== 0) { alive(); return dialogs.message('The file could not be made', MapChecks.capital(written.error) + '.'); }
-            bytes = written.bytes;
-        }
+        var made = fileBytes(), bytes = made.bytes;
+        if (made.error) return dialogs.message('The file could not be made', made.error);
         var blob = new win.Blob([bytes], { type: 'application/octet-stream' }), url = win.URL.createObjectURL(blob), a = el('a');
         a.href = url; a.download = win.MapFile.downloadName(map.name);
         doc.body.appendChild(a); a.click(); doc.body.removeChild(a);
         tools.markSaved();
+        keepSoon();
         win.setTimeout(function () { win.URL.revokeObjectURL(url); }, 10000);
     }
 
-    // What is on the screen is lost when another map takes its place (nothing is kept in the browser yet): when it has been drawn on, ask first
+    // The work that is not saved is kept in the browser's one slot while the person draws, and the slot is emptied when the map is saved, downloaded or replaced (store: mapmaker_store.js)
+    function keepNow() {
+        win.clearTimeout(keepTimer);
+        if (!keepReady || !map || store.status() !== 'ready') return;
+        if (canvas.isStroking()) return keepSoon();
+        var mine = keepEdits;
+        if (tools.isSaved()) store.clearWork(function () { if (mine === keepEdits) keepPending = false; });
+        else store.keepWork(map.name, map.file.kind, map.bytes, function (error) { if (!error && mine === keepEdits) keepPending = false; });
+    }
+    function keepSoon() {
+        keepEdits++;
+        keepPending = !!tools && !tools.isSaved();
+        win.clearTimeout(keepTimer);
+        if (keepReady) keepTimer = win.setTimeout(keepNow, 1500);
+    }
+
+    // Save as a new map: the map goes into the browser under a free name and the saved map takes the screen (the open one is never written over)
+    function keepAs(name, done) {
+        var made = fileBytes();
+        if (made.error) return done(made.error);
+        store.add(name, map.file.kind, made.bytes, function (error) {
+            done(error === 'exists' ? error : error ? 'The browser would not keep the map. Nothing was saved. You can download it instead.' : '', made.bytes);
+        });
+    }
+    function kept(bytes, name) {
+        var error = setMap(bytes, name);
+        if (error) return dialogs.message('The map could not be shown', error);
+        $('announce').textContent = 'Saved as \u201c' + name + '\u201d.';
+    }
+
+    // The work of the last visit, when there is some: pick it up or throw it away (closing the box picks it up: nothing is lost by a key)
+    function restoreWork() {
+        store.readWork(function (work) {
+            var decided = false;
+            function end() { keepReady = true; keepSoon(); }
+            function toss() { if (!decided) { decided = true; store.clearWork(end); } }
+            function pick() {
+                if (decided) return;
+                decided = true;
+                var error = setMap(new win.Uint8Array(work.bytes), work.name);
+                if (error) { store.clearWork(); dialogs.message('The unsaved work cannot be opened', error); } else tools.markUnsaved();
+                end();
+            }
+            if (!work || !work.bytes || !work.bytes.length || !tools.isClean()) return end();
+            dialogs.open({
+                title: 'Pick up your unsaved work?', cls: 'narrow', onClose: pick,
+                build: function (body) { body.appendChild(el('p', 'fatalmsg', 'Last time you drew on \u201c' + MapStore.clean(work.name) + '\u201d and did not save it as a new map or download it. It was kept in this browser.')); },
+                buttons: [{ id: 'pick', text: 'Pick it up', onClick: pick }, { id: 'toss', text: 'Throw it away', ghost: true, onClick: toss }]
+            });
+        });
+    }
+
+    // What is on the screen is lost when another map takes its place (the one slot of unsaved work holds the new map then): when it has been drawn on, ask first
     function leave(then) {
         if (tools.isSaved()) return then();
+        var can = store.status() === 'ready';
         dialogs.open({
             title: 'Leave this map?', cls: 'narrow',
-            build: function (body) { body.appendChild(el('p', 'fatalmsg', 'You have drawn on this map and it is not saved. Download it first, or leave without it.')); },
-            buttons: [{ id: 'download', text: 'Download it first', onClick: function () { download(); then(); } }, { id: 'leave', text: 'Leave without saving', onClick: then }, { id: 'stay', text: 'Stay here', ghost: true }]
+            build: function (body) { body.appendChild(el('p', 'fatalmsg', 'You have drawn on this map and it is not saved. ' + (can ? 'Save it as a new map or download it first, or leave without it.' : 'Download it first, or leave without it.'))); },
+            buttons: (can ? [{ id: 'save', text: 'Save as a new map first', onClick: function () { converterOf().save(then); } }] : []).concat([
+                { id: 'download', text: 'Download it first', onClick: function () { download(); then(); } }, { id: 'leave', text: 'Leave without saving', onClick: then }, { id: 'stay', text: 'Stay here', ghost: true }])
         });
     }
 
@@ -210,20 +270,25 @@
     function convertEnv() {
         return {
             doc: doc, dialogs: dialogs, core: core, limits: limits, thumb: thumb, tags: fillTags, crop: openCrop,
+            taken: function (name) { return MapStore.key(name) === MapStore.key(map.name) || store.has(name); },
+            canKeep: function () { return store.status() === 'ready'; }, libraryState: function () { return store.libraryState(); }, onLibrary: function (f) { store.onLibrary(f); },
+            keep: keepAs, onKept: kept, download: download,
             current: function () { var r = core.checkMap(map.bytes, 'extended'); return { name: map.name, bytes: map.bytes, file: map.file, kind: map.file.kind, report: r.status === 0 ? r.json : map.report }; },
             onMade: function (bytes, name) { leave(function () { var error = setMap(bytes, name); if (error) dialogs.message('The map could not be made', error); }); }
         };
     }
     var converter;
-    function convertWith(name) { return function () { if (!dialogs.isOpen() && !canvas.isStroking()) (converter = converter || MapConvert.create(convertEnv()))[name](); }; }
+    function converterOf() { return converter || (converter = MapConvert.create(convertEnv())); }
+    function convertWith(name) { return function () { if (!dialogs.isOpen() && !canvas.isStroking()) converterOf()[name](); }; }
 
     var ACTIONS = {
-        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, copy: convertWith('copy'), convert: convertWith('convert'),
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }]); }
+        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }]); }
     };
 
     function start(module) {
         core = LvlCore.wrap(module);
+        store = MapStore.create({ idb: (function () { try { return win.indexedDB || null; } catch (e) { return null; } })(), fetch: win.fetch ? win.fetch.bind(win) : null, later: function (f, ms) { win.setTimeout(f, ms); } });
         var small = core.limits('new_map'), big = core.limits('extended');
         if (small.status !== 0 || big.status !== 0) return fatal('The map code did not answer. Reload the page.');
         limits = MapSizes.limitsOf(small.json, big.json);
@@ -242,7 +307,9 @@
             },
             file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
-        win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved()) { e.preventDefault(); e.returnValue = ''; } });         // (a drawn map is not kept anywhere yet)
+        // The page asks before it is closed only when the work is not safe in the browser (the browser keeps nothing, or the last change has not been written yet)
+        win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending)) { e.preventDefault(); e.returnValue = ''; } });
+        doc.addEventListener('visibilitychange', function () { if (doc.visibilityState === 'hidden') keepNow(); });
         Array.prototype.forEach.call(doc.querySelectorAll('[data-act]'), function (b) {
             var act = ACTIONS[b.getAttribute('data-act')];
             if (!act) return;
@@ -255,7 +322,9 @@
         $('boot').hidden = true;
         var made = core.blank(31, 31, GROUND, EGGS, MINUTES, 'new_map');
         var error = made.status === 0 ? setMap(made.bytes, NEW_NAME) : made.error;
-        if (error) fatal('The first map could not be made: ' + error);
+        if (error) return fatal('The first map could not be made: ' + error);
+        store.loadLibrary();
+        store.open(restoreWork);
     }
 
     function boot() {
