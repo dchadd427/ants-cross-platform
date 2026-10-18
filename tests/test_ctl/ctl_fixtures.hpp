@@ -485,6 +485,19 @@ public:
         return sent;
     }
 
+    // One send of at most the rest of `data` from `at`: the count sent (> 0), 0 when the buffers are full for now, -1 when the connection is gone
+    long send_some(const std::string& data, size_t at) {
+        if (fd_ == kBadSock || at >= data.size()) return -1;
+#ifdef MSG_NOSIGNAL
+        const int flags = MSG_NOSIGNAL;
+#else
+        const int flags = 0;
+#endif
+        const auto n = ::send(fd_, data.data() + at, static_cast<iolen_t>(data.size() - at), flags);
+        if (n > 0) return static_cast<long>(n);
+        return (n < 0 && sock_would_block()) ? 0 : -1;
+    }
+
     // Appends what has arrived: > 0 bytes read, 0 the server closed in an orderly way, -1 nothing yet, -2 reset or failed
     int recv_some(std::string& out) {
         if (fd_ == kBadSock) return -2;
@@ -657,8 +670,28 @@ struct Rig {
         Client c;
         Reply none;
         if (!connect(c)) return none;
-        c.send_all(request);
+        send_pumped(c, request);
         return read_reply(c);
+    }
+
+    // Sends `data` and pumps the server while it does: the server reads only when it is pumped, and a large body does not fit in the socket buffers
+    // of the two ends (on macOS those are about 128 KB each way), so a send that waited for room without pumping would never get it.
+    // Stops when the connection is gone (a server that answered on the head has closed it) or when nothing moves for ~2 s.
+    void send_pumped(Client& c, const std::string& data) {
+        size_t sent = 0;
+        int stalls = 0;
+        while (sent < data.size() && stalls < 2000) {
+            const long n = c.send_some(data, sent);
+            if (n < 0) break;
+            if (n > 0) {
+                sent += static_cast<size_t>(n);
+                stalls = 0;
+            } else {
+                ++stalls;
+            }
+            pump();
+            if (n == 0) sleep_ms(1);
+        }
     }
 
     // Pumps for `ms` of wall time (the virtual clock stays) and returns what `c` received meanwhile
