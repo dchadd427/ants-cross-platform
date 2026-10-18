@@ -1,6 +1,6 @@
 # Map submissions: the server and the owner's page
 
-A player makes a map in the map maker ([`MAP_EDITOR.md`](MAP_EDITOR.md)) and may **send it for approval**. Nothing a player sends is public: it waits until the owner approves it on his own page. This page is the home of the server half (S1: the store, the API, the owner's page, the lists that the lobby reads, how to switch it on). The player's half (the Submit button of the editor and the My submissions page, S2) is built on the API below and is not part of S1.
+A player makes a map in the map maker ([`MAP_EDITOR.md`](MAP_EDITOR.md)) and may **send it for approval**. Nothing a player sends is public: it waits until the owner approves it on his own page. This page is the home of the server half (S1: the store, the API, the owner's page, the lists that the lobby reads, how to switch it on). The player's half (the Submit button of the editor and the My submissions page, S2: [`MAP_EDITOR.md`](MAP_EDITOR.md), E7) is built on the API below and is not part of S1.
 
 ## The rules (the owner's)
 
@@ -119,7 +119,7 @@ Nothing of this is live after the merge until the stack is told. The door (`ANTS
 2. **nginx** is `docker/nginx.conf`, built into the web image: nothing to edit, but behind a reverse proxy **mount a file over `/etc/nginx/ants-trusted-proxies/proxies.conf`** of the web container with `set_real_ip_from <the proxy's network>; real_ip_header X-Forwarded-For; real_ip_recursive on;` (the image's file is all comments). A staging or test copy that is not behind a proxy needs nothing.
 3. **The database** is migrated by the server itself at its start (schema version 4 to 5: three new tables, nothing changed). **A program of an older version refuses a database of version 5**: a rollback to a build before this one needs the copy of `ants.db` that was made before the first start (copy the file while the server is stopped; `docs/SERVER.md`, "The database"). **Keep `ants.db` and the results folder consistent**: the files of `submissions/files/` belong to the rows of that database; a restored or replaced `ants.db` leaves them without rows (they are quarantined, see "Known limits").
 4. **The disk**: `/results/submissions/files` on the volume `ants-server-results` (at most 256 MiB waiting, 1 GiB kept, and the server stops accepting at 256 MiB free).
-5. **The player's half** (S2) is separate: until it exists nothing links to the API, and the owner's page shows nothing to review. The owner's page and the API work as soon as the settings are there (a map can be sent with `curl` for a trial: `docs/MAP_SUBMISSIONS.md` has the call above).
+5. **The player's half** (S2) is the editor's Submit for approval button and My submissions (`web/front/mapmaker_submit.js`): until the door is switched on it says "Sending maps is not switched on right now" and sends nothing, and the owner's page shows nothing to review. The owner's page and the API work as soon as the settings are there (a map can be sent with `curl` for a trial: `docs/MAP_SUBMISSIONS.md` has the call above).
 
 ## Tests
 

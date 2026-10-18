@@ -39,7 +39,13 @@ Parts:
              line of the check, the filters and their counts); Open puts a saved map on the screen as the working map (a new history, the question about unsaved drawing first, the next Save
              offers the next number), Copy... starts from the saved map, Delete... asks first (Keep it changes nothing, Delete it removes that one saved map from the browser's database);
              Escape and Back to the map return; a browser that keeps nothing says so; the list is inside the screen, every control is 44 pixels, and nothing scrolls sideways;
-  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700, 700 x 600, 767 x 700, 1024 x 768, 1100 x 700, 1150 x 768, 1280 x 800): the top bar's seven buttons are all inside the window, none
+  * submit   1280 x 800 and a touch screen (390 x 844), Submit for approval and My submissions (the server's door is stood in for by a small fake of /submissions in the page): the script that sends
+             maps is loaded when it is first needed; a map that does not work cannot be sent (the reasons, the button off); a name that the game's list has is told, not refused; a map that works
+             is sent as ONE call with the file's own bytes, a %20 for a space, no token the first time and the token the next, and "Sent. Waiting for approval." follows; My submissions (the
+             second tab of My maps) shows Waiting with Withdraw, Approved, Approved as a new name (renamed by the owner) and Declined with the owner's reason as text, Open my copy puts the copy
+             on the screen, Withdraw asks first and withdraws; a door that is off and the pages of nginx are said in plain words; a status link opens the list and loses its fragment; the
+             sheets are inside the screen, every control is 44 pixels and nothing scrolls sideways;
+  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700 to 1366 x 768, the bar wraps up to 1200): the top bar's eight buttons are all inside the window, none covers the name box or the kind tags (and My maps has its two tabs), none
              covers the name box, and the page does not scroll sideways;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
@@ -67,7 +73,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "narrow", "panel", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -957,7 +963,7 @@ def run_part(part, tab, args, check, tiny, junk):
         summary = lambda: page.ev("JSON.stringify([document.getElementById('s-desc').textContent, document.getElementById('s-time').textContent, document.getElementById('s-ant').textContent])")
         check(json.loads(summary()) == ["“Tiny map with no PowerUps”", "6 minutes · 3 eggs for each team", "No default ant type"], "the side panel says what the map has: %s" % summary())
         top = page.ev("JSON.stringify([].map.call(document.querySelectorAll('.edmenu.dsk .btn'), function (b) { return b.textContent; }))")
-        check(json.loads(top) == ["New", "Open", "My maps", "Copy...", "Save as new...", "Properties", "Download"], "the top bar: New, Open, My maps, Copy..., Save as new..., Properties, Download (%s)" % top)
+        check(json.loads(top) == ["New", "Open", "My maps", "Copy...", "Save as new...", "Properties", "Download", "Submit for approval..."], "the top bar: New, Open, My maps, Copy..., Save as new..., Properties, Download, Submit for approval... (%s)" % top)
         check(page.ev("document.querySelector('#sumbox [data-act=props]').offsetParent !== null && document.querySelector('#sumbox [data-act=props]').textContent === 'Edit'"), "the summary has its Edit link")
         page.shot(args.shots, "mapmaker-props-entry")
         # the mouse: the button opens the dialog
@@ -1088,7 +1094,7 @@ def run_part(part, tab, args, check, tiny, junk):
         tap_selector("[data-act=menu]")
         check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
         names = page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')")
-        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Download", "the menu: %s" % names)
+        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions", "the menu: %s" % names)
         page.shot(args.shots, "mapmaker-props-phone-menu")
         page.ev("document.querySelectorAll('.menulist .btn')[5].click()")
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Properties... opens the sheet")
@@ -1497,7 +1503,7 @@ def run_part(part, tab, args, check, tiny, junk):
             check(page.open() and page.ready(), "the page starts")
             page.press_act("menu")
             check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
-            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Download", "the Menu has My maps after Open")
+            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions", "the Menu has My maps after Open, and the two ways to send a map at its end")
             click_text(page, ".menulist .btn", "My maps")
             check(wait_for(lambda: shown(page) and len(rows(page)) >= 1 and page.ev("[].every.call(document.querySelectorAll('#mine-list .t3'), function (n) { return n.textContent.length > 0; })")), "My maps opens")
             bad = json.loads(page.ev("""JSON.stringify([].filter.call(document.querySelectorAll('#mine button'), function (b) { return b.offsetParent !== null; }).map(function (b) {
@@ -1519,24 +1525,235 @@ def run_part(part, tab, args, check, tiny, junk):
         click_text(page, "#mine-new", "New map")
         check(dialog(page, "New map"), "and the page still works: New map opens")
         page.key("Escape")
+    elif part == "submit":
+        fake = """(function () {
+            var real = window.fetch, srv = window.__srv = { log: [], list: [], off: false, html: false, token: 'T'.repeat(43), n: 0, mapsList: {format: 1, maps: [{file: 'POPcOrN.lvl'}, {file: 'TINY.LVL'}]} };
+            function reply(status, json, html) { return Promise.resolve(new Response(html ? '<html><body>' + status + ' page of nginx</body></html>' : JSON.stringify(json), {status: status, headers: {'Content-Type': html ? 'text/html' : 'application/json'}})); }
+            window.fetch = function (u, init) {
+                u = String(u); init = init || {};
+                if (u === '/maps') return reply(200, srv.mapsList);
+                if (u.indexOf('/submissions') !== 0) return real.apply(this, arguments);
+                var method = init.method || 'GET', auth = init.headers && init.headers.Authorization, body = init.body;
+                srv.log.push({method: method, url: u, auth: auth || '', type: (init.headers || {})['Content-Type'] || '', length: body ? body.length : 0, first: body ? body[0] : -1});
+                if (srv.off) return reply(503, {error: 'submissions_off', message: 'Sending maps is not switched on right now.'});
+                if (srv.html && method === 'POST') return reply(503, null, true);
+                if (method === 'GET') return auth ? reply(200, {submissions: srv.list}) : reply(401, {error: 'no_token', message: 'x'});
+                var w = /^\\/submissions\\/([0-9a-f]{32})\\/withdraw$/.exec(u);
+                if (w) { srv.list = srv.list.filter(function (s) { return s.id !== w[1]; }); return reply(200, {submission: {id: w[1], state: 'withdrawn'}}); }
+                var q = {}; u.split('?')[1].split('&').forEach(function (p) { var kv = p.split('='); q[kv[0]] = decodeURIComponent(kv[1] || ''); });
+                var id = ('0' + (++srv.n)).repeat(16), s = {id: id, state: 'waiting', kind: q.kind, name: q.name, width: 31, height: 31, sent_at: Math.floor(Date.now() / 1000)};
+                srv.list.unshift(s);
+                var out = {submission: s, name_taken: q.name.toLowerCase() === 'tiny', token_is_new: !auth};
+                if (!auth) out.token = srv.token;
+                return reply(201, out);
+            };
+        })();"""
+        title = lambda page: page.ev("(document.querySelector('.dlg h2') || {}).textContent || ''")
+        dialog = lambda page, text: wait_for(lambda: title(page) == text)
+        srv = lambda page, expr: page.ev("JSON.stringify(window.__srv.%s)" % expr)
+        log = lambda page: json.loads(srv(page, "log"))
+        text_of = lambda page, selector: page.ev("(document.querySelector(%s) || {textContent: ''}).textContent" % json.dumps(selector))
+        click_text = lambda page, scope, text: page.ev("[].filter.call(document.querySelectorAll(%s), function (b) { return b.textContent === %s; })[0].click()" % (json.dumps(scope), json.dumps(text)))
+        bad_controls = lambda page, scope: json.loads(page.ev("""JSON.stringify([].filter.call(document.querySelectorAll(%s + ' button, ' + %s + ' input, ' + %s + ' textarea'), function (b) { return b.offsetParent !== null; }).map(function (b) {
+            var r = b.getBoundingClientRect(); return {t: b.textContent || b.id, w: Math.round(r.width), h: Math.round(r.height), out: r.left < -0.5 || r.right > innerWidth + 0.5}; }).filter(function (x) { return x.h < 44 || x.out; }))""" % ((json.dumps(scope),) * 3)))
+        inside = lambda page: page.ev("(function () { var d = document.querySelector('.dlg').getBoundingClientRect(); return d.left >= -0.5 && d.right <= innerWidth + 0.5 && d.top >= -0.5 && d.bottom <= innerHeight + 0.5; })()")
+        send_off = lambda page: page.ev("[].filter.call(document.querySelectorAll('.dlg-foot button'), function (b) { return b.textContent === 'Submit for approval'; })[0].disabled")
+        rows = lambda page: json.loads(page.ev("JSON.stringify([].map.call(document.querySelectorAll('#mine-list .mrow'), function (r) { return r.textContent; }))"))
+        tab_click = lambda page, prefix: page.ev("[].filter.call(document.querySelectorAll('#mine-tabs button'), function (b) { return b.textContent.indexOf(%s) === 0; })[0].click()" % json.dumps(prefix))
+        tiny_size = os.path.getsize(tiny)
+        print("[web map maker] Submit for approval and My submissions, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open(fake) and page.ready(), "the page starts")
+        check(page.ev("typeof MapSubmit") == "undefined" and page.ev("!document.querySelector('script[src*=mapmaker_submit]')"), "the script that sends maps is not loaded yet")
+        check(page.ev("!!document.querySelector('[data-act=submit]') && document.querySelector('[data-act=submit]').textContent") == "Submit for approval...", "the top bar has Submit for approval...")
+        page.press_act("submit")
+        check(dialog(page, "Submit for approval") and page.ev("typeof MapSubmit") == "object", "the button loads the script and opens the dialog")
+        blank_works = page.ev("document.getElementById('check-dot').classList.contains('ok')")
+        if not blank_works:
+            check(send_off(page) and page.ev("!!document.querySelector('.dlg .subfin li') && document.querySelector('.dlg .note.bad') !== null"), "a map that does not work: the reasons are listed and the button is off")
+            check("cannot be submitted" in text_of(page, ".dlg .note.bad"), "with the sentence of the picture: %s" % text_of(page, ".dlg .note.bad"))
+            page.shot(args.shots, "mapmaker-submit-blocked")
+        page.key("Escape")
+        page.choose_file(tiny)
+        check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
+        page.press_act("submit")
+        check(dialog(page, "Submit for approval") and wait_for(lambda: not page.ev("document.querySelector('.dlg #sub-name').disabled")), "the dialog opens for a map that works")
+        check(page.ev("document.activeElement.id") == "sub-name" and page.ev("document.querySelector('#sub-name').value") == "TINY", "the focus is on the name, which is the map's")
+        check(wait_for(lambda: "already in the game" in text_of(page, ".dlg .note.warn")) and page.ev("document.querySelector('.dlg .note.bad') === null"), "TINY is a name of the game's list: told in a yellow note, not an error (%s)" % text_of(page, ".dlg"))
+        check(send_off(page), "no player name yet: the button waits")
+        page.type_into("#sub-maker", "Mia")
+        check(wait_for(lambda: not send_off(page)), "with a name the button works")
+        page.shot(args.shots, "mapmaker-submit-name-taken")
+        page.type_into("#sub-name", "Sunny Picnic")
+        check(wait_for(lambda: "No map in the list has this name." in text_of(page, ".dlg .cname")), "a free name: 'No map in the list has this name.'")
+        page.type_into("#sub-note", "A map with a lake + a hill & 'quotes'")
+        check(inside(page) and bad_controls(page, ".dlg") == [] and page.ev("document.documentElement.scrollWidth <= innerWidth"), "the dialog is inside the screen, every control is 44 pixels (%s)" % bad_controls(page, ".dlg"))
+        page.shot(args.shots, "mapmaker-submit-dialog")
+        click_text(page, ".dlg-foot button", "Submit for approval")
+        check(dialog(page, "Submitted"), "after sending: the dialog 'Submitted'")
+        posts = [c for c in log(page) if c["method"] == "POST"]
+        check(len(posts) == 1 and posts[0]["url"] == "/submissions?kind=classic&name=Sunny%20Picnic&maker=Mia&note=A%20map%20with%20a%20lake%20%2B%20a%20hill%20%26%20'quotes'", "ONE call, a space is %%20, a plus %%2B, an ampersand %%26 (%s)" % [c["url"] for c in posts])
+        check(posts[0]["length"] == tiny_size and posts[0]["type"] == "application/octet-stream" and posts[0]["auth"] == "", "the body is the file's own bytes (%d), as a file, with no token the first time (%s)" % (tiny_size, posts[0]))
+        check("Sent. Waiting for approval." in text_of(page, ".dlg") and "\u201cSunny Picnic\u201d is with the owner now." in text_of(page, ".dlg"), "'Sent. Waiting for approval.' and the name: %s" % text_of(page, ".dlg"))
+        page.shot(args.shots, "mapmaker-submit-sent")
+        stored = page.ev("(function () { window.__k = undefined; var q = indexedDB.open('ants-mapmaker-sent', 1); q.onsuccess = function () { var g = q.result.transaction('sent', 'readonly').objectStore('sent').getAll(); g.onsuccess = function () { window.__k = g.result.map(function (r) { return r.id.charAt(0) !== '#' ? 'map:' + r.name + ':' + (r.bytes && r.bytes.length) : r.id; }).sort().join('|'); }; }; })()")
+        wait_for(lambda: page.ev("window.__k !== undefined"), 5, 0.05)
+        check(page.ev("window.__k") == "#maker|#tokens|map:Sunny Picnic:%d" % tiny_size, "the browser keeps the token, the player's name and the player's own copy: %s" % page.ev("window.__k"))
+        click_text(page, ".dlg-foot button", "See my submissions")
+        check(wait_for(lambda: not page.ev("document.getElementById('mine').hidden") and page.ev("document.getElementById('mine-title').textContent") == "My submissions"), "See my submissions opens My submissions")
+        check(wait_for(lambda: len(rows(page)) == 1), "one row")
+        check(page.ev("[].map.call(document.querySelectorAll('#mine-tabs button'), function (b) { return b.textContent; }).join('|')") == "My maps|My submissions (1)", "two tabs: %s" % page.ev("[].map.call(document.querySelectorAll('#mine-tabs button'), function (b) { return b.textContent; }).join('|')"))
+        check("Waiting for approval" in rows(page)[0] and "Sunny Picnic" in rows(page)[0] and "Classic map" in rows(page)[0] and "31 x 31" in rows(page)[0] and "Sent today" in rows(page)[0], "Waiting, with its name, kind, size and day: %s" % rows(page)[0])
+        check(page.ev("[].map.call(document.querySelectorAll('#mine-list .mrow button'), function (b) { return b.textContent; }).join('|')") == "Withdraw" and "never replaced" in text_of(page, "#mine-note"), "Withdraw only, and the line 'An approved map is never replaced'")
+        # the four answers
+        first = json.loads(srv(page, "list[0]"))
+        page.ev("""(function () { var s = window.__srv, a = s.list[0], now = Math.floor(Date.now() / 1000);
+            s.list = [a,
+              {id: 'b'.repeat(32), state: 'approved', kind: 'extended', name: 'Big Lake', width: 400, height: 300, sent_at: now - 86400 * 3, renamed_by_owner: true, approved_name: 'Big Lake 2', message: 'The name was taken. <b>Thank you</b> for the map!'},
+              {id: 'c'.repeat(32), state: 'approved', kind: 'classic', name: 'Hidden Ponds', width: 40, height: 40, sent_at: now - 86400 * 4},
+              {id: 'd'.repeat(32), state: 'declined', kind: 'classic', name: 'Gauntlet practice', width: 60, height: 60, sent_at: now - 86400 * 5, message: 'Too much like the Gauntlet map. Please change the middle.'}]; })()""")
+        tab_click(page, "My maps")
+        wait_for(lambda: page.ev("document.getElementById('mine-title').textContent") == "My maps")
+        tab_click(page, "My submissions")
+        check(wait_for(lambda: len(rows(page)) == 4), "four rows after the owner has answered")
+        r = rows(page)
+        check("Approved as \u201cBig Lake 2\u201d (renamed by the owner)" in r[1] and "Extended map" in r[1] and "300 x 400" in r[1], "renamed by the owner: %s" % r[1])
+        check("The owner wrote: The name was taken. <b>Thank you</b> for the map!" in r[1] and page.ev("document.querySelectorAll('#mine-list b').length") == 0, "the owner's words are text, never markup")
+        check("Approved" in r[2] and "renamed" not in r[2] and "Declined" in r[3] and "The owner wrote: Too much like the Gauntlet map." in r[3], "Approved and Declined with the owner's reason")
+        check(page.ev("[].map.call(document.querySelectorAll('#mine-list .mrow'), function (r) { return [].map.call(r.querySelectorAll('button'), function (b) { return b.textContent; }).join('+'); }).join('|')") == "Withdraw|||", "buttons: Withdraw for the waiting one, none for the answered ones that came from elsewhere (this browser has no copy of them)")
+        page.shot(args.shots, "mapmaker-submit-my-submissions")
+        check(bad_controls(page, "#mine") == [] and page.ev("document.documentElement.scrollWidth <= innerWidth"), "every control is 44 pixels, nothing scrolls sideways (%s)" % bad_controls(page, "#mine"))
+        # the status link
+        click_text(page, "#mine-link", "Copy my status link")
+        check(wait_for(lambda: page.ev("document.getElementById('mine-link').textContent") == "Link copied" or page.ev("!!document.querySelector('.dlg input')")), "Copy my status link copies it, or shows it to copy by hand")
+        if page.ev("!!document.querySelector('.dlg input')"):
+            check(page.ev("document.querySelector('.dlg input').value").endswith("#sent=" + "T" * 43) and "keep it to yourself" in text_of(page, ".dlg"), "the link has the token in the fragment, with the warning")
+            page.key("Escape")
+        # Withdraw asks first
+        click_text(page, "#mine-list button", "Withdraw")
+        check(dialog(page, "Withdraw this map?") and not [c for c in log(page) if "withdraw" in c["url"]], "Withdraw asks first and sends nothing")
+        click_text(page, ".dlg-foot button", "Keep it waiting")
+        click_text(page, "#mine-list button", "Withdraw")
+        dialog(page, "Withdraw this map?")
+        click_text(page, ".dlg-foot button", "Withdraw it")
+        check(wait_for(lambda: len(rows(page)) == 3) and len([c for c in log(page) if "withdraw" in c["url"]]) == 1 and log(page)[-1]["auth"] == "Bearer " + "T" * 43, "Withdraw is one call with the token, and the row goes")
+        # a second map carries the token
+        page.key("Escape")
+        check(wait_for(lambda: page.ev("document.getElementById('mine').hidden")), "Escape goes back to the map")
+        page.press_act("submit")
+        check(dialog(page, "Submit for approval") and page.ev("document.querySelector('#sub-maker') === null") and "Mia" in text_of(page, ".dlg .subwho"), "the player's name is remembered (and can be changed)")
+        page.type_into("#sub-name", "Sunny Picnic Two")
+        check(wait_for(lambda: not send_off(page)), "the button works")
+        click_text(page, ".dlg-foot button", "Submit for approval")
+        check(dialog(page, "Submitted") and log(page)[-1]["auth"] == "Bearer " + "T" * 43 and log(page)[-1]["method"] == "POST", "the next send carries the token")
+        check(all((c["method"], c["url"].split("?")[0]) in (("GET", "/submissions"), ("POST", "/submissions")) or c["url"].endswith("/withdraw") for c in log(page)), "only GET /submissions, POST /submissions and the withdraw of a waiting map were called")
+        click_text(page, ".dlg-foot button", "Back to the editor")
+        # Open my copy: the own copy of the map comes back as the working map (the owner has answered the second map)
+        page.ev("window.__srv.list[0].state = 'approved'")
+        page.press_act("mine")
+        wait_for(lambda: not page.ev("document.getElementById('mine').hidden"))
+        tab_click(page, "My submissions")
+        check(wait_for(lambda: page.ev("[].some.call(document.querySelectorAll('#mine-list button'), function (b) { return b.textContent === 'Open my copy'; })")), "an answered map has Open my copy")
+        click_text(page, "#mine-list button", "Open my copy")
+        check(wait_for(lambda: page.state()["name"] == "Sunny Picnic Two" and page.ev("document.getElementById('mine').hidden")) and page.state()["check"] == "Works in the original game", "Open my copy puts the player's own copy on the screen as the working map")
+        # the pages of nginx and a door that is off
+        page.ev("window.__srv.html = true")
+        page.press_act("submit")
+        dialog(page, "Submit for approval")
+        wait_for(lambda: not send_off(page))
+        click_text(page, ".dlg-foot button", "Submit for approval")
+        check(wait_for(lambda: "too many tries or the server is busy" in text_of(page, ".dlg")) and title(page) == "Submit for approval" and not send_off(page), "a page of nginx (503 HTML) is said in plain words, and the player can try again: %s" % text_of(page, "#sub-err"))
+        page.key("Escape")
+        page.ev("window.__srv.html = false; window.__srv.off = true")
+        page.press_act("submit")
+        check(dialog(page, "Submit for approval") and wait_for(lambda: "not switched on right now" in text_of(page, ".dlg")) and send_off(page), "a door that is off: a plain line and the button off")
+        check(page.ev("document.querySelector('.dlg .note.bad') === null") and page.ev("!!document.querySelector('.dlg #sub-name') && !!document.querySelector('.dlg-foot')"), "not an error, and nothing else is hidden")
+        page.shot(args.shots, "mapmaker-submit-off")
+        page.key("Escape")
+        page.press_act("mine")
+        wait_for(lambda: not page.ev("document.getElementById('mine').hidden"))
+        tab_click(page, "My submissions")
+        check(wait_for(lambda: "not switched on right now" in text_of(page, "#mine-list")) and len(rows(page)) >= 3, "My submissions with the door off: one plain line, and the list this browser last knew")
+        # a status link on another device: only the token comes along
+        tab.call("Storage.clearDataForOrigin", {"origin": "/".join(args.web.split("/")[:3]), "storageTypes": "indexeddb"})
+        tab.call("Page.navigate", {"url": "about:blank"})               # (a link that only adds a fragment to the open page would not start it again)
+        time.sleep(0.5)
+        page2 = Page(tab, args.web)
+        page2.url += "#sent=" + "T" * 43
+        check(page2.open(fake) and page2.ready(), "the page starts from a status link")
+        page2.ev("window.__srv.list = [{id: 'e'.repeat(32), state: 'approved', kind: 'classic', name: 'Elsewhere', width: 20, height: 20, sent_at: Math.floor(Date.now() / 1000)}]")
+        check(wait_for(lambda: not page2.ev("document.getElementById('mine').hidden") and page2.ev("document.getElementById('mine-title').textContent") == "My submissions"), "it opens My submissions")
+        check(wait_for(lambda: page2.ev("location.hash") == "") and page2.ev("location.href").endswith("/mapmaker.html"), "and the address has lost the token (%s)" % page2.ev("location.href"))
+        # the phone
+        print("[web map maker] Submit for approval and My submissions, a touch screen, 390 x 844")
+        tab.emulate(390, 844, 2, mobile=True)
+        tab.call("Storage.clearDataForOrigin", {"origin": "/".join(args.web.split("/")[:3]), "storageTypes": "indexeddb"})
+        page = Page(tab, args.web)
+        check(page.open(fake) and page.ready(), "the page starts")
+        page.choose_file(tiny)
+        check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
+        page.press_act("menu")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")) and page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).slice(-2).join('|')") == "Submit for approval...|My submissions", "the Menu ends with Submit for approval... and My submissions")
+        page.shot(args.shots, "mapmaker-submit-menu-phone")
+        click_text(page, ".menulist .btn", "Submit for approval...")
+        check(dialog(page, "Submit for approval"), "the dialog opens")
+        page.type_into("#sub-maker", "Mia")
+        wait_for(lambda: not send_off(page))
+        check(inside(page) and page.ev("document.documentElement.scrollWidth <= innerWidth") and bad_controls(page, ".dlg") == [], "the sheet is inside the width, every control is 44 pixels, nothing scrolls sideways (%s)" % bad_controls(page, ".dlg"))
+        page.shot(args.shots, "mapmaker-submit-dialog-phone")
+        page.ev("document.querySelector('.dlg-in').scrollTop = 99999")
+        check(page.ev("(function () { var f = document.querySelector('.dlg-foot').getBoundingClientRect(); return f.bottom <= innerHeight + 0.5 && f.top >= 0; })()"), "Cancel and Submit stay in view (what does not fit scrolls inside the sheet)")
+        click_text(page, ".dlg-foot button", "Submit for approval")
+        check(dialog(page, "Submitted") and inside(page), "Sent: the sheet is inside the screen")
+        page.shot(args.shots, "mapmaker-submit-sent-phone")
+        click_text(page, ".dlg-foot button", "See my submissions")
+        check(wait_for(lambda: len(rows(page)) == 1) and page.ev("document.documentElement.scrollWidth <= innerWidth") and bad_controls(page, "#mine") == [], "My submissions on a phone: inside the width, every control is 44 pixels (%s)" % bad_controls(page, "#mine"))
+        page.ev("(function () { var s = window.__srv, a = s.list[0]; s.list = [a, {id: 'b'.repeat(32), state: 'approved', kind: 'extended', name: 'Big Lake', width: 400, height: 300, sent_at: 1700000000, renamed_by_owner: true, approved_name: 'Big Lake 2', message: 'The name was taken, so I added a number. Thank you for the map!'}, {id: 'd'.repeat(32), state: 'declined', kind: 'classic', name: 'Gauntlet practice', width: 60, height: 60, sent_at: 1699000000, message: 'Too much like the Gauntlet map that is already in the list. Please change the middle and send it again.'}]; })()")
+        tab_click(page, "My maps")
+        wait_for(lambda: page.ev("document.getElementById('mine-title').textContent") == "My maps")
+        tab_click(page, "My submissions")
+        check(wait_for(lambda: len(rows(page)) == 3) and page.ev("document.documentElement.scrollWidth <= innerWidth") and bad_controls(page, "#mine") == [], "three rows on a phone: nothing scrolls sideways, every control is 44 pixels (%s)" % bad_controls(page, "#mine"))
+        page.shot(args.shots, "mapmaker-submit-my-submissions-phone")
+        print("[web map maker] Submit for approval, a phone held sideways, 844 x 390")
+        tab.emulate(844, 390, 2, mobile=True)
+        tab.call("Storage.clearDataForOrigin", {"origin": "/".join(args.web.split("/")[:3]), "storageTypes": "indexeddb"})
+        page = Page(tab, args.web)
+        check(page.open(fake) and page.ready(), "the page starts")
+        page.choose_file(tiny)
+        check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
+        page.press_act("menu")
+        wait_for(lambda: page.ev("!!document.querySelector('.menulist')"))
+        click_text(page, ".menulist .btn", "Submit for approval...")
+        check(dialog(page, "Submit for approval"), "the dialog opens")
+        page.type_into("#sub-maker", "Mia")
+        check(wait_for(lambda: not send_off(page)), "the button works")
+        check(page.ev("(function () { var d = document.querySelector('.dlg').getBoundingClientRect(), f = document.querySelector('.dlg-foot').getBoundingClientRect(); return d.left >= -0.5 && d.right <= innerWidth + 0.5 && d.bottom <= innerHeight + 0.5 && f.bottom <= innerHeight + 0.5 && f.top >= 0; })()") and bad_controls(page, ".dlg-foot") == [], "the sheet is inside the screen with Cancel and Submit in view, 44 pixels (%s)" % bad_controls(page, ".dlg-foot"))
+        page.shot(args.shots, "mapmaker-submit-dialog-landscape")
     elif part == "narrow":
-        for w, h in ((620, 700), (700, 600), (767, 700), (1024, 768), (1100, 700), (1150, 768), (1280, 800)):
+        for w, h in ((620, 700), (700, 600), (767, 700), (1024, 768), (1100, 700), (1150, 768), (1200, 768), (1201, 768), (1240, 768), (1280, 800), (1330, 800), (1366, 768)):
             print("[web map maker] the top bar, %d x %d" % (w, h))
             tab.emulate(w, h, 1)
             page = Page(tab, args.web)
             check(page.open() and page.ready(), "the page starts")
             found = json.loads(page.ev("""JSON.stringify((function () {
-                var name = document.getElementById('map-name').getBoundingClientRect(), out = [], hit = [];
+                var name = document.getElementById('map-name').getBoundingClientRect(), tags = document.getElementById('top-tags').getBoundingClientRect(), out = [], hit = [];
                 [].forEach.call(document.querySelectorAll('.edmenu .btn'), function (b) {
                     if (b.offsetParent === null) return;
                     var r = b.getBoundingClientRect();
                     if (r.left < -0.5 || r.right > innerWidth + 0.5) out.push(b.textContent);
-                    if (r.left < name.right && r.right > name.left && r.top < name.bottom && r.bottom > name.top) hit.push(b.textContent);
+                    [name, tags].forEach(function (n) { if (r.left < n.right && r.right > n.left && r.top < n.bottom && r.bottom > n.top) hit.push(b.textContent); });
                 });
                 return {out: out, hit: hit, scrollX: document.documentElement.scrollWidth > innerWidth, n: [].filter.call(document.querySelectorAll('.edmenu .btn'), function (b) { return b.offsetParent !== null; }).length};
             })())"""))
-            check(found["n"] == 7 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: seven buttons, none cut, none over the name box, no sideways scroll (%s)" % (w, h, found))
+            check(found["n"] == 8 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: eight buttons (Submit for approval... is the last), none cut, none over the name box or the tags, no sideways scroll (%s)" % (w, h, found))
             page.shot(args.shots, "mapmaker-topbar-%dx%d" % (w, h))
+            # My submissions is the second tab of My maps: both tabs, the buttons of the screen and the page stay inside the window
+            page.press_act("mine")
+            wait_for(lambda: page.ev("!document.getElementById('mine').hidden && document.querySelectorAll('#mine-tabs button').length === 2"))
+            tabs = json.loads(page.ev("""JSON.stringify({n: document.querySelectorAll('#mine-tabs button').length, out: [].filter.call(document.querySelectorAll('#mine-tabs button, #mine-back, #mine-new'), function (b) { var r = b.getBoundingClientRect(); return r.left < -0.5 || r.right > innerWidth + 0.5; }).length, scrollX: document.documentElement.scrollWidth > innerWidth})"""))
+            check(tabs == {"n": 2, "out": 0, "scrollX": False}, "%d x %d: My maps has its two tabs, inside the window, and nothing scrolls sideways (%s)" % (w, h, tabs))
+            page.key("Escape")
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):
             print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))
