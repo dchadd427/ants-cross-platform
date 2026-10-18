@@ -1420,6 +1420,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.shot(args.shots, "mapmaker-mine-empty")
         page.key("Escape")
         check(wait_for(lambda: not shown(page)) and page.ev("!!document.getElementById('top').offsetParent"), "Escape goes back to the map")
+        check(page.ev("document.activeElement.getAttribute('data-act')") == "mine", "and the focus is on My maps again")
         page.choose_file(tiny)
         check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
         size = "%s x %s" % (page.state()["rows"], page.state()["columns"])

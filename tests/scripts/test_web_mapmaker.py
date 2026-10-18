@@ -797,6 +797,8 @@ class ThePage(unittest.TestCase):
                     name = os.path.basename(m["file"])
                     text = read(*m["file"].split("/"))
                     self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    if "web_mapmaker_mine_check" not in m["test"]:
+                        continue                # (a page-level mutant is judged by the pinned source of this file: tools/mutate.py runs it)
                     with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
                         f.write(text.replace(m["old"], m["new"]))
                     try:
@@ -818,6 +820,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("tools.setMap(file);\n        keepSoon();\n        if (mine) mine.hide();", app, "a map that takes the screen closes the list (and starts its own history)")
         self.assertIn("onOpen: function (rec) { if (!dialogs.isOpen()) leave(function () { var error = setMap(new win.Uint8Array(rec.bytes), rec.name);", app, "a saved map opens as the working map after the question about unsaved drawing, from a copy of its bytes")
         self.assertIn("converterOf().copy(read(rec))", app)
+        self.assertIn("onBack: function () { if (dialogs.isOpen()) return; mine.hide(); var b = doc.querySelector('[data-act=\"mine\"]'); (b && b.offsetParent ? b : doc.querySelector('[data-act=\"menu\"]')).focus(); },", app, "Back and Escape put the focus on My maps again (the Menu on a phone)")
         # a saved map is never written over and never published: the only calls on the drafts are add (Save), list and remove (this list); the page has no submit
         self.assertEqual(len(re.findall(r"store\.remove\(", self.code["mapmaker_mine.js"])), 1)
         self.assertNotIn("store.remove(", app)

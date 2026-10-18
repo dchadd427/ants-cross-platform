@@ -293,7 +293,7 @@
             onOpen: function (rec) { if (!dialogs.isOpen()) leave(function () { var error = setMap(new win.Uint8Array(rec.bytes), rec.name); if (error) dialogs.message('This saved map cannot be opened', error); }); },
             onCopy: function (rec) { if (!dialogs.isOpen()) converterOf().copy(read(rec)); },
             onNew: function () { if (!dialogs.isOpen()) ACTIONS['new'](); },
-            onBack: function () { if (!dialogs.isOpen()) mine.hide(); },
+            onBack: function () { if (dialogs.isOpen()) return; mine.hide(); var b = doc.querySelector('[data-act="mine"]'); (b && b.offsetParent ? b : doc.querySelector('[data-act="menu"]')).focus(); },
             onShow: function () { $('top').hidden = $('body').hidden = true; doc.title = 'My maps - Map maker - Ants (1998)'; },
             onHide: function () { $('top').hidden = $('body').hidden = false; doc.title = map.name + ' - Map maker - Ants (1998)'; }
         };

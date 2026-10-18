@@ -19,6 +19,7 @@
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function button(cls, text, onClick, label) { var b = el('button', cls, text); b.type = 'button'; if (label) b.setAttribute('aria-label', label); b.addEventListener('click', onClick); return b; }
+        function label(rec) { return typeof rec.name === 'string' && rec.name ? rec.name : ''; }          // (a record with no name is shown and asked about without one)
         function count(kind) { return rows.filter(function (r) { return kind === 'all' || (r.file && r.file.kind === kind); }).length; }
         function say(text) { status.textContent = ''; status.textContent = text; }
 
@@ -56,17 +57,17 @@
         }
 
         function makeRow(rec) {
-            var bytes = new Uint8Array(rec.bytes || 0), file = env.parse(bytes), name = rec.name || '', r = { rec: rec, file: file }, tags = el('span', 'tags'), acts = el('div', 'macts');
+            var bytes = new Uint8Array(rec.bytes || 0), file = label(rec) ? env.parse(bytes) : null, name = label(rec), r = { rec: rec, file: file }, tags = el('span', 'tags'), acts = el('div', 'macts');
             r.node = el('div', 'mrow'); r.thumb = el('span', 'mthumb'); r.thumb.setAttribute('aria-hidden', 'true');
             r.line = el('div', 't3');
             if (file) env.tags(tags, file.kind);
             var size = el('div', 't2', file ? file.rows + ' x ' + file.columns : 'This saved map cannot be read.');
             if (file) size.appendChild(el('span', 'hidem', ' · saved in this browser'));
             if (file) {
-                acts.appendChild(button('btn sm', 'Open', function () { env.onOpen(rec); }, 'Open ' + name));
-                acts.appendChild(button('btn sm', 'Copy…', function () { env.onCopy(rec); }, 'Copy ' + name));
+                acts.appendChild(button('btn sm', 'Open', function () { env.onOpen(rec); }, 'Open ' + (name || 'this saved map')));
+                acts.appendChild(button('btn sm', 'Copy…', function () { env.onCopy(rec); }, 'Copy ' + (name || 'this saved map')));
             }
-            acts.appendChild(button('btn sm ghost', 'Delete…', function () { confirmDelete(r); }, 'Delete ' + name));
+            acts.appendChild(button('btn sm ghost', 'Delete…', function () { confirmDelete(r); }, 'Delete ' + (name || 'this unreadable saved map')));
             var t1 = el('div', 't1', name + ' ');
             t1.appendChild(tags);
             var mid = el('div', 'mmid'); mid.appendChild(t1); mid.appendChild(size); mid.appendChild(r.line);
@@ -76,21 +77,21 @@
 
         // the question before a saved map is deleted: it is the player's own copy in this browser; the default choice is to keep it
         function confirmDelete(r) {
-            var name = r.rec.name;
+            var name = label(r.rec);
             env.dialogs.open({
                 title: 'Delete this saved map?', cls: 'narrow',
                 build: function (body) {
-                    body.appendChild(el('p', 'fatalmsg', '“' + name + '” will be removed from this browser, and it cannot be brought back. A copy you downloaded stays where you saved it, and the game’s own maps are never touched.'));
+                    body.appendChild(el('p', 'fatalmsg', (name ? '“' + name + '”' : 'This unreadable saved map') + ' will be removed from this browser, and it cannot be brought back. A copy you downloaded stays where you saved it, and the game’s own maps are never touched.'));
                 },
                 buttons: [{ id: 'keep', text: 'Keep it', ghost: true }, { id: 'delete', text: 'Delete it', onClick: function () { remove(r); } }]
             });
         }
         function remove(r) {
-            env.store.remove(r.rec.name, function (error) {
+            env.store.remove(r.rec.key, function (error) {
                 if (error) return env.dialogs.message('The map could not be deleted', 'The browser would not delete it. Nothing was changed.');
                 rows.splice(rows.indexOf(r), 1);
                 showList();
-                say('“' + r.rec.name + '” was deleted.');
+                say((label(r.rec) ? '“' + label(r.rec) + '”' : 'The unreadable saved map') + ' was deleted.');
                 $('mine-new').focus();
             });
         }

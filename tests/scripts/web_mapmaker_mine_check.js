@@ -11,6 +11,7 @@
 //   C  Open and Copy hand the saved map to the page (nothing is written), and a map that cannot be read can only be deleted
 //   D  Delete: the clear question first (the safe choice has the focus), Keep it changes nothing, Delete it deletes one map, and a refusal of the browser is said
 //   E  Escape and Back, a list that is closed while it loads, a store that is not open yet
+//   G  Delete takes the record's own key (a nameless record, a key that is not its name)
 //   F  Copy of a saved map (not the open one): the source, the default name and the two ways of making the copy
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
@@ -103,8 +104,8 @@ async function caseA() {
     equal(idb.log, ['getAll drafts'], 'the list reads the drafts store only');
     equal(store.has('mid'), true, 'a saved map\'s name is taken');
     const before = idb.stores.work.size;
-    const answer = await new Promise((res) => store.remove('  MID ', res));
-    equal([answer, Array.from(idb.stores.drafts.keys()).sort(), store.has('Mid'), idb.stores.work.size === before], ['', ['new', 'old'], false, true], 'a delete removes that one saved map (capitals and blanks do not count), frees its name and leaves the slot of unsaved work');
+    const answer = await new Promise((res) => store.remove('mid', res));
+    equal([answer, Array.from(idb.stores.drafts.keys()).sort(), store.has('Mid'), idb.stores.work.size === before], ['', ['new', 'old'], false, true], 'a delete removes that one saved map frees its name and leaves the slot of unsaved work');
     equal(idb.log.filter((l) => /^delete/.test(l)), ['delete drafts mid'], 'and it is a delete from the drafts store only');
     equal(await new Promise((res) => store.remove('nobody', res)), '', 'deleting a name that is not there is not an error');
     equal(idb.log.filter((l) => /^delete/.test(l)), ['delete drafts mid', 'delete drafts nobody'], 'still only the drafts store');
@@ -281,8 +282,38 @@ function caseF() {
     equal(c.host.querySelector('.sn').textContent, 'Draft', 'an Extended saved map is the source too');
 }
 
+// ---- G: the key of the record is what is deleted, never one worked out from its name ----
+async function caseG() {
+    const idb = fakeIdb();
+    idb.stores.drafts.set('foo', rec('Foo', 'classic', 300));
+    idb.stores.drafts.set('mismatch-key', Object.assign(rec('Foo', 'classic', 200), { key: 'mismatch-key' }));
+    idb.stores.drafts.set('undefined', rec('undefined', 'classic', 100));
+    idb.stores.drafts.set('Odd  KEY', Object.assign(rec('Odd', 'classic', 400), { key: 'Odd  KEY' }));
+    idb.stores.drafts.set('odd', rec('Odd', 'classic', 399));
+    idb.stores.drafts.set('nameless', { key: 'nameless', saved: 50, bytes: new Uint8Array([8, 1, 2]) });
+    const s = await loaded(await opened(idb));
+    const row = (i) => s.p.els['mine-list'].children[i];
+    equal(texts(row(5)), ['Delete\u2026'], 'a record with no name is an unreadable row: Delete only');
+    button(row(5), 'Delete\u2026').click();
+    const body = s.p.doc.createElement('div');
+    s.dialogs.opened[0].build(body);
+    check(!/undefined/.test(body.textContent) && /This unreadable saved map will be removed/.test(body.textContent), 'its question does not say undefined: ' + body.textContent);
+    check(!/undefined/.test(button(row(5), 'Delete\u2026').getAttribute('aria-label')), 'nor does its button');
+    s.dialogs.opened[0].buttons[1].onClick({});
+    await later();
+    equal(Array.from(idb.stores.drafts.keys()).sort(), ['Odd  KEY', 'foo', 'mismatch-key', 'odd', 'undefined'].sort(), 'the nameless record is the one deleted, not a map called undefined');
+    button(row(3), 'Delete\u2026').click();
+    s.dialogs.opened[1].buttons[1].onClick({});
+    await later();
+    equal(Array.from(idb.stores.drafts.keys()).sort(), ['Odd  KEY', 'foo', 'odd', 'undefined'].sort(), 'a row whose key differs from its name deletes its own record, not the one its name points at');
+    button(row(0), 'Delete\u2026').click();
+    s.dialogs.opened[2].buttons[1].onClick({});
+    await later();
+    equal(Array.from(idb.stores.drafts.keys()).sort(), ['foo', 'odd', 'undefined'], 'a key with capitals and blanks is deleted as it is stored, not as a name would be cleaned');
+}
+
 (async () => {
-    const parts = [['A the store: list and delete', caseA], ['B the list, the filters and the empty states', caseB], ['C Open, Copy and a map that cannot be read', caseC], ['D Delete and its question', caseD], ['E Escape, closing and waiting', caseE], ['F Copy of a saved map', caseF]];
+    const parts = [['A the store: list and delete', caseA], ['B the list, the filters and the empty states', caseB], ['C Open, Copy and a map that cannot be read', caseC], ['D Delete and its question', caseD], ['E Escape, closing and waiting', caseE], ['F Copy of a saved map', caseF], ['G Delete by the record\'s own key', caseG]];
     for (const [name, fn] of parts) {
         const was = failures;
         try { await fn(); } catch (e) { failures++; console.log('    ERROR: ' + (e && e.stack || e)); }
