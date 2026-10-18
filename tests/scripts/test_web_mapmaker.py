@@ -957,7 +957,8 @@ class ThePage(unittest.TestCase):
         self.assertEqual(sorted(used - defined), [])
         self.assertRegex(self.css, r"\.cv canvas\.map \{[^}]*touch-action: none;")
         self.assertRegex(self.css, r"\.screen\.ed \{ height: 100vh; height: 100dvh;")
-        self.assertIn("@media (min-width: 601px) and (max-width: 1150px) and (min-height: 451px) {", self.css, "the top bar wraps in a narrow window (seven buttons since My maps)")
+        self.assertIn("@media (min-width: 601px) and (max-width: 1200px) and (min-height: 451px) {", self.css, "the top bar wraps in a narrow window (eight buttons since Submit for approval...)")
+        self.assertIn("@media (min-width: 1201px) and (max-width: 1330px) { .edmenu { gap: 6px; } .edmenu .btn.sm { padding-left: 9px; padding-right: 9px; } }", self.css, "and is a little tighter above it, so the kind tag is never covered")
         for part in (".mine { position: absolute; inset: 0; z-index: 8; overflow: auto; }", ".mine { position: static; overflow: visible; flex: 1 0 auto; }", ".mlist { grid-template-columns: 1fr 1fr; gap: 10px; }"):
             self.assertIn(part, self.css, "My maps: the screen over the editor, flowing on a phone, two columns sideways")
         self.assertRegex(self.css, r"\.mchip \{ min-height: 44px;", "the filters are 44 pixels")
