@@ -18,7 +18,7 @@
     function create(env) {
         var doc = env.doc, win = env.win, base = env.base || 'mapmaker_atlas/', farBase = env.far || '/asset_catalog/sprites/';
         var index = null, groundImg = null, objectsImg = null, ready = false, failed = false, farImgs = {}, tiles = [];
-        var layer = null, state = null, pending = [], everything = true, later = 0;
+        var layer = null, state = null, pending = [], everything = true, later = 0, pics = {}, picCount = 0;
 
         function el(tag) { return doc.createElement(tag); }
 
@@ -79,11 +79,13 @@
 
         // The pixel rectangle (x, y, w, h) of the layer, painted again: the ground of its cells, then the objects that reach into it
         function paintRect(lctx, file, st, sheet, vis, x, y, w, h) {
+            lctx.save(); lctx.beginPath(); lctx.rect(x, y, w, h); lctx.clip();          // (the cells and pictures are cut at the rectangle: nothing outside it is touched, so the objects beside it stay whole)
             lctx.fillStyle = BACK; lctx.fillRect(x, y, w, h);
             var r0 = Math.max(vis.r0, Math.floor((y - st.oy) / st.S) - 1), r1 = Math.min(vis.r1, Math.ceil((y + h - st.oy) / st.S) + 1);
             var c0 = Math.max(vis.c0, Math.floor((x - st.ox) / st.S) - 1), c1 = Math.min(vis.c1, Math.ceil((x + w - st.ox) / st.S) + 1);
             for (var r = r0; r <= r1; r++) for (var c = c0; c <= c1; c++) groundCell(lctx, file, st, sheet, r, c);
             objects(lctx, file, st, x, y, w, h);
+            lctx.restore();
         }
 
         // The cells that changed (and the pictures that reach beyond them): their bounding box with a margin, painted again
@@ -104,6 +106,7 @@
             var lw = Math.max(1, Math.round(w * dpr)), lh = Math.max(1, Math.round(h * dpr)), S = view.scale * dpr, T = Math.max(1, Math.round(S));
             var st = { file: file, S: S, T: T, lw: lw, lh: lh, ox: Math.round((w / 2 - view.cx * view.scale) * dpr), oy: Math.round((h / 2 - view.cy * view.scale) * dpr) };
             if (!layer) layer = el('canvas');
+            if (state && state.S !== S) { pics = {}; picCount = 0; }
             if (layer.width !== lw || layer.height !== lh) { layer.width = lw; layer.height = lh; state = null; }
             var lctx = layer.getContext('2d'), sheet = T <= 64 ? scaled(T) : null;
             lctx.imageSmoothingEnabled = T !== CELL;
@@ -133,6 +136,18 @@
             return null;
         }
 
+        // A picture scaled once to iw x ih pixels (kept until the zoom changes): drawn after that without scaling, so where it lands changes none of its pixels
+        function scaledPicture(key, img, sx, sy, sw, sh, iw, ih) {
+            var id = key + ':' + iw + 'x' + ih, c = pics[id];
+            if (c) return c;
+            if (picCount > 400) { pics = {}; picCount = 0; }
+            c = el('canvas'); c.width = iw; c.height = ih;
+            var cx = c.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'medium';
+            cx.drawImage(img, sx, sy, sw, sh, 0, 0, iw, ih);
+            pics[id] = c; picCount++;
+            return c;
+        }
+
         // The anchored objects whose pictures reach into the pixel rectangle (x, y, w, h) of the layer, in row order: from the cells of the rectangle and a margin round them (a picture reaches beyond its cell)
         function objects(lctx, file, st, x, y, w, h) {
             var S = st.S, k = S / CELL, b = file.bytes, items = index.objects.items, far = index.far;
@@ -150,9 +165,9 @@
                     if (it) { img = objectsImg; sx = it[0]; sy = it[1]; sw = it[2]; sh = it[3]; dx = st.ox + c * S + it[4] * k; dy = st.oy + r * S + it[5] * k; }
                     else if (far[id]) { img = farImage(id); if (!img) continue; sw = img.width; sh = img.height; dx = st.ox + c * S + far[id][1] * k; dy = st.oy + r * S + far[id][2] * k; }
                     else continue;
-                    iw = sw * k; ih = sh * k;
+                    iw = Math.max(1, Math.round(sw * k)); ih = Math.max(1, Math.round(sh * k)); dx = Math.round(dx); dy = Math.round(dy);
                     if (dx > x + w || dy > y + h || dx + iw < x || dy + ih < y) continue;
-                    lctx.drawImage(img, sx, sy, sw, sh, dx, dy, iw, ih);
+                    lctx.drawImage(scaledPicture(it ? id : 'f' + id, img, sx, sy, sw, sh, iw, ih), dx, dy);          // (a picture of whole pixels at whole pixels: moved by whole pixels it is the same picture, so the kept layer equals a frame made from nothing)
                 }
             }
             lctx.restore();

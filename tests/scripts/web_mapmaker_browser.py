@@ -52,6 +52,7 @@ Parts:
              shows a texture, the Ground tool has five chips (Gravel, Dirt, Slate, Mud, Water), a second tap on a kind opens "all its tiles" (the plain tile and 3 x 8 edge pieces, the brush row, the gold ring),
              a tile of the sheet paints, Undo takes it back, a map under 10 pixels a cell is drawn in the pictures' average colors, a 512 x 512 map is panned with the processor 4 times slower and frames keep
              the screen's pace; with the atlas refused the page says so in a plain line and draws flat colors; the tools column has no scrollbar; a phone has the sheets with 52 pixel chips and 44 pixel buttons;
+  * layer    the kept layer of the sprite canvas against a frame made from nothing, pixel for pixel (also run alone by the mutants of tests/data/mapmaker_sprites_mutants.json);
   * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -71,8 +72,8 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "narrow", "panel", "layout", "phone", "older", "sprites")
-WITH_ATLAS = ("panel", "sprites")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "narrow", "panel", "layout", "phone", "older", "sprites", "layer")
+WITH_ATLAS = ("panel", "sprites", "layer")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -437,6 +438,7 @@ def run_sprites(tab, args, check):
         flat.shot(args.shots, "mapmaker-sprites-atlas-refused")
     finally:
         tab2.close()
+    run_layer(page, check)
     # the tools column has no scrollbar with the pictures (the other parts run without them)
     for w, h in ((1280, 800), (1366, 768), (1280, 720)):
         tab.emulate(w, h, 1)
@@ -472,6 +474,67 @@ def run_sprites(tab, args, check):
     })())"""))
     check(got["inside"] and got["scrolls"] and not got["wide"] and got["chip"] >= 52 and got["brush"] >= 44 and got["look"] >= 44, "the phone's sheet is inside the screen and scrolls, chips of 52 pixels, buttons of 44 or more (%s)" % got)
     page.shot(args.shots, "mapmaker-sprites-phone-sheet")
+
+
+LAYER_JS = r"""
+(function (b64) {
+  var bin = atob(b64), bytes = new Uint8Array(bin.length), i;
+  for (i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  var file = MapFile.parse(bytes), W = 600, H = 400;
+  function make() { var c = document.createElement('canvas'); c.width = W; c.height = H; return c; }
+  function rig(done) {
+    var s = MapSprites.create({ doc: document, win: window, onReady: function () { done(s); }, onFail: function () { done(null); }, onChange: function () {} });
+    s.load();
+  }
+  function draw(s, c, view) { var ctx = c.getContext('2d'); ctx.setTransform(1, 0, 0, 1, 0, 0); MapView.draw(ctx, view, file, W, H, { sprites: s, dpr: 1, scratch: make() }); }
+  function diff(a, b) { var x = a.getContext('2d').getImageData(0, 0, W, H).data, y = b.getContext('2d').getImageData(0, 0, W, H).data, n = 0, k, pts = [], box = [W, H, -1, -1]; for (k = 0; k < x.length; k += 4) if (x[k] !== y[k] || x[k + 1] !== y[k + 1] || x[k + 2] !== y[k + 2]) { n++; if (pts.length < 12 && n % 61 === 1) pts.push([(k / 4) % W, Math.floor(k / 4 / W), x[k], y[k]]); var px = (k / 4) % W, py = Math.floor(k / 4 / W); box = [Math.min(box[0], px), Math.min(box[1], py), Math.max(box[2], px), Math.max(box[3], py)]; } return n ? [n, box, pts] : 0; }
+  function set(layer, r, c, t, f) { var at = (layer === 1 ? file.layer1 : file.layer2) + 6 * (r * file.columns + c); bytes[at] = t & 255; bytes[at + 1] = t >> 8; if (f !== undefined) { bytes[at + 2] = f; } }
+  return new Promise(function (resolve) {
+    rig(function (kept) {
+      rig(function (fresh) {
+        if (!kept || !fresh) return resolve({ error: 'no atlas' });
+        var out = [], T = 20, view = { scale: T, cx: 30, cy: 30 }, ck = make(), cf = make();
+        function compare(name, v) { draw(kept, ck, v); fresh.reset(); draw(fresh, cf, v); var dd = diff(ck, cf); out.push([name, dd]); if (dd && !window.__cv) window.__cv = [ck.toDataURL(), cf.toDataURL()]; }
+        // the toys that are fetched alone must be in before the frames are compared (they come when they come): look at the whole map from every side once, wait, start again
+        [[30, 30], [15, 15], [15, 45], [45, 15], [45, 45]].forEach(function (c) { draw(fresh, cf, { scale: T, cx: c[0], cy: c[1] }); draw(kept, ck, { scale: T, cx: c[0], cy: c[1] }); });
+        draw(fresh, cf, { scale: 6, cx: 30, cy: 30 });
+        setTimeout(function () {
+          kept.reset(); draw(kept, ck, view);
+          next();
+        }, 2500);
+        function next() {
+        compare('start', view);
+        var steps = [[3, 5], [-4, 2], [T, 0], [0, 3 * T], [-2 * T, T], [1, -1], [37, 29], [-13, -41]];
+        steps.forEach(function (d) { view = { scale: T, cx: view.cx + d[0] / T, cy: view.cy + d[1] / T }; compare('pan ' + d, view); });
+        var shapes = [[[20, 20]], [[20, 21], [20, 22], [20, 23], [20, 24]], [[10, 10], [10, 11], [11, 10], [11, 11], [12, 10], [12, 11]], [[0, 0]], [[0, 5], [1, 5]], [[30, 30], [30, 31], [31, 30], [31, 31]], [[22, 40], [23, 40]], [[44, 20], [44, 21]]];
+        shapes.forEach(function (cells, n) {
+          var list = [];
+          cells.forEach(function (rc) { set(1, rc[0], rc[1], n % 2 ? 476 : 571); list.push(rc[0] * file.columns + rc[1]); });
+          kept.invalidate(list);
+          compare('stroke ' + JSON.stringify(cells), view);
+        });
+        var rocks = 0;
+        for (var r = 0; r < file.rows; r++) for (var c = 0; c < file.columns && rocks < 6; c++) { var at = file.layer2 + 6 * (r * file.columns + c); if ((bytes[at] | (bytes[at + 1] << 8)) !== 0x7FFE && (bytes[at + 2] & 1) && r > 8 && r < 50) { set(2, r, c, 0x7FFE, 0); kept.invalidate([r * file.columns + c]); compare('erase object at ' + r + ',' + c, view); rocks++; } }
+        set(2, 25, 25, 1324, 1); kept.invalidate([25 * file.columns + 25]); compare('put a big grass at 25,25', view);
+        resolve({ out: out });
+        }
+      });
+    });
+  });
+})
+"""
+
+
+def run_layer(page, check):
+    """the kept layer of the sprite canvas against a fresh whole frame, pixel for pixel, in the real browser: after every pan (a few pixels, whole cells, both ways) and every stroke (several shapes, at the map's edge, an object taken away or put) the picture is the same as a frame that is made from nothing"""
+    with open(os.path.join(REPO, "Original-Ants", "Maps", "TREASURE.LVL"), "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    page.ev("window.__layer = undefined; (" + LAYER_JS.strip() + ")(%s).then(function (r) { window.__layer = r; })" % json.dumps(b64))
+    wait_for(lambda: page.ev("window.__layer !== undefined"), 60, 0.2)
+    got = json.loads(page.ev("JSON.stringify(window.__layer)"))
+    check("out" in got and len(got["out"]) >= 15, "the layer check ran (%s)" % (got.get("error") or len(got.get("out", []))))
+    bad = [o for o in got.get("out", []) if o[1]]
+    check(not bad, "the kept layer is pixel for pixel the frame that is made from nothing, after every pan and stroke (%d of %d differ: %s)" % (len(bad), len(got.get("out", [])), bad[:4]))
 
 
 def tab_browser(tab):
@@ -1720,6 +1783,13 @@ def run_part(part, tab, args, check, tiny, junk):
             page.shot(args.shots, "mapmaker-topbar-%dx%d" % (w, h))
     elif part == "sprites":
         run_sprites(tab, args, check)
+    elif part == "layer":
+        print("[web map maker] the kept layer of the sprite canvas, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts")
+        check(wait_for(lambda: page.ev("!!window.MapSprites"), 10), "the sprite script is loaded")
+        run_layer(page, check)
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):
             print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))

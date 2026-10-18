@@ -219,10 +219,16 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), bigger: pick(P.BIGGER), h
         weight = sum(n for t, n in anchored.items() if t in drawable)
         self.assertGreater(weight / sum(anchored.values()), 0.99, "and 99% of the anchored cells")
 
+    def test_a_picture_wider_than_the_sheet_is_refused(self):
+        with self.assertRaises(SystemExit) as stopped:
+            map_atlas.Sheet(64).add(7, 63, 1, bytes(4 * 63))
+        self.assertIn("picture 7", str(stopped.exception))
+
     def test_the_files_are_small_and_the_same_every_time(self):
         self.assertLess(self.sizes["ground.png"], 40000, "ground.png (about 35 KB)")
         self.assertLess(self.sizes["objects.png"], 135000, "objects.png (about 123 KB)")
         self.assertLess(self.sizes["atlas.json"], 12000, "atlas.json (about 8 KB)")
+        self.assertLess(sum(self.sizes.values()), 180000, "the whole atlas (about 167 KB: the page fetches all of it at start)")
         with tempfile.TemporaryDirectory() as again:
             map_atlas.build(SPRITES, CATALOG, again)
             for name in ("ground.png", "objects.png", "atlas.json"):
@@ -230,12 +236,11 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), bigger: pick(P.BIGGER), h
                     self.assertEqual(a.read(), b.read(), name + " differs between two builds")
 
     def test_a_sheet_of_more_than_255_colors_is_refused_not_cut(self):
-        sheet = map_atlas.Sheet(64)
+        sheet = map_atlas.Sheet(302)
         rgba = bytearray()
         for i in range(300):
             rgba += bytes((i % 256, i // 256, 7, 255))
         sheet.add(1, 300, 1, bytes(rgba))
-        sheet.width = 302
         with self.assertRaises(SystemExit) as stopped:
             sheet.indexed("a test sheet")
         self.assertIn("more than 255 colors", str(stopped.exception))

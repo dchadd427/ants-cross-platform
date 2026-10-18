@@ -105,6 +105,8 @@ class Sheet:
         self.width, self.items, self.x, self.y, self.shelf = width, [], 1, 1, 0
 
     def add(self, key, w, h, rgba):
+        if w + 2 > self.width:
+            raise SystemExit("picture %s is %d pixels wide: the sheet is %d" % (key, w, self.width))
         if self.x + w + 1 > self.width:
             self.x, self.y, self.shelf = 1, self.y + self.shelf + 1, 0
         self.items.append((key, self.x, self.y, w, h, rgba))

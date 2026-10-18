@@ -978,6 +978,8 @@ class TheGroundAndTheSprites(unittest.TestCase):
                     name = os.path.basename(m["file"])
                     text = read(*m["file"].split("/"))
                     self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    if "web_mapmaker_browser" in m["test"]:
+                        continue                # (a mutant that only the real browser can notice: tools/mutate.py runs it with ANTS_WEB_URL set)
                     script = [v for k, v in checks.items() if k in m["test"]][0]
                     with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
                         f.write(text.replace(m["old"], m["new"]))

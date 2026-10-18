@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map maker's kinds of ground and of its sprites for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the tables and the sheet of the kinds (web/front/mapmaker_ground.js, the colors of mapmaker_tiles.js, the five chips of mapmaker_palette.js) against tests/scripts/web_mapmaker_ground_check.js, the Ground tool's chips and sheets (web/front/mapmaker_tools.js) against case N of tests/scripts/web_mapmaker_edit_check.js, and the sprite layer (web/front/mapmaker_sprites.js and the pictures' part of mapmaker_view.js) against tests/scripts/web_mapmaker_sprites_check.js. Run from the checkout: tools/mutate.py tests/data/mapmaker_sprites_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+ "note": "Mutants of the map maker's kinds of ground and of its sprites for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the tables and the sheet of the kinds (web/front/mapmaker_ground.js, the colors of mapmaker_tiles.js, the five chips of mapmaker_palette.js) against tests/scripts/web_mapmaker_ground_check.js, the Ground tool's chips and sheets (web/front/mapmaker_tools.js) against case N of tests/scripts/web_mapmaker_edit_check.js, and the sprite layer (web/front/mapmaker_sprites.js and the pictures' part of mapmaker_view.js) against tests/scripts/web_mapmaker_sprites_check.js (three of them only the real browser can notice: they run `web_mapmaker_browser.py --only layer`, so ANTS_WEB_URL must name a page served from this checkout). Run from the checkout: tools/mutate.py tests/data/mapmaker_sprites_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
  "mutants": [
   {
    "id": "ground_shape_name_swapped",
@@ -448,6 +448,27 @@
    "old": "function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= sprites.FROM; }",
    "new": "function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= 5; }",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_ground_drawn_without_clip",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "lctx.save(); lctx.beginPath(); lctx.rect(x, y, w, h); lctx.clip();          // (the cells",
+   "new": "lctx.save();          // (the cells",
+   "test": "python3 tests/scripts/web_mapmaker_browser.py --web \"$ANTS_WEB_URL\" --only layer"
+  },
+  {
+   "id": "sprites_objects_margin_too_small",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "var r0 = Math.max(0, Math.floor((y - st.oy) / S) - REACH), r1 = Math.min(file.rows - 1, Math.ceil((y + h - st.oy) / S) + REACH);",
+   "new": "var r0 = Math.max(0, Math.floor((y - st.oy) / S) - 1), r1 = Math.min(file.rows - 1, Math.ceil((y + h - st.oy) / S) + 1);",
+   "test": "python3 tests/scripts/web_mapmaker_browser.py --web \"$ANTS_WEB_URL\" --only layer"
+  },
+  {
+   "id": "sprites_pictures_scaled_where_they_land",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "lctx.drawImage(scaledPicture(it ? id : 'f' + id, img, sx, sy, sw, sh, iw, ih), dx, dy);",
+   "new": "lctx.imageSmoothingQuality = 'low'; lctx.drawImage(img, sx, sy, sw, sh, dx + 0.4, dy + 0.4, iw, ih);",
+   "test": "python3 tests/scripts/web_mapmaker_browser.py --web \"$ANTS_WEB_URL\" --only layer"
   }
  ]
 }

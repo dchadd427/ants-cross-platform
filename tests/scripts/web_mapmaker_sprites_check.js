@@ -59,7 +59,12 @@ function environment(opts) {
         ctx.restore = () => { if (stack.length) state.alpha = stack.pop(); log.push({ op: 'restore', owner, a: [] }); };
         for (const op of ['beginPath', 'rect', 'clip', 'fill', 'stroke', 'setTransform', 'ellipse', 'arc', 'moveTo', 'lineTo', 'strokeRect']) ctx[op] = (...a) => { log.push({ op, owner, a }); };
         ctx.fillRect = (...a) => { log.push({ op: 'fillRect', owner, a, fill: ctx.fillStyle }); };
-        ctx.drawImage = (img, ...a) => { log.push({ op: 'drawImage', owner, img, a, alpha: state.alpha }); };
+        ctx.drawImage = (img, ...a) => {
+            // an object's picture is scaled once into a canvas of its own and put on the layer as it is: the scaling is not a draw of the map, the put is (written as the draw of the whole picture that it stands for)
+            if (img && img.url && /objects\.png|sprite_/.test(img.url) && a.length === 8 && a[4] === 0 && a[5] === 0 && owner.scaledFrom === undefined) { owner.scaledFrom = { img, src: a.slice(0, 4), size: [a[6], a[7]] }; return; }
+            if (img && img.scaledFrom && a.length === 2) { log.push({ op: 'drawImage', owner, img: img.scaledFrom.img, a: img.scaledFrom.src.concat([a[0], a[1], img.scaledFrom.size[0], img.scaledFrom.size[1]]), alpha: state.alpha }); return; }
+            log.push({ op: 'drawImage', owner, img, a, alpha: state.alpha });
+        };
         ctx.createImageData = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(4 * w * h) });
         ctx.putImageData = () => {}; ctx.getImageData = () => ({ data: [0, 0, 0, 0] });
         return ctx;
@@ -174,12 +179,12 @@ async function caseB() {
     for (let r = Math.max(0, vis.r0 - 8); r <= Math.min(f.rows - 1, vis.r1 + 8); r++) for (let c = Math.max(0, vis.c0 - 8); c <= Math.min(f.columns - 1, vis.c1 + 8); c++) {
         const at = f.layer2 + 6 * (r * f.columns + c), id = f.bytes[at] | (f.bytes[at + 1] << 8);
         if (id === EMPTY2 || !(f.bytes[at + 2] & 1) || !items[id]) continue;
-        const it = items[id], x = Math.round(x0) + c * T + it[4] * k, y = Math.round(y0) + r * T + it[5] * k;
-        if (x > w || y > h || x + it[2] * k < 0 || y + it[3] * k < 0) continue;
+        const it = items[id], x = Math.round(Math.round(x0) + c * T + it[4] * k), y = Math.round(Math.round(y0) + r * T + it[5] * k);
+        if (x > w || y > h || x + Math.round(it[2] * k) < 0 || y + Math.round(it[3] * k) < 0) continue;
         expected.push([it[0], it[1], it[2], it[3]]);
     }
     equal(drawn.map((c) => c.a.slice(0, 4)), expected, 'the objects: the anchored ones only, in row order, from the sheet');
-    check(drawn.length > 10 && drawn.every((c) => Math.abs(c.a[6] - c.a[2] * k) < 1e-6 && Math.abs(c.a[7] - c.a[3] * k) < 1e-6), 'each scaled like the cell (' + drawn.length + ' objects)');
+    check(drawn.length > 10 && drawn.every((c) => c.a[6] === Math.round(c.a[2] * k) && c.a[7] === Math.round(c.a[3] * k)), 'each scaled like the cell, to whole pixels (' + drawn.length + ' objects)');
     const hills = drawn.filter((c) => c.a[2] === 128 && c.a[3] === 128);
     check(hills.length === 4, 'the four hills of Treasure, 128 x 128 each: ' + hills.length);
     // a cell's picture is at the cell's corner plus the offset: take the first anchored rock
@@ -188,7 +193,7 @@ async function caseB() {
     check(rocks.length > 0, 'Treasure has a small rock to look at');
     const rock = rocks.find(([r, c]) => r >= vis.r0 && r <= vis.r1 && c >= vis.c0 && c <= vis.c1);
     if (rock) {
-        const mine = drawn.filter((c) => c.a[0] === items['302'][0] && c.a[1] === items['302'][1] && Math.abs(c.a[4] - (Math.round(x0) + rock[1] * T + items['302'][4] * k)) < 1e-6 && Math.abs(c.a[5] - (Math.round(y0) + rock[0] * T + items['302'][5] * k)) < 1e-6);
+        const mine = drawn.filter((c) => c.a[0] === items['302'][0] && c.a[1] === items['302'][1] && c.a[4] === Math.round(Math.round(x0) + rock[1] * T + items['302'][4] * k) && c.a[5] === Math.round(Math.round(y0) + rock[0] * T + items['302'][5] * k));
         check(mine.length === 1, 'a small rock is at its cell\'s corner plus the offset of the picture (8, 8)');
     }
     check(!drawn.some((c) => c.a[4] === Math.round(x0) + 3 * T && c.a[5] === Math.round(y0) + 4 * T), 'a rock on a cell that is not an anchor is not drawn');
@@ -309,7 +314,7 @@ async function caseF() {
     check(mine.length === 1, 'then it is drawn');
     if (mine.length) {
         const k = 20 / 32, far = INDEX.far['410'], x0 = Math.round(w / 2 - 30 * 20), y0 = Math.round(h / 2 - 24 * 20);
-        check(Math.abs(mine[0].a[4] - (x0 + 25 * 20 + far[1] * k)) < 1e-6 && Math.abs(mine[0].a[5] - (y0 + 20 * 20 + far[2] * k)) < 1e-6 && Math.abs(mine[0].a[6] - mine[0].img.width * k) < 1e-6, 'at its cell\'s corner plus its offset, scaled like the cell');
+        check(mine[0].a[4] === Math.round(x0 + 25 * 20 + far[1] * k) && mine[0].a[5] === Math.round(y0 + 20 * 20 + far[2] * k) && mine[0].a[6] === Math.round(mine[0].img.width * k), 'at its cell\'s corner plus its offset, scaled like the cell');
     }
     // a 404: nothing is drawn, nothing breaks, and it is not asked for again
     const lost = await ready({ farMissing: true }), g = treasure();
