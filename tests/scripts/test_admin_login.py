@@ -102,23 +102,39 @@ class FakeDiscord:
 
 
 def start_helper(extra_env=None, drop=()):
-    port = free_port()
-    env = {"PATH": os.environ.get("PATH", ""), "ANTS_DISCORD_CLIENT_ID": CLIENT_ID, "ANTS_DISCORD_CLIENT_SECRET": "client-secret-xyz", "ANTS_ADMIN_SESSION_SECRET": SECRET,
-           "ANTS_PUBLIC_URL": "https://example.test", "ANTS_ADMIN_LOGIN_PORT": str(port)}
-    env.update(extra_env or {})
-    for name in drop:
-        env.pop(name, None)
-    proc = subprocess.Popen([sys.executable, "-I", SCRIPT], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    for _ in range(200):
-        try:
-            socket.create_connection(("127.0.0.1", port), 0.2).close()
-            return proc, port
-        except OSError:
-            if proc.poll() is not None:
-                break
-            time.sleep(0.05)
-    out, err = proc.communicate(timeout=5) if proc.poll() is not None else ("", "")
-    raise AssertionError("the helper did not start: " + err)
+    """Starts the helper on a port that was free a moment ago and waits until the helper itself answers an HTTP request on it (a connection alone could be
+    some other program's socket). A port that someone took in between, or a helper that is slow, gets a fresh port and another try; the last failure says
+    what the helper wrote, whether it still ran and which port it was."""
+    notes = []
+    for attempt in range(3):
+        port = free_port()
+        env = {"PATH": os.environ.get("PATH", ""), "ANTS_DISCORD_CLIENT_ID": CLIENT_ID, "ANTS_DISCORD_CLIENT_SECRET": "client-secret-xyz", "ANTS_ADMIN_SESSION_SECRET": SECRET,
+               "ANTS_PUBLIC_URL": "https://example.test", "ANTS_ADMIN_LOGIN_PORT": str(port)}
+        env.update(extra_env or {})
+        for name in drop:
+            env.pop(name, None)
+        proc = subprocess.Popen([sys.executable, "-I", SCRIPT], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.monotonic() + 20
+        last = ""
+        while time.monotonic() < deadline:
+            try:
+                c = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+                c.request("GET", "/admin/login")
+                c.getresponse().read()
+                c.close()
+                return proc, port
+            except (OSError, http.client.HTTPException) as e:
+                last = repr(e)
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.05)
+        running = proc.poll() is None
+        if running:
+            proc.kill()
+        out, err = proc.communicate(timeout=10)
+        notes.append("attempt %d: port %d, helper %s (exit %s), last error %s, stdout %r, stderr %r" % (
+            attempt + 1, port, "still running and killed" if running else "ended", proc.returncode, last, out[-500:], err[-1500:]))
+    raise AssertionError("the helper did not start: " + " | ".join(notes))
 
 
 def stop_helper(proc):
