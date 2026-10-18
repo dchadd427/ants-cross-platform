@@ -324,12 +324,13 @@ function caseD() {
 function caseE() {
     const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
     const [gr, gg, gb] = rgb(Tiles.css(485, 0x7FFE)), [wr, wg, wb] = rgb(Tiles.css(476, 0x7FFE));
-    check(gg > gr && gg > gb, 'plain grass (485) is green');
+    check(gr > gb && gr >= gg, 'plain gravel (485) is brown-gray');
+    check(rgb(Tiles.css(487, 0x7FFE)).every((v) => v > 170) && rgb(Tiles.css(571, 0x7FFE))[2] > rgb(Tiles.css(571, 0x7FFE))[0] && rgb(Tiles.css(439, 0x7FFE)).every((v) => v < 100), 'dirt is light, slate bluish and mud dark gray');
     check(wb > wr && wb > wg, 'water (476) is blue');
     equal([Tiles.css(485, 245), Tiles.css(485, 246), Tiles.css(485, 247), Tiles.css(485, 248)], ['#262626', '#4a5fc8', '#c0392b', '#2f9a52'], 'the four hills: black, blue, red, green');
     equal(Tiles.css(485, 134), '#4a4a4a', 'a wall');
     equal(Tiles.css(485, 99999 & 0xFFFF), Tiles.css(485, 99999 & 0xFFFF), 'an id that is no tile has a color');
-    check(rgb(Tiles.css(60000, 0x7FFE))[1] > rgb(Tiles.css(60000, 0x7FFE))[0], 'an id of layer 1 that is no ground is drawn as grass');
+    check(['#8d7871', '#85706a', '#957f78'].includes(Tiles.css(60000, 0x7FFE)), 'an id of layer 1 that is no ground is drawn as gravel');
     const t = Tiles.packedTables();
     equal(t.objects[0x7FFE], 0, 'no object: the packed table is 0');
     equal(t.ground[485], Tiles.hexToPacked(Tiles.css(485, 0x7FFE)), 'packed ground');

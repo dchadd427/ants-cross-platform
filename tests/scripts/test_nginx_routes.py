@@ -114,6 +114,10 @@ class TheRoutesRun(unittest.TestCase):
                 f.write(text)
         with open(os.path.join(html, "front", "LibreFranklin-Medium.ttf"), "wb") as f:
             f.write(b"\x00\x01\x00\x00 a stand-in for the font")
+        os.makedirs(os.path.join(html, "mapmaker_atlas"))                                  # the map maker's sprite atlas (the image's build makes the real one): stand-ins of the three files
+        for name, data in (("atlas.json", b'{"v":1}'), ("ground.png", b"\x89PNG\r\n\x1a\n a stand-in"), ("objects.png", b"\x89PNG\r\n\x1a\n a stand-in")):
+            with open(os.path.join(html, "mapmaker_atlas", name), "wb") as f:
+                f.write(data)
         conf = os.path.join(cls.tmp, "default.conf")
         text = read(CONF)
         if not os.path.exists("/proc/net/if_inet6"):                                       # a kernel without IPv6 cannot listen on [::]: the rest of the file is the one under test

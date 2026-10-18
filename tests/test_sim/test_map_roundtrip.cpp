@@ -165,7 +165,6 @@ void the_fingerprint_sees_a_misplaced_anchor(uint32_t ticks) {
     check(play_hashes(up.level, ticks) == play_hashes(tiny, ticks), "TINY as an Extended map plays as TINY does");
 }
 
-
 // The rules word is state: a hand-made level at rules 1 hashes otherwise than the same level at rules 0 (the Grid carries it and the state hash mixes it), while the version 8
 // level and the Extended level of rules 0 hash as they always did (the word is mixed in only when it is not 0). The play is the same level, so only the word differs.
 void the_rules_word_is_in_the_hash(uint32_t ticks) {
@@ -196,7 +195,10 @@ void the_rules_word_is_in_the_hash(uint32_t ticks) {
     }
     // v8 does not move: the total hashes of TINY at the start and at tick 200 are those of main before the grid read version 9 (the hash ledger of tests/test_sim/hash_ledger.cpp)
     check(classic_play[0].total == 0x54d30843a600048bULL, "TINY's state hash at tick 0 is the one it always had");
-    check(classic_play.size() <= 10 || classic_play[10].total == 0x6fa24979434adcd3ULL, "TINY's state hash at tick 200 is the one it always had");
+    if (ticks >= 200) {
+        check(classic_play.size() > 10, "the play of TINY reaches tick 200 (11 checkpoints)");
+        check(classic_play.size() > 10 && classic_play[10].total == 0x6fa24979434adcd3ULL, "TINY's state hash at tick 200 is the one it always had");
+    }
     ants::sim::Grid reused;
     check(reused.init_from_level(rules_one) && reused.rules() == 1 && reused.init_empty(4, 4) && reused.rules() == 0, "a Grid emptied by init_empty is at rules 0 again");
     check(classic_is_zero, "TINY as a Classic map and as an Extended map of rules 0 have the same hash at every checkpoint");
@@ -225,9 +227,13 @@ void the_grid_reads_relative_anchors() {
     // a cell of an object whose first cell is at row 287, column 4: three rows up and one column left of (290, 5)
     at(290, 5).tile_index = 97;
     at(290, 5).properties = static_cast<uint16_t>(0xFDu | (0xFFu << 8));
-    // a cell below its anchor in a lower row of the map: anchor far to the right and down
+    // a cell whose anchor is 5 rows down and 3 columns right of it
     at(10, 2).tile_index = 97;
     at(10, 2).properties = static_cast<uint16_t>(0x05u | (0x03u << 8));
+    // a cell whose anchor lies above the map (row -2): in a map of more than 256 rows the sum is plain, so the Grid keeps the negative number (Grid::food_object_at_cell reads a
+    // negative anchor as "no anchor, the cell is its own": MAP_FORMAT.md)
+    at(2, 3).tile_index = 97;
+    at(2, 3).properties = static_cast<uint16_t>(0xFCu);
     // a bomb tile: the third word is the owner (here the team 2), no anchor
     at(20, 7).tile_index = 129;
     at(20, 7).properties = 2;
@@ -237,6 +243,8 @@ void the_grid_reads_relative_anchors() {
     check(far.anchor_y == 287 && far.anchor_x == 4, "an anchor above 255 is the sum of the cell and the signed offset: (287, 4), got (" + std::to_string(far.anchor_y) + ", " + std::to_string(far.anchor_x) + ")");
     const ants::sim::TileCell& down = g.get_cell(2, 10);
     check(down.anchor_y == 15 && down.anchor_x == 5, "a positive offset goes down and right: (15, 5), got (" + std::to_string(down.anchor_y) + ", " + std::to_string(down.anchor_x) + ")");
+    const ants::sim::TileCell& above = g.get_cell(3, 2);
+    check(above.anchor_y == -2 && above.anchor_x == 3, "an anchor above the map stays negative in a map of more than 256 rows: (-2, 3), got (" + std::to_string(above.anchor_y) + ", " + std::to_string(above.anchor_x) + ")");
     const ants::sim::TileCell& bomb = g.get_cell(7, 20);
     check(bomb.anchor_y == -1 && bomb.anchor_x == -1 && bomb.interactive_owner == 2, "a bomb tile has no anchor and keeps its owner");
     const ants::sim::TileCell& empty = g.get_cell(1, 1);

@@ -30,7 +30,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const argv = process.argv.slice(2);
 const FRONT = argv.includes('--front') ? path.resolve(argv[argv.indexOf('--front') + 1]) : path.join(ROOT, 'web', 'front');
 const load = (name) => require(path.join(FRONT, name));
-const File = load('mapmaker_file.js'), Canvas = load('mapmaker_canvas.js'), Tiles = load('mapmaker_tiles.js'), Edit = load('mapmaker_edit.js'), Palette = load('mapmaker_palette.js'), Tools = load('mapmaker_tools.js'), Blocks = load('mapmaker_blocks.js');
+const File = load('mapmaker_file.js'), Canvas = load('mapmaker_canvas.js'), Tiles = load('mapmaker_tiles.js'), Edit = load('mapmaker_edit.js'), Palette = load('mapmaker_palette.js'), Tools = load('mapmaker_tools.js'), Blocks = load('mapmaker_blocks.js'), Ground = load('mapmaker_ground.js');
 
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
@@ -336,7 +336,8 @@ function caseF() {
     for (const row of Palette.GROUND) check(row[0] >= 431 && row[0] <= 669, 'ground ' + row[1] + ' is a ground tile (ids 431 to 669)');
     for (const row of Palette.OBJECTS) check(row[0] < 431, 'object ' + row[1] + ' is an object tile');
     const ground = Palette.items('ground'), objects = Palette.items('objects');
-    check(ground.length === 8 && objects.length === 11 && Palette.items('erase').length === 0 && Palette.items('move').length === 0, 'the palettes: 8 kinds of ground, 11 objects, none for the eraser and Move');
+    check(ground.length === 5 && objects.length === 11 && Palette.items('erase').length === 0 && Palette.items('move').length === 0, 'the palettes: 5 kinds of ground, 11 objects, none for the eraser and Move');
+    equal(ground.map((i) => [i.id, i.name, i.label, i.kind]), [[485, 'g01a', 'Gravel', 'gravel'], [487, 'd01a', 'Dirt', 'dirt'], [571, 's01a', 'Slate', 'slate'], [439, 'M01a', 'Mud', 'mud'], [476, 'w01a', 'Water', 'water']], 'the five kinds of ground and the plain tile of each: no grass, no sand');
     check(ground.every((i) => i.color === Tiles.css(i.id, Tiles.EMPTY2)) && objects.every((i) => i.color === Tiles.css(0, i.id)), 'every swatch is the color the canvas draws that tile in');
     const keys = Palette.TOOLS.map((t) => t.key);
     check(new Set(keys).size === keys.length && keys.every((k) => k.length === 1), 'every tool has its own letter');
@@ -364,7 +365,7 @@ function caseF() {
         check(set.points >= 10 && set.points <= 50 && set.units > 0, n + ' stages: a pile of ' + set.units + ' bites of ' + set.points + ' points');
     }
     check(Blocks.MIN_STAGES === 2 && Blocks.MAX_STAGES === 6 && Blocks.MIN_ANTS === 1 && Blocks.MAX_ANTS === 64, 'the ranges of the steppers');
-    check(new Set(Palette.GROUND.concat(Palette.OBJECTS).map((r) => r[2])).size === 19, 'every label is different');
+    check(new Set(Palette.GROUND.concat(Palette.OBJECTS).map((r) => r[2])).size === 16, 'every label is different');
 }
 
 // ---- G: the tools on a fake page ----
@@ -427,16 +428,16 @@ function caseG() {
     const p = toolsPage(open(9, 30, 30));
     equal(p.host.tools.map((b) => [b.getAttribute('data-tool'), b.disabled]), [['ground', false], ['objects', false], ['bigger', false], ['hills', false], ['ants', false], ['food', false], ['erase', false], ['move', false]], 'all eight tools are on');
     check(p.button('ground').getAttribute('aria-pressed') === 'true' && p.button('move').getAttribute('aria-pressed') === 'false', 'Ground is the tool at the start');
-    check(!p.host.box.hidden && !p.host.tile.hidden && p.host.swatches.children.length === 8 && p.host.title.textContent === 'Ground', 'with its palette of 8');
-    check(p.host.tile.querySelector('span').textContent === 'Grass' && p.host.tile.querySelector('i').style.background === Tiles.css(485, Tiles.EMPTY2), 'the phone\'s palette button shows the tile that is chosen');
+    check(!p.host.box.hidden && !p.host.tile.hidden && p.host.swatches.children.length === 5 && p.host.title.textContent === 'Ground', 'with its palette of 5 kinds');
+    check(p.host.tile.querySelector('span').textContent === 'Gravel' && p.host.tile.querySelector('i').style.background === Tiles.css(485, Tiles.EMPTY2), 'the phone\'s palette button shows the tile that is chosen');
     p.host.tile.click();
-    check(p.sheets.length === 1 && p.sheets[0].spec.title === 'Ground' && p.sheets[0].body.children[0].children.length === 8, 'and opens the palette as a sheet of 8 tiles with their names');
-    p.sheets[0].body.children[0].children[4].click();
-    check(p.tools.state().ground === 571 && p.sheets[0].ctl.closed && p.host.tile.querySelector('span').textContent === 'Sand', 'a tile of the sheet is chosen and the sheet closes');
+    check(p.sheets.length === 1 && p.sheets[0].spec.title === 'Ground' && p.sheets[0].body.children[0].children.length === 5, 'and opens the palette as a sheet of 5 kinds with their names');
+    p.sheets[0].body.children[0].children[2].click();
+    check(p.tools.state().ground === 571 && p.sheets[0].ctl.closed && p.host.tile.querySelector('span').textContent === 'Slate', 'a tile of the sheet is chosen and the sheet closes');
     p.host.swatches.children[0].click();
-    check(p.host.swatches.children.filter((b) => b.getAttribute('aria-checked') === 'true').length === 1 && p.host.name.textContent === 'Grass', 'one swatch chosen, and its name said');
+    check(p.host.swatches.children.filter((b) => b.getAttribute('aria-checked') === 'true').length === 1 && p.host.name.textContent === 'Gravel', 'one swatch chosen, and its name said');
     check(p.host.undo.disabled && p.host.redo.disabled && !p.host.fill.disabled && !p.brush(3).disabled, 'undo and redo are off with nothing drawn; Fill and the brushes are on');
-    p.host.swatches.children[2].click();
+    p.host.swatches.children[1].click();
     check(p.tools.state().ground === 487 && p.host.name.textContent === 'Dirt', 'a swatch chooses a tile and its name shows');
     p.button('objects').click();
     check(p.host.swatches.children.length === 11 && p.host.title.textContent === 'Objects' && p.tools.state().tool === 'objects', 'Objects has its own palette of 11');
@@ -473,7 +474,7 @@ function caseG() {
 
     // a stroke through the painter, undo and redo
     const r = toolsPage(open(9, 30, 30)), pt = r.painter(), start = digest(r.file().bytes);
-    r.host.swatches.children[2].click();                                    // dirt (487), which the dictionary does not have yet
+    r.host.swatches.children[1].click();                                    // dirt (487), which the dictionary does not have yet
     check(pt.size() === 1, 'the painter says the brush is 1');
     check(pt.begin({ row: 5, column: 5 }) === true, 'a press begins a stroke that goes on');
     check(r.log.rebased === 1 && r.file().names === 488, 'a tile beyond the dictionary grew it first (' + r.file().names + ' names)');
@@ -1173,7 +1174,56 @@ function caseM() {
     check(p.tools.act({ names: [], cells: [], splices: [] }) === false, 'a change of nothing is no step');
 }
 
-const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM]];
+// ---- N: the kinds of ground on a fake page (the chips, the sheet of a kind, any single tile) ----
+function caseN() {
+    const p = toolsPage(open(9, 30, 30)), kinds = () => p.host.swatches.children, on = () => kinds().filter((b) => b.getAttribute('aria-checked') === 'true').map((b) => b.getAttribute('data-tile'));
+    equal(kinds().map((b) => b.getAttribute('data-tile')), ['485', '487', '571', '439', '476'], 'five kind chips');
+    check(p.host.swatches.className === 'swatches grounds' && kinds().every((b) => b.className === 'swatch gk' && b.children.length === 2 && b.children[1].textContent === b.getAttribute('aria-label')), 'each with its picture and its name under it');
+    kinds()[0].click();
+    check(p.sheets.length === 0, 'before the sheets are loaded a second tap on the chosen kind does nothing more');
+    p.tools.use(Ground, null);
+    check(p.host.name.textContent === 'Gravel: tap it again for all its tiles' && on().join() === '485', 'with the sheets loaded the line says to tap again: ' + p.host.name.textContent);
+    kinds()[1].click();
+    check(p.tools.state().ground === 487 && p.sheets.length === 0 && on().join() === '487' && p.host.name.textContent === 'Dirt: tap it again for all its tiles', 'the first tap on another kind chooses its plain tile and opens nothing');
+    kinds()[1].click();
+    const sheet = p.sheets[0];
+    check(p.sheets.length === 1 && sheet.spec.title === 'Dirt: all its tiles' && sheet.spec.cls === 'ksheetbox', 'a tap on the chosen kind opens its sheet: ' + (sheet && sheet.spec.title));
+    const chip = (id) => sheet.body.querySelectorAll('.gt').filter((b) => b.getAttribute('data-tile') === String(id))[0];
+    const dg03a = Ground.edges('dirt', 'gravel')[1].id;
+    check(Ground.name(dg03a) === 'dg03a' && sheet.body.querySelectorAll('.gt').filter((b) => b.getAttribute('aria-checked') === 'true').length === 1, 'the sheet has the gold ring on the plain tile');
+    chip(dg03a).click();
+    check(p.tools.state().ground === dg03a && on().join() === '487' && p.host.name.textContent === 'Dirt next to gravel: north edge (dg03a)', 'any single tile of the sheet can be chosen: dg03a, and the kind chip of Dirt stays on: ' + p.host.name.textContent);
+    check(p.host.tile.querySelector('span').textContent === 'Dirt \u00b7 dg03a' && !sheet.ctl.closed, 'the phone\'s button names it, and the sheet stays open for the brush');
+    sheet.body.querySelectorAll('.kbrush')[0].children.filter((b) => b.textContent === '5')[0].click();
+    check(p.tools.state().brush === 5 && p.brush(5).getAttribute('aria-checked') === 'true', 'the sheet\'s brush row is the page\'s brush');
+    p.brush(1).click();
+    const pt = p.painter();
+    check(pt.begin({ row: 8, column: 8 }) === true, 'a stroke with the tile begins');
+    pt.end();
+    const f = p.file(), at = f.dictAt + 2 + 11 * dg03a;
+    check(Edit.tile(f, 1, 8 * 30 + 8) === dg03a && f.names === dg03a + 1 && String.fromCharCode.apply(null, Array.from(f.bytes.slice(at, at + 5))) === 'dg03a', 'it paints the cell with that tile and writes its game name in the dictionary');
+    kinds()[1].click();
+    check(p.sheets.length === 2 && p.sheets[1].spec.title === 'Dirt: all its tiles', 'a tap on the chosen kind opens the sheet again, with the custom tile chosen');
+    p.sheets[1].body.querySelectorAll('.gl').filter((b) => b.textContent === 'd01b')[0].click();
+    check(p.tools.state().ground === 488 && p.host.name.textContent === 'Dirt (d01b)', 'a look-alike tile can be chosen too: ' + p.host.name.textContent);
+    // the phone's sheet: five kinds, the chosen one opens the sheet, and a button for it in the footer
+    p.host.tile.click();
+    const picker = p.sheets[p.sheets.length - 1];
+    check(picker.spec.title === 'Ground' && picker.body.querySelectorAll('.pick').length === 5 && picker.body.querySelectorAll('.pick').filter((b) => b.getAttribute('aria-checked') === 'true').length === 1, 'the phone\'s sheet has the five kinds');
+    equal(picker.spec.buttons.map((b) => b.text), ['All dirt tiles', 'Close'], 'with a button for all the tiles of the chosen kind');
+    picker.body.querySelectorAll('.pick')[0].click();
+    check(p.tools.state().ground === 485 && picker.ctl.closed, 'a tap on another kind chooses its plain tile and closes the sheet');
+    p.host.tile.click();
+    const again = p.sheets[p.sheets.length - 1];
+    again.body.querySelectorAll('.pick')[0].click();
+    check(p.sheets[p.sheets.length - 1].spec.title === 'Gravel: all its tiles', 'a tap on the chosen kind there opens its sheet');
+    // the ground tool without the sheets (the lazy part did not load) still paints and names the plain tiles
+    const q = toolsPage(open(9, 30, 30));
+    q.tools.use(null, null);
+    check(q.host.name.textContent === 'Gravel' && q.host.swatches.children.length === 5, 'without the sheets the page keeps its five kinds');
+}
+
+const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN]];
 for (const [name, fn] of cases) {
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

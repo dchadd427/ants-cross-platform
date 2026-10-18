@@ -124,6 +124,13 @@ def main():
     check(bool(tag) and status2 == 304, "/front/classic.css: an unchanged stylesheet is answered 304 to If-None-Match (%s)" % status2)
     status, headers, names, body = get("/front/LibreFranklin-Medium.ttf")
     check(status == 200 and not headers.get("content-type", "").startswith("text/html"), "/front/LibreFranklin-Medium.ttf is the font, not a page (%s, %s)" % (status, headers.get("content-type")))
+    print("[web routes] the map maker's sprite atlas: its index and two sheets are files of the site, revalidated (never the week that other PNG files get), and an unknown name in the folder is a 404, not the game page")
+    for name, kind in (("atlas.json", "application/json"), ("ground.png", "image/png"), ("objects.png", "image/png")):
+        status, headers, names, body = get("/mapmaker_atlas/" + name)
+        check(status == 200 and headers.get("content-type", "").startswith(kind) and not GAME.search(body), "/mapmaker_atlas/%s is the file, not the game page that an unknown address falls back to (%s, %s)" % (name, status, headers.get("content-type")))
+        check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1 and "etag" in headers, "/mapmaker_atlas/%s: Cache-Control is exactly one line, no-cache, must-revalidate, with an ETag (%s)" % (name, headers.get("cache-control")))
+    status, headers, names, body = get("/mapmaker_atlas/nothing.png")
+    check(status == 404 and not GAME.search(body), "/mapmaker_atlas/nothing.png is a 404 (%s)" % status)
     for path in ("/changelog.html", "/legal.html", "/asset_catalog/"):
         status, headers, names, body = get(path)
         page_headers(path, status, headers, names)

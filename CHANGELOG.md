@@ -32,6 +32,15 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/124874d2...HEAD)
 
+## v0.12.84 - 2026-10-18 - Map maker: the game's own sprites (part 1)
+
+**For players:**
+- The map maker draws the game's own pictures, with five kinds of ground (Gravel, Dirt, Slate, Mud, Water) and a sheet of every ground tile.
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/124874d2...7af2dc38)
+
 ## v0.12.83 - 2026-10-18 - Map maker: send a map for approval (S2)
 
 **For players:**
