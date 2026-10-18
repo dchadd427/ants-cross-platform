@@ -24,6 +24,43 @@
 
     function guard(fn) { try { return fn(); } catch (e) { return undefined; } }
 
+    // One request on one store of a database (false for no database); done(error, result): '' when it worked, 'exists' for a key that was there already (add), else 'failed'
+    function request(db, name, mode, make, done) {
+        var tx, req, result = null, answered = false;
+        function end(error) { if (!answered) { answered = true; done(error, result); } }
+        if (!db) return end('failed');
+        guard(function () {
+            tx = db.transaction(name, mode);
+            req = make(tx.objectStore(name));
+            req.onsuccess = function () { result = req.result; };
+            req.onerror = function (e) { if (e && e.preventDefault) e.preventDefault(); end(req.error && req.error.name === 'ConstraintError' ? 'exists' : 'failed'); };
+            tx.oncomplete = function () { end(''); };
+            tx.onabort = tx.onerror = function () { end('failed'); };
+        });
+        if (!req) end('failed');
+    }
+
+    // What the player sent for approval (mapmaker_submit.js), in a database of its own so that the drafts' database is never touched: one store, a record for each submission (its id is the server's)
+    // and the records '#tokens' and '#maker'. Nothing in it is a map of My maps. env: {idb}
+    function createSent(env) {
+        var db = null, status = 'pending';
+        function go(mode, make, done) { request(status === 'ready' && db, 'sent', mode, make, done); }
+        return {
+            status: function () { return status; },
+            open: function (done) {
+                var req = env.idb && guard(function () { return env.idb.open('ants-mapmaker-sent', 1); }), over = false;
+                function finish(ok) { if (over) return; over = true; status = ok ? 'ready' : 'unavailable'; done(status); }
+                if (!req) return finish(false);
+                req.onupgradeneeded = function () { guard(function () { req.result.createObjectStore('sent', { keyPath: 'id' }); }); };
+                req.onerror = req.onblocked = function () { finish(false); };
+                req.onsuccess = function () { db = req.result; finish(true); };
+            },
+            all: function (done) { go('readonly', function (s) { return s.getAll(); }, function (error, result) { done(error ? 'failed' : '', result || []); }); },
+            put: function (rec, done) { go('readwrite', function (s) { return s.put(rec); }, function (error) { done(error ? 'failed' : ''); }); },
+            remove: function (id, done) { go('readwrite', function (s) { return s.delete(id); }, function (error) { done(error ? 'failed' : ''); }); }
+        };
+    }
+
     // env: {idb (the browser's indexedDB or null), fetch (or null)}
     function create(env) {
         var db = null, status = 'pending', drafts = Object.create(null), library = Object.create(null), libraryState = env.fetch ? 'pending' : 'failed', asked = false, waiting = [];
@@ -46,26 +83,15 @@
         }
 
         // One request on one store; done(error, result): error is '' when it worked, 'exists' for a key that was there already (add), else 'failed'
-        function run(name, mode, make, done) {
-            var tx, req, result = null, answered = false;
-            function end(error) { if (!answered) { answered = true; done(error, result); } }
-            if (status !== 'ready') return end('failed');
-            guard(function () {
-                tx = db.transaction(name, mode);
-                req = make(tx.objectStore(name));
-                req.onsuccess = function () { result = req.result; };
-                req.onerror = function (e) { if (e && e.preventDefault) e.preventDefault(); end(req.error && req.error.name === 'ConstraintError' ? 'exists' : 'failed'); };
-                tx.oncomplete = function () { end(''); };
-                tx.onabort = tx.onerror = function () { end('failed'); };
-            });
-            if (!req) end('failed');
-        }
+        function run(name, mode, make, done) { request(status === 'ready' && db, name, mode, make, done); }
 
         return {
             open: open,
             status: function () { return status; },
             // A name that a map has: a draft, one of the six originals and, once the site's list has come, any library map
             has: function (name) { var k = key(name); return !!(drafts[k] || library[k]); },
+            // A name that the game's own list has (the six originals and the site's list), not a draft: what Submit for approval tells the player about
+            inLibrary: function (name) { return !!library[key(name)]; },
             // The site's list of maps, asked once (the page works when it does not come, and says so): 'pending', 'ready' or 'failed'
             loadLibrary: function () {
                 var bad = function () { done('failed'); };
@@ -111,5 +137,5 @@
         };
     }
 
-    return { create: create, clean: clean, key: key, libraryNames: libraryNames, ORIGINALS: ORIGINALS };
+    return { create: create, createSent: createSent, clean: clean, key: key, libraryNames: libraryNames, ORIGINALS: ORIGINALS };
 });

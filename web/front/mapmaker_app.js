@@ -11,7 +11,7 @@
     function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
     var opening = 0;
-    var core = null, limits = null, mine = null, dialogs = null, canvas = null, tools = null, store = null, map = null, checkTimer = 0, summed = null;
+    var core = null, limits = null, mine = null, sent = null, sentStore = null, sentWaiting = null, dialogs = null, canvas = null, tools = null, store = null, map = null, checkTimer = 0, summed = null;
     var keepTimer = 0, keepReady = false, keepPending = false, keepEdits = 0;      // the unsaved work kept in the browser: a rest of 1.5 s after a change, and not before the work of the last visit was dealt with
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
@@ -286,7 +286,7 @@
     function mineEnv() {
         function read(rec) { var bytes = new win.Uint8Array(rec.bytes), r = core.checkMap(bytes, 'extended'), file = win.MapFile.parse(bytes); return { name: rec.name, bytes: bytes, file: file, kind: file.kind, report: r.status === 0 ? r.json : null }; }
         return {
-            doc: doc, $: $, store: store, dialogs: dialogs, tags: fillTags, later: function (f, ms) { win.setTimeout(f, ms); },
+            doc: doc, $: $, store: store, sent: sentProxy(), dialogs: dialogs, tags: fillTags, later: function (f, ms) { win.setTimeout(f, ms); },
             parse: function (bytes) { try { var f = win.MapFile.parse(bytes); return f.ok ? f : null; } catch (e) { return null; } },
             check: function (bytes) { var r = core.checkMap(bytes, 'extended'); return r.status === 0 ? MapChecks.summary(r.json) : null; },
             thumb: function (file) { return MapView.miniBase(file, 84, 84, canvasOf); },
@@ -299,9 +299,63 @@
         };
     }
 
+    // The screens for sending a map are a script of their own (mapmaker_submit.js), loaded the first time they are needed, so a player who never sends a map never downloads it: then(true) when it is there
+    function withSubmit(then) {
+        if (sent) return then(true);
+        if (sentWaiting) return sentWaiting.push(then);
+        sentWaiting = [then];
+        var tag = el('script');
+        function end(ok) {
+            var waiting = sentWaiting;
+            function done() { sentWaiting = null; waiting.forEach(function (f) { f(ok); }); if (ok) { if (mine) mine.tabs(); linkOpened(); } }
+            if (ok && win.MapSubmit) { var made = win.MapSubmit.create(submitEnv(sentStore)); made.load(function () { sent = made; done(); }); } else { ok = false; done(); }
+        }
+        tag.src = 'front/mapmaker_submit.js'; tag.onload = function () { end(true); }; tag.onerror = function () { end(false); };
+        doc.head.appendChild(tag);
+    }
+    function submitOr(then) {
+        withSubmit(function (ok) { if (ok) then(); else dialogs.message('This part did not load', 'The part of the page that sends maps did not load. Check your connection and try again.'); });
+    }
+    // A status link: its tokens join this browser's, the address loses its fragment, and the list opens
+    function linkOpened() {
+        if (sent.fromAddress(win.location.hash, function () { try { win.history.replaceState(null, '', win.location.pathname + win.location.search); } catch (e) {} })) mine.show('sent');
+    }
+    // What My maps is given in place of the player's submissions: the real thing once the script is there
+    function sentProxy() {
+        return { count: function () { return sent ? sent.count() : null; }, hide: function () { if (sent) sent.hide(); }, show: function (ui) { submitOr(function () { sent.show(ui); }); }, preload: function () { withSubmit(function () {}); } };
+    }
+
+    // Send a map for approval (mapmaker_submit.js): the bytes that are sent are the bytes the checker has just judged (the open file, as Download hands it over); the player's own copy is never touched
+    function submitEnv(sentStore) {
+        return {
+            doc: doc, dialogs: dialogs, store: store, sent: sentStore, fetch: win.fetch ? win.fetch.bind(win) : null, Abort: win.AbortController || null, tags: fillTags, thumb: function (file) { return MapView.miniBase(file, 56, 56, canvasOf); },
+            later: function (f, ms) { win.setTimeout(f, ms); }, now: function () { return Date.now(); }, clipboard: win.navigator && win.navigator.clipboard,
+            parse: function (bytes) { try { var f = win.MapFile.parse(bytes); return f.ok ? f : null; } catch (e) { return null; } },
+            link: function () { return win.location.origin + win.location.pathname; },
+            current: function () {
+                var made = fileBytes();
+                if (made.error) return { error: made.error };
+                var r = core.checkMap(made.bytes, 'extended'), file = r.status === 0 && win.MapFile.parse(made.bytes);
+                if (!file || !file.ok) { alive(); return { error: r.status === 0 ? 'This map cannot be read.' : MapChecks.capital(r.error) + '.' }; }
+                return { name: map.name, bytes: made.bytes, file: file, report: r.json };
+            },
+            showFinding: function (f) { if (typeof f.row === 'number' && f.row >= 0) { canvas.showCell(f.row, f.column); $('map').focus(); } else showChecks(); },
+            onSee: function () { mine.show('sent'); },
+            onOpenCopy: function (rec, again) {
+                if (dialogs.isOpen()) return;
+                leave(function () {
+                    var error = setMap(new win.Uint8Array(rec.bytes), String(rec.name).slice(0, 40));
+                    if (error) dialogs.message('This copy cannot be opened', error);
+                    else if (again) dialogs.message('Change your map, then send it again', 'Make your changes, then choose \u201cSubmit for approval...\u201d. It goes to the owner as a new submission.');
+                });
+            }
+        };
+    }
+
     var ACTIONS = {
+        submit: function () { if (!dialogs.isOpen() && !canvas.isStroking()) submitOr(function () { sent.open(); }); }, subs: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show('sent'); },
         'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }]); }
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }]); }
     };
 
     function start(module) {
@@ -311,6 +365,8 @@
         if (small.status !== 0 || big.status !== 0) return fatal('The map code did not answer. Reload the page.');
         limits = MapSizes.limitsOf(small.json, big.json);
         dialogs = MapDialog.create(doc, $('dialogs'), [$('top'), $('body'), $('mine')]);
+        var idb = (function () { try { return win.indexedDB || null; } catch (e) { return null; } })();
+        sentStore = MapStore.createSent({ idb: idb });
         mine = MapMine.create(mineEnv());
         canvas = MapCanvas.create({
             doc: doc, win: win, canvas: $('map'), minimap: $('minimap'), mini: $('mini'), miniCap: $('mini-cap'), where: $('where'),
@@ -345,6 +401,7 @@
         store.loadLibrary();
         store.open(restoreWork);
         loadParts();
+        if (/^#sent=/.test(win.location.hash)) withSubmit(function () {});
     }
 
     // The parts that load after the page is up (docs/MAP_EDITOR.md, "Sprites"): the sheets of the kinds of ground and the game's pictures (the atlas). Without them the page works as before, in flat colors.

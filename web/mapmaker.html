@@ -26,6 +26,7 @@
         <button class="btn sm" type="button" data-act="save" disabled>Save as new...</button>
         <button class="btn sm" type="button" data-act="props" disabled>Properties</button>
         <button class="btn sm" type="button" data-act="download" disabled>Download</button>
+        <button class="btn sm" type="button" data-act="submit" disabled>Submit for approval...</button>
     </div>
     <div class="edmenu mob"><button class="btn sm" type="button" data-act="menu" disabled>Menu</button></div>
 </header>
@@ -88,7 +89,8 @@
 <section class="mine" id="mine" hidden aria-labelledby="mine-title">
     <header class="mhead"><a class="edlogo" href="/" aria-label="ants! - the front page"><img src="/front/logo.png" alt="ants!" width="581" height="218"></a><h1 class="banner gold" id="mine-title" tabindex="-1">My maps</h1></header>
     <div class="mwrap">
-        <div class="mtools"><button class="btn big" type="button" id="mine-new">New map</button><span class="mchips" id="mine-chips" role="group" aria-label="Which maps to show" hidden></span><button class="btn sm ghost" type="button" id="mine-back">Back to the map</button></div>
+        <div class="mtabs" id="mine-tabs" role="group" aria-label="My maps or My submissions" hidden></div>
+        <div class="mtools"><button class="btn big" type="button" id="mine-new">New map</button><span class="mchips" id="mine-chips" role="group" aria-label="Which maps to show" hidden></span><button class="btn sm ghost" type="button" id="mine-link" hidden>Copy my status link</button><button class="btn sm ghost" type="button" id="mine-back">Back to the map</button></div>
         <p class="sr" id="mine-status" role="status"></p><p class="mnote" id="mine-note"></p>
         <div class="mlist" id="mine-list"></div>
     </div>

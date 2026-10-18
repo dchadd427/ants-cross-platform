@@ -28,6 +28,17 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - The map maker draws the game's own pictures, with five kinds of ground (Gravel, Dirt, Slate, Mud, Water) and a sheet of every ground tile.
 
+**Rules / network:** none (protocol 21).
+
+## v0.12.83 - 2026-10-18 - Map maker: send a map for approval (S2)
+
+**For players:**
+- Map maker: "Submit for approval..." sends a map to the owner, and My submissions shows the answers. Nothing is public until approved. Off until switched on.
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c418fafb...123bf2ea)
+
 ## v0.12.82 - 2026-10-18 - Map submissions: server and owner review page (S1)
 
 **For players:**
@@ -659,16 +670,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f0eaf2de...6400ded7)
 
-## v0.12.7 - 2026-10-11 - The match server keeps a history of every match
+## Older versions (v0.12.7 and before)
 
-**For players:**
-- No change to play or to any screen. The match server now keeps what every online match came to (winner, scores or kills, losses, names) for good, beyond the 30 days a recording is kept; the highest score wins, a tie goes to the kills, equal kills is a draw (in 187: the last side standing, then the kills).
-- The list is at `/history` and one match at `/history/<id>`; no page uses them yet.
-
-**Rules / network:** none: the simulation and the protocol are untouched.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46f7b115...f0eaf2de)
-
-## Older versions (v0.12.6 and before)
-
-Every release before v0.12.7, and the long notes of v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.8, and the long notes of v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
