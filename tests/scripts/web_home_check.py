@@ -907,6 +907,16 @@ def main():
                 if why:
                     bad.append((width, why[:2]))
             check(not bad, "the header at %d widths: the Matches button at the right of the row (on a phone, on the logo's row), clear of the logo and the tagline (wrong: %s)" % (len(widths), bad))
+            # the Map maker link (web/front/map_maker_link.js) beside Matches: its place, a hit area of 44 px (elementFromPoint a little over 21 px above and below its center, 2 px each side), no overlap and no sideways scroll
+            bad = []
+            for width in (1280, 390, 320):
+                tab.emulate(width, 900, 1, width <= 480)
+                time.sleep(0.15)
+                m = json.loads(value("(function () { var a = document.getElementById('mapmaker-top'), b = document.getElementById('watch-top'), l = document.querySelector('header.mast img'), h = document.querySelector('header.mast'); if (!a) return 'null'; var r = a.getBoundingClientRect(), q = b.getBoundingClientRect(), g = l.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = function (px, py) { return document.elementFromPoint(px, py) === a; }; "
+                                     "return JSON.stringify({href: a.getAttribute('href'), text: a.textContent.trim(), n: document.querySelectorAll('#mapmaker-top').length, before: r.right <= q.left + 0.5, gap: Math.round(q.left - r.right), h: r.height, hitAbove: hit(x, y - 21.5), hitBelow: hit(x, y + 21.5), hitLeft: hit(r.left - 1.5, y), hitRight: hit(r.right + 1.5, y), farAbove: !hit(x, y - 30), overLogo: r.left < g.right, scroll: document.documentElement.scrollWidth > innerWidth, inside: r.left >= h.getBoundingClientRect().left - 0.5 && q.right <= h.getBoundingClientRect().right + 4.5, row: innerWidth > 720 || r.top < g.bottom}); })()"))
+                if m is None or m["href"] != "/mapmaker.html" or m["text"] != "Map maker" or m["n"] != 1 or not m["before"] or m["gap"] < 6 or abs(m["h"] - 38) > 1 or not (m["hitAbove"] and m["hitBelow"] and m["hitLeft"] and m["hitRight"]) or not m["farAbove"] or m["overLogo"] or m["scroll"] or not m["inside"] or not m["row"]:
+                    bad.append((width, m))
+            check(not bad, "the Map maker link: one, to /mapmaker.html, before Matches and as tall as it, a hit area of 44 px, clear of the logo, on the logo's row on a phone, no sideways scroll at 1280, 390 and 320 px (wrong: %s)" % bad)
             # the tag under the LAST button (21:9) ends with the button: on a computer with a mouse and a 3440 x 1440 screen (nearest to 21:9), in a narrow window, the tag stays inside it and the page does not scroll sideways
             fresh_tab()
             tab.call("Emulation.setDeviceMetricsOverride", {"width": 720, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 3440, "screenHeight": 1440})       # (no touch emulation call: a second one makes Chromium report hover: none)

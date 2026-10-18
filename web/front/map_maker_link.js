@@ -13,11 +13,11 @@
     head.insertBefore(link, matches);
     var style = document.createElement('style');
     /* Desktop: the pair sits at the right, 10 px apart (the row's gap is 22 px). Phone (the page's own 720 px rule): the grid gets a column for each button, both on the logo's row, the tagline under them.
-       The 44 px target: the button keeps the look of Matches (38 px tall) and a hidden layer around it adds the rest. Under 390 px the logo, gaps and padding shrink so that both fit at 320 px. */
+       The 44 px target: the button keeps the look of Matches (38 px tall) and a hidden layer around it adds the rest (the layer is measured from the padding box, inside the 2 px border: 34 + 12 = 46 px). Under 390 px the logo, gaps and padding shrink so that both fit at 320 px. */
     style.textContent =
         '.mast #mapmaker-top { margin-left: auto; margin-right: -12px; flex: 0 0 auto; position: relative; }' +
         '.mast #mapmaker-top + #watch-top { margin-left: 0; }' +
-        '.mast #mapmaker-top::before { content: ""; position: absolute; left: -2px; right: -2px; top: -3px; bottom: -3px; }' +
+        '.mast #mapmaker-top::before { content: ""; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }' +
         '.mast #mapmaker-top:focus-visible { outline: 3px solid var(--gold, #f2c14e); outline-offset: 3px; }' +
         '@media (max-width: 720px) {' +
         '.mast { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "logo . map btn" "text text text text"; column-gap: 10px; }' +

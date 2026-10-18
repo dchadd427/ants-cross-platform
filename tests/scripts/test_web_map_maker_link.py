@@ -23,19 +23,20 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 NODE = shutil.which("node")
 
 FAKE = r"""
-var made = [], head = {kids: [], querySelector: function (s) {
+var made = [], appended = [], head = {kids: [], querySelector: function (s) {
     if (s === '#watch-top') return this.kids.filter(function (k) { return k.id === 'watch-top'; })[0] || null;
     if (s === '#mapmaker-top') return this.kids.filter(function (k) { return k.id === 'mapmaker-top'; })[0] || null;
     return null; },
   insertBefore: function (n, ref) { this.kids.splice(this.kids.indexOf(ref), 0, n); } };
 var doc = {querySelector: function (s) { return s === 'header.mast' ? (global.NOHEAD ? null : head) : null; },
-  createElement: function (t) { var e = {tag: t}; made.push(e); return e; }, head: {appendChild: function (n) { made.push(n); }}};
+  createElement: function (t) { var e = {tag: t}; made.push(e); return e; }, head: {appendChild: function (n) { appended.push(n); }}};
 if (!global.NOMATCHES) head.kids.push({id: 'watch-top'});
 global.document = doc;
 var code = require('fs').readFileSync(process.argv[2], 'utf8');
 function run() { (new Function(code))(); }
 run(); run();
-console.log(JSON.stringify(head.kids.map(function (k) { return [k.id, k.tag, k.href, k.className, k.textContent]; })));
+var styles = appended.filter(function (m) { return m.tag === 'style' && /#mapmaker-top/.test(m.textContent); }).length;
+console.log(styles + ' ' + JSON.stringify(head.kids.map(function (k) { return [k.id, k.tag, k.href, k.className, k.textContent]; })));
 """
 
 
@@ -65,12 +66,25 @@ def problems(page, js):
         bad.append("the link says Map maker")
     if ".mast #mapmaker-top:focus-visible { outline: 3px solid" not in js:
         bad.append("keyboard focus is visible")
-    if "top: -3px; bottom: -3px;" not in js or "'.mast #mapmaker-top::before { content:" not in js:
+    if "top: -6px; bottom: -6px;" not in js or "'.mast #mapmaker-top::before { content:" not in js:
         bad.append("the touch layer makes it 44 px (38 + 6)")
     if 'grid-template-areas: "logo . map btn" "text text text text"' not in js or "grid-area: map;" not in js:
         bad.append("on a phone both buttons stay on the logo's row")
     if "@media (max-width: 389px)" not in js or "width: 88px" not in js:
         bad.append("at 320 px both fit")
+    for need, why in (("flex: 0 0 auto; position: relative; }", "the layer is anchored to the link (position: relative)"),
+                      ("margin-left: auto; margin-right: -12px;", "10 px between the pair (the row's gap is 22)"),
+                      ("'@media (max-width: 720px) {'", "the phone rule starts where the page's own does (720 px)"),
+                      ("column-gap: 10px;", "10 px between the columns on a phone"),
+                      ("outline: 3px solid var(--gold, #f2c14e); outline-offset: 3px;", "the focus ring is drawn"),
+                      ("document.head.appendChild(style);", "the style is added to the page"),
+                      ("left: -4px; right: -4px;", "the layer reaches 2 px past the border each side")):
+        if need not in js:
+            bad.append(why)
+    for forbid, why in (("pointer-events", "the layer does not block touches"), (".target", "the link opens in this tab"), ("setAttribute", "no attributes set behind the tests' back"), ("outline: none", "no focus ring switched off"),
+                        ("outline: 0", "no focus ring switched off"), ("display: none", "nothing is hidden"), ("visibility", "nothing is hidden")):
+        if forbid in js:
+            bad.append(why)
     if "margin-left: auto" not in js or "#mapmaker-top + #watch-top { margin-left: 0; }" not in js:
         bad.append("the pair sits at the right")
     return bad
@@ -98,11 +112,11 @@ class MapMakerLink(unittest.TestCase):
     @unittest.skipUnless(NODE, "node is not installed")
     def test_it_adds_one_link_before_matches_and_never_two(self):
         out = self.run_fake(self.js)
-        self.assertEqual(out, '[["mapmaker-top","a","/mapmaker.html","btn sm","Map maker"],["watch-top",null,null,null,null]]')
+        self.assertEqual(out, '1 [["mapmaker-top","a","/mapmaker.html","btn sm","Map maker"],["watch-top",null,null,null,null]]')
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_without_matches_it_adds_nothing(self):
-        self.assertEqual(self.run_fake(self.js, "global.NOMATCHES = true;"), "[]")
+        self.assertEqual(self.run_fake(self.js, "global.NOMATCHES = true;"), "0 []")
 
     def run_fake(self, js, prefix=""):
         with tempfile.TemporaryDirectory() as tmp:

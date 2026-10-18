@@ -81,8 +81,8 @@
   {
    "id": "js_no_touch_layer",
    "file": "web/front/map_maker_link.js",
-   "old": "top: -3px; bottom: -3px;",
-   "new": "top: 0; bottom: 0;",
+   "old": "top: -6px; bottom: -6px;",
+   "new": "top: -3px; bottom: -3px;",
    "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
   },
   {
@@ -118,6 +118,69 @@
    "file": "web/front/map_maker_link.js",
    "old": "#mapmaker-top + #watch-top { margin-left: 0; }",
    "new": "#mapmaker-top + #watch-top { margin-left: auto; }",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_layer_not_anchored",
+   "file": "web/front/map_maker_link.js",
+   "old": "flex: 0 0 auto; position: relative; }",
+   "new": "flex: 0 0 auto; }",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_phone_rule_at_640",
+   "file": "web/front/map_maker_link.js",
+   "old": "'@media (max-width: 720px) {'",
+   "new": "'@media (max-width: 640px) {'",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_pair_gap_too_wide",
+   "file": "web/front/map_maker_link.js",
+   "old": "margin-left: auto; margin-right: -12px;",
+   "new": "margin-left: auto;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_layer_blocks_touches",
+   "file": "web/front/map_maker_link.js",
+   "old": "bottom: -6px; }",
+   "new": "bottom: -6px; pointer-events: none; }",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_focus_ring_off",
+   "file": "web/front/map_maker_link.js",
+   "old": "outline: 3px solid var(--gold, #f2c14e); outline-offset: 3px;",
+   "new": "outline: none;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_phone_column_gap_40",
+   "file": "web/front/map_maker_link.js",
+   "old": "column-gap: 10px;",
+   "new": "column-gap: 40px;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_opens_a_new_tab",
+   "file": "web/front/map_maker_link.js",
+   "old": "link.title =",
+   "new": "link.target = '_blank'; link.title =",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_style_never_added",
+   "file": "web/front/map_maker_link.js",
+   "old": "document.head.appendChild(style);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_layer_reaches_too_little",
+   "file": "web/front/map_maker_link.js",
+   "old": "left: -4px; right: -4px;",
+   "new": "left: 0; right: 0;",
    "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
   }
  ]
