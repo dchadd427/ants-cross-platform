@@ -614,8 +614,8 @@
   {
    "id": "owned_files_are_orphans",
    "file": "src/ants_server/submissions.cpp",
-   "old": "AND file_kept = 1\", {name}) == 0) {",
-   "new": "AND file_kept = 1\", {name}) >= 0) {"
+   "old": "{name}) != 0) continue;",
+   "new": "{name}) < 0) continue;"
   },
   {
    "id": "com0_allowed",
@@ -626,14 +626,14 @@
   {
    "id": "orphans_stay",
    "file": "src/ants_server/submissions.cpp",
-   "old": "            if (!made) fs::rename(it->path(), quarantine / name, renamed);\n",
-   "new": "            renamed = std::error_code();\n"
+   "old": "        fs::rename(it->path(), target, renamed);\n",
+   "new": "        renamed = std::error_code();\n"
   },
   {
    "id": "orphans_deleted_not_moved",
    "file": "src/ants_server/submissions.cpp",
-   "old": "            if (!made) fs::rename(it->path(), quarantine / name, renamed);\n",
-   "new": "            if (!made) remove_quietly(it->path().string());\n"
+   "old": "        fs::rename(it->path(), target, renamed);\n",
+   "new": "        remove_quietly(it->path().string());\n"
   },
   {
    "id": "quarantine_kept_for_ever",
