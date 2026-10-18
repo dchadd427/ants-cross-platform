@@ -375,6 +375,31 @@ int main() {
         ASSERT_EQ(no_id.call(no_id.req("GET", "/admin/api/me")).status, 404);
         Api bad_id([](SubmissionApiConfig& c) { c.owner_id = "not digits"; });
         ASSERT_EQ(bad_id.call(bad_id.req("GET", "/admin/api/me")).status, 404);
+        // A cookie that is signed with the short secret is no cookie either: 31 characters are too few, 32 are enough (the check is on the length, not only on "a request without a cookie")
+        const std::string s31(31, 'k'), s32(32, 'k');
+        Api short31([&](SubmissionApiConfig& c) { c.session_secret = s31; });
+        ASSERT_EQ(short31.call(short31.req("GET", "/admin/api/me", "", {{"cookie", short31.cookie(kOwner, "Dave", 0, "n0nce", s31)}})).body, nothing.body);
+        ASSERT_EQ(short31.call(short31.req("GET", "/admin/api/maps", "", {{"cookie", short31.cookie(kOwner, "Dave", 0, "n0nce", s31)}})).body, nothing.body);
+        Api short32([&](SubmissionApiConfig& c) { c.session_secret = s32; });
+        ASSERT_TRUE(short32.me(short32.cookie(kOwner, "Dave", 0, "n0nce", s32)).get("owner").as_bool_or(false));
+        // The owner is the id itself, not an id that begins with it (nor one it begins)
+        ASSERT_FALSE(t.me(t.cookie(std::string(kOwner) + "7")).get("owner").as_bool_or(false));
+        ASSERT_FALSE(t.me(t.cookie(std::string(kOwner).substr(0, 5))).get("owner").as_bool_or(false));
+        ASSERT_EQ(t.call(t.req("GET", "/admin/api/maps", "", {{"cookie", t.cookie(std::string(kOwner) + "7")}})).body, nothing.body);
+        // The picture of a map that exists is for the owner alone: a visitor and a stranger get the answer of a missing path
+        SubmitInput in;
+        in.kind = "classic";
+        in.name = "River Run";
+        in.maker = "Mia";
+        in.bytes = tiny();
+        in.address = "203.0.113.5";
+        const SubmitOutcome sent = t.store->submit(in, t.now);
+        ASSERT_TRUE(sent.ok);
+        const std::string picture = "/admin/api/maps/" + sent.submission.id + "/picture";
+        ASSERT_EQ(t.call(t.req("GET", picture)).body, nothing.body);
+        ASSERT_EQ(t.call(t.req("GET", picture, "", {{"cookie", t.cookie("999")}})).body, nothing.body);
+        ASSERT_EQ(t.call(t.req("GET", picture)).status, 404);
+        ASSERT_EQ(t.call(t.req("GET", picture, "", {{"cookie", t.cookie()}})).status, 200);
     } TEST_END();
 
     TEST_CASE("API2.3 A change by the owner needs the CSRF token of that very session, a same-origin request, the JSON type and a JSON object; a read does not come from another site") {
