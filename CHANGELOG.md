@@ -23,13 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.79 - 2026-10-18 - Map maker: save as a new map and drafts (E5)
 
 **For players:**
 - The map maker page (not linked from the site yet: /mapmaker.html) can save a map now. Save as new... (in the top bar, or in the Menu on a phone) keeps the map in your browser as a new map under a free name, and shows it, so the next Save makes one more new map. A map is never written over: if the name is already used by the map you opened, one of your saved maps or one of the game's maps, it says so and offers the next free name in one click ("Use Sunny Picnic 3").
 - Copy and Start an Extended map use the same name check, so a copy can no longer take the name of a game map or a saved map.
 - What you draw is kept in the browser while you work. If you close the page without saving, the next visit offers to pick the work up or throw it away, and the question before you leave a map offers Save as a new map first. A browser that cannot keep files says so, offers Download, and asks before the page is closed as before.
 - Saved maps cannot be opened again from the page yet: the list of your maps comes next.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d09bb5c9...421ebb6b)
 
 ## v0.12.78 - 2026-10-17 - Map maker: convert, crop and copy (E4)
 
@@ -665,15 +667,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/893ef3c...9889d7d4)
 
-## v0.12.3 - 2026-10-11 - Housekeeping: documentation of finished work removed
+## Older versions (v0.12.3 and before)
 
-**For players:**
-- No change to play; internal documentation of finished work was removed.
-
-**Rules / network:** none: the simulation and the protocol are untouched.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/166ccc6...d9a8fb0)
-
-## Older versions (v0.12.2 and before)
-
-Every release before v0.12.3, and the long notes of v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.4, and the long notes of v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
