@@ -56,7 +56,7 @@ SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET = 30 * 1000, 9 * 1000        # bytes, raw and 
 EDITOR_BUDGET = 340 * 1000        # bytes: the map maker's own scripts and style (mapmaker_*.js, mapmaker.css), measured apart from the pictures so that the editor's growth is seen (raised from 260,000 in E5: saving, drafts and the lists of E6 need the room; the gzipped cap below stays)
 LAZY_BUDGET = 36 * 1000        # bytes: the two lazily loaded map maker scripts together (about 28,500 now), and gzipped below (about 9,300): added with the sprites (docs/MAP_EDITOR.md, "Sprites"), so the editor's own caps did not have to move
 LAZY_GZIP_BUDGET = 12 * 1000
-EDITOR_GZIP_BUDGET = 90 * 1000      # bytes: the same, gzipped file by file (what a player downloads); raised from 80,000 in E5: the files already summed 76,973 before it (the 68 KB that was quoted is another way of counting) and E5 adds about 4,300
+EDITOR_GZIP_BUDGET = 94 * 1000      # bytes: the same, gzipped file by file (what a player downloads); raised from 90,000 in the sprites part 1, on purpose: the pictures' own page code and Submit for approval met in one release (the files summed 91,602); raised from 80,000 in E5: the files already summed 76,973 before it (the 68 KB that was quoted is another way of counting) and E5 adds about 4,300
 
 
 def read(*parts):
