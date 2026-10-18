@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- The lobby has a small Map maker button next to Matches, at the top right.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/73e722fb...HEAD)
+
 ## v0.12.80 - 2026-10-18 - Map maker: My maps (E6)
 
 **For players:**

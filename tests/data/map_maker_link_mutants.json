@@ -1,0 +1,124 @@
+{
+ "note": "Mutants of the lobby header's Map maker link for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/front/map_maker_link.js and its script tag in web/lobby.html against tests/scripts/test_web_map_maker_link.py. Run from the checkout: python3 tools/mutate.py tests/data/map_maker_link_mutants.json --keep-going --jobs 1 --timeout 120. Every mutant must be caught; the same test file runs the list in the quick tier on a copy.",
+ "mutants": [
+  {
+   "id": "page_no_script",
+   "file": "web/lobby.html",
+   "old": "<script src=\"front/map_maker_link.js\"></script><script src=\"front/lobby_rules.js\">",
+   "new": "<script src=\"front/lobby_rules.js\">",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "page_script_twice",
+   "file": "web/lobby.html",
+   "old": "<script src=\"front/map_maker_link.js\"></script><script src=\"front/lobby_rules.js\">",
+   "new": "<script src=\"front/map_maker_link.js\"></script><script src=\"front/map_maker_link.js\"></script><script src=\"front/lobby_rules.js\">",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "page_script_on_its_own_line",
+   "file": "web/lobby.html",
+   "old": "<script src=\"front/map_maker_link.js\"></script><script src=\"front/lobby_rules.js\">",
+   "new": "<script src=\"front/map_maker_link.js\"></script>\n<script src=\"front/lobby_rules.js\">",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "page_script_after_rules",
+   "file": "web/lobby.html",
+   "old": "<script src=\"front/map_maker_link.js\"></script><script src=\"front/lobby_rules.js\"></script>",
+   "new": "<script src=\"front/lobby_rules.js\"></script><script src=\"front/map_maker_link.js\"></script>",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_wrong_address",
+   "file": "web/front/map_maker_link.js",
+   "old": "'/mapmaker.html'",
+   "new": "'/mapmaker'",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_not_the_matches_look",
+   "file": "web/front/map_maker_link.js",
+   "old": "'btn sm'",
+   "new": "'btn'",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_not_before_matches",
+   "file": "web/front/map_maker_link.js",
+   "old": "head.insertBefore(link, matches);",
+   "new": "head.appendChild(link);",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_no_guard_against_a_second",
+   "file": "web/front/map_maker_link.js",
+   "old": "if (!matches || head.querySelector('#mapmaker-top')) return;",
+   "new": "if (!matches) return;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_adds_without_matches",
+   "file": "web/front/map_maker_link.js",
+   "old": "if (!matches || head.querySelector('#mapmaker-top')) return;",
+   "new": "if (head.querySelector('#mapmaker-top')) return;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_wrong_text",
+   "file": "web/front/map_maker_link.js",
+   "old": "link.textContent = 'Map maker';",
+   "new": "link.textContent = 'Maps';",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_focus_not_visible",
+   "file": "web/front/map_maker_link.js",
+   "old": ":focus-visible",
+   "new": ":hover",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_no_touch_layer",
+   "file": "web/front/map_maker_link.js",
+   "old": "top: -3px; bottom: -3px;",
+   "new": "top: 0; bottom: 0;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_phone_no_own_column",
+   "file": "web/front/map_maker_link.js",
+   "old": "grid-area: map;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_phone_one_column",
+   "file": "web/front/map_maker_link.js",
+   "old": "\"logo . map btn\"",
+   "new": "\"logo btn\"",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_320_logo_stays_wide",
+   "file": "web/front/map_maker_link.js",
+   "old": "width: 88px",
+   "new": "width: 120px",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_pair_not_at_the_right",
+   "file": "web/front/map_maker_link.js",
+   "old": "margin-left: auto; margin-right: -12px;",
+   "new": "margin-right: -12px;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_matches_keeps_its_auto_margin",
+   "file": "web/front/map_maker_link.js",
+   "old": "#mapmaker-top + #watch-top { margin-left: 0; }",
+   "new": "#mapmaker-top + #watch-top { margin-left: auto; }",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  }
+ ]
+}
