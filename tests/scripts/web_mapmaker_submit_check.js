@@ -71,9 +71,14 @@ function fakeServer(rules) {
     function reply(status, json, text) { return { status, text: () => Promise.resolve(text !== undefined ? text : JSON.stringify(json)) }; }
     function fetch(url, init) {
         init = init || {};
-        const call = { method: init.method || 'GET', url, headers: init.headers || {}, body: init.body };
+        const call = { method: init.method || 'GET', url, headers: init.headers || {}, body: init.body, signal: init.signal };
         calls.push(call);
         return new Promise((resolve, reject) => setImmediate(() => {
+            if (init.signal) init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+            if (state.hang) { state.held = () => answer(resolve, reject); return; }
+            answer(resolve, reject);
+        }));
+        function answer(resolve, reject) {
             if (state.net) return reject(new Error('offline'));
             const key = call.method + ' ' + url.split('?')[0].replace(/[0-9a-f]{32}/, '<id>');
             if (state.answers[key]) { const a = state.answers[key]; return resolve(reply(a[0], a[1], a[2])); }
@@ -85,34 +90,36 @@ function fakeServer(rules) {
                 return resolve(reply(201, out));
             }
             if (key === 'POST /submissions/<id>/withdraw') return resolve(reply(200, { submission: { id: ID1, state: 'withdrawn' } }));
-            return resolve(reply(404, { error: 'not_found' }));
-        }));
+            return resolve(reply(404, { error: 'not_found', message: 'There is no such map.' }));
+        }
     }
     return { fetch, calls, state };
 }
+
+class FakeAbort { constructor() { const l = []; this.aborted = false; this.signal = { addEventListener: (t, f) => l.push(f) }; this.abort = () => { this.aborted = true; l.forEach((f) => f()); FakeAbort.last = this; }; } }
 
 // ---- the page ----
 function page(opts) {
     opts = opts || {};
     const doc = makeDocument(), host = doc.createElement('div'), top = doc.createElement('header');
     [host, top].forEach((n) => doc.body.appendChild(n));
-    const dialogs = Dialog.create(doc, host, [top]), server = opts.server || fakeServer(), idb = opts.idb || fakeIdb(), events = [];
+    const timers = [], dialogs = Dialog.create(doc, host, [top]), server = opts.server || fakeServer(), idb = opts.idb || fakeIdb(), events = [];
     const sentStore = Store.createSent({ idb: opts.noIdb ? null : idb });
     const report = opts.report || { works: true, headline: 'Works in the original game', findings: [], kind: 'classic' };
     const file = { kind: opts.kind || 'classic', rows: 31, columns: 31, ok: true };
-    const bytes = opts.bytes || new Uint8Array([8, 1, 2, 3]);
+    const bytes = opts.bytes || new Uint8Array([8, 1, 2, 3]), cfg = { bytes };
     const library = Object.assign({ tiny: true, treasure: true }, opts.library || {});
     const env = {
-        doc, dialogs, sent: sentStore, fetch: opts.noFetch ? null : server.fetch, later: (f) => setImmediate(f), now: () => opts.now || Date.now(),
+        doc, dialogs, sent: sentStore, fetch: opts.noFetch ? null : server.fetch, later: (f, ms) => (ms >= 30000 ? timers.push(f) : setImmediate(f)), Abort: opts.noAbort ? null : FakeAbort, now: () => opts.now || Date.now(),
         store: { inLibrary: (n) => !!library[Store.key(n)], libraryState: () => opts.libraryState || 'ready', onLibrary: (f) => f() },
         parse: (b) => (b && b[0] === 8 ? { kind: 'classic', rows: 31, columns: 31 } : b && b[0] === 9 ? { kind: 'extended', rows: 300, columns: 400 } : null),
         thumb: () => doc.createElement('canvas'), tags: (h, kind) => { h.textContent = kind === 'extended' ? 'Extended map|New version only' : 'Classic map'; },
-        current: () => (opts.currentError ? { error: opts.currentError } : { name: opts.name || 'Sunny Picnic', bytes, file, report }),
+        current: () => (opts.currentError ? { error: opts.currentError } : { name: opts.name || 'Sunny Picnic', bytes: cfg.bytes, file, report }),
         showFinding: (f) => events.push(['show', f.row, f.column]), onOpenCopy: (r, again) => events.push(['copy', r.name, !!again]), onSee: () => events.push(['see']),
         clipboard: opts.clipboard, link: () => 'https://example.org/mapmaker.html'
     };
     const sub = Submit.create(env);
-    return { doc, host, dialogs, server, idb, events, sub, bytes, sentStore, env };
+    return { cfg, timers, doc, host, dialogs, server, idb, events, sub, bytes, sentStore, env };
 }
 function button(p, text) { return p.host.querySelectorAll('button').find((b) => b.textContent === text); }
 function text(p) { return p.host.textContent; }
@@ -270,7 +277,7 @@ async function caseD() {
     button(p, 'See my submissions').click();
     equal(p.events, [['see']], 'See my submissions goes to the list');
     // the second map uses the token
-    p.server.state.tokenIsNew = false;
+    p.server.state.tokenIsNew = false; p.cfg.bytes = new Uint8Array([8, 1, 2, 9]);
     p.sub.open(); await later();
     button(p, 'Submit for approval').click(); await later();
     equal(post(p.server)[1].headers.Authorization, 'Bearer ' + TOKEN, 'the next send carries the token');
@@ -413,8 +420,62 @@ async function caseF() {
     check(x.list.querySelectorAll('img').length === 0 && /<img src=x/.test(x.list.textContent), 'a name is text');
 }
 
+// ---- G: a send that may or may not have arrived, a second send of the same map, a 404 that is not a door ----
+async function caseG() {
+    check(!Submit.isOff({ status: 404, json: { error: 'not_found', message: 'There is no such map.' } }) && Submit.isOff({ status: 404, json: null }) && Submit.isOff({ status: 404, json: {} }), 'a 404 with an error code of the server is not a door that is off; one without is');
+    equal(Submit.why({ status: 404, json: { error: 'not_found', message: 'There is no such map.' } }), 'There is no such map.', 'and says the server\u2019s sentence');
+    check(/did not answer in time/.test(Submit.why({ timeout: true })), 'a timeout has its sentence');
+    // the same map is not sent twice
+    let p = await opened(); type(p, 'sub-maker', 'Mia'); button(p, 'Submit for approval').click(); await later();
+    button(p, 'Back to the editor').click();
+    p.sub.open(); await later();
+    check(button(p, 'Submit for approval').disabled && /already waiting for approval/.test(text(p)) && button(p, 'See my submissions') !== undefined, 'a map that is waiting with these very bytes is not sent again: the dialog says so and offers My submissions');
+    button(p, 'See my submissions').click();
+    equal(p.events.pop(), ['see'], 'which opens it');
+    p.dialogs.close();
+    const q = await loadedPage({ bytes: new Uint8Array([8, 1, 2, 4]), idb: p.idb }); q.sub.open(); await later();
+    check(!button(q, 'Submit for approval').disabled, 'a changed map can be sent');
+    // no answer in time: the request is aborted, and the player is told it may have arrived
+    const hang = fakeServer(); hang.state.hang = false;
+    p = await loadedPage({ server: hang }); p.sub.open(); await later(); type(p, 'sub-maker', 'Mia');
+    hang.state.hang = true; button(p, 'Submit for approval').click(); await later();
+    check(button(p, 'Submit for approval').disabled, 'while it is sent the button is off');
+    p.timers.forEach((f) => f()); await later();
+    check(FakeAbort.last && FakeAbort.last.aborted, 'after 30 seconds the request is aborted');
+    check(/did not answer in time\. The map may have been received: look at My submissions before you send it again\. If this was the first map you sent, this browser cannot find it again/.test(p.host.querySelector('#sub-err').textContent) && button(p, 'See my submissions') !== undefined, 'and the player is told it may have arrived, and what to do');
+    check(!button(p, 'Submit for approval').disabled, 'the player may still try again');
+    // Escape while it is sent: no second send; the late answer is kept
+    const slow = fakeServer();
+    p = await loadedPage({ server: slow }); p.sub.open(); await later(); type(p, 'sub-maker', 'Mia');
+    slow.state.hang = true; button(p, 'Submit for approval').click(); await later();
+    p.doc.key('Escape');
+    check(!p.dialogs.isOpen(), 'Escape closes the dialog');
+    p.sub.open();
+    check(/still being sent/.test(text(p)) && post(slow).length === 1, 'but a second send cannot start while one is on its way');
+    p.dialogs.close();
+    slow.state.hang = false; slow.state.held(); await later();
+    check(p.idb.m.has(ID1) && p.sub.tokens().length === 1, 'the late answer is kept (the token and the record)');
+    check(/Sent\. Waiting for approval\./.test(text(p)), 'and shown when no other dialog is open');
+    p.dialogs.close();
+    p.sub.open(); await later();
+    check(/already waiting/.test(text(p)), 'and the map is then known as waiting');
+    // a first send with no answer says the map may be lost to this browser; later ones do not
+    const net = fakeServer();
+    p = await loadedPage({ server: net }); p.sub.open(); await later(); type(p, 'sub-maker', 'Mia'); net.state.net = true; button(p, 'Submit for approval').click(); await later();
+    check(/may have been received/.test(p.host.querySelector('#sub-err').textContent) && /cannot find it again/.test(p.host.querySelector('#sub-err').textContent), 'no answer at all: it may have gone through (first map: and may be lost to this browser)');
+    p = await loadedPage({ idb: (() => { const i = fakeIdb(); i.m.set('#tokens', { id: '#tokens', list: [TOKEN] }); return i; })(), server: net }); p.sub.open(); await later(); type(p, 'sub-maker', 'Mia'); button(p, 'Submit for approval').click(); await later();
+    check(/may have been received/.test(p.host.querySelector('#sub-err').textContent) && !/cannot find it again/.test(p.host.querySelector('#sub-err').textContent), 'with a token, the player is only sent to My submissions');
+    // an answer that is not what a 201 is
+    const odd = fakeServer(); odd.state.answers['POST /submissions'] = [201, null, 'ok'];
+    p = await loadedPage({ server: odd }); p.sub.open(); await later(); type(p, 'sub-maker', 'Mia'); button(p, 'Submit for approval').click(); await later();
+    check(/may have been received/.test(p.host.querySelector('#sub-err').textContent), 'a 201 without a submission says it may have been sent');
+    // the note: more than two line ends in a row become two
+    p = await opened(); type(p, 'sub-maker', 'Mia'); type(p, 'sub-note', 'a\n\n\n\n\nb'); button(p, 'Submit for approval').click(); await later();
+    check(/&note=a%0A%0Ab$/.test(post(p.server)[0].url), 'three line ends in a row are two: ' + post(p.server)[0].url);
+}
+
 (async () => {
-    const parts = [['A the words', caseA], ['B the sent store', caseB], ['C the dialog', caseC], ['D what is sent, and the answers', caseD], ['F My submissions', caseF]];
+    const parts = [['A the words', caseA], ['B the sent store', caseB], ['C the dialog', caseC], ['D what is sent, and the answers', caseD], ['F My submissions', caseF], ['G a send that may have arrived, twins, a 404', caseG]];
     for (const [name, fn] of parts) {
         const was = failures;
         try { await fn(); } catch (e) { failures++; console.log('    ERROR: ' + (e && e.stack || e)); }

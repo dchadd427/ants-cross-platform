@@ -18,7 +18,10 @@
     var STATES = { waiting: ['warn', 'Waiting for approval'], approved: ['ok', 'Approved'], taken_down: ['wait', 'Approved, but no longer in the map list'], declined: ['bad', 'Declined'] };
 
     function guard(fn) { try { return fn(); } catch (e) { return undefined; } }
-    function isOff(res) { return res.status === 404 || (res.status === 503 && !!res.json && res.json.error === 'submissions_off'); }
+    // The door is off when the server says so, or when there is no door (a 404 that is not the server's own JSON: a real 404 of the server, such as a withdraw of an unknown id, has an error code)
+    function isOff(res) { return (res.status === 503 && !!res.json && res.json.error === 'submissions_off') || (res.status === 404 && !(res.json && res.json.error)); }
+    var MAYBE = ' The map may have been received: look at My submissions before you send it again.';
+    var LOST = ' If this was the first map you sent, this browser cannot find it again, and sending it again may give the owner two.';
     function chars(t) { return Array.from(t).length; }
     function enc(t) { return encodeURIComponent(t); }                              // (a space is %20 and a plus stays a plus: never a form encoder)
 
@@ -52,6 +55,7 @@
     function why(res) {
         var j = res.json || {};
         if (res.net) return 'The server did not answer. Check your connection and try again.';
+        if (res.timeout) return 'The server did not answer in time.';
         if (isOff(res)) return OFF;
         if (LINES[j.error]) return LINES[j.error];
         if (typeof j.message === 'string' && j.message) return j.message;
@@ -60,15 +64,19 @@
         return 'The server could not take this (error ' + res.status + '). Nothing was sent.';
     }
 
-    // The calls: done({status, json}) or done({net: true}), once
-    function api(fetchFn) {
+    // The calls: done({status, json}), done({net: true}) or, after 30 seconds, done({timeout: true}) (the request is aborted), once. env: {fetch, later(fn, ms), Abort (AbortController or null)}
+    function api(env) {
+        var fetchFn = env.fetch;
         function call(method, path, token, body, done) {
             var over = false, headers = {};
             function fin(r) { if (!over) { over = true; done(r); } }
             if (token) headers.Authorization = 'Bearer ' + token;
             if (body) headers['Content-Type'] = 'application/octet-stream';
-            var p = fetchFn && guard(function () { return fetchFn(path, { method: method, headers: headers, body: body || undefined, cache: 'no-store' }); });
+            var stop = env.Abort && guard(function () { return new env.Abort(); }), init = { method: method, headers: headers, body: body || undefined, cache: 'no-store' };
+            if (stop) init.signal = stop.signal;
+            var p = fetchFn && guard(function () { return fetchFn(path, init); });
             if (!p) return fin({ net: true });
+            env.later(function () { if (!over) { fin({ timeout: true }); if (stop) guard(function () { stop.abort(); }); } }, 30000);
             p.then(function (r) {
                 return r.text().then(function (t) { var j = guard(function () { return JSON.parse(t); }); fin({ status: r.status, json: j && typeof j === 'object' ? j : null }); });
             }).then(null, function () { fin({ net: true }); });
@@ -77,9 +85,10 @@
     }
 
     // env: {doc, dialogs, store (the maps' store: inLibrary, libraryState, onLibrary), sent (Store.createSent), fetch, later(fn, ms), parse(bytes) -> file | null, thumb(file) -> canvas | null, tags(host, kind),
+    //       Abort (AbortController or null),
     //       current() -> {name, bytes, file, report} | {error}, showFinding(f), onOpenCopy(rec), onSee(), clipboard, link() -> the page's address without a fragment, now()}
     function create(env) {
-        var doc = env.doc, dialogs = env.dialogs, calls = api(env.fetch).call, recs = Object.create(null), tokens = [], maker = '', token = 0, loaded = false;
+        var doc = env.doc, dialogs = env.dialogs, calls = api(env).call, pending = false, recs = Object.create(null), tokens = [], maker = '', token = 0, loaded = false;
         function h(tag, cls, kids, attrs) {
             var n = doc.createElement(tag), k;
             if (cls) n.className = cls;
@@ -111,20 +120,30 @@
             });
         }
 
+        // a map that is waiting already, with these very bytes
+        function waitingTwin(bytes) {
+            return visible().filter(function (r) {
+                if (r.state !== 'waiting' || !r.bytes || r.bytes.length !== bytes.length) return false;
+                for (var i = 0; i < bytes.length; i++) if (r.bytes[i] !== bytes[i]) return false;
+                return true;
+            })[0];
+        }
+
         // ---- Submit for approval
         function open() {
+            if (pending) return say('Still sending', 'A map is still being sent. Please wait for the answer, then look at My submissions.');
             var cur = env.current();
             if (cur.error) return say('The map cannot be sent', cur.error);
             var kind = cur.file.kind, report = cur.report, bytes = cur.bytes, works = !!report.works, sending = false, door = 'checking', ctl, shown = false;
             var reasons = (report.findings || []).filter(function (f) { return f.severity === 'fatal' || f.severity === 'warning'; });                    // (what stops a map: the checker's own sentences)
-            var big = bytes.length > CAP[kind], name = Store.clean(cur.name), editing = !maker;
+            var twin = waitingTwin(bytes), big = bytes.length > CAP[kind], name = Store.clean(cur.name), editing = !maker;
             var nameIn = h('input', '', [], { type: 'text', id: 'sub-name', maxlength: 60, autocomplete: 'off', spellcheck: 'false' }), nameBox = h('div', '', [], { 'aria-live': 'polite' });
             var noteIn = h('textarea', '', [], { id: 'sub-note', maxlength: 280, rows: 3, placeholder: 'For example: what is special about this map' }), noteBox = h('div', '');
             var makerIn = h('input', '', [], { type: 'text', id: 'sub-maker', maxlength: 24, autocomplete: 'off' }), makerBox = h('div', 'subwho'), problems = h('div', '', [], { 'aria-live': 'polite' });
             var errBox = h('div', '', [], { 'aria-live': 'polite', id: 'sub-err' }), details = h('div', ''), doorBox = h('div', '', [], { 'aria-live': 'polite' });
             nameIn.value = name.slice(0, 60); makerIn.value = maker;
 
-            function values() { return { name: Store.clean(nameIn.value), maker: Store.clean(makerIn.value), note: noteIn.value.replace(/\r\n?/g, '\n').replace(/^\s+|\s+$/g, '') }; }
+            function values() { return { name: Store.clean(nameIn.value), maker: Store.clean(makerIn.value), note: noteIn.value.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '') }; }
             function bad() {
                 var v = values();
                 return nameProblem(v.name) || (chars(v.maker) < 1 ? 'Please type the name that players will see as the maker.' : textProblem(v.maker, 24, 'player name')) || textProblem(v.note, 280, 'note');
@@ -140,8 +159,9 @@
                 else makerBox.appendChild(h('span', '', ['Maker shown to players ', h('b', '', maker), ' ', button('link', 'Change my player name', function () { editing = true; paint(); makerIn.focus(); })]));
                 doorBox.textContent = '';
                 if (door === 'off') doorBox.appendChild(note('warn', 'i', OFF));
+                else if (twin) doorBox.appendChild(note('warn', 'i', ['This very map is already waiting for approval (sent ' + when(twin.sent_at || 0, env.now()) + ' as \u201c' + twin.name + '\u201d). Look at My submissions instead of sending it again. To send a changed map, change it first.', h('div', '', button('btn sm', 'See my submissions', function () { ctl.close(); env.onSee(); }))]));
                 else if (big) doorBox.appendChild(note('bad', '!', 'This map file is too big to send (at most ' + Math.round(CAP[kind] / 1024) + ' KB).'));
-                var ready = works && !big && door !== 'off' && door !== 'checking' && !bad() && !sending;
+                var ready = works && !twin && !big && door !== 'off' && door !== 'checking' && !bad() && !sending;
                 if (ctl) { ctl.setDisabled('send', !ready); ctl.setDisabled('cancel', false); }
                 problems.textContent = '';
                 var line = nm ? '' : bad();
@@ -172,7 +192,7 @@
                 var tags = h('span', 'tags'), pic = env.thumb(cur.file);
                 env.tags(tags, kind);
                 body.appendChild(h('p', 'lead', 'Send your map to the owner of the game. If the owner approves it, it joins the map list for everyone.'));
-                body.appendChild(h('div', 'srccard', [pic ? h('span', 'cthumb', pic) : '', h('div', 'st', [h('div', 'sh', [tags]), h('div', 'sl', cur.file.rows + ' x ' + cur.file.columns + (env.sent.status() === 'ready' ? ' · a copy stays in this browser' : ''))])]));
+                body.appendChild(h('div', 'srccard', [pic ? h('span', 'cthumb', pic) : '', h('div', 'st', [h('div', 'sh', [tags]), h('div', 'sl', cur.file.rows + ' x ' + cur.file.columns + (env.sent.status() === 'ready' ? ' · saved in this browser' : ''))])]));
                 body.appendChild(h('div', 'cname', [h('label', '', 'Name of the map', { 'for': 'sub-name' }), nameIn, nameBox]));
                 body.appendChild(verdict());
                 body.appendChild(doorBox);
@@ -189,7 +209,8 @@
             function fail(res) {
                 var box = errBox, list = res.json && Array.isArray(res.json.findings) ? res.json.findings : [];
                 box.textContent = '';
-                box.appendChild(note('bad', '!', [why(res)].concat(list.length ? [h('ul', 'subfin', list.map(function (f) { return h('li', '', Checks.capital(String(f.message))); }))] : [])));
+                var lost = res.net || res.timeout || (res.status === 201 && !(res.json && res.json.submission));
+                box.appendChild(note('bad', '!', [why(res) + (lost ? MAYBE + (tokens.length ? '' : LOST) : '')].concat(lost ? [h('div', '', button('btn sm', 'See my submissions', function () { ctl.close(); env.onSee(); }))] : []).concat(list.length ? [h('ul', 'subfin', list.map(function (f) { return h('li', '', Checks.capital(String(f.message))); }))] : [])));
                 if (isOff(res)) door = 'off';
                 paint();
             }
@@ -197,18 +218,18 @@
             function send() {
                 var v = values(), q = '?kind=' + kind + '&name=' + enc(v.name) + '&maker=' + enc(v.maker) + (v.note ? '&note=' + enc(v.note) : '');
                 if (sending || bad() || !works) return;
-                sending = true; paint();
+                sending = pending = true; paint();
                 errBox.textContent = '';
                 calls('POST', '/submissions' + q, tokens[0], bytes, function (res) {
-                    sending = false;
+                    sending = pending = false;
                     var j = res.json || {};
-                    if (res.status !== 201 || !j.submission || typeof j.submission.id !== 'string') return fail(res);
+                    if (res.status !== 201 || !j.submission || typeof j.submission.id !== 'string') return attempt.closed ? undefined : fail(res);
                     var t = TOKEN.test(j.token) ? j.token : tokens[0], rec = { tok: t, bytes: bytes, rows: cur.file.rows, columns: cur.file.columns }, k;
                     for (k in j.submission) rec[k] = j.submission[k];
                     if (t) tokens = [t].concat(tokens.filter(function (x) { return x !== t; }));
                     maker = v.maker; keepMeta();
                     recs[rec.id] = rec; keep(rec);
-                    sentDialog(rec, !!j.name_taken);
+                    if (!attempt.closed || !dialogs.isOpen()) sentDialog(rec, !!j.name_taken);          // (a late answer after the dialog was closed is kept, and shown unless another dialog is open)
                 });
             }
 
@@ -292,7 +313,7 @@
                 title: 'Withdraw this map?', cls: 'narrow',
                 build: function (body) { body.appendChild(h('p', 'fatalmsg', '“' + rec.name + '” will not go to the owner. You keep your own copy, and you can send it again later.')); },
                 buttons: [{ id: 'keep', text: 'Keep it waiting', ghost: true }, { id: 'go', text: 'Withdraw it', onClick: function () {
-                    calls('POST', '/submissions/' + rec.id + '/withdraw', rec.tok, null, function (res) {
+                    calls('POST', '/submissions/' + enc(rec.id) + '/withdraw', rec.tok, null, function (res) {
                         if (res.status === 200) { delete recs[rec.id]; env.sent.remove(rec.id, function () {}); return paint(); }
                         say(res.status === 409 ? 'The owner has already answered' : 'The map could not be withdrawn', res.status === 409 ? 'Open My submissions again to see the answer.' : why(res));
                     });

@@ -812,7 +812,7 @@ class ThePage(unittest.TestCase):
         done = run_check(script=SUBMIT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn(" 0 failed", done.stdout)
-        for part in ("A the words", "B the sent store", "C the dialog", "D what is sent, and the answers", "F My submissions"):
+        for part in ("A the words", "B the sent store", "C the dialog", "D what is sent, and the answers", "F My submissions", "G a send that may have arrived, twins, a 404"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_submit_check_can_fail_on_the_broken_copies_of_the_words_the_call_the_dialog_the_list_and_the_tabs(self):
@@ -842,10 +842,10 @@ class ThePage(unittest.TestCase):
     def test_a_player_never_publishes_and_nothing_can_be_replaced_by_the_script_that_sends_maps(self):
         submit = read("web", "front", "mapmaker_submit.js")
         # the calls: a map goes to the owner's queue (POST /submissions), the list is read (GET), a waiting map is withdrawn: nothing else, nothing of the owner's side or the lobby's lists
-        self.assertEqual(sorted(re.findall(r"calls\('(GET|POST|PUT|DELETE|PATCH)', ([^,]+),", submit)), [("GET", "'/submissions'"), ("GET", "'/submissions'"), ("POST", "'/submissions' + q"), ("POST", "'/submissions/' + rec.id + '/withdraw'")])
+        self.assertEqual(sorted(re.findall(r"calls\('(GET|POST|PUT|DELETE|PATCH)', ([^,]+),", submit)), [("GET", "'/submissions'"), ("GET", "'/submissions'"), ("POST", "'/submissions' + q"), ("POST", "'/submissions/' + enc(rec.id) + '/withdraw'")])
         self.assertNotRegex(submit, r"/admin|/maps|PUT|DELETE|PATCH|innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|localStorage|sessionStorage", "the owner's page and the lists are not touched, and text is text")
         self.assertIn("function enc(t) { return encodeURIComponent(t); }", submit, "a space is %20 and a plus stays a plus")
-        self.assertIn("var ready = works && !big && door !== 'off' && door !== 'checking' && !bad() && !sending;", submit, "the button works only for a map that the checker says works, when the door is on")
+        self.assertIn("var ready = works && !twin && !big && door !== 'off' && door !== 'checking' && !bad() && !sending;", submit, "the button works only for a map that the checker says works, when the door is on")
         self.assertIn("if (sending || bad() || !works) return;", submit)
         # the bytes that are sent are the bytes the dialog judged: the dialog takes both from one answer of the page
         self.assertIn("return { name: map.name, bytes: made.bytes, file: file, report: r.json };", self.app)

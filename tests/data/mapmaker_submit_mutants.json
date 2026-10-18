@@ -67,8 +67,8 @@
   {
    "id": "a_404_is_not_an_absent_door",
    "file": "web/front/mapmaker_submit.js",
-   "old": "res.status === 404 || (res.status === 503",
-   "new": "(res.status === 503",
+   "old": "(res.status === 404 && !(res.json && res.json.error))",
+   "new": "false",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
@@ -130,15 +130,15 @@
   {
    "id": "a_map_that_fails_can_be_sent",
    "file": "web/front/mapmaker_submit.js",
-   "old": "var ready = works && !big",
-   "new": "var ready = !big",
+   "old": "var ready = works && !twin && !big",
+   "new": "var ready = !twin && !big",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
    "id": "a_file_too_big_can_be_sent",
    "file": "web/front/mapmaker_submit.js",
-   "old": "works && !big && door",
-   "new": "works && door",
+   "old": "works && !twin && !big && door",
+   "new": "works && !twin && door",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
@@ -256,8 +256,8 @@
   {
    "id": "withdraw_asks_the_wrong_address",
    "file": "web/front/mapmaker_submit.js",
-   "old": "'/submissions/' + rec.id + '/withdraw'",
-   "new": "'/submissions/' + rec.id",
+   "old": "'/submissions/' + enc(rec.id) + '/withdraw'",
+   "new": "'/submissions/' + enc(rec.id)",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
@@ -357,6 +357,104 @@
    "old": "if (env.sent) env.sent.preload();",
    "new": "",
    "test": "node tests/scripts/web_mapmaker_mine_check.js"
+  },
+  {
+   "id": "a_404_with_a_code_is_a_door_that_is_off",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "|| (res.status === 404 && !(res.json && res.json.error)); }",
+   "new": "|| res.status === 404; }",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_request_never_times_out",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "env.later(function () { if (!over) { fin({ timeout: true });",
+   "new": "env.later(function () { if (false) { fin({ timeout: true });",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_timed_out_request_is_not_aborted",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "guard(function () { stop.abort(); });",
+   "new": "0;",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_timeout_has_no_sentence",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "if (res.timeout) return 'The server did not answer in time.';",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_lost_answer_is_not_said_to_be_possible",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "(lost ? MAYBE + (tokens.length ? '' : LOST) : '')",
+   "new": "''",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "the_lost_token_is_always_said",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "(tokens.length ? '' : LOST)",
+   "new": "LOST",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_lost_answer_has_no_way_to_my_submissions",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "].concat(lost ? [h('div', '', button('btn sm', 'See my submissions'",
+   "new": "].concat(false ? [h('div', '', button('btn sm', 'See my submissions'",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_twin_can_be_sent_again",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "var ready = works && !twin &&",
+   "new": "var ready = works &&",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_second_send_can_start_while_one_is_on_its_way",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "sending = pending = true;",
+   "new": "sending = true;",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_send_that_ended_still_blocks",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "sending = pending = false;",
+   "new": "sending = false;",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_late_answer_is_not_shown",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "if (!attempt.closed || !dialogs.isOpen()) sentDialog",
+   "new": "if (!attempt.closed) sentDialog",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "a_twin_is_judged_by_its_length_only",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "                for (var i = 0; i < bytes.length; i++) if (r.bytes[i] !== bytes[i]) return false;\n",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "the_note_keeps_many_line_ends",
+   "file": "web/front/mapmaker_submit.js",
+   "old": ".replace(/\\n{3,}/g, '\\n\\n')",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "an_odd_201_is_called_nothing_sent",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "(res.status === 201 && !(res.json && res.json.submission))",
+   "new": "false",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
   }
  ]
 }

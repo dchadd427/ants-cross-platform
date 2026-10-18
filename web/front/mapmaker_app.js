@@ -328,7 +328,7 @@
     // Send a map for approval (mapmaker_submit.js): the bytes that are sent are the bytes the checker has just judged (the open file, as Download hands it over); the player's own copy is never touched
     function submitEnv(sentStore) {
         return {
-            doc: doc, dialogs: dialogs, store: store, sent: sentStore, fetch: win.fetch ? win.fetch.bind(win) : null, tags: fillTags, thumb: function (file) { return MapView.miniBase(file, 56, 56, canvasOf); },
+            doc: doc, dialogs: dialogs, store: store, sent: sentStore, fetch: win.fetch ? win.fetch.bind(win) : null, Abort: win.AbortController || null, tags: fillTags, thumb: function (file) { return MapView.miniBase(file, 56, 56, canvasOf); },
             later: function (f, ms) { win.setTimeout(f, ms); }, now: function () { return Date.now(); }, clipboard: win.navigator && win.navigator.clipboard,
             parse: function (bytes) { try { var f = win.MapFile.parse(bytes); return f.ok ? f : null; } catch (e) { return null; } },
             link: function () { return win.location.origin + win.location.pathname; },
