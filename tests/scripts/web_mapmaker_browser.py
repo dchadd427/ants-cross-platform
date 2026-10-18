@@ -35,8 +35,12 @@ Parts:
              database (its bytes are the file's) and the saved map takes the screen, so the next Save offers the next number; a name that exists is never written over; drawing is kept in the
              browser's one slot (a reload asks to pick it up or throw it away, and the browser's own question is not asked while the work is safe); the question before a map is left offers Save as a
              new map first; a browser that keeps nothing says so, offers Download, and the browser's question comes back; the sheets are inside the screen and every control is 44 pixels;
-  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700, 700 x 600, 767 x 700, 1024 x 768, 1280 x 800): the top bar's six buttons are all inside the window, none covers the name box,
-             and the page does not scroll sideways;
+  * mine     1280 x 800 and a touch screen (390 x 844, 844 x 390), My maps: the list of the maps saved in this browser (the empty state, a saved Classic and a saved Extended map with their kind tags and the
+             line of the check, the filters and their counts); Open puts a saved map on the screen as the working map (a new history, the question about unsaved drawing first, the next Save
+             offers the next number), Copy... starts from the saved map, Delete... asks first (Keep it changes nothing, Delete it removes that one saved map from the browser's database);
+             Escape and Back to the map return; a browser that keeps nothing says so; the list is inside the screen, every control is 44 pixels, and nothing scrolls sideways;
+  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700, 700 x 600, 767 x 700, 1024 x 768, 1100 x 700, 1150 x 768, 1280 x 800): the top bar's seven buttons are all inside the window, none
+             covers the name box, and the page does not scroll sideways;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
   * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
@@ -63,7 +67,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "narrow", "panel", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "narrow", "panel", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -953,7 +957,7 @@ def run_part(part, tab, args, check, tiny, junk):
         summary = lambda: page.ev("JSON.stringify([document.getElementById('s-desc').textContent, document.getElementById('s-time').textContent, document.getElementById('s-ant').textContent])")
         check(json.loads(summary()) == ["“Tiny map with no PowerUps”", "6 minutes · 3 eggs for each team", "No default ant type"], "the side panel says what the map has: %s" % summary())
         top = page.ev("JSON.stringify([].map.call(document.querySelectorAll('.edmenu.dsk .btn'), function (b) { return b.textContent; }))")
-        check(json.loads(top) == ["New", "Open", "Copy...", "Save as new...", "Properties", "Download"], "the top bar: New, Open, Copy..., Save as new..., Properties, Download (%s)" % top)
+        check(json.loads(top) == ["New", "Open", "My maps", "Copy...", "Save as new...", "Properties", "Download"], "the top bar: New, Open, My maps, Copy..., Save as new..., Properties, Download (%s)" % top)
         check(page.ev("document.querySelector('#sumbox [data-act=props]').offsetParent !== null && document.querySelector('#sumbox [data-act=props]').textContent === 'Edit'"), "the summary has its Edit link")
         page.shot(args.shots, "mapmaker-props-entry")
         # the mouse: the button opens the dialog
@@ -1084,9 +1088,9 @@ def run_part(part, tab, args, check, tiny, junk):
         tap_selector("[data-act=menu]")
         check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
         names = page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')")
-        check(names == "New|Open|Copy...|Save as new...|Properties...|Download", "the menu: %s" % names)
+        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Download", "the menu: %s" % names)
         page.shot(args.shots, "mapmaker-props-phone-menu")
-        page.ev("document.querySelectorAll('.menulist .btn')[4].click()")
+        page.ev("document.querySelectorAll('.menulist .btn')[5].click()")
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Properties... opens the sheet")
         check(page.ev("document.querySelector('.dlg').getBoundingClientRect().bottom") <= 844.5 and page.ev("[].every.call(document.querySelectorAll('.dlg-foot button'), function (b) { return b.getBoundingClientRect().bottom <= innerHeight + 1 && b.getBoundingClientRect().height >= 43.5; })"), "Cancel and Apply are in view, 44 pixels high")
         small = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('.dlg button, .dlg input, .dlg textarea'), function (b) { var r = b.getBoundingClientRect(); return b.offsetParent !== null && !b.disabled && (r.width < 43.5 || r.height < 43.5); }).map(function (b) { return b.id || b.textContent; }))")
@@ -1389,8 +1393,134 @@ def run_part(part, tab, args, check, tiny, junk):
         tab.call("Page.reload", {})
         wait_for(lambda: bool(DIALOGS), 6)
         check(DIALOGS == ["beforeunload"], "the browser's own question comes back when nothing can be kept (%s)" % DIALOGS)
+    elif part == "mine":
+        title = lambda page: page.ev("(document.querySelector('.dlg h2') || {}).textContent || ''")
+        dialog = lambda page, text: wait_for(lambda: title(page) == text)
+        rows = lambda page: json.loads(page.ev("JSON.stringify([].map.call(document.querySelectorAll('#mine-list .mrow .t1'), function (n) { return n.firstChild.textContent.trim(); }))"))
+        shown = lambda page: page.ev("!document.getElementById('mine').hidden")
+        click_text = lambda page, scope, text: page.ev("[].filter.call(document.querySelectorAll(%s), function (b) { return b.textContent === %s; })[0].click()" % (json.dumps(scope), json.dumps(text)))
+        row_button = lambda page, name, text: page.ev("(function () { var r = [].filter.call(document.querySelectorAll('#mine-list .mrow'), function (n) { return n.querySelector('.t1').firstChild.textContent.trim() === %s; })[0]; "
+                                                      "[].filter.call(r.querySelectorAll('button'), function (b) { return b.textContent === %s; })[0].click(); })()" % (json.dumps(name), json.dumps(text)))
+        draft = lambda page, key: idb_read(page, "drafts", key)
+        print("[web map maker] My maps, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts")
+        page.press_act("mine")
+        check(wait_for(lambda: shown(page)) and not page.ev("document.getElementById('top').offsetParent"), "My maps opens over the editor (the top bar is put away)")
+        for _ in range(40):                                              # (the drafts of the other parts of this check: deleted here, through the list's own Delete)
+            wait_for(lambda: page.ev("document.getElementById('mine-note').textContent.indexOf('Looking') < 0"), 4)
+            if not rows(page):
+                break
+            row_button(page, rows(page)[0], "Delete\u2026")
+            dialog(page, "Delete this saved map?")
+            click_text(page, ".dlg-foot button", "Delete it")
+            wait_for(lambda: not page.ev("!!document.querySelector('.dlg')"), 4)
+        check(rows(page) == [] and "no saved maps yet" in page.ev("document.getElementById('mine-note').textContent") and page.ev("document.getElementById('mine-chips').offsetParent") is None, "nothing saved: a plain sentence and no filters (%s)" % page.ev("document.getElementById('mine-note').textContent"))
+        page.shot(args.shots, "mapmaker-mine-empty")
+        page.key("Escape")
+        check(wait_for(lambda: not shown(page)) and page.ev("!!document.getElementById('top').offsetParent"), "Escape goes back to the map")
+        check(page.ev("document.activeElement.getAttribute('data-act')") == "mine", "and the focus is on My maps again")
+        page.choose_file(tiny)
+        check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
+        size = "%s x %s" % (page.state()["rows"], page.state()["columns"])
+        page.press_act("save")
+        dialog(page, "Save as a new map")
+        page.type_into(".cname input", "Mine A")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: page.state()["name"] == "Mine A"), "Mine A is saved")
+        page.press_act("convert")
+        check(dialog(page, "Start an Extended map from this one?"), "an Extended map from it")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: page.state()["tags"] == ["Extended map", "New version only"]), "the Extended map is on the screen")
+        page.press_act("save")
+        dialog(page, "Save as a new map")
+        page.type_into(".cname input", "Mine B")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: page.state()["name"] == "Mine B"), "Mine B is saved")
+        page.press_act("mine")
+        check(wait_for(lambda: len(rows(page)) == 2 and page.ev("[].every.call(document.querySelectorAll('#mine-list .t3'), function (n) { return n.textContent.length > 0; })")), "the list has the two saved maps")
+        check(rows(page) == ["Mine B", "Mine A"], "newest first: %s" % rows(page))
+        check(page.ev("[].map.call(document.querySelectorAll('#mine-chips button'), function (b) { return b.textContent; }).join('|')") == "All (2)|Classic (1)|Extended (1)", "the filters count the kinds")
+        check(page.ev("document.querySelector('#mine-list .mrow .t3').textContent") == "Works in the new version" and page.ev("!!document.querySelector('#mine-list .mrow .badge-nv')") and page.ev("document.querySelector('#mine-list .mrow .t2').textContent").startswith(size), "a saved Extended map has its badge, its size and its verdict")
+        check(page.ev("[].every.call(document.querySelectorAll('#mine-list .mthumb'), function (n) { var c = n.querySelector('canvas'); return !!c && c.width > 0; })"), "each has the small picture of its map")
+        page.shot(args.shots, "mapmaker-mine-list")
+        click_text(page, "#mine-chips button", "Extended (1)")
+        check(rows(page) == ["Mine B"] and page.ev("document.querySelector('#mine-chips [aria-pressed=true]').textContent") == "Extended (1)", "the Extended filter shows the Extended map only")
+        click_text(page, "#mine-chips button", "All (2)")
+        page.key("e")
+        check(page.ev("document.querySelector('[data-tool=ground]').getAttribute('aria-pressed')") == "true", "a tool's letter does nothing while the list is open")
+        # Open: the saved map becomes the working map, with its own history; drawing first asks
+        row_button(page, "Mine A", "Open")
+        check(wait_for(lambda: page.state()["name"] == "Mine A" and not shown(page)) and page.button_off("#undo-btn"), "Open puts the saved map on the screen as the working map (no history), and the list closes")
+        page.press_act("save")
+        dialog(page, "Save as a new map")
+        check(page.ev("document.querySelector('.cname input').value") == "Mine A 2", "saving it again is always a new map: the next number is offered (and the name Mine A is taken)")
+        page.type_into(".cname input", "mine a")
+        check(page.button_off(".dlg-foot .btn:last-child") and "Use \u201cmine a 2\u201d" in page.ev("document.querySelector('.cname .note .btn').textContent"), "its own name is refused, with the next free name")
+        page.key("Escape")
+        page.tool("ground")
+        page.tile(487)
+        a, b = page.cell_point(3, 3), page.cell_point(3, 12)
+        page.drag(a[0], a[1], b[0], b[1], steps=8)
+        check(not page.button_off("#undo-btn"), "a line is drawn on it")
+        page.press_act("mine")
+        wait_for(lambda: len(rows(page)) == 2)
+        row_button(page, "Mine B", "Open")
+        check(dialog(page, "Leave this map?") and shown(page), "Open asks about the unsaved drawing first, and the list stays behind the question")
+        click_text(page, ".dlg-foot button", "Stay here")
+        check(shown(page) and page.state()["name"] == "Mine A" and not page.button_off("#undo-btn"), "Stay here changes nothing")
+        # Delete: the question first
+        row_button(page, "Mine B", "Delete\u2026")
+        check(dialog(page, "Delete this saved map?") and page.ev("document.activeElement.textContent") == "Keep it", "Delete... asks first, and the focus is on Keep it")
+        check("\u201cMine B\u201d will be removed from this browser" in page.ev("document.querySelector('.dlg').textContent"), "it names the map")
+        page.shot(args.shots, "mapmaker-mine-delete")
+        click_text(page, ".dlg-foot button", "Keep it")
+        check(rows(page) == ["Mine B", "Mine A"] and draft(page, "mine b"), "Keep it deletes nothing")
+        row_button(page, "Mine B", "Delete\u2026")
+        dialog(page, "Delete this saved map?")
+        click_text(page, ".dlg-foot button", "Delete it")
+        check(wait_for(lambda: rows(page) == ["Mine A"]) and not draft(page, "mine b") and draft(page, "mine a"), "Delete it removes that one saved map from the browser's database, and no other")
+        check(page.ev("document.getElementById('mine-status').textContent").endswith("was deleted.") and page.ev("document.querySelector('#mine-chips button').textContent") == "All (1)", "the deletion is said and the counts follow")
+        # Copy... starts from the saved map, not from the map on the screen
+        row_button(page, "Mine A", "Copy\u2026")
+        check(dialog(page, "Copy this map") and page.ev("document.querySelector('.srccard .sn').textContent") == "Mine A" and page.ev("document.querySelector('.cname input').value") == "Mine A 2", "Copy... starts from the saved map, under the next free name")
+        click_text(page, ".dlg-foot button", "Make new map")
+        check(dialog(page, "Leave this map?"), "the question about the unsaved drawing comes before the copy takes the screen")
+        click_text(page, ".dlg-foot button", "Leave without saving")
+        check(wait_for(lambda: page.state()["name"] == "Mine A 2" and not shown(page)), "the copy is on the screen and the list is closed")
+        # a touch screen
+        for w, h, name in ((390, 844, "phone-390x844"), (844, 390, "phone-844x390"), (340, 700, "phone-340x700")):
+            print("[web map maker] My maps, a touch screen, %d x %d" % (w, h))
+            tab.emulate(w, h, 2, mobile=True)
+            page = Page(tab, args.web)
+            check(page.open() and page.ready(), "the page starts")
+            page.press_act("menu")
+            check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
+            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Download", "the Menu has My maps after Open")
+            click_text(page, ".menulist .btn", "My maps")
+            check(wait_for(lambda: shown(page) and len(rows(page)) >= 1 and page.ev("[].every.call(document.querySelectorAll('#mine-list .t3'), function (n) { return n.textContent.length > 0; })")), "My maps opens")
+            bad = json.loads(page.ev("""JSON.stringify([].filter.call(document.querySelectorAll('#mine button'), function (b) { return b.offsetParent !== null; }).map(function (b) {
+                var r = b.getBoundingClientRect(); return {t: b.textContent, w: Math.round(r.width), h: Math.round(r.height), out: r.left < -0.5 || r.right > innerWidth + 0.5}; }).filter(function (x) { return x.h < 44 || x.w < 44 || x.out; }))"""))
+            check(bad == [] and page.ev("document.documentElement.scrollWidth <= innerWidth"), "every control is 44 pixels and inside the screen, and nothing scrolls sideways (%s)" % bad)
+            page.shot(args.shots, "mapmaker-mine-%s" % name)
+            row_button(page, rows(page)[0], "Delete\u2026")
+            check(dialog(page, "Delete this saved map?") and page.ev("(function () { var d = document.querySelector('.dlg').getBoundingClientRect(); return d.left >= -0.5 && d.right <= innerWidth + 0.5 && d.bottom <= innerHeight + 0.5; })()"), "the question is a sheet inside the screen")
+            page.shot(args.shots, "mapmaker-mine-delete-%s" % name)
+            click_text(page, ".dlg-foot button", "Keep it")
+        # a browser that keeps nothing
+        tab.emulate(1280, 800, 1)
+        blocked = "Object.defineProperty(window, 'indexedDB', { get: function () { throw new Error('blocked'); } });"
+        page = Page(tab, args.web)
+        check(page.open(blocked) and page.ready(), "the page starts with the browser's database blocked")
+        page.press_act("mine")
+        check(wait_for(lambda: "keeps no saved maps" in page.ev("document.getElementById('mine-note').textContent")) and "Download" in page.ev("document.getElementById('mine-note').textContent"), "a browser that keeps nothing says so plainly")
+        page.shot(args.shots, "mapmaker-mine-unavailable")
+        click_text(page, "#mine-new", "New map")
+        check(dialog(page, "New map"), "and the page still works: New map opens")
+        page.key("Escape")
     elif part == "narrow":
-        for w, h in ((620, 700), (700, 600), (767, 700), (1024, 768), (1280, 800)):
+        for w, h in ((620, 700), (700, 600), (767, 700), (1024, 768), (1100, 700), (1150, 768), (1280, 800)):
             print("[web map maker] the top bar, %d x %d" % (w, h))
             tab.emulate(w, h, 1)
             page = Page(tab, args.web)
@@ -1405,7 +1535,7 @@ def run_part(part, tab, args, check, tiny, junk):
                 });
                 return {out: out, hit: hit, scrollX: document.documentElement.scrollWidth > innerWidth, n: [].filter.call(document.querySelectorAll('.edmenu .btn'), function (b) { return b.offsetParent !== null; }).length};
             })())"""))
-            check(found["n"] == 6 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: six buttons, none cut, none over the name box, no sideways scroll (%s)" % (w, h, found))
+            check(found["n"] == 7 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: seven buttons, none cut, none over the name box, no sideways scroll (%s)" % (w, h, found))
             page.shot(args.shots, "mapmaker-topbar-%dx%d" % (w, h))
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):

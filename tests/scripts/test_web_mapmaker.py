@@ -35,12 +35,13 @@ DIALOG_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_dialog_check
 PROPS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_props_check.js")
 CONVERT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_convert_check.js")
 SAVE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_save_check.js")
+MINE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_mine_check.js")
 EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
 BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check.js")
 OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
 
 
 def read(*parts):
@@ -711,7 +712,7 @@ class ThePage(unittest.TestCase):
         self.assertEqual(sorted(asked - set(ids)), [], "the crop screen asks for ids that the page does not have")
         self.assertRegex(self.page, r'<div class="screen crop" id="crop" hidden>')
         self.assertEqual(re.findall(r'<i class="h ([a-z]+)" data-h="([a-z]+)"></i>', self.page), [(h, h) for h in ("nw", "n", "ne", "w", "e", "sw", "s", "se")], "the eight handles of the frame")
-        self.assertIn("busy: function () { return dialogs.isOpen() || !$('crop').hidden; }", self.app, "the tools' keys do nothing while the crop screen is open")
+        self.assertIn("busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }", self.app, "the tools' keys do nothing while the crop screen or My maps is open")
         self.assertIn("MapCrop.open({ doc: doc, $: $, host: $('crop'), editor: $('editor'), limits: limits.classic,", self.app, "the limits of the frame are the core's")
         self.assertIn("{ text: 'Copy...', onClick: ACTIONS.copy }", self.app, "the phone's Menu has Copy...")
         self.assertIn("copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert')", self.app)
@@ -720,7 +721,7 @@ class ThePage(unittest.TestCase):
 
     def test_every_button_that_the_page_has_is_wired_and_starts_off_until_the_core_is_there(self):
         acts = re.findall(r'data-act="([a-z-]+)"', self.page)
-        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "new", "open", "props", "save", "zoom-in", "zoom-out"])
+        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "mine", "new", "open", "props", "save", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
         self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,", self.app)
@@ -749,16 +750,16 @@ class ThePage(unittest.TestCase):
         self.assertIn("createLvlCore", self.app.split("function boot()")[1], "a module that did not load at all is told too")
 
     def test_a_map_is_read_as_a_place_that_takes_both_kinds_and_the_limits_come_from_the_core(self):
-        self.assertEqual(self.app.count("core.checkMap("), 3)
-        self.assertEqual(len(re.findall(r"core\.(?:checkMap|readReport)\([^)]*'extended'\)", self.app)), 4)
+        self.assertEqual(self.app.count("core.checkMap("), 5, "the open map's three, and the two of My maps (a saved map is read as a place that takes both kinds too)")
+        self.assertEqual(len(re.findall(r"core\.(?:checkMap|readReport)\([^)]*'extended'\)", self.app)), 6)
         self.assertIn("core.limits('new_map')", self.app)
         self.assertIn("core.limits('extended')", self.app)
         self.assertNotRegex(self.code["mapmaker_dialog.js"], r"\b(10000|10,000|262144|262,144|130|512)\b", "a limit is the core's, never a number of the dialog")
         self.assertNotRegex(self.code["mapmaker_sizes.js"], r"\b(10000|10,000|262144|262,144|130|512)\b")
 
     def test_save_as_a_new_map_is_in_the_top_bar_and_the_menu_and_the_page_keeps_work_in_the_browser_only_when_it_may(self):
-        self.assertEqual(re.findall(r'data-act="(new|open|copy|save|props|download)" disabled>([^<]+)</button>', self.page)[:6],
-                         [("new", "New"), ("open", "Open"), ("copy", "Copy..."), ("save", "Save as new..."), ("props", "Properties"), ("download", "Download")], "the top bar is in the order of the picture, with Properties as before")
+        self.assertEqual(re.findall(r'data-act="(new|open|mine|copy|save|props|download)" disabled>([^<]+)</button>', self.page)[:7],
+                         [("new", "New"), ("open", "Open"), ("mine", "My maps"), ("copy", "Copy..."), ("save", "Save as new..."), ("props", "Properties"), ("download", "Download")], "the top bar is in the order of the picture, with Properties as before and My maps after Open")
         app = self.app
         self.assertIn("{ text: 'Save as new...', onClick: ACTIONS.save }", app, "the phone's Menu has it")
         self.assertIn("save: convertWith('save')", app)
@@ -773,6 +774,62 @@ class ThePage(unittest.TestCase):
         self.assertIn("taken: function (name) { return MapStore.key(name) === MapStore.key(map.name) || store.has(name); },", app, "the open map, a draft and a library map are taken")
         self.assertIn("canvas.setFile(file);\n        tools.setMap(file);\n        keepSoon();", app, "a map that takes the screen leaves the slot as it should")
         self.assertIn("buttons: (can ? [{ id: 'save', text: 'Save as a new map first'", app, "the question before a map is left offers Save as a new map when the browser keeps maps")
+
+    def test_my_maps_pass_their_checks_on_a_fake_dom(self):
+        done = run_check(script=MINE_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the store: list and delete", "B the list, the filters and the empty states", "C Open, Copy and a map that cannot be read", "D Delete and its question", "E Escape, closing and waiting", "F Copy of a saved map"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_my_maps_check_can_fail_on_the_broken_copies_of_the_list(self):
+        """tests/data/mapmaker_mine_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy of the list, the store's list and delete, or Copy's saved map must fail the check"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_mine_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 30)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    if "web_mapmaker_mine_check" not in m["test"]:
+                        continue                # (a page-level mutant is judged by the pinned source of this file: tools/mutate.py runs it)
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, MINE_CHECK)
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_my_maps_is_in_the_page_and_the_menu_and_only_the_players_own_saved_copy_can_be_deleted(self):
+        ids = re.findall(r'\bid="([^"]+)"', self.page)
+        asked = set(re.findall(r"\$\('([^']+)'\)", self.code["mapmaker_mine.js"]))
+        self.assertTrue({"mine", "mine-list", "mine-status", "mine-note", "mine-chips", "mine-new", "mine-back", "mine-title"} <= asked, sorted(asked))
+        self.assertEqual(sorted(asked - set(ids)), [], "the list asks for ids that the page does not have")
+        self.assertRegex(self.page, r'<section class="mine" id="mine" hidden aria-labelledby="mine-title">')
+        app = self.app
+        self.assertIn("{ text: 'My maps', onClick: ACTIONS.mine }", app, "the phone's Menu has My maps")
+        self.assertIn("mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }", app)
+        self.assertIn("MapDialog.create(doc, $('dialogs'), [$('top'), $('body'), $('mine')])", app, "the list is inert behind a dialog")
+        self.assertIn("tools.setMap(file);\n        keepSoon();\n        if (mine) mine.hide();", app, "a map that takes the screen closes the list (and starts its own history)")
+        self.assertIn("onOpen: function (rec) { if (!dialogs.isOpen()) leave(function () { var error = setMap(new win.Uint8Array(rec.bytes), rec.name);", app, "a saved map opens as the working map after the question about unsaved drawing, from a copy of its bytes")
+        self.assertIn("converterOf().copy(read(rec))", app)
+        self.assertIn("onBack: function () { if (dialogs.isOpen()) return; mine.hide(); var b = doc.querySelector('[data-act=\"mine\"]'); (b && b.offsetParent ? b : doc.querySelector('[data-act=\"menu\"]')).focus(); },", app, "Back and Escape put the focus on My maps again (the Menu on a phone)")
+        # a saved map is never written over and never published: the only calls on the drafts are add (Save), list and remove (this list); the page has no submit
+        self.assertEqual(len(re.findall(r"store\.remove\(", self.code["mapmaker_mine.js"])), 1)
+        self.assertNotIn("store.remove(", app)
+        self.assertEqual(len(re.findall(r"\.delete\(", self.code["mapmaker_store.js"])), 2, "two deletes: the slot of unsaved work, and a saved map of the drafts store")
+        self.assertIn("run('drafts', 'readwrite', function (s) { return s.delete(k); }", self.code["mapmaker_store.js"], "a saved map is deleted from the drafts store only")
+        for name in ("mapmaker_mine.js", "mapmaker_app.js", "mapmaker_store.js"):
+            self.assertNotRegex(self.code[name], r"\.put\(\{ key|\.clear\(\)|deleteDatabase|deleteObjectStore", name)
+        self.assertNotRegex(self.page + self.code["mapmaker_mine.js"], r"(?i)submit|publish|approval", "players never publish from the editor (a later step)")
+        self.assertIn("'Delete this saved map?'", self.code["mapmaker_mine.js"], "a delete is asked about first")
 
     def test_nothing_can_write_over_a_file_and_no_sentence_is_put_in_as_markup(self):
         for name, text in self.code.items():
@@ -844,6 +901,10 @@ class ThePage(unittest.TestCase):
         self.assertEqual(sorted(used - defined), [])
         self.assertRegex(self.css, r"\.cv canvas\.map \{[^}]*touch-action: none;")
         self.assertRegex(self.css, r"\.screen\.ed \{ height: 100vh; height: 100dvh;")
+        self.assertIn("@media (min-width: 601px) and (max-width: 1150px) and (min-height: 451px) {", self.css, "the top bar wraps in a narrow window (seven buttons since My maps)")
+        for part in (".mine { position: absolute; inset: 0; z-index: 8; overflow: auto; }", ".mine { position: static; overflow: visible; flex: 1 0 auto; }", ".mlist { grid-template-columns: 1fr 1fr; gap: 10px; }"):
+            self.assertIn(part, self.css, "My maps: the screen over the editor, flowing on a phone, two columns sideways")
+        self.assertRegex(self.css, r"\.mchip \{ min-height: 44px;", "the filters are 44 pixels")
 
     def test_a_dialog_holds_the_focus_closes_on_escape_and_leaves_the_page_behind_it_inert(self):
         dialog = self.code["mapmaker_dialog.js"]

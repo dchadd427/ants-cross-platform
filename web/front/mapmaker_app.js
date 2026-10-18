@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var doc = document, win = window;
-    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCrop', 'MapConvert', 'MapStore', 'MapCanvas', 'MapTools'];
+    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCrop', 'MapConvert', 'MapStore', 'MapMine', 'MapCanvas', 'MapTools'];
     var GROUND = 485, EGGS = 6, MINUTES = 10;          // a new map: plain grass (docs/MAP_FORMAT.md, "The blank map"), 6 eggs a team, 10 minutes
     var NEW_NAME = 'My map';
 
@@ -11,7 +11,7 @@
     function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
     var opening = 0;
-    var core = null, limits = null, dialogs = null, canvas = null, tools = null, store = null, map = null, checkTimer = 0, summed = null;
+    var core = null, limits = null, mine = null, dialogs = null, canvas = null, tools = null, store = null, map = null, checkTimer = 0, summed = null;
     var keepTimer = 0, keepReady = false, keepPending = false, keepEdits = 0;      // the unsaved work kept in the browser: a rest of 1.5 s after a change, and not before the work of the last visit was dealt with
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
@@ -134,6 +134,7 @@
         canvas.setFile(file);
         tools.setMap(file);
         keepSoon();
+        if (mine) mine.hide();                               // (the list of My maps gives way to the map that took the screen)
         return '';
     }
 
@@ -281,9 +282,26 @@
     function converterOf() { return converter || (converter = MapConvert.create(convertEnv())); }
     function convertWith(name) { return function () { if (!dialogs.isOpen() && !canvas.isStroking()) converterOf()[name](); }; }
 
+    // My maps (mapmaker_mine.js): a saved map opens as the working map (after the question about unsaved drawing; its history starts again), or is copied; nothing here writes over a saved map
+    function mineEnv() {
+        function read(rec) { var bytes = new win.Uint8Array(rec.bytes), r = core.checkMap(bytes, 'extended'), file = win.MapFile.parse(bytes); return { name: rec.name, bytes: bytes, file: file, kind: file.kind, report: r.status === 0 ? r.json : null }; }
+        return {
+            doc: doc, $: $, store: store, dialogs: dialogs, tags: fillTags, later: function (f, ms) { win.setTimeout(f, ms); },
+            parse: function (bytes) { try { var f = win.MapFile.parse(bytes); return f.ok ? f : null; } catch (e) { return null; } },
+            check: function (bytes) { var r = core.checkMap(bytes, 'extended'); return r.status === 0 ? MapChecks.summary(r.json) : null; },
+            thumb: function (file) { return MapView.miniBase(file, 84, 84, canvasOf); },
+            onOpen: function (rec) { if (!dialogs.isOpen()) leave(function () { var error = setMap(new win.Uint8Array(rec.bytes), rec.name); if (error) dialogs.message('This saved map cannot be opened', error); }); },
+            onCopy: function (rec) { if (!dialogs.isOpen()) converterOf().copy(read(rec)); },
+            onNew: function () { if (!dialogs.isOpen()) ACTIONS['new'](); },
+            onBack: function () { if (dialogs.isOpen()) return; mine.hide(); var b = doc.querySelector('[data-act="mine"]'); (b && b.offsetParent ? b : doc.querySelector('[data-act="menu"]')).focus(); },
+            onShow: function () { $('top').hidden = $('body').hidden = true; doc.title = 'My maps - Map maker - Ants (1998)'; },
+            onHide: function () { $('top').hidden = $('body').hidden = false; doc.title = map.name + ' - Map maker - Ants (1998)'; }
+        };
+    }
+
     var ACTIONS = {
-        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }]); }
+        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }]); }
     };
 
     function start(module) {
@@ -292,7 +310,8 @@
         var small = core.limits('new_map'), big = core.limits('extended');
         if (small.status !== 0 || big.status !== 0) return fatal('The map code did not answer. Reload the page.');
         limits = MapSizes.limitsOf(small.json, big.json);
-        dialogs = MapDialog.create(doc, $('dialogs'), [$('top'), $('body')]);
+        dialogs = MapDialog.create(doc, $('dialogs'), [$('top'), $('body'), $('mine')]);
+        mine = MapMine.create(mineEnv());
         canvas = MapCanvas.create({
             doc: doc, win: win, canvas: $('map'), minimap: $('minimap'), mini: $('mini'), miniCap: $('mini-cap'), where: $('where'),
             zoomIn: doc.querySelector('[data-act="zoom-in"]'), zoomOut: doc.querySelector('[data-act="zoom-out"]'),
@@ -305,7 +324,7 @@
                 tile: $('tile-btn'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn'),
                 stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more')
             },
-            file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
+            file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
         // The page asks before it is closed only when the work is not safe in the browser (the browser keeps nothing, or the last change has not been written yet)
         win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending)) { e.preventDefault(); e.returnValue = ''; } });

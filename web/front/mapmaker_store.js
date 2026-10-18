@@ -94,6 +94,16 @@
                     done(error);
                 });
             },
+            // The saved maps for My maps, newest first ('failed' when the browser will not say)
+            list: function (done) {
+                run('drafts', 'readonly', function (s) { return s.getAll(); }, function (error, result) {
+                    done(error ? 'failed' : '', (result || []).sort(function (a, b) { return (b.saved || 0) - (a.saved || 0); }));
+                });
+            },
+            // Deletes one saved map from the drafts store (the player's own copy; nothing else is ever deleted), by the key the record itself has: its name is free again
+            remove: function (k, done) {
+                run('drafts', 'readwrite', function (s) { return s.delete(k); }, function (error) { if (!error) delete drafts[k]; done(error ? 'failed' : ''); });
+            },
             // The one slot of unsaved work: not a map (never listed, never a name), replaced as the person draws
             keepWork: function (name, kind, bytes, done) { run('work', 'readwrite', function (s) { return s.put({ name: clean(name), kind: kind, bytes: bytes, saved: Date.now() }, 'current'); }, done || function () {}); },
             clearWork: function (done) { run('work', 'readwrite', function (s) { return s.delete('current'); }, done || function () {}); },
