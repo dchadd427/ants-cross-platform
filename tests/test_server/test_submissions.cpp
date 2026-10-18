@@ -710,7 +710,7 @@ int main() {
         ASSERT_TRUE(cut);
     } TEST_END();
 
-    TEST_CASE("SUB7.2 At open, a file that no row owns (a crash between the rename and the commit) is deleted and counted; a file that a row owns, a temporary file and a name the server does not make are left alone") {
+    TEST_CASE("SUB7.2 At open, a file that no row owns (a crash between the rename and the commit) is MOVED to submissions/orphans/ (never deleted) and counted; a file that a row owns, a temporary file and a name the server does not make are left alone") {
         Sub rig;
         const SubmitOutcome a = rig.send("Owned Map");
         ASSERT_TRUE(a.ok);
@@ -726,8 +726,37 @@ int main() {
         const std::vector<std::string> left = rig.files();
         ASSERT_EQ(left.size(), size_t{2});
         ASSERT_TRUE(fs::exists(dir / (a.submission.id + ".lvl")) && fs::exists(dir / stranger) && !fs::exists(dir / orphan));
+        ASSERT_TRUE(fs::exists(fs::path(rig.config.dir) / "orphans" / orphan));                       // (moved, not deleted)
         const std::vector<std::string> notices = again.take_notices();
-        ASSERT_TRUE(notices.size() == 1 && notices[0].find("1 file") != std::string::npos);
+        ASSERT_TRUE(notices.size() == 1 && notices[0].find("1 file") != std::string::npos && notices[0].find("orphans") != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("SUB7.3 A database that was reset or replaced does not take the approved maps' files with it: they wait in submissions/orphans/ (and the server starts); what waits there over 30 days goes") {
+        Sub rig([](SubmissionConfig& c) { c.per_address_per_day = 100; c.per_day_total = 1000; c.max_waiting = 100; });
+        std::vector<std::string> ids;
+        for (int i = 0; i < 3; ++i) {
+            const SubmitOutcome o = rig.send("Kept Map " + std::to_string(i + 1));
+            ASSERT_TRUE(o.ok && rig.approve(o.submission.id));
+            ids.push_back(o.submission.id);
+        }
+        Submission s;
+        Failure why;
+        ASSERT_TRUE(rig.store->take_down(ids[2], "42", "Dave", rig.now, s, why));
+        const fs::path root = fs::path(rig.config.dir);
+        db::Database fresh;                                                                           // (the database file is gone: a new one, with no rows)
+        open_server_db(fresh, "");
+        SubmissionStore again(fresh, rig.config, [](const std::string& key) { return library().library_has_name(key); });
+        std::string reason;
+        ASSERT_TRUE(again.open(rig.now, reason));
+        ASSERT_EQ(rig.files().size(), size_t{0});
+        for (const std::string& id : ids) ASSERT_TRUE(fs::exists(root / "orphans" / (id + ".lvl")) && fs::file_size(root / "orphans" / (id + ".lvl")) > 100);          // (all three, the taken-down one too)
+        const std::vector<std::string> notices = again.take_notices();
+        ASSERT_TRUE(notices.size() == 1 && notices[0].find("3 file") != std::string::npos);
+        // nothing is lost at once; after 30 days the quarantine is emptied at the next start
+        fs::last_write_time(root / "orphans" / (ids[0] + ".lvl"), fs::file_time_type::clock::now() - std::chrono::hours(24 * 31));
+        SubmissionStore later(fresh, rig.config, [](const std::string& key) { return library().library_has_name(key); });
+        ASSERT_TRUE(later.open(rig.now, reason));
+        ASSERT_TRUE(!fs::exists(root / "orphans" / (ids[0] + ".lvl")) && fs::exists(root / "orphans" / (ids[1] + ".lvl")) && fs::exists(root / "orphans" / (ids[2] + ".lvl")));
     } TEST_END();
 
     TEST_CASE("SUB8.1 A database that fails is a clean 503 with nothing half done: no file stays, the server does not stop") {

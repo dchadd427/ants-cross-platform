@@ -185,7 +185,7 @@ class TheText(unittest.TestCase):
         api = block_of(CONF, "location ^~ /admin/api/ ")
         self.assertIn("proxy_pass http://$ants_submit$uri$is_args$args;", api)                            # (the normalized path goes on, never the raw request line)
         self.assertRegex(api, r'if \(\$uri !~ "\^/admin/api/\[A-Za-z0-9/_-\]\{0,120\}\\z"\) \{ return 404; \}')
-        for header in ("location = /admin/login ", "location = /admin/callback "):
+        for header in ("location = /admin/login ", "location = /admin/callback ", "location = /admin/logout "):
             self.assertIn("error_page 502 504 = @login_off;", block_of(CONF, header))                   # (a person's browser gets words, not JSON)
         self.assertRegex(open(os.path.join(REPO, "Dockerfile.login"), encoding="utf-8").read(), r"(?m)^FROM python:3\.\d+\.\d+-alpine3\.\d+$")          # (a fixed tag, like the other images)
         # the size of a map is decided from the raw query exactly as the game server reads it, and the small limit is the Classic one
@@ -491,7 +491,7 @@ class TheDoorIsDown(unittest.TestCase):
                                          ("POST", "/admin/logout", b"")):
                 status, headers, text = rig.ask(method, target, {"Content-Type": "application/octet-stream"} if body else None, body)
                 self.assertEqual(status, 503, target)
-                if target.startswith("/admin/login"):                                   # (a person's browser gets words)
+                if target.startswith(("/admin/login", "/admin/logout")):                                   # (a person's browser gets words)
                     self.assertTrue("text/html" in names(headers, "content-type")[0] and b"Signing in is not available" in text and b"submissions_off" not in text)
                 else:
                     self.assertEqual(json.loads(text)["error"], "submissions_off")

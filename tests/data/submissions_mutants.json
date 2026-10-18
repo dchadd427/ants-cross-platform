@@ -612,12 +612,6 @@
    "new": "        m.thumb ="
   },
   {
-   "id": "orphans_stay",
-   "file": "src/ants_server/submissions.cpp",
-   "old": "            remove_quietly(it->path().string());\n            ++removed;",
-   "new": "            ++removed;"
-  },
-  {
    "id": "owned_files_are_orphans",
    "file": "src/ants_server/submissions.cpp",
    "old": "AND file_kept = 1\", {name}) == 0) {",
@@ -628,6 +622,24 @@
    "file": "src/ants_server/map_names.cpp",
    "old": "stem[3] >= '0' && stem[3] <= '9';",
    "new": "stem[3] >= '1' && stem[3] <= '9';"
+  },
+  {
+   "id": "orphans_stay",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "            if (!made) fs::rename(it->path(), quarantine / name, renamed);\n",
+   "new": "            renamed = std::error_code();\n"
+  },
+  {
+   "id": "orphans_deleted_not_moved",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "            if (!made) fs::rename(it->path(), quarantine / name, renamed);\n",
+   "new": "            if (!made) remove_quietly(it->path().string());\n"
+  },
+  {
+   "id": "quarantine_kept_for_ever",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "if (!stamp && written < old) remove_quietly",
+   "new": "if (false && !stamp && written < old) remove_quietly"
   }
  ]
 }

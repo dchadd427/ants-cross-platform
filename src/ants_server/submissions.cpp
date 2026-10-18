@@ -1,6 +1,7 @@
 #include "ants_server/submissions.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -30,6 +31,7 @@ constexpr size_t kClassicUploadBytes = 512u * 1024u;               // LevelLimit
 constexpr size_t kExtendedUploadBytes = 4u * 1024u * 1024u;        // LevelLimits::for_extended_maps()
 constexpr size_t kListLimit = 500;                                 // rows of one list of the owner page
 constexpr size_t kMaxFindingsKept = 20;
+constexpr int kOrphanDays = 30;                     // files in submissions/orphans/ are deleted after this many days
 constexpr size_t kMaxFindingChars = 240;           // one finding's message at most (a map full of hills would name every one of them: the answer stays small)
 constexpr int64_t kDay = 86400;
 
@@ -668,19 +670,34 @@ bool SubmissionStore::take_approved_changed() {
 }
 
 void SubmissionStore::remove_orphans() {
+    // A file that no row owns is MOVED to submissions/orphans/, never deleted: a database that was reset, restored from an older copy or replaced would otherwise take the files of every approved
+    // map with it. The quarantine is not part of any budget; what stays there for more than kOrphanDays is deleted (so a mistake can be put right for a month).
     std::error_code ec;
-    size_t removed = 0;
-    for (fs::directory_iterator it(fs::path(config_.dir) / "files", ec), end; !ec && it != end; it.increment(ec)) {
+    const fs::path files = fs::path(config_.dir) / "files";
+    const fs::path quarantine = fs::path(config_.dir) / "orphans";
+    size_t moved = 0;
+    for (fs::directory_iterator it(files, ec), end; !ec && it != end; it.increment(ec)) {
         const std::string name = it->path().filename().string();
         bool ours = name.size() == 36 && name.compare(32, 4, ".lvl") == 0;                 // (only a name this server makes: 32 hex digits and .lvl)
         for (size_t i = 0; ours && i < 32; ++i) ours = (name[i] >= '0' && name[i] <= '9') || (name[i] >= 'a' && name[i] <= 'f');
         if (!ours) continue;
-        if (scalar("SELECT COUNT(*) FROM map_submissions WHERE file = ? AND file_kept = 1", {name}) == 0) {          // (a read that fails is -1: nothing is deleted on a doubt)
-            remove_quietly(it->path().string());
-            ++removed;
+        if (scalar("SELECT COUNT(*) FROM map_submissions WHERE file = ? AND file_kept = 1", {name}) == 0) {          // (a read that fails is -1: nothing is moved on a doubt)
+            std::error_code made, renamed;
+            fs::create_directories(quarantine, made);
+            if (!made) fs::rename(it->path(), quarantine / name, renamed);
+            if (!made && !renamed) ++moved;
         }
     }
-    if (removed > 0) notices_.push_back("submissions: " + std::to_string(removed) + " file(s) that no submission owned were deleted at the start");
+    if (moved > 0) {
+        notices_.push_back("submissions: " + std::to_string(moved) + " file(s) that no submission owned were moved to " + quarantine.string() +
+                           " at the start (a database that was reset or restored from an older copy? move them back to " + files.string() + " if their rows are in the database again)");
+    }
+    const auto old = fs::file_time_type::clock::now() - std::chrono::hours(24 * kOrphanDays);
+    for (fs::directory_iterator it(quarantine, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code stamp;
+        const auto written = fs::last_write_time(it->path(), stamp);
+        if (!stamp && written < old) remove_quietly(it->path().string());
+    }
 }
 
 void SubmissionStore::maintenance(int64_t now) {
