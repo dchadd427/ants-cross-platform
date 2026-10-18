@@ -25,6 +25,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 import urllib.parse
 import base64
 from http.server import BaseHTTPRequestHandler
@@ -173,6 +174,24 @@ def verify(value, secret=SECRET):
         return None
     payload = signed[3:]
     return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8"))
+
+
+class TheStart(unittest.TestCase):
+    def test_the_server_binds_and_serves_without_asking_for_the_name_of_the_machine(self):
+        # (HTTPServer.server_bind() calls socket.getfqdn(): on the macOS runner of the CI the helper sat in that reverse lookup for minutes and never listened)
+        module = load_module()
+
+        def refuse(*args, **kwargs):
+            raise AssertionError("a name lookup: %r" % (args,))
+        with mock.patch.object(socket, "getfqdn", refuse), mock.patch.object(socket, "gethostbyaddr", refuse), mock.patch.object(socket, "gethostbyname", refuse):
+            server = module.QuickServer(("127.0.0.1", 0), module.make_off_handler())
+        self.addCleanup(server.server_close)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        status, headers, body, cookies = ask(server.server_address[1], "GET", "/admin/login")
+        self.assertEqual(status, 503)
+        self.assertTrue(server.daemon_threads)
 
 
 class TheSettings(unittest.TestCase):

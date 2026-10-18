@@ -30,7 +30,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import socketserver
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 STATE_COOKIE = "ants_admin_state"
 SESSION_COOKIE = "ants_admin"
@@ -38,6 +39,18 @@ STATE_SECONDS = 600
 TIMEOUT_SECONDS = 10
 MAX_NAME_CHARS = 64
 USER_AGENT = "AntsAdminLogin/1 (+https://github.com/dchadd427/ants-cross-platform)"
+
+
+class QuickServer(socketserver.ThreadingMixIn, HTTPServer):
+    """HTTPServer.server_bind() calls socket.getfqdn(host), a reverse lookup of the address it just bound, for a name that nobody reads. On a machine whose resolver is slow
+    or unreachable (a macOS runner of the CI: the helper sat in that call for minutes and never listened) the server then does not start. This binds the same way and sets
+    the two attributes by hand, so a start touches no resolver."""
+    daemon_threads = True
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = self.server_address[0]
+        self.server_port = self.server_address[1]
 
 
 class ConfigError(Exception):
@@ -232,8 +245,7 @@ def main():
         except ValueError:
             port = 4040
         cfg = None
-    server = ThreadingHTTPServer(("0.0.0.0", port), handler)
-    server.daemon_threads = True
+    server = QuickServer(("0.0.0.0", port), handler)
     if cfg is not None:
         sys.stderr.write("admin login helper on port %d, redirect address %s\n" % (port, cfg["redirect_uri"]))
     try:
