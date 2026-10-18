@@ -669,34 +669,59 @@ bool SubmissionStore::take_approved_changed() {
     return changed;
 }
 
+namespace {
+// A name this server makes for a file: 32 lowercase hex digits and ".lvl"
+bool made_file_name(const std::string& name) {
+    if (name.size() != 36 || name.compare(32, 4, ".lvl") != 0) return false;
+    for (size_t i = 0; i < 32; ++i) {
+        if (!((name[i] >= '0' && name[i] <= '9') || (name[i] >= 'a' && name[i] <= 'f'))) return false;
+    }
+    return true;
+}
+// ... or such a name that the quarantine gave a number when its place was taken: "<32 hex>.lvl.<1 to 3 digits>"
+bool quarantined_name(const std::string& name) {
+    if (made_file_name(name)) return true;
+    if (name.size() < 38 || name.size() > 40 || !made_file_name(name.substr(0, 36)) || name[36] != '.') return false;
+    for (size_t i = 37; i < name.size(); ++i) {
+        if (name[i] < '0' || name[i] > '9') return false;
+    }
+    return true;
+}
+}  // namespace
+
 void SubmissionStore::remove_orphans() {
     // A file that no row owns is MOVED to submissions/orphans/, never deleted: a database that was reset, restored from an older copy or replaced would otherwise take the files of every approved
-    // map with it. The quarantine is not part of any budget; what stays there for more than kOrphanDays is deleted (so a mistake can be put right for a month).
+    // map with it. The quarantine is in no budget. A moved file gets the time of the move as its time (a rename keeps the old one), and what has been there for kOrphanDays is deleted, but only a
+    // regular file with a name this server makes (a link, a folder or a stranger's file is never touched), and only what was there before this start: the purge comes first.
     std::error_code ec;
     const fs::path files = fs::path(config_.dir) / "files";
     const fs::path quarantine = fs::path(config_.dir) / "orphans";
+    const auto old = fs::file_time_type::clock::now() - std::chrono::hours(24 * kOrphanDays);
+    for (fs::directory_iterator it(quarantine, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code stamp;
+        if (!quarantined_name(it->path().filename().string()) || !fs::is_regular_file(fs::symlink_status(it->path(), stamp)) || stamp) continue;
+        const auto written = fs::last_write_time(it->path(), stamp);
+        if (!stamp && written < old) remove_quietly(it->path().string());
+    }
     size_t moved = 0;
     for (fs::directory_iterator it(files, ec), end; !ec && it != end; it.increment(ec)) {
         const std::string name = it->path().filename().string();
-        bool ours = name.size() == 36 && name.compare(32, 4, ".lvl") == 0;                 // (only a name this server makes: 32 hex digits and .lvl)
-        for (size_t i = 0; ours && i < 32; ++i) ours = (name[i] >= '0' && name[i] <= '9') || (name[i] >= 'a' && name[i] <= 'f');
-        if (!ours) continue;
-        if (scalar("SELECT COUNT(*) FROM map_submissions WHERE file = ? AND file_kept = 1", {name}) == 0) {          // (a read that fails is -1: nothing is moved on a doubt)
-            std::error_code made, renamed;
-            fs::create_directories(quarantine, made);
-            if (!made) fs::rename(it->path(), quarantine / name, renamed);
-            if (!made && !renamed) ++moved;
-        }
+        if (!made_file_name(name)) continue;                                              // (only a name this server makes)
+        if (scalar("SELECT COUNT(*) FROM map_submissions WHERE file = ? AND file_kept = 1", {name}) != 0) continue;          // (a read that fails is -1: nothing is moved on a doubt)
+        std::error_code made, renamed, probe;
+        fs::create_directories(quarantine, made);
+        if (made) continue;
+        fs::path target = quarantine / name;
+        for (int n = 1; n < 1000 && fs::symlink_status(target, probe).type() != fs::file_type::not_found; ++n) target = quarantine / (name + "." + std::to_string(n));          // (a second file of the same name never replaces the first)
+        if (fs::symlink_status(target, probe).type() != fs::file_type::not_found) continue;
+        fs::rename(it->path(), target, renamed);
+        if (renamed) continue;
+        fs::last_write_time(target, fs::file_time_type::clock::now(), probe);
+        ++moved;
     }
     if (moved > 0) {
         notices_.push_back("submissions: " + std::to_string(moved) + " file(s) that no submission owned were moved to " + quarantine.string() +
                            " at the start (a database that was reset or restored from an older copy? move them back to " + files.string() + " if their rows are in the database again)");
-    }
-    const auto old = fs::file_time_type::clock::now() - std::chrono::hours(24 * kOrphanDays);
-    for (fs::directory_iterator it(quarantine, ec), end; !ec && it != end; it.increment(ec)) {
-        std::error_code stamp;
-        const auto written = fs::last_write_time(it->path(), stamp);
-        if (!stamp && written < old) remove_quietly(it->path().string());
     }
 }
 
