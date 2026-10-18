@@ -68,6 +68,7 @@ cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web"/favicon.* "${DIST_DIR}/"
 mkdir -p "${DIST_DIR}/front"
 cp -f "${SCRIPT_DIR}/web/front"/* "${DIST_DIR}/front/"            # the front page's pictures and font, served at /front/
+python3 "${SCRIPT_DIR}/tools/map_atlas.py" "${DIST_DIR}/mapmaker_atlas"        # the map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"); the few big toys that it fetches one by one come from /asset_catalog/sprites/, which the image has and this folder does not
 
 echo "========================================================"
 echo " Build Succeeded! Web distribution ready in: ${DIST_DIR}"

@@ -34,7 +34,7 @@
     <aside class="panel tools" aria-label="Tools">
         <h3>Tools</h3>
         <div class="toolbtns" id="toolbtns" role="group" aria-label="Tools">
-            <button class="tool" type="button" data-tool="ground" aria-pressed="true" aria-keyshortcuts="G" disabled><i style="background:#5f8f3c"></i>Ground</button>
+            <button class="tool" type="button" data-tool="ground" aria-pressed="true" aria-keyshortcuts="G" disabled><i style="background:#8d7871"></i>Ground</button>
             <button class="tool" type="button" data-tool="objects" aria-pressed="false" aria-keyshortcuts="O" disabled><i style="background:#2f6b2a"></i>Objects</button>
             <button class="tool" type="button" data-tool="bigger" aria-pressed="false" aria-keyshortcuts="K" aria-label="Bigger objects" title="Bigger objects: grass, leaves, rocks and toys that cover several cells" disabled><i style="background:#8bb83f"></i>Bigger</button>
             <button class="tool" type="button" data-tool="hills" aria-pressed="false" aria-keyshortcuts="H" disabled><i style="background:#c0392b"></i>Hills</button>
@@ -56,6 +56,7 @@
         <div class="cv" id="cv">
             <canvas class="map" id="map" tabindex="0" role="application" aria-label="The map. Arrow keys move the marked square, Enter paints it with the chosen tool, plus and minus zoom, zero shows the whole map." aria-describedby="where"></canvas>
             <div class="minimap" id="minimap" hidden><canvas id="mini" role="img" aria-label="Small map of the whole map. Click or tap it to look somewhere else."></canvas><div id="mini-cap"></div></div>
+            <div class="atlasnote" id="atlas-note" role="status" hidden></div>
             <div class="bootmsg" id="boot" role="status">Loading the map code&hellip;</div>
         </div>
         <div class="cvbar">

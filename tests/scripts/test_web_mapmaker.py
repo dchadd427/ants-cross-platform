@@ -25,6 +25,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -42,7 +43,11 @@ CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js"
 NODE = shutil.which("node")
 BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check.js")
 OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
+GROUND_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ground_check.js")
+SPRITES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_sprites_check.js")
 SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
+ALL_SCRIPTS = SCRIPTS + LAZY_SCRIPTS
 
 
 def read(*parts):
@@ -50,8 +55,8 @@ def read(*parts):
         return f.read()
 
 
-def run_check(front=None, script=CHECK):
-    args = [NODE, script] + (["--front", front] if front else [])
+def run_check(front=None, script=CHECK, extra=()):
+    args = [NODE, script] + (["--front", front] if front else []) + list(extra)
     return subprocess.run(args, capture_output=True, text=True, timeout=300)
 
 
@@ -195,7 +200,7 @@ class TheCodeRuns(unittest.TestCase):
                 text = read("web", "front", "mapmaker_dialog.js")
                 self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in mapmaker_dialog.js exactly once: %s" % old)
                 with tempfile.TemporaryDirectory() as tmp:
-                    for script in SCRIPTS:
+                    for script in ALL_SCRIPTS:
                         shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
                     with open(os.path.join(tmp, "mapmaker_dialog.js"), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
@@ -246,7 +251,7 @@ class TheCodeRuns(unittest.TestCase):
                 text = read("web", "front", name)
                 self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
                 with tempfile.TemporaryDirectory() as tmp:
-                    for script in SCRIPTS:
+                    for script in ALL_SCRIPTS:
                         shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
                     with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
@@ -323,7 +328,7 @@ class TheCodeRuns(unittest.TestCase):
                 text = read("web", "front", name)
                 self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
                 with tempfile.TemporaryDirectory() as tmp:
-                    for script in SCRIPTS:
+                    for script in ALL_SCRIPTS:
                         shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
                     with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
@@ -345,7 +350,7 @@ class TheCodeRuns(unittest.TestCase):
         ids = [m["id"] for m in spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         with tempfile.TemporaryDirectory() as tmp:
-            for name in SCRIPTS:
+            for name in ALL_SCRIPTS:
                 shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
             for m in spec["mutants"]:
                 with self.subTest(m["id"]):
@@ -433,13 +438,13 @@ class TheCodeRuns(unittest.TestCase):
             "an editor that is not given the guard": ("mapmaker_tools.js", "erase: Blocks.eraseAt, guard: Blocks.blockedText }", "erase: Blocks.eraseAt }"),
             "a hill refused in the words of nobody": ("mapmaker_blocks.js", "TEAMS[teamOfHill(Edit.tile(file, 2, idx))].label + '\\u2019s hill is here. Move it first, or take it away with Erase.'", "'Something is here.'"),
             "a bigger object put by the path of a food pile": ("mapmaker_tools.js", "else if (state.tool === 'bigger') change = Objects.place(file, bigNow(), cell.row, cell.column);", "void 0;"),
-            "a sheet of bigger objects that marks no one as chosen": ("mapmaker_tools.js", "chosen = tool === 'bigger' ? state.big : tileOf();", "chosen = tileOf();"),
+            "a sheet of bigger objects that marks no one as chosen": ("mapmaker_tools.js", "chosen = tool === 'bigger' ? state.big : tileOf(), have = itemOf(tool, chosen);\n                        grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', tool === 'bigger' ? label : label + ' to paint with');", "chosen = tileOf(), have = itemOf(tool, chosen);\n                        grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', tool === 'bigger' ? label : label + ' to paint with');"),
             "a bigger object picked that is not kept": ("mapmaker_tools.js", "else if (state.tool === 'bigger') state.big = id; else state.objects = id;", "else state.objects = id;"),
             "a bigger object whose box the canvas is not told": ("mapmaker_tools.js", "shape: function () { return editor && state.tool === 'bigger' ? bigNow().box : null; },", "shape: function () { return null; },"),
             "a palette of bigger objects that shows swatches beside the map": ("mapmaker_tools.js", "host.swatches.hidden = tool === 'food' || tool === 'bigger';", "host.swatches.hidden = tool === 'food';"),
             "a button that does not say how many cells": ("mapmaker_tools.js", "plural(item.cells.length, 'cell', 'cells') + ', ' + (b.c1 - b.c0 + 1)", "'' + (b.c1 - b.c0 + 1)"),
             "a chip whose squares are all filled": ("mapmaker_tools.js", "if (item.cells.some(function (rc) { return rc[0] === r && rc[1] === c; })) cell.style.background = item.color;", "cell.style.background = item.color;"),
-            "a chip of a bigger object that is only a color": ("mapmaker_tools.js", "if (tool === 'bigger') footprint(chip, item); else chip.style.background = item.color;", "chip.style.background = item.color;"),
+            "a chip of a bigger object that is only a color": ("mapmaker_tools.js", "if (tool === 'bigger') { if (!picture(chip, true, item.id, 30)) footprint(chip, item); } else {", "if (tool === 'bigger') { chip.style.background = item.color; } else {"),
             "a sheet that does not say the whole name to a screen reader": ("mapmaker_tools.js", "b.setAttribute('aria-label', bigText(item)); } else who.textContent = item.label;", "} else who.textContent = item.label;"),
             "a rock put without its solid bit": ("mapmaker_edit.js", "if (Solid.sets(tileId)) setSolid(idx, true);", "void 0;"),
             "a change whose solid bits are not applied": ("mapmaker_edit.js", "for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);", "void 0;"),
@@ -471,7 +476,7 @@ class TheCodeRuns(unittest.TestCase):
             "a Fill that stays on": ("mapmaker_tools.js", "state.fill = false;                                    // (Fill is for one click: the next press paints again)", "void 0;"),
             "a tile the dictionary cannot hold that is refused in silence": ("mapmaker_tools.js", "if (made.error) { if (env.say) env.say(", "if (made.error) { if (false) env.say("),
             "a palette button that does not open the sheet": ("mapmaker_tools.js", "host.tile.addEventListener('click', openPicker);", "void 0;"),
-            "a sheet whose tile is not chosen": ("mapmaker_tools.js", "b.addEventListener('click', function () { chooseTile(item.id); ctl.close(); });", "b.addEventListener('click', function () { ctl.close(); });"),
+            "a sheet whose tile is not chosen": ("mapmaker_tools.js", "chooseTile(item.id); ctl.close(); });\n                            grid.appendChild(b);", "ctl.close(); });\n                            grid.appendChild(b);"),
             "a stroke that goes on after the mouse button was let go outside": ("mapmaker_canvas.js", "if (e.pointerType === 'mouse' && e.buttons === 0) return endStroke();", "void 0;"),
             "a stroke that goes on after the pointer was lost": ("mapmaker_canvas.js", "canvas.addEventListener('lostpointercapture', function (e) { if (stroke && stroke.id === e.pointerId) endStroke(); });", "void 0;"),
             "a stroke that goes on after the window lost the focus": ("mapmaker_canvas.js", "win.addEventListener('blur', function () { if (stroke) endStroke(); });", "void 0;"),
@@ -487,7 +492,7 @@ class TheCodeRuns(unittest.TestCase):
                 text = read("web", "front", name)
                 self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
                 with tempfile.TemporaryDirectory() as tmp:
-                    for script in SCRIPTS:
+                    for script in ALL_SCRIPTS:
                         shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
                     with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
@@ -535,7 +540,7 @@ class TheCodeRuns(unittest.TestCase):
                 text = read("web", "front", name)
                 self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
                 with tempfile.TemporaryDirectory() as tmp:
-                    for script in SCRIPTS:
+                    for script in ALL_SCRIPTS:
                         shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
                     with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
@@ -585,7 +590,7 @@ class TheCodeRuns(unittest.TestCase):
                 text = read("web", "front", name)
                 self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
                 with tempfile.TemporaryDirectory() as tmp:
-                    for script in SCRIPTS:
+                    for script in ALL_SCRIPTS:
                         shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
                     with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
@@ -637,7 +642,7 @@ class TheCodeRuns(unittest.TestCase):
                 text = read("web", "front", name)
                 self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
                 with tempfile.TemporaryDirectory() as tmp:
-                    for script in SCRIPTS:
+                    for script in ALL_SCRIPTS:
                         shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
                     with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
@@ -791,7 +796,7 @@ class ThePage(unittest.TestCase):
         ids = [m["id"] for m in spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         with tempfile.TemporaryDirectory() as tmp:
-            for name in SCRIPTS:
+            for name in ALL_SCRIPTS:
                 shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
             for m in spec["mutants"]:
                 with self.subTest(m["id"]):
@@ -981,6 +986,89 @@ class ThePage(unittest.TestCase):
         self.assertIn("' cells of ') + Sizes.number(live.max) + ' \u00b7 the file will be ' + live.text", dialog)
 
 
+@unittest.skipUnless(NODE, "node is not installed")
+class TheGroundAndTheSprites(unittest.TestCase):
+    """the five kinds of ground and the game's pictures (docs/MAP_EDITOR.md, "Ground" and "Sprites"): the checks run, broken copies fail them, and the page's side is read from the source"""
+    atlas = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.atlas = cls.tmp.name
+        made = subprocess.run([sys.executable, os.path.join(REPO, "tools", "map_atlas.py"), cls.atlas], capture_output=True, text=True)
+        if made.returncode != 0:
+            raise AssertionError("the atlas could not be made: " + made.stdout + made.stderr)
+        cls.page = read("web", "mapmaker.html")
+        cls.app = read("web", "front", "mapmaker_app.js")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_the_ground_passes_its_checks(self):
+        done = run_check(script=GROUND_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the names and the kinds", "B the facts", "C the library", "D the palette and the colors", "E the sheet of a kind"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_sprites_pass_their_checks_on_the_real_atlas(self):
+        done = run_check(script=SPRITES_CHECK, extra=["--atlas", self.atlas])
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A loading", "B a whole frame", "C pictures and flat colors", "D the layer kept between frames", "E the zoom", "F a toy that is fetched alone", "G the ants and the ghost", "H chips"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_checks_can_fail_on_the_broken_copies_of_the_ground_the_tools_and_the_sprites(self):
+        """tests/data/mapmaker_sprites_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check named for it"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_sprites_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 60)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        checks = {"web_mapmaker_ground_check": GROUND_CHECK, "web_mapmaker_sprites_check": SPRITES_CHECK, "web_mapmaker_edit_check": EDIT_CHECK, "web_mapmaker_check.js": CHECK}
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    if "web_mapmaker_browser" in m["test"]:
+                        continue                # (a mutant that only the real browser can notice: tools/mutate.py runs it with ANTS_WEB_URL set)
+                    script = [v for k, v in checks.items() if k in m["test"]][0]
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, script, ["--atlas", self.atlas] if script == SPRITES_CHECK else [])
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_two_lazy_scripts_are_loaded_by_the_app_and_not_by_the_page(self):
+        tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
+        for name in LAZY_SCRIPTS:
+            self.assertNotIn("front/" + name, tags, name + " loads after the page is up")
+            self.assertIn(name, self.app)
+        self.assertIn("script('mapmaker_ground.js'); script('mapmaker_sprites.js');", self.app)
+        self.assertIn("s.src = 'front/' + name;", self.app)
+        self.assertIn('<div class="atlasnote" id="atlas-note" role="status" hidden></div>', self.page, "the plain line over the map when the atlas does not load")
+        self.assertIn("The game\\u2019s pictures could not be loaded, so the map is drawn in flat colors. Your map is not affected.", self.app)
+        self.assertIn("onFail: function () { canvas.setSprites(null); tools.use(win.MapGround, null); note(flat); }", self.app, "a failed atlas leaves the flat colors")
+        self.assertNotIn("MapGround", self.app.split("var NEEDED = ")[1].split("];")[0], "the page does not need the lazy parts to start")
+
+    def test_the_editor_is_not_changed_by_the_pictures(self):
+        """the bytes of the open file stay the one copy: nothing of the new code writes a byte, and the sprite layer only reads"""
+        sprites, ground = read("web", "front", "mapmaker_sprites.js"), read("web", "front", "mapmaker_ground.js")
+        for name, text in (("mapmaker_sprites.js", sprites), ("mapmaker_ground.js", ground)):
+            self.assertNotRegex(text, r"\.bytes\[[^\]]*\]\s*=[^=]|\.set\(|createObjectURL|indexedDB|localStorage|\.put\(", name + " reads the map and writes nothing")
+        self.assertNotIn("XMLHttpRequest", sprites)
+        self.assertEqual(re.findall(r"farBase \+ ", sprites), ["farBase + "], "the one request besides the atlas: a toy's own sprite file")
+        self.assertIn("'/asset_catalog/sprites/'", sprites)
+        self.assertIn("'mapmaker_atlas/'", sprites)
+
+
 class TheImageCarriesThePage(unittest.TestCase):
     def test_the_dockerfile_the_ci_and_the_local_build_have_it(self):
         self.assertRegex(read("Dockerfile"), r"(?m)^COPY web/mapmaker\.html /usr/share/nginx/html/mapmaker\.html$")
@@ -992,11 +1080,11 @@ class TheImageCarriesThePage(unittest.TestCase):
 
     def test_every_file_of_the_page_is_in_front_and_the_folder_is_copied_whole(self):
         self.assertIn("COPY web/front/ /usr/share/nginx/html/front/", read("Dockerfile"))
-        for name in SCRIPTS + ("mapmaker.css",):
+        for name in ALL_SCRIPTS + ("mapmaker.css",):
             self.assertTrue(os.path.isfile(os.path.join(FRONT, name)), name)
 
     def test_no_file_is_over_the_line_ceiling_of_the_hygiene_check(self):
-        for name in SCRIPTS + ("mapmaker.css",):
+        for name in ALL_SCRIPTS + ("mapmaker.css",):
             self.assertLess(len(read("web", "front", name).splitlines()), 1500, name)
         self.assertLess(len(read("web", "mapmaker.html").splitlines()), 1500)
 

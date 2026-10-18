@@ -1,6 +1,7 @@
-// The colors that stand for the tiles on the map maker's canvas (docs/MAP_EDITOR.md): one color for a kind of ground and a few for the kinds of object, not the game's pictures (the
-// pictures come with a later change). The kinds follow the tile ids of docs/MAP_FORMAT.md and the names of Table 4 of ants.chd: layer 1 ids 431 to 669 are ground (the first letter of a
-// tile's name is its kind: m mud, w water, g grass, d dirt, s sand; the others of the name are the kinds it blends into), layer 2 holds the objects. A plain ES5 script that a page and node can load.
+// The colors that stand for the tiles on the map maker's canvas (docs/MAP_EDITOR.md): one color for a kind of ground and a few for the kinds of object. They are what the canvas shows while the
+// game's pictures are not loaded (the atlas, mapmaker_sprites.js) and, once they are, the average color of each picture for tiles smaller than 10 pixels (setAverages). The kinds follow the tile
+// ids of docs/MAP_FORMAT.md and the names of Table 4 of ants.chd: layer 1 ids 431 to 669 are ground, and the first letter of a tile's name is its kind: g Gravel, d Dirt, s Slate, m and M Mud,
+// w Water (mapmaker_ground.js lists every tile); layer 2 holds the objects. A plain ES5 script that a page and node can load.
 (function (root, factory) {
     'use strict';
     if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -9,14 +10,13 @@
     'use strict';
 
     var EMPTY2 = 0x7FFE;
-    var GROUND = {                 // the kinds of ground: a few shades each, so that a field is not one flat color
-        grass: ['#6a9a44', '#5f8f3c', '#58873a'], dirt: ['#9a8460', '#917c58', '#a08c68'], sand: ['#cdbb8c', '#c6b384', '#d3c294'],
-        mud: ['#7a5a3a', '#725232', '#82623f'], water: ['#2e6fa8', '#2b69a0', '#3276b0']
+    var GROUND = {                 // the five kinds of ground: a few shades each (the average colors of the plain tiles), so that a field is not one flat color
+        gravel: ['#8d7871', '#85706a', '#957f78'], dirt: ['#d6cac1', '#cfc2b8', '#ddd1c9'], slate: ['#9493aa', '#8c8ba2', '#9c9bb2'],
+        mud: ['#4b4b4b', '#444444', '#525252'], water: ['#1d3d71', '#1a386a', '#214378']
     };
-    // layer 1: [first id, last id, kind]
+    // layer 1: [first id, last id, kind] (the kind is the first letter of the game's name: mapmaker_ground.js)
     var GROUND_IDS = [
-        [431, 475, 'mud'], [476, 484, 'water'], [485, 486, 'grass'], [487, 490, 'dirt'], [491, 522, 'grass'], [523, 570, 'dirt'], [571, 579, 'sand'], [580, 595, 'grass'],
-        [596, 611, 'mud'], [612, 659, 'sand'], [660, 669, 'mud']
+        [431, 475, 'mud'], [476, 484, 'water'], [485, 486, 'gravel'], [487, 490, 'dirt'], [491, 522, 'gravel'], [523, 570, 'dirt'], [571, 579, 'slate'], [580, 595, 'gravel'], [596, 611, 'mud'], [612, 659, 'slate'], [660, 669, 'mud']
     ];
     // layer 2: [first id, last id, color]
     var OBJECT_IDS = [
@@ -37,7 +37,7 @@
 
     function build() {
         var i, j, k;
-        for (i = 0; i < 65536; i++) { css1[i] = GROUND.grass[1]; css2[i] = null; }
+        for (i = 0; i < 65536; i++) { css1[i] = GROUND.gravel[1]; css2[i] = null; }
         for (i = 0; i < GROUND_IDS.length; i++) {
             var row = GROUND_IDS[i], shades = GROUND[row[2]];
             for (j = row[0]; j <= row[1]; j++) css1[j] = shades[j % 3];
@@ -46,6 +46,17 @@
         for (k = 0; k < 65536; k++) if (css2[k] === null && k !== EMPTY2) css2[k] = OTHER_OBJECT;
     }
     build();
+
+    // the kind of a ground tile ('gravel', 'dirt', 'slate', 'mud', 'water'), or null for an id that is not ground
+    function kindOf(id) { for (var i = 0; i < GROUND_IDS.length; i++) if (id >= GROUND_IDS[i][0] && id <= GROUND_IDS[i][1]) return GROUND_IDS[i][2]; return null; }
+
+    // The picture's own average colors (the atlas): `ground` is 6 hex digits for each id from 431, `objects` is {id: 0xRRGGBB}; the tables and the packed copies take them
+    function setAverages(ground, objects) {
+        var i, hex = function (n) { return '#' + ('00000' + n.toString(16)).slice(-6); };
+        for (i = 0; i * 6 < ground.length; i++) css1[GROUND_IDS[0][0] + i] = '#' + ground.substr(i * 6, 6);
+        for (var id in objects) if (objects.hasOwnProperty(id)) css2[+id] = hex(objects[id]);
+        packed1 = packed2 = null;
+    }
 
     // the color of a cell (the object when there is one, else the ground) as a CSS color
     function css(t1, t2) { return t2 !== EMPTY2 && css2[t2] ? css2[t2] : css1[t1 & 0xFFFF]; }
@@ -59,5 +70,5 @@
         return { ground: packed1, objects: packed2 };
     }
 
-    return { css: css, packedTables: packedTables, hexToPacked: hexToPacked, TEAMS: TEAMS, FOOD: FOOD, EMPTY2: EMPTY2 };
+    return { css: css, kindOf: kindOf, setAverages: setAverages, packedTables: packedTables, hexToPacked: hexToPacked, TEAMS: TEAMS, FOOD: FOOD, EMPTY2: EMPTY2 };
 });
