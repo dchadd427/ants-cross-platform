@@ -777,8 +777,8 @@
   {
    "id": "crop_is_not_guarded",
    "file": "src/ants_assets/lvl_core.cpp",
-   "old": "return guarded([&] { return crop_impl(",
-   "new": "return ([&] { return crop_impl(",
+   "old": "return guarded([&] { return crop_impl(data, size, row, column, rows, columns, profile); });",
+   "new": "return crop_impl(data, size, row, column, rows, columns, profile);",
    "build": [
     "test_lvl_core"
    ],
@@ -818,7 +818,7 @@
    "id": "crop_c_interface_ignores_the_profile",
    "file": "src/ants_assets/lvl_core_c.cpp",
    "old": "crop(data, size, row, column, rows, columns, profile_of(profile))",
-   "new": "crop(data, size, row, column, rows, columns, Profile::Extended)",
+   "new": "crop(data, size, row, column, rows, columns, profile_of(profile | 2))",
    "build": [
     "test_lvl_core"
    ],

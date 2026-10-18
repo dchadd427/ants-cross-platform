@@ -546,6 +546,7 @@ function main() {
             const tiny = library.find((c) => c.id === 'tiny').bytes;
             check(core.crop(tiny, 3, 4, 20, 18, 'bogus').status === 1 && core.crop(tiny, -1, 4, 20, 18).status === 1 && core.crop(tiny, 3, 4.5, 20, 18).status === 1 && core.crop(tiny, 3, 4, '20', 18).status === 1 &&
                 core.crop(tiny, 3, 4, 20, 4294967296).status === 1 && core.crop(tiny, 3, 4, NaN, 18).status === 1 && core.crop([1, 2], 0, 0, 1, 1).status === 1, 'numbers that are not whole numbers of a dword are refused by the wrapper');
+            check(/whole numbers/.test(core.crop(tiny, -1, 4, 20, 18).error) && /whole numbers/.test(core.crop(tiny, 3, 4, 20.5, 18).error) && /whole numbers/.test(core.crop(tiny, 3, 4, 20, 4294967296).error), 'the wrapper says why a number is refused');
             const none = core.crop(tiny, 3, 4, 0, 18), below = core.crop(tiny, 12, 0, 20, 31), wrap = core.crop(tiny, 4294967295, 0, 2, 1);
             check(none.status === 1 && /at least one row and one column/.test(none.error) && below.status === 1 && /is not inside the map, which has 31 rows and 31 columns/.test(below.error) && wrap.status === 1, 'an empty window and one outside the map are refused with a sentence: ' + below.error);
             const up = core.convertToExtended(tiny).bytes;

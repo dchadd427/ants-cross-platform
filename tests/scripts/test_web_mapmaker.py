@@ -10,6 +10,9 @@
     the web job of the CI runs it from the image;
   - the properties of the map (tests/scripts/web_mapmaker_props_check.js): the words of the dialog, the change that the history takes, the dialog on a small fake of the DOM with a stand-in for the
     core, and broken copies of the scripts that it must refuse; with a built module also the 540 maps and the dialog on the real core (web_mapmaker_core_check.js, case I);
+  - copy, convert and crop (tests/scripts/web_mapmaker_convert_check.js): the arithmetic of the frame (on thousands of random pulls it stays on the map and within the limits), the names of a new map, the
+    Crop to fit screen and the dialogs on a small fake of the DOM with a stand-in for the core, and broken copies of the scripts that it must refuse; with a built module also the real flows
+    (web_mapmaker_core_check.js, case J);
   - the page's side is read from the source: the markup, the scripts in their order, every id that the code asks for, what the buttons do, the refusal of a module of another interface
     version, that nothing in the page can write over a file or put a sentence in as markup, and that the image, the CI's check of the image and the local web build carry the page;
   - the opt-in browser check (tests/scripts/test_web_mapmaker.sh) is there and says what it covers.
@@ -29,12 +32,13 @@ FRONT = os.path.join(REPO, "web", "front")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_check.js")
 DIALOG_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_dialog_check.js")
 PROPS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_props_check.js")
+CONVERT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_convert_check.js")
 EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
 BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check.js")
 OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
 
 
 def read(*parts):
@@ -243,6 +247,81 @@ class TheCodeRuns(unittest.TestCase):
                     with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
                     done = run_check(tmp, PROPS_CHECK)
+                self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
+    def test_copy_convert_and_crop_pass_their_checks_on_a_fake_dom(self):
+        done = run_check(script=CONVERT_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_convert_check_can_fail_on_broken_copies_of_the_scripts(self):
+        crop, convert = "mapmaker_crop.js", "mapmaker_convert.js"
+        mutants = {
+            "a frame that starts at the top left": (crop, "row: Math.floor((rows - b.rows) / 2), column: Math.floor((columns - b.columns) / 2)", "row: 0, column: 0"),
+            "a start frame that is as wide as the limit allows, whatever the cells": (crop, "columns: Math.max(1, Math.min(m.columns, Math.floor(m.cells / m.rows)))", "columns: m.columns"),
+            "a frame that can be moved off the map (rows)": (crop, "row: clamp(f.row + dr, 0, rows - f.rows)", "row: f.row + dr"),
+            "a frame that can be moved off the map (columns)": (crop, "column: clamp(f.column + dc, 0, columns - f.columns)", "column: f.column + dc"),
+            "a pull that is not held to the columns of the limit": (crop, "if (right - left > m.columns) { if (w) left = right - m.columns; else right = left + m.columns; }", "void 0;"),
+            "a pull that is not held to the rows of the limit": (crop, "if (bottom - top > m.rows) { if (n) top = bottom - m.rows; else bottom = top + m.rows; }", "void 0;"),
+            "a pull that is not held to the cells of the limit": (crop, "if ((bottom - top) * (right - left) > m.cells) {", "if (false) {"),
+            "a frame that is shortened at its top for a side pull": (crop, "else top += Math.floor((bottom - top - fit) / 2), bottom = top + fit;", "else bottom = top + fit;"),
+            "a shortening that says nothing": (crop, "note = w || e ? 'rows' : '';", "note = '';"),
+            "a stop that says it shortened the frame": (crop, "note = w || e ? 'rows' : '';", "note = 'rows';"),
+            "a left edge that can pass the right one": (crop, "left = clamp(left + dc, 0, right - 1)", "left = clamp(left + dc, 0, right)"),
+            "a bottom edge that can leave the map": (crop, "bottom = clamp(bottom + dr, top + 1, rows)", "bottom = bottom + dr"),
+            "an arrow that goes the wrong way": (crop, "ArrowLeft: [0, -1]", "ArrowLeft: [0, 1]"),
+            "an arrow that moves two cells": (crop, "return d ? move(f, d[0], d[1], rows, columns) : null;", "return d ? move(f, d[0] * 2, d[1] * 2, rows, columns) : null;"),
+            "a last row that is one too many": (crop, "range: 'Rows ' + f.row + ' to ' + (f.row + f.rows - 1)", "range: 'Rows ' + f.row + ' to ' + (f.row + f.rows)"),
+            "rows that count from 1": (crop, "range: 'Rows ' + f.row + ' to '", "range: 'Rows ' + (f.row + 1) + ' to '"),
+            "a widest shape that is as tall as the tallest": (crop, "rows: Math.max(1, Math.min(l.rows, rows, Math.floor(l.cells / wc))), columns: wc", "rows: Math.min(l.rows, rows), columns: wc"),
+            "a sentence that swaps rows and columns": (crop, "so it can be ' + f.rows + ' rows tall at most", "so it can be ' + f.columns + ' rows tall at most"),
+            "a pointer that counts pixels as cells": (crop, "dc = Math.round((e.clientX - grab.x) * k)", "dc = Math.round((e.clientX - grab.x))"),
+            "a handle that moves the whole frame": (crop, "if (grab.h) { out = resize(", "if (false) { out = resize("),
+            "a pointer that was let go and still drags": (crop, "['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) { box.addEventListener(t, function () { grab = null; }); });", "void 0;"),
+            "an Escape that does nothing": (crop, "if (e.key === 'Escape') { e.stopPropagation(); leave(env.onCancel); }", "if (false) { }"),
+            "a key listener that is never taken off": (crop, "doc.removeEventListener('keydown', onKey, true);", "void 0;"),
+            "a Use this part that hands over the start frame": (crop, "function onUse() { var f = frame;", "function onUse() { var f = start(L, R, C);"),
+            "an editor that stays hidden": (crop, "host.hidden = true; if (env.editor) env.editor.hidden = false;", "host.hidden = true;"),
+            "keys that are swallowed whatever they are": (crop, "if (out) { e.preventDefault(); set(out, ''); }", "{ e.preventDefault(); if (out) set(out, ''); }"),
+            "a shape that is never marked": (crop, "x.chip.className = 'chip' + (x.s.rows === frame.rows && x.s.columns === frame.columns ? ' on' : '')", "x.chip.className = 'chip'"),
+            "a note that stays after the frame is moved": (crop, "note('warn', '!', why ? noteText(frame, L) : ''); show(); }", "if (why) note('warn', '!', noteText(frame, L)); show(); }"),
+            "a picture with the wrong proportions": (crop, "stage.style.setProperty('--ar', C + '/' + R);", "stage.style.setProperty('--ar', R + '/' + C);"),
+            "a limit that is a number of the page": (crop, "It never has more than ' + L.rows + ' rows, '", "It never has more than 90 rows, '"),
+            "a copy that does not count on from the number": (convert, "n = m ? parseInt(m[2], 10) + 1 : 2", "n = m ? parseInt(m[2], 10) : 2"),
+            "a name that is taken and used again": (convert, "while (taken(tried));", "while (false);"),
+            "a name that goes over 40 characters": (convert, "Array.from(name).slice(0, MAX_NAME - tail)", "Array.from(name).slice(0, MAX_NAME)"),
+            "names that differ in capitals": (convert, ".toLowerCase() === clean(b).toLowerCase()", ".toLowerCase() === clean(b)"),
+            "a name with blanks round it": (convert, ".replace(/^ | $/g, '')", ""),
+            "reasons in the order of the core": (convert, "return rank(a) - rank(b); });", "return 0; });"),
+            "a short reason that keeps the semicolon": (convert, ".replace('; ', ' and ')", ".replace('; ', ', ')"),
+            "a name of the open map that is free": (convert, "f.ok = !!name && !same(name, cur.name);", "f.ok = !!name;"),
+            "a copy that is the open map's own array": (convert, "env.onMade(cur.bytes.slice(), nm.name());", "env.onMade(cur.bytes, nm.name());"),
+            "a Make new map that stays on for a taken name": (convert, "ctl.setDisabled('make', !nm.ok);", "ctl.setDisabled('make', false);"),
+            "a Classic choice that is never dimmed": (convert, ", !fits)", ", false)"),
+            "an Extended map that is not the core's": (convert, "var made = core.convertToExtended(cur.bytes);", "var made = { status: 0, json: { ok: true }, bytes: cur.bytes };"),
+            "an Extended name that is the open map's": (convert, "suffixed(cur.name, 'Extended')", "cur.name"),
+            "a Classic name that is the open map's": (convert, "suffixed(w.sourceName, 'Classic')", "w.sourceName"),
+            "a crop that is offered when it does not help": (convert, "sizes ? act('Crop it to fit...', crop) : ''", "act('Crop it to fit...', crop)"),
+            "a shortening that is offered when it does not help": (convert, "text ? act('Shorten the description...', shorten) : ''", "act('Shorten the description...', shorten)"),
+            "a crop with the corner swapped": (convert, "core.crop(w.bytes, f.row, f.column, f.rows, f.columns, 'extended')", "core.crop(w.bytes, f.column, f.row, f.rows, f.columns, 'extended')"),
+            "a Cancel of the crop screen that goes nowhere": (convert, "onCancel: function () { classic(w); }", "onCancel: function () { }"),
+            "a second crop that forgets the first": (convert, "row: was.row + f.row", "row: f.row"),
+            "a Keep it Extended that makes a map": (convert, "{ id: 'keep', text: 'Keep it Extended' }", "{ id: 'keep', text: 'Keep it Extended', onClick: function () { env.onMade(w.bytes, 'x'); } }"),
+            "a part that does not say what the core cut": (convert, "(cr ? cr.notes : []).concat(res.json.notes)", "res.json.notes"),
+            "a badge on the wrong card": (convert, "(which === 'same') === ext ? h('span', 'badge-nv', 'New version only') : ''", "(which === 'same') ? h('span', 'badge-nv', 'New version only') : ''"),
+        }
+        for what, (name, old, new) in mutants.items():
+            with self.subTest(what):
+                text = read("web", "front", name)
+                self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
+                with tempfile.TemporaryDirectory() as tmp:
+                    for script in SCRIPTS:
+                        shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                        f.write(text.replace(old, new))
+                    done = run_check(tmp, CONVERT_CHECK)
                 self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
 
     def test_the_drawing_passes_its_checks(self):
@@ -591,9 +670,23 @@ class ThePage(unittest.TestCase):
         for dialog_id in re.findall(r"""['"]?\b(size-rows|size-columns)\b""", self.code["mapmaker_dialog.js"]):
             self.assertNotIn(dialog_id, ids, "the dialog's boxes are made by the dialog")
 
+    def test_the_crop_screen_is_in_the_page_with_every_id_its_code_asks_for_and_the_app_hands_it_what_it_needs(self):
+        ids = re.findall(r'\bid="([^"]+)"', self.page)
+        asked = set(re.findall(r"\$\('([^']+)'\)", self.code["mapmaker_crop.js"]))
+        self.assertTrue({"crop-stage", "crop-frame", "crop-fill", "crop-note", "crop-use", "crop-cancel", "crop-name", "crop-tags", "crop-whole", "crop-shapes", "crop-nothing", "crop-chips", "crop-big", "crop-cells", "crop-range"} <= asked, sorted(asked))
+        self.assertEqual(sorted(asked - set(ids)), [], "the crop screen asks for ids that the page does not have")
+        self.assertRegex(self.page, r'<div class="screen crop" id="crop" hidden>')
+        self.assertEqual(re.findall(r'<i class="h ([a-z]+)" data-h="([a-z]+)"></i>', self.page), [(h, h) for h in ("nw", "n", "ne", "w", "e", "sw", "s", "se")], "the eight handles of the frame")
+        self.assertIn("busy: function () { return dialogs.isOpen() || !$('crop').hidden; }", self.app, "the tools' keys do nothing while the crop screen is open")
+        self.assertIn("MapCrop.open({ doc: doc, $: $, host: $('crop'), editor: $('editor'), limits: limits.classic,", self.app, "the limits of the frame are the core's")
+        self.assertIn("{ text: 'Copy...', onClick: ACTIONS.copy }", self.app, "the phone's Menu has Copy...")
+        self.assertIn("copy: convertWith('copy'), convert: convertWith('convert')", self.app)
+        self.assertIn("onMade: function (bytes, name) { leave(function () {", self.app, "the new map takes the place of the open one only after the question about unsaved drawing")
+        self.assertEqual(re.findall(r'<button class="(?:link)" type="button" id="convert-link" data-act="convert" disabled></button>', self.page), ['<button class="link" type="button" id="convert-link" data-act="convert" disabled></button>'])
+
     def test_every_button_that_the_page_has_is_wired_and_starts_off_until_the_core_is_there(self):
         acts = re.findall(r'data-act="([a-z-]+)"', self.page)
-        self.assertEqual(sorted(set(acts)), ["check", "download", "menu", "new", "open", "props", "zoom-in", "zoom-out"])
+        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "new", "open", "props", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
         self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,", self.app)
@@ -622,8 +715,8 @@ class ThePage(unittest.TestCase):
         self.assertIn("createLvlCore", self.app.split("function boot()")[1], "a module that did not load at all is told too")
 
     def test_a_map_is_read_as_a_place_that_takes_both_kinds_and_the_limits_come_from_the_core(self):
-        self.assertEqual(self.app.count("core.checkMap("), 2)
-        self.assertEqual(len(re.findall(r"core\.(?:checkMap|readReport)\([^)]*'extended'\)", self.app)), 3)
+        self.assertEqual(self.app.count("core.checkMap("), 3)
+        self.assertEqual(len(re.findall(r"core\.(?:checkMap|readReport)\([^)]*'extended'\)", self.app)), 4)
         self.assertIn("core.limits('new_map')", self.app)
         self.assertIn("core.limits('extended')", self.app)
         self.assertNotRegex(self.code["mapmaker_dialog.js"], r"\b(10000|10,000|262144|262,144|130|512)\b", "a limit is the core's, never a number of the dialog")

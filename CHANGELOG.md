@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- The map maker page (not linked from the site yet: /mapmaker.html) can copy and convert a map now. Copy... (in the top bar, or in the Menu on a phone) makes a new map of the same kind or of the other kind. Under the size numbers of the side panel, "Start an Extended map from this one..." makes an Extended map from any Classic map, and "Make a Classic map from this one..." brings an Extended map back when it fits. Every way makes a new map under a name that is free; the map you opened is never changed or replaced.
+- An Extended map that does not fit a Classic map shows the reasons in the converter's own words, and two ways out. Crop it to fit... opens a screen with a movable frame (never bigger than a new Classic map): drag it with the mouse or a finger, pull a corner or an edge, and a wider frame gets shorter by itself. Shorten the description... opens the map properties on the copy.
+- A part that is cropped out keeps every object whole or leaves it out (never half a hill), moves the starting ants and food piles inside it, and says what it left out.
+
+**Details:** the map core (interface version 4) has a new call, `lvl_crop`; the page needs the new module, so reload it once.
+
 ## v0.12.77 - 2026-10-17 - Map maker: map properties (E3c)
 
 **For players:**

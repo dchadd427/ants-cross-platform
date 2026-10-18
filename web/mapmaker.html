@@ -21,6 +21,7 @@
     <div class="edmenu dsk">
         <button class="btn sm" type="button" data-act="new" disabled>New</button>
         <button class="btn sm" type="button" data-act="open" disabled>Open</button>
+        <button class="btn sm" type="button" data-act="copy" disabled>Copy...</button>
         <button class="btn sm" type="button" data-act="props" disabled>Properties</button>
         <button class="btn sm" type="button" data-act="download" disabled>Download</button>
     </div>
@@ -72,6 +73,7 @@
         <div class="sidetags tags" id="side-tags"></div>
         <dl class="kv"><dt>Rows</dt><dd id="s-rows"></dd><dt>Columns</dt><dd id="s-cols"></dd><dt>Cells</dt><dd id="s-cells"></dd><dt>File</dt><dd id="s-file"></dd></dl>
         <div class="meterbox"><div class="meter" id="meter" role="meter" aria-label="Cells of the most this kind of map can have" aria-valuemin="0"><i id="meter-fill"></i></div><div class="meter-cap" id="meter-cap"></div></div>
+        <div class="convertbox"><button class="link" type="button" id="convert-link" data-act="convert" disabled></button></div>
         <div class="sumbox" id="sumbox"><div class="hd"><h3>Details</h3><button class="link" type="button" data-act="props" disabled>Edit</button></div><div class="desc" id="s-desc"></div><div id="s-time"></div><div id="s-ant"></div></div>
         <div class="checkline"><span class="dot" id="check-dot"></span><span id="check-line">Not checked</span></div>
         <div class="chkbtn"><button class="btn full" type="button" data-act="check" disabled>Check map</button></div>
@@ -80,6 +82,24 @@
     </aside>
 </div>
 <div id="dialogs"></div>
+</div>
+<div class="screen crop" id="crop" hidden>
+<header class="crtop"><a class="edlogo" href="/" aria-label="ants! - the front page"><img src="/front/logo.png" alt="ants!" width="581" height="218"></a><h1 class="banner gold" id="crop-title">Crop to fit</h1></header>
+<div class="crbody">
+    <section class="panel crmap" id="crop-map" aria-labelledby="crop-title">
+        <div class="crwho"><span class="crname" id="crop-name"></span><span class="tags" id="crop-tags"></span></div>
+        <p class="crhelp">Drag the frame to choose the part you keep. Drag a corner or an edge to make it smaller or wider.</p>
+        <div class="crstage" id="crop-stage"><div class="crframe" id="crop-frame" tabindex="0" role="group" aria-label="The part you keep. The arrow keys move it."><span class="crdrag" aria-hidden="true">&#10021; Drag</span><i class="h nw" data-h="nw"></i><i class="h n" data-h="n"></i><i class="h ne" data-h="ne"></i><i class="h w" data-h="w"></i><i class="h e" data-h="e"></i><i class="h sw" data-h="sw"></i><i class="h s" data-h="s"></i><i class="h se" data-h="se"></i></div></div>
+        <p class="crwhole" id="crop-whole"></p>
+        <div class="crshapes"><p id="crop-shapes"></p><div class="chips" id="crop-chips"></div></div>
+    </section>
+    <aside class="crside">
+        <div class="panel crread"><div class="crlab">The part you keep</div><div class="crbig" id="crop-big" aria-live="polite"></div><div class="meter"><i id="crop-fill"></i></div><div class="crcells" id="crop-cells"></div><div class="crrange" id="crop-range"></div></div>
+        <div id="crop-note" aria-live="polite"></div>
+        <div class="crbtns"><button class="btn big" type="button" id="crop-use">Use this part</button><button class="btn ghost" type="button" id="crop-cancel">Cancel</button></div>
+        <p class="crnothing" id="crop-nothing"></p>
+    </aside>
+</div>
 </div>
 <input type="file" id="file-in" accept=".lvl,.LVL" hidden>
 <noscript><p style="position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:24px;background:#0b1612;color:#f4ece2;font-size:18px">The map maker needs JavaScript.</p></noscript>
@@ -97,6 +117,8 @@
 <script src="front/mapmaker_checks.js"></script>
 <script src="front/mapmaker_dialog.js"></script>
 <script src="front/mapmaker_props.js"></script>
+<script src="front/mapmaker_crop.js"></script>
+<script src="front/mapmaker_convert.js"></script>
 <script src="front/mapmaker_canvas.js"></script>
 <script src="front/mapmaker_tools.js"></script>
 <script src="front/mapmaker_app.js"></script>

@@ -25,6 +25,11 @@ Parts:
              keys on the ant types, Enter, Escape) work it; the counter counts bytes ("letters like e acute count double"), a 30 byte description of a Classic map shows the core's sentence and Cut it to 29,
              an Extended map has the larger box that stops at 255; Apply is ONE step of the history (Undo gives the old map back and the summary with it), Cancel and Escape change nothing, the
              check line is run again, and Download hands over the map; then a touch screen (390 x 844): Menu, Properties..., the sheet, the line under the map with its Edit link;
+  * convert  1280 x 800, Copy, convert and crop: Copy... makes a copy of the same kind under a new name (a name that is the open map's is refused), "Start an Extended map from this one" makes an Extended
+             map and "Make a Classic map from this one" brings it back, the open map is never written over (a download of it is still the file it was); an Extended map of 120 x 400 gives the
+             reasons, Crop it to fit opens the screen with the frame (dragged with the mouse, pulled at a handle: wider is shorter by itself, the arrow keys, the readout counts from 0), Use this
+             part gives a Classic map of the part; then a touch screen (390 x 844 and 844 x 390): the sheets are inside the screen with their buttons, every control is 44 pixels, the crop screen has
+             no sideways scroll and its corners and buttons are 44 pixels;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
   * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
@@ -32,7 +37,7 @@ Parts:
              sheet is inside the screen with Cancel and Apply in view, its controls are 44 pixels, and what does not fit scrolls inside it;
   * phone    390 x 844 (portrait) and 844 x 390 (landscape), a touch screen: no sideways scroll, the buttons and the New map dialog are inside the screen, two fingers zoom and one finger pans (Move) or
              paints (a tool), a tap paints a cell, two fingers do not paint;
-  * older    a map core of another interface version (the page is given a module that says it is version 2, the one before the properties): the page says so and offers a reload, and no button works.
+  * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
 the address); 2 is the status of a bad command line.
@@ -51,7 +56,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "panel", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "panel", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -1062,9 +1067,9 @@ def run_part(part, tab, args, check, tiny, junk):
         tap_selector("[data-act=menu]")
         check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
         names = page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')")
-        check(names == "New|Open|Properties...|Download", "the menu: %s" % names)
+        check(names == "New|Open|Copy...|Properties...|Download", "the menu: %s" % names)
         page.shot(args.shots, "mapmaker-props-phone-menu")
-        page.ev("document.querySelectorAll('.menulist .btn')[2].click()")
+        page.ev("document.querySelectorAll('.menulist .btn')[3].click()")
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Properties... opens the sheet")
         check(page.ev("document.querySelector('.dlg').getBoundingClientRect().bottom") <= 844.5 and page.ev("[].every.call(document.querySelectorAll('.dlg-foot button'), function (b) { return b.getBoundingClientRect().bottom <= innerHeight + 1 && b.getBoundingClientRect().height >= 43.5; })"), "Cancel and Apply are in view, 44 pixels high")
         small = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('.dlg button, .dlg input, .dlg textarea'), function (b) { var r = b.getBoundingClientRect(); return b.offsetParent !== null && !b.disabled && (r.width < 43.5 || r.height < 43.5); }).map(function (b) { return b.id || b.textContent; }))")
@@ -1081,6 +1086,160 @@ def run_part(part, tab, args, check, tiny, junk):
         check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Cancel closes it")
         page.ev("document.getElementById('undo-btn').click()")
         check(wait_for(lambda: page.ev("document.getElementById('phone-sum').textContent") == "“Tiny map with no PowerUps” · 6 min"), "Undo gives it back on a phone too")
+    elif part == "convert":
+        print("[web map maker] copy, convert and crop, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts")
+        page.choose_file(tiny)
+        check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
+        check(page.ev("document.getElementById('convert-link').textContent") == "Start an Extended map from this one...", "the side panel offers an Extended map")
+        page.press_act("copy")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg .srccard')")), "Copy... opens the dialog with the map that is copied")
+        page.shot(args.shots, "mapmaker-convert-copy")
+        check(page.ev("document.querySelector('.dlg h2').textContent") == "Copy this map" and page.ev("document.querySelector('.cname input').value") == "TINY 2", "the name of the copy is TINY 2")
+        page.type_into(".cname input", "tiny")
+        check(page.ev("!!document.querySelector('.cname .note.bad')") and page.button_off(".dlg-foot .btn:last-child"), "the open map's own name is refused (capitals do not matter) and Make new map is off")
+        page.type_into(".cname input", "Little Tiny")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: page.state()["name"] == "Little Tiny"), "a copy of the same kind is open under the new name")
+        s = page.state()
+        check(s["rows"] == "31" and s["tags"] == ["Classic map"] and s["check"] == "Works in the original game", "it is the same Classic map: %s" % s)
+        page.ev("document.getElementById('convert-link').click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.cboxes')")) and page.ev("document.querySelector('.dlg h2').textContent") == "Start an Extended map from this one?", "the link opens the Extended map's dialog")
+        page.shot(args.shots, "mapmaker-convert-start-extended")
+        check(page.ev("document.querySelector('.cname input').value") == "Little Tiny Extended", "its name is Little Tiny Extended")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: page.state()["name"] == "Little Tiny Extended"), "the Extended map is open")
+        s = page.state()
+        check(s["tags"] == ["Extended map", "New version only"] and s["check"] == "Works in the new version" and page.ev("document.getElementById('convert-link').textContent") == "Make a Classic map from this one...", "an Extended map with its badge, and the link back: %s" % s)
+        page.ev("document.getElementById('convert-link').click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.cboxes')")) and "fits a Classic map" in page.ev("document.querySelector('.dlg .lead').textContent"), "it fits a Classic map again")
+        page.shot(args.shots, "mapmaker-convert-fits")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: page.state()["tags"] == ["Classic map"]), "the Classic map is made")
+        check(page.state()["name"] == "Little Tiny Extended Classic", "under a name of its own: %s" % page.state()["name"])
+        # an Extended map of 120 x 400
+        page.press_act("new")
+        wait_for(lambda: page.ev("!!document.querySelector('.kinds')"))
+        page.ev("document.querySelectorAll('.kind input')[1].click()")
+        page.type_into("#size-rows", "120")
+        page.type_into("#size-columns", "400")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+        check(wait_for(lambda: page.state()["rows"] == "120" and page.state()["columns"] == "400"), "an Extended map of 120 x 400")
+        page.press_act("copy")
+        wait_for(lambda: page.ev("!!document.querySelector('.kind.off')"))
+        check(page.ev("document.querySelectorAll('.kind')[1].textContent").startswith("Classic map (convert)Not yet: this map has 120 rows and a Classic map made now has at most 90."), "the Classic choice is dimmed, with the reason: %s" % page.ev("document.querySelectorAll('.kind')[1].textContent"))
+        page.shot(args.shots, "mapmaker-convert-copy-cannot")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg button'), function (b) { return b.textContent === 'See why and what to do'; })[0].click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.creasons')")) and page.ev("document.querySelectorAll('.creasons .note').length") == 2, "See why and what to do lists the reasons (rows, then columns)")
+        check(page.ev("document.querySelector('.creasons .note').textContent.indexOf('This map has 120 rows') === 1"), "the rows first")
+        page.shot(args.shots, "mapmaker-convert-reasons")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg button'), function (b) { return b.textContent === 'Crop it to fit...'; })[0].click()")
+        check(wait_for(lambda: page.ev("!document.getElementById('crop').hidden")) and page.ev("document.getElementById('editor').hidden"), "Crop it to fit opens the screen and hides the editor")
+        check(page.ev("document.getElementById('crop-big').textContent") == "90 rows x 111 columns" and page.ev("document.getElementById('crop-range').textContent") == "Rows 15 to 104 · Columns 144 to 254", "the frame starts in the center: 90 rows x 111 columns")
+        page.shot(args.shots, "mapmaker-convert-crop-start")
+        stage = page.box("#crop-stage")
+        frame = page.box("#crop-frame")
+        check(stage["w"] > 400 and abs((frame["x"] + frame["w"] / 2) - (stage["x"] + stage["w"] / 2)) < 3, "the picture is wide and the frame is in the middle of it: %s" % stage)
+        page.drag(frame["x"] + frame["w"] / 2, frame["y"] + frame["h"] / 2, frame["x"] + frame["w"] / 2 + 60, frame["y"] + frame["h"] / 2)
+        moved = page.ev("document.getElementById('crop-range').textContent")
+        check(moved != "Rows 15 to 104 · Columns 144 to 254" and moved.startswith("Rows 15 to 104 · Columns 1"), "dragging the frame with the mouse moves it: %s" % moved)
+        handle = page.box("#crop-frame .h.e")
+        page.drag(handle["x"] + handle["w"] / 2, handle["y"] + handle["h"] / 2, handle["x"] + handle["w"] / 2 + 80, handle["y"] + handle["h"] / 2)
+        check(page.ev("document.getElementById('crop-big').textContent") == "76 rows x 130 columns" and "shortened by itself" in page.ev("document.getElementById('crop-note').textContent"), "pulled wider: 76 rows x 130 columns, shortened by itself: %s" % page.ev("document.getElementById('crop-big').textContent"))
+        page.shot(args.shots, "mapmaker-convert-crop-wider")
+        before = page.ev("document.getElementById('crop-range').textContent")
+        page.ev("document.getElementById('crop-frame').focus()")
+        page.key("ArrowLeft")
+        check(page.ev("document.getElementById('crop-range').textContent") != before, "an arrow key moves the frame")
+        page.ev("document.getElementById('crop-use').click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.cboxes')")) and page.ev("document.getElementById('crop').hidden") and not page.ev("document.getElementById('editor').hidden"), "Use this part brings the editor back with the dialog of the part")
+        check("cropped to 76 x 130" in page.ev("document.querySelector('.dlg .lead').textContent") and "Only the part you chose is kept" in page.ev("document.querySelector('.cboxes').textContent"), "it says what was kept")
+        page.shot(args.shots, "mapmaker-convert-crop-fits")
+        page.click_selector(".dlg-foot .btn:last-child")
+        check(wait_for(lambda: page.state()["rows"] == "76" and page.state()["columns"] == "130"), "the Classic map is the part: 76 x 130")
+        check(page.state()["tags"] == ["Classic map"], "a Classic map")
+        # Escape on the crop screen comes back to the reasons
+        page.press_act("new")
+        wait_for(lambda: page.ev("!!document.querySelector('.kinds')"))
+        page.ev("document.querySelectorAll('.kind input')[1].click()")
+        page.type_into("#size-rows", "120")
+        page.type_into("#size-columns", "400")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+        wait_for(lambda: page.state()["rows"] == "120")
+        page.ev("document.getElementById('convert-link').click()")
+        wait_for(lambda: page.ev("!!document.querySelector('.creasons')"))
+        page.ev("[].filter.call(document.querySelectorAll('.dlg button'), function (b) { return b.textContent === 'Crop it to fit...'; })[0].click()")
+        wait_for(lambda: page.ev("!document.getElementById('crop').hidden"))
+        page.key("Escape")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.creasons')")) and page.ev("document.getElementById('crop').hidden"), "Escape leaves the crop screen and shows the reasons again")
+        page.key("Escape")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")) and page.state()["rows"] == "120", "and the Extended map is as it was")
+        # a touch screen
+        for w, h in ((390, 844), (844, 390)):
+            print("[web map maker] copy and crop on a touch screen, %d x %d" % (w, h))
+            tab.emulate(w, h, 2, mobile=True)
+            page = Page(tab, args.web)
+            check(page.open() and page.ready(), "the page starts")
+            page.choose_file(tiny)
+            wait_for(lambda: page.state()["name"] == "TINY")
+            page.ev("document.querySelector('[data-act=menu]').click()")
+            wait_for(lambda: page.ev("!!document.querySelector('.menulist')"))
+            page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent === 'Copy...'; })[0].click()")
+            check(wait_for(lambda: page.ev("!!document.querySelector('.dlg .srccard')")), "Menu, Copy... opens the sheet")
+            fit = json.loads(page.ev("""JSON.stringify((function () {
+                var d = document.querySelector('.dlg').getBoundingClientRect(), bad = [];
+                [].forEach.call(document.querySelectorAll('.dlg-foot button'), function (b) { var r = b.getBoundingClientRect(); if (r.bottom > innerHeight + 1 || r.right > innerWidth + 1 || r.left < -1) bad.push(b.textContent); });
+                var small = [].filter.call(document.querySelectorAll('.dlg button, .dlg input[type=text]'), function (b) { var r = b.getBoundingClientRect(); return b.offsetParent !== null && !b.disabled && (r.width < 43.5 || r.height < 43.5); }).map(function (b) { return b.textContent; });
+                return {bottom: d.bottom, right: d.right, bad: bad, small: small, scrollX: document.documentElement.scrollWidth > innerWidth};
+            })())"""))
+            check(fit["bad"] == [] and fit["bottom"] <= h + 1 and fit["right"] <= w + 1 and not fit["scrollX"], "%d x %d: the sheet is inside the screen with Cancel and Make new map in view (%s)" % (w, h, fit))
+            check(fit["small"] == [], "%d x %d: every control of the sheet is at least 44 pixels each way (%s)" % (w, h, fit["small"]))
+            page.shot(args.shots, "mapmaker-convert-copy-phone-%dx%d" % (w, h))
+            page.ev("document.querySelector('.dlg-foot .btn:first-child').click()")
+            # an Extended map that does not fit: the reasons sheet and the crop screen
+            page.press_act("new") if False else None
+            page.ev("document.querySelector('[data-act=menu]').click()")
+            wait_for(lambda: page.ev("!!document.querySelector('.menulist')"))
+            page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent === 'New'; })[0].click()")
+            wait_for(lambda: page.ev("!!document.querySelector('.kinds')"))
+            page.ev("document.querySelectorAll('.kind input')[1].click()")
+            page.type_into("#size-rows", "120")
+            page.type_into("#size-columns", "400")
+            page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+            wait_for(lambda: page.state()["rows"] == "120")
+            page.ev("document.querySelector('[data-act=menu]').click()")
+            wait_for(lambda: page.ev("!!document.querySelector('.menulist')"))
+            page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent === 'Copy...'; })[0].click()")
+            wait_for(lambda: page.ev("!!document.querySelector('.kind.off')"))
+            page.ev("[].filter.call(document.querySelectorAll('.dlg button'), function (b) { return b.textContent === 'See why and what to do'; })[0].click()")
+            check(wait_for(lambda: page.ev("!!document.querySelector('.creasons')")), "%d x %d: See why and what to do opens the reasons" % (w, h))
+            fit = json.loads(page.ev("""JSON.stringify((function () {
+                var d = document.querySelector('.dlg').getBoundingClientRect(), bad = [];
+                [].forEach.call(document.querySelectorAll('.dlg-foot button'), function (b) { var r = b.getBoundingClientRect(); if (r.bottom > innerHeight + 1 || r.right > innerWidth + 1) bad.push(b.textContent); });
+                var small = [].filter.call(document.querySelectorAll('.dlg button'), function (b) { var r = b.getBoundingClientRect(); return b.offsetParent !== null && (r.width < 43.5 || r.height < 43.5); }).map(function (b) { return b.textContent; });
+                return {bottom: d.bottom, bad: bad, small: small};
+            })())"""))
+            check(fit["bad"] == [] and fit["bottom"] <= h + 1 and fit["small"] == [], "%d x %d: the reasons sheet is inside the screen and its buttons are 44 pixels (%s)" % (w, h, fit))
+            page.shot(args.shots, "mapmaker-convert-reasons-phone-%dx%d" % (w, h))
+            page.ev("[].filter.call(document.querySelectorAll('.dlg button'), function (b) { return b.textContent === 'Crop it to fit...'; })[0].click()")
+            check(wait_for(lambda: page.ev("!document.getElementById('crop').hidden")), "%d x %d: the crop screen opens" % (w, h))
+            time.sleep(0.2)
+            found = json.loads(page.ev("""JSON.stringify((function () {
+                var small = [], corners = [].map.call(document.querySelectorAll('#crop-frame .h'), function (n) { var r = n.getBoundingClientRect(), shown = getComputedStyle(n).display !== 'none'; return {h: n.getAttribute('data-h'), shown: shown, w: r.width, hh: r.height}; });
+                [].forEach.call(document.querySelectorAll('#crop button'), function (b) { var r = b.getBoundingClientRect(); if (r.width < 43.5 || r.height < 43.5) small.push(b.textContent); });
+                var s = document.getElementById('crop-stage').getBoundingClientRect();
+                return {scrollX: document.documentElement.scrollWidth > innerWidth, corners: corners, small: small, stageW: s.width, stageH: s.height, right: s.right, bodyW: document.getElementById('crop').scrollWidth, innerW: innerWidth};
+            })())"""))
+            shown = [c["h"] for c in found["corners"] if c["shown"]]
+            check(not found["scrollX"] and found["bodyW"] <= found["innerW"] and found["right"] <= w + 1 and found["stageH"] > 60, "%d x %d: the crop screen has no sideways scroll and a usable picture (%s)" % (w, h, {k: found[k] for k in ("scrollX", "bodyW", "right", "stageW", "stageH")}))
+            check(shown == ["nw", "ne", "sw", "se"] and all(c["w"] >= 43.5 and c["hh"] >= 43.5 for c in found["corners"] if c["shown"]) and found["small"] == [], "%d x %d: the four corners are the handles, 44 pixels each, and so are the buttons (%s %s)" % (w, h, shown, found["small"]))
+            page.shot(args.shots, "mapmaker-convert-crop-phone-%dx%d" % (w, h))
+            vis = json.loads(page.ev("JSON.stringify((function () { var u = document.getElementById('crop-use').getBoundingClientRect(), c = document.getElementById('crop-cancel').getBoundingClientRect(); return {use: u.bottom <= innerHeight || innerHeight < 500, cancel: c.right <= innerWidth + 1, ur: u.right <= innerWidth + 1}; })())"))
+            check(vis["cancel"] and vis["ur"], "%d x %d: Use this part and Cancel are inside the width (%s)" % (w, h, vis))
+            page.ev("document.getElementById('crop-cancel').click()")
+            check(wait_for(lambda: page.ev("!!document.querySelector('.creasons')")), "%d x %d: Cancel comes back to the reasons" % (w, h))
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):
             print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))
