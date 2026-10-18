@@ -11,17 +11,38 @@
     var NONE = 'You have no saved maps yet. Use “Save as new...” in the editor to keep a map here.';
     var OFF = 'This browser keeps no saved maps (a private window, or site data is blocked), so the list is empty. The map maker still works: use Download to keep a map on your device.';
 
-    // env: {doc, $ (an element of the page by id), store, dialogs, parse(bytes) -> file or null, check(bytes) -> {works, text} or null, thumb(file) -> canvas, tags(host, kind), later(fn, ms),
+    // env: {doc, $ (an element of the page by id), store, sent (the player's submissions: mapmaker_submit.js, or null), dialogs, parse(bytes) -> file or null, check(bytes) -> {works, text} or null, thumb(file) -> canvas, tags(host, kind), later(fn, ms),
     //       onOpen(rec), onCopy(rec), onNew(), onBack(), onShow(), onHide()}
     function create(env) {
         var doc = env.doc, $ = env.$, host = $('mine'), list = $('mine-list'), status = $('mine-status'), note = $('mine-note'), chips = $('mine-chips');
-        var rows = [], filter = 'all', shown = false, token = 0;
+        var rows = [], filter = 'all', shown = false, token = 0, tab = 'maps', tabs = $('mine-tabs'), tabNames = { maps: 'My maps', sent: 'My submissions' }, sentCount = 0, mapCount = null;
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function button(cls, text, onClick, label) { var b = el('button', cls, text); b.type = 'button'; if (label) b.setAttribute('aria-label', label); b.addEventListener('click', onClick); return b; }
         function label(rec) { return typeof rec.name === 'string' && rec.name ? rec.name : ''; }          // (a record with no name is shown and asked about without one)
         function count(kind) { return rows.filter(function (r) { return kind === 'all' || (r.file && r.file.kind === kind); }).length; }
         function say(text) { status.textContent = ''; status.textContent = text; }
+
+        // the two tabs (My maps and My submissions): the second only where the page has the player's submissions
+        function showTabs() {
+            tabs.textContent = ''; tabs.hidden = !env.sent;
+            Object.keys(tabNames).forEach(function (t) {
+                var b = button('mchip' + (t === tab ? ' on' : ''), tabNames[t] + (t === 'sent' ? (sentCount === null ? '' : ' (' + sentCount + ')') : mapCount === null ? '' : ' (' + mapCount + ')'), function () { setTab(t); tabs.querySelector('[aria-pressed="true"]').focus(); });
+                b.setAttribute('aria-pressed', t === tab ? 'true' : 'false');
+                tabs.appendChild(b);
+            });
+        }
+        function setTab(t) {
+            tab = t; token++;
+            $('mine-title').textContent = tabNames[t];
+            $('mine-new').hidden = t === 'sent'; $('mine-link').hidden = t !== 'sent';
+            if (t === 'maps') load();
+            else {
+                chips.hidden = true; list.textContent = ''; note.textContent = '';
+                env.sent.show({ list: list, note: note, say: say, link: $('mine-link'), count: function (n) { sentCount = n; showTabs(); } });
+            }
+            showTabs();
+        }
 
         function showChips() {
             chips.textContent = '';
@@ -37,6 +58,7 @@
             showChips();
             var shownRows = rows.filter(function (r) { return filter === 'all' || (r.file && r.file.kind === filter); });
             list.textContent = '';
+            mapCount = rows.length; showTabs();
             note.textContent = !rows.length ? NONE : !shownRows.length ? 'No ' + filter + ' maps are saved yet.' : '';
             shownRows.forEach(function (r) { list.appendChild(r.node); });
             say(shownRows.length === 1 ? '1 saved map shown.' : shownRows.length + ' saved maps shown.');
@@ -111,16 +133,17 @@
             });
         }
 
-        function show() {
-            shown = true; filter = 'all';
+        function show(which) {
+            shown = true; filter = 'all'; mapCount = null; sentCount = env.sent ? env.sent.count() : null; if (env.sent) env.sent.preload();
             host.hidden = false;
             if (env.onShow) env.onShow();
-            load();
+            setTab(which === 'sent' && env.sent ? 'sent' : 'maps');
             $('mine-title').focus();
         }
         function hide() {
             if (!shown) return;
             shown = false; token++;
+            if (env.sent) env.sent.hide();
             host.hidden = true;
             if (env.onHide) env.onHide();
         }
@@ -128,7 +151,7 @@
         $('mine-new').addEventListener('click', function () { env.onNew(); });
         $('mine-back').addEventListener('click', function () { env.onBack(); });
         doc.addEventListener('keydown', function (e) { if (shown && e.key === 'Escape' && !env.dialogs.isOpen()) env.onBack(); });
-        return { show: show, hide: hide, isOpen: function () { return shown; } };
+        return { show: show, hide: hide, tabs: function () { if (shown) { sentCount = env.sent ? env.sent.count() : null; showTabs(); } }, isOpen: function () { return shown; } };
     }
 
     return { create: create };

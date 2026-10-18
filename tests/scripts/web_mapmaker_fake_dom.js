@@ -41,7 +41,7 @@ function makeDocument() {
         n.appendChild = (c) => { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = n; n.children.push(c); return c; };
         n.insertBefore = (c, ref) => { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = n; const at = ref ? n.children.indexOf(ref) : -1; if (at < 0) n.children.push(c); else n.children.splice(at, 0, c); return c; };
         n.removeChild = (c) => { n.children.splice(n.children.indexOf(c), 1); c.parentNode = null; return c; };
-        n.setAttribute = (k, v) => { n.attrs[k] = String(v); };
+        n.setAttribute = (k, v) => { n.attrs[k] = String(v); if (k === 'id') n.id = String(v); };
         n.getAttribute = (k) => (k in n.attrs ? n.attrs[k] : null);
         n.removeAttribute = (k) => { delete n.attrs[k]; };
         n.hasAttribute = (k) => k in n.attrs;

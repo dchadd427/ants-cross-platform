@@ -237,8 +237,9 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 /* a desktop that is not tall: the note under the palette goes (the palette and the tools need the room) */
 @media (min-width: 601px) and (min-height: 451px) and (max-height: 780px) { .side { gap: 8px; } .toolnote { display: none; } .tools { padding: 8px 10px; gap: 4px; } .toolbtns { gap: 4px; } .tool { min-height: 34px; padding: 4px 10px; } .swatch.team { min-height: 28px; } }
 
-/* a narrow desktop window (601 to 1150 pixels): the top bar wraps, the name box on a line of its own, so no button is cut and none covers the name (seven buttons since My maps) */
-@media (min-width: 601px) and (max-width: 1150px) and (min-height: 451px) {
+/* a narrow desktop window (601 to 1200 pixels): the top bar wraps, the name box on a line of its own, so no button is cut and none covers the name (eight buttons since Submit for approval) */
+@media (min-width: 1201px) and (max-width: 1330px) { .edmenu { gap: 6px; } .edmenu .btn.sm { padding-left: 9px; padding-right: 9px; } }
+@media (min-width: 601px) and (max-width: 1200px) and (min-height: 451px) {
     .edtop { flex-wrap: wrap; } .edtop .edmenu { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; } .edtop .edname { order: 3; flex: 1 1 100%; }
 }
 
@@ -366,3 +367,15 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .mlist { grid-template-columns: 1fr 1fr; gap: 10px; } .mrow { grid-template-columns: 52px minmax(0, 1fr); gap: 2px 10px; padding: 8px 10px; } .mthumb { width: 52px; height: 52px; }
     .mrow .t1 { font-size: 16px; } .mrow .t2, .mrow .t3 { font-size: 13px; } .macts { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+/* send a map for approval and My submissions (mapmaker_submit.js) */
+.mtabs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; } .mtabs[hidden], #mine-new[hidden], #mine-link[hidden] { display: none; }
+.dot.warn { background: var(--warn); } .st-warn { color: var(--warn); } .st-bad { color: var(--bad); } .st-wait { color: var(--note); }
+.note.warn { border-left-color: var(--warn); background: #2a2208; } .note div { min-width: 0; overflow-wrap: anywhere; }
+.dlg.subdlg { width: min(700px, 100%); } .subdlg .link { min-height: 44px; } .subdlg .pfield { margin: 10px 0; } .subdlg .cname input[type=text], .subdlg #sub-name { max-width: 100%; }
+.subhd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 14px; margin-top: 8px; font-size: 17px; } .subhd > span { display: flex; align-items: center; gap: 8px; }
+.subfin { margin: 2px 0 8px 22px; font-size: 15.5px; line-height: 1.4; } .subwho { margin: 6px 0; font-size: 15.5px; } .subwho b { font-weight: 500; color: #fff; font-size: 18px; } .subwho label { display: block; font-size: 14px; color: var(--muted); } .subwho input { max-width: 340px; min-height: 44px; font-size: 18px; background: #000; }
+.subok { display: flex; align-items: center; gap: 14px; margin: 4px 0 10px; } .subok .big { font-size: 22px; } .tick { flex: none; display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; font-size: 26px; color: #04210f; background: var(--ok); border-radius: 50%; }
+.subul { margin: 0 0 8px 20px; display: grid; gap: 6px; font-size: 16px; line-height: 1.4; }
+.owrote { margin-top: 8px; padding: 6px 10px; font-size: 15px; line-height: 1.4; background: #0d1b16; border-radius: 3px; overflow-wrap: anywhere; } .owrote span { color: var(--muted); }
+.mine .mlist .note { margin: 0; } .subdlg .note b { font-weight: 400; color: var(--gold); }

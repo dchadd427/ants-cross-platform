@@ -12,6 +12,7 @@
 //   D  Delete: the clear question first (the safe choice has the focus), Keep it changes nothing, Delete it deletes one map, and a refusal of the browser is said
 //   E  Escape and Back, a list that is closed while it loads, a store that is not open yet
 //   G  Delete takes the record's own key (a nameless record, a key that is not its name)
+//   H  the tabs My maps and My submissions (the second is the player's submissions, given by the page: mapmaker_submit.js)
 //   F  Copy of a saved map (not the open one): the source, the default name and the two ways of making the copy
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
@@ -65,7 +66,7 @@ function rec(name, kind, saved, bytes) { return { key: name.toLowerCase(), name,
 // ---- the page, as far as the list needs it ----
 function page() {
     const doc = makeDocument(), els = {};
-    const ids = { mine: 'section', 'mine-list': 'div', 'mine-status': 'p', 'mine-note': 'p', 'mine-chips': 'span', 'mine-new': 'button', 'mine-back': 'button', 'mine-title': 'h1' };
+    const ids = { mine: 'section', 'mine-list': 'div', 'mine-status': 'p', 'mine-note': 'p', 'mine-chips': 'span', 'mine-new': 'button', 'mine-back': 'button', 'mine-title': 'h1', 'mine-tabs': 'div', 'mine-link': 'button' };
     Object.keys(ids).forEach((id) => { const n = doc.createElement(ids[id]); n.id = id; els[id] = n; doc.body.appendChild(n); });
     return { doc, els, $: (id) => els[id] };
 }
@@ -312,8 +313,37 @@ async function caseG() {
     equal(Array.from(idb.stores.drafts.keys()).sort(), ['foo', 'odd', 'undefined'], 'a key with capitals and blanks is deleted as it is stored, not as a name would be cleaned');
 }
 
+// ---- H: the tabs: My maps and My submissions ----
+async function caseH() {
+    const idb = fakeIdb();
+    idb.stores.drafts.set('a', rec('A', 'classic', 100));
+    const shown = [], hidden = [], uis = [];
+    const sent = { count: () => 3, show: (ui) => { shown.push(1); uis.push(ui); ui.list.textContent = 'the submissions'; ui.count(4); }, hide: () => hidden.push(1), preload: () => shown.push('preload') };
+    const s = setup(await opened(idb), { sent });
+    s.mine.show(); await later(); s.flush();
+    const tabs = s.p.els['mine-tabs'];
+    equal([tabs.hidden, texts(tabs)], [false, ['My maps (1)', 'My submissions (3)']], 'two tabs, with their counts, when the page has the submissions');
+    equal([shown, s.p.els['mine-title'].textContent], [['preload'], 'My maps'], 'the list of maps first, and the other part is asked to load');
+    button(tabs, 'My submissions (3)').click();
+    equal([shown.length, s.p.els['mine-title'].textContent, s.p.els['mine-new'].hidden, s.p.els['mine-chips'].hidden], [2, 'My submissions', true, true], 'the second tab shows the submissions and puts the maps\' own buttons away');
+    equal(texts(tabs), ['My maps (1)', 'My submissions (4)'], 'the count of the submissions is the one that the list says');
+    check(s.p.els['mine-list'].textContent === 'the submissions', 'the list is the submissions\'');
+    check(uis[0].link === s.p.els['mine-link'], 'with the button for the status link');
+    button(tabs, 'My maps (1)').click(); await later(); s.flush();
+    equal([s.p.els['mine-title'].textContent, s.p.els['mine-new'].hidden, s.p.els['mine-link'].hidden, names(s)], ['My maps', false, true, ['A']], 'back to the maps');
+    s.mine.hide();
+    equal(hidden.length, 1, 'closing the screen tells the submissions');
+    s.mine.show('sent'); await later();
+    equal([s.p.els['mine-title'].textContent, shown.length], ['My submissions', 4], 'it can open on the second tab');
+    const bare = setup(await opened(fakeIdb()));
+    bare.mine.show(); await later(); bare.flush();
+    check(bare.p.els['mine-tabs'].hidden === true, 'a page with no submissions has no tabs');
+    bare.mine.show('sent'); await later(); bare.flush();
+    equal(bare.p.els['mine-title'].textContent, 'My maps', 'and cannot open on one');
+}
+
 (async () => {
-    const parts = [['A the store: list and delete', caseA], ['B the list, the filters and the empty states', caseB], ['C Open, Copy and a map that cannot be read', caseC], ['D Delete and its question', caseD], ['E Escape, closing and waiting', caseE], ['F Copy of a saved map', caseF], ['G Delete by the record\'s own key', caseG]];
+    const parts = [['A the store: list and delete', caseA], ['B the list, the filters and the empty states', caseB], ['C Open, Copy and a map that cannot be read', caseC], ['D Delete and its question', caseD], ['E Escape, closing and waiting', caseE], ['F Copy of a saved map', caseF], ['G Delete by the record\'s own key', caseG], ['H the tabs', caseH]];
     for (const [name, fn] of parts) {
         const was = failures;
         try { await fn(); } catch (e) { failures++; console.log('    ERROR: ' + (e && e.stack || e)); }
