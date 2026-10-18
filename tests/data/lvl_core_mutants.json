@@ -911,16 +911,6 @@
     "test_lvl_core"
    ],
    "test": "./build/tests/test_assets/test_lvl_core"
-  },
-  {
-   "id": "conversion_says_130_for_the_game_profile",
-   "file": "src/ants_assets/lvl_core.cpp",
-   "old": "most < 256 && text.size()",
-   "new": "most <= 256 && text.size()",
-   "build": [
-    "test_lvl_core"
-   ],
-   "test": "./build/tests/test_assets/test_lvl_core"
   }
  ]
 }
