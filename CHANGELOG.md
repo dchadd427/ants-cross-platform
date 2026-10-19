@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Group** keeps the clump of before and adds **Mix**: pick the teams and how many ants for each, choose every cell or every other cell, drag a box and the teams are mixed cell by cell, with a preview and one Undo. Good for a "mosh pit" start.
 - **Clear (team) ants...** takes one team's ants away after asking, and says how many.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...2304d240); how it works: [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...a65d54b7); how it works: [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
 
 ## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
 
