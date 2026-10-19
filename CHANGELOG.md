@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.89 - 2026-10-19 - Owner page: sign in with a username and a password (replaces Discord)
 
 **For players:**
 - Owner page: you sign in with a username and a password instead of Discord. There are two roles: an Admin does everything, including adding users, resetting or removing them and reading the list of sign-ins and actions; a Moderator approves, declines, takes down and puts back maps. The lists show who decided each map.
@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21). The server's database moves from schema version 5 to 6 at its first start (copy `ants.db` first: an older program refuses version 6).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f09faf63...b2b682f7)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...4b6b48f3)
 
 ## v0.12.88 - 2026-10-18 - Player text is marked as data on the owner page; safer links (injection hardening, web)
 
