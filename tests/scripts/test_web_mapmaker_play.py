@@ -82,7 +82,7 @@ class ThePlayChecks(unittest.TestCase):
         with open(os.path.join(REPO, "tests", "data", "mapmaker_play_mutants.json"), encoding="utf-8") as f:
             spec = json.load(f)
         tests = {m["test"] for m in spec["mutants"]}
-        self.assertEqual(tests, {"node tests/scripts/web_mapmaker_play_check.js", "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html", "node tests/scripts/web_report_check.js web/shell.html", "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"})
+        self.assertEqual(tests, {"node tests/scripts/web_mapmaker_play_check.js", "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html", "python3 -m unittest tests.scripts.test_web_report.ThePagesOwnCode", "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"})
         for m in spec["mutants"]:
             if m["file"] in ("web/shell.html", "web/front/mapmaker_app.js", "web/mapmaker.html", "web/front/mapmaker_dialog.js"):
                 self.assertNotIn("play_check", m["test"], m["id"])

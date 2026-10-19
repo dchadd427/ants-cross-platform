@@ -2102,7 +2102,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.choose_file(tiny)
         check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
         page.press_act("menu")
-        check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")) and page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).slice(-2).join('|')") == "Submit for approval...|My submissions", "the Menu ends with Submit for approval... and My submissions")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")) and page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).slice(-3).join('|')") == "Submit for approval...|My submissions|\u25b6 Play this map", "the Menu ends with Submit for approval..., My submissions and Play this map")
         page.shot(args.shots, "mapmaker-submit-menu-phone")
         click_text(page, ".menulist .btn", "Submit for approval...")
         check(dialog(page, "Submit for approval"), "the dialog opens")
