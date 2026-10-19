@@ -244,6 +244,7 @@ def make_config(workdir, port, stub_port, relaxed=False):
     text = text.replace("listen 80;", "listen 127.0.0.1:%d;" % port).replace("listen [::]:80;", "")
     text = text.replace("/srv/community-maps/", workdir + "/srv/")
     text = text.replace("/var/cache/nginx/", workdir + "/cache/")
+    text = text.replace("access_log /dev/stdout ants_noquery;", "access_log off;")                      # (the image logs to its output; a rig is quiet)
     text = text.replace("set $ants_replays ants-server:4020;", "set $ants_replays 127.0.0.1:%d;" % stub_port)
     text = text.replace("set $ants_replays ants-server:4002;", "set $ants_replays 127.0.0.1:%d;" % stub_port)
     if relaxed:                                                                                # (the tests that fetch 534 files one after the other are not the flood; the strict rig is)

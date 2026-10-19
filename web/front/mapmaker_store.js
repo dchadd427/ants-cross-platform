@@ -11,7 +11,7 @@
 
     // A name as people compare it: blanks round it and between words count once, capitals do not count
     // (a no-break space counts as a blank, zero-width characters count for nothing, and a letter written in two ways is one: NFC)
-    function clean(name) { return String(name).normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
+    function clean(name) { return String(name).normalize('NFC').replace(/[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]|\uDB40[\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
     function key(name) { return clean(name).toLowerCase(); }
 
     // The names in the list that GET /maps sends ({"format":1,"maps":[{file}]}): the file names without .lvl, or null when it is no list

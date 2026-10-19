@@ -670,6 +670,458 @@
    "file": "src/ants_server/submissions.cpp",
    "old": "if (!quarantined_name(it->path().filename().string()) ||",
    "new": "if ("
+  },
+  {
+   "id": "description_bytes_not_read_as_utf8",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (decode_utf8(bytes, as_text)) return tidy_characters(as_text);                           // (the file's bytes are UTF-8)\n",
+   "new": ""
+  },
+  {
+   "id": "description_latin1_not_read",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    return tidy_characters(v);                                                                    // (else each byte is one Latin-1 letter)",
+   "new": "    return tidy_characters(std::vector<char32_t>());"
+  },
+  {
+   "id": "description_controls_kept",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "        if (is_control(c)) continue;\n        v.push_back(allowed_display_char(c)",
+   "new": "        v.push_back(allowed_display_char(c)"
+  },
+  {
+   "id": "description_line_end_glues_words",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "c == U'\\t' || c == U'\\n' || c == U'\\r' || c == 0x0B || c == 0x0C || is_other_space(c)) c = U' ';",
+   "new": "is_other_space(c)) c = U' ';"
+  },
+  {
+   "id": "description_invisible_kept",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    for (char32_t c : in) {\n        if (is_invisible(c)) continue;\n",
+   "new": "    for (char32_t c : in) {\n"
+  },
+  {
+   "id": "description_any_character_kept",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "v.push_back(allowed_display_char(c) ? c : U'?');",
+   "new": "v.push_back(c);"
+  },
+  {
+   "id": "description_odd_characters_vanish_unmarked",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "v.push_back(allowed_display_char(c) ? c : U'?');",
+   "new": "if (allowed_display_char(c)) v.push_back(c);"
+  },
+  {
+   "id": "description_blanks_not_collapsed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    tidy(v);\n    cut_to(v, kMaxDescriptionChars);",
+   "new": "    cut_to(v, kMaxDescriptionChars);"
+  },
+  {
+   "id": "description_not_cut",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    cut_to(v, kMaxDescriptionChars);\n    return encode(v);",
+   "new": "    cut_to(v, 100000);\n    return encode(v);"
+  },
+  {
+   "id": "description_cut_leaves_a_space",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (v.size() > most) v.resize(most);\n    while (!v.empty() && v.back() == U' ') v.pop_back();",
+   "new": "    if (v.size() > most) v.resize(most);"
+  },
+  {
+   "id": "description_cut_at_101",
+   "file": "include/ants_server/map_names.hpp",
+   "old": "constexpr size_t kMaxDescriptionChars = 100;",
+   "new": "constexpr size_t kMaxDescriptionChars = 101;"
+  },
+  {
+   "id": "description_row_decoded_twice",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    return tidy_characters(v);\n}\n\nstd::string clean_description",
+   "new": "    return clean_description(text);\n}\n\nstd::string clean_description"
+  },
+  {
+   "id": "description_stored_raw",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "s.description = names::clean_description(meta.get(\"description\").str());",
+   "new": "s.description = meta.get(\"description\").str();"
+  },
+  {
+   "id": "description_row_read_raw",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "s.description = names::tidy_description(st.column_text(8));",
+   "new": "s.description = st.column_text(8);"
+  },
+  {
+   "id": "maker_links_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (has_link_markup(out.text)) return fail(\"link\");\n",
+   "new": ""
+  },
+  {
+   "id": "maker_look_alikes_not_folded",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    const std::vector<char32_t> look = folded(v);",
+   "new": "    const std::vector<char32_t> look = v;"
+  },
+  {
+   "id": "maker_reserved_words_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "reserved_maker_word(look) || looks_like_bot(look)) return fail(\"reserved\");",
+   "new": "(reserved_maker_word(look) && false) || looks_like_bot(look)) return fail(\"reserved\");"
+  },
+  {
+   "id": "maker_bot_names_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "reserved_maker_word(look) || looks_like_bot(look)) return fail(\"reserved\");",
+   "new": "reserved_maker_word(look) || (looks_like_bot(look) && false)) return fail(\"reserved\");"
+  },
+  {
+   "id": "maker_the_owner_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    if (skeleton.size() > 3 && skeleton.compare(0, 3, \"the\") == 0) skeleton.erase(0, 3);\n",
+   "new": ""
+  },
+  {
+   "id": "maker_ants_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "\"server\", \"ants\", \"root\"};",
+   "new": "\"server\", \"root\"};"
+  },
+  {
+   "id": "maker_greek_omicron_not_folded",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "{0x039F, 'o'}, ",
+   "new": ""
+  },
+  {
+   "id": "maker_cyrillic_capital_o_not_folded",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "{0x041E, 'o'}, ",
+   "new": ""
+  },
+  {
+   "id": "maker_cyrillic_small_a_not_folded",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "{0x0430, 'a'}, ",
+   "new": ""
+  },
+  {
+   "id": "maker_greek_small_nu_wrong",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "{0x03BD, 'v'}",
+   "new": "{0x03BD, 'n'}"
+  },
+  {
+   "id": "maker_ascii_not_lower_cased",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "        if (c >= U'A' && c <= U'Z') c = c - U'A' + U'a';\n        out.push_back(c);",
+   "new": "        out.push_back(c);"
+  },
+  {
+   "id": "maker_bot_rule_never_fires",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "return ants::ai::is_reserved_bot_name(ascii);",
+   "new": "return ants::ai::is_reserved_bot_name(ascii) && false;"
+  },
+  {
+   "id": "link_markup_case_matters",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    const std::string lower = lower_ascii(std::string(cleaned_text));",
+   "new": "    const std::string lower(cleaned_text);"
+  },
+  {
+   "id": "link_markup_scheme_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "lower.find(\"://\") != std::string::npos || ",
+   "new": ""
+  },
+  {
+   "id": "link_markup_www_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "lower.find(\"www.\") != std::string::npos || ",
+   "new": ""
+  },
+  {
+   "id": "link_markup_backticks_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": " || lower.find(\"```\") != std::string::npos;",
+   "new": ";"
+  },
+  {
+   "id": "note_links_allowed",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (note.ok && names::has_link_markup(note.text)) {",
+   "new": "    if (false && note.ok && names::has_link_markup(note.text)) {"
+  },
+  {
+   "id": "note_link_has_no_sentence",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "note.reason == \"link\" ? \"The note cannot hold a web address or three backticks.\" : ",
+   "new": ""
+  },
+  {
+   "id": "maker_reserved_has_no_sentence",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "maker.reason == \"reserved\" ? \"That maker name cannot be used. Please choose another.\" : ",
+   "new": ""
+  },
+  {
+   "id": "fold_lookalikes_keeps_case",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "    return encode(folded(v));",
+   "new": "    return encode(v);"
+  },
+  {
+   "id": "editor_page_without_the_policy",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header X-Policy-Off \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_policy_allows_eval",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_policy_allows_inline_script",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_policy_has_no_wasm_rule",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_policy_allows_other_sites",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src *; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_policy_allows_plugins",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_policy_allows_a_base_address",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_page_can_be_framed_by_its_own_site",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_page_x_frame_options_missing",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_page_sends_the_referrer",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_page_kept_by_caches",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"public, max-age=300\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_page_lost_embedder_policy",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "editor_page_lost_sniffing_guard",
+   "file": "docker/nginx.conf",
+   "old": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "new": "    location = /mapmaker.html {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\" always;\n        add_header X-Frame-Options \"DENY\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "log_format_has_the_request_line",
+   "file": "docker/nginx.conf",
+   "old": "\"$request_method $uri $server_protocol\"",
+   "new": "\"$request\"",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "log_format_has_the_args",
+   "file": "docker/nginx.conf",
+   "old": "\"$request_method $uri $server_protocol\"",
+   "new": "\"$request_method $uri$is_args$args $server_protocol\"",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "submissions_logged_with_the_query",
+   "file": "docker/nginx.conf",
+   "old": "    location = /submissions {\n        access_log /dev/stdout ants_noquery;       # (the address holds the name, the maker and the note)\n",
+   "new": "    location = /submissions {\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "submission_status_logged_with_the_query",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /submissions/ {\n        access_log /dev/stdout ants_noquery;\n",
+   "new": "    location ^~ /submissions/ {\n",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "owner_api_logged_with_the_query",
+   "file": "docker/nginx.conf",
+   "old": "        access_log /dev/stdout ants_noquery;       # (a decline reason or a name can be in the address)\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+   "build": []
+  },
+  {
+   "id": "lvl_tool_prints_the_description_raw",
+   "file": "tools/lvl_tool.cpp",
+   "old": "escaped(level.description)",
+   "new": "(false ? escaped(level.description) : level.description)",
+   "test": "./build/lvl_tool --selftest",
+   "build": [
+    "lvl_tool"
+   ]
+  },
+  {
+   "id": "lvl_tool_escape_keeps_control_bytes",
+   "file": "tools/lvl_tool.cpp",
+   "old": "} else if (c < 0x20 || c >= 0x7F) {",
+   "new": "} else if (c >= 0x7F) {",
+   "test": "./build/lvl_tool --selftest",
+   "build": [
+    "lvl_tool"
+   ]
+  },
+  {
+   "id": "lvl_tool_escape_keeps_high_bytes",
+   "file": "tools/lvl_tool.cpp",
+   "old": "} else if (c < 0x20 || c >= 0x7F) {",
+   "new": "} else if (c < 0x20) {",
+   "test": "./build/lvl_tool --selftest",
+   "build": [
+    "lvl_tool"
+   ]
+  },
+  {
+   "id": "lvl_tool_escape_keeps_line_ends",
+   "file": "tools/lvl_tool.cpp",
+   "old": "        } else if (c == '\\n') {\n            out += \"\\\\n\";\n        } else if (c == '\\r') {\n            out += \"\\\\r\";\n        } else if (c == '\\t') {\n            out += \"\\\\t\";\n",
+   "new": "",
+   "test": "./build/lvl_tool --selftest",
+   "build": [
+    "lvl_tool"
+   ]
+  },
+  {
+   "id": "lvl_tool_quote_not_escaped",
+   "file": "tools/lvl_tool.cpp",
+   "old": "if (c == '\"' || c == '\\\\') {",
+   "new": "if (c == '\\\\') {",
+   "test": "./build/lvl_tool --selftest",
+   "build": [
+    "lvl_tool"
+   ]
+  },
+  {
+   "id": "maker_root_allowed",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "\"ants\", \"root\"};",
+   "new": "\"ants\"};"
+  },
+  {
+   "id": "maker_digits_not_read_as_letters",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "if (digits && c >= U'0' && c <= U'5') {",
+   "new": "if (false && digits && c >= U'0' && c <= U'5') {"
+  },
+  {
+   "id": "maker_digit_three_is_wrong",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "\"oi eas\"",
+   "new": "\"oi aes\""
+  },
+  {
+   "id": "maker_l_is_not_i",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "} else if (c == U'l') {",
+   "new": "} else if (false && c == U'l') {"
+  },
+  {
+   "id": "maker_accents_ignored",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "if (c >= kAccentsFrom && c < kAccentsFrom",
+   "new": "if (false && c >= kAccentsFrom && c < kAccentsFrom"
+  },
+  {
+   "id": "maker_only_the_digits_dropped_variant",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "for (const bool digits : {false, true}) {",
+   "new": "for (const bool digits : {true}) {"
+  },
+  {
+   "id": "maker_only_the_digits_read_variant",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "for (const bool digits : {false, true}) {",
+   "new": "for (const bool digits : {false}) {"
+  },
+  {
+   "id": "maker_other_letters_vanish_from_the_skeleton",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "} else if (c >= 0x80) {\n            skeleton.push_back('?');",
+   "new": "} else if (c >= 0x80) {\n            (void)0;"
+  },
+  {
+   "id": "maker_digits_stay_in_the_skeleton",
+   "file": "src/ants_server/map_names.cpp",
+   "old": "} else if (c >= U'a' && c <= U'z') {\n            skeleton.push_back(static_cast<char>(c));",
+   "new": "} else if ((c >= U'a' && c <= U'z') || (c >= U'0' && c <= U'9')) {\n            skeleton.push_back(static_cast<char>(c));"
   }
  ]
 }
