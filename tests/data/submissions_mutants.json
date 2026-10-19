@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map submissions (src/ants_server/submissions.cpp, submissions_http.cpp, map_names.cpp, crypto.cpp, the submissions part of map_store.cpp and the door of src/ants_ctl/http.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/submissions_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md (the server's own check, the canonical file, a limit, a protected name, the token, the owner's cookie, CSRF, what a visitor is told, a text rule, the door's size and method rules). The test command runs the three suites of the store, the routes and the text rules, and the door cases of test_ctl. Not listed on purpose: a longer-than-45-characters address text (inet_pton refuses any such text anyway, so the cap is a second lock and the mutant is equivalent). The two mutants fits_not_required and canonical_not_rechecked are second locks behind check_map's own 'works' and the canonical rewrite: a map that works but does not fit the place cannot be built from the map maker's output, and the rewritten file is checked again only as defense in depth; they are expected to survive. short_secret_accepted is not listed either: the owner's API is off in two places (the constructor and owner_api_on(), both at 32 characters), so changing one of them changes nothing a caller can see; the tests of a 31-character secret hold the pair.",
+ "note": "Mutants of the map submissions (src/ants_server/submissions.cpp, submissions_http.cpp, map_names.cpp, crypto.cpp, the submissions part of map_store.cpp and the door of src/ants_ctl/http.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/submissions_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md (the server's own check, the canonical file, a limit, a protected name, the token, the session cookie's time, CSRF, what a visitor is told, a text rule, the door's size and method rules). The test command runs the three suites of the store, the routes and the text rules, and the door cases of test_ctl. Not listed on purpose: a longer-than-45-characters address text (inet_pton refuses any such text anyway, so the cap is a second lock and the mutant is equivalent). The two mutants fits_not_required and canonical_not_rechecked are second locks behind check_map's own 'works' and the canonical rewrite: a map that works but does not fit the place cannot be built from the map maker's output, and the rewritten file is checked again only as defense in depth; they are expected to survive. short_secret_accepted is not listed either: the owner's API is off in two places (the constructor and owner_api_on(), both at 32 characters), so changing one of them changes nothing a caller can see; the tests of a 31-character secret hold the pair. The mutants of the accounts, the roles, the sign-in and the CSRF token are tests/data/admin_accounts_mutants.json.",
  "defaults": {
   "build": "test_submissions test_submissions_api test_map_names test_ctl test_map_list",
   "test": "./build/tests/test_server/test_submissions && ./build/tests/test_server/test_submissions_api && ./build/tests/test_server/test_map_names && ./build/tests/test_ctl/test_ctl && ./build/tests/test_server/test_map_list"
@@ -188,8 +188,8 @@
   {
    "id": "owner_message_dropped",
    "file": "src/ants_server/submissions.cpp",
-   "old": "!st.bind_text(4, note.text).ok() || !st.bind_int64(5, now).ok() || !st.bind_text(6, id).ok()) {",
-   "new": "!st.bind_text(4, \"\").ok() || !st.bind_int64(5, now).ok() || !st.bind_text(6, id).ok()) {"
+   "old": "!st.bind_text(4, note.text).ok() || !st.bind_int64(5, now).ok() || !st.bind_text(6, actor_name).ok() ||",
+   "new": "!st.bind_text(4, \"\").ok() || !st.bind_int64(5, now).ok() || !st.bind_text(6, actor_name).ok() ||"
   },
   {
    "id": "decline_needs_no_reason",
@@ -368,56 +368,26 @@
   {
    "id": "cookie_never_expires",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (exp <= now_s || exp > now_s + kMaxSessionLifeS) return none;",
-   "new": "    if (exp > now_s + kMaxSessionLifeS) return none;"
+   "old": "    if (exp <= now_s || exp > now_s + config_.session_seconds + kSessionSlackS) return none;",
+   "new": "    if (exp > now_s + config_.session_seconds + kSessionSlackS) return none;"
   },
   {
    "id": "cookie_may_last_for_ever",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (exp <= now_s || exp > now_s + kMaxSessionLifeS) return none;",
+   "old": "    if (exp <= now_s || exp > now_s + config_.session_seconds + kSessionSlackS) return none;",
    "new": "    if (exp <= now_s) return none;"
-  },
-  {
-   "id": "everybody_is_the_owner",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    s.owner = ctl::constant_time_equal(s.id, config_.owner_id);",
-   "new": "    s.owner = true;"
-  },
-  {
-   "id": "owner_id_prefix_is_enough",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    s.owner = ctl::constant_time_equal(s.id, config_.owner_id);",
-   "new": "    s.owner = s.id.compare(0, config_.owner_id.size(), config_.owner_id) == 0;"
-  },
-  {
-   "id": "csrf_not_checked",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_of(who))) return error_reply(403, \"csrf\", \"The page's token is missing or old. Reload the page.\");\n",
-   "new": "    (void)token;\n"
-  },
-  {
-   "id": "csrf_of_any_session",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "hex_encode(hmac_sha256(config_.session_secret, \"csrf1|\" + s.nonce + \"|\" + s.id)).substr(0, 32)",
-   "new": "hex_encode(hmac_sha256(config_.session_secret, \"csrf1|\" + s.id)).substr(0, 32)"
-  },
-  {
-   "id": "other_site_may_change",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (site != nullptr && *site != \"same-origin\") return error_reply(403, \"csrf\", \"The page's token is missing or old. Reload the page.\");\n",
-   "new": "    (void)site;\n"
   },
   {
    "id": "other_site_may_read",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (cross_site(request) || request.path.size() < 11) return not_found();",
-   "new": "    if (request.path.size() < 11) return not_found();"
+   "old": "    if (cross_site(request) || path.size() < 11) return not_found();",
+   "new": "    if (path.size() < 11) return not_found();"
   },
   {
    "id": "a_stranger_is_told_no",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (!who.valid || !who.owner) return not_found();",
-   "new": "    if (!who.valid || !who.owner) return error_reply(403, \"owner_only\", \"Owner only.\");"
+   "old": "    if (!who.valid) return not_found();                                             // (a visitor gets what an unknown path gets)",
+   "new": "    if (!who.valid) return error_reply(403, \"owner_only\", \"Owner only.\");"
   },
   {
    "id": "json_not_required",
@@ -488,8 +458,8 @@
   {
    "id": "picture_for_anybody",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (!who.valid || !who.owner) return not_found();",
-   "new": "    if (!who.valid || !who.owner) { if (request.path.size() < 8 || request.path.compare(request.path.size() - 8, 8, \"/picture\") != 0) return not_found(); }"
+   "old": "    if (!who.valid) return not_found();                                             // (a visitor gets what an unknown path gets)",
+   "new": "    if (!who.valid && (path.size() < 8 || path.compare(path.size() - 8, 8, \"/picture\") != 0)) return not_found();"
   },
   {
    "id": "token_returned_always",
@@ -590,8 +560,8 @@
   {
    "id": "decline_counts_the_file_still",
    "file": "src/ants_server/submissions.cpp",
-   "old": "SET state = 'declined', owner_message = ?, decided_at = ?, file_kept = 0 WHERE id = ? AND state = 'waiting'",
-   "new": "SET state = 'declined', owner_message = ?, decided_at = ? WHERE id = ? AND state = 'waiting'"
+   "old": "SET state = 'declined', owner_message = ?, decided_at = ?, decided_by = ?, file_kept = 0 WHERE id = ? AND state = 'waiting'",
+   "new": "SET state = 'declined', owner_message = ?, decided_at = ?, decided_by = ? WHERE id = ? AND state = 'waiting'"
   },
   {
    "id": "finding_message_not_shortened",
@@ -602,7 +572,7 @@
   {
    "id": "admin_api_short_path_throws",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (cross_site(request) || request.path.size() < 11) return not_found();",
+   "old": "    if (cross_site(request) || path.size() < 11) return not_found();",
    "new": "    if (cross_site(request)) return not_found();"
   },
   {

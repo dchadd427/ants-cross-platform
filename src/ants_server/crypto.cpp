@@ -75,6 +75,98 @@ std::string hmac_sha256(std::string_view key, std::string_view data) {
     return sha256(outer);
 }
 
+namespace {
+
+using Sha256State = std::array<uint32_t, 8>;
+
+constexpr Sha256State kSha256Start = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+
+// SHA-256 of "<what was already hashed in whole blocks> + tail", given the state after those blocks and their length in bytes (a multiple of 64). Used by PBKDF2 below to continue from the
+// state after the HMAC key block, so that an iteration costs two compressions instead of four.
+std::string sha256_continue(Sha256State h, size_t already, std::string_view tail) {
+    const auto* bytes = reinterpret_cast<const unsigned char*>(tail.data());
+    const size_t whole = tail.size() / 64;
+    for (size_t i = 0; i < whole; ++i) compress(h, bytes + 64 * i);
+    unsigned char last[128];
+    const size_t rest = tail.size() - whole * 64;
+    if (rest > 0) std::memcpy(last, bytes + whole * 64, rest);
+    last[rest] = 0x80;
+    const size_t padded = rest < 56 ? 64 : 128;
+    std::memset(last + rest + 1, 0, padded - rest - 1);
+    const uint64_t bits = static_cast<uint64_t>(already + tail.size()) * 8u;
+    for (int i = 0; i < 8; ++i) last[padded - 1 - static_cast<size_t>(i)] = static_cast<unsigned char>(bits >> (8 * i));
+    compress(h, last);
+    if (padded == 128) compress(h, last + 64);
+    std::string out(32, '\0');
+    for (size_t i = 0; i < 8; ++i) {
+        for (size_t j = 0; j < 4; ++j) out[4 * i + j] = static_cast<char>(h[i] >> (24 - 8 * j));
+    }
+    return out;
+}
+
+}  // namespace
+
+namespace {
+uint64_t g_pbkdf2_runs = 0;
+}
+
+uint64_t pbkdf2_runs() { return g_pbkdf2_runs; }
+
+bool pbkdf2_hmac_sha256(std::string_view password, std::string_view salt, uint32_t iterations, size_t length, std::string& out) {
+    out.clear();
+    if (iterations == 0 || length == 0 || length > 1024) return false;
+    ++g_pbkdf2_runs;
+    // HMAC's two key blocks, hashed once: every HMAC of the loop continues from these states (RFC 2104; RFC 8018 section 5.2)
+    std::string key = password.size() > 64 ? sha256(password) : std::string(password);
+    key.resize(64, '\0');
+    unsigned char inner_block[64], outer_block[64];
+    for (size_t i = 0; i < 64; ++i) {
+        inner_block[i] = static_cast<unsigned char>(key[i] ^ 0x36);
+        outer_block[i] = static_cast<unsigned char>(key[i] ^ 0x5c);
+    }
+    Sha256State inner = kSha256Start, outer = kSha256Start;
+    compress(inner, inner_block);
+    compress(outer, outer_block);
+    const size_t blocks = (length + 31) / 32;
+    for (size_t b = 1; b <= blocks; ++b) {
+        std::string first(salt);
+        first.push_back(static_cast<char>((b >> 24) & 0xFF));
+        first.push_back(static_cast<char>((b >> 16) & 0xFF));
+        first.push_back(static_cast<char>((b >> 8) & 0xFF));
+        first.push_back(static_cast<char>(b & 0xFF));
+        std::string u = sha256_continue(outer, 64, sha256_continue(inner, 64, first));
+        std::string t = u;
+        for (uint32_t i = 1; i < iterations; ++i) {
+            u = sha256_continue(outer, 64, sha256_continue(inner, 64, u));
+            for (size_t k = 0; k < 32; ++k) t[k] = static_cast<char>(t[k] ^ u[k]);
+        }
+        out += t;
+    }
+    out.resize(length);
+    return true;
+}
+
+namespace {
+uint64_t g_equal_calls = 0;
+}
+
+uint64_t equal_constant_time_calls() { return g_equal_calls; }
+
+bool equal_constant_time(std::string_view a, std::string_view b, size_t* steps) {
+    ++g_equal_calls;
+    const size_t n = a.size() > b.size() ? a.size() : b.size();
+    size_t diff = a.size() ^ b.size();
+    size_t looked = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const unsigned char ca = i < a.size() ? static_cast<unsigned char>(a[i]) : 0;
+        const unsigned char cb = i < b.size() ? static_cast<unsigned char>(b[i]) : 0;
+        diff |= static_cast<size_t>(ca ^ cb);
+        ++looked;
+    }
+    if (steps != nullptr) *steps = looked;
+    return diff == 0;
+}
+
 std::string hex_encode(std::string_view bytes) {
     static const char* const kHex = "0123456789abcdef";
     std::string out;

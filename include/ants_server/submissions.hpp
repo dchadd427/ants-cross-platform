@@ -50,7 +50,7 @@ struct Failure {
 
 /// One row of map_submissions
 struct Submission {
-    std::string id, state, kind, name, final_name, maker, note, owner_message, description, hash, file, findings_json;
+    std::string id, state, kind, name, final_name, maker, note, owner_message, description, hash, file, findings_json, decided_by;
     bool renamed{false};
     bool file_kept{true};
     int64_t width{0}, height{0}, minutes{0}, players{0}, size{0}, created_at{0}, decided_at{0};

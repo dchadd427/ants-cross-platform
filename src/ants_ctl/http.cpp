@@ -136,8 +136,8 @@ bool valid_secret(const std::string& s) {
 
 // What may be put into a response header from a program's hands: visible ASCII and spaces, so no CR, LF or other control character can end the
 // line and start another
-bool safe_header_value(std::string_view s) {
-    if (s.empty() || s.size() > 256) return false;
+bool safe_header_value(std::string_view s, size_t max_size = 256) {
+    if (s.empty() || s.size() > max_size) return false;
     return std::all_of(s.begin(), s.end(), [](char c) {
         const unsigned char u = static_cast<unsigned char>(c);
         return u >= 0x20 && u <= 0x7E;
@@ -299,7 +299,14 @@ bool authenticated(const HttpRequest& r, const std::string& secret) {
 
 // ------------------------------------------------------------------------------------------------
 
+namespace {
+uint64_t g_constant_time_calls = 0;
+}
+
+uint64_t constant_time_equal_calls() { return g_constant_time_calls; }
+
 bool constant_time_equal(std::string_view a, std::string_view b) {
+    ++g_constant_time_calls;
     const size_t n = std::max(a.size(), b.size());
     size_t diff = a.size() ^ b.size();
     for (size_t i = 0; i < n; ++i) {
@@ -588,7 +595,12 @@ void HttpServer::Impl::dispatch(Conn& c, uint32_t now, const Handler& handler) {
         return respond_error(c, now, 500, "internal error");
     }
     const std::string_view type = safe_header_value(response.content_type) ? std::string_view(response.content_type) : std::string_view("application/json");
-    respond(c, now, response.status, type, response.body);
+    std::string extra;
+    for (const std::string& cookie : response.set_cookies) {
+        if (!safe_header_value(cookie, 512)) continue;
+        extra += "Set-Cookie: " + cookie + "\r\n";
+    }
+    respond(c, now, response.status, type, response.body, extra.c_str());
 }
 
 // One connection's turn. False when it is finished (or lost) and must be dropped.

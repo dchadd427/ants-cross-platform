@@ -1,0 +1,713 @@
+{
+ "note": "Mutants of the owner's accounts (src/ants_server/admin_accounts.cpp, admin_cli.cpp, the owner's part of submissions_http.cpp, crypto.cpp's PBKDF2 and comparison, the version 6 migration) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/admin_accounts_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md, 'Accounts' (the hash and its cost, a comparison that looks at every byte, the work an unknown name costs, the three limits on guessing to the try and the second, the budget of password checks, the generation of the sessions, the last Admin, the roles and the answer for a Moderator, the forced change of a starting password, the cookie's flags and time, CSRF and the sign-in's checks, the log, the migration). Not listed on purpose, because no program can tell them apart from the real one: a password longer than 256 bytes that is refused before any work (a hash of it would be refused anyway) and the zeroing of a password in memory (not done).",
+ "defaults": {
+  "build": "test_admin_accounts test_admin_api test_submissions_api",
+  "test": "./build/tests/test_server/test_admin_accounts && ./build/tests/test_server/test_admin_api && ./build/tests/test_server/test_submissions_api"
+ },
+ "mutants": [
+  {
+   "id": "pbkdf2_one_round_short",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "for (uint32_t i = 1; i < iterations; ++i) {",
+   "new": "for (uint32_t i = 1; i + 1 < iterations; ++i) {"
+  },
+  {
+   "id": "pbkdf2_long_key_not_hashed",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "std::string key = password.size() > 64 ? sha256(password) : std::string(password);\n    key.resize(64, '\\0');\n    unsigned char inner_block",
+   "new": "std::string key(password);\n    key.resize(64, '\\0');\n    unsigned char inner_block"
+  },
+  {
+   "id": "pbkdf2_block_index_fixed",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "first.push_back(static_cast<char>(b & 0xFF));",
+   "new": "first.push_back(static_cast<char>(1));"
+  },
+  {
+   "id": "pbkdf2_rounds_not_mixed",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "for (size_t k = 0; k < 32; ++k) t[k] = static_cast<char>(t[k] ^ u[k]);",
+   "new": "for (size_t k = 0; k < 32; ++k) t[k] = u[k];"
+  },
+  {
+   "id": "pbkdf2_salt_ignored",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "std::string first(salt);",
+   "new": "std::string first; (void)salt;"
+  },
+  {
+   "id": "compare_stops_at_the_first_difference",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "diff |= static_cast<size_t>(ca ^ cb);\n        ++looked;",
+   "new": "diff |= static_cast<size_t>(ca ^ cb);\n        ++looked;\n        if (diff != 0) break;"
+  },
+  {
+   "id": "compare_ignores_the_length",
+   "file": "src/ants_server/crypto.cpp",
+   "old": "size_t diff = a.size() ^ b.size();\n    size_t looked = 0;",
+   "new": "size_t diff = 0;\n    size_t looked = 0;"
+  },
+  {
+   "id": "salt_is_always_the_same",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (!random_bytes(salt, sizeof salt)) return std::string();",
+   "new": "for (auto& b : salt) b = 7;"
+  },
+  {
+   "id": "verify_uses_the_new_rounds",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (!pbkdf2_hmac_sha256(password, salt, stored_rounds, kHashBytes, got)) return false;",
+   "new": "if (!pbkdf2_hmac_sha256(password, salt, rounds, kHashBytes, got)) return false;"
+  },
+  {
+   "id": "old_hash_never_outdated",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (outdated != nullptr) *outdated = stored_rounds < rounds;",
+   "new": "if (outdated != nullptr) *outdated = stored_rounds < rounds && false;"
+  },
+  {
+   "id": "hash_compared_with_equals",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (!equal_constant_time(got, want)) return false;",
+   "new": "if (got != want) return false;"
+  },
+  {
+   "id": "starting_password_has_look_alikes",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "constexpr char kPasswordAlphabet[] = \"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789\";",
+   "new": "constexpr char kPasswordAlphabet[] = \"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456780\";"
+  },
+  {
+   "id": "starting_password_biased",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (b >= 224) continue;",
+   "new": ""
+  },
+  {
+   "id": "starting_password_short",
+   "file": "include/ants_server/admin_accounts.hpp",
+   "old": "constexpr size_t kStartingPasswordChars = 20;",
+   "new": "constexpr size_t kStartingPasswordChars = 19;"
+  },
+  {
+   "id": "password_may_be_short",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (chars.size() < kPasswordMinChars) return \"too_short\";",
+   "new": "if (chars.size() + 1 < kPasswordMinChars) return \"too_short\";"
+  },
+  {
+   "id": "password_length_in_bytes",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (chars.size() < kPasswordMinChars) return \"too_short\";",
+   "new": "if (password.size() < kPasswordMinChars) return \"too_short\";"
+  },
+  {
+   "id": "password_may_be_the_username",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    if (username_key(password) == username_key(username)) return \"same_as_name\";\n",
+   "new": "    (void)username;\n"
+  },
+  {
+   "id": "password_may_hold_controls",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (c < 0x20 || (c >= 0x7F && c < 0xA0)) return \"characters\";",
+   "new": "if (c == 0x110000) return \"characters\";"
+  },
+  {
+   "id": "password_cost_too_low",
+   "file": "include/ants_server/admin_accounts.hpp",
+   "old": "constexpr uint32_t kPasswordRounds = 600000;",
+   "new": "constexpr uint32_t kPasswordRounds = 100000;"
+  },
+  {
+   "id": "unknown_name_costs_nothing",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    else password_verify(password, dummy_hash_, config_.rounds, nullptr);                     // (an unknown or disabled name costs the same work)",
+   "new": "    else {}"
+  },
+  {
+   "id": "disabled_account_signs_in",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "const bool usable = user != nullptr && !user->disabled && !expired;",
+   "new": "const bool usable = user != nullptr && !expired;"
+  },
+  {
+   "id": "lock_comes_one_try_late",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (lock && fails >= tries) {",
+   "new": "if (lock && fails > tries) {"
+  },
+  {
+   "id": "pair_lock_ends_a_second_late",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (pair_row.locked_until > now) return Attempt::Locked;",
+   "new": "if (pair_row.locked_until >= now) return Attempt::Locked;"
+  },
+  {
+   "id": "address_lock_ends_a_second_late",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (addr_row.locked_until > now) return Attempt::Locked;",
+   "new": "if (addr_row.locked_until >= now) return Attempt::Locked;"
+  },
+  {
+   "id": "lock_is_short",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "until = now + config_.window_seconds;\n        locked_now = true;",
+   "new": "until = now + config_.window_seconds / 2;\n        locked_now = true;"
+  },
+  {
+   "id": "old_wrong_tries_never_expire",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (r.found && r.first_at + config_.window_seconds > now) {",
+   "new": "if (r.found) {"
+  },
+  {
+   "id": "a_good_sign_in_keeps_the_count",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "run(db_, \"DELETE FROM admin_locks WHERE (scope = 'pair' AND key = ?) OR (scope = 'user' AND key = ?)\", {pair_key, user_ref});",
+   "new": ""
+  },
+  {
+   "id": "address_is_not_counted",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "const bool addr_locked = bump(\"addr\", addr, std::string(), now, config_.address_tries, true);",
+   "new": "const bool addr_locked = false;"
+  },
+  {
+   "id": "address_lock_after_21",
+   "file": "include/ants_server/admin_accounts.hpp",
+   "old": "int address_tries{20};",
+   "new": "int address_tries{21};"
+  },
+  {
+   "id": "pair_lock_after_6",
+   "file": "include/ants_server/admin_accounts.hpp",
+   "old": "int pair_tries{5};",
+   "new": "int pair_tries{6};"
+  },
+  {
+   "id": "slow_mode_shuts_out_known_addresses",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (slow && !known) return Attempt::Locked;",
+   "new": "if (slow) return Attempt::Locked;"
+  },
+  {
+   "id": "slow_mode_never_comes",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (slow && !known) return Attempt::Locked;",
+   "new": "(void)slow;"
+  },
+  {
+   "id": "slow_mode_after_11",
+   "file": "include/ants_server/admin_accounts.hpp",
+   "old": "int user_tries{10};",
+   "new": "int user_tries{11};"
+  },
+  {
+   "id": "known_addresses_never_forgotten",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "AND last_ok >= ?\", {id, addr, now - config_.known_days * 86400}",
+   "new": "AND last_ok >= ?\", {id, addr, now - now}"
+  },
+  {
+   "id": "known_addresses_unbounded",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "{id, id, static_cast<int64_t>(config_.known_addresses)});",
+   "new": "{id, id, int64_t{100000}});"
+  },
+  {
+   "id": "password_checks_not_counted",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (!take_check(known, now_ms)) return Attempt::Busy;",
+   "new": "(void)now_ms;"
+  },
+  {
+   "id": "the_kept_place_is_not_one",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (reserved && window_reserved_used_ < 1) {",
+   "new": "if (reserved && window_reserved_used_ < 100) {"
+  },
+  {
+   "id": "starting_password_check_not_counted",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    if (!take_forced_check(now_ms)) return Attempt::Busy;\n    std::string stored;",
+   "new": "    (void)now_ms;\n    std::string stored;"
+  },
+  {
+   "id": "the_table_of_locks_has_no_end",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (lock_rows_ < config_.lock_rows_max) return false;",
+   "new": "return false;"
+  },
+  {
+   "id": "last_admin_can_be_removed",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "        if (others == 0) {\n            why = failure(409, \"last_admin\", \"This is the last Admin, so this account cannot be removed.",
+   "new": "        if (false) {\n            why = failure(409, \"last_admin\", \"This is the last Admin, so this account cannot be removed."
+  },
+  {
+   "id": "last_admin_can_be_disabled",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "        if (others == 0) {\n            why = failure(409, \"last_admin\", \"This is the last Admin, so this account cannot be disabled.",
+   "new": "        if (false) {\n            why = failure(409, \"last_admin\", \"This is the last Admin, so this account cannot be disabled."
+  },
+  {
+   "id": "a_disabled_admin_counts",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "WHERE role = 'admin' AND disabled = 0 AND id <> ?",
+   "new": "WHERE role = 'admin' AND id <> ?"
+  },
+  {
+   "id": "the_admin_counts_itself",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "WHERE role = 'admin' AND disabled = 0 AND id <> ?",
+   "new": "WHERE role = 'admin' AND disabled = 0 AND id <> -?"
+  },
+  {
+   "id": "reset_keeps_the_sessions",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "must_change = 1, starting_at = ?, session_gen = session_gen + 1\")",
+   "new": "must_change = 1, starting_at = ?\")"
+  },
+  {
+   "id": "reset_keeps_the_old_choice",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "SET pw_hash = ?, must_change = 1, starting_at = ?, session_gen",
+   "new": "SET pw_hash = ?, must_change = 0, starting_at = ?, session_gen"
+  },
+  {
+   "id": "reset_keeps_the_locks",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    clear_locks_of(keyed(\"user\", username_key(user.name)));\n    run(db_, \"DELETE FROM admin_known_addr WHERE user_id = ?\", {id});\n    audit(by, now, \"password_reset\"",
+   "new": "    run(db_, \"DELETE FROM admin_known_addr WHERE user_id = ?\", {id});\n    audit(by, now, \"password_reset\""
+  },
+  {
+   "id": "reset_keeps_the_known_addresses",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    run(db_, \"DELETE FROM admin_known_addr WHERE user_id = ?\", {id});\n    audit(by, now, \"password_reset\"",
+   "new": "    audit(by, now, \"password_reset\""
+  },
+  {
+   "id": "console_reset_leaves_it_disabled",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "(console ? \", disabled = 0\" : \"\")",
+   "new": "(console ? \"\" : \"\")"
+  },
+  {
+   "id": "disable_keeps_the_sessions",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "UPDATE admin_users SET disabled = ?, session_gen = session_gen + 1 WHERE id = ?",
+   "new": "UPDATE admin_users SET disabled = ? WHERE id = ?"
+  },
+  {
+   "id": "new_password_keeps_the_sessions",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "must_change = 0, starting_at = 0, session_gen = session_gen + 1 WHERE id = ?",
+   "new": "must_change = 0, starting_at = 0 WHERE id = ?"
+  },
+  {
+   "id": "new_password_keeps_the_forced_change",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "SET pw_hash = ?, must_change = 0, starting_at = 0, session_gen = session_gen + 1 WHERE id = ?",
+   "new": "SET pw_hash = ?, must_change = 1, starting_at = 0, session_gen = session_gen + 1 WHERE id = ?"
+  },
+  {
+   "id": "a_second_first_admin",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    if (any) {\n        why = failure(409, \"admin_exists\"",
+   "new": "    if (any && false) {\n        why = failure(409, \"admin_exists\""
+  },
+  {
+   "id": "any_role_is_taken",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "if (role != \"admin\" && role != \"moderator\") {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "names_are_case_sensitive",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');",
+   "new": "        if (c == 0) c = 0;"
+  },
+  {
+   "id": "the_address_is_logged_plain",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "{now, by.name, by.id, std::string(action), target, detail, address_hash(by.address)});",
+   "new": "{now, by.name, by.id, std::string(action), target, detail, by.address});"
+  },
+  {
+   "id": "failed_sign_ins_not_logged",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "        audit(who, now, \"sign_in_failed\", std::string(), std::string());",
+   "new": ""
+  },
+  {
+   "id": "the_cap_of_failed_lines_is_off",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "{static_cast<int64_t>(config_.audit_failed_max)});",
+   "new": "{int64_t{1000000}});"
+  },
+  {
+   "id": "a_moderator_may_manage_users",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        if (!admin) return forbidden_like_missing();",
+   "new": "        if (!admin && false) return forbidden_like_missing();"
+  },
+  {
+   "id": "a_moderator_is_told_what_is_there",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    HttpResponse r = not_found();\n    r.status = 403;",
+   "new": "    HttpResponse r = error_reply(403, \"admin_only\", \"Admin only.\");"
+  },
+  {
+   "id": "a_moderator_gets_a_404",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    HttpResponse r = not_found();\n    r.status = 403;",
+   "new": "    HttpResponse r = not_found();\n    r.status = 404;"
+  },
+  {
+   "id": "everybody_is_an_admin",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "const bool admin = who.user.role == \"admin\";",
+   "new": "const bool admin = true;"
+  },
+  {
+   "id": "the_forced_change_is_not_held",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "if (who.user.must_change) return error_reply(403, \"password_change_required\"",
+   "new": "if (false) return error_reply(403, \"password_change_required\""
+  },
+  {
+   "id": "the_starting_password_may_stay",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        switch (accounts_.password_matches(who.user, fresh, now_ms)) {",
+   "new": "        switch (Attempt::Wrong) {"
+  },
+  {
+   "id": "the_old_password_is_not_asked",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!who.user.must_change) {                                                   // (the old password proves",
+   "new": "    if (false) {                                                   // (the old password proves"
+  },
+  {
+   "id": "a_wrong_old_password_is_enough",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "            case Attempt::Wrong: return error_reply(403, \"bad_password\", \"That is not your current password.\");",
+   "new": "            case Attempt::Wrong: break;"
+  },
+  {
+   "id": "the_new_password_may_be_the_old",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        if (current == fresh) return bad_new(\"same_as_old\");",
+   "new": ""
+  },
+  {
+   "id": "the_rules_for_a_new_password_are_skipped",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!problem.empty()) return bad_new(problem);",
+   "new": ""
+  },
+  {
+   "id": "the_generation_of_the_session_is_ignored",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "|| s.user.session_gen != gen) return none;",
+   "new": "|| false) return none;"
+  },
+  {
+   "id": "a_disabled_user_keeps_the_session",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "if (!accounts_.find(uid, s.user) || s.user.disabled ||",
+   "new": "if (!accounts_.find(uid, s.user) ||"
+  },
+  {
+   "id": "the_cookie_signature_is_not_checked",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!ctl::constant_time_equal(mac, expected)) return none;",
+   "new": ""
+  },
+  {
+   "id": "the_cookie_never_ends",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (exp <= now_s || exp > now_s + config_.session_seconds + kSessionSlackS) return none;",
+   "new": "    if (exp > now_s + config_.session_seconds + kSessionSlackS) return none;"
+  },
+  {
+   "id": "the_cookie_may_last_for_ever",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (exp <= now_s || exp > now_s + config_.session_seconds + kSessionSlackS) return none;",
+   "new": "    if (exp <= now_s) return none;"
+  },
+  {
+   "id": "the_session_lasts_a_day",
+   "file": "include/ants_server/submissions_http.hpp",
+   "old": "int64_t session_seconds{12 * 3600};",
+   "new": "int64_t session_seconds{24 * 3600};"
+  },
+  {
+   "id": "the_cookie_is_readable_by_script",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "\"; Path=/admin; Max-Age=\" + std::to_string(max_age) + \"; HttpOnly; SameSite=Strict\"",
+   "new": "\"; Path=/admin; Max-Age=\" + std::to_string(max_age) + \"; SameSite=Strict\""
+  },
+  {
+   "id": "the_cookie_is_not_strict",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "HttpOnly; SameSite=Strict\"",
+   "new": "HttpOnly; SameSite=Lax\""
+  },
+  {
+   "id": "the_cookie_is_not_secure",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "+ (secure ? \"; Secure\" : \"\");",
+   "new": "+ (secure ? \"\" : \"\");"
+  },
+  {
+   "id": "the_sign_in_wants_no_json",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!content_type_is(request, \"application/json\")) return error_reply(415, \"bad_content_type\", \"Send JSON.\");\n    const std::string identity",
+   "new": "    const std::string identity"
+  },
+  {
+   "id": "the_sign_in_says_which_part_was_wrong",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        case Attempt::Wrong: return wrong;",
+   "new": "        case Attempt::Wrong: return error_reply(401, \"bad_login\", \"Wrong password.\");"
+  },
+  {
+   "id": "other_site_may_read",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (cross_site(request) || path.size() < 11) return not_found();",
+   "new": "    if (path.size() < 11) return not_found();"
+  },
+  {
+   "id": "admin_api_short_path_throws",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (cross_site(request) || path.size() < 11) return not_found();",
+   "new": "    if (cross_site(request)) return not_found();"
+  },
+  {
+   "id": "a_visitor_is_told_no",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!who.valid) return not_found();                                             // (a visitor gets what an unknown path gets)",
+   "new": "    if (!who.valid) return error_reply(403, \"sign_in\", \"Sign in first.\");"
+  },
+  {
+   "id": "the_picture_is_for_anybody",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!who.valid) return not_found();                                             // (a visitor gets what an unknown path gets)",
+   "new": "    if (!who.valid && (path.size() < 8 || path.compare(path.size() - 8, 8, \"/picture\") != 0)) return not_found();"
+  },
+  {
+   "id": "a_new_password_leaves_no_new_cookie",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "r.set_cookies.push_back(cookie.empty() ? clear_cookie() : cookie);",
+   "new": "r.set_cookies.push_back(clear_cookie());"
+  },
+  {
+   "id": "the_decider_is_not_kept",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "!st.bind_int64(5, now).ok() || !st.bind_text(6, actor_name).ok() ||\n        !st.bind_text(7, id).ok()) {",
+   "new": "!st.bind_int64(5, now).ok() || !st.bind_text(6, \"\").ok() ||\n        !st.bind_text(7, id).ok()) {"
+  },
+  {
+   "id": "the_decider_is_not_shown",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    if (s.state != \"waiting\" && s.state != \"withdrawn\") o.set(\"decided_by\", JsonValue::make_string(s.decided_by));",
+   "new": ""
+  },
+  {
+   "id": "the_old_deciders_are_not_filled_in",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "    \"UPDATE map_submissions SET decided_by = COALESCE((SELECT r.actor_name FROM review_log r WHERE r.submission = map_submissions.id AND r.action IN ('approve', 'decline', 'take_down', 'put_back') ORDER BY r.id DESC LIMIT 1), '')\"\n    \" WHERE state IN ('approved', 'declined', 'taken_down');\";",
+   "new": "    \";\";"
+  },
+  {
+   "id": "a_role_may_be_anything",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "\" role TEXT NOT NULL CHECK (role IN ('admin', 'moderator')),\"",
+   "new": "\" role TEXT NOT NULL,\"",
+   "build": "test_db",
+   "test": "./build/tests/test_db/test_db"
+  },
+  {
+   "id": "a_name_may_be_taken_twice",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "\" name_key TEXT NOT NULL UNIQUE,\"",
+   "new": "\" name_key TEXT NOT NULL,\"",
+   "build": "test_db",
+   "test": "./build/tests/test_db/test_db"
+  },
+  {
+   "id": "the_sign_in_takes_another_site",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (site != nullptr && *site != \"same-origin\") return error_reply(403, \"cross_site\", \"This request must come from the site's own page.\");\n    if (!content_type_is(request, \"application/json\")) return error_reply(415, \"bad_content_type\", \"Send JSON.\");\n    const std::string identity",
+   "new": "    if (site != nullptr && *site != \"same-origin\" && false) return error_reply(403, \"cross_site\", \"This request must come from the site's own page.\");\n    if (!content_type_is(request, \"application/json\")) return error_reply(415, \"bad_content_type\", \"Send JSON.\");\n    const std::string identity"
+  },
+  {
+   "id": "csrf_not_checked",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) {\n        refusal",
+   "new": "    if (false && token != nullptr && *token == csrf_for(who.nonce, who.user)) {\n        refusal"
+  },
+  {
+   "id": "csrf_of_any_session",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "\"csrf2|\" + nonce + \"|\" + std::to_string(user.id) + \"|\" + std::to_string(user.session_gen)",
+   "new": "\"csrf2|\" + nonce.substr(0, 0) + std::to_string(user.id)"
+  },
+  {
+   "id": "csrf_compared_with_equals",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) {\n        refusal",
+   "new": "    if (token == nullptr || *token != csrf_for(who.nonce, who.user)) {\n        refusal"
+  },
+  {
+   "id": "cookie_signature_compared_with_equals",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!ctl::constant_time_equal(mac, expected)) return none;",
+   "new": "    if (mac != expected) return none;"
+  },
+  {
+   "id": "other_site_may_change",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (site != nullptr && *site != \"same-origin\") {\n        refusal = error_reply(403, \"csrf\"",
+   "new": "    if (site != nullptr && *site != \"same-origin\" && false) {\n        refusal = error_reply(403, \"csrf\""
+  },
+  {
+   "id": "sign_out_needs_no_token",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) return error_reply(403, \"csrf\", \"The page's token is missing or old. Reload the page.\");\n    }\n    JsonValue o = JsonValue::make_object();\n    o.set(\"signed_in\", JsonValue::make_bool(false));",
+   "new": "        (void)token;\n    }\n    JsonValue o = JsonValue::make_object();\n    o.set(\"signed_in\", JsonValue::make_bool(false));"
+  },
+  {
+   "id": "decisions_are_not_logged",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    accounts_.audit(actor, now_s, logged, s.final_name.empty() ? s.name : s.final_name, detail);",
+   "new": "    (void)actor; (void)logged; (void)detail;"
+  },
+  {
+   "id": "logout_leaves_the_session_alive",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (accounts_.session_revoked(nonce)) return none;",
+   "new": ""
+  },
+  {
+   "id": "logout_does_not_remember_the_session",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (who.valid && !accounts_.revoke_session(",
+   "new": "    if (who.valid && false && !accounts_.revoke_session("
+  },
+  {
+   "id": "revoked_sessions_never_forgotten",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    run(db_, \"DELETE FROM admin_revoked WHERE exp < ?\", {now});",
+   "new": ""
+  },
+  {
+   "id": "revoked_sessions_forgotten_early",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "DELETE FROM admin_revoked WHERE exp < ?\", {now}",
+   "new": "DELETE FROM admin_revoked WHERE exp < ?\", {now + 1000}"
+  },
+  {
+   "id": "a_revoked_nonce_of_a_failing_database_is_alive",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    int64_t n = 1;                                                                  // (a database",
+   "new": "    int64_t n = 0;                                                                  // (a database"
+  },
+  {
+   "id": "starting_password_never_expires",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "user->starting_at > 0 && now - user->starting_at > config_.starting_days * 86400;",
+   "new": "user->starting_at > 0 && false;"
+  },
+  {
+   "id": "starting_password_expires_a_second_early",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "now - user->starting_at > config_.starting_days * 86400;",
+   "new": "now - user->starting_at >= config_.starting_days * 86400;"
+  },
+  {
+   "id": "starting_password_lives_a_day_more",
+   "file": "include/ants_server/admin_accounts.hpp",
+   "old": "int64_t starting_days{7};",
+   "new": "int64_t starting_days{8};"
+  },
+  {
+   "id": "reset_does_not_restart_the_time",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "must_change = 1, starting_at = ?, session_gen",
+   "new": "must_change = 1, starting_at = starting_at + 0 * ?, session_gen"
+  },
+  {
+   "id": "new_password_keeps_the_time",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "must_change = 0, starting_at = 0, session_gen",
+   "new": "must_change = 0, starting_at = starting_at, session_gen"
+  },
+  {
+   "id": "forced_checks_share_the_budget_of_sign_ins",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    if (forced_used_ >= config_.forced_checks_per_window) return false;",
+   "new": "    if (window_used_ >= config_.checks_per_window) return false;"
+  },
+  {
+   "id": "forced_checks_have_no_end",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    if (forced_used_ >= config_.forced_checks_per_window) return false;",
+   "new": ""
+  },
+  {
+   "id": "files_are_made_with_the_loose_umask",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "old_ = static_cast<int>(::umask(077));",
+   "new": "old_ = static_cast<int>(::umask(022));"
+  },
+  {
+   "id": "loose_files_are_left_alone",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "const bool done = ::chmod(path.c_str(), want) == 0;",
+   "new": "const bool done = true; (void)want;"
+  },
+  {
+   "id": "the_folder_is_not_tightened",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "    tighten(folder, 0700, \"folder\");",
+   "new": "    (void)folder;"
+  },
+  {
+   "id": "the_wal_file_is_not_tightened",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "    tighten(db_path + \"-wal\", 0600, \"database file\");",
+   "new": ""
+  },
+  {
+   "id": "a_sign_in_name_of_any_length_is_checked",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "if (username.size() > 64 || password.size() > kPasswordMaxBytes) return wrong;",
+   "new": "if (password.size() > kPasswordMaxBytes) return wrong;"
+  },
+  {
+   "id": "the_cookie_is_secure_only_on_request",
+   "file": "src/ants_server/main.cpp",
+   "old": "ac.cookie_secure = !(plain_http != nullptr && std::string(plain_http) == \"1\");",
+   "new": "ac.cookie_secure = plain_http != nullptr && false;",
+   "build": "ants_server lvl_tool",
+   "test": "BUILD_DIR=build python3 tests/scripts/submissions_server_check.py"
+  },
+  {
+   "id": "the_first_password_goes_to_the_error_stream",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "out << \"Admin account created.",
+   "new": "err << \"Admin account created.",
+   "build": "ants_server lvl_tool",
+   "test": "BUILD_DIR=build python3 tests/scripts/submissions_server_check.py"
+  },
+  {
+   "id": "the_reset_is_not_enabled_on_the_console",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "accounts.reset(Actor(), id, now, password, failure, true)",
+   "new": "accounts.reset(Actor(), id, now, password, failure, false)"
+  }
+ ]
+}
