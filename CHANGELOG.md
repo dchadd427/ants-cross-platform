@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
+
+**For players:**
+- Map maker: "Fix edges..." no longer doubles an edge. Where the map already has a piece on one side of a boundary, the other side gets none, so the original Treasure map needs no changes and the seam lines are gone. A second press changes nothing.
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9bedadc0...4fefb548)
+
 ## v0.12.90 - 2026-10-18 - Map maker: Play this map (against bots)
 
 **For players:**
@@ -665,16 +674,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.15...v0.12.16); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
 
-## v0.12.15 - 2026-10-11 - Community maps load in the browser
+## Older versions (v0.12.15 and before)
 
-**For players:**
-- **A room can play any community map in the browser:** when the leader picks a map of the community, every browser downloads that one file before the match loads (it is checked to be the host's copy) and the match waits for everybody. The same goes for watching a recording of such a match.
-- A map that cannot be had (taken off the site, no connection, too slow) stops that start for the room, with the reason on screen; the leader's next START tries again.
-
-**Rules / network:** none: the simulation and the protocol are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9f65f043...9e408a1b)
-
-## Older versions (v0.12.14 and before)
-
-Every release before v0.12.15, and the long notes of v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.16, and the long notes of v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
