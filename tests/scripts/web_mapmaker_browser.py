@@ -1371,7 +1371,7 @@ def run_part(part, tab, args, check, tiny, junk):
         summary = lambda: page.ev("JSON.stringify([document.getElementById('s-desc').textContent, document.getElementById('s-time').textContent, document.getElementById('s-ant').textContent])")
         check(json.loads(summary()) == ["“Tiny map with no PowerUps”", "6 minutes · 3 eggs for each team", "No default ant type"], "the side panel says what the map has: %s" % summary())
         top = page.ev("JSON.stringify([].map.call(document.querySelectorAll('.edmenu.dsk .btn'), function (b) { return b.textContent; }))")
-        check(json.loads(top) == ["New", "Open", "My maps", "Copy...", "Save as new...", "Properties", "Download", "Submit for approval..."], "the top bar: New, Open, My maps, Copy..., Save as new..., Properties, Download, Submit for approval... (%s)" % top)
+        check(json.loads(top) == ["\u25b6 Play this map", "New", "Open", "My maps", "Copy...", "Save as new...", "Properties", "Download", "Submit for approval..."], "the top bar: Play this map, New, Open, My maps, Copy..., Save as new..., Properties, Download, Submit for approval... (%s)" % top)
         check(page.ev("document.querySelector('#sumbox [data-act=props]').offsetParent !== null && document.querySelector('#sumbox [data-act=props]').textContent === 'Edit'"), "the summary has its Edit link")
         page.shot(args.shots, "mapmaker-props-entry")
         # the mouse: the button opens the dialog
@@ -1502,7 +1502,7 @@ def run_part(part, tab, args, check, tiny, junk):
         tap_selector("[data-act=menu]")
         check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
         names = page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')")
-        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions", "the menu: %s" % names)
+        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions|\u25b6 Play this map", "the menu: %s" % names)
         page.shot(args.shots, "mapmaker-props-phone-menu")
         page.ev("document.querySelectorAll('.menulist .btn')[5].click()")
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Properties... opens the sheet")
@@ -1911,7 +1911,7 @@ def run_part(part, tab, args, check, tiny, junk):
             check(page.open() and page.ready(), "the page starts")
             page.press_act("menu")
             check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
-            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions", "the Menu has My maps after Open, and the two ways to send a map at its end")
+            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions|\u25b6 Play this map", "the Menu has My maps after Open, the two ways to send a map and then Play this map at its end")
             click_text(page, ".menulist .btn", "My maps")
             check(wait_for(lambda: shown(page) and len(rows(page)) >= 1 and page.ev("[].every.call(document.querySelectorAll('#mine-list .t3'), function (n) { return n.textContent.length > 0; })")), "My maps opens")
             bad = json.loads(page.ev("""JSON.stringify([].filter.call(document.querySelectorAll('#mine button'), function (b) { return b.offsetParent !== null; }).map(function (b) {

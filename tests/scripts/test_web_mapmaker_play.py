@@ -82,7 +82,7 @@ class ThePlayChecks(unittest.TestCase):
         with open(os.path.join(REPO, "tests", "data", "mapmaker_play_mutants.json"), encoding="utf-8") as f:
             spec = json.load(f)
         tests = {m["test"] for m in spec["mutants"]}
-        self.assertEqual(tests, {"node tests/scripts/web_mapmaker_play_check.js", "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html", "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"})
+        self.assertEqual(tests, {"node tests/scripts/web_mapmaker_play_check.js", "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html", "node tests/scripts/web_report_check.js web/shell.html", "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"})
         for m in spec["mutants"]:
             if m["file"] in ("web/shell.html", "web/front/mapmaker_app.js", "web/mapmaker.html", "web/front/mapmaker_dialog.js"):
                 self.assertNotIn("play_check", m["test"], m["id"])
@@ -151,10 +151,11 @@ class ThePageWiring(unittest.TestCase):
         self.assertRegex(shell, r"var test = !out\.map && !out\.file && window\.AntsTestGame \? window\.AntsTestGame\.fromAddress\(q\.get\('testmap'\), q\.get\('seats'\)\) : null;")
         self.assertIn("var levels = test ? null : localBots(q.get('bots'));", shell, "the front page's bots are not mixed into a test game")
         self.assertIn("ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test;", shell)
-        self.assertIn("else if (ANTS_TEST) window.AntsTestGame.begin(ANTS_TEST, window, function () { return Module; }, function () { ANTS_NAME_GATE.when(startGame); }); else window.AntsMapFiles.beforeLocalGame(", shell)
-        self.assertLess(shell.index("else if (ANTS_TEST)"), shell.index("else window.AntsMapFiles.beforeLocalGame("), "a test game never takes the other way (the file of a map of the players)")
+        self.assertIn("else if (ANTS_TEST && !window.AntsTestGame.begin(ANTS_TEST, window, function () { return Module; })) { /* a card says why the test game cannot start */ } else window.AntsMapFiles.beforeLocalGame(", shell, "a test game that cannot start shows its card and starts nothing; otherwise it goes through the page's one gate like every game on this computer")
+        self.assertEqual(len(re.findall(r"ANTS_NAME_GATE\.when\(startGame\)", shell)), 2, "no third way to start a game")
+        self.assertIn("if (typeof ANTS_TEST !== 'undefined' && ANTS_TEST) return; var sent = fetch('/stats/local'", shell, "a test game is not counted for the front page")
 
-    def test_the_way_back_and_the_strip_are_the_pictures(self):
+    def test_the_way_back_and_the_strip_say_their_words(self):
         for needle in ("Leave the test game?", "The game stops here. You go back to the map exactly as you left it.", "Keep playing", "Back to editor", "Not saved. Not counted.", "min-height:44px"):
             self.assertIn(needle, self.game)
         for needle in ("A test game on ", "Nothing is saved and no score is kept.", "Quick:", "You play one color. The other colors are bots or empty. A color needs ants and a hill on the map to be used.",
@@ -169,7 +170,7 @@ class ThePageWiring(unittest.TestCase):
         self.assertIn("play.run_play_phone(", browser)
         self.assertIn("  * play ", browser)
         self.assertTrue(os.path.isfile(os.path.join(REPO, "tests", "scripts", "web_mapmaker_play_browser.py")))
-        self.assertIn('"play"', re.search(r"WITH_ATLAS = \([^)]*\)", browser).group(0), "the pictures that the part takes are the real map maker's, with the game's pictures")
+        self.assertIn('"play"', re.search(r"WITH_ATLAS = \([^)]*\)", browser).group(0), "the screenshots that the part takes show the real map maker, with the game's own pictures in it")
 
 
 if __name__ == "__main__":

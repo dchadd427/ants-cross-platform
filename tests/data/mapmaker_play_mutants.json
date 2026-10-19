@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the map maker's Play this map for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the verdict, the start rules and the dialogs of web/front/mapmaker_play.js and the game page's side, web/front/test_game.js, against tests/scripts/web_mapmaker_play_check.js; the glue in web/shell.html, web/front/mapmaker_app.js, web/mapmaker.html and mapmaker_dialog.js against tests/scripts/web_lobby_check.js and the pinned source of tests/scripts/test_web_mapmaker_play.py. Run from the checkout: tools/mutate.py tests/data/mapmaker_play_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker_play.py runs the node ones on a copy of the files.",
+  "note": "Mutants of the map maker's Play this map for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the verdict, the start rules and the dialogs of web/front/mapmaker_play.js and the game page's side, web/front/test_game.js, against tests/scripts/web_mapmaker_play_check.js; the glue in web/shell.html, web/front/mapmaker_app.js, web/mapmaker.html and mapmaker_dialog.js against tests/scripts/web_lobby_check.js, tests/scripts/web_report_check.js and the pinned source of tests/scripts/test_web_mapmaker_play.py. Run from the checkout: tools/mutate.py tests/data/mapmaker_play_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker_play.py runs the node ones on a copy of the files.",
   "mutants": [
     {
       "id": "play_rows_limit_91",
@@ -765,24 +765,10 @@
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "game_begin_counted",
-      "file": "web/front/test_game.js",
-      "old": "        win.antsReportLocalGame = function () { /* a test game is not counted in the front page's numbers */ };\n",
-      "new": "",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
       "id": "game_begin_no_strip",
       "file": "web/front/test_game.js",
-      "old": "        strip(win, test, rec);\n        done();",
-      "new": "        done();",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
-      "id": "game_begin_no_start",
-      "file": "web/front/test_game.js",
-      "old": "        strip(win, test, rec);\n        done();",
-      "new": "        strip(win, test, rec);",
+      "old": "        strip(win, test, rec);\n        return true;",
+      "new": "        return true;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
@@ -947,13 +933,6 @@
       "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
     },
     {
-      "id": "shell_test_not_started",
-      "file": "web/shell.html",
-      "old": "else if (ANTS_TEST) window.AntsTestGame.begin(ANTS_TEST, window, function () { return Module; }, function () { ANTS_NAME_GATE.when(startGame); }); else",
-      "new": "else",
-      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
-    },
-    {
       "id": "shell_test_after_community",
       "file": "web/shell.html",
       "old": "ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test;",
@@ -1029,6 +1008,41 @@
       "old": "'btn' + (it.cls ? ' ' + it.cls : '')",
       "new": "'btn'",
       "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "shell_test_not_started",
+      "file": "web/shell.html",
+      "old": "else if (ANTS_TEST && !window.AntsTestGame.begin(ANTS_TEST, window, function () { return Module; })) { /* a card says why the test game cannot start */ } else window.AntsMapFiles",
+      "new": "else window.AntsMapFiles",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "shell_test_started_when_card",
+      "file": "web/shell.html",
+      "old": "else if (ANTS_TEST && !window.AntsTestGame.begin(",
+      "new": "else if (ANTS_TEST && window.AntsTestGame.begin(",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "shell_test_counted",
+      "file": "web/shell.html",
+      "old": "if (typeof ANTS_TEST !== 'undefined' && ANTS_TEST) return; var sent = fetch(",
+      "new": "var sent = fetch(",
+      "test": "node tests/scripts/web_report_check.js web/shell.html"
+    },
+    {
+      "id": "shell_everything_not_counted",
+      "file": "web/shell.html",
+      "old": "if (typeof ANTS_TEST !== 'undefined' && ANTS_TEST) return; var sent = fetch(",
+      "new": "if (true) return; var sent = fetch(",
+      "test": "node tests/scripts/web_report_check.js web/shell.html"
+    },
+    {
+      "id": "game_begin_no_return",
+      "file": "web/front/test_game.js",
+      "old": "        strip(win, test, rec);\n        return true;",
+      "new": "        strip(win, test, rec);\n        return false;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
     }
   ]
 }

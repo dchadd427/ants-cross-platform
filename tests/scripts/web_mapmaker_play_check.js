@@ -211,16 +211,12 @@ function gameChecks() {
     {
         const test = Game.fromAddress(ID, 'ymhn'), module = { preRun: [], FS: { calls: [], mkdirTree(p) { this.calls.push(['mkdirTree', p]); }, writeFile(p, b) { this.calls.push(['writeFile', p, digest(b)]); } } };
         const opener2 = tabOf({ [ID]: { name: 'Mosh <b>Pit</b>', bytes: bytes.slice() } }), w = windowOf(opener2);
-        let started = 0, counted = 0;
-        w.antsReportLocalGame = () => { counted++; };
-        const result = Game.begin(test, w, () => module, () => { started++; });
-        check(result === true && started === 1, 'begin starts the game once');
+        const result = Game.begin(test, w, () => module);
+        check(result === true, 'begin says that the game may start');
         equal(module.preRun.length, 1, 'one function for the game to run before it looks for maps');
         check(module.FS.calls.length === 0, 'nothing is written until the game\'s file system is there');
         module.preRun[0]();
         equal(module.FS.calls, [['mkdirTree', 'Original-Ants/Maps'], ['writeFile', 'Original-Ants/Maps/playtest.lvl', digest(bytes)]], 'the file system gets the tab\'s bytes under the one name');
-        w.antsReportLocalGame();
-        equal(counted, 0, 'a test game is not counted for the front page');
         const bar = w.document.getElementById('test-strip');
         check(bar && w.document.body.children[0] === bar, 'the strip is the first thing on the page');
         equal(bar.textContent, '\u25c0 Back to editorTest gameMosh <b>Pit</b> \u00b7 You: Green \u00b7 Bots: Blue Hard, Red MediumNot saved. Not counted.', 'the strip says what this is, with the name as text');
@@ -247,7 +243,7 @@ function gameChecks() {
         w.timers[0][0]();
         equal(w.assigned, ['/mapmaker.html'], 'a tab that the browser did not close goes to the map maker');
         const w2 = windowOf(tabOf({ [ID]: { name: 'x', bytes } })), m2 = { preRun: [], FS: {} };
-        Game.begin(test, w2, () => m2, () => {});
+        Game.begin(test, w2, () => m2);
         w2.document.getElementById('test-strip').querySelector('button').click();
         w2.document.querySelector('[role=dialog]').querySelectorAll('button')[1].click();
         w2.closed = true;
@@ -257,9 +253,8 @@ function gameChecks() {
     // begin with no hand-over: a card, no game
     {
         const w = windowOf(null), module = { preRun: [] };
-        let started = 0;
-        const result = Game.begin(Game.fromAddress(ID, 'ymnn'), w, () => module, () => { started++; });
-        check(result === false && started === 0 && module.preRun.length === 0, 'no hand-over: the game does not start and nothing is queued');
+        const result = Game.begin(Game.fromAddress(ID, 'ymnn'), w, () => module);
+        check(result === false && module.preRun.length === 0, 'no hand-over: the game does not start and nothing is queued');
         const box = w.document.getElementById('load-failure');
         check(box && /This test game cannot start/.test(box.textContent) && /Open the map maker/.test(box.textContent) && /press Play this map again/.test(box.textContent), 'a card says so, in plain words');
         box.querySelector('button').click();

@@ -2111,10 +2111,10 @@
         })();
 
         // ANTS_REPORT_BEGIN (tests/scripts/web_report_check.js runs this function with a fake fetch and a table of failures)
-        // The game calls this when a game on THIS computer begins (its first tick; a match of the network never does): the server counts it for the numbers of the front page (docs/SERVER.md, the section on the site statistics). One POST with nothing in it; no retry, nothing on the page, and no failure (no fetch, a throw, a refused or lost request, a 503) is ever the game's business.
+        // The game calls this when a game on THIS computer begins (its first tick; a match of the network never does): the server counts it for the numbers of the front page (docs/SERVER.md, the section on the site statistics), except a test game from the map maker (ANTS_TEST), which is not counted. One POST with nothing in it; no retry, nothing on the page, and no failure (no fetch, a throw, a refused or lost request, a 503) is ever the game's business.
         function antsReportLocalGame() {
             try {
-                var sent = fetch('/stats/local', { method: 'POST', keepalive: true });
+                if (typeof ANTS_TEST !== 'undefined' && ANTS_TEST) return; var sent = fetch('/stats/local', { method: 'POST', keepalive: true });
                 if (sent && typeof sent.catch === 'function') sent.catch(function () { /* only the front page's numbers depend on it: nobody is told */ });
             } catch (e) { /* no fetch in this browser: nothing is counted */ }
         }
@@ -3883,7 +3883,7 @@
             // (a recording starts the game once the file is here too: the replay block above)
             function begin() {
                 if (ANTS_REPLAY_MODE) window.antsAfterReplay(function () { ANTS_NAME_GATE.when(startGame); });
-                else if (ANTS_TEST) window.AntsTestGame.begin(ANTS_TEST, window, function () { return Module; }, function () { ANTS_NAME_GATE.when(startGame); }); else window.AntsMapFiles.beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE, function () { return Module; }, function (text, gone) { showDownloadError(new Error(text), 'map', gone); }, function () { ANTS_NAME_GATE.when(startGame); });
+                else if (ANTS_TEST && !window.AntsTestGame.begin(ANTS_TEST, window, function () { return Module; })) { /* a card says why the test game cannot start */ } else window.AntsMapFiles.beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE, function () { return Module; }, function (text, gone) { showDownloadError(new Error(text), 'map', gone); }, function () { ANTS_NAME_GATE.when(startGame); });
             }
             if (!window.fetch || !window.Promise || !window.Uint8Array) { begin(); return; }
 

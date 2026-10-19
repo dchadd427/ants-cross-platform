@@ -139,18 +139,17 @@
         return bar;
     }
 
-    // The game page's start of a test game: the bytes are written where the game looks (its Module.preRun), the strip goes up, and `go` starts the game. A hand-over that is not there (the map maker's tab is
-    // closed, or this tab was not opened from one) is a card with a way to the map maker, and the game does not start. A reload of this tab takes the same hand-over again: the game starts over on the same map.
-    function begin(test, win, getModule, done) {
+    // The game page's start of a test game: the bytes are written where the game looks (its Module.preRun) and the strip goes up; true means that the page may start the game (through its own gate, as any game on
+    // this computer). A hand-over that is not there (the map maker's tab is closed, or this tab was not opened from one) is a card with a way to the map maker, and false: the game does not start. A reload
+    // of this tab takes the same hand-over again: the game starts over on the same map.
+    function begin(test, win, getModule) {
         var rec = take(win, test.id);
         if (!rec) {
             card(win.document, 'This test game cannot start', 'A test game is started from the map maker, and the tab that held its map is not there any more. Open the map maker and press Play this map again.', 'Open the map maker', EDITOR);
             return false;
         }
         getModule().preRun.push(win.AntsMapFiles.writer(function () { return getModule().FS; }, FILE, rec.bytes));
-        win.antsReportLocalGame = function () { /* a test game is not counted in the front page's numbers */ };
         strip(win, test, rec);
-        done();
         return true;
     }
 
