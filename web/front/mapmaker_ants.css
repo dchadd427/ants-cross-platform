@@ -1,0 +1,51 @@
+/* The Ants tool's box of the map maker (web/front/mapmaker_ants.js, docs/MAP_EDITOR.md): the switch One at a time / Group, the four teams with their counts, Clump and Mix, the plain warnings and the
+   box drawn over the map. Loaded with the script, the first time the tool is chosen; the tokens are mapmaker.css's and classic.css's. Every button is 44 pixels high on a touch screen. */
+.am { display: flex; flex-direction: column; gap: 5px; padding-top: 6px; border-top: 1px solid var(--rule); min-width: 0; }
+.am[hidden] { display: none; }
+.am-h { margin-top: 2px; font-size: 13px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.am-row { display: grid; gap: 4px; min-width: 0; }
+.am-two { grid-template-columns: 1fr 1fr; } .am-four { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; } .am-teams { grid-template-columns: 1fr; gap: 4px; }
+.am-b { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 36px; padding: 3px 6px; font-size: 14.5px; line-height: 1.15; text-align: center; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 6px; }
+.am-b[aria-pressed="true"] { background: #0d1b16; color: var(--gold); border-color: var(--gold); }
+.am-b[disabled] { opacity: .45; cursor: default; }
+.am-b.ghost { background: #0d1b16; }
+.am-b.go { font-weight: 500; }
+.am-b:focus-visible, .am-link:focus-visible, .am-n:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.am-team { justify-content: flex-start; padding: 0 8px; background: #0d1b16; border-color: var(--rule); }
+.am-team.on { background: #14332b; border-color: var(--gold); color: var(--cream); }
+.am-mixteam { flex-direction: column; justify-content: center; gap: 1px; padding: 4px 2px; font-size: 13px; min-height: 52px; }
+.am-mixteam[aria-pressed="true"] { background: #14332b; border-color: var(--gold); color: var(--cream); }
+.am-mixteam[aria-pressed="false"] { opacity: .6; }
+.am-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #f4ece2; box-sizing: border-box; }
+.am-tn { flex: 1 1 auto; min-width: 0; text-align: left; }
+.am-mixteam .am-tn { flex: none; text-align: center; }
+.am-tc { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.am-team.on .am-tc { color: var(--gold); }
+.am-step { grid-template-columns: 36px minmax(0, 1fr) 36px; align-items: center; }
+.am-s { min-width: 36px; height: 36px; padding: 0; font-size: 22px; }
+.am-n { width: 100%; min-width: 0; height: 36px; box-sizing: border-box; font-size: 20px; text-align: center; background: #0b1612; color: var(--cream); border: 2px solid var(--edge); border-radius: 6px; }
+.am-note { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.am-total { font-size: 14px; color: var(--cream); }
+.am-link { display: inline; min-height: 0; padding: 0; font: inherit; color: var(--mint, #7fe3a3); text-decoration: underline; background: none; border: 0; cursor: pointer; }
+.am-clear { min-height: 36px; margin-top: 4px; border-color: var(--rule); background: #0d1b16; }
+.am-status { font-size: 14px; line-height: 1.35; padding: 8px 10px; color: var(--cream); background: #0d1b16; border: 2px solid var(--edge); border-radius: 6px; }
+.am-status.warn { color: var(--warn); border-color: var(--warn); }
+.am-go { margin-top: 2px; }
+.am-warn { display: flex; flex-direction: column; gap: 4px; }
+.am-w { font-size: 13px; line-height: 1.35; padding: 7px 9px; border-radius: 6px; border: 2px solid var(--edge); background: #0d1b16; color: var(--cream); }
+.am-w.ok { border-color: #3b976f; } .am-w.warn { border-color: var(--warn); background: #2a2208; color: var(--warn); } .am-w.bad { border-color: var(--bad); background: #3b0d10; color: #ffe4de; }
+.am-said { font-size: 13px; line-height: 1.35; color: var(--cream); }
+.cv canvas.am-over { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+@media (pointer: coarse), (max-width: 600px), (min-width: 601px) and (max-height: 450px) {
+    .am-b, .am-team, .am-n, .am-clear { min-height: 44px; } .am-s { min-width: 44px; height: 44px; } .am-n { height: 44px; } .am-step { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+    .am-mixteam { min-height: 56px; }
+}
+@media (max-width: 600px) {
+    .am { grid-column: 1 / -1; }
+    .am-b { font-size: 16px; }
+    .am-teams { grid-template-columns: 1fr 1fr; }
+    .am-note { font-size: 13px; }
+}
+.side.am-on > *:not(.am):not(.checkline) { display: none; }
+.side.am-on { overflow-y: auto; }
+.side .am { border-top: 0; padding-top: 0; flex: 1 1 auto; }
