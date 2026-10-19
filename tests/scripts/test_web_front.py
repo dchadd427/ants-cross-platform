@@ -55,7 +55,7 @@ SUBMIT_LAZY = ("mapmaker_submit.js",)        # the map maker's script that is lo
 SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET = 30 * 1000, 9 * 1000        # bytes, raw and gzipped: its own limits, so that the eagerly loaded scripts keep theirs (340,000 and 90,000) and a player who never sends a map downloads nothing of it
 EDITOR_BUDGET = 340 * 1000        # bytes: the map maker's own scripts and style (mapmaker_*.js, mapmaker.css), measured apart from the pictures so that the editor's growth is seen (raised from 260,000 in E5: saving, drafts and the lists of E6 need the room; the gzipped cap below stays)
 LAZY_BUDGET = 46 * 1000        # bytes: the three lazily loaded map maker scripts together (about 44,000 now), and gzipped below (about 14,700): added with the sprites (docs/MAP_EDITOR.md, "Sprites"), so the editor's own caps did not have to move; raised from 36,000 and 12,000 on purpose in Fix edges (sprites part 2), which adds mapmaker_edges.js (the rule and its dialog, about 13,000 bytes) here and not to the eagerly loaded scripts
-LAZY_GZIP_BUDGET = 15 * 1000
+LAZY_GZIP_BUDGET = 16 * 1000       # (raised from 15,000 on purpose in the Fix edges fixes: one wearer per boundary and the tile a neighbor ends with, about 600 bytes gzipped, are lazy code; the three scripts are 15,283 now)
 EDITOR_GZIP_BUDGET = 94 * 1000      # bytes: the same, gzipped file by file (what a player downloads); raised from 90,000 in the sprites part 1, on purpose: the pictures' own page code and Submit for approval met in one release (the files summed 91,602); raised from 80,000 in E5: the files already summed 76,973 before it (the 68 KB that was quoted is another way of counting) and E5 adds about 4,300
 
 
