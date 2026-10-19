@@ -358,7 +358,9 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(self.ask("GET", "/history?limit=2")[2], b'{"history":[],"count":0,"query":"limit=2"}')      # another search is another entry
         self.assertEqual(self.stub_lines(before + 3) - before, 3)
         for _ in range(4):
-            self.assertEqual(self.ask("GET", "/history/" + ITEM_ID)[1:], self.ask("GET", "/history/" + ITEM_ID)[1:])
+            one, two = self.ask("GET", "/history/" + ITEM_ID), self.ask("GET", "/history/" + ITEM_ID)
+            strip = lambda r: ([h for h in r[1] if h[0].lower() != "date"], r[2])          # (the Date line moves on with the clock: a second can tick between the two asks)
+            self.assertEqual(strip(one), strip(two))
         self.assertEqual(self.stub_lines(before + 11) - before, 11)                           # eight asks of one match: none came from a cache
         self.assertEqual(self.ask("GET", "/history")[2], first[2])                            # (the list without a query is still the one entry: the queries did not take its place)
         self.assertEqual(self.stub_lines() - before, 11)
