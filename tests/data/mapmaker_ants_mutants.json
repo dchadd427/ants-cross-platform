@@ -1,0 +1,264 @@
+{
+  "note": "Mutants of the map maker's Ants tool box for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/front/mapmaker_ants.js and its hooks in web/front/mapmaker_tools.js against tests/scripts/web_mapmaker_ants_check.js; the ones that start with browser_ only the real browser notices (they run `web_mapmaker_browser.py --only ants`, so ANTS_WEB_URL must name a page served from this checkout). Run from the checkout: tools/mutate.py tests/data/mapmaker_ants_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+  "mutants": [
+    {
+      "id": "dup_allowed",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (antMap(file, lay)[row * file.columns + column] !== undefined) return { error: 'An ant is already on that cell.' };",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "solid_ignored",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (Edit.flags(file, 1, idx) & 1) return",
+      "new": "if (Edit.flags(file, 1, idx) & 2) return",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "object_ignored",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (Edit.tile(file, 2, idx) !== EMPTY2) return 'An object",
+      "new": "if (Edit.tile(file, 2, idx) === EMPTY2) return 'An object",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "hill_pile_half",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (why === 'hill' || why === 'pile') return",
+      "new": "if (why === 'pile') return",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "cap_off_by_one",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "lay.records.length + 1 > MAX_RECORDS",
+      "new": "lay.records.length + 1 > MAX_RECORDS + 1",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "max_records_wrong",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "var MAX_RECORDS = 65535;",
+      "new": "var MAX_RECORDS = 65536;",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "insert_place_wrong",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "rel: lay.b1.length, removed",
+      "new": "rel: lay.b1.length - 6, removed",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "count_word_wrong",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "lay.records.length + records.length);",
+      "new": "lay.records.length + records.length + 1);",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "take_count_wrong",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "lay.records.length - 1);",
+      "new": "lay.records.length);",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "gap_parity_wrong",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "((r - box.r0) + (c - box.c0)) % 2) continue",
+      "new": "((r - box.r0) + (c - box.c0)) % 3) continue",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "mix_one_team",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "order.push(teams[i % n]);",
+      "new": "order.push(teams[0]);",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "mix_existing_ant_overwritten",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (map[idx] !== undefined || whyNot(file, idx)) continue;",
+      "new": "if (whyNot(file, idx)) continue;",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "mix_blocked_cell_used",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (map[idx] !== undefined || whyNot(file, idx)) continue;",
+      "new": "if (map[idx] !== undefined) continue;",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "mix_small_accepted",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (found.length < ants) {\n            out.text",
+      "new": "if (found.length < 1) {\n            out.text",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "need_cells_ignores_gap",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "need: ants * gap",
+      "new": "need: ants",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "packed_neighbors",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if ((dr || dc) && !shut",
+      "new": "if ((dr && dc) && !shut",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "missing_team_rule",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (!facts.ants[t]) missing.push",
+      "new": "if (facts.ants[t] > 1) missing.push",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "over_rule",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (after > MAX_RECORDS) {",
+      "new": "if (after >= MAX_RECORDS) {",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "too_many_number",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "Take ' + num(total - MAX_RECORDS) + (",
+      "new": "Take ' + num(total - MAX_RECORDS + 1) + (",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clear_wrong_team",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "function clearTeam(file, team) { return Blocks.eraseStart(file, team); }",
+      "new": "function clearTeam(file, team) { return Blocks.eraseStart(file, 0); }",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "tap_only_flipped",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "tapOnly: function () { return st.mode === 'one'; }",
+      "new": "tapOnly: function () { return st.mode !== 'one'; }",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "mine_ignores_mix",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "return st.mode === 'one' || st.shape === 'mix'; }",
+      "new": "return st.mode === 'one'; }",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "tap_removes_wrong",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (at >= 0) { change = takeOne",
+      "new": "if (at > 0) { change = takeOne",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "take_mode_puts",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "else if (st.tap === 'take') {",
+      "new": "else if (st.tap === 'zzz') {",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clear_asks_nothing",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "title: 'Clear the ' + label(t) + ' ants?'",
+      "new": "title: 'Clear'",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clear_count_wrong",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "text: 'Take away ' + plural(count,",
+      "new": "text: 'Take away ' + plural(count + 1,",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "side_class_wrong",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "toggle('am-on', !narrow && shown)",
+      "new": "toggle('am-on', narrow && shown)",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "team_order",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "var ORDER = [3, 2, 0, 1];",
+      "new": "var ORDER = [0, 1, 2, 3];",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "browser_begin_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "                if (mine()) return mine().begin(cell);\n",
+      "new": "",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only ants"
+    },
+    {
+      "id": "browser_tap_only_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "(mine() ? mine().tapOnly() : places())",
+      "new": "places()",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only ants"
+    },
+    {
+      "id": "browser_part_never_asked",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (id === 'ants') askAnts();",
+      "new": "",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only ants"
+    },
+    {
+      "id": "browser_extend_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "                if (mine()) return mine().extend(from, to);\n",
+      "new": "",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only ants"
+    },
+    {
+      "id": "mix_not_shuffled",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "for (i = ants - 1; i > 0; i--) { var j",
+      "new": "for (i = ants - 1; i > 100000; i--) { var j",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "mix_lines_not_repaired",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "pass < 12 && n > 1",
+      "new": "pass < 0 && n > 1",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "mix_not_spread",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "found[Math.floor((k + 0.5) * found.length / ants)]",
+      "new": "found[k]",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "too_many_singular",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "(total - MAX_RECORDS === 1 ? ' ant' : ' ants')",
+      "new": "' ants'",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "rows_note_missing",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "if (file.rows > 90)",
+      "new": "if (file.rows > 9000)",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    }
+  ]
+}

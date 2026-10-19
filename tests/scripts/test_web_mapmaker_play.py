@@ -165,7 +165,7 @@ class ThePageWiring(unittest.TestCase):
 
     def test_the_browser_check_has_the_part(self):
         browser = read("tests", "scripts", "web_mapmaker_browser.py")
-        self.assertRegex(browser, r'PARTS = \([^)]*"play"\)')
+        self.assertRegex(browser, r'PARTS = \([^)]*"play"[,)]')
         self.assertIn("play.run_play(", browser)
         self.assertIn("play.run_play_phone(", browser)
         self.assertIn("  * play ", browser)

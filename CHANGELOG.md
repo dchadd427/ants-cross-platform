@@ -32,7 +32,16 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21). The server's database moves from schema version 5 to 6 at its first start (copy `ants.db` first: an older program refuses version 6).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...fcd24846)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9c3e784...6948051a)
+
+## v0.12.92 - 2026-10-19 - Map maker: place ants one at a time, and mix teams
+
+**For players:**
+- **Map maker: place ants one at a time.** Choose Ants, tap a cell and one ant of the picked team stands there; tap an ant (any team) and it is taken away. "Take one away" makes every tap a removal. Each team shows how many ants it has, with plain warnings (a team with none, too many for the file, ants packed too tight).
+- **Group** keeps the clump of before and adds **Mix**: pick the teams and how many ants for each, choose every cell or every other cell, drag a box and the teams are mixed cell by cell, with a preview and one Undo. Good for a "mosh pit" start.
+- **Clear (team) ants...** takes one team's ants away after asking, and says how many.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...a65d54b7); how it works: [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
 
 ## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
 
@@ -663,20 +672,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b54ec65...zoom-nearest)
 
-## v0.12.19 - 2026-10-12 - Comments name the test files where the checks now live
+## Older versions (v0.12.19 and before)
 
-**For players:**
-- Nothing changes in the game: comments and documents were corrected so that they name the test files where the checks now live.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.18...v0.12.19); comment-only change.
-
-## v0.12.18 - 2026-10-12 - Zooming no longer clicks the sound
-
-**For players:**
-- **Zooming no longer makes the sound click.** The sounds are placed by distance from the middle of the picture, so every zoom step with the wheel moves the listener, and the sounds that were playing changed their volume and side in one instant. That click is measured. A faint sound that suddenly got loud may have been heard as played again ("repeat"), but that is only a hypothesis about what the owner heard, not confirmed. The volume and side now glide to the new place in 12 ms. Which sounds start, when and where is unchanged, in a replay and in a game.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
-
-## Older versions (v0.12.17 and before)
-
-Every release before v0.12.18, and the long notes of v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.20, and the long notes of v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -35,7 +35,7 @@
         var doc = env.doc, canvas = env.canvas, host = env.host;
         var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4 };
         var editor = null, current = null, told = false, fits = '';                     // `fits`: a note when fewer ants than asked for found room, until the next choice
-        var ground = null, sprites = null;                                              // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js): the kinds' sheets and the game's pictures
+        var ground = null, sprites = null, ants = null, asked = false;                  // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js: the kinds' sheets and the game's pictures; mapmaker_ants.js: the Ants tool's box, asked for when the tool is first chosen)
         var ICONS = { ground: [0, 485], objects: [1, 302], bigger: [1, 1323], hills: [1, 248], food: [1, 264] };           // the tool buttons' pictures: [layer 2?, tile]
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
@@ -98,14 +98,14 @@
                 b.disabled = !(tool && Palette.usable(tool.id));
                 b.setAttribute('aria-pressed', String(tool.id === state.tool));
             });
-            var hasPalette = !!(Palette.tool(state.tool) || {}).palette, panel = host.box.parentNode;
+            var own = !!ants && state.tool === 'ants', hasPalette = !!(Palette.tool(state.tool) || {}).palette && !own, panel = host.box.parentNode;
             if (panel && panel.classList) panel.classList.toggle('tilemode', state.tool === 'bigger');          // (a long list: the one button and its sheet, on a desktop too)
             host.box.hidden = !hasPalette;
             host.tile.hidden = !hasPalette;
             host.hint.textContent = '';
-            host.hint.appendChild(el('span', 'dsk', HINTS[state.tool]));
-            host.hint.appendChild(el('span', 'mob', PHONE_HINTS[state.tool]));
+            if (!own) { host.hint.appendChild(el('span', 'dsk', HINTS[state.tool])); host.hint.appendChild(el('span', 'mob', PHONE_HINTS[state.tool])); }
             if (hasPalette) showPalette();
+            if (ants) ants.show(own);
             showButtons();
             canvas.refresh();
         }
@@ -137,7 +137,7 @@
             showPalette();
         }
 
-        function showInfo() { if (host.name) host.name.textContent = infoText(); }
+        function showInfo() { if (host.name) host.name.textContent = infoText(); if (ants) ants.refresh(); }
 
         // The team swatches: a chip and the team's name
         function teamButton(team, cls, onPick) {
@@ -286,10 +286,27 @@
 
         function chooseTeam(id) { state.team = id; fits = ''; showPalette(); }
 
+        // The Ants tool's box is a script of its own (mapmaker_ants.js), asked for the first time the tool is chosen; until it is there (or when it did not load) the tool is the clump of before
+        function askAnts() {
+            if (asked || !env.loadAnts) return;
+            asked = true;
+            env.loadAnts(function (Part) {
+                if (!Part) { asked = false; return; }
+                ants = Part.create({
+                    doc: doc, win: env.win, host: { tools: host.hint.parentNode, hint: host.hint, side: host.side, cv: host.map && host.map.parentNode, map: host.map }, file: env.file, act: act, say: env.say, dialogs: env.dialogs, about: env.about, props: env.props,
+                    team: function () { return state.team; }, setTeam: chooseTeam, ants: function () { return state.ants; }, setAnts: function (n) { state.ants = n; fits = ''; }, fits: function () { return fits; },
+                    view: function () { return canvas.state(); }, refresh: function () { canvas.refresh(); }
+                });
+                if (editor) ants.setMap();
+                showTools();
+            });
+        }
+
         function chooseTool(id) {
             if (!Palette.usable(id)) return;
             if (canvas.isStroking()) return;
             state.tool = id; fits = '';
+            if (id === 'ants') askAnts();
             showTools();
         }
 
@@ -304,6 +321,9 @@
         }
         function undo() { if (editor && !canvas.isStroking()) changed(editor.undo()); }
         function redo() { if (editor && !canvas.isStroking()) changed(editor.redo()); }
+
+        // A CHANGE that is not a stroke (the properties, Fix edges, the Ants box) as one step of the history; false when a stroke is going on or the change did nothing
+        function act(change) { if (!editor || canvas.isStroking()) return false; var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; }
 
         // ---- the painter: what the canvas calls ----
         function startStroke() {
@@ -332,19 +352,22 @@
             else { showInfo(); if (env.file() !== was) env.onEdit(); }                    // (nothing changed on the map, but the dictionary may have got a name: the page is told)
         }
 
+        // the box of the Ants tool takes the canvas's taps and drags (One at a time, and the drag of a Mix); the clump is the tool's own
+        function mine() { return !!ants && state.tool === 'ants' && ants.mine() ? ants.painter : null; }
         var painter = {
             // the size of the square that the canvas marks under the pointer: the brush, a hill (4 x 4), a cell for ants and food (a bigger object marks its own box: shape); 0 for a tool that does not mark
-            size: function () { return !editor ? 0 : (paints() ? state.brush : (places() ? (state.tool === 'hills' ? Blocks.HILL : 1) : 0)); },
+            size: function () { return !editor ? 0 : (mine() ? 1 : (paints() ? state.brush : (places() ? (state.tool === 'hills' ? Blocks.HILL : 1) : 0))); },
             // the picture that follows the pointer: a bigger object's tile id (0 for the other tools)
             ghost: function () { return editor && state.tool === 'bigger' ? state.big : 0; },
             // a tool that puts one whole thing with a tap: a drag looks around instead of painting
-            tapOnly: function () { return !!editor && places(); },
+            tapOnly: function () { return !!editor && (mine() ? mine().tapOnly() : places()); },
             // the box of a bigger object, counted from the cell that is tapped
             shape: function () { return editor && state.tool === 'bigger' ? bigNow().box : null; },
             // the hill's door is marked in the square, and the cell that anchors a bigger object
             door: function () { return !!editor && (state.tool === 'hills' || state.tool === 'bigger'); },
             begin: function (cell) {
                 if (!editor) return false;
+                if (mine()) return mine().begin(cell);
                 if (places()) { place(cell); return false; }
                 if (!paints()) return false;
                 current = startStroke();
@@ -369,6 +392,7 @@
                 return true;
             },
             extend: function (from, to) {
+                if (mine()) return mine().extend(from, to);
                 if (!current) return;
                 current.segment(from.row, from.column, to.row, to.column, state.brush);
                 canvas.markDirty(current.takeDirty());
@@ -376,12 +400,14 @@
                 if (why && !told) { told = true; if (env.say) env.say('It cannot be put there', why); }
             },
             end: function () {
+                if (mine()) return mine().end();
                 if (!current) return;
                 var n = current.end();
                 current = null;
                 if (n) { canvas.refreshMini(); showButtons(); showInfo(); env.onEdit(); }
             },
             cancel: function () {
+                if (mine()) return mine().cancel();
                 if (!current) return;
                 var d = current.cancel();
                 current = null;
@@ -446,7 +472,7 @@
 
         return {
             // A map is open (a new one, or one from the disk): the history starts empty
-            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; showButtons(); showInfo(); },
+            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; if (ants) ants.setMap(); showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
             // The lazily loaded parts came in (mapmaker_ground.js: the sheets of the kinds; mapmaker_sprites.js: the pictures, or null when the atlas failed): the palette and the tool buttons show them
             use: function (g, s) {
@@ -455,8 +481,7 @@
                 Array.prototype.forEach.call(host.tools, function (b) { var icon = ICONS[b.getAttribute('data-tool')], i = b.querySelector('i'); if (icon && i) picture(i, !!icon[0], icon[1], 18); });
                 showPalette();
             },
-            // A CHANGE that is not a tap (mapmaker_props.js: the properties of the map) as one step of the history; false when a stroke is going on or the change did nothing
-            act: function (change) { if (!editor || canvas.isStroking()) return false; var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; },
+            act: act,
             isClean: function () { return !editor || editor.history.isClean(); },
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },

@@ -365,6 +365,17 @@
         doc.head.appendChild(c); doc.head.appendChild(s);
     }
 
+    // The Ants tool's box (mapmaker_ants.js and its style), loaded the first time the tool is chosen: done(the part), or done(null) when it did not load (the tool is then the clump of before)
+    function loadAnts(done) {
+        if (win.MapAnts) return done(win.MapAnts);
+        var left = 2, bad = false, s = el('script'), c = el('link');
+        function end(ok) { bad = bad || !ok; if (--left) return; done(bad || !win.MapAnts ? null : win.MapAnts); }
+        s.src = 'front/mapmaker_ants.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_ants.css';
+        s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
+        doc.head.appendChild(c); doc.head.appendChild(s);
+    }
+    function antsAbout() { showSummary(); var p = summed && summed.props; return p && !p.error ? { ant: win.MapProps.summary(p).ant, eggs: p.eggs } : null; }
+
     var ACTIONS = {
         play: playMap,
         submit: function () { if (!dialogs.isOpen() && !canvas.isStroking()) submitOr(function () { sent.open(); }); }, subs: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show('sent'); },
@@ -391,10 +402,10 @@
             doc: doc, win: win, canvas: canvas,
             host: {
                 tools: doc.querySelectorAll('[data-tool]'), box: $('palette-box'), title: $('palette-title'), swatches: $('palette'), name: $('palette-name'), hint: $('tool-hint'),
-                tile: $('tile-btn'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn'),
+                tile: $('tile-btn'), map: $('map'), side: doc.querySelector('aside.side'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn'),
                 stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more')
             },
-            file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
+            loadAnts: loadAnts, about: antsAbout, props: function () { ACTIONS.props(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
         // The page asks before it is closed only when the work is not safe in the browser (the browser keeps nothing, or the last change has not been written yet)
         win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending)) { e.preventDefault(); e.returnValue = ''; } });
