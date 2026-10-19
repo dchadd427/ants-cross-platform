@@ -14,7 +14,7 @@
   {
    "id": "empty_world_keeps_the_old_rules_word",
    "file": "include/ants_sim/grid.hpp",
-   "old": "        rules_ = 0;\n        return true;",
+   "old": "        rules_ = rules;\n        return true;",
    "new": "        return true;"
   },
   {
@@ -64,6 +64,36 @@
    "file": "include/ants_assets/lvl_parser.hpp",
    "old": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
    "new": "return LevelLimits{128, 121, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+  },
+  {
+   "id": "play_limits_refuse_120_columns",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 119, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+  },
+  {
+   "id": "play_limits_refuse_128_rows",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{127, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+  },
+  {
+   "id": "for_game_online_reads_play_limits",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return local ? for_play_extended() : LevelLimits{};",
+   "new": "return for_play_extended();"
+  },
+  {
+   "id": "for_game_local_reads_classic_limits",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return local ? for_play_extended() : LevelLimits{};",
+   "new": "return LevelLimits{};"
+  },
+  {
+   "id": "for_game_inverted",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return local ? for_play_extended() : LevelLimits{};",
+   "new": "return local ? LevelLimits{} : for_play_extended();"
   },
   {
    "id": "play_limits_refuse_extended_maps",

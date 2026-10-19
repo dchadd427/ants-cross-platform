@@ -10,7 +10,10 @@ the game is really played for a while; then the way back.
              game gets are the bytes of the slot (the map maker's own file as it is, not a copy that a script wrote again), the roster is Red, Blue and Black; back in the editor the view, the tool,
              the check line, the unsaved work and the history are as they were: Undo takes the stroke back and the file is TINY again, byte for byte (what Download hands over);
   * control  the same page counts a game that was not started from the map maker (a normal game on this computer asks the server to count it), so the check of "not counted" can see a request;
-  * refusal  a blank map (no color has a hill) is refused in plain words, an Extended map of 100 x 100 is "bigger than the game can play yet" with a way to a Classic copy and no Start; a browser
+  * extended an Extended map of 100 x 100 (rules 1, a hill in each corner, 25 ants of each team mixed in the middle: tests/scripts/make_crowd_map.js) is opened from the disk and played from the map maker
+             against three bots: the game gets the file's own bytes, all four colors play with their 25 ants, the ticks advance, the ants alive change, the page counts nothing, the work of a frame is
+             measured against a game on a 60 x 60 map, and back in the editor the file is the same bytes;
+  * refusal  a blank map (no color has a hill) is refused in plain words, an Extended map of 100 x 121 is "wider than 120 columns" with a way to a Classic copy and no Start; a browser
              that does not open the tab is told so, and nothing is kept;
   * phone    390 x 844, a touch screen: Menu has "Play this map" (gold), the sheet's answers and buttons are 44 pixels, inside the screen, no sideways scroll; a tap starts the game in its tab, whose
              strip has a 44 pixel way back and does not scroll sideways, and the way back closes it.
@@ -304,9 +307,9 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     check([b for b in page.ev("[].map.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent; })")] == ["OK"], "with OK only")
     page.shot(args.shots, shots_prefix + "-desktop-refusal-blank")
     dialog_button(page, "OK")
-    mod.make_extended(page, 100, 100)
+    mod.make_extended(page, 100, 121)
     page.press_act("play")
-    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')"), 10) and "This map is bigger than the game can play yet." in page.ev("document.querySelector('.dlg-in').textContent"), "an Extended map of 100 x 100: \"This map is bigger than the game can play yet.\"")
+    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')"), 10) and "This map is wider than 120 columns." in page.ev("document.querySelector('.dlg-in').textContent"), "an Extended map of 100 x 121: \"This map is wider than 120 columns.\"")
     names = page.ev("[].map.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent; })")
     check(names == ["Make a Classic copy...", "OK"] and not page.ev("!!document.querySelector('.pseat')"), "with a way to a Classic copy and OK, and no Start: %s" % names)
     page.shot(args.shots, shots_prefix + "-desktop-refusal-extended")
@@ -323,6 +326,110 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     dialog_button(page, "Start the game")
     check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'The test game could not open'"), 5) and "Allow pop-ups" in page.ev("document.querySelector('.dlg-in').textContent"), "a browser that does not open the tab is told so, in plain words")
     page.key("Escape")
+    run_play_extended(page, tab, args, check, mod, shots_prefix)
+
+
+def make_crowd_file(mod, web, directory):
+    """the 100 x 100 Extended map of the proofs (tests/scripts/make_crowd_map.js, made with the map maker's own code and the core that the served page loads); None when node or the core is not there"""
+    import subprocess
+    import urllib.request
+    core = os.path.join(directory, "core")
+    os.makedirs(core, exist_ok=True)
+    try:
+        for name in ("lvl_core.js", "lvl_core.wasm"):
+            with urllib.request.urlopen(web.rstrip("/") + "/" + name, timeout=30) as r, open(os.path.join(core, name), "wb") as f:
+                f.write(r.read())
+        out = os.path.join(directory, "crowd.lvl")
+        done = subprocess.run(["node", os.path.join(mod.REPO, "tests", "scripts", "make_crowd_map.js"), out, "--module", core], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    print("    " + (done.stdout.strip() or done.stderr.strip()))
+    return out if done.returncode == 0 and os.path.isfile(out) else None
+
+
+def frame_work(game, seconds):
+    """the game's own work for a frame (its simulation tick and its picture) over `seconds`: (mean, longest, frames), in microseconds and frames, from the probes 12 to 15"""
+    game.ev("Module._ants_probe(15)")
+    time.sleep(seconds)
+    return game.ev("Module._ants_probe(12)"), game.ev("Module._ants_probe(13)"), game.ev("Module._ants_probe(14)")
+
+
+def run_play_extended(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
+    """an Extended map of 100 x 100 (rules 1: a hill in each corner, 25 Combat Ants of every team mixed in the middle) is played from the map maker against three bots: the game starts, the ticks
+    advance, the ants alive change (they fight), the page asks the server to count nothing, and the way back leaves the editor's file as it was; the work of a frame is measured against a game on a
+    60 x 60 map (TREASURE) of the same page"""
+    import tempfile
+    dt = tab.dt
+    print("[web map maker] Play this map: an Extended map of 100 x 100 against three bots")
+    with tempfile.TemporaryDirectory(prefix="ants_crowd_") as directory:
+        path = make_crowd_file(mod, args.web, directory)
+        check(path is not None, "the 100 x 100 map is made (node and the served core)")
+        if path is None:
+            return
+        with open(path, "rb") as f:
+            crowd = f.read()
+        check(page.open() and page.ready(), "the page starts again (the check before it took window.open away from the old one)")
+        page.ev(mod.EDGES_JS)
+        page.choose_file(path)
+        leave_unsaved(page, mod)
+        check(mod.wait_for(lambda: page.state()["rows"] == "100" and page.state()["columns"] == "100", 20), "the map is opened from the disk: 100 x 100")
+        got = mod.edges_bytes(page)
+        check(got["sha"] == sha(crowd), "and it is the file's own bytes (%d)" % len(crowd))
+        page.press_act("play")
+        check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg.play')"), 15), "Play this map opens the start dialog on a 100 x 100 Extended map (not a refusal)")
+        rows = json.loads(page.ev("JSON.stringify([].map.call(document.querySelectorAll('.pseat'), function (r) { return [r.querySelector('.pn').textContent, r.querySelector('.pf').textContent]; }))"))
+        check([r[0] for r in rows] == ["Black", "Blue", "Green", "Red"] and all(r[1] == "25 ants, 1 hill" for r in rows), "four colors with 25 ants and a hill: %s" % rows)
+        for name in ("Red", "Blue", "Black"):
+            choose(page, name, "m")
+        choose(page, "Green", "y")
+        check(page.ev("document.querySelector('.play-status').textContent") == "You and 3 bots.", "you at Green and three Medium bots")
+        page.shot(args.shots, shots_prefix + "-extended-dialog")
+        known = {t["targetId"] for t in pages_of(dt)}
+        dialog_button(page, "Start the game")
+        game = game_tab(mod, dt, known, (1280, 800))
+        check(game is not None, "Start opens the game in a tab of its own")
+        if game is None:
+            return
+        requests = []
+
+        def seen(msg, game=game):
+            if msg.get("method") == "Network.requestWillBeSent" and msg.get("sessionId") == game.session:
+                requests.append((msg["params"]["request"].get("method"), msg["params"]["request"].get("url")))
+        dt.handlers.append(seen)
+        game.call("Network.enable")
+        check(wait_ready(mod, game), "the game page loads the game")
+        digest, length = game_file(game)
+        check(digest == sha(crowd) and length == len(crowd), "the game's file system holds the map's own bytes (%d, byte for byte)" % length)
+        check(game.ev("Module.arguments.slice(1, 12).join(' ')") == "--map Original-Ants/Maps/playtest.lvl --play --player 0 --bot 1:medium --bot 2:medium --bot 3:medium", "the game was told its map, to play, and its three bots")
+        ok, box = start_the_game(mod, game)
+        check(ok, "the game goes through its quick help and START, and the match runs")
+        first = probes(game, SEATS_PROBES)
+        check(first[0] == 15 and first[1:] == [25, 25, 25, 25], "all four colors play with their 25 ants (roster, ants alive): %s" % first)
+        one = clock_picture(game, box)
+        work = frame_work(game, 6.0)
+        two = clock_picture(game, box)
+        check(one != two, "the time on the game's screen moves: the ticks advance")
+        print("    100 x 100, 100 ants: the work of a frame (tick and picture) over 6 s: mean %d us, longest %d us, %d frames" % work)
+        check(work[2] > 20 and work[0] < 50000, "the game keeps its pace: the work of a frame is far under the 50 ms of a tick (mean %d us)" % work[0])
+        changed = mod.wait_for(lambda: probes(game, SEATS_PROBES)[1:] != [25, 25, 25, 25], 90, 0.5)
+        check(changed, "the ants fight: the ants alive change (%s)" % probes(game, SEATS_PROBES)[1:])
+        game.save_shot(args.shots, shots_prefix + "-extended-game")
+        check(not any(m == "POST" and "/stats/local" in u for m, u in requests), "the game page did not ask the server to count this game (%d requests seen)" % len(requests))
+        dt.handlers.remove(seen)
+        ask_back(mod, game, check, "extended")
+        press_back(mod, game, dt, check, "extended")
+        check(mod.wait_for(lambda: page.ev("!!document.getElementById('play-toast')"), 5, 0.1) and page.ev("document.getElementById('play-toast').textContent") == "Back from the test game. Your map is as you left it.", "the map maker says that you are back")
+        after = mod.edges_bytes(page)
+        check(after["sha"] == sha(crowd), "back in the editor the file is the same bytes as before the game")
+        # the same page, a 60 x 60 map (TREASURE) against three bots: the work of a frame to compare with
+        ctl = Tab(types.SimpleNamespace(devtools=dt))
+        ctl.emulate(1280, 800, 1)
+        ctl.open(args.web.rstrip("/") + "/play.html?map=treasure&bots=medium", settle=1)
+        ok2, box2 = start_the_game(mod, ctl)
+        control = frame_work(ctl, 6.0) if ok2 else (0, 0, 0)
+        print("    60 x 60, TREASURE: the work of a frame over 6 s: mean %d us, longest %d us, %d frames" % control)
+        check(ok2 and control[2] > 20, "the control game on TREASURE runs")
+        ctl.close()
 
 
 def run_play_phone(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
@@ -363,7 +470,7 @@ def run_play_phone(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     press_back(mod, game, dt, check, "phone")
     check(mod.wait_for(lambda: page.ev("!!document.getElementById('play-toast')"), 5, 0.1), "back in the map maker, a line says so")
     page.shot(args.shots, shots_prefix + "-phone-back")
-    # the refusal on a phone: Menu, New, an Extended map of 100 x 100
+    # the refusal on a phone: Menu, New, an Extended map of 100 x 121
     page.ev("(function () { var t = document.getElementById('play-toast'); if (t) t.parentNode.removeChild(t); })()")
     page.press_act("menu")
     mod.wait_for(lambda: page.ev("!!document.querySelector('.menulist')"), 5)
@@ -373,13 +480,13 @@ def run_play_phone(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     mod.wait_for(lambda: page.ev("!!document.querySelector('.kinds')"), 5)
     page.ev("document.querySelectorAll('.kind input')[1].click()")
     page.type_into("#size-rows", "100")
-    page.type_into("#size-columns", "100")
+    page.type_into("#size-columns", "121")
     dialog_button(page, "Make map")
     mod.wait_for(lambda: page.state()["rows"] == "100", 15)
     page.press_act("menu")
     mod.wait_for(lambda: page.ev("!!document.querySelector('.menulist')"), 5)
     page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent.indexOf('Play this map') >= 0; })[0].click()")
-    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')"), 10) and "bigger than the game can play yet" in page.ev("document.querySelector('.dlg-in').textContent"), "an Extended map of 100 x 100 is refused on a phone too")
+    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')"), 10) and "wider than 120 columns" in page.ev("document.querySelector('.dlg-in').textContent"), "an Extended map of 100 x 121 is refused on a phone too")
     small = page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (n) { return n.getBoundingClientRect().height < 43.5; }).length")
     check(small == 0 and not page.ev("document.documentElement.scrollWidth > innerWidth"), "its buttons are 44 pixels, no sideways scroll")
     page.shot(args.shots, shots_prefix + "-phone-refusal")

@@ -249,6 +249,10 @@ void the_play_limits() {
     constexpr LevelLimits play = LevelLimits::for_play_extended();
     check(play.allow_extended, "the play limits allow Extended maps");
     check(play.rows() == 128 && play.columns() == 120 && play.cells() == 16384, "the play limits are 128 rows, 120 columns and 16,384 cells");
+    // a game of this computer reads the play limits, a match of the network the Classic game's (one rule, in one place: LevelLimits::for_game)
+    check(LevelLimits::for_game(true).allow_extended && LevelLimits::for_game(true).rows() == 128 && LevelLimits::for_game(true).columns() == 120 && LevelLimits::for_game(true).cells() == 16384,
+          "a game of this computer reads the play limits");
+    check(!LevelLimits::for_game(false).allow_extended && LevelLimits::for_game(false).rows() == 256 && LevelLimits::for_game(false).columns() == 256, "a match of the network reads the Classic game's limits: no Extended map");
     check(play.rows() < LevelLimits::for_extended_maps().rows() && play.cells() < LevelLimits::for_extended_maps().cells(), "the play limits are tighter than those of an Extended map");
     check(play.read_bytes() == 4u * 1024u * 1024u && play.write_bytes() == 3584u * 1024u, "a file of at most 4 MiB is read and a canonical file of 3.5 MiB written");
     std::vector<std::string> names(1344, ".");

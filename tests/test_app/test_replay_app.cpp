@@ -10,6 +10,7 @@
 #include "ants_replay/replay.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
+#include "crowd_level.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -693,6 +694,61 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(rep.head.venue, "local game");
             ASSERT_TRUE(plays_to(rep, app.sim(), why));
             app.shutdown();
+        }
+    } TEST_END();
+
+    TEST_CASE("RA1.11 A game on this computer on an Extended map (100 x 100, rules 1) is recorded like the others and plays out to the state in which it was left; the same file is watched in the application when the map is in the maps folder, and not by a reading of the network's (Classic maps only)") {
+        ScratchRoot root;
+        const std::string big = (root.path() / "Big.lvl").string();
+        ASSERT_TRUE(ants_test::write_crowd_file(big, ants_test::crowd_level()));
+        std::error_code copied;
+        fs::copy_file(maps_dir() + "/TINY.LVL", root.path() / "TINY.LVL", copied);        // (a maps folder of the game holds Classic maps beside it; the setup screen's list is theirs)
+        ASSERT_FALSE(copied);
+        replay::Replay rep;
+        std::vector<uint8_t> bytes;
+        uint64_t ended_hash = 0;
+        {
+            Application app;
+            ApplicationConfig cfg = local_config(0x02);                                // one bot
+            cfg.start_in_map_select = false;                                           // --map: the match is running at once
+            cfg.play_at_once = false;
+            cfg.maps_dir = root.path().string();
+            cfg.default_map_path = big;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_TRUE(app.recorder() != nullptr);
+            for (int i = 0; i < 400; ++i) app.update_simulation(0.05f);
+            quit_match(app);
+            std::string why;
+            ASSERT_TRUE(read_back(app, rep, why));
+            ASSERT_EQ(rep.head.venue, "local game");
+            ASSERT_EQ(rep.head.sim_rules, replay::kSimRules);                          // (the rules number is the build's: an older build says only that the map cannot be loaded)
+            bytes = app.last_replay();
+            ended_hash = app.sim().state_hash().total;
+            assets::LevelData level;
+            ASSERT_FALSE(replay::load_map(rep.head, root.path().string(), level, why));     // (a reading of the network: Classic maps only)
+            ASSERT_TRUE(why.find("Extended maps can't be played online yet") != std::string::npos);
+            ASSERT_TRUE(replay::load_map(rep.head, root.path().string(), level, why, assets::LevelLimits::for_game(true)));
+            const replay::Outcome outcome = replay::play(rep, level);
+            ASSERT_TRUE(outcome.ok && outcome.hash == ended_hash);
+            app.shutdown();
+        }
+        {
+            const fs::path file = root.path() / "match.antsrep";
+            std::ofstream out(file, std::ios::binary);
+            out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            out.close();
+            Application viewer;
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.lan_port = 0;
+            cfg.maps_dir = root.path().string();
+            cfg.replay_path = file.string();
+            ASSERT_TRUE(viewer.init(cfg));
+            ASSERT_EQ(viewer.sim().grid().width(), 100u);
+            ASSERT_EQ(viewer.sim().grid().height(), 100u);
+            for (int i = 0; i < 100; ++i) viewer.update_simulation(0.05f);
+            ASSERT_TRUE(viewer.replay_value(ReplayValue::Turn) > 0);
+            viewer.shutdown();
         }
     } TEST_END();
 

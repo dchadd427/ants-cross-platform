@@ -434,7 +434,7 @@ int main() {
         ASSERT_FALSE(s.load_map("../x.lvl", entry, level));
     } TEST_END();
 
-    TEST_CASE("ML5.1 An Extended map is not played in a room: it is not listed, not chosen, not made into a room and not loaded for a start, and every refusal says that Extended maps are not played online yet") {
+    TEST_CASE("ML5.1 An Extended map is not played in a room: it is not listed, not chosen, not made into a room and not loaded for a start; the refusals that a player reads say that Extended maps are not played online yet") {
         const std::string sentence = "Extended maps can't be played online yet";
         TempDir t;
         const fs::path dir = t.path / "maps";
@@ -459,13 +459,12 @@ int main() {
         const CreateResult made = mgr.create_room(spec, 0);
         ASSERT_TRUE(!made.ok && made.http_status == 422 && made.error.find(sentence) != std::string::npos);
         ASSERT_EQ(mgr.room_count(), size_t{0});
-        // the room's start loads its map through this service: the refusal is carried to the players
+        // the room's start loads its map through this service: a file that is not a Classic map is not loaded (the room tells its players "This map could not be loaded: choose another map.")
         MapEntry entry;
         assets::LevelData level;
         ASSERT_FALSE(s.load_map("Big One.lvl", entry, level));
-        ASSERT_EQ(entry.refusal, sentence);
         MapEntry fine;
-        ASSERT_TRUE(s.load_map("TINY.LVL", fine, level) && fine.refusal.empty());
+        ASSERT_TRUE(s.load_map("TINY.LVL", fine, level));
         // an approved Extended map of a player: listed only for the library page (format 2), never found for a room
         ApprovedMap approved;
         approved.name = "Approved Big.lvl";

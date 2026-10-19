@@ -357,13 +357,7 @@ LobbyServices RoomManager::lobby_services() {
         // a Plan message costs no disk read and no hashing; a name that is not in the list is refused. The file is read when the room loads its map (load_map).
         return store_.listed_name(name);
     };
-    s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) {
-        if (!store_.find(file, entry)) return false;
-        assets::LevelValidation loaded;
-        if (level.load_from_file(entry.path, &loaded)) return true;
-        if (loaded.has(assets::LevelProblemKind::VersionNotSupported)) entry.refusal = loaded.online_reason();       // (the room says so to the players: an Extended map is not played online yet)
-        return false;
-    };
+    s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) { return store_.find(file, entry) && level.load_from_file(entry.path); };
     s.match_place = [this](uint32_t now_ms) { return take_match_place(now_ms); };
     return s;
 }

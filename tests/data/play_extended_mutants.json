@@ -1,0 +1,279 @@
+{
+ "note": "Mutants of the play of an Extended map on this computer and its refusal everywhere online (docs/TESTING.md, 'Mutation checks'; docs/MAP_FORMAT.md, 'Version 9'): the local flag of the game's loaders (--map, START, the room's Start), the host / join startup, the replay viewer, the setup screen's list, the server's room creation, lists and store, the arena's judgement, the tools' --extended, and the sentence \"Extended maps can't be played online yet\". The limits themselves (120 / 121 columns, 128 / 129 rows) and the choice of for_game are in tests/data/grid_extended_mutants.json. Run: python3 tools/mutate.py tests/data/play_extended_mutants.json --keep-going --jobs 1 (do not commit the .report.json); every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "online_room_start_loads_as_a_local_game",
+   "file": "src/ants_app/application_maps.cpp",
+   "old": "start.mode, false);",
+   "new": "start.mode, true);",
+   "build": "test_map_fetch_app",
+   "test": "./build/tests/test_app/test_map_fetch_app",
+   "expect": "MF1.6"
+  },
+  {
+   "id": "online_host_startup_reads_extended",
+   "file": "src/ants_app/application.cpp",
+   "old": "const bool local_game = config_.net_role == ApplicationConfig::NetRole::None;",
+   "new": "const bool local_game = true;",
+   "build": "test_map_fetch_app",
+   "test": "./build/tests/test_app/test_map_fetch_app",
+   "expect": "MF1.7"
+  },
+  {
+   "id": "online_join_startup_reads_extended",
+   "file": "src/ants_app/application.cpp",
+   "old": "const bool local_game = config_.net_role == ApplicationConfig::NetRole::None;",
+   "new": "const bool local_game = config_.net_role != ApplicationConfig::NetRole::Host;",
+   "build": "test_map_fetch_app",
+   "test": "./build/tests/test_app/test_map_fetch_app",
+   "expect": "MF1.7"
+  },
+  {
+   "id": "online_startup_refusal_in_the_parsers_words",
+   "file": "src/ants_app/application.cpp",
+   "old": "(local_game ? start_verdict.reason() : start_verdict.online_reason())",
+   "new": "start_verdict.reason()",
+   "build": "test_map_fetch_app",
+   "test": "./build/tests/test_app/test_map_fetch_app",
+   "expect": "MF1.7"
+  },
+  {
+   "id": "online_room_start_refusal_in_the_parsers_words",
+   "file": "src/ants_app/application.cpp",
+   "old": "(local ? verdict.reason() : verdict.online_reason())",
+   "new": "verdict.reason()",
+   "build": "test_map_fetch_app",
+   "test": "./build/tests/test_app/test_map_fetch_app",
+   "expect": "MF1.6"
+  },
+  {
+   "id": "local_start_game_reads_classic_only",
+   "file": "src/ants_app/application.cpp",
+   "old": "config_.game_mode, true)) return false;",
+   "new": "config_.game_mode, false)) return false;",
+   "build": "test_app_integration",
+   "test": "./build/tests/test_app/test_app_integration",
+   "expect": "13."
+  },
+  {
+   "id": "local_startup_validates_as_classic",
+   "file": "src/ants_app/application.cpp",
+   "old": "start_verdict = current_level_.validate(local_roster_, ants::assets::LevelLimits::for_game(local_game));",
+   "new": "start_verdict = current_level_.validate(local_roster_);",
+   "build": "test_app_integration",
+   "test": "./build/tests/test_app/test_app_integration",
+   "expect": "13."
+  },
+  {
+   "id": "local_match_validates_as_classic",
+   "file": "src/ants_app/application.cpp",
+   "old": "verdict = current_level_.validate(roster, ants::assets::LevelLimits::for_game(local));",
+   "new": "verdict = current_level_.validate(roster);",
+   "build": "test_app_integration",
+   "test": "./build/tests/test_app/test_app_integration",
+   "expect": "13."
+  },
+  {
+   "id": "setup_list_shows_extended_files",
+   "file": "src/ants_app/map_select.cpp",
+   "old": "if (!extended) maps_.push_back(std::move(entry));",
+   "new": "maps_.push_back(std::move(entry));",
+   "build": "test_app_integration",
+   "test": "./build/tests/test_app/test_app_integration",
+   "expect": "13.3"
+  },
+  {
+   "id": "setup_list_hides_every_unreadable_file",
+   "file": "src/ants_app/map_select.cpp",
+   "old": "extended = verdict.has(ants::assets::LevelProblemKind::VersionNotSupported);",
+   "new": "extended = true;",
+   "build": "test_app_integration",
+   "test": "./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "replay_viewer_reads_classic_only",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "replay_level_, why, assets::LevelLimits::for_game(true))",
+   "new": "replay_level_, why, assets::LevelLimits::for_game(false))",
+   "build": "test_replay_app",
+   "test": "./build/tests/test_app/test_replay_app",
+   "expect": "RA1.11"
+  },
+  {
+   "id": "replay_viewer_validates_as_classic",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "replay_level_.validate(replay->head.roster, assets::LevelLimits::for_game(true));",
+   "new": "replay_level_.validate(replay->head.roster);",
+   "build": "test_replay_app",
+   "test": "./build/tests/test_app/test_replay_app",
+   "expect": "RA1.11"
+  },
+  {
+   "id": "server_replay_reading_accepts_extended",
+   "file": "include/ants_replay/player.hpp",
+   "old": "const std::string& maps_dir, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits = assets::LevelLimits{});",
+   "new": "const std::string& maps_dir, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits = assets::LevelLimits::for_game(true));",
+   "build": "test_replay",
+   "test": "./build/tests/test_replay/test_replay",
+   "expect": "RP6.2"
+  },
+  {
+   "id": "replay_refusal_in_the_parsers_words",
+   "file": "src/ants_replay/player.cpp",
+   "old": "(limits.allow_extended ? verdict.reason() : verdict.online_reason())",
+   "new": "verdict.reason()",
+   "build": "test_replay",
+   "test": "./build/tests/test_replay/test_replay",
+   "expect": "RP6.2"
+  },
+  {
+   "id": "online_reason_is_the_parsers",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "return has(LevelProblemKind::VersionNotSupported) ? std::string(kExtendedNotOnlineText) : reason();",
+   "new": "return reason();",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI31 ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "online_sentence_changed",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "\"Extended maps can't be played online yet\"",
+   "new": "\"Extended maps cannot be played online\"",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI31 ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "server_room_creation_accepts_extended",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (!level.load_from_file(entry.path, &loaded)) {",
+   "new": "if (!level.load_from_file(entry.path, &loaded, assets::LevelLimits::for_game(true))) {",
+   "build": "test_map_list",
+   "test": "./build/tests/test_server/test_map_list",
+   "expect": "ML5.1"
+  },
+  {
+   "id": "server_room_creation_refuses_in_other_words",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "r.error = loaded.has(assets::LevelProblemKind::VersionNotSupported) ?",
+   "new": "r.error = false ?",
+   "build": "test_map_list",
+   "test": "./build/tests/test_server/test_map_list",
+   "expect": "ML5.1"
+  },
+  {
+   "id": "server_room_start_loads_extended",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "level.load_from_file(entry.path); };",
+   "new": "level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_game(true)); };",
+   "build": "test_map_list",
+   "test": "./build/tests/test_server/test_map_list",
+   "expect": "ML5.1"
+  },
+  {
+   "id": "server_lists_extended_files",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "if (!level.load_from_file(entry.path)) return;",
+   "new": "if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_game(true))) return;",
+   "build": "test_map_list",
+   "test": "./build/tests/test_server/test_map_list",
+   "expect": "ML5.1"
+  },
+  {
+   "id": "server_approved_extended_map_without_the_sentence",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "approved_map->kind == \"extended\") return fail(assets::kExtendedNotOnlineText);",
+   "new": "approved_map->kind == \"never\") return fail(assets::kExtendedNotOnlineText);",
+   "build": "test_map_list",
+   "test": "./build/tests/test_server/test_map_list",
+   "expect": "ML5.1"
+  },
+  {
+   "id": "arena_judges_an_extended_map_as_classic",
+   "file": "src/ants_ai/arena.cpp",
+   "old": "validate(info.roster, spec.limits)",
+   "new": "validate(info.roster)",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI31 ./build/tests/test_ai/test_ai",
+   "expect": "AI31."
+  },
+  {
+   "id": "tool_arena_ignores_extended",
+   "file": "tools/bot_arena.cpp",
+   "old": "else if (s == \"--extended\") o.extended = true;",
+   "new": "else if (s == \"--extended\") o.extended = false;",
+   "build": [
+    "bot_arena"
+   ],
+   "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
+   "expect": "ExtendedTools"
+  },
+  {
+   "id": "tool_arena_spec_without_limits",
+   "file": "tools/bot_arena.cpp",
+   "old": "s.limits = assets::LevelLimits::for_game(o.extended);",
+   "new": "",
+   "build": [
+    "bot_arena"
+   ],
+   "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
+   "expect": "ExtendedTools"
+  },
+  {
+   "id": "tool_arena_loads_classic_only",
+   "file": "tools/bot_arena.cpp",
+   "old": "load_from_file(p.string(), nullptr, assets::LevelLimits::for_game(o.extended))",
+   "new": "load_from_file(p.string(), nullptr, assets::LevelLimits{})",
+   "build": [
+    "bot_arena"
+   ],
+   "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
+   "expect": "ExtendedTools"
+  },
+  {
+   "id": "tool_sweep_child_without_extended",
+   "file": "tools/map_sweep.cpp",
+   "old": "if (o.extended) a.push_back(\"--extended\");",
+   "new": "",
+   "build": [
+    "map_sweep"
+   ],
+   "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
+   "expect": "ExtendedTools"
+  },
+  {
+   "id": "tool_sweep_loads_classic_only",
+   "file": "tools/map_sweep.cpp",
+   "old": "assets::LevelLimits::for_game(extended));",
+   "new": "assets::LevelLimits{});",
+   "build": [
+    "map_sweep"
+   ],
+   "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
+   "expect": "ExtendedTools"
+  },
+  {
+   "id": "tool_replay_loads_classic_only",
+   "file": "tools/replay_tool.cpp",
+   "old": "assets::LevelLimits::for_game(o.extended))) {",
+   "new": "assets::LevelLimits{})) {",
+   "build": [
+    "replay_tool"
+   ],
+   "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
+   "expect": "ExtendedTools"
+  },
+  {
+   "id": "tool_replay_always_extended",
+   "file": "tools/replay_tool.cpp",
+   "old": "assets::LevelLimits::for_game(o.extended))) {",
+   "new": "assets::LevelLimits::for_game(true))) {",
+   "build": [
+    "replay_tool"
+   ],
+   "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
+   "expect": "ExtendedTools"
+  }
+ ]
+}
