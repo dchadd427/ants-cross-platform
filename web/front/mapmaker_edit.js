@@ -229,6 +229,7 @@
                     if (made.grew) f = self.file = hooks.rebase(made.bytes);
                 }
                 for (i = 0; i < ch.cells.length; i++) { var c = ch.cells[i], was = tile(f, 2, c[0]); touch(2, c[0]); setCell(f, 2, c[0], c[1], c[2], c[3]); dirty.push(c[0]); n++; if (c[1] === EMPTY2 && Solid.clears(was)) setSolid(c[0], false); }
+                for (i = 0; ch.ground && i < ch.ground.length; i++) { var g = ch.ground[i]; touch(1, g[0]); setCell(f, 1, g[0], g[1], flags(f, 1, g[0]), third(f, 1, g[0])); dirty.push(g[0]); n++; }          // (the tiles of layer 1 that mapmaker_edges.js picks again: their flags stay)
                 for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);                 // (the solid bits of layer 1 that go with the cells)
                 for (i = 0; i < ch.splices.length; i++) {
                     var s = ch.splices[i];

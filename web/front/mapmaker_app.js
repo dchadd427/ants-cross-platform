@@ -406,7 +406,7 @@
 
     // The parts that load after the page is up (docs/MAP_EDITOR.md, "Sprites"): the sheets of the kinds of ground and the game's pictures (the atlas). Without them the page works as before, in flat colors.
     function loadParts() {
-        var left = 2, flat = 'The game\u2019s pictures could not be loaded, so the map is drawn in flat colors. Your map is not affected.';
+        var left = 3, sprites = null, flat = 'The game\u2019s pictures could not be loaded, so the map is drawn in flat colors. Your map is not affected.';
         function note(text) { var n = $('atlas-note'); n.textContent = text; n.hidden = !text; }
         function script(name) {
             var s = el('script');
@@ -414,9 +414,24 @@
             s.onload = s.onerror = function () { if (!--left) parts(); };
             doc.head.appendChild(s);
         }
+        // The Fix edges button (mapmaker_edges.js) works with the table of the kinds, so both scripts must be there
+        function edges() {
+            if (!win.MapEdges || !win.MapGround) return;
+            var b = $('edges-btn');
+            b.disabled = false;
+            b.addEventListener('click', function () {
+                if (dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden) return;
+                win.MapEdges.open({
+                    doc: doc, dialogs: dialogs, ground: win.MapGround, file: function () { return map.file; }, apply: tools.act,
+                    visible: function () { var st = canvas.state(); return MapView.visible(st.view, map.file, st.width, st.height); },
+                    sprites: function () { return sprites && sprites.ready() ? sprites : null; }
+                });
+            });
+        }
         function parts() {
+            edges();
             if (!win.MapSprites) { tools.use(win.MapGround, null); return note(flat); }
-            var sprites = win.MapSprites.create({
+            sprites = win.MapSprites.create({
                 doc: doc, win: win, onChange: function () { canvas.redraw(); },
                 onReady: function () { canvas.setSprites(sprites); tools.use(win.MapGround, sprites); canvas.refreshMini(); },
                 onFail: function () { canvas.setSprites(null); tools.use(win.MapGround, null); note(flat); }
@@ -424,7 +439,7 @@
             tools.use(win.MapGround, null);
             sprites.load();
         }
-        script('mapmaker_ground.js'); script('mapmaker_sprites.js');
+        script('mapmaker_ground.js'); script('mapmaker_sprites.js'); script('mapmaker_edges.js');
     }
 
     function boot() {

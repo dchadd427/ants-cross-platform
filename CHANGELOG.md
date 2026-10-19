@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.87 - 2026-10-18 - Map maker: Fix edges (sprites part 2)
+
+**For players:**
+- Map maker: a "Fix edges..." button puts the game's edge and corner pieces where two kinds of ground meet, on the part you can see or on the whole map, with a before and an after. One Undo takes it all back.
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/19f99e08...cd81e7b0)
+
 ## v0.12.86 - 2026-10-18 - Maps taller than 90 rows: the simulation and bots (no change to current maps)
 
 **For players:**

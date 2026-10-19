@@ -51,8 +51,9 @@
         return out;
     }
     // the kinds that `key` has edge tiles toward, in the order of the palette
+    var OTHERS = {};
     function others(key) {
-        return KINDS.filter(function (k) { return NAMES.some(function (n, i) { var t = INFO[FIRST + i]; return t.kind === key && t.other === k.key; }); }).map(function (k) { return k.key; });
+        return OTHERS[key] || (OTHERS[key] = KINDS.filter(function (k) { return NAMES.some(function (n, i) { var t = INFO[FIRST + i]; return t.kind === key && t.other === k.key; }); }).map(function (k) { return k.key; }));
     }
     // the tile ids of `key` next to `other`: [{shape, id (the "a" tile), variants: [other ids of the same picture]}] for the shapes 2 to 9
     function edges(key, other) {
@@ -66,6 +67,10 @@
             return out;
         });
     }
+    // The walking class of each ground tile (ids 431 to 669), one digit each: the engine's table kTileTerrain (src/ants_sim/movement_tables_data.inc; a test holds this string to it). Fix edges never
+    // changes a cell to a tile of another class, so what it does cannot change where ants walk.
+    var TERRAIN = '33333333333333030303030303030303030303030303022222222200400000000000000000000000000000000000404040404040404040404040404040404040404040404040111000000000000000000000030303030303030301010101010101010101010101010101010101010101010103333333333';
+    function terrain(id) { return id >= FIRST && id < FIRST + TERRAIN.length ? +TERRAIN.charAt(id - FIRST) : -1; }
     // the game's dictionary name of any ground tile
     function name(id) { return INFO[id] ? INFO[id].name : ''; }
 
@@ -141,5 +146,5 @@
         return { refresh: refresh };
     }
 
-    return { FIRST: FIRST, LAST: FIRST + NAMES.length - 1, NAMES: NAMES, KINDS: KINDS, SHAPES: SHAPES, UNUSED: UNUSED, info: info, kind: kind, kindOf: kindOf, label: label, name: name, plainIds: plainIds, others: others, edges: edges, sheet: sheet };
+    return { FIRST: FIRST, LAST: FIRST + NAMES.length - 1, NAMES: NAMES, KINDS: KINDS, SHAPES: SHAPES, UNUSED: UNUSED, info: info, kind: kind, kindOf: kindOf, terrain: terrain, TERRAIN: TERRAIN, label: label, name: name, plainIds: plainIds, others: others, edges: edges, sheet: sheet };
 });
