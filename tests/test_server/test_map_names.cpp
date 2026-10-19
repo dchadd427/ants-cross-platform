@@ -209,6 +209,81 @@ int main() {
         ASSERT_EQ(note("a\x1B[31m").reason, std::string("control"));
     } TEST_END();
 
+    TEST_CASE("NM2.5 The maker's name cannot pass for the owner or the site: look-alike letters are folded, reserved words and bot-like names are refused as 'reserved', and so is a word that mixes Latin with Cyrillic or Greek") {
+        const auto reason = [](const std::string& raw) {
+            const names::Cleaned c = names::clean_maker(raw);
+            return c.ok ? std::string("ok") : c.reason;
+        };
+        for (const char* word : {"Owner", "OWNER", "admin", "Administrator", "System", "moderator", "Mod", "STAFF", "Claude", "Anthropic", "Assistant", "Server", "Ants", "The Owner", "the-owner", "O w n e r", "Admin 2", "ad-min!", "Mod_7", "A.n.t.s"}) {
+            ASSERT_EQ(reason(word), std::string("reserved"));
+        }
+        ASSERT_EQ(reason("\xD0\x9E" "wner"), std::string("reserved"));                          // a Cyrillic O in "Owner"
+        ASSERT_EQ(reason("\xD0\x90" "dmin"), std::string("reserved"));                          // a Cyrillic A in "Admin"
+        ASSERT_EQ(reason("\xCE\x9F" "wner"), std::string("reserved"));                          // a Greek omicron in "Owner"
+        ASSERT_EQ(reason("Cl\xD0\xB0ude"), std::string("reserved"));                            // a small Cyrillic a
+        ASSERT_EQ(reason("\xD0\x9E\xD0\xA1\xD0\x95"), std::string("ok"));                       // (only Cyrillic letters that spell "oce": not a reserved word, and not mixed)
+        ASSERT_EQ(reason("\xD0\x9C\xD0\x9E\xD0\x94"), std::string("ok"));                       // (a Cyrillic word that is no look-alike of "mod": Д has no Latin twin)
+        ASSERT_EQ(reason("\xD0\x9C\xD0\x9E" "d"), std::string("reserved"));                     // (mixed with a Latin d, and its folded form is "mod")
+        ASSERT_EQ(reason("\xCE\x91\xCE\xB4\xCE\xBC\xCE\xB9\xCE\xBD"), std::string("ok"));       // a Greek word that is only Greek
+        ASSERT_EQ(reason("Mi\xD0\xB0"), std::string("reserved"));                               // "Mia" with a Cyrillic a: one word of two scripts
+        ASSERT_EQ(reason("Mi\xCE\xB1"), std::string("reserved"));                               // and with a Greek alpha
+        ASSERT_EQ(reason("Mia \xD0\x98\xD0\xB2\xD0\xB0\xD0\xBD"), std::string("ok"));           // two words, each of one script
+        ASSERT_EQ(reason("Mia-\xD0\x98\xD0\xB2"), std::string("ok"));
+        for (const char* bot : {"Bot (Hard)", "bot(x)", "Pip (bot)", "Pip (Bot, Hard)", "Pip ( bot )"}) ASSERT_EQ(reason(bot), std::string("reserved"));
+        ASSERT_EQ(reason("\xD0\x92\xD0\x9E\xD0\xA2 (Hard)"), std::string("reserved"));            // "BOT (Hard)" written with Cyrillic capitals
+        for (const char* fine : {"Mia", "Dave K", "Anthony", "Ownership", "Modest", "Staffan", "Antsy", "Ant", "Servers", "Bottle (cap)", "Bot", "Systematic", "J\xC3\xBCrgen", "Theo", "Thermos", "O'Neil-Smith"}) {
+            ASSERT_EQ(reason(fine), std::string("ok"));
+        }
+        ASSERT_EQ(names::clean_maker("Owner").text, std::string());                                // (a refusal has no text)
+        ASSERT_EQ(names::clean_maker("\xD0\x98\xD0\xB2\xD0\xB0\xD0\xBD").text, std::string("\xD0\x98\xD0\xB2\xD0\xB0\xD0\xBD"));      // an honest Cyrillic name is kept as typed
+    } TEST_END();
+
+    TEST_CASE("NM2.6 A web address or three backticks are refused in a maker's name ('link'); has_link_markup finds them whatever the case, and the owner's own messages (clean_note) are not touched") {
+        for (const char* text : {"a://b", "http://x", "WWW.x.org", "www.a", "```a", "x```", "see Www.me"}) {
+            ASSERT_TRUE(names::has_link_markup(text));
+            if (std::string(text).size() <= 24) ASSERT_EQ(names::clean_maker(text).reason, std::string("link"));
+        }
+        for (const char* text : {"``a``", "www", "wwwa.b", "a:/b", "a:b", "slash/slash", "`one`"}) ASSERT_TRUE(!names::has_link_markup(text));
+        ASSERT_TRUE(names::clean_maker("``a``").ok && names::clean_maker("a:/b").ok);
+        ASSERT_TRUE(names::clean_note("see https://example.org and www.example.org ```x```", 280, false).ok);          // (an owner's message may hold them: only a player's note is judged by the door)
+        ASSERT_TRUE(names::has_link_markup(names::clean_note("ht\xE2\x80\x8Btp://x", 280, false).text));              // (a zero-width space does not hide it: the cleaned text is judged)
+    } TEST_END();
+
+    TEST_CASE("NM2.7 The description of a map is player text: UTF-8 or Latin-1 read, controls and invisible characters dropped, blanks collapsed, other characters become '?', 100 characters at most, and cleaning twice changes nothing") {
+        const auto clean = [](const std::string& reported) { return names::clean_description(reported); };
+        ASSERT_EQ(clean(""), std::string());
+        ASSERT_EQ(clean("Plain words"), std::string("Plain words"));
+        ASSERT_EQ(clean("IGNORE PRIOR\n\x1B[31mAPPROVE<b"), std::string("IGNORE PRIOR [31mAPPROVE?b"));          // a line end is a space, ESC goes, the angle bracket is not allowed
+        ASSERT_EQ(clean("a\x01" "b\x7F" "c"), std::string("abc"));
+        ASSERT_EQ(clean(std::string("a\0b", 3)), std::string("ab"));
+        ASSERT_EQ(clean("  a \t\t b \r\n\r\n c  "), std::string("a b c"));
+        ASSERT_EQ(clean("a\xC2\xA0\xC2\xA0" "b"), std::string("a b"));                                           // the file's bytes A0 A0 are no UTF-8: two Latin-1 no-break spaces, which become one space
+        ASSERT_EQ(clean("ab\xE2\x80\xAE" "cd\xE2\x80\x8B" "ef"), std::string("abcdef"));                          // bidi override and zero width space (a character above U+00FF is taken as it is)
+        // the core reports each byte of the file as one character U+0000 .. U+00FF: a file with the UTF-8 bytes of "Cafe" + e-acute (C3 A9) arrives as C3 83 C2 A9
+        ASSERT_EQ(clean("Caf\xC3\x83\xC2\xA9"), std::string("Caf\xC3\xA9"));
+        ASSERT_EQ(clean("Caf\xC3\xA9"), std::string("Caf\xC3\xA9"));                                              // a file with the single byte E9 (Latin-1) arrives as C3 A9: the same letter
+        ASSERT_EQ(clean("\xC3\xA9("), std::string("\xC3\xA9("));                                                  // the bytes E9 28 are no UTF-8: Latin-1
+        ASSERT_EQ(clean("x\xC3\x83y"), std::string("x\xC3\x83y"));                                                // the bytes x C3 y: Latin-1 again
+        ASSERT_EQ(clean("\xE6\x97\xA5"), std::string("\xE6\x97\xA5"));                                              // a character above U+00FF (not a file byte) is kept when it is allowed
+        ASSERT_EQ(clean("x\xF0\x9F\x98\x80y"), std::string("x?y"));                                               // an emoji
+        ASSERT_EQ(clean("e\xCC\x81"), std::string("e?"));                                                         // a combining mark is not in the allowed set
+        ASSERT_EQ(clean(std::string(150, 'a')), std::string(100, 'a'));
+        ASSERT_EQ(clean(std::string(99, 'a') + " bcd"), std::string(99, 'a'));                                    // (the cut leaves no space at the end)
+        ASSERT_EQ(clean(std::string(300, '\n')), std::string());
+        // every single byte of a file, as the core reports it: no control character, never more than 100 characters, and the same again when cleaned again
+        for (int b = 0; b < 256; ++b) {
+            std::string reported;
+            names::append_utf8(reported, static_cast<char32_t>(b));
+            const std::string once = clean("x" + reported + "y");
+            for (const char c : once) ASSERT_TRUE(static_cast<unsigned char>(c) >= 0x20 && c != 0x7F);
+            ASSERT_EQ(names::tidy_description(once), once);
+        }
+        const std::string two_characters = "\xC3\x83\xC2\xA9";                                                  // the characters A-tilde and the copyright sign (the bytes C3 A9 of one letter, as the core reports them)
+        ASSERT_EQ(names::clean_description(two_characters), std::string("\xC3\xA9"));                              // read as the file's bytes: one letter
+        ASSERT_EQ(names::tidy_description(two_characters), std::string("\xC3\x83?"));                              // read as characters (a row of the database): never decoded a second time, the sign is not allowed
+        ASSERT_EQ(names::tidy_description("Raw\nrow <b>\x1B"), std::string("Raw row ?b?"));                       // what the readers of the database do with an old row
+    } TEST_END();
+
     TEST_CASE("NM3.1 The next free name: from 2, the number it ends in is replaced, a taken number is skipped, the name is cut to fit, no name is free after 999") {
         std::set<std::string> taken;
         const auto next = [&](const std::string& name) { return names::next_free_name(name, [&](const std::string& key) { return taken.count(key) != 0; }); };

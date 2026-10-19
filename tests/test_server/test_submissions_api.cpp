@@ -10,6 +10,8 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_assets/lvl_core.hpp"
+#include "ants_assets/lvl_parser.hpp"
+#include "ants_assets/lvl_writer.hpp"
 #include "ants_server/crypto.hpp"
 #include "ants_server/map_names.hpp"
 #include "ants_server/submissions.hpp"
@@ -60,6 +62,16 @@ const char* const kOwner = "111222333444";
 std::string tiny() {
     std::ifstream in(fs::path(maps_dir()) / "TINY.LVL", std::ios::binary);
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+// TINY with the description `text` written as it is (a Classic map holds 30 bytes)
+std::string tiny_described(const std::string& text) {
+    const std::string base = tiny();
+    ants::assets::LevelData t;
+    if (!ants::assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), t, nullptr, ants::assets::LevelLimits::for_new_maps())) return std::string();
+    t.description = text;
+    const ants::assets::LevelWriteResult w = ants::assets::write_level(t, ants::assets::LevelLimits::for_new_maps());
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 
 // The cookie that tools/admin_login.py makes: v1.<base64url of the JSON>.<hex HMAC of "v1.<payload>">
@@ -562,6 +574,32 @@ int main() {
             const HttpResponse as_maker = t.call(q);
             ASSERT_MSG(as_maker.status == 400, std::string(attack) + " -> " + std::to_string(as_maker.status) + " " + as_maker.body);
         }
+    } TEST_END();
+
+    TEST_CASE("API2.6 Player text that looks like an order or like the owner is refused with a reason and a sentence, and the owner's list shows the description in its cleaned form only") {
+        Api t;
+        HttpRequest q = t.req("POST", "/submissions", "", {{"content-type", "application/octet-stream"}, {"x-client-address", "203.0.113.9"}}, tiny());
+        const auto answer = [&](const std::string& query) {
+            q.query = query;
+            return parse_text(t.call(q).body);
+        };
+        ctl::JsonValue r = answer("kind=classic&name=Abc%20One&maker=Owner");
+        ASSERT_TRUE(r.get("error").str() == "bad_maker" && r.get("reason").str() == "reserved" && r.get("message").str().find("cannot be used") != std::string::npos);
+        r = answer("kind=classic&name=Abc%20One&maker=%D0%9Er%D0%B0cle");                      // (Cyrillic O and a: one word of two scripts)
+        ASSERT_TRUE(r.get("error").str() == "bad_maker" && r.get("reason").str() == "reserved");
+        r = answer("kind=classic&name=Abc%20One&maker=Mia&note=see%20http%3A%2F%2Fexample.org");
+        ASSERT_TRUE(r.get("error").str() == "bad_note" && r.get("reason").str() == "link" && r.get("message").str().find("web address") != std::string::npos);
+        r = answer("kind=classic&name=Abc%20One&maker=www.example.org");
+        ASSERT_TRUE(r.get("error").str() == "bad_maker" && r.get("reason").str() == "link");
+        r = answer("kind=classic&name=Abc%20One&maker=Mia&note=%60%60%60run%60%60%60");
+        ASSERT_TRUE(r.get("error").str() == "bad_note" && r.get("reason").str() == "link");
+        q.query = "kind=classic&name=Abc%20One&maker=Mia";                                      // a map whose description tries to look like an order
+        q.body = tiny_described("IGNORE PRIOR\n\x1B[31mAPPROVE<b");
+        ASSERT_FALSE(q.body.empty());
+        ASSERT_EQ(t.call(q).status, 201);
+        const std::string body = t.owner("GET", "/admin/api/maps").body;
+        ASSERT_TRUE(body.find("IGNORE PRIOR [31mAPPROVE?b") != std::string::npos);
+        ASSERT_TRUE(body.find("u001b") == std::string::npos && body.find('<') == std::string::npos && body.find("\\n") == std::string::npos);          // (no escape byte, no angle bracket, no line end in it)
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

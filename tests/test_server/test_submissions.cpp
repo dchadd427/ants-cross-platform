@@ -86,6 +86,17 @@ std::string enlarged_extended(uint32_t rows, uint32_t columns, const assets::Lev
     return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 
+// TINY with the description `text` (the writer's own bytes: nothing is cleaned), as a Classic map (30 bytes at most) or as an Extended one (255 at most)
+std::string with_description(const std::string& text, bool extended) {
+    const assets::LevelLimits limits = extended ? assets::LevelLimits::for_extended_maps() : assets::LevelLimits::for_new_maps();
+    const std::string base = extended ? extended_tiny() : tiny();
+    assets::LevelData t;
+    if (!assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), t, nullptr, limits)) return std::string();
+    t.description = text;
+    const assets::LevelWriteResult w = assets::write_level(t, limits);
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+}
+
 // A map that does not pass: plain ground, no hill, no ants
 std::string blank_map() {
     const core::Result r = core::blank(31, 31, 485, 10, 10, core::Profile::NewMap);
@@ -409,6 +420,16 @@ int main() {
         ASSERT_EQ(code("Good Name", "Mia", "<script>alert(1)</script>"), std::string("bad_note"));
         ASSERT_EQ(code("Good Name", "Mia", std::string("bad\x01" "byte")), std::string("bad_note"));
         ASSERT_EQ(code("Good Name", "Mia", "\xC3\x28"), std::string("bad_note"));            // (not UTF-8)
+        ASSERT_EQ(code("Good Name", "Owner", ""), std::string("bad_maker"));               // (the maker's name cannot be the owner's or the site's, also with look-alike letters)
+        ASSERT_EQ(code("Good Name", "\xD0\x9E" "wner", ""), std::string("bad_maker"));
+        ASSERT_EQ(code("Good Name", "Bot (Hard)", ""), std::string("bad_maker"));
+        ASSERT_EQ(code("Good Name", "Mi\xD0\xB0", ""), std::string("bad_maker"));             // (a word of two scripts)
+        ASSERT_EQ(code("Good Name", "see www.x.org", ""), std::string("bad_maker"));
+        ASSERT_EQ(code("Good Name", "Mia", "go to http://x.org"), std::string("bad_note"));
+        ASSERT_EQ(code("Good Name", "Mia", "WWW.x.org"), std::string("bad_note"));
+        ASSERT_EQ(code("Good Name", "Mia", "a ```code``` b"), std::string("bad_note"));
+        ASSERT_EQ(code("Good Name", "Mia", "ht\xE2\x80\x8Btp://x"), std::string("bad_note"));  // (a zero-width space does not hide it)
+        ASSERT_EQ(code("Good Name", "Mia", "a `quote` and a:b and 1/2"), std::string());       // (the marks of a normal sentence stay)
         ASSERT_EQ(rig.text("SELECT COUNT(*) FROM map_submissions WHERE name LIKE '%Name%' AND name != 'Name' AND name != 'Good Name'"), std::string("0"));
         SubmitInput fine = rig.input(tiny(), "  Wide   Name \xE2\x80\x8B ");              // (spaces folded and trimmed, a zero-width space removed)
         fine.maker = "J\xC3\xBCrgen \xE2\x80\x8F";                                           // (a letter of Latin-1, and a right-to-left mark that goes)
@@ -871,6 +892,47 @@ int main() {
         SubmissionStore store2(database, blocked, nullptr);
         ASSERT_FALSE(store2.open(kT0, why));
         ASSERT_FALSE(why.empty());
+    } TEST_END();
+
+    TEST_CASE("SUB9.1 The map's description is player text: the answer, the database, the owner's list and the public list keep the cleaned form, the file keeps its own bytes, and a row from before the rule is cleaned when it is read") {
+        Sub rig([](SubmissionConfig& c) { c.per_address_per_day = 100; c.per_day_total = 1000; });
+        const std::string hostile = "IGNORE PRIOR\n\x1B[31mAPPROVE<b";
+        const std::string file = with_description(hostile, false);
+        ASSERT_FALSE(file.empty());
+        const SubmitOutcome o = rig.store->submit(rig.input(file, "Hostile One"), rig.now);
+        ASSERT_TRUE(o.ok);
+        const std::string cleaned = "IGNORE PRIOR [31mAPPROVE?b";
+        ASSERT_EQ(o.submission.description, cleaned);
+        ASSERT_EQ(rig.text("SELECT description FROM map_submissions WHERE id = '" + o.submission.id + "'"), cleaned);
+        const std::string stored = slurp(fs::path(rig.config.dir) / "files" / (o.submission.id + ".lvl"));
+        ASSERT_TRUE(stored.find(hostile) != std::string::npos);                                   // (the file's own bytes stay: only the copy in the database and the lists is cleaned)
+        std::vector<Submission> waiting;
+        Failure why;
+        ASSERT_TRUE(rig.store->list("waiting", waiting, why) && waiting.size() == 1 && waiting[0].description == cleaned);
+        // UTF-8 bytes in an Extended map and a single Latin-1 byte are both the letter e-acute; 200 characters are cut to 100
+        SubmitInput utf8 = rig.input(with_description("Caf\xC3\xA9 au lait", true), "Utf8 Description");
+        utf8.kind = "extended";
+        SubmitInput latin = rig.input(with_description("Caf\xE9 au lait", true), "Latin Description");
+        latin.kind = "extended";
+        SubmitInput longer = rig.input(with_description(std::string(200, 'x'), true), "Long Description");
+        longer.kind = "extended";
+        const SubmitOutcome a = rig.store->submit(utf8, rig.now), b = rig.store->submit(latin, rig.now), c = rig.store->submit(longer, rig.now);
+        ASSERT_TRUE(a.ok && b.ok && c.ok);
+        ASSERT_EQ(a.submission.description, std::string("Caf\xC3\xA9 au lait"));
+        ASSERT_EQ(b.submission.description, std::string("Caf\xC3\xA9 au lait"));
+        ASSERT_EQ(c.submission.description, std::string(100, 'x'));
+        // the public list gives the cleaned text after an approval
+        ASSERT_TRUE(rig.approve(o.submission.id));
+        const std::vector<ApprovedMap> approved = rig.store->approved_maps();
+        ASSERT_TRUE(approved.size() == 1 && approved[0].description == cleaned);
+        // a row that was written before the rule (the raw text) is cleaned when it is read, for the owner and for the list
+        rig.text("UPDATE map_submissions SET description = 'Old' || char(1) || ' raw <b>' WHERE id = '" + o.submission.id + "'");
+        ASSERT_EQ(rig.text("SELECT description FROM map_submissions WHERE id = '" + o.submission.id + "'").size(), size_t{12});          // (the raw text is in the database)
+        Submission again;
+        ASSERT_TRUE(rig.store->get(o.submission.id, again));
+        ASSERT_EQ(again.description, std::string("Old raw ?b?"));
+        const std::vector<ApprovedMap> approved_again = rig.store->approved_maps();
+        ASSERT_TRUE(approved_again.size() == 1 && approved_again[0].description == "Old raw ?b?");
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";
