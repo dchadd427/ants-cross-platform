@@ -93,6 +93,7 @@
     function ask(win, id) {
         var doc = win.document, scrim = el(doc, 'div', 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.6);'), previous = doc.activeElement;
         var box = el(doc, 'div', 'box-sizing:border-box;max-width:460px;width:100%;padding:20px;border:2px solid #2aa58a;border-radius:10px;background:#07120e;' + LOOK);
+        box.id = 'test-leave';
         box.setAttribute('role', 'dialog');
         box.setAttribute('aria-modal', 'true');
         box.setAttribute('aria-labelledby', 'test-leave-title');
@@ -101,6 +102,8 @@
         var row = el(doc, 'div', 'display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px;');
         var keep = el(doc, 'button', 'min-height:44px;', 'Keep playing'), out = el(doc, 'button', 'min-height:44px;', 'Back to editor');
         keep.type = out.type = 'button';
+        keep.id = 'test-leave-keep';
+        out.id = 'test-leave-out';
         keep.className = 'btn';
         out.className = 'btn';
         function close() { doc.removeEventListener('keydown', onKey, true); if (scrim.parentNode) scrim.parentNode.removeChild(scrim); if (previous && previous.focus) previous.focus(); }

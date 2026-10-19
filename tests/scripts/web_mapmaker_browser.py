@@ -64,6 +64,9 @@ Parts:
              that Download hands over and every pixel of the map are as before); Fix edges on the visible part changes only tile words of layer 1 inside it and the check line stays "Works in the
              original game"; a second one on the whole map brings the total to the count that the rule says; ONE Undo takes back each fix (the bytes are the exact ones that went before, and the
              pixels too), Redo makes it again, and the fixed map has nothing left to fix (also run alone by the mutants of tests/data/mapmaker_edges_mutants.json);
+  * play     1280 x 800 and a touch screen (390 x 844), Play this map (tests/scripts/web_mapmaker_play_browser.py, which says what it covers): a game is started from the map maker against bots in a tab of its own,
+             really played (the roster, the ants, the clock on the screen), with the open file's own bytes; the way back asks once and closes the tab; the map comes back as it was, history included;
+             the refusals are plain words
   * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -83,7 +86,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges")
+PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play")
 WITH_ATLAS = ("panel", "sprites", "layer", "edges")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
@@ -2164,6 +2167,15 @@ def run_part(part, tab, args, check, tiny, junk):
     elif part == "edges":
         tab.emulate(1280, 800, 1)
         run_edges(Page(tab, args.web), tab, args, check)
+    elif part == "play":
+        import web_mapmaker_play_browser as play                      # (Play this map: its own file, this one is at the limit of lines)
+        tab.emulate(1280, 800, 1)
+        play.run_play(Page(tab, args.web), tab, args, check, sys.modules[__name__])
+        phone = Tab(tab_browser(tab))
+        try:
+            play.run_play_phone(Page(phone, args.web), phone, args, check, sys.modules[__name__])
+        finally:
+            phone.close()
     elif part == "layer":
         print("[web map maker] the kept layer of the sprite canvas, 1280 x 800")
         tab.emulate(1280, 800, 1)
