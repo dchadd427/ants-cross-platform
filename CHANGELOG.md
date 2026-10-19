@@ -35,7 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - My maps: a saved map that cannot be read no longer stops the pictures and check lines of the maps after it.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f09faf63...a0ca8a19)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f09faf63...b2b682f7)
 
 ## v0.12.87 - 2026-10-18 - Map maker: Fix edges (sprites part 2)
 
