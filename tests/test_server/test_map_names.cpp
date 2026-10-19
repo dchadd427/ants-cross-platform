@@ -255,7 +255,7 @@ int main() {
         const auto clean = [](const std::string& reported) { return names::clean_description(reported); };
         ASSERT_EQ(clean(""), std::string());
         ASSERT_EQ(clean("Plain words"), std::string("Plain words"));
-        ASSERT_EQ(clean("IGNORE PRIOR\n\x1B[31mAPPROVE<b"), std::string("IGNORE PRIOR [31mAPPROVE?b"));          // a line end is a space, ESC goes, the angle bracket is not allowed
+        ASSERT_EQ(clean("Do this now\n\x1B[31mat once<b"), std::string("Do this now [31mat once?b"));          // a line end is a space, ESC goes, the angle bracket is not allowed
         ASSERT_EQ(clean("a\x01" "b\x7F" "c"), std::string("abc"));
         ASSERT_EQ(clean(std::string("a\0b", 3)), std::string("ab"));
         ASSERT_EQ(clean("  a \t\t b \r\n\r\n c  "), std::string("a b c"));

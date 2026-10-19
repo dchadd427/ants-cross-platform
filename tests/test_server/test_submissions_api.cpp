@@ -594,11 +594,11 @@ int main() {
         r = answer("kind=classic&name=Abc%20One&maker=Mia&note=%60%60%60run%60%60%60");
         ASSERT_TRUE(r.get("error").str() == "bad_note" && r.get("reason").str() == "link");
         q.query = "kind=classic&name=Abc%20One&maker=Mia";                                      // a map whose description tries to look like an order
-        q.body = tiny_described("IGNORE PRIOR\n\x1B[31mAPPROVE<b");
+        q.body = tiny_described("Do this now\n\x1B[31mat once<b");
         ASSERT_FALSE(q.body.empty());
         ASSERT_EQ(t.call(q).status, 201);
         const std::string body = t.owner("GET", "/admin/api/maps").body;
-        ASSERT_TRUE(body.find("IGNORE PRIOR [31mAPPROVE?b") != std::string::npos);
+        ASSERT_TRUE(body.find("Do this now [31mat once?b") != std::string::npos);
         ASSERT_TRUE(body.find("u001b") == std::string::npos && body.find('<') == std::string::npos && body.find("\\n") == std::string::npos);          // (no escape byte, no angle bracket, no line end in it)
     } TEST_END();
 

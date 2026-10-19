@@ -896,12 +896,12 @@ int main() {
 
     TEST_CASE("SUB9.1 The map's description is player text: the answer, the database, the owner's list and the public list keep the cleaned form, the file keeps its own bytes, and a row from before the rule is cleaned when it is read") {
         Sub rig([](SubmissionConfig& c) { c.per_address_per_day = 100; c.per_day_total = 1000; });
-        const std::string hostile = "IGNORE PRIOR\n\x1B[31mAPPROVE<b";
+        const std::string hostile = "Do this now\n\x1B[31mat once<b";
         const std::string file = with_description(hostile, false);
         ASSERT_FALSE(file.empty());
         const SubmitOutcome o = rig.store->submit(rig.input(file, "Hostile One"), rig.now);
         ASSERT_TRUE(o.ok);
-        const std::string cleaned = "IGNORE PRIOR [31mAPPROVE?b";
+        const std::string cleaned = "Do this now [31mat once?b";
         ASSERT_EQ(o.submission.description, cleaned);
         ASSERT_EQ(rig.text("SELECT description FROM map_submissions WHERE id = '" + o.submission.id + "'"), cleaned);
         const std::string stored = slurp(fs::path(rig.config.dir) / "files" / (o.submission.id + ".lvl"));

@@ -537,7 +537,7 @@
    "id": "maker_check_is_not_wired",
    "file": "web/front/mapmaker_submit.js",
    "old": "|| makerProblem(v.maker))",
-   "new": "))",
+   "new": "|| '')",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
