@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """The owner's page, web/admin.html with web/admin_page.js and web/admin.css (run by ./run_tests.sh --fast and by the CI; docs/MAP_SUBMISSIONS.md "The owner's page").
 
-  - the page's own code is RUN (node, when it is installed): what it shows to nobody, to a stranger and to the owner (the approved pictures: the logon, "This page is for the owner only", the four tabs, the rows,
-    the rename box, the decline box, the question before a take-down, the empty states), what each button sends with the CSRF token, a session that ends, and that no text of a person becomes markup
-    (tests/scripts/web_admin_check.js); the check is shown able to fail: broken copies of the script are refused by it;
-  - the page is not reachable from anywhere: no other file of web/ names the address or the file, there is no link in the page for the owner or a stranger but the logon's, and the script has no way to make
-    markup from text (no innerHTML, no document.write, no eval) and no address of another site.
+  - the page's own code is RUN (node, when it is installed): what it shows to nobody (the sign-in box), to an account with a starting password (the choice of its own), to an Admin and to a Moderator (the first
+    design's pictures: the account menu, the four tabs, the rows, the rename box, the decline box, the question before a take-down, the users, the password shown once, the log, the empty states), what each button
+    sends with the CSRF token, a session that ends, that no password is kept or put in an address, and that no text of a person becomes markup (tests/scripts/web_admin_check.js); the check is shown able to fail:
+    broken copies of the script are refused by it;
+  - the page is not reachable from anywhere: no other file of web/ names the address or the file, there is no link in the page, and the script has no way to make markup from text (no innerHTML, no
+    document.write, no eval) and no address of another site.
 """
 import os
 import re
@@ -42,8 +43,6 @@ class ThePagesOwnCode(unittest.TestCase):
             "no CSRF token is sent": ("init.headers['X-Ants-Csrf'] = me && me.csrf ? me.csrf : '';", "init.headers['X-Ants-Csrf'] = '';"),
             "the cookie is not sent": ("credentials: 'same-origin'", "credentials: 'omit'"),
             "a text becomes markup": ("if (text !== undefined && text !== null) n.textContent = text;", "if (text !== undefined && text !== null) n.innerHTML = text;"),
-            "a stranger gets the owner's page": ("if (!me.owner) return showNotOwner();\n                return showShell();", "return showShell();"),
-            "a page that is off says who is signed in": ("return me ? showLogon() : showNotOwner();", "return showLogon();"),
             "Take down asks no question": ("var td = button('Take down', 'big bad', function () { st.dialog = m; st.dialogKind = 'take-down'; st.dialogBody = null; draw(); });", "var td = button('Take down', 'big bad', function () { act(m.id, 'take-down', {}); });"),
             "Approve asks no question": ("var ap = button('Approve', 'big ok', function () { st.dialog = m; st.dialogKind = 'approve'; st.dialogBody = null; draw(); });", "var ap = button('Approve', 'big ok', function () { act(m.id, 'approve', {}); });"),
             "the Approve question sends the wrong call": ("if (!approve) return act(m.id, 'take-down', {});", "if (true) return act(m.id, 'take-down', {});"),
@@ -75,17 +74,44 @@ class ThePagesOwnCode(unittest.TestCase):
             "an approved map shows the maker's first name": ("return m.state === 'approved' || m.state === 'taken_down' ? m.approved_name : m.name;", "return m.name;"),
             "the empty Approved tab has no way to the waiting maps": ("if (st.tab === 'approved' && counts.waiting > 0)", "if (false)"),
             "an expired session is not noticed": ("if (r.status === 404) return start();\n                    if (done && done(r)) return;", "if (done && done(r)) return;"),
-            "a list that fails shows nothing and says nothing": ("if (r.status !== 200) { toast('The list could not be loaded. Reload the page.'); return null; }", "if (r.status !== 200) { st.data = { counts: {}, maps: [] }; draw(); return null; }"),
+            "a list that fails shows nothing and says nothing": ("(the session ended: the page asks again who is here)\n                    if (r.status !== 200) { toast('The list could not be loaded. Reload the page.'); return null; }", "(the session ended: the page asks again who is here)\n                    if (r.status !== 200) { st.data = { counts: {}, maps: [] }; draw(); return null; }"),
             "the list is not asked again after a change": ("Promise.resolve(load()).then(release, release);", "release();"),
-            "a link leads out of the owner's page": ("add(app, header(section.title), add(wrap, host));", "add(app, header(section.title), add(wrap, host), el('a'));"),
-            "the sign-out is a link, not a post": ("f.method = 'post';", "f.method = 'get';"),
-            "the page behind the question is not inert": ("n.setAttribute('inert', '');", ""),
+            "a link leads out of the owner's page": ("add(app, header(section.title, true), add(wrap, host));", "add(app, header(section.title, true), add(wrap, host), el('a'));"),
+            "the page behind the question is not inert": ("if (n !== d.node && n !== host.parentNode && n !== app) n.setAttribute('inert', '');", ""),
+            "the page behind a box is not inert": ("Array.prototype.slice.call(app.children).forEach(function (n) { n.setAttribute('inert', ''); });", ""),
+            "Escape does not close a box": ("if (e.key === 'Escape') { closeModal(); return; }", ""),
             "the question does not hear the document's keys": ("doc.addEventListener('keydown', d.onKey, true);", ""),
             "the question leaves its key listener behind": ("st.keyOff = function () { doc.removeEventListener('keydown', d.onKey, true); };", "st.keyOff = function () {};"),
-            "a bidirectional control stays in player text": ("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", "[\\u061d]"),
+            "a bidirectional control stays in player text": ("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, ''));        // (bidirectional", "[\\u061d]/g, ''));        // (bidirectional"),
+            "a bidirectional control stays in a typed name": ("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, ''));\n            n.setAttribute('data-untrusted', TYPED);", "[\\u061d]/g, ''));\n            n.setAttribute('data-untrusted', TYPED);"),
             "the typed name is lost behind the question": ("st.open.typed = input.value; st.dialog = m;", "st.dialog = m;"),
             "Save name and approve asks no question": ("st.open.typed = input.value; st.dialog = m; st.dialogKind = 'approve'; st.dialogBody = { name: input.value }; draw(); });", "act(m.id, 'approve', { name: input.value }); });"),
             "the question forgets the owner's name": ("act(m.id, 'approve', body || {},", "act(m.id, 'approve', {},"),
+            "the password box shows what is typed": ("input.type = attrs.type || 'text';", "input.type = 'text';"),
+            "the eye does not show the password": ("input.type = shown ? 'text' : 'password';", ""),
+            "the sign-in password has the wrong autocomplete": ("{ type: 'password', autocomplete: 'current-password', maxlength: 256 });\n            var go", "{ type: 'password', autocomplete: 'off', maxlength: 256 });\n            var go"),
+            "the new password has the wrong autocomplete": ("var first = field('New password', prefix + '-new', { type: 'password', autocomplete: 'new-password'", "var first = field('New password', prefix + '-new', { type: 'password', autocomplete: 'current-password'"),
+            "the password goes in the address": ("call('POST', '/admin/api/login', { username: typedName, password: pass.input.value })", "call('POST', '/admin/api/login?p=' + pass.input.value, { username: typedName })"),
+            "the sign-in answer is not the same for both": ("else if (r.status === 401) showLogin('Wrong username or password', false, typedName);", "else if (r.status === 401) showLogin('Wrong password', false, typedName);"),
+            "a lock does not dim the button": ("if (locked) { go.disabled = true; go.className += ' dis'; }", ""),
+            "a starting password gets the maps": ("if (me.must_change) return showChoose();", ""),
+            "Save is live when the two differ": ("function ready() { return chars(first.input.value) >= MIN_CHARS && first.input.value === second.input.value; }", "function ready() { return chars(first.input.value) >= MIN_CHARS; }"),
+            "eight characters are enough": ("var MIN_CHARS = 12;", "var MIN_CHARS = 8;"),
+            "the characters are counted as bytes": ("function chars(text) { return Array.from(String(text)).length; }", "function chars(text) { return unescape(encodeURIComponent(String(text))).length; }"),
+            "a Moderator is offered the users": ("if (me.role === 'admin') add(menu, item('Users',", "if (true) add(menu, item('Users',"),
+            "the menu does not close with Escape": ("if (e.key === 'Escape') { shut(); btn.focus(); }", ""),
+            "a new password does not renew the token": ("me.csrf = r.json && r.json.csrf ? r.json.csrf : me.csrf;", ""),
+            "a session that ended is not noticed": ("if (r.status === 404 || r.status === 401 || (r.status === 403 && r.json && r.json.error === 'password_change_required')) { closeModal(); start(); return true; }", ""),
+            "the starting role is the greater one": ("choose('moderator');\n                var rolebox", "choose('admin');\n                var rolebox"),
+            "Remove asks no question": ("add(ua, button('Remove', 'sm bad', function () { askRemove(u); }));", "add(ua, button('Remove', 'sm bad', function () { act(u, 'remove'); }));"),
+            "the last Admin is not told": ("if (r.json && r.json.error === 'last_admin') { st.notice = user; draw(); return; }", ""),
+            "an account name is not marked": ("n.setAttribute('data-untrusted', TYPED);", ""),
+            "the log's words are not marked": ("add(row, el('span', 'tm', when(e.at, env.now())), typed('span', 'wh', e.who), wt);", "add(row, el('span', 'tm', when(e.at, env.now())), el('span', 'wh', e.who), wt);"),
+            "the decider is not shown": ("if (st.tab !== 'waiting' && m.decided_by) add(line,", "if (false) add(line,"),
+            "the one-time box has no words": ("el('b', null, 'Shown once.')", "el('b', null, '')"),
+            "Copy copies nothing": ("cb.writeText(password)", "cb.writeText('')"),
+            "reset of oneself reloads the list under the password": ("if (user.you && action === 'reset') return; load(); return; }", "load(); return; }"),
+            "the sign-out sends no token": ("call('POST', '/admin/api/logout', {})", "env.fetch('/admin/api/logout', { method: 'POST', credentials: 'same-origin', headers: {}, body: '{}' })"),
             "the textarea has no limit": ("area.maxLength = 200;", ""),
         }
         with tempfile.TemporaryDirectory() as folder:
@@ -128,25 +154,30 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         for rule in re.findall(r"\.adm \.(?:chip|linkbtn) \{[^}]*\}", css):                   # (a finger: the tabs and the sign-out are 44 px tall at least, on a phone too)
             self.assertRegex(rule, r"min-height: (4[4-9]|[5-9][0-9])px", rule)
         self.assertEqual(len(re.findall(r"\.adm \.(?:chip|linkbtn) \{", css)), 3)           # (chip twice: wide and phone; the sign-out once)
-        self.assertNotRegex(css, r"\.adm \.signed \{ display: none")
-        self.assertIn(".adm .signed .who { display: none; }", css)               # (on a phone the words go, the small Sign out stays)
+        self.assertNotIn(".signed", css)
+        for name in ("eye", "acct", "rcard"):                                                # (the eye, the account button and the role cards are fingers too)
+            self.assertTrue(any(re.search(r"(min-height|height): (4[4-9]|[5-9][0-9])px", r) for r in re.findall(r"\.adm \.%s \{[^}]*\}" % name, css)), name)
         script = read("web", "admin_page.js")
-        self.assertEqual(sorted(set(re.findall(r"""['"](/[A-Za-z][^'"\s]*)""", script))), ["/admin/api/maps/", "/admin/api/maps?state=", "/admin/api/me", "/admin/api/next-name?name=", "/admin/login", "/admin/logout", "/front/logo.png", "/picture"])
-        self.assertNotRegex(script, r"https?://")
+        self.assertEqual(sorted(set(re.findall(r"""['"](/[A-Za-z][^'"\s]*)""", script))), ["/admin/api/audit", "/admin/api/login", "/admin/api/logout", "/admin/api/maps/", "/admin/api/maps?state=", "/admin/api/me", "/admin/api/next-name?name=", "/admin/api/password", "/admin/api/users", "/admin/api/users/", "/front/logo.png", "/picture"])
+        self.assertNotRegex(script.replace("http://www.w3.org/2000/svg", ""), r"https?://")          # (the one name that SVG needs is not an address that is loaded)
         for forbidden in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "setTimeout('", 'setTimeout("', "localStorage", "sessionStorage", "document.cookie", "location.href"):
             self.assertNotIn(forbidden, script, forbidden)
 
-    def test_the_registry_holds_one_section_and_a_later_one_is_one_more_entry(self):
+    def test_the_registry_holds_the_sections_and_a_later_one_is_one_more_entry(self):
         script = read("web", "admin_page.js")
-        self.assertIn("var SECTIONS = [{ id: 'maps', title: 'Maps players sent', render: renderMaps }];", script)
-        self.assertIn("section.render(host, signed);", script)                      # (the shell knows no section by name: it calls the one that is chosen)
+        self.assertIn("{ id: 'maps', title: 'Maps players sent', render: renderMaps, roles: ['admin', 'moderator'] },", script)
+        self.assertIn("{ id: 'users', title: 'Users', render: renderUsers, roles: ['admin'] }", script)          # (a section names who may see it; the server holds the same rule)
+        self.assertIn("section.render(host);", script)                              # (the shell knows no section by name: it calls the one that is chosen)
         shell = script[script.index("function showShell()"):script.index("// ---- the section \"Maps players sent\"")]
         self.assertNotIn("Maps players sent", shell)
         self.assertNotIn("Waiting", shell)
 
     def test_the_text_of_the_pictures_is_in_the_script(self):
         script = read("web", "admin_page.js")
-        for words in ("Owner logon", "Only the owner can open this page", "Sign in with Discord", "This page is for the owner only", "Maps players sent", "Rename and approve", "Use next name", "Save name and approve",
+        for words in ("Sign in", "Wrong username or password", "Too many tries. Wait a few minutes.", "Choose your own password", "At least 12 characters. That is the only rule.", "Change password",
+                      "The current password is not right. Nothing was changed.", "Your password was changed. Use the new one the next time you sign in.", "Shown once.", "Has not chosen a password yet",
+                      "Everyone who can sign in to this page. Only an Admin sees this list.", "Remove this user?", "You are the only user", "Passwords are never written here.",
+                      "This page is for the owner only", "Maps players sent", "Rename and approve", "Use next name", "Save name and approve",
                       "Name for this map", "Take this map down?", "Players will no longer find it. It can be put back later.", "Put back", "No approved maps yet", "Go to maps waiting",
                       "A name that is already taken is never replaced.", "Declining asks for a short reason that the maker can read. Nothing is deleted.",
                       "Taking a map down does not delete it. Its name stays protected"):
