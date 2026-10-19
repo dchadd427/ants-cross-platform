@@ -17,13 +17,13 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 **Fixes:**
 - one line each (optional)
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...b2150865)
 
 Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.89 - 2026-10-18 - Safer player text on the server: descriptions, maker names, logs, page headers (injection hardening, server)
 
 **For players:**
 - Maps sent for approval: the server now cleans the map's description before it is stored or listed (odd characters become "?", blanks are tidied, at most 100 characters); the map file itself is not changed.
