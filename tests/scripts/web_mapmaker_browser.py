@@ -2088,8 +2088,12 @@ def run_part(part, tab, args, check, tiny, junk):
         page2.url += "#sent=" + "T" * 43
         check(page2.open(fake) and page2.ready(), "the page starts from a status link")
         page2.ev("window.__srv.list = [{id: 'e'.repeat(32), state: 'approved', kind: 'classic', name: 'Elsewhere', width: 20, height: 20, sent_at: Math.floor(Date.now() / 1000)}]")
-        check(wait_for(lambda: not page2.ev("document.getElementById('mine').hidden") and page2.ev("document.getElementById('mine-title').textContent") == "My submissions"), "it opens My submissions")
+        check(dialog(page2, "Add submissions from a link?") and "made by someone else" in text_of(page2, ".dlg"), "it asks first, in words that say the submissions are someone else's")
         check(wait_for(lambda: page2.ev("location.hash") == "") and page2.ev("location.href").endswith("/mapmaker.html"), "and the address has lost the token (%s)" % page2.ev("location.href"))
+        check(page2.ev("document.getElementById('mine').hidden") is True, "nothing is opened or added before the answer")
+        click_text(page2, ".dlg-foot .btn", "Add them")
+        check(wait_for(lambda: not page2.ev("document.getElementById('mine').hidden") and page2.ev("document.getElementById('mine-title').textContent") == "My submissions"), "Add them opens My submissions")
+        check(wait_for(lambda: "Added from a link" in text_of(page2, "#mine-list")) and "Elsewhere" in text_of(page2, "#mine-list"), "and its rows say that they were added from a link")
         # the phone
         print("[web map maker] Submit for approval and My submissions, a touch screen, 390 x 844")
         tab.emulate(390, 844, 2, mobile=True)
