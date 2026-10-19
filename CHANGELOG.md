@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **Map maker: place ants one at a time.** Choose Ants, tap a cell and one ant of the picked team stands there; tap an ant (any team) and it is taken away. "Take one away" makes every tap a removal. Each team shows how many ants it has, with plain warnings (a team with none, too many for the file, ants packed too tight).
+- **Group** keeps the clump of before and adds **Mix**: pick the teams and how many ants for each, choose every cell or every other cell, drag a box and the teams are mixed cell by cell, with a preview and one Undo. Good for a "mosh pit" start.
+- **Clear <team> ants...** takes one team's ants away after asking, and says how many.
+
 ## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
 
 **For players:**
@@ -666,14 +673,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
 
-## v0.12.16 - 2026-10-12 - Auto camera for replays and live matches
+## Older versions (v0.12.16 and before)
 
-**For players:**
-- **Auto camera for replays and live matches.** The picture goes to the busiest place (fights, thefts, fires, bombs) and stays there at least 3 seconds; rings on the minimap show where things happen. **Manual camera** leaves the picture where you put it. Moving the picture by hand (the edge of the screen, the minimap, two fingers) switches to Manual; zooming does not. The button is in the bar (a row of its own on a phone, an icon in fullscreen) and what you chose is remembered on the device.
-- **Nothing can be picked in a replay:** no click, drag box, corner marks, Move and Stop buttons, order markers, voices or inspect panel. Matches you play are the same.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.15...v0.12.16); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
-
-## Older versions (v0.12.15 and before)
-
-Every release before v0.12.16, and the long notes of v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.18, and the long notes of v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
