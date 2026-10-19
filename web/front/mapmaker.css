@@ -34,6 +34,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .edmenu { display: flex; gap: 10px; }
 .edmenu .btn.sm { min-height: 40px; }
 .btn { white-space: nowrap; }
+.btn.gold { background: var(--gold); color: #1b1608; border-color: #7a5f0c; text-shadow: none; } .btn.gold:hover { background: #ffe27d; }
 .btn[disabled] { opacity: .45; cursor: default; }
 .edbody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 150px minmax(0, 1fr) 270px; gap: 18px; padding: 8px 28px 28px 28px; }
 .tools { padding: 10px; display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; }
@@ -154,6 +155,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .dlg-foot .btn.ghost { background: #0d1b16; box-shadow: none; border-color: var(--frame-hi); color: var(--cream); }
 .dlg-foot .btn[disabled] { opacity: .45; }
 .menulist { display: grid; gap: 10px; }
+.menuhint { font-size: 14.5px; line-height: 1.35; color: var(--muted); margin: -4px 2px 0; }
 .kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 14px; border: 0; min-width: 0; }
 .kind { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 14px 52px; background: #0d1b16; border: 2px solid var(--rule); border-radius: 6px; cursor: pointer; }
 .kind.on { border-color: var(--gold); background: #14332b; box-shadow: 0 0 0 1px #000 inset; }
@@ -265,8 +267,8 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 @media (min-width: 601px) and (min-height: 451px) and (max-height: 780px) { .side { gap: 8px; } .toolnote { display: none; } .tools { padding: 8px 10px; gap: 4px; } .toolbtns { gap: 4px; } .tool { min-height: 34px; padding: 4px 10px; } .swatch.team { min-height: 28px; } }
 
 /* a narrow desktop window (601 to 1200 pixels): the top bar wraps, the name box on a line of its own, so no button is cut and none covers the name (eight buttons since Submit for approval) */
-@media (min-width: 1201px) and (max-width: 1330px) { .edmenu { gap: 6px; } .edmenu .btn.sm { padding-left: 9px; padding-right: 9px; } }
-@media (min-width: 601px) and (max-width: 1200px) and (min-height: 451px) {
+@media (min-width: 1221px) and (max-width: 1480px) { .edmenu { gap: 4px; } .edmenu .btn.sm { padding-left: 6px; padding-right: 6px; font-size: 14px; } }
+@media (min-width: 601px) and (max-width: 1220px) and (min-height: 451px) {
     .edtop { flex-wrap: wrap; } .edtop .edmenu { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; } .edtop .edname { order: 3; flex: 1 1 100%; }
 }
 

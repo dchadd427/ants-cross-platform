@@ -728,7 +728,7 @@ class ThePage(unittest.TestCase):
 
     def test_every_button_that_the_page_has_is_wired_and_starts_off_until_the_core_is_there(self):
         acts = re.findall(r'data-act="([a-z-]+)"', self.page)
-        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "mine", "new", "open", "props", "save", "submit", "zoom-in", "zoom-out"])
+        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "mine", "new", "open", "play", "props", "save", "submit", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
         self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,", self.app)
@@ -997,8 +997,8 @@ class ThePage(unittest.TestCase):
         self.assertEqual(sorted(used - defined), [])
         self.assertRegex(self.css, r"\.cv canvas\.map \{[^}]*touch-action: none;")
         self.assertRegex(self.css, r"\.screen\.ed \{ height: 100vh; height: 100dvh;")
-        self.assertIn("@media (min-width: 601px) and (max-width: 1200px) and (min-height: 451px) {", self.css, "the top bar wraps in a narrow window (eight buttons since Submit for approval...)")
-        self.assertIn("@media (min-width: 1201px) and (max-width: 1330px) { .edmenu { gap: 6px; } .edmenu .btn.sm { padding-left: 9px; padding-right: 9px; } }", self.css, "and is a little tighter above it, so the kind tag is never covered")
+        self.assertIn("@media (min-width: 601px) and (max-width: 1220px) and (min-height: 451px) {", self.css, "the top bar wraps in a narrow window (eight buttons since Submit for approval..., nine since Play this map)")
+        self.assertIn("@media (min-width: 1221px) and (max-width: 1480px) { .edmenu { gap: 4px; } .edmenu .btn.sm { padding-left: 6px; padding-right: 6px; font-size: 14px; } }", self.css, "and is tighter above it, so the kind tag is never covered")
         for part in (".mine { position: absolute; inset: 0; z-index: 8; overflow: auto; }", ".mine { position: static; overflow: visible; flex: 1 0 auto; }", ".mlist { grid-template-columns: 1fr 1fr; gap: 10px; }"):
             self.assertIn(part, self.css, "My maps: the screen over the editor, flowing on a phone, two columns sideways")
         self.assertRegex(self.css, r"\.mchip \{ min-height: 44px;", "the filters are 44 pixels")

@@ -48,7 +48,7 @@ Parts:
              second tab of My maps) shows Waiting with Withdraw, Approved, Approved as a new name (renamed by the owner) and Declined with the owner's reason as text, Open my copy puts the copy
              on the screen, Withdraw asks first and withdraws; a door that is off and the pages of nginx are said in plain words; a status link opens the list and loses its fragment; the
              sheets are inside the screen, every control is 44 pixels and nothing scrolls sideways;
-  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700 to 1366 x 768, the bar wraps up to 1200): the top bar's eight buttons are all inside the window, none covers the name box or the kind tags (and My maps has its two tabs), none
+  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700 to 1366 x 768, the bar wraps up to 1220): the top bar's nine buttons are all inside the window, none covers the name box or the kind tags (and My maps has its two tabs), none
              covers the name box, and the page does not scroll sideways;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
@@ -67,6 +67,9 @@ Parts:
              that Download hands over and every pixel of the map are as before); Fix edges on the visible part changes only tile words of layer 1 inside it and the check line stays "Works in the
              original game"; a second one on the whole map brings the total to the count that the rule says; ONE Undo takes back each fix (the bytes are the exact ones that went before, and the
              pixels too), Redo makes it again, and the fixed map has nothing left to fix (also run alone by the mutants of tests/data/mapmaker_edges_mutants.json);
+  * play     1280 x 800 and a touch screen (390 x 844), Play this map (tests/scripts/web_mapmaker_play_browser.py, which says what it covers): a game is started from the map maker against bots in a tab of its own,
+             really played (the roster, the ants, the clock on the screen), with the open file's own bytes; the way back asks once and closes the tab; the map comes back as it was, history included;
+             the refusals are plain words
   * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -86,8 +89,8 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges")
-WITH_ATLAS = ("panel", "sprites", "layer", "edges")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
+PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play")
+WITH_ATLAS = ("panel", "sprites", "layer", "edges", "play")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 VIOLATIONS = []                   # what the browser refused for the page's content security policy (the console's "Refused to ..." lines and the audit issues), kept for the part that is running
 
@@ -1422,7 +1425,7 @@ def run_part(part, tab, args, check, tiny, junk):
         summary = lambda: page.ev("JSON.stringify([document.getElementById('s-desc').textContent, document.getElementById('s-time').textContent, document.getElementById('s-ant').textContent])")
         check(json.loads(summary()) == ["“Tiny map with no PowerUps”", "6 minutes · 3 eggs for each team", "No default ant type"], "the side panel says what the map has: %s" % summary())
         top = page.ev("JSON.stringify([].map.call(document.querySelectorAll('.edmenu.dsk .btn'), function (b) { return b.textContent; }))")
-        check(json.loads(top) == ["New", "Open", "My maps", "Copy...", "Save as new...", "Properties", "Download", "Submit for approval..."], "the top bar: New, Open, My maps, Copy..., Save as new..., Properties, Download, Submit for approval... (%s)" % top)
+        check(json.loads(top) == ["\u25b6 Play this map", "New", "Open", "My maps", "Copy...", "Save as new...", "Properties", "Download", "Submit for approval..."], "the top bar: Play this map, New, Open, My maps, Copy..., Save as new..., Properties, Download, Submit for approval... (%s)" % top)
         check(page.ev("document.querySelector('#sumbox [data-act=props]').offsetParent !== null && document.querySelector('#sumbox [data-act=props]').textContent === 'Edit'"), "the summary has its Edit link")
         page.shot(args.shots, "mapmaker-props-entry")
         # the mouse: the button opens the dialog
@@ -1553,7 +1556,7 @@ def run_part(part, tab, args, check, tiny, junk):
         tap_selector("[data-act=menu]")
         check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
         names = page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')")
-        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions", "the menu: %s" % names)
+        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions|\u25b6 Play this map", "the menu: %s" % names)
         page.shot(args.shots, "mapmaker-props-phone-menu")
         page.ev("document.querySelectorAll('.menulist .btn')[5].click()")
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Properties... opens the sheet")
@@ -1962,7 +1965,7 @@ def run_part(part, tab, args, check, tiny, junk):
             check(page.open() and page.ready(), "the page starts")
             page.press_act("menu")
             check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
-            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions", "the Menu has My maps after Open, and the two ways to send a map at its end")
+            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions|\u25b6 Play this map", "the Menu has My maps after Open, the two ways to send a map and then Play this map at its end")
             click_text(page, ".menulist .btn", "My maps")
             check(wait_for(lambda: shown(page) and len(rows(page)) >= 1 and page.ev("[].every.call(document.querySelectorAll('#mine-list .t3'), function (n) { return n.textContent.length > 0; })")), "My maps opens")
             bad = json.loads(page.ev("""JSON.stringify([].filter.call(document.querySelectorAll('#mine button'), function (b) { return b.offsetParent !== null; }).map(function (b) {
@@ -2157,7 +2160,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.choose_file(tiny)
         check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
         page.press_act("menu")
-        check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")) and page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).slice(-2).join('|')") == "Submit for approval...|My submissions", "the Menu ends with Submit for approval... and My submissions")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")) and page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).slice(-3).join('|')") == "Submit for approval...|My submissions|\u25b6 Play this map", "the Menu ends with Submit for approval..., My submissions and Play this map")
         page.shot(args.shots, "mapmaker-submit-menu-phone")
         click_text(page, ".menulist .btn", "Submit for approval...")
         check(dialog(page, "Submit for approval"), "the dialog opens")
@@ -2209,7 +2212,7 @@ def run_part(part, tab, args, check, tiny, junk):
                 });
                 return {out: out, hit: hit, scrollX: document.documentElement.scrollWidth > innerWidth, n: [].filter.call(document.querySelectorAll('.edmenu .btn'), function (b) { return b.offsetParent !== null; }).length};
             })())"""))
-            check(found["n"] == 8 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: eight buttons (Submit for approval... is the last), none cut, none over the name box or the tags, no sideways scroll (%s)" % (w, h, found))
+            check(found["n"] == 9 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: nine buttons (Play this map is the first, Submit for approval... the last), none cut, none over the name box or the tags, no sideways scroll (%s)" % (w, h, found))
             page.shot(args.shots, "mapmaker-topbar-%dx%d" % (w, h))
             # My submissions is the second tab of My maps: both tabs, the buttons of the screen and the page stay inside the window
             page.press_act("mine")
@@ -2222,6 +2225,15 @@ def run_part(part, tab, args, check, tiny, junk):
     elif part == "edges":
         tab.emulate(1280, 800, 1)
         run_edges(Page(tab, args.web), tab, args, check)
+    elif part == "play":
+        import web_mapmaker_play_browser as play                      # (Play this map: its own file, this one is at the limit of lines)
+        tab.emulate(1280, 800, 1)
+        play.run_play(Page(tab, args.web), tab, args, check, sys.modules[__name__])
+        phone = Tab(tab_browser(tab))
+        try:
+            play.run_play_phone(Page(phone, args.web), phone, args, check, sys.modules[__name__])
+        finally:
+            phone.close()
     elif part == "layer":
         print("[web map maker] the kept layer of the sprite canvas, 1280 x 800")
         tab.emulate(1280, 800, 1)
