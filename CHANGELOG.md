@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f09faf63...b1874ec0)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f09faf63...7eae530d)
 
 ## v0.12.87 - 2026-10-18 - Map maker: Fix edges (sprites part 2)
 
