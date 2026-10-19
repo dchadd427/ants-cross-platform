@@ -1,6 +1,7 @@
 #include "ants_server/admin_cli.hpp"
 
 #include <ctime>
+#include <filesystem>
 #include <ostream>
 
 #include "ants_db/database.hpp"
@@ -15,6 +16,8 @@ int run_admin_command(const AdminCommand& command, std::ostream& out, std::ostre
         err << "needs the database: give --db FILE or --results-dir DIR (the file is ants.db in it)\n";
         return 1;
     }
+    std::error_code made;
+    std::filesystem::create_directories(std::filesystem::u8path(command.db_path).parent_path(), made);          // (as the server does before it opens the file: a first account may be made before the first start)
     db::Database database;
     const db::Error opened = db::open_and_migrate(database, command.db_path, db_migrations(), db::OpenOptions());
     if (!opened.ok()) {

@@ -64,7 +64,7 @@ class ComposeFilesAsText(unittest.TestCase):
         cls.staging = read(STAGING)
 
     def test_container_names_are_its_own(self):
-        self.assertEqual(container_names(self.staging), ["ants-beta-staging", "ants-server-staging", "ants-admin-login-staging"])
+        self.assertEqual(container_names(self.staging), ["ants-beta-staging", "ants-server-staging"])
         self.assertEqual(set(container_names(self.stack)) & set(container_names(self.staging)), set())
 
     def test_host_ports_are_its_own_and_the_server_ports_stay_on_loopback(self):
@@ -92,8 +92,8 @@ class ComposeFilesAsText(unittest.TestCase):
             self.assertIn("dockerfile: Dockerfile.server\n", text)
             self.assertRegex(text, r"(?m)^  ants-beta:\s*$")
             self.assertRegex(text, r"(?m)^  ants-server:\s*$")
-            self.assertIn("dockerfile: Dockerfile.login\n", text)
-            self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-admin-login"])      # (these three and no other: the server plays its own matches of computer players, there is no bot arena container; the third is the owner's logon, docs/MAP_SUBMISSIONS.md)
+            self.assertNotIn("Dockerfile.login", text)
+            self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server"])      # (these two and no other: the server plays its own matches of computer players, there is no bot arena container, and the owner signs in at the game server itself, docs/MAP_SUBMISSIONS.md)
             self.assertNotIn("profiles:", "\n".join(code_lines(text)))                            # (and none that waits behind a profile for somebody to ask for it)
         command = lambda text: [l.strip() for l in code_lines(text) if l.strip().startswith("command:")]
         self.assertEqual(len(command(self.staging)), 1)
@@ -130,7 +130,7 @@ class ComposeConfig(unittest.TestCase):
             self.skipTest("docker compose is not available: " + self.error[:200])
 
     def test_both_files_render(self):
-        self.assertEqual(sorted(self.configs["staging"]["services"]), ["ants-admin-login", "ants-beta", "ants-server"])
+        self.assertEqual(sorted(self.configs["staging"]["services"]), ["ants-beta", "ants-server"])
 
     def test_nothing_that_matters_is_shared(self):
         stack, staging = self.configs["stack"], self.configs["staging"]

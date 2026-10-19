@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """docker/nginx.conf routes the map submissions and the owner's page safely (run by ./run_tests.sh --fast; the blocks are RUN where the program nginx is installed).
 
-The game server's SUBMISSION door (ants_server --submit-port 4030, docs/MAP_SUBMISSIONS.md) and the login helper (tools/admin_login.py) are reached by the site's nginx only:
+The game server's SUBMISSION door (ants_server --submit-port 4030, docs/MAP_SUBMISSIONS.md) is reached by the site's nginx only:
 
-  - the paths: /submissions and /submissions/<32 hex digits>[/withdraw] (a player), /admin/api/ (the owner's calls), /admin/login, /admin/callback, /admin/logout (the helper), /admin (the page, a static file that nothing
-    links to), /maps/all (the list of the newest version) and the fallback that asks the game server for the file and the picture of an APPROVED map; everything else under /admin/ is a 404;
+  - the paths: /submissions and /submissions/<32 hex digits>[/withdraw] (a player), /admin/api/ (the owner's calls, the sign-in among them), /admin (the page, a static file that nothing links to), /maps/all (the
+    list of the newest version) and the fallback that asks the game server for the file and the picture of an APPROVED map; everything else under /admin/ is a 404 (there is no helper, no callback);
   - what is passed on: nothing the visitor sent but the few headers that each block names (the token of a maker, the cookie and the CSRF token of the owner, the type of the body), the real client address in
-    X-Client-Address (a header of that name from a visitor never gets through), no cookie set by the game server;
+    X-Client-Address (a header of that name from a visitor never gets through), no cookie set by the game server for a player's call and the cookie of the sign-in (Set-Cookie) for the owner's calls;
+  - the sign-in (POST /admin/api/login) has an allowance of its own, six a minute for each address;
   - the limits that nginx holds before the game server is asked: the size of a map (under a million bytes for a Classic one, 4 MiB for an Extended one), the methods, an allowance for each address;
   - a game server that is not there is a JSON 503, never a page of the site; the owner's page is never kept by a cache, has a strict content security policy and cannot be framed.
 """
@@ -38,7 +39,7 @@ ID = "0123456789abcdef0123456789abcdef"
 
 
 class Door(BaseHTTPRequestHandler):
-    """The submission door, the login helper and the replay port of the rig: each answers JSON (or a file) and remembers what it was sent."""
+    """The submission door and the replay port of the rig: each answers JSON (or a file) and remembers what it was sent."""
     seen = []
     lock = threading.Lock()
     name = "door"
@@ -66,7 +67,7 @@ class Door(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         if self.name == "door":
-            self.send_header("Set-Cookie", "evil=1")                  # (the game server never sets a cookie; if it did, the site would not pass it on)
+            self.send_header("Set-Cookie", "evil=1")                  # (the game server sets the cookie of the owner's sign-in; for a player's call the site would not pass one on)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -99,13 +100,11 @@ class Rig:
             f.write(trusted)
         self.port = maps.free_port()
         self.door, self.door_server, self.door_port = stub("door")
-        self.login, self.login_server, self.login_port = stub("login")
         self.replay, self.replay_server, self.replay_port = stub("replay")
         text = RAW
         text = text.replace("/usr/share/nginx/html", self.work + "/html")
         text = text.replace("/etc/nginx/ants-trusted-proxies/", self.work + "/trusted/")
         text = text.replace("set $ants_submit ants-server:4030;", "set $ants_submit 127.0.0.1:%d;" % self.door_port)
-        text = text.replace("set $ants_login ants-admin-login:4040;", "set $ants_login 127.0.0.1:%d;" % self.login_port)
         text = text.replace("set $ants_replays ants-server:4020;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
         text = text.replace("set $ants_replays ants-server:4002;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
         text = text.replace("set $ants_server ants-server:4002;", "set $ants_server 127.0.0.1:%d;" % self.replay_port)
@@ -133,7 +132,7 @@ class Rig:
     def stop(self):
         self.proc.terminate()
         self.proc.wait(timeout=10)
-        for server in (self.door_server, self.login_server, self.replay_server):
+        for server in (self.door_server, self.replay_server):
             server.shutdown()
             server.server_close()
         shutil.rmtree(self.work, ignore_errors=True)
@@ -171,8 +170,7 @@ class TheText(unittest.TestCase):
     def test_every_new_location_is_there_once_and_nothing_else_can_catch_the_paths(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         mine = [l for l in locations if "admin" in l or "submi" in l or "approved" in l]
-        self.assertEqual(sorted(mine), sorted(["= /submissions", "^~ /submissions/", "@submit_off", "= /admin", "= /admin.html", "= /admin/", "^~ /admin/api/", "= /admin/login", "= /admin/callback",
-                                               "= /admin/logout", "^~ /admin/", "@approved_files"]))
+        self.assertEqual(sorted(mine), sorted(["= /submissions", "^~ /submissions/", "@submit_off", "= /admin", "= /admin.html", "= /admin/", "^~ /admin/api/", "^~ /admin/", "@approved_files"]))
         for header in ("location = /submissions {", "location ^~ /submissions/ {", "location = /admin {", "location ^~ /admin/api/ {", "location ^~ /admin/ {"):
             self.assertEqual(CONF.count(header), 1, header)
         # (a regular-expression location would win over a prefix one only without ^~; the extension rule of scripts and styles must not answer for /admin.js either: /admin_page.js is a file of the page)
@@ -181,13 +179,13 @@ class TheText(unittest.TestCase):
     def test_the_hardening_of_the_owner_paths(self):
         admin = block_of(CONF, "location = /admin ")
         self.assertIn('add_header Permissions-Policy "camera=(), microphone=(), geolocation=()', admin)
-        self.assertIn("access_log off;", block_of(CONF, "location = /admin/callback "))                  # (the address holds Discord's one-time code)
         api = block_of(CONF, "location ^~ /admin/api/ ")
         self.assertIn("proxy_pass http://$ants_submit$uri$is_args$args;", api)                            # (the normalized path goes on, never the raw request line)
         self.assertRegex(api, r'if \(\$uri !~ "\^/admin/api/\[A-Za-z0-9/_-\]\{0,120\}\\z"\) \{ return 404; \}')
-        for header in ("location = /admin/login ", "location = /admin/callback ", "location = /admin/logout "):
-            self.assertIn("error_page 502 504 = @login_off;", block_of(CONF, header))                   # (a person's browser gets words, not JSON)
-        self.assertRegex(open(os.path.join(REPO, "Dockerfile.login"), encoding="utf-8").read(), r"(?m)^FROM python:3\.\d+\.\d+-alpine3\.\d+$")          # (a fixed tag, like the other images)
+        self.assertIn("limit_req zone=ants_admin_login burst=5 nodelay;", api)                           # (the sign-in's own allowance: the zone has a key only for that path)
+        self.assertNotIn("login_off", CONF)                                                               # (no helper: nothing else answers for the sign-in)
+        for gone in ("/admin/login", "/admin/callback", "/admin/logout", "ants-admin-login", "iscord"):
+            self.assertNotIn(gone, CONF)
         # the size of a map is decided from the raw query exactly as the game server reads it, and the small limit is the Classic one
         head = CONF[:CONF.index("server {")]
         self.assertIn("map $args $submit_extended", head)
@@ -202,10 +200,11 @@ class TheText(unittest.TestCase):
             self.assertIn("zone=" + zone + " ", CONF[CONF.index("server {"):])
         self.assertIn("map $request_method $submit_post_key", head)                     # (only a POST counts against the allowance of sending)
         self.assertIn("POST $binary_remote_addr;", head)
+        self.assertRegex(head, r"map \$uri \$admin_login_key \{\s+default \"\";\s+/admin/api/login \$binary_remote_addr;\s+\}")          # (only the sign-in counts against the allowance of signing in)
+        self.assertIn("limit_req_zone $admin_login_key zone=ants_admin_login:1m rate=6r/m;", head)
 
     def test_only_return_is_used_inside_an_if_and_the_checks_come_before_the_pass(self):
-        for header in ("location = /submissions ", "location ^~ /submissions/ ", "location = /admin ", "location ^~ /admin/api/ ", "location = /admin/login ", "location = /admin/callback ", "location = /admin/logout ",
-                       "location @approved_files "):
+        for header in ("location = /submissions ", "location ^~ /submissions/ ", "location = /admin ", "location ^~ /admin/api/ ", "location @approved_files "):
             block = block_of(CONF, header)
             for line in [l.strip() for l in block.splitlines() if l.strip().startswith("if (")]:
                 self.assertRegex(line, r"\{ return \d{3}; \}$", header)
@@ -214,14 +213,17 @@ class TheText(unittest.TestCase):
                     self.assertLess(block.index(check), block.index("proxy_pass"), header + check)
 
     def test_what_a_block_passes_on_is_named_and_the_visitors_own_headers_are_not(self):
-        for header in ("location = /submissions ", "location ^~ /submissions/ ", "location ^~ /admin/api/ ", "location = /admin/login ", "location = /admin/callback ", "location = /admin/logout "):
+        for header in ("location = /submissions ", "location ^~ /submissions/ ", "location ^~ /admin/api/ "):
             block = block_of(CONF, header)
             self.assertIn("proxy_pass_request_headers off;", block, header)
             self.assertIn('proxy_set_header Connection "close";', block, header)
         for header in ("location = /submissions ", "location ^~ /submissions/", "location ^~ /admin/api/"):
             block = block_of(CONF, header)
             self.assertIn("proxy_set_header X-Client-Address $remote_addr;", block, header)
-            self.assertIn("proxy_hide_header Set-Cookie;", block, header)
+            if "admin" in header:
+                self.assertNotIn("Set-Cookie", block, header)                                          # (the game server's sign-in cookie goes through)
+            else:
+                self.assertIn("proxy_hide_header Set-Cookie;", block, header)                          # (a player's call never sets a cookie)
         self.assertEqual(re.findall(r"proxy_set_header\s+(\S+)", block_of(CONF, "location ^~ /admin/api/ ")),
                          ["Connection", "Host", "Content-Type", "Cookie", "X-Ants-Csrf", "Sec-Fetch-Site", "X-Client-Address"])
         self.assertEqual(re.findall(r"proxy_set_header\s+(\S+)", block_of(CONF, "location = /submissions ")),
@@ -246,10 +248,10 @@ class TheText(unittest.TestCase):
         for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
             text = "\n".join(l for l in open(os.path.join(REPO, name), encoding="utf-8").read().splitlines() if not l.lstrip().startswith("#"))
             self.assertIn('"--submit-port", "${ANTS_SUBMIT_PORT:-0}"', text, name)                  # (off until the stack says so)
-            self.assertIn("ants-admin-login:", text, name)
-            self.assertIn("ANTS_ADMIN_DISCORD_ID: ${ANTS_ADMIN_DISCORD_ID:-}", text, name)
-            self.assertEqual(text.count("ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}"), 2, name)         # (the server's and the helper's: one value)
-            self.assertIn("dockerfile: Dockerfile.login", text, name)
+            self.assertNotIn("ants-admin-login", text, name)                                       # (no helper container: the game server signs people in)
+            self.assertNotIn("DISCORD", text, name)
+            self.assertNotIn("ANTS_PUBLIC_URL", text, name)
+            self.assertEqual(text.count("ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}"), 1, name)       # (the server's: the one setting that stays)
         self.assertIn("4030", RAW)
         self.assertIn("--submit-any-interface", open(os.path.join(REPO, "Dockerfile.server"), encoding="utf-8").read())
         dockerfile = open(os.path.join(REPO, "Dockerfile"), encoding="utf-8").read()
@@ -290,20 +292,20 @@ class TheBlocksRun(unittest.TestCase):
         self.assertEqual(self.rig.ask("POST", "/admin", body=b"")[0], 405)
         self.assertEqual(self.rig.ask("GET", "/admin.html")[0], 404)
         self.assertEqual(self.rig.ask("GET", "/admin/")[0], 301)
-        before = (self.count(self.rig.door), self.count(self.rig.login))
-        for path in ("/admin/x", "/admin/api", "/admin/logo.png", "/admin/login/", "/admin/callback/x", "/admin/logout/x", "/admin/login.html"):
+        before = self.count(self.rig.door)
+        for path in ("/admin/x", "/admin/api", "/admin/logo.png", "/admin/login", "/admin/login/", "/admin/callback", "/admin/callback/x", "/admin/logout", "/admin/logout/x", "/admin/login.html"):
             status, headers, body = self.rig.ask("GET", path)
             self.assertIn(status, (301, 404), path)
             self.assertNotIn(b"the page of the site", body, path)                           # (never the page of the site)
             self.assertNotIn(b"stub", body, path)
-        self.assertEqual((self.count(self.rig.door), self.count(self.rig.login)), before)
+        self.assertEqual(self.count(self.rig.door), before)
 
-    def test_the_owners_api_passes_the_cookie_and_the_token_and_nothing_else_of_the_visitor_and_no_cookie_comes_back(self):
+    def test_the_owners_api_passes_the_cookie_and_the_token_and_nothing_else_of_the_visitor_and_the_cookie_of_the_sign_in_comes_back(self):
         status, headers, body = self.rig.ask("POST", "/admin/api/maps/%s/approve" % ID, {"Cookie": "ants_admin=abc", "X-Ants-Csrf": "tok", "Content-Type": "application/json", "Authorization": "Bearer secret",
                                                                                       "X-Client-Address": "6.6.6.6", "X-Forwarded-For": "7.7.7.7", "Referer": "http://evil.example/", "User-Agent": "attacker/1",
                                                                                       "Sec-Fetch-Site": "same-origin", "X-Real-IP": "8.8.8.8"}, b"{}")
         self.assertEqual(status, 201)
-        self.assertEqual(names(headers, "set-cookie"), [])
+        self.assertEqual(names(headers, "set-cookie"), ["evil=1"])                              # (what the game server sets for the owner's calls goes through: the sign-in, the new password, the sign-out)
         method, path, seen, length = self.last(self.rig.door)
         self.assertEqual((method, path, length), ("POST", "/admin/api/maps/%s/approve" % ID, 2))
         self.assertEqual(seen.get("cookie"), "ants_admin=abc")
@@ -325,6 +327,7 @@ class TheBlocksRun(unittest.TestCase):
         status, headers, body = self.rig.ask("POST", "/submissions?kind=classic&name=Abc&maker=Mia", {"Authorization": "Bearer tok", "Cookie": "ants_admin=abc", "Content-Type": "application/octet-stream",
                                                                                                        "X-Client-Address": "6.6.6.6"}, b"m" * 1000)
         self.assertEqual(status, 201)
+        self.assertEqual(names(headers, "set-cookie"), [])                                      # (a player's call never gets a cookie, whatever the game server sent)
         method, path, seen, length = self.last(self.rig.door)
         self.assertEqual((method, path, length), ("POST", "/submissions?kind=classic&name=Abc&maker=Mia", 1000))
         self.assertEqual((seen.get("authorization"), seen.get("x-client-address"), seen.get("content-type")), ("Bearer tok", "127.0.0.1", "application/octet-stream"))
@@ -385,23 +388,32 @@ class TheBlocksRun(unittest.TestCase):
         self.assertEqual(rig.ask("DELETE", "/submissions/" + ID)[0], 405)
         self.assertEqual(rig.ask("POST", "/submissions/" + ID + "/withdraw", {"Authorization": "Bearer t"}, b"x" * 2000)[0], 413)
 
-    def test_the_login_helpers_three_paths_with_their_methods_and_only_what_each_needs(self):
+    def test_the_sign_in_is_a_post_to_the_game_server_with_the_body_the_cookie_and_nothing_else_of_the_visitor(self):
         rig = self.rig
-        status, headers, body = rig.ask("GET", "/admin/login", {"Cookie": "ants_admin=abc", "Referer": "x"})
-        self.assertEqual(status, 200)
-        seen = self.last(rig.login)[2]
-        self.assertNotIn("cookie", seen)                                                        # (the logon starts from nothing)
-        self.assertEqual(rig.ask("GET", "/admin/callback?code=c&state=s", {"Cookie": "ants_admin_state=s; other=1", "Referer": "x", "Authorization": "Bearer y"})[0], 200)
-        method, path, seen, length = self.last(rig.login)
-        self.assertEqual((method, path), ("GET", "/admin/callback?code=c&state=s"))
-        self.assertEqual(seen.get("cookie"), "ants_admin_state=s; other=1")
-        self.assertNotIn("authorization", seen)
+        body = b'{"username":"dave","password":"a password that nginx must not keep"}'
+        status, headers, text = rig.ask("POST", "/admin/api/login", {"Content-Type": "application/json", "Cookie": "ants_admin=old", "Referer": "http://x.example/", "X-Client-Address": "6.6.6.6", "Sec-Fetch-Site": "same-origin"}, body)
+        self.assertEqual(status, 201)
+        method, path, seen, length = self.last(rig.door)
+        self.assertEqual((method, path, length), ("POST", "/admin/api/login", len(body)))
+        self.assertEqual((seen.get("content-type"), seen.get("x-client-address"), seen.get("sec-fetch-site"), seen.get("cookie")), ("application/json", "127.0.0.1", "same-origin", "ants_admin=old"))
         self.assertNotIn("referer", seen)
-        self.assertEqual(rig.ask("POST", "/admin/logout", body=b"")[0], 200)
-        self.assertEqual(self.last(rig.login)[3], 0)
-        self.assertEqual((rig.ask("POST", "/admin/login", body=b"")[0], rig.ask("POST", "/admin/callback", body=b"")[0], rig.ask("GET", "/admin/logout")[0]), (405, 405, 405))
-        self.assertEqual(rig.ask("POST", "/admin/logout", {"Content-Type": "text/plain"}, b"x" * 2000)[0], 413)
+        self.assertEqual(rig.ask("GET", "/admin/api/login")[0], 200)                              # (a GET goes on too: the game server answers it as a path that is not there)
+        self.assertEqual(rig.ask("POST", "/admin/api/login", {"Content-Type": "application/json"}, b"x" * 9000)[0], 413)
+        # nothing of the body is written down: the access log holds the request line only (the rig's log is off; the block has no log_format that names a body)
+        self.assertNotIn("$request_body", RAW)
 
+    def test_the_sign_in_has_an_allowance_of_its_own_and_the_other_calls_do_not_use_it(self):
+        rig = Rig()
+        try:
+            body = b'{"username":"dave","password":"x"}'
+            codes = [rig.ask("POST", "/admin/api/login", {"Content-Type": "application/json"}, body)[0] for _ in range(8)]
+            self.assertEqual(codes[:6], [201] * 6)                                              # (one and a burst of five)
+            self.assertEqual(codes[6:], [503, 503])
+            self.assertEqual(rig.ask("GET", "/admin/api/me")[0], 200)                           # (the page's other calls are not held back by it)
+            self.assertEqual(rig.ask("POST", "/admin/api/password", {"Content-Type": "application/json"}, b"{}")[0], 201)
+            self.assertEqual(rig.ask("GET", "/admin/api/login")[0], 503)                        # (the key is the path: any call to it uses the allowance of the address)
+        finally:
+            rig.stop()
 
     def test_a_file_and_a_picture_of_an_approved_map_come_from_the_game_server_when_the_folder_has_none(self):
         rig = self.rig
@@ -480,21 +492,15 @@ class TheRealAddress(unittest.TestCase):
 
 class TheDoorIsDown(unittest.TestCase):
     @unittest.skipUnless(shutil.which("nginx"), "nginx is not installed")
-    def test_a_game_server_or_a_helper_that_is_not_there_is_a_json_503_never_a_page_of_the_site(self):
+    def test_a_game_server_that_is_not_there_is_a_json_503_never_a_page_of_the_site(self):
         rig = Rig()
         try:
             rig.door_server.shutdown()
             rig.door_server.server_close()
-            rig.login_server.shutdown()
-            rig.login_server.server_close()
-            for method, target, body in (("GET", "/admin/api/me", None), ("POST", "/submissions?kind=classic&name=Abc&maker=Mia", b"m"), ("GET", "/submissions", None), ("GET", "/admin/login", None),
-                                         ("POST", "/admin/logout", b"")):
+            for method, target, body in (("GET", "/admin/api/me", None), ("POST", "/admin/api/login", b"{}"), ("POST", "/submissions?kind=classic&name=Abc&maker=Mia", b"m"), ("GET", "/submissions", None)):
                 status, headers, text = rig.ask(method, target, {"Content-Type": "application/octet-stream"} if body else None, body)
                 self.assertEqual(status, 503, target)
-                if target.startswith(("/admin/login", "/admin/logout")):                                   # (a person's browser gets words)
-                    self.assertTrue("text/html" in names(headers, "content-type")[0] and b"Signing in is not available" in text and b"submissions_off" not in text)
-                else:
-                    self.assertEqual(json.loads(text)["error"], "submissions_off")
+                self.assertEqual(json.loads(text)["error"], "submissions_off")
                 self.assertEqual(names(headers, "cache-control"), ["no-store"])
             self.assertEqual(rig.ask("GET", "/admin")[0], 200)                                   # (the page is a file: it still opens, and says what it can)
         finally:

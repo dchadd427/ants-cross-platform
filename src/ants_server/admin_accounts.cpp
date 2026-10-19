@@ -468,10 +468,13 @@ Attempt AdminAccounts::confirm_password(const User& user, const std::string& pas
     return attempt(user.name, &user, password, identity, now, now_ms, nullptr);
 }
 
-bool AdminAccounts::password_is(const User& user, const std::string& password) {
+Attempt AdminAccounts::password_matches(const User& user, const std::string& password, uint32_t now_ms) {
+    if (!open_) return Attempt::Error;
+    if (!take_check(false, now_ms)) return Attempt::Busy;
     std::string stored;
     each(db_, "SELECT pw_hash FROM admin_users WHERE id = ?", {user.id}, [&](db::Statement& st) { stored = st.column_text(0); });
-    return !stored.empty() && password_verify(password, stored, config_.rounds, nullptr);
+    ++verifies_;
+    return !stored.empty() && password_verify(password, stored, config_.rounds, nullptr) ? Attempt::Ok : Attempt::Wrong;
 }
 
 // ------------------------------------------------------------------------------------------------ changes

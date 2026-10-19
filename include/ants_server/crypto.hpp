@@ -19,6 +19,8 @@ std::string hmac_sha256(std::string_view key, std::string_view data);
 /// `password` and `salt` by `iterations` rounds (at least 1). False, and `out` empty, for a count or a length out of range. Built on hmac_sha256's own SHA-256; no new primitive: the loop is the RFC's.
 /// It is slow on purpose (a password hash, docs/MAP_SUBMISSIONS.md "Accounts"): 600,000 rounds take a few tenths of a second.
 bool pbkdf2_hmac_sha256(std::string_view password, std::string_view salt, uint32_t iterations, size_t length, std::string& out);
+/// How many times pbkdf2_hmac_sha256 has run since the program began (a test holds that a sign-in with an unknown name does the same work as one with a known name, by this count)
+uint64_t pbkdf2_runs();
 /// Whether two byte strings are equal, looking at every byte of the longer one whatever the answer is (no early exit), so that the time says nothing about where they differ. `steps` (optional) receives
 /// how many byte pairs were looked at: a test holds the property by it (equal to the longer length for every pair), since a clock cannot.
 bool equal_constant_time(std::string_view a, std::string_view b, size_t* steps = nullptr);

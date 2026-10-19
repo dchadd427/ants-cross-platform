@@ -307,6 +307,27 @@ int main() {
         ASSERT_EQ(t.login("owner-account-1", "my own fresh password").status, 200);
     } TEST_END();
 
+    TEST_CASE("ADM2.1b The checks of a password that the page asks for are counted like a sign-in: past the budget of the server the answer is 503 busy, so a session cannot make the one thread hash without end") {
+        Site t([](AccountConfig& c) { c.checks_per_window = 3; });
+        User u;
+        std::string starting;
+        Failure why;
+        ASSERT_TRUE(t.accounts->create_first_admin("owner-account-1", t.now, u, starting, why));
+        const Session s = t.sign_in("owner-account-1", starting);                                    // (a check: 1)
+        ASSERT_TRUE(s);
+        const auto change = [&](const std::string& fresh) { return t.post(s, "/admin/api/password", Site::json_pair("current", "", "new", fresh)); };
+        ASSERT_EQ(parse_text(change(starting).body).get("reason").str(), std::string("same_as_old"));    // (2)
+        ASSERT_EQ(parse_text(change(starting).body).get("reason").str(), std::string("same_as_old"));    // (3)
+        HttpResponse r = change(starting);
+        ASSERT_TRUE(r.status == 503 && parse_text(r.body).get("error").str() == "busy");              // (nothing is hashed past the budget)
+        const uint64_t runs = pbkdf2_runs();
+        ASSERT_EQ(change(starting).status, 503);
+        ASSERT_EQ(pbkdf2_runs(), runs);
+        ASSERT_EQ(change("short").status, 400);                                                        // (the rules that need no hash are still told)
+        t.now_ms += 10000;
+        ASSERT_EQ(change("my own fresh password").status, 200);
+    } TEST_END();
+
     TEST_CASE("ADM2.2 Changing a password later needs the current one (wrong tries count toward the lock), a new one that is not the old one, ends every other session and keeps this one") {
         Site t;
         t.add("dave", "admin");

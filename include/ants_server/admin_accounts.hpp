@@ -117,8 +117,9 @@ public:
     Attempt sign_in(const std::string& typed_name, const std::string& password, const std::string& identity, int64_t now, uint32_t now_ms, User& user);
     /// The same checks for a signed-in user who proves the current password (changing it): wrong tries count toward the same locks
     Attempt confirm_password(const User& user, const std::string& password, const std::string& identity, int64_t now, uint32_t now_ms);
-    /// Whether the password is the one kept for this user (no lock, no count: for the rule "not the starting password" on a session that already signed in)
-    bool password_is(const User& user, const std::string& password);
+    /// Whether the password is the one kept for this user (no lock, no count of wrong tries: for the rule "not the starting password" on a session that already signed in). It costs a password check, so it
+    /// takes one of the server's checks: Ok means the same, Wrong not the same, Busy that the budget of checks is used up (nothing was checked).
+    Attempt password_matches(const User& user, const std::string& password, uint32_t now_ms);
 
     bool find(int64_t id, User& out);
     std::vector<User> list();

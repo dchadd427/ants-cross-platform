@@ -106,9 +106,16 @@ std::string sha256_continue(Sha256State h, size_t already, std::string_view tail
 
 }  // namespace
 
+namespace {
+uint64_t g_pbkdf2_runs = 0;
+}
+
+uint64_t pbkdf2_runs() { return g_pbkdf2_runs; }
+
 bool pbkdf2_hmac_sha256(std::string_view password, std::string_view salt, uint32_t iterations, size_t length, std::string& out) {
     out.clear();
     if (iterations == 0 || length == 0 || length > 1024) return false;
+    ++g_pbkdf2_runs;
     // HMAC's two key blocks, hashed once: every HMAC of the loop continues from these states (RFC 2104; RFC 8018 section 5.2)
     std::string key = password.size() > 64 ? sha256(password) : std::string(password);
     key.resize(64, '\0');

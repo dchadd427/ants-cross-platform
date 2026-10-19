@@ -140,6 +140,8 @@ int main() {
         ASSERT_EQ(steps, size_t{6});
         ASSERT_TRUE(equal_constant_time("", "", &steps));
         ASSERT_EQ(steps, size_t{0});
+        ASSERT_FALSE(equal_constant_time("abc", std::string("abc\0", 4)));                          // (another length is another secret, even when the extra bytes are zero)
+        ASSERT_FALSE(equal_constant_time(std::string("abc\0\0", 5), "abc"));
         ASSERT_FALSE(equal_constant_time(std::string("ab\0c", 4), std::string("ab\0d", 4)));
         ASSERT_TRUE(equal_constant_time(std::string("ab\0c", 4), std::string("ab\0c", 4)));
     } TEST_END();
@@ -201,7 +203,7 @@ int main() {
         }
         for (const char c : std::string("IlOo01")) ASSERT_EQ(counts.count(c), size_t{0});
         ASSERT_EQ(counts.size(), size_t{56});
-        for (const auto& kv : counts) ASSERT_MSG(kv.second > 40000 / 56 / 2 && kv.second < 40000 / 56 * 2, std::string("uneven: ") + kv.first);          // (40,000 draws: about 714 each)
+        for (const auto& kv : counts) ASSERT_MSG(kv.second > 40000 / 56 * 8 / 10 && kv.second < 40000 / 56 * 12 / 10, std::string("uneven: ") + kv.first);          // (40,000 draws: about 714 each, five standard deviations either way; a modulo that is not rejected makes 32 of the characters a quarter more likely)
     } TEST_END();
 
     TEST_CASE("ACC1.6 What a new password must be: 12 characters (not bytes), printable, valid UTF-8, at most 256 bytes, not the username") {
@@ -279,12 +281,13 @@ int main() {
         ASSERT_EQ(t.sign_in("Mia", "mia's long password"), Attempt::Wrong);                        // (disabled: right password, same answer as a wrong one)
         // the same work for each kind of failure: a password check is done in every case
         const size_t base = t.accounts->verifies();
+        const uint64_t runs = pbkdf2_runs();
         t.sign_in("Dave", "wrong wrong wrong", "203.0.113.1");
-        ASSERT_EQ(t.accounts->verifies(), base + 1);
+        ASSERT_TRUE(t.accounts->verifies() == base + 1 && pbkdf2_runs() == runs + 1);
         t.sign_in("nobody", "wrong wrong wrong", "203.0.113.2");
-        ASSERT_EQ(t.accounts->verifies(), base + 2);
+        ASSERT_TRUE(t.accounts->verifies() == base + 2 && pbkdf2_runs() == runs + 2);                // (an unknown name: the same work, really done)
         t.sign_in("Mia", "mia's long password", "203.0.113.3");
-        ASSERT_EQ(t.accounts->verifies(), base + 3);
+        ASSERT_TRUE(t.accounts->verifies() == base + 3 && pbkdf2_runs() == runs + 3);                // (a disabled account: the same work too)
         ASSERT_EQ(t.sign_in("Dave", "dave's long password", "203.0.113.4", &u), Attempt::Ok);
         ASSERT_TRUE(t.scalar("SELECT last_login_at FROM admin_users WHERE name = 'Dave'") == t.now && u.last_login_at == t.now);
         ASSERT_EQ(t.scalar("SELECT last_login_at FROM admin_users WHERE name = 'Mia'"), int64_t{0});

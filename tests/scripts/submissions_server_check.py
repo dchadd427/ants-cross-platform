@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """The map submissions end to end, with the real programs (suite 2.19.14 of ./run_tests.sh; docs/MAP_SUBMISSIONS.md).
 
-The real ants_server (BUILD_DIR/src/ants_server/ants_server, a folder of its own for its results), the real login helper (tools/admin_login.py) and a fake Discord, with what the site's nginx would do done by
-hand (the headers X-Client-Address and Sec-Fetch-Site, the cookie that the browser keeps): the owner signs in through the helper and the server accepts that very cookie; a stranger who signs in is told so and
-is shown nothing; a map is sent, reviewed and approved; the lobby's list, the file and the picture of the approved map are served; a take-down hides it and a put-back shows it again; an Extended map is in the
-newest version's list only; and a restart of the server keeps all of it. The server's log holds no address, token, map name or maker. Exit 0: all passed (or the program is not built: said, and 0).
+The real ants_server (BUILD_DIR/src/ants_server/ants_server, a folder of its own for its results), with what the site's nginx would do done by hand (the headers X-Client-Address and Sec-Fetch-Site, the cookie
+that the browser keeps): the first Admin is made with the command line (the starting password is printed once, to the terminal), signs in, is made to choose a password, adds a Moderator, who signs in, chooses a
+password and may decide on maps but not touch the users; a map is sent, reviewed and approved; the lobby's list, the file and the picture of the approved map are served; a take-down hides it and a put-back shows
+it again; an Extended map is in the newest version's list only; a restart keeps the accounts, the sessions and the maps; the reset command ends a session. The server's log holds no address, token, map name,
+maker, username or password. Exit 0: all passed (or the program is not built: said, and 0).
 """
 import http.client
 import json
@@ -21,18 +22,20 @@ import unittest
 import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-import test_admin_login as login  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 BUILD = os.environ.get("BUILD_DIR", "build")
 SERVER = os.path.join(REPO, BUILD, "src", "ants_server", "ants_server")
 LVL_TOOL = os.path.join(REPO, BUILD, "lvl_tool")
-OWNER = "111222333444"
+SECRET = "0123456789abcdef0123456789abcdef0123456789"
+CHOSEN = "my own chosen passphrase 1"
+JSON_HEADERS = {"Content-Type": "application/json", "Sec-Fetch-Site": "same-origin", "X-Client-Address": "198.51.100.7"}
 
 
 def free_port():
-    return login.free_port()
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 class Server:
@@ -42,8 +45,7 @@ class Server:
         self.replay_port = free_port()
         self.ws_port = free_port()
         env = dict(os.environ)
-        env["ANTS_ADMIN_DISCORD_ID"] = OWNER
-        env["ANTS_ADMIN_SESSION_SECRET"] = login.SECRET
+        env["ANTS_ADMIN_SESSION_SECRET"] = SECRET
         env.update(env_extra or {})
         self.args = [SERVER, "--maps", os.path.join(REPO, "Original-Ants", "Maps"), "--community-maps", os.path.join(REPO, "Community-Maps"), "--port", "0", "--ws-port", str(self.ws_port), "--replay-port",
                      str(self.replay_port), "--submit-port", str(self.submit_port), "--results-dir", results] + list(extra_args)
@@ -86,13 +88,38 @@ def j(triple):
     return json.loads(triple[2].decode("utf-8"))
 
 
-def sign_in(discord, helper_port, code):
-    """The browser's side of the logon, through the real helper: the cookie that the site would keep."""
-    status, headers, body, cookies = login.ask(helper_port, "GET", "/admin/login")
-    state = urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query)["state"][0]
-    status, headers, body, cookies = login.ask(helper_port, "GET", "/admin/callback?code=%s&state=%s" % (code, state), {"Cookie": "ants_admin_state=" + state})
-    assert status == 302, status
-    return [login.cookie_pair(c) for c in cookies if c.startswith("ants_admin=")][0]
+def create_admin(results, name="Owner"):
+    """The first account, from the command line: the starting password is on standard output, once."""
+    done = subprocess.run([SERVER, "--admin-create", name, "--results-dir", results], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    return re.search(r"Starting password: (\S{20})\n", done.stdout).group(1), done
+
+
+class Session:
+    """A browser that signed in: the cookie and the token of the page."""
+
+    def __init__(self, server, name, password, address="198.51.100.7"):
+        self.server = server
+        status, headers, body = server.call("POST", "/admin/api/login", dict(JSON_HEADERS, **{"X-Client-Address": address}), json.dumps({"username": name, "password": password}).encode())
+        assert status == 200, (status, body)
+        self.cookie = headers["set-cookie"].split(";")[0]
+        self.info = json.loads(body)
+        self.csrf = self.info["csrf"]
+        self.attributes = headers["set-cookie"]
+
+    def call(self, method, path, body=None):
+        h = {"Cookie": self.cookie, "Sec-Fetch-Site": "same-origin"}
+        if method == "POST":
+            h["Content-Type"] = "application/json"
+            h["X-Ants-Csrf"] = self.csrf
+            body = json.dumps(body or {}).encode()
+        return self.server.call(method, path, h, body)
+
+    def change_password(self, current, new):
+        status, headers, body = self.call("POST", "/admin/api/password", {"current": current, "new": new})
+        assert status == 200, (status, body)
+        self.cookie = headers["set-cookie"].split(";")[0]
+        self.csrf = json.loads(body)["csrf"]
 
 
 def make_maps(work):
@@ -111,8 +138,7 @@ class TheWholeWay(unittest.TestCase):
         cls.work = tempfile.mkdtemp(prefix="ants_submissions_e2e_")
         cls.results = os.path.join(cls.work, "results")
         cls.tiny, cls.extended = make_maps(cls.work)
-        cls.discord = login.FakeDiscord()
-        cls.helper, cls.helper_port = login.start_helper({"ANTS_DISCORD_API": "http://127.0.0.1:%d/api" % cls.discord.port})
+        cls.starting, cls.cli = create_admin(cls.results)
         cls.server = Server(cls.results)
         cls.logs = ""
 
@@ -120,25 +146,14 @@ class TheWholeWay(unittest.TestCase):
     def tearDownClass(cls):
         out, err = cls.server.stop()
         cls.logs += err
-        login.stop_helper(cls.helper)
-        cls.discord.stop()
         shutil.rmtree(cls.work, ignore_errors=True)
 
     # ---- the pieces
-    def owner_cookie(self):
-        return sign_in(self.discord, self.helper_port, "good-1")
-
     def me(self, cookie):
         return j(self.server.call("GET", "/admin/api/me", {"Cookie": cookie} if cookie else {}))
 
     def owner_call(self, method, path, body=None):
-        cookie = self.owner_cookie()
-        h = {"Cookie": cookie, "Sec-Fetch-Site": "same-origin"}
-        if method == "POST":
-            h["Content-Type"] = "application/json"
-            h["X-Ants-Csrf"] = self.me(cookie)["csrf"]
-            body = json.dumps(body or {}).encode()
-        return self.server.call(method, path, h, body)
+        return self.owner.call(method, path, body)
 
     def send(self, data, name, kind="classic", address="203.0.113.5", token=None, maker="Mia"):
         q = urllib.parse.urlencode({"kind": kind, "name": name, "maker": maker, "note": "made by hand"}, quote_via=urllib.parse.quote)
@@ -155,20 +170,52 @@ class TheWholeWay(unittest.TestCase):
 
     # ---- the tests, in the order a map takes: they share the server, so they are one test of steps
     def test_the_whole_way(self):
+        # the command line made the first Admin: the password was shown once, on standard output, and nowhere else
+        self.assertEqual((self.cli.stderr, len(self.starting)), ("", 20))
+        self.assertIn("Admin account created.\nUsername: Owner\nStarting password: " + self.starting + "\nShown once. Sign in at /admin and change it.\n", self.cli.stdout)
+        again = subprocess.run([SERVER, "--admin-create", "Second", "--results-dir", self.results], capture_output=True, text=True, timeout=60)
+        self.assertEqual((again.returncode, again.stdout), (1, ""))                                  # (an Admin exists: nothing is made, nothing is shown)
         # nobody is signed in: the page is told so; the owner's calls do not exist for a visitor
         self.assertEqual(self.me(""), {"signed_in": False})
         self.assertEqual(self.server.call("GET", "/admin/api/maps")[0], 404)
         unknown = self.server.call("GET", "/admin/api/zzz")
         self.assertEqual(self.server.call("GET", "/admin/api/maps")[2], unknown[2])
-        # the owner signs in through the helper, and the server takes that cookie
-        cookie = self.owner_cookie()
-        me = self.me(cookie)
-        self.assertTrue(me["signed_in"] and me["owner"] and me["name"] == "Dave" and len(me["csrf"]) == 32)
-        # a stranger who signs in is told so, and is shown nothing
-        stranger = sign_in(self.discord, self.helper_port, "good-2")
-        me2 = self.me(stranger)
-        self.assertEqual((me2["signed_in"], me2["owner"], me2["name"], "csrf" in me2), (True, False, "miauser", False))
-        self.assertEqual(self.server.call("GET", "/admin/api/maps", {"Cookie": stranger})[2], unknown[2])
+        self.assertEqual(self.server.call("GET", "/admin/api/users")[2], unknown[2])
+        # a wrong name and a wrong password get the same words, and no cookie
+        wrong_user = self.server.call("POST", "/admin/api/login", JSON_HEADERS, json.dumps({"username": "nobody", "password": self.starting}).encode())
+        wrong_pass = self.server.call("POST", "/admin/api/login", dict(JSON_HEADERS, **{"X-Client-Address": "198.51.100.8"}), json.dumps({"username": "Owner", "password": "not the password"}).encode())
+        self.assertEqual((wrong_user[0], wrong_user[2], wrong_user[1].get("set-cookie")), (401, wrong_pass[2], None))
+        self.assertEqual(wrong_pass[0], 401)
+        # the first sign-in with the starting password: a cookie with the flags, and nothing but the choice of a password
+        self.owner = Session(self.server, "Owner", self.starting)
+        for flag in ("HttpOnly", "Secure", "SameSite=Strict", "Path=/admin", "Max-Age=43200"):
+            self.assertIn(flag, self.owner.attributes)
+        me = self.me(self.owner.cookie)
+        self.assertEqual((me["signed_in"], me["name"], me["role"], me["must_change"], len(me["csrf"])), (True, "Owner", "admin", True, 32))
+        refused = self.owner.call("GET", "/admin/api/maps")
+        self.assertEqual((refused[0], j(refused)["error"]), (403, "password_change_required"))
+        self.assertEqual(self.owner.call("GET", "/admin/api/users")[0], 403)
+        weak = self.owner.call("POST", "/admin/api/password", {"current": "", "new": "short"})
+        self.assertEqual((weak[0], j(weak)["reason"]), (400, "too_short"))
+        self.owner.change_password("", CHOSEN)
+        self.assertEqual(self.me(self.owner.cookie)["must_change"], False)
+        self.assertEqual(self.owner.call("GET", "/admin/api/maps")[0], 200)
+        # the Admin adds a Moderator: the starting password is in the answer, once
+        status, headers, body = self.owner.call("POST", "/admin/api/users", {"username": "mia", "role": "moderator"})
+        self.assertEqual(status, 201, body)
+        mia_starting = j((status, headers, body))["password"]
+        listing = self.owner.call("GET", "/admin/api/users")[2].decode()
+        self.assertNotIn(mia_starting, listing)
+        self.assertEqual([u["name"] for u in json.loads(listing)["users"]], ["Owner", "mia"])
+        time.sleep(10.5)                                                                           # (a password check costs the one thread a third of a second: the server allows three in ten seconds, and this is the fourth)
+        self.moderator = Session(self.server, "mia", mia_starting, "198.51.100.9")
+        self.assertEqual(self.moderator.call("GET", "/admin/api/maps")[0], 403)                   # (a starting password: nothing else yet)
+        self.moderator.change_password("", "mia chose a long phrase")
+        self.assertEqual(self.moderator.call("GET", "/admin/api/maps")[0], 200)
+        for method, path in (("GET", "/admin/api/users"), ("GET", "/admin/api/audit"), ("POST", "/admin/api/users"), ("POST", "/admin/api/users/1/remove")):
+            denied = self.moderator.call(method, path, {"username": "evil", "role": "admin"} if method == "POST" else None)
+            self.assertEqual((denied[0], denied[2]), (403, unknown[2]), method + " " + path)       # (the answer of a path that is not there, with the status 403)
+        self.assertEqual([u["name"] for u in json.loads(self.owner.call("GET", "/admin/api/users")[2])["users"]], ["Owner", "mia"])
         # a map is sent: a waiting submission with the maker's token
         status, headers, body = self.send(self.tiny + b"J" * 3000, "Run One")
         self.assertEqual(status, 201, body)
@@ -190,7 +237,7 @@ class TheWholeWay(unittest.TestCase):
         self.assertEqual((refused[0], j(refused)["error"], j(refused)["suggestion"]), (409, "name_taken", "Tiny 2"))
         # the owner approves: the lobby's list has it, with its file and its picture
         approved = self.owner_call("POST", "/admin/api/maps/%s/approve" % sid, {})
-        self.assertEqual((approved[0], j(approved)["map"]["state"]), (200, "approved"))
+        self.assertEqual((approved[0], j(approved)["map"]["state"], j(approved)["map"]["decided_by"]), (200, "approved", "Owner"))
         entry = self.listed("/maps", "Run One.lvl")
         self.assertEqual(len(entry), 1)
         self.assertEqual((entry[0]["maker"], entry[0]["width"], entry[0]["thumb"]), ("Mia", 31, "/maps/previews/Run%20One.png"))
@@ -204,7 +251,7 @@ class TheWholeWay(unittest.TestCase):
         mine = j(self.server.call("GET", "/submissions/" + sid, {"Authorization": "Bearer " + token}))["submission"]
         self.assertEqual((mine["state"], mine["approved_name"], mine["renamed_by_owner"]), ("approved", "Run One", False))
         # take down: hidden from the list and the files, nothing deleted; put back: shown again
-        self.assertEqual(self.owner_call("POST", "/admin/api/maps/%s/take-down" % sid)[0], 200)
+        self.assertEqual(self.moderator.call("POST", "/admin/api/maps/%s/take-down" % sid, {})[0], 200)               # (a Moderator takes a map down)
         self.assertEqual(self.listed("/maps", "Run One.lvl"), [])
         self.assertEqual(self.server.call("GET", "/maps/files/Run%20One.lvl", door="replay")[0], 404)
         self.assertEqual(self.server.call("GET", "/maps/previews/Run%20One.png", door="replay")[0], 404)
@@ -231,13 +278,21 @@ class TheWholeWay(unittest.TestCase):
         out, err = self.server.stop()
         type(self).logs += err
         self.assertEqual(self.server.proc.returncode, 0)                                           # (a stop by SIGTERM is a clean exit)
-        self.assertIn("schema version 5", err)
+        self.assertIn("schema version 6", err)
         type(self).server = Server(self.results)
+        self.owner.server = self.moderator.server = self.server
+        self.assertEqual(self.me(self.owner.cookie)["name"], "Owner")                              # (the session and the accounts are in the database and the secret: a restart keeps them)
+        self.assertEqual(self.me(self.moderator.cookie)["role"], "moderator")
         self.assertEqual(len(self.listed("/maps", "Run One.lvl")), 1)
         self.assertEqual(len(self.listed("/maps/all", "Run Extended.lvl")), 1)
         self.assertEqual(self.server.call("GET", "/maps/files/Run%20One.lvl", door="replay")[2], file_bytes)
         listing = j(self.owner_call("GET", "/admin/api/maps?state=waiting"))
         self.assertEqual(sorted(m["name"] for m in listing["maps"]), ["Tiny", "run one"])
+        log = json.loads(self.owner_call("GET", "/admin/api/audit")[2])
+        actions = [e["action"] for e in log["entries"]]
+        for wanted in ("sign_in", "sign_in_failed", "password_changed", "user_added", "map_approved", "map_taken_down", "map_put_back"):
+            self.assertIn(wanted, actions)
+        self.assertNotIn(self.starting, json.dumps(log))
         self.assertEqual(self.server.call("GET", "/submissions/" + sid, {"Authorization": "Bearer " + token})[0], 200)       # (the maker's token still finds it)
         # the log: lines for the operator, nothing of a person
         out, err = self.server.stop()
@@ -246,9 +301,19 @@ class TheWholeWay(unittest.TestCase):
         for fault in ("Sanitizer", "runtime error", "terminate called"):                         # (a build with the sanitizers says so in the log)
             self.assertNotIn(fault, self.logs)
         self.assertIn("map submissions on: files in", self.logs)
-        for private in (token, "203.0.113.", "Mia", "Run One", "Run Extended", "made by hand", "Dave", OWNER, login.SECRET):
+        for private in (token, "203.0.113.", "198.51.100.", "Mia", "Run One", "Run Extended", "made by hand", "Owner", "mia", self.starting, mia_starting, CHOSEN, "mia chose a long phrase", SECRET):
             self.assertNotIn(private, self.logs)
+        # the reset command, beside the stopped server: a new password, and the old session and the old password are dead
+        reset = subprocess.run([SERVER, "--admin-reset", "owner", "--results-dir", self.results], capture_output=True, text=True, timeout=60)
+        self.assertEqual((reset.returncode, reset.stderr), (0, ""))
+        fresh = re.search(r"New starting password: (\S{20})\n", reset.stdout).group(1)
+        self.assertNotIn(fresh, self.logs)
         type(self).server = Server(self.results)                                                  # (the teardown stops one)
+        self.owner.server = self.server
+        self.assertEqual(self.me(self.owner.cookie), {"signed_in": False})                         # (the reset ended the session)
+        self.assertEqual(self.server.call("POST", "/admin/api/login", JSON_HEADERS, json.dumps({"username": "Owner", "password": CHOSEN}).encode())[0], 401)
+        again = Session(self.server, "Owner", fresh)
+        self.assertTrue(self.me(again.cookie)["must_change"])
 
 
 class TheSettings(unittest.TestCase):
@@ -271,12 +336,21 @@ class TheSettings(unittest.TestCase):
             done = subprocess.run(base + ["--results-dir", work, "--submissions-dir", os.path.join(blocker, "inside")], capture_output=True, text=True, timeout=30)
             self.assertEqual(done.returncode, 1)
             self.assertIn("map submissions:", done.stderr)
-            # without the owner's two settings the server runs and says the owner's page is off
+            # the account commands need a database and exclude each other
+            done = subprocess.run([SERVER, "--admin-create", "Owner"], capture_output=True, text=True, timeout=30)
+            self.assertEqual((done.returncode, done.stdout), (1, ""))
+            self.assertIn("--db", done.stderr)
+            done = subprocess.run([SERVER, "--admin-create", "Owner", "--admin-reset", "Owner", "--results-dir", work], capture_output=True, text=True, timeout=30)
+            self.assertEqual(done.returncode, 2)
+            done = subprocess.run([SERVER, "--admin-reset", "nobody", "--results-dir", work], capture_output=True, text=True, timeout=30)
+            self.assertEqual((done.returncode, done.stdout), (1, ""))
+            self.assertIn("no user", done.stderr)
+            # without the session secret the server runs and says the owner's page is off
             proc = subprocess.Popen(base + ["--results-dir", work + "/ok"], env={"PATH": os.environ.get("PATH", "")}, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             time.sleep(1.5)
             proc.send_signal(signal.SIGTERM)
             out, err = proc.communicate(timeout=15)
-            self.assertIn("the owner's review page is OFF", err)
+            self.assertIn("the owner's review page is OFF (ANTS_ADMIN_SESSION_SECRET", err)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 

@@ -498,8 +498,14 @@ HttpResponse SubmissionApi::change_password(const HttpRequest& request, const Se
             case Attempt::Error: return error_reply(503, "storage_error", "The server could not check this just now. Please try again later.");
         }
         if (current == fresh) return bad_new("same_as_old");
-    } else if (accounts_.password_is(who.user, fresh)) {
-        return bad_new("same_as_old");                                             // (not the starting password)
+    } else {
+        switch (accounts_.password_matches(who.user, fresh, now_ms)) {                // (not the starting password: this costs a password check, so it is counted like one)
+            case Attempt::Ok: return bad_new("same_as_old");
+            case Attempt::Wrong: break;
+            case Attempt::Busy: return error_reply(503, "busy", "The server is busy. Please try again in a minute.");
+            case Attempt::Locked:
+            case Attempt::Error: return error_reply(503, "storage_error", "The server could not check this just now. Please try again later.");
+        }
     }
     int64_t gen = 0;
     Failure why;
