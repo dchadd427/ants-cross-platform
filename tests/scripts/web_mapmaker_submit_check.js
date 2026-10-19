@@ -408,11 +408,35 @@ async function caseF() {
     // arriving by a status link
     const p7 = await loadedPage({ idb: fakeIdb() }); let cleared = 0;
     equal([p7.sub.fromAddress('', () => cleared++), p7.sub.fromAddress('#sent=nope', () => cleared++), cleared], [false, false, 0], 'an address with no token does nothing');
-    const joined = p7.sub.fromAddress('#sent=' + TOKEN2, () => cleared++); await later();
-    equal([joined, cleared, p7.sub.tokens(), p7.idb.m.get('#tokens').list], [true, 1, [TOKEN2], [TOKEN2]], 'a status link joins the token to this browser and the address loses it');
+    let added = 0;
+    const joined = p7.sub.fromAddress('#sent=' + TOKEN2, () => cleared++, () => added++); await later();
+    equal([joined, cleared, added, p7.sub.tokens(), p7.idb.m.has('#tokens')], [true, 1, 0, [], false], 'a status link clears the address and asks first: nothing is adopted yet');
+    check(p7.dialogs.isOpen() && /This link adds submissions made by someone else to this browser\. Add them\?/.test(text(p7)), 'the question says whose submissions they are');
+    button(p7, 'Do not add').click(); await later();
+    equal([added, p7.sub.tokens(), p7.idb.m.has('#tokens'), p7.dialogs.isOpen()], [0, [], false, false], 'Do not add changes nothing');
+    p7.sub.fromAddress('#sent=' + TOKEN2, () => cleared++, () => added++); await later();
+    button(p7, 'Add them').click(); await later();
+    equal([added, p7.sub.tokens(), p7.idb.m.get('#tokens').list, p7.idb.m.get('#tokens').linked], [1, [TOKEN2], [TOKEN2], [TOKEN2]], 'Add them joins the token to this browser and remembers that it came from a link');
     p7.server.state.list = [view(ID1, 'approved', { name: 'From elsewhere' })];
-    p7.sub.show(listUi(p7).ui); await later();
-    equal(p7.idb.m.has(ID1), true, 'the submissions of that link are listed and kept');
+    const l7 = listUi(p7); p7.sub.show(l7.ui); await later();
+    equal([p7.idb.m.has(ID1), p7.idb.m.get(ID1).linked, /Added from a link/.test(l7.list.textContent)], [true, true, true], 'the submissions of that link are listed and kept, marked as added from a link');
+    // a token from a link is never the one a send uses
+    p7.sub.open(); await later(); type(p7, 'sub-maker', 'Mia'); button(p7, 'Submit for approval').click(); await later();
+    const linkedSend = p7.server.calls.filter((c) => c.method === 'POST').pop();
+    check(linkedSend && !linkedSend.headers.Authorization, 'a send from a browser that only has a linked token goes out with no token, so the server makes a fresh one');
+    equal(p7.sub.tokens()[0], TOKEN, 'and the token the server made is the first one');
+    check(p7.idb.m.get('#tokens').linked.indexOf(TOKEN) < 0, 'and is not marked as linked');
+    // a browser that has its own token: a link adds a second one behind it, and a send still uses its own
+    const p10 = await loadedPage({ idb: fakeIdb() }); p10.idb.m.set('#tokens', { id: '#tokens', list: [TOKEN] });
+    const p11 = await loadedPage({ idb: p10.idb });
+    p11.sub.fromAddress('#sent=' + TOKEN2, () => {}, () => {}); await later(); button(p11, 'Add them').click(); await later();
+    p11.sub.open(); await later(); type(p11, 'sub-maker', 'Mia'); button(p11, 'Submit for approval').click(); await later();
+    equal(p11.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, 'Bearer ' + TOKEN, 'with its own token and a linked one, a send uses its own');
+    // a link whose tokens this browser has already: no question
+    let again = 0;
+    const p12 = await loadedPage({ idb: p10.idb });
+    p12.sub.fromAddress('#sent=' + TOKEN, () => {}, () => again++); await later();
+    equal([again, p12.dialogs.isOpen()], [1, false], 'a link with only tokens that are already here asks nothing');
     // XSS in a name from the server
     server.state.list = [view(ID1, 'waiting', { name: '<img src=x onerror=alert(1)>' })];
     const p8 = await loadedPage({ server, idb: fakeIdb() }); p8.idb.m.set('#tokens', { id: '#tokens', list: [TOKEN] });
