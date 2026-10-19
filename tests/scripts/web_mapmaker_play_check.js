@@ -323,8 +323,10 @@ function dialogChecks() {
     // Start
     all(p, '.play-quick button')[1].click();
     equal(checked(p), 'ymmn', '2 bots after Green');
-    startButton(p).click();
-    equal(p.opened.length, 1, 'Start opens one tab');
+    const go = startButton(p);
+    go.click();
+    go.fire('click', {});
+    equal(p.opened.length, 1, 'Start opens one tab (a second call of it opens no second)');
     const m = /^\/play\.html\?testmap=([a-z0-9]{12})&seats=(ymmn)$/.exec(p.opened[0][0]);
     check(!!m && p.opened[0][1] === '_blank', 'at the game page with the id of a hand-over and the four letters, in a new tab: ' + p.opened[0][0]);
     check(!p.dialogs.isOpen() && p.host.querySelector('.dlg') === null, 'the dialog closes');
@@ -381,8 +383,8 @@ function dialogChecks() {
     const b2 = answers({ teams: [[3, 16], [3, 0], [3, 16], [0, 16]] });
     p = pageOf();
     Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: b2.check }), readReport: () => ({ status: 0, json: b2.read }) } }));
-    check(rowOf(p, 'Red').className.indexOf('off') > 0 && rowOf(p, 'Black').className.indexOf('off') > 0 && rowOf(p, 'Red').querySelector('.pf').textContent === 'Red has no hill', 'a color without a hill is marked, with the check\'s sentence');
-    equal(rowOf(p, 'Black').querySelector('.pf').textContent, 'Black has no starting ants (no start marker, tile 154)', 'and one without ants too');
+    check(rowOf(p, 'Red').className.indexOf('off') > 0 && rowOf(p, 'Black').className.indexOf('off') > 0 && rowOf(p, 'Red').querySelector('.pf').textContent === 'No hill', 'a color without a hill is marked, in plain words');
+    equal(rowOf(p, 'Black').querySelector('.pf').textContent, 'No starting ants', 'and one without ants too, with no color name and no tile number');
     equal(['Green', 'Red', 'Blue', 'Black'].map((n) => rowOf(p, n).querySelectorAll('input').map((i) => (i.disabled ? 1 : 0)).join('')), ['00000', '11110', '00000', '11110'], 'only Empty is open on it');
     equal(rowOf(p, 'Red').querySelectorAll('.pc').map((l) => l.className), ['pc dis', 'pc dis', 'pc dis', 'pc dis', 'pc on'], 'the style marks what is chosen and what is off (a class of its own, no :has)');
     equal(checked(p), 'ynmn', 'the first choice skips it');

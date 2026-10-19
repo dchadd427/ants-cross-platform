@@ -361,8 +361,8 @@
     {
       "id": "play_start_when_off",
       "file": "web/front/mapmaker_play.js",
-      "old": "            var go = startable(choice, v.seats);\n            if (!go.ok) return;\n            var rec",
-      "new": "            var go = startable(choice, v.seats);\n            var rec",
+      "old": "if (!go.ok || started) return;",
+      "new": "if (started) return;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
@@ -1042,6 +1042,27 @@
       "file": "web/front/test_game.js",
       "old": "        strip(win, test, rec);\n        return true;",
       "new": "        strip(win, test, rec);\n        return false;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_second_start_opens_second_tab",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!go.ok || started) return;",
+      "new": "if (!go.ok) return;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_row_words_sentence",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!info.hills) parts.push('no hill');",
+      "new": "if (!info.hills) parts.push('no hill (' + info.name + ')');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_row_words_ants",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!info.ants) parts.push('no starting ants');",
+      "new": "if (!info.ants) parts.push('no ants');",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     }
   ]

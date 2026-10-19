@@ -119,6 +119,13 @@
         return out;
     }
 
+    // The words on a row of a color that cannot play: plain, without the color (the row has it) and without the check's tile numbers; the check's own sentence only for any other reason
+    function why(info) {
+        var parts = [];
+        if (!info.ants) parts.push('no starting ants');
+        if (!info.hills) parts.push('no hill');
+        return capital(parts.length ? parts.join(', ') : info.why[0] || 'cannot be used');
+    }
     function hillText(n) { return n === 0 ? 'no hill' : n === 1 ? '1 hill' : n + ' hills'; }
     function antText(n) { return n === 1 ? '1 ant' : n + ' ants'; }
 
@@ -189,9 +196,11 @@
             refresh();
         }
 
+        var started = false;
         function start(ctl) {
             var go = startable(choice, v.seats);
-            if (!go.ok) return;
+            if (!go.ok || started) return;
+            started = true;                                                          // (a second call opens no second tab)
             var rec = { id: randomId(win), name: m.name, bytes: m.bytes.slice() };
             var tab = win.open('/play.html?testmap=' + rec.id + '&seats=' + code(choice), '_blank');
             if (!tab) {
@@ -224,7 +233,7 @@
                     dot.setAttribute('aria-hidden', 'true');
                     var label = el('div', 'pname');
                     label.appendChild(el('span', 'pn', info.name));
-                    label.appendChild(el('span', 'pf', info.usable ? antText(info.ants) + ', ' + hillText(info.hills) : (info.why[0] || 'Cannot be used')));
+                    label.appendChild(el('span', 'pf', info.usable ? antText(info.ants) + ', ' + hillText(info.hills) : why(info)));
                     who.appendChild(dot); who.appendChild(label);
                     var set1 = el('div', 'pchoices'), g = { seat: seat, inputs: [] };
                     set1.setAttribute('role', 'radiogroup');
