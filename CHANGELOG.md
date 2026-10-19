@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21). The server's database moves from schema version 5 to 6 at its first start (copy `ants.db` first: an older program refuses version 6).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...0eaf7195)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...fcd24846)
 
 ## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
 
@@ -677,6 +677,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
 
-## Older versions (v0.12.16 and before)
+## Older versions (v0.12.17 and before)
 
 Every release before v0.12.18, and the long notes of v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
