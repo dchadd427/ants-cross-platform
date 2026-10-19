@@ -86,11 +86,15 @@ def stub(name):
 
 
 class Rig:
-    def __init__(self, trusted="", relaxed=True):
+    def __init__(self, trusted="", relaxed=True, log=False):
         self.work = tempfile.mkdtemp(prefix="ants_nginx_submit_")
         for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp", "html", "trusted"):
             os.makedirs(os.path.join(self.work, sub), exist_ok=True)
         shutil.copyfile(os.path.join(REPO, "web", "admin.html"), os.path.join(self.work, "html", "admin.html"))
+        shutil.copyfile(os.path.join(REPO, "web", "mapmaker.html"), os.path.join(self.work, "html", "mapmaker.html"))
+        os.makedirs(os.path.join(self.work, "html", "front"), exist_ok=True)
+        with open(os.path.join(self.work, "html", "front", "mapmaker_app.js"), "w") as f:
+            f.write("// a script of the page\n")
         with open(os.path.join(self.work, "html", "index.html"), "w") as f:
             f.write("<html>the page of the site</html>")
         with open(os.path.join(self.work, "srv", "files", "Static One.lvl"), "wb") as f:
@@ -114,6 +118,8 @@ class Rig:
             text = re.sub(r"(zone=ants_submit_post:1m rate=)10r/m", r"\g<1>100000r/s", text)
             text = re.sub(r"(zone=ants_submit_read:1m rate=)10r/s", r"\g<1>100000r/s", text)
         text = text.replace("/srv/community-maps/", self.work + "/srv/").replace("/var/cache/nginx/", self.work + "/cache/")
+        self.log_file = os.path.join(self.work, "access.log")
+        text = text.replace("access_log /dev/stdout ants_noquery;", ("access_log %s ants_noquery;" % self.log_file) if log else "access_log off;")          # (the image logs to its output)
         user = "user root;\n" if hasattr(os, "geteuid") and os.geteuid() == 0 else ""
         full = user + "pid %s/nginx.pid;\nerror_log %s/error.log;\nevents { worker_connections 256; }\nhttp {\n access_log off;\n client_body_temp_path %s/tmp/body;\n proxy_temp_path %s/tmp/proxy;\n fastcgi_temp_path %s/tmp/fcgi;\n uwsgi_temp_path %s/tmp/uwsgi;\n scgi_temp_path %s/tmp/scgi;\n%s\n}\n" % ((self.work,) * 7 + (text,))
         conf = os.path.join(self.work, "nginx.conf")
@@ -242,6 +248,32 @@ class TheText(unittest.TestCase):
         self.assertEqual(block_of(CONF, "location = /admin.html ").strip(), "return 404;")
         self.assertEqual(block_of(CONF, "location ^~ /admin/ ").strip(), "return 404;")
 
+    def test_the_editor_page_has_the_policy_and_the_headers_of_a_page_that_cannot_be_framed(self):
+        locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
+        self.assertEqual(locations.count("= /mapmaker.html"), 1)
+        page = block_of(CONF, "location = /mapmaker.html ")
+        policy = re.search(r'add_header Content-Security-Policy "([^"]+)" always;', page).group(1)
+        directives = dict((d.split(" ", 1)[0], d.split(" ", 1)[1] if " " in d else "") for d in policy.split("; "))
+        self.assertEqual(directives, {"default-src": "'self'", "script-src": "'self' 'wasm-unsafe-eval'", "style-src": "'self' 'unsafe-inline'", "img-src": "'self' data: blob:", "connect-src": "'self'", "object-src": "'none'",
+                                      "base-uri": "'none'", "frame-ancestors": "'none'"})
+        self.assertNotIn("'unsafe-eval'", policy)
+        self.assertNotRegex(policy, r"script-src[^;]*unsafe-inline")                         # (no inline script, ever)
+        for header in ('add_header X-Frame-Options "DENY" always;', 'add_header Referrer-Policy "no-referrer" always;', 'add_header Cache-Control "no-cache, must-revalidate" always;',
+                       'add_header Cross-Origin-Opener-Policy "same-origin" always;', 'add_header Cross-Origin-Embedder-Policy "require-corp" always;', 'add_header X-Content-Type-Options "nosniff" always;'):
+            self.assertIn(header, page)
+        # the page is the file that the extension rule would serve: the exact rule is in front of it, so the headers above are the ones the page gets
+        self.assertLess(CONF.index("location = /mapmaker.html "), CONF.index("location ~* \\.(html|css|js)$"))
+
+    def test_the_paths_that_carry_a_players_text_are_logged_without_their_query(self):
+        head = CONF[:CONF.index("server {")]
+        fmt = re.search(r"log_format\s+ants_noquery\s+(.+?);", head, re.S).group(1)
+        self.assertIn("$uri", fmt)
+        for query in ("$request ", "$request\"", "$request_uri", "$args", "$query_string", "$is_args"):
+            self.assertNotIn(query, fmt)
+        for header in ("location = /submissions ", "location ^~ /submissions/ ", "location ^~ /admin/api/ "):
+            self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, header), header)
+        self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 3)             # (no other block says it: the other paths keep the stock log)
+
     def test_the_stacks_the_image_and_the_documents_agree_with_the_file(self):
         for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
             text = "\n".join(l for l in open(os.path.join(REPO, name), encoding="utf-8").read().splitlines() if not l.lstrip().startswith("#"))
@@ -297,6 +329,27 @@ class TheBlocksRun(unittest.TestCase):
             self.assertNotIn(b"the page of the site", body, path)                           # (never the page of the site)
             self.assertNotIn(b"stub", body, path)
         self.assertEqual((self.count(self.rig.door), self.count(self.rig.login)), before)
+
+    def test_the_editor_page_comes_with_its_policy_and_cannot_be_framed_and_its_scripts_are_still_served_as_scripts(self):
+        status, headers, body = self.rig.ask("GET", "/mapmaker.html")
+        self.assertEqual(status, 200)
+        self.assertIn(b"Map maker", body)
+        policy = names(headers, "content-security-policy")
+        self.assertEqual(len(policy), 1)
+        self.assertIn("script-src 'self' 'wasm-unsafe-eval'", policy[0])
+        self.assertIn("frame-ancestors 'none'", policy[0])
+        self.assertEqual(names(headers, "x-frame-options"), ["DENY"])
+        self.assertEqual(names(headers, "referrer-policy"), ["no-referrer"])
+        self.assertEqual(names(headers, "cache-control"), ["no-cache, must-revalidate"])
+        self.assertEqual(names(headers, "x-content-type-options"), ["nosniff"])
+        self.assertEqual(names(headers, "cross-origin-embedder-policy"), ["require-corp"])
+        self.assertEqual(names(headers, "cross-origin-opener-policy"), ["same-origin"])
+        self.assertEqual(self.rig.ask("HEAD", "/mapmaker.html")[0], 200)
+        status, headers, body = self.rig.ask("GET", "/front/mapmaker_app.js")
+        self.assertEqual(status, 200)
+        self.assertEqual(names(headers, "cache-control"), ["no-cache, must-revalidate"])                 # (a script keeps the headers it had)
+        self.assertEqual(names(headers, "x-content-type-options"), ["nosniff"])
+        self.assertEqual(names(headers, "x-frame-options"), [])
 
     def test_the_owners_api_passes_the_cookie_and_the_token_and_nothing_else_of_the_visitor_and_no_cookie_comes_back(self):
         status, headers, body = self.rig.ask("POST", "/admin/api/maps/%s/approve" % ID, {"Cookie": "ants_admin=abc", "X-Ants-Csrf": "tok", "Content-Type": "application/json", "Authorization": "Bearer secret",
@@ -499,6 +552,43 @@ class TheDoorIsDown(unittest.TestCase):
             self.assertEqual(rig.ask("GET", "/admin")[0], 200)                                   # (the page is a file: it still opens, and says what it can)
         finally:
             rig.stop()
+
+
+@unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: the access log of the map submissions was NOT run (tests/scripts/test_nginx_submissions.py)")
+class TheLogHasNoQuery(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.rig = Rig(log=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.rig.stop()
+
+    def lines(self):
+        for _ in range(50):                                                                    # (the log is written when the answer has gone: wait for the last line)
+            with open(self.rig.log_file, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+            if lines:
+                return lines
+            time.sleep(0.05)
+        return []
+
+    def test_a_note_a_name_and_a_maker_are_not_in_the_log_and_the_path_is(self):
+        secret = "SecretNote%20from%20a%20player"
+        self.assertEqual(self.rig.ask("POST", "/submissions?kind=classic&name=Secret%20Name&maker=Secret%20Maker&note=" + secret, {"Content-Type": "application/octet-stream"}, b"m" * 100)[0], 201)
+        self.assertEqual(self.rig.ask("GET", "/submissions?x=QueryOne")[0], 200)
+        self.assertEqual(self.rig.ask("GET", "/submissions/%s?x=QueryTwo" % ID)[0], 404)                  # (a query there is a 404: still logged without it)
+        self.assertEqual(self.rig.ask("GET", "/admin/api/maps?state=QueryThree")[0], 200)
+        self.assertEqual(self.rig.ask("POST", "/admin/api/maps/%s/decline?reason=QueryFour" % ID, {"Content-Type": "application/json"}, b"{}")[0], 201)
+        time.sleep(0.3)
+        text = "\n".join(self.lines())
+        for secret_word in ("Secret", "QueryOne", "QueryTwo", "QueryThree", "QueryFour", "kind=classic", "?"):
+            self.assertNotIn(secret_word, text, secret_word)
+        self.assertEqual(len(re.findall(r'"POST /submissions HTTP/1\.1" 201 ', text)), 1, text)
+        self.assertIn('"GET /submissions HTTP/1.1" 200 ', text)
+        self.assertIn('"GET /admin/api/maps HTTP/1.1" 200 ', text)
+        self.assertIn('"POST /admin/api/maps/%s/decline HTTP/1.1" 201 ' % ID, text)
+        self.assertIn('"GET /submissions/%s HTTP/1.1" 404 ' % ID, text)
 
 
 if __name__ == "__main__":

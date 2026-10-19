@@ -565,6 +565,7 @@ def site_config(conf, fs, cache, port):
     html, stats = os.path.join(fs, "usr", "share", "nginx", "html"), os.path.join(cache, "ants_stats")
     maps = os.path.join(fs, "srv", "community-maps")                                       # (the players' maps and pictures, served by /maps/previews/ and /maps/files/: outside the web root)
     text = conf.replace("/srv/community-maps", maps).replace("/usr/share/nginx/html", html).replace("/var/cache/nginx/ants_stats", stats).replace("/var/cache/nginx/ants_history", os.path.join(cache, "ants_history"))
+    text = re.sub(r"access_log[ \t]+/dev/stdout[ \t]+\w+;", "access_log off;", text)                  # (the image logs the submission paths to its output; here nobody reads it)
     text, moved = re.subn(r"^([ \t]*)listen[ \t]+80;[ \t]*$", r"\1listen 127.0.0.1:%d;" % port, text, flags=re.M)
     text = re.sub(r"^[ \t]*listen[ \t]+\[::\]:80;[ \t]*\n", "", text, flags=re.M)
     if moved != 1:

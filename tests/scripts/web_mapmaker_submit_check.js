@@ -134,6 +134,17 @@ function caseA() {
     equal(['Hi', 'x'.repeat(61), 'a<b', 'Big Lake.', 'Big..Lake', '..', 'abé', ' ab', '-ab', 'A_b-c! (1), d&e.f'].map((n) => Submit.nameProblem(n) !== ''), [true, true, true, true, true, true, true, true, true, false], 'the name rules of the server');
     equal(Submit.nameProblem('x'.repeat(60)), '', '60 characters are fine');
     equal([Submit.textProblem('Mia', 24, 'player name'), Submit.textProblem('x'.repeat(25), 24, 'player name') !== '', Submit.textProblem('a<b', 24, 'note') !== '', Submit.textProblem('\u{1F600}'.repeat(24), 24, 'note')], ['', true, true, ''], 'the maker name and the note: a length by characters and no < or >');
+    // the maker's name and the links, as the server judges them again: the very cases of the server's NM2.5 and NM2.6 (tests/data/maker_name_cases.json)
+    const cases = JSON.parse(require('fs').readFileSync(path.join(__dirname, '..', 'data', 'maker_name_cases.json'), 'utf8'));
+    const mine = (n) => Submit.makerProblem(Store.clean(n)) || Submit.textProblem(Store.clean(n), 24, 'player name');
+    equal(cases.reserved.filter((n) => Submit.makerProblem(Store.clean(n)) === ''), [], 'every name that only the owner or the site may have, a look-alike, a digit-or-accent disguise of one and a bot-like name is refused');
+    equal(cases.ok.filter((n) => mine(n) !== ''), [], 'and an honest name (also of two alphabets) is not');
+    equal(cases.link.filter((n) => mine(n) === ''), [], 'a web address or three backticks, also behind an invisible character, are refused in a maker name');
+    equal(cases.link.filter((n) => Submit.textProblem(Store.clean(n), 280, 'note') === ''), [], 'and in a note');
+    equal(cases.no_link.filter((n) => Submit.textProblem(Store.clean(n), 24, 'note') !== ''), [], 'two backticks, a colon and a slash are fine');
+    equal(Submit.skeletons('0wn3r 5'), ['wnr', 'owners'], 'the skeletons: digits left out, and digits as the letters they look like');
+    check(/cannot be used/.test(Submit.makerProblem('Owner')), 'with a sentence');
+    check(/web address/.test(Submit.textProblem('a://b', 24, 'note')), 'and it says why');
     equal(Submit.tokensOf('#sent=' + TOKEN), [TOKEN], 'a status link has a token');
     equal(Submit.tokensOf('#sent=' + TOKEN + ',' + TOKEN2), [TOKEN, TOKEN2], 'or two');
     equal([Submit.tokensOf('#sent=abc'), Submit.tokensOf('#sent='), Submit.tokensOf(''), Submit.tokensOf('#other=' + TOKEN), Submit.tokensOf('#sent=' + TOKEN + '<b>'), Submit.tokensOf('#sent=' + TOKEN + ',zz')], [[], [], [], [], [], [TOKEN]], 'nothing else is a token');
@@ -202,8 +213,16 @@ async function caseC() {
     check(p.host.querySelector('.note.warn') !== null && p.host.querySelector('.note.bad') === null, 'as a yellow note and not as an error');
     type(p, 'sub-note', 'a<b');
     check(send.disabled && /cannot have the marks/.test(text(p)), 'a note with < stops the button');
+    type(p, 'sub-note', 'see http://example.org');
+    check(send.disabled && /web address/.test(text(p)), 'a note with a web address stops the button');
     type(p, 'sub-note', 'x'.repeat(200));
     check(!send.disabled, 'a long note is fine');
+    type(p, 'sub-maker', 'Owner');
+    check(send.disabled && /cannot be used/.test(text(p)), 'a maker name that only the owner may have stops the button');
+    type(p, 'sub-maker', '\u041e' + 'wner');
+    check(send.disabled && /cannot be used/.test(text(p)), 'also with a Cyrillic letter in it');
+    type(p, 'sub-maker', 'Mia');
+    check(!send.disabled, 'and an honest name lets it go');
     // a map that does not work
     p = await opened({ report: { works: false, headline: 'Does not work in the original game', kind: 'classic', findings: [{ severity: 'fatal', message: 'blue has no hill', row: -1 }, { severity: 'fatal', message: 'red has no starting ants (no start marker, tile 155)', row: 4, column: 9 }, { severity: 'note', message: 'a note' }] } });
     check(button(p, 'Submit for approval').disabled, 'a map that does not work cannot be submitted');
