@@ -295,7 +295,7 @@
         var idx = row * file.columns + column, why = inTheWay(file, idx);
         if (why) return { error: blockedText(file, idx) };
         var change = emptyChange(), records = [], waypoints = [], i;
-        if (Edit.tile(file, 2, idx) !== EMPTY2) takeObject(file, change, idx);
+        takeObject(file, change, idx);
         for (i = 0; i < lay.records.length; i++) {
             var r = lay.records[i];
             if (!(PLANT_NAMES[r.tile] && r.row === row && r.column === column)) records.push(r);
