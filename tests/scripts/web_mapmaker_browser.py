@@ -45,7 +45,7 @@ Parts:
              second tab of My maps) shows Waiting with Withdraw, Approved, Approved as a new name (renamed by the owner) and Declined with the owner's reason as text, Open my copy puts the copy
              on the screen, Withdraw asks first and withdraws; a door that is off and the pages of nginx are said in plain words; a status link opens the list and loses its fragment; the
              sheets are inside the screen, every control is 44 pixels and nothing scrolls sideways;
-  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700 to 1366 x 768, the bar wraps up to 1200): the top bar's eight buttons are all inside the window, none covers the name box or the kind tags (and My maps has its two tabs), none
+  * narrow   desktop windows of 620 to 1280 pixels wide (620 x 700 to 1366 x 768, the bar wraps up to 1220): the top bar's nine buttons are all inside the window, none covers the name box or the kind tags (and My maps has its two tabs), none
              covers the name box, and the page does not scroll sideways;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
@@ -2154,7 +2154,7 @@ def run_part(part, tab, args, check, tiny, junk):
                 });
                 return {out: out, hit: hit, scrollX: document.documentElement.scrollWidth > innerWidth, n: [].filter.call(document.querySelectorAll('.edmenu .btn'), function (b) { return b.offsetParent !== null; }).length};
             })())"""))
-            check(found["n"] == 8 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: eight buttons (Submit for approval... is the last), none cut, none over the name box or the tags, no sideways scroll (%s)" % (w, h, found))
+            check(found["n"] == 9 and found["out"] == [] and found["hit"] == [] and not found["scrollX"], "%d x %d: nine buttons (Play this map is the first, Submit for approval... the last), none cut, none over the name box or the tags, no sideways scroll (%s)" % (w, h, found))
             page.shot(args.shots, "mapmaker-topbar-%dx%d" % (w, h))
             # My submissions is the second tab of My maps: both tabs, the buttons of the screen and the page stay inside the window
             page.press_act("mine")

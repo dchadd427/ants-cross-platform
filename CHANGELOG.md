@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Map maker: a gold "Play this map" button (the first of the top bar, and in a phone's Menu) starts a test game on the map you are drawing, against bots, in a new tab. Choose your color and the bots (Easy, Medium or Hard) or leave a color empty; at least one bot is needed. The game says "Not saved. Not counted." and "Back to editor" asks once and closes the tab: the map maker is as you left it, with its Undo history.
+- A map that cannot be played says why in plain words: an Extended map, or a map bigger than the game can play yet (more than 90 rows), a color without a hill or starting ants, or a problem that the check found.
+
+**Rules / network:** none (protocol 21).
+
 ## v0.12.87 - 2026-10-18 - Map maker: Fix edges (sprites part 2)
 
 **For players:**
