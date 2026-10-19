@@ -2,12 +2,18 @@
 // tests/common/map_library.hpp) at tick 0, tick 200 and tick 2,400, written to a file that two builds can be compared with (`diff`): a change that must not move any play of
 // any map (docs/TESTING.md, "The hash ledger") leaves the file byte for byte as it was on main.
 //
-//   hash_ledger --out FILE [--extended] [--only TEXT] [--ticks A,B,...]
+//   hash_ledger --out FILE [--extended] [--rules1] [--only TEXT] [--ticks A,B,...]
 //
 // By default the maps are played as the library has them (version 8). With --extended every map goes up to an Extended map of rules 0 (convert_to_extended) and the simulation
 // plays that one: its ledger must equal the other (the simulation reads the Extended map as it reads the Classic one). A line is `NAME TAB hash@t0 TAB hash@t1 ...` (16 hex
 // digits each); a play that ends before a tick (the match is over) gives the hash of its last tick there, marked with a `!` after the hash, so that two builds that disagree about
-// the end of a match differ in the file too. Exit status 0 when the file is written, 1 when a map does not load or a conversion fails, 2 for a bad option.
+// the end of a match differ in the file too. Exit status 0 when the file is written, 1 when a map does not load or a conversion fails (or, with --rules1, when a play differs), 2 for
+// a bad option.
+//
+// With --rules1 every map is played twice side by side, as it is (rules 0) and with its rules word forced to 1 (the wall at row 90 down, the rules-aware order tile: a map of at most
+// 90 rows has no row 90, so nothing may change), and at the start and after every game second the two engines must agree on everything but the rules word that the grid's hash mixes
+// in: the other seven parts of the state hash, every cell, every hill. The file written is the ledger of the play at rules 0, so it is also `diff`ed with the ledger of main as usual.
+// A map for which the two differ is named on standard error, and the exit status is 1.
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -52,6 +58,7 @@ int main(int argc, char* argv[]) {
     std::string out_path;
     std::string only;
     bool extended = false;
+    bool rules_one = false;
     std::vector<uint32_t> ticks{0, 200, 2400};
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -61,24 +68,28 @@ int main(int argc, char* argv[]) {
             only = argv[++i];
         } else if (arg == "--extended") {
             extended = true;
+        } else if (arg == "--rules1") {
+            rules_one = true;
         } else if (arg == "--ticks" && i + 1 < argc) {
             if (!parse_ticks(argv[++i], ticks)) {
                 std::cerr << "--ticks wants whole game seconds in ticks (multiples of 20), comma separated\n";
                 return 2;
             }
         } else {
-            std::cerr << "usage: hash_ledger --out FILE [--extended] [--only TEXT] [--ticks A,B,...]\n";
+            std::cerr << "usage: hash_ledger --out FILE [--extended] [--rules1] [--only TEXT] [--ticks A,B,...]\n";
             return 2;
         }
     }
     if (out_path.empty()) {
-        std::cerr << "usage: hash_ledger --out FILE [--extended] [--only TEXT] [--ticks A,B,...]\n";
+        std::cerr << "usage: hash_ledger --out FILE [--extended] [--rules1] [--only TEXT] [--ticks A,B,...]\n";
         return 2;
     }
     const uint32_t last = *std::max_element(ticks.begin(), ticks.end());
     std::string text;
     int failures = 0;
     int written = 0;
+    int differing = 0;
+    uint64_t checkpoints = 0;
     for (const ants_test::LibraryMap& m : ants_test::library()) {
         if (!only.empty() && m.name.find(only) == std::string::npos) continue;
         LevelData level;
@@ -96,7 +107,18 @@ int main(int argc, char* argv[]) {
             }
             level = up.level;
         }
-        const std::vector<ants::sim::StateHash> hashes = ants_test::play_hashes(level, last);
+        std::vector<ants::sim::StateHash> hashes;
+        if (rules_one) {
+            const ants_test::RulesOneComparison c = ants_test::play_hashes_rules_one(level, last);
+            checkpoints += c.checkpoints;
+            if (!c.difference.empty()) {
+                std::cerr << m.name << ": rules 1 plays differently from rules 0: " << c.difference << "\n";
+                ++differing;
+            }
+            hashes = c.hashes;
+        } else {
+            hashes = ants_test::play_hashes(level, last);
+        }
         text += m.name;
         for (const uint32_t t : ticks) {
             const size_t index = t / ants_test::kLibraryTicksPerSecond;
@@ -116,5 +138,8 @@ int main(int argc, char* argv[]) {
     std::cout << "hash ledger: " << written << " maps, ticks";
     for (const uint32_t t : ticks) std::cout << " " << t;
     std::cout << (extended ? " (as Extended maps)" : "") << " -> " << out_path << "\n";
-    return failures == 0 ? 0 : 1;
+    if (rules_one) {
+        std::cout << "rules 1 against rules 0: " << written << " maps, " << checkpoints << " checkpoints compared, " << differing << " maps differ\n";
+    }
+    return failures == 0 && differing == 0 ? 0 : 1;
 }

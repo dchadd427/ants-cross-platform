@@ -117,8 +117,9 @@ int PathGridPool::free_count() const noexcept {
 // ============================================================================
 
 PathSearch::PathSearch(uint32_t ant_id, TileCoord start, TileCoord goal, uint16_t rows, uint16_t cols,
-                       PathGridPool& pool)
-    : ant_id_(ant_id), start_(start), goal_(goal), rows_(rows), cols_(cols), pool_(&pool) {
+                       PathGridPool& pool, bool wall_at_row_90)
+    : ant_id_(ant_id), start_(start), goal_(goal), rows_(rows), cols_(cols), pool_(&pool),
+      sentinel_row_(wall_at_row_90 ? kSentinelRow : kNoSentinelRow) {
     init();  // the ctor runs Init immediately (0x101989e)
 }
 
@@ -132,6 +133,7 @@ PathSearch::PathSearch(const PathSearch& other, PathGridPool& pool)
       rows_(other.rows_),
       cols_(other.cols_),
       pool_(&pool),
+      sentinel_row_(other.sentinel_row_),
       slot_(other.slot_),
       grid_(other.slot_ >= 0 ? pool.cells(other.slot_) : nullptr),
       heap_(other.heap_),
@@ -229,14 +231,14 @@ void PathSearch::neighbours(TileCoord cur, std::array<TileCoord, 8>& out) const 
     out[6] = TileCoord{c - 1, r};      // W
     out[7] = TileCoord{c - 1, r - 1};  // NW
     if (r == 0) {
-        out[1].y = out[0].y = out[7].y = kSentinelRow;
+        out[1].y = out[0].y = out[7].y = sentinel_row_;
     } else if (r == static_cast<int32_t>(rows_) - 1) {
-        out[3].y = out[4].y = out[5].y = kSentinelRow;
+        out[3].y = out[4].y = out[5].y = sentinel_row_;
     }
     if (c == 0) {
-        out[5].y = out[6].y = out[7].y = kSentinelRow;
+        out[5].y = out[6].y = out[7].y = sentinel_row_;
     } else if (c == static_cast<int32_t>(cols_) - 1) {
-        out[3].y = out[2].y = out[1].y = kSentinelRow;
+        out[3].y = out[2].y = out[1].y = sentinel_row_;
     }
 }
 
@@ -297,7 +299,7 @@ int PathSearch::step(uint16_t budget, const StepCostFn& cost) {
             std::array<TileCoord, 8> nb{};
             neighbours(cur, nb);
             for (const TileCoord& n : nb) {
-                if (n.y == kSentinelRow) continue;  // 0x1019b23
+                if (n.y == sentinel_row_) continue;  // 0x1019b23 (rules 1: row -1, which no neighbour of a real tile otherwise has)
                 if (!in_grid(n)) continue;          // remake guard: only reachable on 1-row / 1-column maps
 
                 const uint32_t newg = cost(cur, n) + (cc & kGMask);  // StepCost + g(cur), unsigned
@@ -360,7 +362,7 @@ PathManager& PathManager::operator=(PathManager&& other) noexcept {
 }
 
 // PathMgr::Request (FUN_010246e8).
-void PathManager::request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols) {
+void PathManager::request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols, bool wall_at_row_90) {
     if (!pool_) pool_ = std::make_unique<PathGridPool>();  // moved-from manager
     // Remove the FIRST queued request of the same ant (0x10246f8-0x102473b); destroying it frees its slot.
     for (auto it = queue_.begin(); it != queue_.end(); ++it) {
@@ -370,7 +372,7 @@ void PathManager::request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_
         }
     }
     // Construct (runs Init) and append at the tail (0x1024769).
-    queue_.push_back(std::make_unique<PathSearch>(ant_id, from, to, rows, cols, *pool_));
+    queue_.push_back(std::make_unique<PathSearch>(ant_id, from, to, rows, cols, *pool_, wall_at_row_90));
 }
 
 // PathMgr::Run (0x1024786).
