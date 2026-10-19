@@ -356,6 +356,32 @@ bool says_extended(const std::vector<uint8_t>& bytes) {
     return bytes.size() >= 4 && bytes[0] == LVL_EXTENDED_VERSION && bytes[1] == 0 && bytes[2] == 0 && bytes[3] == 0;
 }
 
+// Text from a file (a map's description is a player's) printed so that it is only data: a quote and a backslash get a backslash, a line end is \n, \r or \t, every other control character and every
+// byte from 0x80 up is \xHH. Nothing in it can move the cursor, set a color, or look like a line of this tool's own.
+std::string escaped(const std::string& text) {
+    std::string out;
+    for (const char ch : text) {
+        const unsigned char c = static_cast<unsigned char>(ch);
+        if (c == '"' || c == '\\') {
+            out += '\\';
+            out += ch;
+        } else if (c == '\n') {
+            out += "\\n";
+        } else if (c == '\r') {
+            out += "\\r";
+        } else if (c == '\t') {
+            out += "\\t";
+        } else if (c < 0x20 || c >= 0x7F) {
+            char hex[8];
+            std::snprintf(hex, sizeof hex, "\\x%02x", c);
+            out += hex;
+        } else {
+            out += ch;
+        }
+    }
+    return out;
+}
+
 int info(const Options& o, std::ostream& out, std::ostream& err) {
     const std::string& path = o.files[0];
     std::vector<uint8_t> bytes;
@@ -400,7 +426,7 @@ int info(const Options& o, std::ostream& out, std::ostream& err) {
             << "Format flags:  " << flags << (level.format_flags == 0 ? " (none)" : "") << "\n"
             << "Rules:         " << level.rules << (level.rules == LVL_RULES_ORIGINAL ? " (the original's rules)" : " (extended rules)") << "\n";
     }
-    out << "Description:   \"" << level.description << "\" (" << level.description.size() << " bytes)\n"
+    out << "Description:   \"" << escaped(level.description) << "\" (" << level.description.size() << " bytes)\n"
         << "Minutes:       " << level.default_minutes << "\n"
         << "Grid:          " << level.height() << " rows x " << level.width() << " columns\n"
         << "Dictionary:    " << level.tile_dictionary.size() << " names, " << named << " of them other than \".\"; the map uses " << used.size() << " tile ids, "
@@ -855,6 +881,13 @@ int selftest() {
                 "info: food, waypoints, the default type, the eggs");
         t.check(has(r.out, "Original game: works, no findings\n"), "info: TINY works in the original game");
         t.check(has(r.out, "Rewrite:       19312 bytes\n  name_padding: 670 of the 670 dictionary names have leftover bytes"), "info: what a rewrite changes");
+        // the description is a player's text: printed escaped, never raw (no line end, no escape byte, no angle bracket's meaning, and the quote cannot end the field early)
+        LevelData described = tiny_level;
+        described.description = "A\n\x1B[1m\"q\"\\<\xC3\xA9";
+        const std::string described_path = file_of("described.lvl", write_level(described).bytes);
+        const Run d = run_words({"info", described_path});
+        t.check(d.status == 0 && has(d.out, "Description:   \"A\\n\\x1b[1m\\\"q\\\"\\\\<\\xc3\\xa9\" (13 bytes)\n"), "info: a description with a line end, an escape byte, quotes and a UTF-8 letter is printed escaped");
+        t.check(d.out.find('\x1B') == std::string::npos && d.out.find("A\n") == std::string::npos, "info: no raw escape byte and no raw line end of the description is in the output");
     }
 
     std::cout << "  rewrite\n";
