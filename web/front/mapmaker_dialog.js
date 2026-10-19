@@ -92,7 +92,7 @@
                 build: function (body) {
                     var list = el('div', 'menulist');
                     items.forEach(function (it) {
-                        var b = el('button', 'btn', it.text);
+                        var b = el('button', 'btn' + (it.cls ? ' ' + it.cls : ''), it.text);
                         b.type = 'button';
                         if (it.disabled) b.disabled = true;
                         b.addEventListener('click', function () { current.close(); it.onClick(); });
