@@ -133,7 +133,7 @@ public:
      * @param rows    map rows (the original copies map+0xd0 at creation)
      * @param cols    map columns (map+0xd2)
      * @param pool    grid pool; must outlive this search
-     * @param wall_at_row_90  true (the original, rules 0): a real tile in row 90 is never entered; false (rules 1): the wall is down and every row can be walked
+     * @param wall_at_row_90  the default true means the wall is UP (rules 0): every engine caller must pass grid_.rules() == 0. True (the original, rules 0): a real tile in row 90 is never entered; false (rules 1): the wall is down and every row can be walked
      */
     PathSearch(uint32_t ant_id, TileCoord start, TileCoord goal, uint16_t rows, uint16_t cols, PathGridPool& pool, bool wall_at_row_90 = true);
     ~PathSearch();
@@ -230,7 +230,7 @@ public:
     /**
      * @brief PathMgr::Request (0x10246e8): removes the first queued request of the same ant (releasing its
      *        grid slot), then appends a new request, which takes a free grid slot immediately if there is one.
-     *        @p wall_at_row_90 is PathSearch's (the simulation passes it from the level's rules).
+     *        @p wall_at_row_90 is PathSearch's. Its default true means the wall is up: every engine caller must pass grid_.rules() == 0.
      */
     void request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols, bool wall_at_row_90 = true);
 
