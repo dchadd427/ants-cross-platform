@@ -10,6 +10,10 @@
 #include <set>
 #include <sstream>
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
+
 #include "../common/test_assert.hpp"
 #include "ants_server/admin_accounts.hpp"
 #include "ants_server/admin_cli.hpp"
@@ -124,6 +128,26 @@ int main() {
         ASSERT_EQ(pbkdf2_hex("password", "salt", 1, 0), std::string("<refused>"));
         ASSERT_EQ(pbkdf2_hex("password", "salt", 1, 1025), std::string("<refused>"));
         ASSERT_EQ(pbkdf2_hex("password", "salt", 1, 5), std::string("120fb6cffc"));                // (a short result is the start of the longer one)
+    } TEST_END();
+
+    TEST_CASE("ACC1.1b The vectors of tests/data/pbkdf2_vectors.json (made by Python's hashlib, checked against it again by test_pbkdf2_vectors.py): the loop of the server gives every one") {
+        std::ifstream in(std::string(ANTS_SOURCE_DIR) + "/tests/data/pbkdf2_vectors.json", std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        const ctl::JsonValue file = parse_text(text);
+        ASSERT_TRUE(file.get("vectors").size() >= 3);
+        bool more_than_one_block = false;
+        for (size_t i = 0; i < file.get("vectors").size(); ++i) {
+            const ctl::JsonValue& v = file.get("vectors").at(i);
+            const auto bytes = [](const std::string& hex) {
+                std::string out;
+                for (size_t k = 0; k + 1 < hex.size(); k += 2) out.push_back(static_cast<char>(std::stoi(hex.substr(k, 2), nullptr, 16)));
+                return out;
+            };
+            const size_t length = static_cast<size_t>(v.get("length").as_int_or(0));
+            more_than_one_block = more_than_one_block || length > 32;
+            ASSERT_MSG(pbkdf2_hex(bytes(v.get("password").str()), bytes(v.get("salt").str()), static_cast<uint32_t>(v.get("rounds").as_int_or(0)), length) == v.get("hex").str(), std::to_string(i));
+        }
+        ASSERT_TRUE(more_than_one_block);
     } TEST_END();
 
     TEST_CASE("ACC1.2 The comparison of two secrets looks at every byte of the longer one whatever the answer, so that its time does not say where they differ") {
@@ -807,6 +831,92 @@ int main() {
         std::ostringstream out6, err6;
         ASSERT_EQ(run_admin_command(bad_name, out6, err6), 1);
         ASSERT_TRUE(out6.str().empty() && err6.str().find("at least 3") != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("ACC4.3 The database and its side files are private to the user (0600), the results folder too (0700): made so by the first-account command even with a loose umask, and tightened with a line for the log when they were looser") {
+#ifndef _WIN32
+        const auto mode = [](const fs::path& p) {
+            struct stat st;
+            return ::stat(p.string().c_str(), &st) == 0 ? static_cast<int>(st.st_mode & 0777) : -1;
+        };
+        TempDir dir;
+        const mode_t old = ::umask(022);                                                            // (a loose umask: the files would be 0644 and the folder 0755)
+        AdminCommand create;
+        create.name = "Owner";
+        create.folder = (dir.path / "results").string();
+        create.db_path = (dir.path / "results" / "ants.db").string();
+        create.rounds = kFast;
+        std::ostringstream out, err;
+        ASSERT_EQ(run_admin_command(create, out, err), 0);
+        ::umask(old);
+        ASSERT_EQ(mode(create.db_path), 0600);
+        ASSERT_EQ(mode(dir.path / "results"), 0700);
+        ASSERT_TRUE(err.str().find("readable by others") == std::string::npos);                    // (nothing to tighten: nothing said)
+        // looser ones are tightened, each with a line, and a second pass says nothing
+        ASSERT_EQ(::chmod(create.db_path.c_str(), 0644), 0);
+        { std::ofstream w(create.db_path + "-wal"); }
+        ASSERT_EQ(::chmod((create.db_path + "-wal").c_str(), 0666), 0);
+        ASSERT_EQ(::chmod((dir.path / "results").string().c_str(), 0755), 0);
+        const std::vector<std::string> lines = tighten_private_files(create.db_path, create.folder);
+        ASSERT_EQ(lines.size(), size_t{3});
+        ASSERT_TRUE(lines[0].find("made private") != std::string::npos && lines[0].find(create.db_path) != std::string::npos);
+        ASSERT_TRUE(mode(create.db_path) == 0600 && mode(create.db_path + "-wal") == 0600 && mode(dir.path / "results") == 0700);
+        ASSERT_TRUE(tighten_private_files(create.db_path, create.folder).empty());
+        ASSERT_TRUE(tighten_private_files((dir.path / "none").string(), "").empty());              // (a file that is not there is no change)
+#endif
+    } TEST_END();
+
+    TEST_CASE("ACC2.16 A starting password that nobody used in 7 days is dead (the user is reset); a reset or a new password starts or ends the time; one that was used in time keeps working until it is changed") {
+        Accounts t;
+        User u;
+        std::string password;
+        Failure why;
+        ASSERT_TRUE(t.accounts->create(Actor(), "mia", "moderator", t.now, u, password, why));
+        ASSERT_EQ(u.starting_at, t.now);
+        t.now += 7 * 86400;
+        ASSERT_EQ(t.sign_in("mia", password, "203.0.113.1"), Attempt::Ok);                          // (exactly 7 days: still good)
+        t.now += 1;
+        ASSERT_EQ(t.sign_in("mia", password, "203.0.113.2"), Attempt::Wrong);                       // (a second more: dead, and the same answer as a wrong password)
+        ASSERT_EQ(t.sign_in("mia", "a wrong one", "203.0.113.3"), Attempt::Wrong);
+        std::string again;
+        ASSERT_TRUE(t.accounts->reset(Actor(), u.id, t.now, again, why));                           // (a reset gives a new password and a new time)
+        t.accounts->find(u.id, u);
+        ASSERT_EQ(u.starting_at, t.now);
+        t.now += 3 * 86400;
+        ASSERT_EQ(t.sign_in("mia", again, "203.0.113.4"), Attempt::Ok);
+        int64_t gen = 0;
+        ASSERT_TRUE(t.accounts->change_password(Actor(), u.id, "a long password of my own", t.now, gen, why));
+        t.accounts->find(u.id, u);
+        ASSERT_EQ(u.starting_at, int64_t{0});
+        t.now += 400 * 86400;
+        ASSERT_EQ(t.sign_in("mia", "a long password of my own", "203.0.113.5"), Attempt::Ok);       // (a chosen password never expires)
+        // the first Admin's too: the command is the way back
+        Accounts f;
+        ASSERT_TRUE(f.accounts->create_first_admin("boss", f.now, u, password, why));
+        f.now += 8 * 86400;
+        ASSERT_EQ(f.sign_in("boss", password, "203.0.113.6"), Attempt::Wrong);
+    } TEST_END();
+
+    TEST_CASE("ACC2.17 Signing out is for good: a revoked session is refused until it would have ended anyway, then forgotten; the check of the starting password has a budget of its own") {
+        Accounts t([](AccountConfig& c) { c.checks_per_window = 1; c.forced_checks_per_window = 2; });
+        ASSERT_FALSE(t.accounts->session_revoked("nonce-1"));
+        ASSERT_TRUE(t.accounts->revoke_session("nonce-1", t.now + 100));
+        ASSERT_TRUE(t.accounts->session_revoked("nonce-1"));
+        ASSERT_FALSE(t.accounts->session_revoked("nonce-2"));
+        t.accounts->maintenance(t.now + 99);
+        ASSERT_TRUE(t.accounts->session_revoked("nonce-1"));
+        t.accounts->maintenance(t.now + 101);
+        ASSERT_FALSE(t.accounts->session_revoked("nonce-1"));
+        const User dave = t.add("dave", "admin");
+        ASSERT_EQ(t.sign_in("dave", "a long password", "203.0.113.1"), Attempt::Wrong);             // (the one sign-in check of the window)
+        ASSERT_EQ(t.sign_in("dave", "a long password", "203.0.113.2"), Attempt::Busy);
+        ASSERT_EQ(t.accounts->password_matches(dave, "x", t.now_ms), Attempt::Wrong);               // (the sign-ins used up theirs: the screen that must choose a password still has two)
+        ASSERT_EQ(t.accounts->password_matches(dave, "x", t.now_ms), Attempt::Wrong);
+        ASSERT_EQ(t.accounts->password_matches(dave, "x", t.now_ms), Attempt::Busy);
+        t.now_ms += 10000;
+        ASSERT_EQ(t.accounts->password_matches(dave, "x", t.now_ms), Attempt::Wrong);
+        ASSERT_TRUE(t.database.exec("DROP TABLE admin_revoked").ok());                              // (a database that cannot say: nobody is let in on a doubt)
+        ASSERT_TRUE(t.accounts->session_revoked("nonce-3"));
     } TEST_END();
 
     TEST_CASE("ACC4.2 The command refuses a file that is not a database or that a newer program made, and leaves it as it was") {

@@ -433,6 +433,7 @@ int main(int argc, char** argv) {
         ants::server::AdminCommand command;
         command.kind = o.admin_create.empty() ? ants::server::AdminCommand::Kind::Reset : ants::server::AdminCommand::Kind::Create;
         command.name = o.admin_create.empty() ? o.admin_reset : o.admin_create;
+        command.folder = o.db_file.empty() ? o.results_dir : std::string();
         command.db_path = !o.db_file.empty() ? o.db_file : o.results_dir.empty() ? std::string() : (std::filesystem::path(o.results_dir) / "ants.db").u8string();
         return ants::server::run_admin_command(command, std::cout, std::cerr);
     }
@@ -637,6 +638,7 @@ int main(int argc, char** argv) {
             std::filesystem::create_directories(std::filesystem::u8path(path).parent_path(), ec);          // (an empty parent, a file in the current folder, is fine)
             int version = 0;
             std::string journal;
+            const ants::server::PrivateCreation private_files;                           // (the database, and the -wal and -shm that SQLite makes after it, are for this user only)
             const ants::db::Error err = ants::db::open_and_migrate(database, path, ants::server::db_migrations(), ants::db::OpenOptions(), &version, &journal);
             if (!err.ok()) {
                 std::fprintf(stderr, "database %s: %s\n(the file was not changed; --no-db starts the server without a database)\n", path.c_str(), err.message.c_str());
@@ -644,6 +646,7 @@ int main(int argc, char** argv) {
             }
             log("database " + path + ": schema version " + std::to_string(version) + " (journal mode " + journal + ")" +
                 (journal == "wal" ? std::string() : std::string("; the file system gave no WAL, the rollback journal is used")));
+            for (const std::string& line : ants::server::tighten_private_files(path, o.db_file.empty() ? o.results_dir : std::string())) log(line);          // (the accounts' hashes are in this file)
         }
     }
     {
@@ -775,6 +778,7 @@ int main(int argc, char** argv) {
             (submit_api->owner_api_on() ? "the owner's review page is on" + std::string(ac.cookie_secure ? "" : " (ANTS_ADMIN_ALLOW_HTTP: the cookie is not marked Secure)") : "the owner's review page is OFF (ANTS_ADMIN_SESSION_SECRET, 32 characters or more, is needed)") +
             "; " + std::to_string(submissions->approved_maps().size()) + " approved maps in the lobby's list");
         for (const std::string& line : submissions->take_notices()) log(line);
+        for (const std::string& line : accounts->take_notices()) log(line);
     }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
@@ -832,7 +836,10 @@ int main(int argc, char** argv) {
             if (static_cast<uint32_t>(now - last_submission_upkeep_ms) >= 3600u * 1000u) {                 // (once an hour: the files of declined maps, old rows and counters)
                 last_submission_upkeep_ms = now;
                 submissions->maintenance(static_cast<int64_t>(std::time(nullptr)));
-                if (accounts) accounts->maintenance(static_cast<int64_t>(std::time(nullptr)));
+                if (accounts) {
+                    accounts->maintenance(static_cast<int64_t>(std::time(nullptr)));
+                    for (const std::string& line : accounts->take_notices()) log(line);          // (a refused write of the accounts: never a password, a name or an address)
+                }
             }
             for (const std::string& line : submissions->take_notices()) log(line);
         }

@@ -60,7 +60,7 @@ private:
     ctl::HttpResponse admin_post(const ctl::HttpRequest& request, const Session& who, const std::string& tail, int64_t now_s);
     ctl::HttpResponse user_routes(const ctl::HttpRequest& request, const Session& who, const std::string& tail, int64_t now_s);
     ctl::HttpResponse login(const ctl::HttpRequest& request, int64_t now_s, uint32_t now_ms);
-    ctl::HttpResponse logout(const ctl::HttpRequest& request, const Session& who);
+    ctl::HttpResponse logout(const ctl::HttpRequest& request, const Session& who, int64_t now_s);
     ctl::HttpResponse change_password(const ctl::HttpRequest& request, const Session& who, int64_t now_s, uint32_t now_ms);
     bool post_guard(const ctl::HttpRequest& request, const Session& who, ctl::JsonValue& body, ctl::HttpResponse& refusal) const;
     Session session_of(const ctl::HttpRequest& request, int64_t now_s) const;

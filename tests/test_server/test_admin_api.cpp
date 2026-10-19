@@ -522,11 +522,38 @@ int main() {
         ASSERT_TRUE(r.set_cookies[0].compare(0, 11, "ants_admin=") == 0 && r.set_cookies[0].find("; Max-Age=0") != std::string::npos && r.set_cookies[0].find("; HttpOnly") != std::string::npos &&
                     r.set_cookies[0].find("; Secure") != std::string::npos && r.set_cookies[0].find("; SameSite=Strict") != std::string::npos && r.set_cookies[0].find("; Path=/admin") != std::string::npos);
         ASSERT_EQ(r.set_cookies[0].compare(11, 1, ";"), 0);                                         // (the value is empty)
-        ASSERT_EQ(t.call(t.req("POST", "/admin/api/logout", {{"cookie", s.cookie}, {"content-type", "application/json"}})).status, 403);          // (a session needs its token: another site cannot sign the person out)
-        ASSERT_EQ(t.call(t.req("POST", "/admin/api/logout", {{"cookie", s.cookie}, {"x-ants-csrf", s.csrf}, {"sec-fetch-site", "cross-site"}})).status, 403);
+        const Session live = t.sign_in("dave", kPassword, "198.51.100.5");                           // (a session that is still there)
+        ASSERT_EQ(t.call(t.req("POST", "/admin/api/logout", {{"cookie", live.cookie}, {"content-type", "application/json"}})).status, 403);          // (a session needs its token: another site cannot sign the person out)
+        ASSERT_EQ(t.call(t.req("POST", "/admin/api/logout", {{"cookie", live.cookie}, {"x-ants-csrf", live.csrf}, {"sec-fetch-site", "cross-site"}})).status, 403);
+        ASSERT_EQ(t.get(live, "/admin/api/maps").status, 200);                                      // (neither of them signed the session out)
         r = t.call(t.req("POST", "/admin/api/logout", {{"content-type", "application/json"}}));
         ASSERT_TRUE(r.status == 200 && r.set_cookies.size() == 1 && r.set_cookies[0].find("; Max-Age=0") != std::string::npos);
         ASSERT_EQ(t.call(t.req("GET", "/admin/api/logout")).status, 404);
+    } TEST_END();
+
+    TEST_CASE("ADM5.3 Signing out ends that session on the server: the copied cookie is refused afterwards (a missing path), the same user's other session goes on, and a new sign-in works") {
+        Site t;
+        t.add("dave", "admin");
+        const Session a = t.sign_in("dave", kPassword, "198.51.100.1");
+        const Session b = t.sign_in("dave", kPassword, "198.51.100.2");
+        ASSERT_EQ(t.get(a, "/admin/api/maps").status, 200);
+        const Session copy = a;                                                                     // (what a thief who copied the cookie holds)
+        ASSERT_EQ(t.post(a, "/admin/api/logout").status, 200);
+        ASSERT_EQ(t.get(copy, "/admin/api/maps").status, 404);
+        ASSERT_EQ(t.post(copy, "/admin/api/maps/" + std::string(32, 'a') + "/approve").status, 404);
+        ASSERT_FALSE(parse_text(t.get(copy, "/admin/api/me").body).get("signed_in").as_bool_or(true));
+        ASSERT_EQ(t.get(b, "/admin/api/maps").status, 200);
+        ASSERT_EQ(t.get(t.sign_in("dave", kPassword, "198.51.100.3"), "/admin/api/maps").status, 200);
+    } TEST_END();
+
+    TEST_CASE("ADM1.4 A sign-in name of 64 bytes is looked at, one of 65 is refused before any work (the same bytes as a wrong password)") {
+        Site t;
+        t.add("dave", "admin");
+        const uint64_t runs = pbkdf2_runs();
+        const HttpResponse long_name = t.login(std::string(65, 'x'), kPassword);
+        ASSERT_TRUE(long_name.status == 401 && pbkdf2_runs() == runs);
+        const HttpResponse edge = t.login(std::string(64, 'x'), kPassword);
+        ASSERT_TRUE(edge.status == 401 && edge.body == long_name.body && pbkdf2_runs() == runs + 1);
     } TEST_END();
 
     TEST_CASE("ADM5.2 The cookie carries Secure unless the trial setting drops it, and names the user and generation only: nothing of the password or the role") {

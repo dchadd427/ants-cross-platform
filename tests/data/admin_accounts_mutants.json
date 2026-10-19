@@ -128,8 +128,8 @@
   {
    "id": "disabled_account_signs_in",
    "file": "src/ants_server/admin_accounts.cpp",
-   "old": "const bool usable = user != nullptr && !user->disabled;",
-   "new": "const bool usable = user != nullptr;"
+   "old": "const bool usable = user != nullptr && !user->disabled && !expired;",
+   "new": "const bool usable = user != nullptr && !expired;"
   },
   {
    "id": "lock_comes_one_try_late",
@@ -230,7 +230,7 @@
   {
    "id": "starting_password_check_not_counted",
    "file": "src/ants_server/admin_accounts.cpp",
-   "old": "    if (!take_check(false, now_ms)) return Attempt::Busy;\n    std::string stored;",
+   "old": "    if (!take_forced_check(now_ms)) return Attempt::Busy;\n    std::string stored;",
    "new": "    (void)now_ms;\n    std::string stored;"
   },
   {
@@ -266,14 +266,14 @@
   {
    "id": "reset_keeps_the_sessions",
    "file": "src/ants_server/admin_accounts.cpp",
-   "old": "must_change = 1, session_gen = session_gen + 1\")",
-   "new": "must_change = 1\")"
+   "old": "must_change = 1, starting_at = ?, session_gen = session_gen + 1\")",
+   "new": "must_change = 1, starting_at = ?\")"
   },
   {
    "id": "reset_keeps_the_old_choice",
    "file": "src/ants_server/admin_accounts.cpp",
-   "old": "SET pw_hash = ?, must_change = 1, session_gen",
-   "new": "SET pw_hash = ?, must_change = 0, session_gen"
+   "old": "SET pw_hash = ?, must_change = 1, starting_at = ?, session_gen",
+   "new": "SET pw_hash = ?, must_change = 0, starting_at = ?, session_gen"
   },
   {
    "id": "reset_keeps_the_locks",
@@ -302,14 +302,14 @@
   {
    "id": "new_password_keeps_the_sessions",
    "file": "src/ants_server/admin_accounts.cpp",
-   "old": "must_change = 0, session_gen = session_gen + 1 WHERE id = ?",
-   "new": "must_change = 0 WHERE id = ?"
+   "old": "must_change = 0, starting_at = 0, session_gen = session_gen + 1 WHERE id = ?",
+   "new": "must_change = 0, starting_at = 0 WHERE id = ?"
   },
   {
    "id": "new_password_keeps_the_forced_change",
    "file": "src/ants_server/admin_accounts.cpp",
-   "old": "SET pw_hash = ?, must_change = 0, session_gen = session_gen + 1 WHERE id = ?",
-   "new": "SET pw_hash = ?, must_change = 1, session_gen = session_gen + 1 WHERE id = ?"
+   "old": "SET pw_hash = ?, must_change = 0, starting_at = 0, session_gen = session_gen + 1 WHERE id = ?",
+   "new": "SET pw_hash = ?, must_change = 1, starting_at = 0, session_gen = session_gen + 1 WHERE id = ?"
   },
   {
    "id": "a_second_first_admin",
@@ -584,6 +584,108 @@
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    accounts_.audit(actor, now_s, logged, s.final_name.empty() ? s.name : s.final_name, detail);",
    "new": "    (void)actor; (void)logged; (void)detail;"
+  },
+  {
+   "id": "logout_leaves_the_session_alive",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (accounts_.session_revoked(nonce)) return none;",
+   "new": ""
+  },
+  {
+   "id": "logout_does_not_remember_the_session",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (who.valid && !accounts_.revoke_session(",
+   "new": "    if (who.valid && false && !accounts_.revoke_session("
+  },
+  {
+   "id": "revoked_sessions_never_forgotten",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    run(db_, \"DELETE FROM admin_revoked WHERE exp < ?\", {now});",
+   "new": ""
+  },
+  {
+   "id": "revoked_sessions_forgotten_early",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "DELETE FROM admin_revoked WHERE exp < ?\", {now}",
+   "new": "DELETE FROM admin_revoked WHERE exp < ?\", {now + 1000}"
+  },
+  {
+   "id": "a_revoked_nonce_of_a_failing_database_is_alive",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    int64_t n = 1;                                                                  // (a database",
+   "new": "    int64_t n = 0;                                                                  // (a database"
+  },
+  {
+   "id": "starting_password_never_expires",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "user->starting_at > 0 && now - user->starting_at > config_.starting_days * 86400;",
+   "new": "user->starting_at > 0 && false;"
+  },
+  {
+   "id": "starting_password_expires_a_second_early",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "now - user->starting_at > config_.starting_days * 86400;",
+   "new": "now - user->starting_at >= config_.starting_days * 86400;"
+  },
+  {
+   "id": "starting_password_lives_a_day_more",
+   "file": "include/ants_server/admin_accounts.hpp",
+   "old": "int64_t starting_days{7};",
+   "new": "int64_t starting_days{8};"
+  },
+  {
+   "id": "reset_does_not_restart_the_time",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "must_change = 1, starting_at = ?, session_gen",
+   "new": "must_change = 1, starting_at = starting_at + 0 * ?, session_gen"
+  },
+  {
+   "id": "new_password_keeps_the_time",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "must_change = 0, starting_at = 0, session_gen",
+   "new": "must_change = 0, starting_at = starting_at, session_gen"
+  },
+  {
+   "id": "forced_checks_share_the_budget_of_sign_ins",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    if (forced_used_ >= config_.forced_checks_per_window) return false;",
+   "new": "    if (window_used_ >= config_.checks_per_window) return false;"
+  },
+  {
+   "id": "forced_checks_have_no_end",
+   "file": "src/ants_server/admin_accounts.cpp",
+   "old": "    if (forced_used_ >= config_.forced_checks_per_window) return false;",
+   "new": ""
+  },
+  {
+   "id": "files_are_made_with_the_loose_umask",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "old_ = static_cast<int>(::umask(077));",
+   "new": "old_ = static_cast<int>(::umask(022));"
+  },
+  {
+   "id": "loose_files_are_left_alone",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "const bool done = ::chmod(path.c_str(), want) == 0;",
+   "new": "const bool done = true; (void)want;"
+  },
+  {
+   "id": "the_folder_is_not_tightened",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "    tighten(folder, 0700, \"folder\");",
+   "new": "    (void)folder;"
+  },
+  {
+   "id": "the_wal_file_is_not_tightened",
+   "file": "src/ants_server/admin_cli.cpp",
+   "old": "    tighten(db_path + \"-wal\", 0600, \"database file\");",
+   "new": ""
+  },
+  {
+   "id": "a_sign_in_name_of_any_length_is_checked",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "if (username.size() > 64 || password.size() > kPasswordMaxBytes) return wrong;",
+   "new": "if (password.size() > kPasswordMaxBytes) return wrong;"
   },
   {
    "id": "the_cookie_is_secure_only_on_request",

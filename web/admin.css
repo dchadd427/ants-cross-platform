@@ -232,3 +232,4 @@ button { font: inherit; color: inherit; }
     .adm .ahd { display: none; }
     .adm .arow2 { grid-template-columns: minmax(0, 1fr); }
 }
+.noscript { padding: 1em; }

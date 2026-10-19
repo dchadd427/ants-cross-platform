@@ -146,7 +146,8 @@ const char* const kSubmissionsSql =
 // Version 6. The accounts of the owner's page (docs/MAP_SUBMISSIONS.md, "Accounts"). admin_users: one row for each account; `pw_hash` is "pbkdf2-sha256$<rounds>$<salt>$<hash>" (the password itself is never kept),
 // `must_change` is 1 while the password is the starting one, `session_gen` goes up whenever the user's sessions must end. admin_locks: the counts of wrong tries (scope pair = one name from one address,
 // addr = one address, user = one name from everywhere; `key` is a keyed hash, never a name or an address). admin_known_addr: the addresses (keyed hashes) that signed a user in. admin_audit: who did what and
-// when (`addr_key` a keyed hash). map_submissions.decided_by is the name of the account that approved, declined, took down or put back a map; the maps decided before this version get the name that
+// when (`addr_key` a keyed hash). `starting_at` is when the user's starting password was made (0 once the user chose their own: a starting password that nobody used expires); admin_revoked holds the nonces of
+// sessions that were signed out, until they would have ended anyway. map_submissions.decided_by is the name of the account that approved, declined, took down or put back a map; the maps decided before this version get the name that
 // review_log recorded.
 const char* const kAccountsSql =
     "CREATE TABLE admin_users ("
@@ -160,8 +161,10 @@ const char* const kAccountsSql =
     " session_gen INTEGER NOT NULL DEFAULT 1,"
     " created_at INTEGER NOT NULL,"
     " created_by TEXT NOT NULL DEFAULT '',"
-    " last_login_at INTEGER NOT NULL DEFAULT 0"
+    " last_login_at INTEGER NOT NULL DEFAULT 0,"
+    " starting_at INTEGER NOT NULL DEFAULT 0"
     ");"
+    "CREATE TABLE admin_revoked (nonce TEXT PRIMARY KEY NOT NULL, exp INTEGER NOT NULL) WITHOUT ROWID;"
     "CREATE TABLE admin_locks ("
     " scope TEXT NOT NULL CHECK (scope IN ('pair', 'addr', 'user')),"
     " key TEXT NOT NULL,"

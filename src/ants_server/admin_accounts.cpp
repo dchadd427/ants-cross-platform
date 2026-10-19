@@ -59,7 +59,7 @@ bool each(db::Database& db, const std::string& sql, const std::vector<Arg>& args
     }
 }
 
-const char* const kUserColumns = "id, name, role, must_change, disabled, session_gen, created_at, last_login_at, created_by";
+const char* const kUserColumns = "id, name, role, must_change, disabled, session_gen, created_at, last_login_at, created_by, starting_at";
 
 User read_user(db::Statement& st) {
     User u;
@@ -72,6 +72,7 @@ User read_user(db::Statement& st) {
     u.created_at = st.column_int64(6);
     u.last_login_at = st.column_int64(7);
     u.created_by = st.column_text(8);
+    u.starting_at = st.column_int64(9);
     return u;
 }
 
@@ -234,7 +235,7 @@ int64_t AdminAccounts::count(const std::string& sql) {
 }
 
 bool AdminAccounts::fail_db(Failure& why, const char* where) {
-    notices_.push_back(std::string("accounts: the database refused ") + where);
+    if (notices_.size() < 100) notices_.push_back(std::string("accounts: the database refused ") + where);
     why = failure(503, "storage_error", "The server could not save this just now. Please try again later.");
     return false;
 }
@@ -243,6 +244,16 @@ std::vector<std::string> AdminAccounts::take_notices() {
     std::vector<std::string> out;
     out.swap(notices_);
     return out;
+}
+
+bool AdminAccounts::revoke_session(const std::string& nonce, int64_t until) {
+    return run(db_, "INSERT OR REPLACE INTO admin_revoked (nonce, exp) VALUES (?, ?)", {nonce, until});
+}
+
+bool AdminAccounts::session_revoked(const std::string& nonce) {
+    int64_t n = 1;                                                                  // (a database that fails reads as revoked: nobody is let in on a doubt)
+    each(db_, "SELECT COUNT(*) FROM admin_revoked WHERE nonce = ?", {nonce}, [&](db::Statement& st) { n = st.column_int64(0); });
+    return n != 0;
 }
 
 bool AdminAccounts::find(int64_t id, User& out) {
@@ -306,6 +317,7 @@ void AdminAccounts::maintenance(int64_t now) {
     run(db_, "DELETE FROM admin_audit WHERE id <= (SELECT id FROM admin_audit ORDER BY id DESC LIMIT 1 OFFSET ?)", {static_cast<int64_t>(config_.audit_max)});
     run(db_, "DELETE FROM admin_locks WHERE locked_until <= ? AND first_at + ? <= ?", {now, config_.window_seconds, now});
     run(db_, "DELETE FROM admin_known_addr WHERE last_ok < ?", {now - config_.known_days * 86400});
+    run(db_, "DELETE FROM admin_revoked WHERE exp < ?", {now});
     const int64_t rows = count("SELECT COUNT(*) FROM admin_locks");
     if (rows >= 0) lock_rows_ = static_cast<size_t>(rows);
 }
@@ -355,13 +367,18 @@ bool AdminAccounts::lock_table_full(int64_t now) {
     return lock_rows_ >= config_.lock_rows_max;
 }
 
-bool AdminAccounts::take_check(bool reserved, uint32_t now_ms) {
+void AdminAccounts::roll_window(uint32_t now_ms) {
     if (!window_started_ || static_cast<uint32_t>(now_ms - window_start_ms_) >= config_.hash_window_ms) {
         window_started_ = true;
         window_start_ms_ = now_ms;
         window_used_ = 0;
         window_reserved_used_ = 0;
+        forced_used_ = 0;
     }
+}
+
+bool AdminAccounts::take_check(bool reserved, uint32_t now_ms) {
+    roll_window(now_ms);
     if (window_used_ < config_.checks_per_window) {
         ++window_used_;
         return true;
@@ -371,6 +388,13 @@ bool AdminAccounts::take_check(bool reserved, uint32_t now_ms) {
         return true;
     }
     return false;
+}
+
+bool AdminAccounts::take_forced_check(uint32_t now_ms) {
+    roll_window(now_ms);
+    if (forced_used_ >= config_.forced_checks_per_window) return false;
+    ++forced_used_;
+    return true;
 }
 
 bool AdminAccounts::known_address(int64_t id, const std::string& addr, int64_t now) {
@@ -397,7 +421,8 @@ Attempt AdminAccounts::attempt(const std::string& typed_name, const User* user, 
     if (addr_row.locked_until > now) return Attempt::Locked;
     const LockRow pair_row = lock_row("pair", pair_key);
     if (pair_row.locked_until > now) return Attempt::Locked;
-    const bool usable = user != nullptr && !user->disabled;
+    const bool expired = user != nullptr && user->must_change && user->starting_at > 0 && now - user->starting_at > config_.starting_days * 86400;          // (a starting password that nobody used in time is dead: the user is reset)
+    const bool usable = user != nullptr && !user->disabled && !expired;
     const bool known = usable && known_address(user->id, addr, now);
     const LockRow user_row = lock_row("user", user_ref);
     const bool slow = user_row.found && user_row.fails >= config_.user_tries && user_row.first_at + config_.window_seconds > now;
@@ -470,7 +495,7 @@ Attempt AdminAccounts::confirm_password(const User& user, const std::string& pas
 
 Attempt AdminAccounts::password_matches(const User& user, const std::string& password, uint32_t now_ms) {
     if (!open_) return Attempt::Error;
-    if (!take_check(false, now_ms)) return Attempt::Busy;
+    if (!take_forced_check(now_ms)) return Attempt::Busy;
     std::string stored;
     each(db_, "SELECT pw_hash FROM admin_users WHERE id = ?", {user.id}, [&](db::Statement& st) { stored = st.column_text(0); });
     ++verifies_;
@@ -505,8 +530,8 @@ bool AdminAccounts::create(const Actor& by, const std::string& typed_name, const
         why = failure(503, "no_random", "The server could not make a random password just now.");
         return false;
     }
-    if (!run(db_, "INSERT INTO admin_users (name, name_key, role, pw_hash, must_change, disabled, session_gen, created_at, created_by) VALUES (?, ?, ?, ?, 1, 0, 1, ?, ?)",
-             {name, username_key(name), role, hash, now, by.name})) {
+    if (!run(db_, "INSERT INTO admin_users (name, name_key, role, pw_hash, must_change, disabled, session_gen, created_at, created_by, starting_at) VALUES (?, ?, ?, ?, 1, 0, 1, ?, ?, ?)",
+             {name, username_key(name), role, hash, now, by.name, now})) {
         password.clear();
         return fail_db(why, "a write");
     }
@@ -539,7 +564,7 @@ bool AdminAccounts::reset(const Actor& by, int64_t id, int64_t now, std::string&
         why = failure(503, "no_random", "The server could not make a random password just now.");
         return false;
     }
-    if (!run(db_, std::string("UPDATE admin_users SET pw_hash = ?, must_change = 1, session_gen = session_gen + 1") + (console ? ", disabled = 0" : "") + " WHERE id = ?", {hash, id})) {
+    if (!run(db_, std::string("UPDATE admin_users SET pw_hash = ?, must_change = 1, starting_at = ?, session_gen = session_gen + 1") + (console ? ", disabled = 0" : "") + " WHERE id = ?", {hash, now, id})) {
         password.clear();
         return fail_db(why, "a write");
     }
@@ -600,7 +625,7 @@ bool AdminAccounts::change_password(const Actor& by, int64_t id, const std::stri
         why = failure(503, "no_random", "The server could not save a password just now.");
         return false;
     }
-    if (!run(db_, "UPDATE admin_users SET pw_hash = ?, must_change = 0, session_gen = session_gen + 1 WHERE id = ?", {hash, id})) return fail_db(why, "a write");
+    if (!run(db_, "UPDATE admin_users SET pw_hash = ?, must_change = 0, starting_at = 0, session_gen = session_gen + 1 WHERE id = ?", {hash, id})) return fail_db(why, "a write");
     gen = user.session_gen + 1;
     audit(by, now, "password_changed", user.name, std::string());
     return true;

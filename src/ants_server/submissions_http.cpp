@@ -384,6 +384,7 @@ SubmissionApi::Session SubmissionApi::session_of(const HttpRequest& request, int
     if (uid <= 0 || gen <= 0 || nonce.empty() || nonce.size() > 64) return none;
     Session s;
     if (!accounts_.find(uid, s.user) || s.user.disabled || s.user.session_gen != gen) return none;          // (a reset, a disable, a removal or a new password made the cookie old)
+    if (accounts_.session_revoked(nonce)) return none;                                     // (signed out: this very cookie is dead, a copy of it too)
     s.nonce = nonce;
     s.valid = true;
     return s;
@@ -455,7 +456,7 @@ HttpResponse SubmissionApi::login(const HttpRequest& request, int64_t now_s, uin
     return r;
 }
 
-HttpResponse SubmissionApi::logout(const HttpRequest& request, const Session& who) {
+HttpResponse SubmissionApi::logout(const HttpRequest& request, const Session& who, int64_t now_s) {
     const std::string* site = request.header("sec-fetch-site");
     if (site != nullptr && *site != "same-origin") return error_reply(403, "cross_site", "This request must come from the site's own page.");
     if (who.valid) {
@@ -465,6 +466,9 @@ HttpResponse SubmissionApi::logout(const HttpRequest& request, const Session& wh
     JsonValue o = JsonValue::make_object();
     o.set("signed_in", JsonValue::make_bool(false));
     HttpResponse r = json_reply(200, o);
+    if (who.valid && !accounts_.revoke_session(who.nonce, now_s + config_.session_seconds + kSessionSlackS)) {
+        r = error_reply(503, "storage_error", "The server could not sign you out just now. Please try again.");        // (the cookie is cleared all the same; the session is not over on the server)
+    }
     r.set_cookies.push_back(clear_cookie());
     return r;
 }
@@ -541,7 +545,7 @@ HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now
         }
         return json_reply(200, o);
     }
-    if (path == "/admin/api/logout") return request.method == "POST" ? logout(request, who) : not_found();
+    if (path == "/admin/api/logout") return request.method == "POST" ? logout(request, who, now_s) : not_found();
     if (!who.valid) return not_found();                                             // (a visitor gets what an unknown path gets)
     if (cross_site(request) || path.size() < 11) return not_found();                // ("/admin/api" itself has no route)
     const std::string tail = path.substr(11);

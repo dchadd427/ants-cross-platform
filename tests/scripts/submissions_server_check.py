@@ -173,6 +173,10 @@ class TheWholeWay(unittest.TestCase):
         # the command line made the first Admin: the password was shown once, on standard output, and nowhere else
         self.assertEqual((self.cli.stderr, len(self.starting)), ("", 20))
         self.assertIn("Admin account created.\nUsername: Owner\nStarting password: " + self.starting + "\nShown once. Sign in at /admin and change it.\n", self.cli.stdout)
+        self.assertEqual(os.stat(self.results).st_mode & 0o777, 0o700)                             # (the accounts' hashes are for the server's user only: the folder, the database and the files that SQLite keeps beside it)
+        for name in os.listdir(self.results):
+            if name.startswith("ants.db"):
+                self.assertEqual(os.stat(os.path.join(self.results, name)).st_mode & 0o077, 0, name)
         again = subprocess.run([SERVER, "--admin-create", "Second", "--results-dir", self.results], capture_output=True, text=True, timeout=60)
         self.assertEqual((again.returncode, again.stdout), (1, ""))                                  # (an Admin exists: nothing is made, nothing is shown)
         # nobody is signed in: the page is told so; the owner's calls do not exist for a visitor

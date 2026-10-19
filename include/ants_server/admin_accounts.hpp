@@ -64,6 +64,8 @@ struct AccountConfig {
     size_t lock_rows_max{50000};              // rows of admin_locks; a table that is full of live rows answers "too many tries" to everybody new (it takes thousands of addresses to fill it)
     size_t checks_per_window{3};              // password checks in a window of hash_window_ms for the whole server (a check costs the one thread about 0.3 s)
     uint32_t hash_window_ms{10000};
+    int64_t starting_days{7};                 // a starting password that was not used to sign in and choose a new one by then is dead (a reset makes another)
+    size_t forced_checks_per_window{2};       // checks for "not the starting password" on a session that must choose a password: a budget of their own, so they cannot use up the sign-ins' (nor the other way round)
     size_t known_addresses{10};               // how many addresses are remembered for each user
     int64_t known_days{30};
     int64_t audit_days{180};
@@ -80,6 +82,7 @@ struct User {
     int64_t session_gen{1};
     int64_t created_at{0};
     int64_t last_login_at{0};                 // 0: never
+    int64_t starting_at{0};                   // when the starting password was made; 0 when the user has chosen their own
     std::string created_by;
 };
 
@@ -121,6 +124,9 @@ public:
     /// takes one of the server's checks: Ok means the same, Wrong not the same, Busy that the budget of checks is used up (nothing was checked).
     Attempt password_matches(const User& user, const std::string& password, uint32_t now_ms);
 
+    /// Signs one session out for good: its nonce is refused until the time the session would have ended anyway. False when the database failed.
+    bool revoke_session(const std::string& nonce, int64_t until);
+    bool session_revoked(const std::string& nonce);
     bool find(int64_t id, User& out);
     std::vector<User> list();
     /// Whether any Admin exists (disabled or not); false also when the database fails (`ok` says)
@@ -155,6 +161,8 @@ private:
     void clear_locks_of(const std::string& user_ref);
     bool lock_table_full(int64_t now);
     bool take_check(bool reserved, uint32_t now_ms);
+    bool take_forced_check(uint32_t now_ms);
+    void roll_window(uint32_t now_ms);
     bool known_address(int64_t id, const std::string& addr, int64_t now);
     void remember_address(int64_t id, const std::string& addr, int64_t now);
     std::string keyed(const char* scope, const std::string& text) const;
@@ -169,7 +177,7 @@ private:
     std::vector<std::string> notices_;
     bool open_{false};
     uint32_t window_start_ms_{0};
-    size_t window_used_{0}, window_reserved_used_{0};
+    size_t window_used_{0}, window_reserved_used_{0}, forced_used_{0};
     bool window_started_{false};
     size_t lock_rows_{0};
     size_t verifies_{0};

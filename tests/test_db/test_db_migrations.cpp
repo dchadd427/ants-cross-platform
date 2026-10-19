@@ -241,7 +241,7 @@ void run_migration_tests() {
         const std::string created = st.column_text(0);
         DB_CHECK(created.size() == 20 && created.substr(0, 2) == "20" && created.back() == 'Z');
         DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version') ORDER BY name)").ok());
-        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,admin_known_addr,admin_locks,admin_users,history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,submission_limits");
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,admin_known_addr,admin_locks,admin_revoked,admin_users,history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,submission_limits");
         DB_CHECK(migrate(db, list).ok());
         DB_CHECK(rows_in(db, "meta") == 1);
     } DB_END;
