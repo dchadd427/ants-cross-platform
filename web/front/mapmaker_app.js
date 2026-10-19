@@ -352,10 +352,24 @@
         };
     }
 
+    // Play this map (mapmaker_play.js and its style, loaded the first time): a test game against bots in a tab of its own; this tab is not touched, so the map comes back as it was, with its history
+    function playMap() {
+        if (dialogs.isOpen() || canvas.isStroking()) return;
+        var left = 2, bad = false;
+        function go() { win.MapPlay.open({ doc: doc, win: win, dialogs: dialogs, core: core, map: function () { return map; }, convert: ACTIONS.convert }); }
+        function end(ok) { bad = bad || !ok; if (--left) return; if (bad || !win.MapPlay) dialogs.message('This part did not load', 'The part of the page that plays a map did not load. Check your connection and try again.'); else go(); }
+        if (win.MapPlay) return go();
+        var s = el('script'), c = el('link');
+        s.src = 'front/mapmaker_play.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_play.css';
+        s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
+        doc.head.appendChild(c); doc.head.appendChild(s);
+    }
+
     var ACTIONS = {
+        play: playMap,
         submit: function () { if (!dialogs.isOpen() && !canvas.isStroking()) submitOr(function () { sent.open(); }); }, subs: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show('sent'); },
         'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }]); }
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }, { text: '\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }]); }
     };
 
     function start(module) {

@@ -236,6 +236,7 @@ add_executable(test_map_names
 
 target_link_libraries(test_map_names PRIVATE
     ants_server_core
+    ants_test_paths
 )
 
 target_include_directories(test_map_names PRIVATE

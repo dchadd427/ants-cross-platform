@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "ants_ai/bot_names.hpp"
+
 namespace ants::server::names {
 
 namespace {
@@ -114,6 +116,102 @@ std::string encode(const std::vector<char32_t>& v) {
     return out;
 }
 
+// Letters of the Cyrillic and Greek alphabets that are drawn like a Latin letter (both cases; the Latin letter is in lower case). The maker's name is judged on its folded form, so "Owner" written with
+// a Cyrillic O is the word "owner". Only letters that allowed_display_char lets through are listed. The browser's copy of this table is LOOK in web/front/mapmaker_submit.js.
+struct Lookalike {
+    char32_t from;
+    char to;
+};
+constexpr Lookalike kLookalikes[] = {
+    {0x0410, 'a'}, {0x0412, 'b'}, {0x0415, 'e'}, {0x041A, 'k'}, {0x041C, 'm'}, {0x041D, 'h'}, {0x041E, 'o'}, {0x0420, 'p'}, {0x0421, 'c'}, {0x0422, 't'}, {0x0423, 'y'}, {0x0425, 'x'},
+    {0x0430, 'a'}, {0x0435, 'e'}, {0x043A, 'k'}, {0x043E, 'o'}, {0x0440, 'p'}, {0x0441, 'c'}, {0x0443, 'y'}, {0x0445, 'x'},
+    {0x0391, 'a'}, {0x0392, 'b'}, {0x0395, 'e'}, {0x0396, 'z'}, {0x0397, 'h'}, {0x0399, 'i'}, {0x039A, 'k'}, {0x039C, 'm'}, {0x039D, 'n'}, {0x039F, 'o'}, {0x03A1, 'p'}, {0x03A4, 't'}, {0x03A5, 'y'}, {0x03A7, 'x'},
+    {0x03B1, 'a'}, {0x03B9, 'i'}, {0x03BA, 'k'}, {0x03BD, 'v'}, {0x03BF, 'o'}, {0x03C1, 'p'}, {0x03C5, 'u'}, {0x03C7, 'x'}, {0x03C9, 'w'},
+};
+
+// The folded text: every look-alike letter is its Latin letter, ASCII letters are lower case, everything else stays
+std::vector<char32_t> folded(const std::vector<char32_t>& v) {
+    std::vector<char32_t> out;
+    out.reserve(v.size());
+    for (char32_t c : v) {
+        for (const Lookalike& l : kLookalikes) {
+            if (l.from == c) {
+                c = static_cast<char32_t>(l.to);
+                break;
+            }
+        }
+        if (c >= U'A' && c <= U'Z') c = c - U'A' + U'a';
+        out.push_back(c);
+    }
+    return out;
+}
+
+// The base letter of a Latin letter with an accent or a stroke, U+00C0 .. U+017F, in lower case ('.' where there is none): the accents are not allowed in a maker's name, but "Ownér" is still the word
+// "owner" to a reader. The browser's copy is the same rule (NFD without the marks, and the strokes in ACCENTS of web/front/mapmaker_submit.js); a test holds both to this table.
+constexpr char32_t kAccentsFrom = 0x00C0;
+const char kAccents[] = "aaaaaa.ceeeeiiiidnooooo.ouuuuy..aaaaaa.ceeeeiiiidnooooo.ouuuuy.yaaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiii..jjkk.llllll..llnnnnnn...oooooo..rrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzz.";
+
+// The letters of a folded name as a reader takes them for a word: lower case, an accented letter as its base letter, "l" as "i", any other letter that is not ASCII as '?', no space, mark or digit
+// (`digits` false), or, with `digits` true, a digit that is drawn like a letter as that letter (0 o, 1 i, 3 e, 4 a, 5 s) and no other digit
+std::string skeleton_of(const std::vector<char32_t>& folded_name, bool digits) {
+    std::string skeleton;
+    for (char32_t c : folded_name) {
+        if (c >= kAccentsFrom && c < kAccentsFrom + sizeof kAccents - 1 && kAccents[c - kAccentsFrom] != '.') c = static_cast<char32_t>(kAccents[c - kAccentsFrom]);
+        if (digits && c >= U'0' && c <= U'5') {
+            const char letter = "oi eas"[c - U'0'];
+            if (letter != ' ') skeleton.push_back(letter);
+        } else if (c == U'l') {
+            skeleton.push_back('i');
+        } else if (c >= U'a' && c <= U'z') {
+            skeleton.push_back(static_cast<char>(c));
+        } else if (c >= 0x80) {
+            skeleton.push_back('?');
+        }
+    }
+    return skeleton;
+}
+
+// The names that only the owner or the site may have, as the letters of the folded name spell them (spaces and marks between them do not matter), also with "the" in front, with the digits left out or
+// read as the letters they look like
+bool reserved_maker_word(const std::vector<char32_t>& folded_name) {
+    static const char* const kWords[] = {"owner", "admin", "administrator", "system", "moderator", "mod", "staff", "assistant", "server", "ants", "root"};
+    for (const bool digits : {false, true}) {
+        std::string skeleton = skeleton_of(folded_name, digits);
+        if (skeleton.size() > 3 && skeleton.compare(0, 3, "the") == 0) skeleton.erase(0, 3);
+        for (const char* word : kWords) {
+            if (skeleton == word) return true;
+        }
+    }
+    return false;
+}
+
+// Does the folded name read like a bot's (ai::is_reserved_bot_name: "Bot (...)", "... (bot)")
+bool looks_like_bot(const std::vector<char32_t>& folded_name) {
+    std::string ascii;
+    for (const char32_t c : folded_name) ascii.push_back(c < 0x80 ? static_cast<char>(c) : '?');
+    return ants::ai::is_reserved_bot_name(ascii);
+}
+
+// Cuts to `most` characters and drops a space that the cut leaves at the end
+void cut_to(std::vector<char32_t>& v, size_t most) {
+    if (v.size() > most) v.resize(most);
+    while (!v.empty() && v.back() == U' ') v.pop_back();
+}
+
+// The characters of a description: see tidy_description
+std::string tidy_characters(const std::vector<char32_t>& in) {
+    std::vector<char32_t> v;
+    for (char32_t c : in) {
+        if (is_invisible(c)) continue;
+        if (c == U'\t' || c == U'\n' || c == U'\r' || c == 0x0B || c == 0x0C || is_other_space(c)) c = U' ';
+        if (is_control(c)) continue;
+        v.push_back(allowed_display_char(c) ? c : U'?');
+    }
+    tidy(v);
+    cut_to(v, kMaxDescriptionChars);
+    return encode(v);
+}
+
 }  // namespace
 
 bool decode_utf8(std::string_view bytes, std::vector<char32_t>& out) {
@@ -195,8 +293,44 @@ Cleaned clean_maker(std::string_view raw) {
     if (v.size() > kMaxMakerChars) return fail("too_long");
     Cleaned out;
     out.text = encode(v);
+    if (has_link_markup(out.text)) return fail("link");
+    const std::vector<char32_t> look = folded(v);
+    if (reserved_maker_word(look) || looks_like_bot(look)) return fail("reserved");
     out.ok = true;
     return out;
+}
+
+std::string fold_lookalikes(std::string_view text) {
+    std::vector<char32_t> v;
+    if (!decode_utf8(text, v)) return std::string(text);
+    return encode(folded(v));
+}
+
+bool has_link_markup(std::string_view cleaned_text) {
+    const std::string lower = lower_ascii(std::string(cleaned_text));
+    return lower.find("://") != std::string::npos || lower.find("www.") != std::string::npos || lower.find("```") != std::string::npos;
+}
+
+std::string tidy_description(std::string_view text) {
+    std::vector<char32_t> v;
+    if (!decode_utf8(text, v)) {
+        v.clear();
+        for (const char c : text) v.push_back(static_cast<unsigned char>(c));                  // (not UTF-8: Latin-1)
+    }
+    return tidy_characters(v);
+}
+
+std::string clean_description(std::string_view as_reported) {
+    std::vector<char32_t> v;
+    if (!decode_utf8(as_reported, v)) return tidy_description(as_reported);
+    std::string bytes;
+    for (const char32_t c : v) {
+        if (c > 0xFF) return tidy_characters(v);                                                // (already characters, not the file's bytes)
+        bytes.push_back(static_cast<char>(c));
+    }
+    std::vector<char32_t> as_text;
+    if (decode_utf8(bytes, as_text)) return tidy_characters(as_text);                           // (the file's bytes are UTF-8)
+    return tidy_characters(v);                                                                    // (else each byte is one Latin-1 letter)
 }
 
 Cleaned clean_note(std::string_view raw, size_t max_chars, bool required) {

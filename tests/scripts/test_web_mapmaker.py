@@ -728,7 +728,7 @@ class ThePage(unittest.TestCase):
 
     def test_every_button_that_the_page_has_is_wired_and_starts_off_until_the_core_is_there(self):
         acts = re.findall(r'data-act="([a-z-]+)"', self.page)
-        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "mine", "new", "open", "props", "save", "submit", "zoom-in", "zoom-out"])
+        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "mine", "new", "open", "play", "props", "save", "submit", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
         self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,", self.app)
@@ -844,6 +844,40 @@ class ThePage(unittest.TestCase):
                     finally:
                         shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
                     self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_pages_rules_for_the_makers_name_are_the_servers(self):
+        """The page's copy of the maker-name rules (mapmaker_submit.js: LOOK, makerProblem) is held to the server's (src/ants_server/map_names.cpp: kLookalikes, kWords): the same look-alike letters
+        with the same Latin letters, the same reserved words, the same script ranges, the same bot rule and the same link marks"""
+        cpp = read("src", "ants_server", "map_names.cpp")
+        server = dict((chr(int(code, 16)), letter) for code, letter in re.findall(r"\{(0x[0-9A-F]{4}), '(\w)'\}", cpp))
+        look = re.search(r"var LOOK = '([^']+)'", read("web", "front", "mapmaker_submit.js")).group(1)
+        self.assertEqual(len(look) % 2, 0)
+        page = dict((look[i], look[i + 1].lower()) for i in range(0, len(look), 2))      # (the page lower-cases the whole name afterwards)
+        self.assertEqual(len(page) * 2, len(look), "a letter twice in LOOK")
+        self.assertEqual(page, server, "the look-alike letters of the page and of the server")
+        self.assertGreaterEqual(len(server), 40)
+        words = re.search(r"kWords\[\] = \{([^}]+)\}", cpp).group(1)
+        server_words = re.findall(r'"(\w+)"', words)
+        page_words = re.search(r"\^\(the\)\?\(([a-z|]+)\)\$", read("web", "front", "mapmaker_submit.js")).group(1).split("|")
+        self.assertEqual(sorted(page_words), sorted(server_words), "the reserved words")
+        self.assertEqual(len(server_words), 11)
+        # the accents: the server's table (U+00C0 .. U+017F) is the page's rule (NFD without the marks, and the strokes of ACCENTS) on every one of those characters
+        table = re.search(r'const char kAccents\[\] = "([^"]+)";', cpp).group(1)
+        self.assertEqual(len(table), 0x180 - 0xC0)
+        probe = "".join(chr(c) for c in range(0xC0, 0x180))
+        done = subprocess.run([NODE, "-e", "const S = require(%s); const o = []; for (const c of %s) o.push(S.skeletons(c)[0] || '.'); console.log(JSON.stringify(o));" %
+                               (json.dumps(os.path.join(FRONT, "mapmaker_submit.js")), json.dumps(probe))], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        page_table = "".join("." if x == "." else ("?" if ord(x[0]) >= 0x80 else x) for x in json.loads(done.stdout))
+        expected = "".join("." if t == "." else ("i" if t == "l" else t) for t in table)          # (the page's "l" is "i" too)
+        self.assertEqual(page_table.replace("?", "."), expected, "the accents of the page and of the server")
+        # the digits that look like letters, and the "l"
+        self.assertIn('"oi eas"', cpp)
+        self.assertIn("'oi eas'", read("web", "front", "mapmaker_submit.js"))
+        # the link marks are the same text in both
+        self.assertIn('lower.find("://")', cpp)
+        self.assertIn('lower.find("www.")', cpp)
+        self.assertIn('lower.find("```")', cpp)
 
     def test_a_player_never_publishes_and_nothing_can_be_replaced_by_the_script_that_sends_maps(self):
         submit = read("web", "front", "mapmaker_submit.js")
@@ -963,8 +997,8 @@ class ThePage(unittest.TestCase):
         self.assertEqual(sorted(used - defined), [])
         self.assertRegex(self.css, r"\.cv canvas\.map \{[^}]*touch-action: none;")
         self.assertRegex(self.css, r"\.screen\.ed \{ height: 100vh; height: 100dvh;")
-        self.assertIn("@media (min-width: 601px) and (max-width: 1200px) and (min-height: 451px) {", self.css, "the top bar wraps in a narrow window (eight buttons since Submit for approval...)")
-        self.assertIn("@media (min-width: 1201px) and (max-width: 1330px) { .edmenu { gap: 6px; } .edmenu .btn.sm { padding-left: 9px; padding-right: 9px; } }", self.css, "and is a little tighter above it, so the kind tag is never covered")
+        self.assertIn("@media (min-width: 601px) and (max-width: 1220px) and (min-height: 451px) {", self.css, "the top bar wraps in a narrow window (eight buttons since Submit for approval..., nine since Play this map)")
+        self.assertIn("@media (min-width: 1221px) and (max-width: 1480px) { .edmenu { gap: 4px; } .edmenu .btn.sm { padding-left: 6px; padding-right: 6px; font-size: 14px; } }", self.css, "and is tighter above it, so the kind tag is never covered")
         for part in (".mine { position: absolute; inset: 0; z-index: 8; overflow: auto; }", ".mine { position: static; overflow: visible; flex: 1 0 auto; }", ".mlist { grid-template-columns: 1fr 1fr; gap: 10px; }"):
             self.assertIn(part, self.css, "My maps: the screen over the editor, flowing on a phone, two columns sideways")
         self.assertRegex(self.css, r"\.mchip \{ min-height: 44px;", "the filters are 44 pixels")

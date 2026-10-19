@@ -907,6 +907,11 @@ int main() {
         ASSERT_TRUE(t.accounts->session_revoked("nonce-1"));
         t.accounts->maintenance(t.now + 101);
         ASSERT_FALSE(t.accounts->session_revoked("nonce-1"));
+        ASSERT_TRUE(t.accounts->revoke_session("nonce-long", t.now + 12 * 3600));                   // (a real session life: the upkeep an hour later must not forget it)
+        t.accounts->maintenance(t.now + 3600);
+        ASSERT_TRUE(t.accounts->session_revoked("nonce-long"));
+        t.accounts->maintenance(t.now + 12 * 3600 - 1);
+        ASSERT_TRUE(t.accounts->session_revoked("nonce-long"));
         const User dave = t.add("dave", "admin");
         ASSERT_EQ(t.sign_in("dave", "a long password", "203.0.113.1"), Attempt::Wrong);             // (the one sign-in check of the window)
         ASSERT_EQ(t.sign_in("dave", "a long password", "203.0.113.2"), Attempt::Busy);

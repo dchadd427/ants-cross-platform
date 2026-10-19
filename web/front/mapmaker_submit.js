@@ -34,7 +34,18 @@
     }
     function textProblem(text, most, what) {
         if (chars(text) > most) return 'The ' + what + ' can have ' + most + ' characters at most.';
-        return /[<>]/.test(text) ? 'The ' + what + ' cannot have the marks < and >.' : '';
+        return /[<>]/.test(text) ? 'The ' + what + ' cannot have the marks < and >.' : /:\/\/|www\./i.test(text) || text.indexOf('```') >= 0 ? 'The ' + what + ' cannot have a web address or three backticks.' : '';
+    }
+    // The maker's name as the server judges it again (map_names.cpp): look-alike letters, accents, "l" as "i" and digits as letters are folded; LOOK and ACCENTS are pairs (from, to)
+    var LOOK = 'АAВBЕEКKМMНHОOРPСCТTУYХXаaеeкkоoрpсcуyхxΑAΒBΕEΖZΗHΙIΚKΜMΝNΟOΡPΤTΥYΧXαaιiκkνvοoρpυuχxωw', ACCENTS = 'ıiøołlđdðdħhŧt';
+    function fold(t) { return t.replace(/[^\x00-\x7f]/g, function (c) { var i = LOOK.indexOf(c); return i < 0 ? c : LOOK.charAt(i + 1); }).toLowerCase(); }
+    function skeletons(t) {
+        var f = fold(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[ıøłđðħŧ]/g, function (c) { return ACCENTS.charAt(ACCENTS.indexOf(c) + 1); }).replace(/l/g, 'i');
+        return [f, f.replace(/[0-5]/g, function (c) { return 'oi eas'.charAt(c); })].map(function (x) { return x.replace(/[^a-z\u0080-\uffff]/g, ''); });
+    }
+    function makerProblem(t) {
+        return skeletons(t).some(function (k) { return /^(the)?(owner|admin|administrator|system|moderator|mod|staff|assistant|server|ants|root)$/.test(k); }) || /^bot\(|\(bot(,[^()]+)?\)$/.test(fold(t).replace(/\s/g, '')) ?
+            'That player name cannot be used. Please choose another.' : '';
     }
     function when(sec, now) {
         var d = new Date(sec * 1000), t = new Date(now);
@@ -147,7 +158,7 @@
             function values() { return { name: Store.clean(nameIn.value), maker: Store.clean(makerIn.value), note: noteIn.value.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '') }; }
             function bad() {
                 var v = values();
-                return nameProblem(v.name) || (chars(v.maker) < 1 ? 'Please type the name that players will see as the maker.' : textProblem(v.maker, 24, 'player name')) || textProblem(v.note, 280, 'note');
+                return nameProblem(v.name) || (chars(v.maker) < 1 ? 'Please type the name that players will see as the maker.' : textProblem(v.maker, 24, 'player name') || makerProblem(v.maker)) || textProblem(v.note, 280, 'note');
             }
             function paint() {
                 var v = values(), nm = nameProblem(v.name), lib = env.store.libraryState();
@@ -364,5 +375,5 @@
         return { load: load, open: open, show: show, hide: function () { token++; }, count: function () { return visible().length; }, fromAddress: fromAddress, tokens: function () { return tokens.slice(); } };
     }
 
-    return { create: create, api: api, nameProblem: nameProblem, textProblem: textProblem, tokensOf: tokensOf, statusOf: statusOf, why: why, when: when, isOff: isOff };
+    return { create: create, api: api, nameProblem: nameProblem, textProblem: textProblem, makerProblem: makerProblem, skeletons: skeletons, tokensOf: tokensOf, statusOf: statusOf, why: why, when: when, isOff: isOff };
 });

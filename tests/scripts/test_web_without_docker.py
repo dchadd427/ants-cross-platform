@@ -562,6 +562,9 @@ class TheSiteConfiguration(Scratch):
         self.assertNotIn("/usr/share/nginx", text.replace("/w/fs/usr/share/nginx/html", ""))
         self.assertNotIn("/var/cache/nginx", text)
         self.assertIn("location = /busy", text, "the rest of the file is as it was")
+        self.assertNotIn("/dev/stdout", text, "the image's log lines (the submission paths log to its output) go nowhere here")
+        self.assertIn("log_format ants_noquery ", text, "but the log format stays, a location that is left would not know it")
+        self.assertEqual(text.count("access_log off;"), 4)           # (the three paths and the one-time code of the logon)
 
     def test_a_file_that_the_tool_cannot_move_is_an_error(self):
         for conf, wanted in (("server {\n    listen 80;\n    listen 80;\n}\n", "exactly one `listen 80;`"), ("server {\n    root /usr/share/nginx/html;\n}\n", "exactly one `listen 80;`"),

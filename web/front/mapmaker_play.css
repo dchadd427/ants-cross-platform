@@ -1,0 +1,33 @@
+/* "Play this map" of the map maker (web/front/mapmaker_play.js, docs/MAP_EDITOR.md): the start dialog, its refusal's list and the line that says that the player is back. Loaded with the script, the first
+   time the button is pressed; the tokens are mapmaker.css's and classic.css's. */
+.dlg.play { width: min(760px, 100%); }
+.dlg.play .dlg-in { padding-bottom: 4px; }
+.play-lead { font-size: 17px; line-height: 1.4; margin-bottom: 12px; } .play-lead b { font-weight: 500; color: var(--gold); }
+.play-quick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; } .play-ql { font-size: 15px; color: var(--muted); }
+.play-quick .btn.sm { min-height: 44px; } .play-quick .btn[disabled] { opacity: .45; cursor: default; }
+.play-seats { border-top: 1px solid var(--rule); }
+.pseat { display: grid; grid-template-columns: minmax(150px, 1fr) auto; gap: 8px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.pwho { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pdot { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #f4ece2; }
+.pname { display: flex; flex-direction: column; min-width: 0; } .pn { font-size: 18px; line-height: 1.2; } .pf { font-size: 14px; line-height: 1.3; color: var(--muted); overflow-wrap: anywhere; }
+.pseat.off .pn { color: var(--muted); } .pseat.off .pf { color: var(--warn); }
+.pchoices { display: grid; grid-template-columns: repeat(5, minmax(70px, 1fr)); gap: 6px; }
+.pc { position: relative; display: flex; align-items: center; justify-content: center; min-height: 46px; padding: 3px 4px; text-align: center; font-size: 15px; line-height: 1.15; color: var(--cream); background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); cursor: pointer; }
+.pc input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.pc:hover { background-color: var(--teal-hi); }
+.pc.on { background: var(--pressed); color: var(--pressed-ink); box-shadow: var(--btn-shadow-chosen); transform: translate(1px, 2px); }
+.pc:focus-within { outline: 3px solid var(--gold); outline-offset: 2px; }
+.pc.dis { opacity: .4; cursor: default; box-shadow: none; }
+.play-help { font-size: 14.5px; line-height: 1.4; color: var(--muted); margin: 10px 0 4px; }
+.play-status { font-size: 15px; line-height: 1.4; min-height: 22px; margin: 4px 0 8px; color: var(--ok); } .play-status.no { color: var(--warn); }
+.play-why { margin: 8px 0 4px 20px; font-size: 15px; line-height: 1.4; } .play-why li { margin-bottom: 4px; }
+.play-toast { position: fixed; left: 50%; bottom: 20px; z-index: 30; transform: translateX(-50%); max-width: min(520px, calc(100% - 32px)); padding: 12px 18px; font-size: 16px; line-height: 1.35; color: var(--cream); background: #0d1b16; border: 2px solid var(--frame-hi); border-radius: 8px; box-shadow: 3px 4px 0 var(--shadow); }
+@media (max-width: 600px) {
+    .pseat { grid-template-columns: 1fr; gap: 6px; }
+    .pchoices { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+    .pc { min-height: 48px; font-size: 13.5px; padding: 2px; }
+    .play-lead { font-size: 16px; }
+}
+@media (min-width: 601px) and (max-height: 450px) {
+    .pseat { padding: 4px 0; } .pc { min-height: 44px; } .play-help { display: none; }
+}

@@ -110,7 +110,7 @@ function element(attributes) {
 }
 function loadShell() {
     const block = between(shellText, 'ANTS_PAGE_BEGIN', 'ANTS_PAGE_END', shellPath);
-    const win = { location: { search: '', protocol: 'https:', host: 'example.test', href: 'https://example.test/', assign() {} }, localStorage: makeStorage({}), confirm() { return true; }, AntsMapFiles: require(path.join(repo, 'web', 'map_files.js')) };
+    const win = { location: { search: '', protocol: 'https:', host: 'example.test', href: 'https://example.test/', assign() {} }, localStorage: makeStorage({}), confirm() { return true; }, AntsMapFiles: require(path.join(repo, 'web', 'map_files.js')), AntsTestGame: require(path.join(repo, 'web', 'front', 'test_game.js')) };
     const stage = element({ 'data-aspect': '16:9' });
     const doc = {
         body: element(),
@@ -269,6 +269,22 @@ try {
     same('a map that is no text at all (an array in the query) is nothing', local('?map[]=tiny'), []);
     same('an address with no local parameter at all: nothing is given to the game (today\'s front page: the setup screen), whatever the browser remembered', [local('', 'Bob'), local('?aspect=4:3', 'Bob'), local('?x=1&y=2', 'Bob')], [[], [], []]);
     same('another page\'s parameters are not local ones (join, room, fill, seat, embed)', local('?join=/ws&room=abc&fill=hard&seat=2&embed=1'), []);
+
+    // a test game from the map maker (play.html?testmap=<id>&seats=<four letters>; web/front/test_game.js, docs/MAP_EDITOR.md "Play this map"): the map is the one name of the game's maps folder, you sit at the seat of the letter y,
+    // the bots at the others, and the address's own words never reach the game
+    {
+        const ID = 'k7m2xq9abc12', TEST = ['--map', 'Original-Ants/Maps/playtest.lvl', '--play'];
+        same('a test game: the map, the start, you at Green and a Medium bot at Red', local('?testmap=' + ID + '&seats=ymnn'), [...TEST, '--player', '0', '--bot', '1:medium']);
+        same('you at Black with a bot of each level at the others, and the name', local('?testmap=' + ID + '&seats=ehmy&name=Bob'), [...TEST, '--player', '3', '--bot', '0:easy', '--bot', '1:hard', '--bot', '2:medium', '--name', 'Bob']);
+        same('the remembered name is used for a test game too', local('?testmap=' + ID + '&seats=ymnn', 'Maya').slice(-2), ['--name', 'Maya']);
+        same('never --alone: a test game has a bot at least', local('?testmap=' + ID + '&seats=nnym').indexOf('--alone'), -1);
+        same('the page keeps the hand-over (and no map file to fetch)', [P.localArguments('?testmap=' + ID + '&seats=ymnn', '').test.id, P.localArguments('?testmap=' + ID + '&seats=ymnn', '').file, P.localArguments('?map=tiny', '').test], [ID, '', null]);
+        for (const bad of ['yyyy', 'nnnn', 'ynnn', 'mmmm', 'YMNN', 'ymn', 'ymnnn', 'ymnx', 'ymnn&x=1', '']) same('seats ' + JSON.stringify(bad) + ' start no test game', local('?testmap=' + ID + '&seats=' + encodeURIComponent(bad)), []);
+        for (const bad of ['', 'abc', 'ABCDEFGH', 'k7m2-q9abc12', '../k7m2xq9', 'k7m2xq9abc12 ']) same('hand-over ' + JSON.stringify(bad) + ' starts no test game', local('?testmap=' + encodeURIComponent(bad) + '&seats=ymnn'), []);
+        same('seats without a hand-over, and a hand-over without seats, start nothing', [local('?seats=ymnn'), local('?testmap=' + ID)], [[], []]);
+        same('a map of the six wins over a test game (one game only)', local('?testmap=' + ID + '&seats=ymnn&map=tiny'), ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone']);
+        same('bots of the front page are not mixed in a test game (the seats say who plays)', local('?testmap=' + ID + '&seats=ymnn&bots=hard&teams=0%2B1'), [...TEST, '--player', '0', '--bot', '1:medium']);
+    }
 
     // the name
     same('the name of the address', local('?map=tiny&name=Bob').slice(-2), ['--name', 'Bob']);

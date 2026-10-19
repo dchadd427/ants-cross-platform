@@ -1,14 +1,17 @@
 // Tests of the small pieces under the map submissions (docs/MAP_SUBMISSIONS.md): the rules for the text that a player sends (strict UTF-8, invisible characters, spaces, controls, the characters allowed, NFC without
 // tables, a name that is a safe file name), SHA-256 and HMAC-SHA-256 against the published vectors, base64url, the address that a request counts under, and the query of a call. Pure functions: no files, no network.
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <map>
 #include <set>
 
+#include "../common/ants_test_paths.hpp"
 #include "../common/test_assert.hpp"
 #include "ants_ctl/http.hpp"
+#include "ants_ctl/json.hpp"
 #include "ants_server/crypto.hpp"
 #include "ants_server/map_names.hpp"
 #include "ants_server/submissions_http.hpp"
@@ -35,6 +38,16 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 }
 
 using namespace ants::server;
+
+#define ASSERT_MSG(cond, msg) \
+    do { \
+        ++g_assert_count; \
+        if (!(cond)) { \
+            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n    " << (msg) << "\n"; \
+            ++g_test_failures; \
+            return; \
+        } \
+    } while (0)
 
 namespace {
 
@@ -207,6 +220,106 @@ int main() {
         ASSERT_EQ(note(std::string(281, 'n')).reason, std::string("too_long"));
         ASSERT_EQ(note(std::string(1000000, 'n')).reason, std::string("too_long"));
         ASSERT_EQ(note("a\x1B[31m").reason, std::string("control"));
+    } TEST_END();
+
+    TEST_CASE("NM2.5 The maker's name cannot pass for the owner or the site: look-alike letters, accents, and digits that look like letters are read as the letters, reserved words and bot-like names are refused as 'reserved', ordinary names of every script are not (cases: tests/data/maker_name_cases.json, shared with the page's check)") {
+        std::ifstream in(std::string(ANTS_SOURCE_DIR) + "/tests/data/maker_name_cases.json", std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        ants::ctl::JsonValue cases;
+        ASSERT_TRUE(ants::ctl::parse_json(text, cases, nullptr));
+        const auto reason = [](const std::string& raw) {
+            const names::Cleaned c = names::clean_maker(raw);
+            return c.ok ? std::string("ok") : c.reason;
+        };
+        ASSERT_TRUE(cases.get("reserved").size() > 40 && cases.get("ok").size() > 35);
+        for (size_t i = 0; i < cases.get("reserved").size(); ++i) {
+            const std::string name = cases.get("reserved").at(i).str();
+            ASSERT_MSG(reason(name) == "reserved", "should be reserved: " + name);
+        }
+        for (size_t i = 0; i < cases.get("ok").size(); ++i) {
+            const std::string name = cases.get("ok").at(i).str();
+            ASSERT_MSG(reason(name) == "ok", "should be accepted: " + name + " (" + reason(name) + ")");
+        }
+        ASSERT_EQ(names::clean_maker("Owner").text, std::string());                                // (a refusal has no text)
+        ASSERT_EQ(names::clean_maker("\xD0\x98\xD0\xB2\xD0\xB0\xD0\xBD").text, std::string("\xD0\x98\xD0\xB2\xD0\xB0\xD0\xBD"));      // an honest Cyrillic name is kept as typed
+        ASSERT_EQ(names::clean_maker("\xCE\xBC" "Torrent").text, std::string("\xCE\xBC" "Torrent"));                                 // and so is one that mixes alphabets
+    } TEST_END();
+
+    TEST_CASE("NM2.6 A web address or three backticks are refused in a maker's name ('link'); has_link_markup finds them whatever the case, and the owner's own messages (clean_note) are not touched") {
+        std::ifstream in(std::string(ANTS_SOURCE_DIR) + "/tests/data/maker_name_cases.json", std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        ants::ctl::JsonValue cases;
+        ASSERT_TRUE(ants::ctl::parse_json(text, cases, nullptr));
+        for (size_t i = 0; i < cases.get("link").size(); ++i) {
+            const std::string name = cases.get("link").at(i).str();
+            ASSERT_MSG(names::clean_maker(name).reason == "link", "should be a link: " + name);
+            ASSERT_TRUE(names::has_link_markup(names::clean_note(name, 280, false).text));          // (a note is judged on the cleaned text too)
+        }
+        for (size_t i = 0; i < cases.get("no_link").size(); ++i) {
+            const std::string name = cases.get("no_link").at(i).str();
+            ASSERT_MSG(!names::has_link_markup(name) && names::clean_maker(name).ok, "no link: " + name);
+        }
+        ASSERT_TRUE(names::clean_note("see https://example.org and www.example.org ```x```", 280, false).ok);          // (an owner's message may hold them: only a player's note is judged by the door)
+    } TEST_END();
+
+    TEST_CASE("NM2.7 The description of a map is player text: UTF-8 or Latin-1 read, controls and invisible characters dropped, blanks collapsed, other characters become '?', 100 characters at most, and cleaning twice changes nothing") {
+        const auto clean = [](const std::string& reported) { return names::clean_description(reported); };
+        ASSERT_EQ(clean(""), std::string());
+        ASSERT_EQ(clean("Plain words"), std::string("Plain words"));
+        ASSERT_EQ(clean("Do this now\n\x1B[31mat once<b"), std::string("Do this now [31mat once?b"));          // a line end is a space, ESC goes, the angle bracket is not allowed
+        ASSERT_EQ(clean("a\x01" "b\x7F" "c"), std::string("abc"));
+        ASSERT_EQ(clean(std::string("a\0b", 3)), std::string("ab"));
+        ASSERT_EQ(clean("  a \t\t b \r\n\r\n c  "), std::string("a b c"));
+        ASSERT_EQ(clean("a\xC2\xA0\xC2\xA0" "b"), std::string("a b"));                                           // the file's bytes A0 A0 are no UTF-8: two Latin-1 no-break spaces, which become one space
+        ASSERT_EQ(clean("ab\xE2\x80\xAE" "cd\xE2\x80\x8B" "ef"), std::string("abcdef"));                          // bidi override and zero width space (a character above U+00FF is taken as it is)
+        // the core reports each byte of the file as one character U+0000 .. U+00FF: a file with the UTF-8 bytes of "Cafe" + e-acute (C3 A9) arrives as C3 83 C2 A9
+        ASSERT_EQ(clean("Caf\xC3\x83\xC2\xA9"), std::string("Caf\xC3\xA9"));
+        ASSERT_EQ(clean("Caf\xC3\xA9"), std::string("Caf\xC3\xA9"));                                              // a file with the single byte E9 (Latin-1) arrives as C3 A9: the same letter
+        ASSERT_EQ(clean("\xC3\xA9("), std::string("\xC3\xA9("));                                                  // the bytes E9 28 are no UTF-8: Latin-1
+        ASSERT_EQ(clean("x\xC3\x83y"), std::string("x\xC3\x83y"));                                                // the bytes x C3 y: Latin-1 again
+        ASSERT_EQ(clean("\xE6\x97\xA5"), std::string("\xE6\x97\xA5"));                                              // a character above U+00FF (not a file byte) is kept when it is allowed
+        ASSERT_EQ(clean("x\xF0\x9F\x98\x80y"), std::string("x?y"));                                               // an emoji
+        ASSERT_EQ(clean("e\xCC\x81"), std::string("e?"));                                                         // a combining mark is not in the allowed set
+        ASSERT_EQ(clean(std::string(150, 'a')), std::string(100, 'a'));
+        ASSERT_EQ(clean(std::string(99, 'a') + " bcd"), std::string(99, 'a'));                                    // (the cut leaves no space at the end)
+        ASSERT_EQ(clean(std::string(300, '\n')), std::string());
+        // every single byte of a file, as the core reports it: no control character, never more than 100 characters, and the same again when cleaned again
+        for (int b = 0; b < 256; ++b) {
+            std::string reported;
+            names::append_utf8(reported, static_cast<char32_t>(b));
+            const std::string once = clean("x" + reported + "y");
+            for (const char c : once) ASSERT_TRUE(static_cast<unsigned char>(c) >= 0x20 && c != 0x7F);
+            ASSERT_EQ(names::tidy_description(once), once);
+        }
+        const std::string two_characters = "\xC3\x83\xC2\xA9";                                                  // the characters A-tilde and the copyright sign (the bytes C3 A9 of one letter, as the core reports them)
+        ASSERT_EQ(names::clean_description(two_characters), std::string("\xC3\xA9"));                              // read as the file's bytes: one letter
+        ASSERT_EQ(names::tidy_description(two_characters), std::string("\xC3\x83?"));                              // read as characters (a row of the database): never decoded a second time, the sign is not allowed
+        ASSERT_EQ(names::tidy_description("Raw\nrow <b>\x1B"), std::string("Raw row ?b?"));                       // what the readers of the database do with an old row
+    } TEST_END();
+
+    TEST_CASE("NM2.8 Every look-alike letter of the Cyrillic and Greek alphabets that the server folds is listed here, with its Latin letter (the page's copy of the table is held to this list by tests/scripts/test_web_mapmaker.py), and nothing else is folded") {
+        const struct {
+            const char* from;
+            const char* to;
+        } kPairs[] = {
+            {"\xD0\x90", "a"}, {"\xD0\x92", "b"}, {"\xD0\x95", "e"}, {"\xD0\x9A", "k"}, {"\xD0\x9C", "m"}, {"\xD0\x9D", "h"},
+            {"\xD0\x9E", "o"}, {"\xD0\xA0", "p"}, {"\xD0\xA1", "c"}, {"\xD0\xA2", "t"}, {"\xD0\xA3", "y"}, {"\xD0\xA5", "x"},
+            {"\xD0\xB0", "a"}, {"\xD0\xB5", "e"}, {"\xD0\xBA", "k"}, {"\xD0\xBE", "o"}, {"\xD1\x80", "p"}, {"\xD1\x81", "c"},
+            {"\xD1\x83", "y"}, {"\xD1\x85", "x"}, {"\xCE\x91", "a"}, {"\xCE\x92", "b"}, {"\xCE\x95", "e"}, {"\xCE\x96", "z"},
+            {"\xCE\x97", "h"}, {"\xCE\x99", "i"}, {"\xCE\x9A", "k"}, {"\xCE\x9C", "m"}, {"\xCE\x9D", "n"}, {"\xCE\x9F", "o"},
+            {"\xCE\xA1", "p"}, {"\xCE\xA4", "t"}, {"\xCE\xA5", "y"}, {"\xCE\xA7", "x"}, {"\xCE\xB1", "a"}, {"\xCE\xB9", "i"},
+            {"\xCE\xBA", "k"}, {"\xCE\xBD", "v"}, {"\xCE\xBF", "o"}, {"\xCF\x81", "p"}, {"\xCF\x85", "u"}, {"\xCF\x87", "x"},
+            {"\xCF\x89", "w"},
+        };
+        size_t count = 0;
+        for (const auto& p : kPairs) {
+            ASSERT_EQ(names::fold_lookalikes(p.from), std::string(p.to));
+            ++count;
+        }
+        ASSERT_EQ(count, size_t{43});
+        ASSERT_EQ(names::fold_lookalikes("Owner ADMIN 123 _-. J\xC3\xBCrgen"), std::string("owner admin 123 _-. j\xC3\xBCrgen"));      // (ASCII letters to lower case, a Latin-1 letter stays)
+        ASSERT_EQ(names::fold_lookalikes("\xD0\x94\xCE\xB4\xCE\x98\xE6\x97\xA5"), std::string("\xD0\x94\xCE\xB4\xCE\x98\xE6\x97\xA5"));      // (letters without a Latin twin stay as they are)
+        ASSERT_EQ(names::fold_lookalikes("\xC3\x28"), std::string("\xC3\x28"));                                                                  // (not UTF-8: unchanged)
     } TEST_END();
 
     TEST_CASE("NM3.1 The next free name: from 2, the number it ends in is replaced, a taken number is skipped, the name is cut to fit, no name is free after 999") {

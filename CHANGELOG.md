@@ -17,13 +17,13 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 **Fixes:**
 - one line each (optional)
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...b2150865)
 
 Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.89 - 2026-10-19 - Owner page: sign in with a username and a password (replaces Discord)
+## v0.12.93 - 2026-10-19 - Owner page: sign in with a username and a password (replaces Discord)
 
 **For players:**
 - Owner page: you sign in with a username and a password instead of Discord. There are two roles: an Admin does everything, including adding users, resetting or removing them and reading the list of sign-ins and actions; a Moderator approves, declines, takes down and puts back maps. The lists show who decided each map.
@@ -32,7 +32,41 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21). The server's database moves from schema version 5 to 6 at its first start (copy `ants.db` first: an older program refuses version 6).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...4b6b48f3)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...0eaf7195)
+
+## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
+
+**For players:**
+- Map maker: "Fix edges..." no longer doubles an edge. Where the map already has a piece on one side of a boundary, the other side gets none, so the original Treasure map needs no changes and the seam lines are gone. A second press changes nothing.
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9bedadc0...4fefb548)
+
+## v0.12.90 - 2026-10-18 - Map maker: Play this map (against bots)
+
+**For players:**
+- Map maker: a gold "Play this map" button (the first of the top bar, and in a phone's Menu) starts a test game on the map you are drawing, against bots, in a new tab. Choose your color and the bots (Easy, Medium or Hard) or leave a color empty; at least one bot is needed. The game says "Not saved. Not counted." and "Back to editor" asks once and closes the tab: the map maker is as you left it, with its Undo history.
+- A map that cannot be played says why in plain words: an Extended map, or a map bigger than the game can play yet (more than 90 rows), a color without a hill or starting ants, or a problem that the check found.
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6afbd600...5004dce3)
+
+## v0.12.89 - 2026-10-18 - Safer player text on the server: descriptions, maker names, logs, page headers (injection hardening, server)
+
+**For players:**
+- Maps sent for approval: the server now cleans the map's description before it is stored or listed (odd characters become "?", blanks are tidied, at most 100 characters); the map file itself is not changed.
+- A maker's name can no longer pass for the owner or the site ("Owner", "Admin", "System", "Root" and the like, also written with look-alike letters, accents or digits such as 0wner), and a note or a maker's name cannot hold a web address or three backticks. The map maker tells you while you type.
+- The map maker page is now sent with a strict content security policy and cannot be put inside another page.
+
+**Rules / network:** none (protocol 21).
+
+**Fixes:**
+- The web server's log no longer copies the name, maker and note of a sent map (it logs the path only).
+- `lvl_tool info` prints a map's description escaped.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
 
 ## v0.12.88 - 2026-10-18 - Player text is marked as data on the owner page; safer links (injection hardening, web)
 
@@ -643,32 +677,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
 
-## v0.12.16 - 2026-10-12 - Auto camera for replays and live matches
+## Older versions (v0.12.16 and before)
 
-**For players:**
-- **Auto camera for replays and live matches.** The picture goes to the busiest place (fights, thefts, fires, bombs) and stays there at least 3 seconds; rings on the minimap show where things happen. **Manual camera** leaves the picture where you put it. Moving the picture by hand (the edge of the screen, the minimap, two fingers) switches to Manual; zooming does not. The button is in the bar (a row of its own on a phone, an icon in fullscreen) and what you chose is remembered on the device.
-- **Nothing can be picked in a replay:** no click, drag box, corner marks, Move and Stop buttons, order markers, voices or inspect panel. Matches you play are the same.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.15...v0.12.16); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
-
-## v0.12.15 - 2026-10-11 - Community maps load in the browser
-
-**For players:**
-- **A room can play any community map in the browser:** when the leader picks a map of the community, every browser downloads that one file before the match loads (it is checked to be the host's copy) and the match waits for everybody. The same goes for watching a recording of such a match.
-- A map that cannot be had (taken off the site, no connection, too slow) stops that start for the room, with the reason on screen; the leader's next START tries again.
-
-**Rules / network:** none: the simulation and the protocol are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9f65f043...9e408a1b)
-
-## v0.12.14 - 2026-10-11 - The server knows the community maps and lists them
-
-**For players:**
-- **The server knows all the community maps** and the lobby can choose any of them, not only the six of the original game.
-- **The map list is public:** `GET /maps` lists every map with its size, players, minutes, how often it was played and a preview picture; the previews and the map files are served by the site.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.13...v0.12.14)
-
-## Older versions (v0.12.13 and before)
-
-Every release before v0.12.14, and the long notes of v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.18, and the long notes of v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

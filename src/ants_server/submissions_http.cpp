@@ -234,12 +234,12 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
     const std::string identity = client_identity(request, config_.trust_client_header);
     if (identity.empty()) return error_reply(400, "no_address", "The server cannot tell where this request came from.");
     if (!address_allowed(identity, now_s)) return error_reply(429, "too_many_requests", "Too many tries from this address. Please try again in an hour.");
+    if (request.query.size() > 4096) return error_reply(414, "query_too_long", "The request is too long.");          // (before anything is decoded)
     SubmitInput in;
     if (!query_value(request.query, "kind", in.kind)) in.kind.clear();
     if (!query_value(request.query, "name", in.name)) in.name.clear();
     if (!query_value(request.query, "maker", in.maker)) in.maker.clear();
     if (!query_value(request.query, "note", in.note)) in.note.clear();
-    if (request.query.size() > 4096) return error_reply(414, "query_too_long", "The request is too long.");
     in.bytes = request.body;
     in.address = identity;
     in.token = bearer_of(request);

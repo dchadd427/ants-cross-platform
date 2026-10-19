@@ -347,7 +347,7 @@
   {
    "id": "store_key_keeps_zero_width",
    "file": "web/front/mapmaker_store.js",
-   "old": ".replace(/[\\u200B-\\u200D\\uFEFF]/g, '')",
+   "old": ".replace(/[\\u00AD\\u034F\\u061C\\u115F\\u1160\\u17B4\\u17B5\\u180B-\\u180E\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\u3164\\uFE00-\\uFE0F\\uFEFF\\uFFA0]|\\uDB40[\\uDC00-\\uDFFF]/g, '')",
    "new": "",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },

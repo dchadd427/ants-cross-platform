@@ -28,8 +28,8 @@ if (begin < 0 || end < begin || text.indexOf('ANTS_REPORT_BEGIN', begin + 1) >= 
 const block = text.slice(text.indexOf('\n', begin) + 1, text.lastIndexOf('\n', end));
 
 // A page whose global scope has the given fetch (and nothing else): the block is a script, and its function is a global of the page, as the game's EM_JS code needs it
-function page(fetchImpl) {
-    const context = vm.createContext({ fetch: fetchImpl });
+function page(fetchImpl, extra) {
+    const context = vm.createContext(Object.assign({ fetch: fetchImpl }, extra || {}));
     vm.runInContext(block, context);
     return context;
 }
@@ -56,6 +56,18 @@ process.on('unhandledRejection', () => { unhandled++; });
         context.antsReportLocalGame();
         await quiet();
         check('it does not remember: each call is a request (the game says when a match began, once for each match)', calls.length === 3, calls.length);
+    }
+
+    // 1b. a test game from the map maker (the game page's ANTS_TEST holds it) is not counted: no request at all; a page without a test game counts as before
+    {
+        const calls = [];
+        const fetchImpl = function () { calls.push(Array.prototype.slice.call(arguments)); return Promise.resolve({ ok: true, status: 204 }); };
+        page(fetchImpl, { ANTS_TEST: { id: 'k7m2xq9abc12' } }).antsReportLocalGame();
+        await quiet();
+        check('a test game from the map maker makes no request', calls.length === 0, calls.length);
+        page(fetchImpl, { ANTS_TEST: null }).antsReportLocalGame();
+        await quiet();
+        check('a page that has no test game (ANTS_TEST is null) counts the game', calls.length === 1, calls.length);
     }
 
     // 2. every way to fail is swallowed, nothing is retried, nothing is left unhandled

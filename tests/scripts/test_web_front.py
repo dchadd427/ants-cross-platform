@@ -51,11 +51,15 @@ MAPMAKER_LAZY = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 BUDGET = 1300 * 1000        # bytes: the whole folder (about 0.98 MB: some 427 KB of pictures, the font, the lobby's scripts and the map maker's); a picture that grows past this is a decision, not an accident
+PLAY_LAZY = ("mapmaker_play.js", "mapmaker_play.css")        # the map maker's Play this map (docs/MAP_EDITOR.md): its script and its style are loaded together the first time the button is pressed (web/front/mapmaker_app.js, playMap)
+PLAY_BUDGET, PLAY_GZIP_BUDGET = 24 * 1000, 8 * 1000        # bytes, raw and gzipped, both files together (about 20,000 and 6,600): their own limits, because the editor's eagerly loaded scripts are at 92,400 of their 94,000 gzipped and every other new part had to be loaded on demand; a player who never tests a map downloads none of it
+GAME_SCRIPTS = ("test_game.js",)        # the game page's side of Play this map (web/shell.html loads it with the other scripts of this folder): not the lobby's, not the editor's
+GAME_BUDGET, GAME_GZIP_BUDGET = 14 * 1000, 5 * 1000        # bytes, raw and gzipped (about 10,700 and 4,100): its own limits, because it is neither the editor's nor the lobby's, and the game page downloads it for every visit
 SUBMIT_LAZY = ("mapmaker_submit.js",)        # the map maker's script that is loaded only when a player sends a map or looks at My submissions (web/front/mapmaker_app.js, withSubmit): not in the page's own list of scripts, so apart from the budget below
-SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET = 32 * 1000, 9500        # bytes, raw and gzipped (raised from 30,000 and 9,000 for the question before a status link adds anything and the linked tokens that a send never uses; the file is about 30,200 and 9,150 now): its own limits, so that the eagerly loaded scripts keep theirs (340,000 and 90,000) and a player who never sends a map downloads nothing of it
+SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET = 32 * 1000, 10 * 1000        # bytes, raw and gzipped: its own limits, so that the eagerly loaded scripts keep theirs (340,000 and 90,000) and a player who never sends a map downloads nothing of it; raised from 30,000 and 9,000 on purpose in the injection hardening: the file had 1,100 and 120 bytes left, and the browser's copy of the server's new maker-name rules (look-alike letters, reserved words, links) takes about 1,300 and 650; the question before a status link and the linked tokens (injection hardening, web) took the rest of the room
 EDITOR_BUDGET = 340 * 1000        # bytes: the map maker's own scripts and style (mapmaker_*.js, mapmaker.css), measured apart from the pictures so that the editor's growth is seen (raised from 260,000 in E5: saving, drafts and the lists of E6 need the room; the gzipped cap below stays)
 LAZY_BUDGET = 46 * 1000        # bytes: the three lazily loaded map maker scripts together (about 44,000 now), and gzipped below (about 14,700): added with the sprites (docs/MAP_EDITOR.md, "Sprites"), so the editor's own caps did not have to move; raised from 36,000 and 12,000 on purpose in Fix edges (sprites part 2), which adds mapmaker_edges.js (the rule and its dialog, about 13,000 bytes) here and not to the eagerly loaded scripts
-LAZY_GZIP_BUDGET = 15 * 1000
+LAZY_GZIP_BUDGET = 16 * 1000       # (raised from 15,000 on purpose in the Fix edges fixes: one wearer per boundary and the tile a neighbor ends with, about 600 bytes gzipped, are lazy code; the three scripts are 15,283 now)
 EDITOR_GZIP_BUDGET = 94 * 1000      # bytes: the same, gzipped file by file (what a player downloads); raised from 90,000 in the sprites part 1, on purpose: the pictures' own page code and Submit for approval met in one release (the files summed 91,602); raised from 80,000 in E5: the files already summed 76,973 before it (the 68 KB that was quoted is another way of counting) and E5 adds about 4,300
 
 
@@ -226,7 +230,7 @@ class Sheet:
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_exactly_the_files_that_the_tool_makes_the_shared_stylesheet_the_lobbys_stylesheets_and_the_scripts(self):
-        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS) + list(MAPMAKER_FILES) + list(MAPMAKER_LAZY) + list(SUBMIT_LAZY)))
+        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS) + list(MAPMAKER_FILES) + list(MAPMAKER_LAZY) + list(SUBMIT_LAZY) + list(PLAY_LAZY) + list(GAME_SCRIPTS)))
 
     def test_every_picture_is_a_png_of_the_size_that_the_page_gives_it(self):
         for name, size in PICTURES.items():
@@ -264,6 +268,24 @@ class TheFolder(unittest.TestCase):
             self.assertLess(len(gzip.compress(data, 9)), SUBMIT_GZIP_BUDGET, "%s gzipped" % name)
             self.assertNotIn(name, read("web", "mapmaker.html"), "a lazily loaded script has no tag in the page")
             self.assertIn("'front/%s'" % name, read("web", "front", "mapmaker_app.js"), "the page loads it itself, when it is needed")
+
+    def test_play_this_map_is_loaded_on_demand_and_has_budgets_of_its_own(self):
+        import gzip
+        raw = zipped = 0
+        for name in PLAY_LAZY:
+            data = read_bytes("web", "front", name)
+            raw += len(data)
+            zipped += len(gzip.compress(data, 9))
+            self.assertNotIn(name, read("web", "mapmaker.html"), "a lazily loaded file has no tag in the page")
+        self.assertLess(raw, PLAY_BUDGET, "Play this map's script and style are %d bytes" % raw)
+        self.assertLess(zipped, PLAY_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
+        app = read("web", "front", "mapmaker_app.js")
+        self.assertIn("s.src = 'front/mapmaker_play.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_play.css';", app, "the page loads both itself, when the button is pressed")
+        for name in GAME_SCRIPTS:
+            data = read_bytes("web", "front", name)
+            self.assertLess(len(data), GAME_BUDGET, "%s is %d bytes" % (name, len(data)))
+            self.assertLess(len(gzip.compress(data, 9)), GAME_GZIP_BUDGET, "%s gzipped" % name)
+            self.assertIn('<script src="front/%s"></script>' % name, read("web", "shell.html"), "the game page loads it")
 
     def test_the_font_is_a_byte_copy_of_the_games_own_with_its_licence_beside_it(self):
         for name in FONT_FILES:
@@ -655,7 +677,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY) - set(SUBMIT_LAZY)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY) - set(SUBMIT_LAZY) - set(PLAY_LAZY) - set(GAME_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)
