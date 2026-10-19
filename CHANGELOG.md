@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Nothing changes yet: the game's ants and the computer players can now cross and use every row of a map taller than 90 rows (the new Extended maps), where the old rule put an invisible wall across row 90. Every existing map plays exactly as before.
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
+
 ## v0.12.85 - 2026-10-18 - The grid reads Extended maps (no change to play)
 
 **For players:**
