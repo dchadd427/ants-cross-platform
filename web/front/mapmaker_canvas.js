@@ -46,8 +46,7 @@
             if (m.width !== mini.width || m.height !== mini.height) { m.width = mini.width; m.height = mini.height; }
             ctx.drawImage(mini, 0, 0);
             var f = View.miniFrame(view, file, w, h, mini.width, mini.height);
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeRect(f.x, f.y, f.w, f.h);
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(f.x, f.y, f.w, f.h);
+            ctx.strokeStyle = '#fbfbff'; ctx.lineWidth = 1; ctx.strokeRect(Math.floor(f.x) + 0.5, Math.floor(f.y) + 0.5, Math.max(1, Math.round(f.w) - 1), Math.max(1, Math.round(f.h) - 1));
         }
 
         function brushNow() { return painter ? painter.size() : 0; }
@@ -148,7 +147,7 @@
             if (ids.length === 1) {
                 var cell = cellOf(p), mouse = e.pointerType === 'mouse', panning = mouse && (e.button === 1 || spaceHeld);
                 var tapTool = !panning && !!cell && tapOnly();                          // (a tool that puts a whole thing with a tap: a drag looks around instead)
-                var brush = !panning && !tapTool && brushNow() > 0 && !!cell;
+                var brush = !panning && !tapTool && (brushNow() > 0 || (!!painter && !!painter.canMove && painter.canMove(cell))) && !!cell;
                 drag = { x: p.x, y: p.y, moved: false, pan: !brush, place: tapTool };
                 if (e.button === 1) e.preventDefault();
                 if (brush) {

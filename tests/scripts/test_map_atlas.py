@@ -165,8 +165,8 @@ class TheAtlas(unittest.TestCase):
 
     def test_every_object_that_the_editor_offers_is_in_the_sheet_with_the_offset_of_its_frame(self):
         script = r"""
-const P = require(%r), B = require(%r), pick = (l) => l.map((r) => r[0]);
-console.log(JSON.stringify({ objects: pick(P.OBJECTS), bigger: pick(P.BIGGER), hills: B.TEAMS.map((t) => t.hill), food: Object.keys(B.FOOD_NAMES).map(Number), stages: [].concat.apply([], Object.keys(B.FOOD).map((n) => B.FOOD[n].stages.map((s) => s[1]))).filter((t) => t !== 0x7FFE) }));
+const P = require(%r), B = require(%r), pick = (l) => (l || []).map((r) => r[0]);
+console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), bigger: pick(P.BIGGER), hills: B.TEAMS.map((t) => t.hill), food: Object.keys(B.FOOD_NAMES).map(Number), stages: [].concat.apply([], Object.keys(B.FOOD).map((n) => B.FOOD[n].stages.map((s) => s[1]))).filter((t) => t !== 0x7FFE) }));
 """ % (os.path.join(REPO, "web", "front", "mapmaker_palette.js"), os.path.join(REPO, "web", "front", "mapmaker_blocks.js"))
         import shutil
         import subprocess
@@ -174,7 +174,7 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), bigger: pick(P.BIGGER), h
         if not node:
             self.skipTest("node is not installed: the list of what the editor offers is read by it")
         offered = json.loads(subprocess.run([node, "-e", script], capture_output=True, text=True, check=True).stdout)
-        wanted = set(offered["objects"]) | set(offered["bigger"]) | set(offered["hills"]) | set(offered["food"]) | set(offered["stages"]) | {self.index["ant"], 129, 130, 131, 132}
+        wanted = set(offered["objects"]) | set(offered["plants"]) | set(offered["bigger"]) | set(offered["hills"]) | set(offered["food"]) | set(offered["stages"]) | {self.index["ant"], 129, 130, 131, 132}
         self.assertEqual(len(offered["bigger"]), 29)
         items = self.index["objects"]["items"]
         for ident in sorted(wanted):
@@ -197,9 +197,26 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), bigger: pick(P.BIGGER), h
                         self.assertEqual(got[:3], want[:3], "tile %s pixel %d,%d" % (key, row, col))
             boxes.append((int(key), x, y, x + iw, y + ih))
             self.assertTrue(0 <= avg <= 0xFFFFFF)
+        ants = self.index["ants"]
+        self.assertEqual(sorted(ants), ["black", "blue", "green", "red"])
+        ant_it = items["811"]
+        self.assertEqual(ants["black"], ant_it[:2])
+        aw, ah = ant_it[2], ant_it[3]
+        _sw, _sh, ant_pixels = sprite_pixels(self.frame0(811)[0])
+        for team in ("blue", "red", "green"):
+            ax, ay = ants[team]
+            self.assertTrue(ax >= 1 and ay >= 1 and ax + aw + 1 <= w and ay + ah + 1 <= h)
+            remap = dict(zip(map_atlas.ANT_RAMPS["black"], map_atlas.ANT_RAMPS[team]))
+            for row in range(ah):
+                for col in range(aw):
+                    want, got = ant_pixels[row][col], rows[ay + row][ax + col]
+                    self.assertEqual(got[3] == 0, want[3] < 128)
+                    if want[3] >= 128:
+                        self.assertEqual(got[:3], remap[want[:3]])
+            boxes.append(("ant_" + team, ax, ay, ax + aw, ay + ah))
         for i, a in enumerate(boxes):
             for b in boxes[i + 1:]:
-                self.assertTrue(a[3] + 1 <= b[1] or b[3] + 1 <= a[1] or a[4] + 1 <= b[2] or b[4] + 1 <= a[2], "pictures %d and %d are a pixel apart at least" % (a[0], b[0]))
+                self.assertTrue(a[3] + 1 <= b[1] or b[3] + 1 <= a[1] or a[4] + 1 <= b[2] or b[4] + 1 <= a[2], "pictures %s and %s are a pixel apart at least" % (a[0], b[0]))
 
     def test_the_other_objects_of_the_library_are_in_the_index_by_their_sprite_number(self):
         far, items = self.index["far"], self.index["objects"]["items"]
@@ -226,9 +243,9 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), bigger: pick(P.BIGGER), h
 
     def test_the_files_are_small_and_the_same_every_time(self):
         self.assertLess(self.sizes["ground.png"], 40000, "ground.png (about 35 KB)")
-        self.assertLess(self.sizes["objects.png"], 135000, "objects.png (about 123 KB)")
+        self.assertLess(self.sizes["objects.png"], 165000, "objects.png (about 155 KB)")
         self.assertLess(self.sizes["atlas.json"], 12000, "atlas.json (about 8 KB)")
-        self.assertLess(sum(self.sizes.values()), 180000, "the whole atlas (about 167 KB: the page fetches all of it at start)")
+        self.assertLess(sum(self.sizes.values()), 210000, "the whole atlas (about 199 KB: the page fetches all of it at start)")
         with tempfile.TemporaryDirectory() as again:
             map_atlas.build(SPRITES, CATALOG, again)
             for name in ("ground.png", "objects.png", "atlas.json"):

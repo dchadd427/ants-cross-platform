@@ -35,7 +35,7 @@ if (!ATLAS) {
     if (made.status !== 0) { console.log('the atlas could not be made: ' + made.stdout + made.stderr); process.exit(1); }
 }
 const load = (name) => require(path.join(FRONT, name));
-const File = load('mapmaker_file.js'), Tiles = load('mapmaker_tiles.js'), Sprites = load('mapmaker_sprites.js'), View = load('mapmaker_view.js');
+const File = load('mapmaker_file.js'), Tiles = load('mapmaker_tiles.js'), Sprites = load('mapmaker_sprites.js'), View = load('mapmaker_view.js'), Blocks = load('mapmaker_blocks.js'), Edit = load('mapmaker_edit.js');
 
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
@@ -66,7 +66,7 @@ function environment(opts) {
             log.push({ op: 'drawImage', owner, img, a, alpha: state.alpha });
         };
         ctx.createImageData = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(4 * w * h) });
-        ctx.putImageData = () => {}; ctx.getImageData = () => ({ data: [0, 0, 0, 0] });
+        ctx.putImageData = (img, x, y) => { log.push({ op: 'putImageData', owner, img, a: [x, y] }); }; ctx.getImageData = () => ({ data: [0, 0, 0, 0] });
         return ctx;
     }
     function makeCanvas() {
@@ -138,7 +138,7 @@ async function caseA() {
     Tiles.setAverages('000000'.repeat(239), {});     // (put the flat colors away, then load again below to see the averages come from the atlas)
     const again = await ready();
     check(Tiles.css(485, EMPTY2) === '#' + INDEX.ground.avg.substr((485 - 431) * 6, 6), 'the average colors of the pictures replace the flat ones: ' + Tiles.css(485, EMPTY2));
-    check(Tiles.css(0, 62) === '#' + ('00000' + INDEX.objects.items['62'][6].toString(16)).slice(-6) && Tiles.css(0, 410) === '#' + ('00000' + INDEX.far['410'][3].toString(16)).slice(-6), 'and those of the objects, in the sheet and fetched alone');
+    check(Tiles.css(0, 62) === '#' + ('00000' + INDEX.objects.items['62'][6].toString(16)).slice(-6) && Tiles.css(0, 410) === '#' + ('00000' + INDEX.objects.items['410'][6].toString(16)).slice(-6) && Tiles.css(0, 347) === '#' + ('00000' + INDEX.far['347'][3].toString(16)).slice(-6), 'and those of the objects, in the sheet and fetched alone');
     check(again.sprites.ready(), 'ready again');
     for (const [what, opts, name] of [['the index is not there', { missing: 'atlas.json' }], ['the network is down', { fetchFails: true }], ['the index is of another version', { badIndex: true }], ['a sheet does not load', { imageFails: 'objects.png' }], ['the ground sheet does not load', { imageFails: 'ground.png' }]]) {
         const f = await ready(opts);
@@ -172,8 +172,9 @@ async function caseB() {
     }
     equal(wrong, 0, 'each one is the tile of its cell, from the right place of the sheet');
     check(Math.abs(area - cells * T * T) < 1, 'the cells tile the view with no gap and no overlap (' + area + ' pixels)');
-    // the objects: only anchors, in row order, each at its cell's corner plus the picture's offset
-    const all = out.calls.filter(isObject), drawn = all.filter((c) => !(c.a[2] === 23 && c.a[3] === 40 && c.a[0] === INDEX.objects.items[String(INDEX.ant)][0]));      // (the starting ants come last: their own check is G)
+    // the objects: only anchors, in row order, each at its cell's corner plus the picture's offset, followed by the top-layer plants of Block 1
+    const antXs = new Set(Object.values(INDEX.ants).map((a) => a[0]));
+    const all = out.calls.filter(isObject), drawn = all.filter((c) => !(c.a[2] === 23 && c.a[3] === 40 && antXs.has(c.a[0])));      // (the starting ants come last: their own check is G)
     const items = INDEX.objects.items, k = view.scale / 32;
     const expected = [];
     for (let r = Math.max(0, vis.r0 - 8); r <= Math.min(f.rows - 1, vis.r1 + 8); r++) for (let c = Math.max(0, vis.c0 - 8); c <= Math.min(f.columns - 1, vis.c1 + 8); c++) {
@@ -183,7 +184,15 @@ async function caseB() {
         if (x > w || y > h || x + Math.round(it[2] * k) < 0 || y + Math.round(it[3] * k) < 0) continue;
         expected.push([it[0], it[1], it[2], it[3]]);
     }
-    equal(drawn.map((c) => c.a.slice(0, 4)), expected, 'the objects: the anchored ones only, in row order, from the sheet');
+    for (const p of f.plants || []) {
+        if (p.row < Math.max(0, vis.r0 - 8) || p.row > Math.min(f.rows - 1, vis.r1 + 8) || p.column < Math.max(0, vis.c0 - 8) || p.column > Math.min(f.columns - 1, vis.c1 + 8)) continue;
+        const it = items[p.id];
+        if (!it) continue;
+        const x = Math.round(Math.round(x0) + (p.column + 0.5) * T + it[4] * k), y = Math.round(Math.round(y0) + (p.row + 0.5) * T + it[5] * k);
+        if (x > w || y > h || x + Math.round(it[2] * k) < 0 || y + Math.round(it[3] * k) < 0) continue;
+        expected.push([it[0], it[1], it[2], it[3]]);
+    }
+    equal(drawn.map((c) => c.a.slice(0, 4)), expected, 'the objects: the anchored ones only, in row order, then the top-layer plants, from the sheet');
     check(drawn.length > 10 && drawn.every((c) => c.a[6] === Math.round(c.a[2] * k) && c.a[7] === Math.round(c.a[3] * k)), 'each scaled like the cell, to whole pixels (' + drawn.length + ' objects)');
     const hills = drawn.filter((c) => c.a[2] === 128 && c.a[3] === 128);
     check(hills.length === 4, 'the four hills of Treasure, 128 x 128 each: ' + hills.length);
@@ -197,6 +206,22 @@ async function caseB() {
         check(mine.length === 1, 'a small rock is at its cell\'s corner plus the offset of the picture (8, 8)');
     }
     check(!drawn.some((c) => c.a[4] === Math.round(x0) + 3 * T && c.a[5] === Math.round(y0) + 4 * T), 'a rock on a cell that is not an anchor is not drawn');
+    // a food pile put by the editor lives in block 2 while its layer-2 cell stays empty: its stage picture is drawn at 10 px/cell and up, and its gold mark on the small map
+    let cur = treasure();
+    const ed = Edit.create(cur, { rebase: (b) => { cur = File.parse(b); return cur; }, erase: Blocks.eraseAt });
+    for (const st of [2, 3, 4, 5, 6]) {
+        const pr = 20, pc = 25, wantTile = Blocks.FOOD[st].stages[0][1], fit = items[wantTile];
+        ed.act(Blocks.placePile(cur, pr, pc, st));
+        check(cur.tile2(pr, pc) === EMPTY2, 'a ' + st + '-stage pile put by the editor leaves layer 2 empty');
+        const pout = frame(rig, cur, view, w, h).calls.filter((c) => isObject(c) && c.a[0] === fit[0] && c.a[1] === fit[1] && c.a[4] === Math.round(Math.round(x0) + pc * T + fit[4] * k) && c.a[5] === Math.round(Math.round(y0) + pr * T + fit[5] * k));
+        check(pout.length === 1, 'a ' + st + '-stage food pile in block 2 draws its stage-0 picture (' + wantTile + ')');
+        rig.env.log.length = 0;
+        View.miniBase(cur, 168, 168, rig.env.makeCanvas);
+        check(rig.env.log.filter((c) => c.op === 'fillRect' && c.fill === Tiles.MINI_FOOD).length === cur.food.length, 'the small map marks every food pile of block 2');
+        ed.undo();
+        const gone = frame(rig, cur, view, w, h).calls.filter((c) => isObject(c) && c.a[4] === Math.round(Math.round(x0) + pc * T + fit[4] * k) && c.a[5] === Math.round(Math.round(y0) + pr * T + fit[5] * k));
+        check(gone.length === 0, 'and when the pile is undone its picture is gone');
+    }
 }
 
 async function caseC() {
@@ -299,12 +324,12 @@ async function caseE() {
 
 async function caseF() {
     const rig = await ready(), f = treasure(), w = 600, h = 400;
-    put2(f, 20, 25, 410, 1);               // flower1a: a toy that is not in the sheet
+    put2(f, 20, 25, 347, 1);               // chicken: a toy that is not in the sheet
     put2(f, 21, 25, 99999 & 0xFFFF, 1);    // (nothing: no picture, not in the index)
     const view = { scale: 20, cx: 30, cy: 24 };
-    check(!!INDEX.far['410'] && !INDEX.objects.items['410'], 'flower1a is fetched alone, not in the sheet');
+    check(!!INDEX.far['347'] && !INDEX.objects.items['347'], 'chicken is fetched alone, not in the sheet');
     frame(rig, f, view, w, h);
-    const mineUrl = '/asset_catalog/sprites/sprite_' + ('000' + INDEX.far['410'][0]).slice(-4) + '.png', asked = rig.env.images.filter((i) => i.url === mineUrl);
+    const mineUrl = '/asset_catalog/sprites/sprite_' + ('000' + INDEX.far['347'][0]).slice(-4) + '.png', asked = rig.env.images.filter((i) => i.url === mineUrl);
     check(asked.length === 1, 'the first frame asks for its picture: ' + mineUrl);
     const second = frame(rig, f, view, w, h);
     check(rig.env.images.filter((i) => i.url === mineUrl).length === 1 && second.calls.filter((c) => c.op === 'drawImage' && c.img && c.img.url === mineUrl).length === 0, 'it is asked for once, and nothing is drawn in its place yet');
@@ -313,12 +338,12 @@ async function caseF() {
     const third = frame(rig, f, view, w, h), mine = third.calls.filter((c) => c.op === 'drawImage' && c.img && c.img.url === mineUrl);
     check(mine.length === 1, 'then it is drawn');
     if (mine.length) {
-        const k = 20 / 32, far = INDEX.far['410'], x0 = Math.round(w / 2 - 30 * 20), y0 = Math.round(h / 2 - 24 * 20);
+        const k = 20 / 32, far = INDEX.far['347'], x0 = Math.round(w / 2 - 30 * 20), y0 = Math.round(h / 2 - 24 * 20);
         check(mine[0].a[4] === Math.round(x0 + 25 * 20 + far[1] * k) && mine[0].a[5] === Math.round(y0 + 20 * 20 + far[2] * k) && mine[0].a[6] === Math.round(mine[0].img.width * k), 'at its cell\'s corner plus its offset, scaled like the cell');
     }
     // a 404: nothing is drawn, nothing breaks, and it is not asked for again
     const lost = await ready({ farMissing: true }), g = treasure();
-    put2(g, 20, 25, 410, 1);
+    put2(g, 20, 25, 347, 1);
     frame(lost, g, view, w, h);
     lost.env.settle();
     lost.sprites.reset();
@@ -329,19 +354,19 @@ async function caseF() {
 async function caseG() {
     const rig = await ready(), f = treasure(), w = 600, h = 400;
     check(f.markers.length === 24, 'Treasure has 24 starting ants (' + f.markers.length + ')');
-    const ant = INDEX.objects.items[String(INDEX.ant)];
-    check(!!ant && ant[2] === 23 && ant[3] === 40 && ant[4] === -11 && ant[5] === -28, 'the ant is the standing worker (agst301): 23 x 40, offset -11, -28');
+    const ant = INDEX.objects.items[String(INDEX.ant)], antXs = new Set(Object.values(INDEX.ants).map((a) => a[0]));
+    check(!!ant && ant[2] === 23 && ant[3] === 40 && ant[4] === -11 && ant[5] === -28 && antXs.size === 4, 'the ant is the standing worker (agst301): 23 x 40, offset -11, -28, in four team colors');
     const view = { scale: 24, cx: f.columns / 2, cy: f.rows / 2 };
     View.clamp(view, f, w, h);
     const vis = View.visible(view, f, w, h), inView = f.markers.filter((m) => m.row >= vis.r0 && m.row <= vis.r1 && m.column >= vis.c0 && m.column <= vis.c1);
-    const big = frame(rig, f, view, w, h), ants = big.calls.filter((c) => c.op === 'drawImage' && c.a[0] === ant[0] && c.a[1] === ant[1] && c.a[2] === 23 && c.a[3] === 40);
-    check(inView.length > 6 && ants.length === inView.length, 'at 24 pixels a cell each ant in view is drawn: ' + ants.length + ' of ' + inView.length);
+    const big = frame(rig, f, view, w, h), ants = big.calls.filter((c) => c.op === 'drawImage' && antXs.has(c.a[0]) && c.a[2] === 23 && c.a[3] === 40);
+    check(inView.length > 6 && ants.length === inView.length, 'at 24 pixels a cell each ant in view is drawn in its team color: ' + ants.length + ' of ' + inView.length);
     const rings = big.calls.filter((c) => c.op === 'ellipse');
     check(rings.length === inView.length, 'with a ring at its feet');
     const strokes = big.calls.filter((c) => c.op === 'stroke').length, blacks = inView.filter((m) => m.team === 'black').length;
     check(blacks > 0 && strokes === inView.length + blacks, 'in the color of its team, and the black one with a thin white edge (' + strokes + ' lines for ' + inView.length + ' rings and ' + blacks + ' black ones)');
     const small = frame(rig, f, { scale: 11, cx: f.columns / 2, cy: f.rows / 2 }, w, h);
-    check(small.calls.filter((c) => c.op === 'drawImage' && c.a[0] === ant[0] && c.a[1] === ant[1] && c.a[2] === 23).length === 0 && small.calls.filter((c) => c.op === 'arc').length >= 20, 'below 12 pixels a cell the ants are dots in the team\'s color');
+    check(small.calls.filter((c) => c.op === 'drawImage' && antXs.has(c.a[0]) && c.a[2] === 23).length === 0 && small.calls.filter((c) => c.op === 'arc').length >= 20, 'below 12 pixels a cell the ants are dots in the team\'s color');
     const ghosted = frame(rig, f, view, w, h, { ghost: { id: 346, row: 30, column: 30 } }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1);
     check(ghosted.length === 1 && ghosted[0].a[2] === INDEX.objects.items['346'][2], 'the ghost of a bigger object is its own picture, see-through (' + (ghosted[0] || { alpha: 'none' }).alpha + ')');
     const plain = frame(rig, f, view, w, h, { ghost: null }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1);
@@ -362,7 +387,7 @@ async function caseH() {
     host.children = [];
     const rock = rig.sprites.chip(host, true, 302, 26) && rig.env.log.filter((c) => c.op === 'drawImage').pop();
     check(rock.a[6] === 13 * 3 && rock.a[7] === 13 * 3, 'a small picture is grown by one and a half, not more');
-    check(rig.sprites.chip({ style: {}, appendChild() {} }, true, 99, 30) === false && rig.sprites.chip({ style: {}, appendChild() {} }, false, 300, 30) === false && rig.sprites.chip({ style: {}, appendChild() {} }, true, 410, 30) === false, 'no chip for a tile that has no picture in the sheet');
+    check(rig.sprites.chip({ style: {}, appendChild() {} }, true, 410, 30) === true && rig.sprites.chip({ style: {}, appendChild() {} }, true, 99, 30) === false && rig.sprites.chip({ style: {}, appendChild() {} }, false, 300, 30) === false && rig.sprites.chip({ style: {}, appendChild() {} }, true, 347, 30) === false, 'a plant has a chip in the sheet; no chip for a tile that has no picture in the sheet');
     const cold = Sprites.create({ doc: rig.env.doc, win: rig.env.win });
     check(cold.chip({ style: {}, appendChild() {} }, false, 485, 30) === false, 'and none before the atlas is in');
 }

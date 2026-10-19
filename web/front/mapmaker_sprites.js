@@ -150,16 +150,18 @@
 
         // The anchored objects whose pictures reach into the pixel rectangle (x, y, w, h) of the layer, in row order: from the cells of the rectangle and a margin round them (a picture reaches beyond its cell)
         function objects(lctx, file, st, x, y, w, h) {
-            var S = st.S, k = S / CELL, b = file.bytes, items = index.objects.items, far = index.far;
+            function u(o) { return b[o] | (b[o + 1] << 8); }
+            var S = st.S, k = S / CELL, b = file.bytes, items = index.objects.items, far = index.far, food = {}, a = file.blocksAt, n, i, m, s;
             var r0 = Math.max(0, Math.floor((y - st.oy) / S) - REACH), r1 = Math.min(file.rows - 1, Math.ceil((y + h - st.oy) / S) + REACH);
             var c0 = Math.max(0, Math.floor((x - st.ox) / S) - REACH), c1 = Math.min(file.columns - 1, Math.ceil((x + w - st.ox) / S) + REACH);
-            lctx.save(); lctx.beginPath(); lctx.rect(x, y, w, h); lctx.clip();
-            lctx.imageSmoothingEnabled = true; lctx.imageSmoothingQuality = 'medium';
+            if ((a += 2 + 6 * u(a)) + 2 <= b.length) for (n = u(a), a += 2, i = 0; i < n && (m = u(a + 8)) && a + 10 + 4 * m <= b.length; i++, a += 10 + 4 * m)
+                for (s = 0; s < m; s++) if (u(a + 4) <= u(a + 10 + 4 * s)) food[u(a) * file.columns + u(a + 2)] = u(a + 12 + 4 * s);
+            lctx.save(); lctx.beginPath(); lctx.rect(x, y, w, h); lctx.clip(); lctx.imageSmoothingEnabled = true; lctx.imageSmoothingQuality = 'medium';
             for (var r = r0; r <= r1; r++) {
                 var at = file.layer2 + 6 * (r * file.columns + c0);
                 for (var c = c0; c <= c1; c++, at += 6) {
-                    if (!(b[at + 2] & 1)) continue;
-                    var id = b[at] | (b[at + 1] << 8);
+                    var id = u(at), ft = food[r * file.columns + c];
+                    if (id === EMPTY2 && ft) id = ft; else if (!(b[at + 2] & 1)) continue;
                     if (id === EMPTY2) continue;
                     var it = items[id], dx, dy, iw, ih, img, sx = 0, sy = 0, sw, sh;
                     if (it) { img = objectsImg; sx = it[0]; sy = it[1]; sw = it[2]; sh = it[3]; dx = st.ox + c * S + it[4] * k; dy = st.oy + r * S + it[5] * k; }
@@ -170,32 +172,40 @@
                     lctx.drawImage(scaledPicture(it ? id : 'f' + id, img, sx, sy, sw, sh, iw, ih), dx, dy);          // (a picture of whole pixels at whole pixels: moved by whole pixels it is the same picture, so the kept layer equals a frame made from nothing)
                 }
             }
+            if (file.plants) for (i = 0; i < file.plants.length; i++) {
+                var p = file.plants[i], pit = items[p.id];
+                if (!pit || p.row < r0 || p.row > r1 || p.column < c0 || p.column > c1) continue;
+                iw = Math.max(1, Math.round(pit[2] * k)); ih = Math.max(1, Math.round(pit[3] * k));
+                dx = Math.round(st.ox + (p.column + 0.5) * S + pit[4] * k); dy = Math.round(st.oy + (p.row + 0.5) * S + pit[5] * k);
+                if (dx > x + w || dy > y + h || dx + iw < x || dy + ih < y) continue;
+                lctx.drawImage(scaledPicture(p.id, objectsImg, pit[0], pit[1], pit[2], pit[3], iw, ih), dx, dy);
+            }
             lctx.restore();
         }
 
-        // One object's picture at a cell, see-through (the ghost of a bigger object that follows the pointer)
+        // One object's picture at a cell, see-through (the ghost of a bigger object or plant that follows the pointer)
         function ghost(ctx, view, w, h, id, row, column) {
-            var it = index.objects.items[id], s = view.scale, k = s / CELL;
+            var it = index.objects.items[id], s = view.scale, k = s / CELL, half = (id >= 404 && id <= 421 && id !== 409 && id !== 417 && id !== 418) ? 0.5 : 0;
             if (!it) return;
             ctx.save(); ctx.globalAlpha = 0.62; ctx.imageSmoothingEnabled = true;
-            ctx.drawImage(objectsImg, it[0], it[1], it[2], it[3], w / 2 + (column - view.cx) * s + it[4] * k, h / 2 + (row - view.cy) * s + it[5] * k, it[2] * k, it[3] * k);
+            ctx.drawImage(objectsImg, it[0], it[1], it[2], it[3], w / 2 + (column + half - view.cx) * s + it[4] * k, h / 2 + (row + half - view.cy) * s + it[5] * k, it[2] * k, it[3] * k);
             ctx.restore();
         }
 
-        // The starting ants: the game's standing worker ant on its cell, with a ring in the team's color at its feet (black has a thin white edge)
+        // The starting ants: the game's standing worker ant in its team's color on its cell center, with a ring in the team's color at its feet (black has a thin white edge)
         function ants(ctx, view, file, w, h, vis) {
-            var it = index.objects.items[index.ant], s = view.scale, k = s / CELL, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s;
+            var it = index.objects.items[index.ant], teamAnts = index.ants, s = view.scale, k = s / CELL, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s;
             if (!it) return;
             ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'medium';
             for (var i = 0; i < file.markers.length; i++) {
                 var m = file.markers[i];
                 if (m.row < vis.r0 - 2 || m.row > vis.r1 + 2 || m.column < vis.c0 - 2 || m.column > vis.c1 + 2) continue;
-                var cx = x0 + (m.column + 0.5) * s, cy = y0 + m.row * s + 11 * k, rx = 12 * k, ry = 5.5 * k, line = Math.max(1.6, 2.4 * k);
+                var cx = x0 + (m.column + 0.5) * s, ay = y0 + (m.row + 0.5) * s, cy = ay + 11 * k, rx = 12 * k, ry = 5.5 * k, line = Math.max(1.6, 2.4 * k), src = teamAnts && teamAnts[m.team] || it;
                 ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 6.2832);
                 ctx.fillStyle = Tiles.TEAMS[m.team]; ctx.globalAlpha = 0.28; ctx.fill(); ctx.globalAlpha = 1;
                 if (m.team === 'black') { ctx.strokeStyle = '#f4ece2'; ctx.lineWidth = line + 2; ctx.stroke(); }
                 ctx.strokeStyle = Tiles.TEAMS[m.team]; ctx.lineWidth = line; ctx.stroke();
-                ctx.drawImage(objectsImg, it[0], it[1], it[2], it[3], x0 + m.column * s + it[4] * k, y0 + m.row * s + it[5] * k, it[2] * k, it[3] * k);
+                ctx.drawImage(objectsImg, src[0], src[1], it[2], it[3], cx + it[4] * k, ay + it[5] * k, it[2] * k, it[3] * k);
             }
         }
 

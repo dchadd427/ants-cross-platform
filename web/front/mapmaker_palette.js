@@ -18,6 +18,11 @@
         [302, 'smlrock1', 'Rock 1'], [303, 'smlrock2', 'Rock 2'], [304, 'smlrock3', 'Rock 3'], [305, 'smlrock4', 'Rock 4'], [307, 'smlrock6', 'Rock 5'], [308, 'smlrock7', 'Rock 6'],
         [62, 'pu_comb', 'Combat ant power-up'], [63, 'pu_thief', 'Thief ant power-up'], [64, 'pu_bomb', 'Bomber ant power-up'], [65, 'pu_swim', 'Swimmer ant power-up'], [66, 'pu_mason', 'Fire ant power-up']
     ];
+    var PLANTS = [
+        [404, 'clover1', 'Clover 1'], [405, 'clover2', 'Clover 2'], [406, 'clover3', 'Clover 3'], [407, 'clover4', 'Clover 4'], [408, 'clovers', 'Clover patch'],
+        [410, 'flower1a', 'Flower 1a'], [411, 'flower1b', 'Flower 1b'], [412, 'flower2a', 'Flower 2a'], [413, 'flower2b', 'Flower 2b'],
+        [414, 'flower3a', 'Flower 3a'], [415, 'flower3b', 'Flower 3b'], [416, 'flower3c', 'Flower 3c'], [420, 'dflower1', 'Daisy flower'], [421, 'flower1', 'Flower 1']
+    ];
     // The bigger objects: [the tile id, the game's name for the tile, the cells it covers as 'row,column' offsets from its anchor (the cell that is tapped)]. They are the objects that stand on
     // more than one cell in at least 30 of the 540 maps of the library, most used first (the library check, tests/scripts/web_mapmaker_objects_check.js, measures it again), without the
     // hills, the bombs, the power-ups, the food and the flowers and clovers that the flower droppers read (each of those has its own tool, or comes later). Every cell of such an object
@@ -81,9 +86,9 @@
 
     function items(tool) {
         if (tool === 'bigger') return bigger();
-        var list = tool === 'ground' ? GROUND : (tool === 'objects' ? OBJECTS : []);
+        var list = tool === 'ground' ? GROUND : (tool === 'objects' ? OBJECTS.concat(PLANTS) : (tool === 'plants' ? PLANTS : []));
         return list.map(function (row) {
-            return { id: row[0], name: row[1], label: row[2], kind: tool === 'ground' ? Tiles.kindOf(row[0]) : null, color: tool === 'ground' ? Tiles.css(row[0], Tiles.EMPTY2) : Tiles.css(0, row[0]) };
+            return { id: row[0], name: row[1], label: row[2], kind: tool === 'ground' ? Tiles.kindOf(row[0]) : null, color: tool === 'ground' ? Tiles.css(row[0], Tiles.EMPTY2) : Tiles.css(0, row[0]), plant: !!(Blocks.PLANT_NAMES && Blocks.PLANT_NAMES[row[0]]) };
         });
     }
 
@@ -100,5 +105,5 @@
     // the tile that an item stands for, for a painting tool (null for Erase)
     function itemOf(id, tileId) { var list = items(id); for (var i = 0; i < list.length; i++) if (list[i].id === tileId) return list[i]; return null; }
 
-    return { TOOLS: TOOLS, GROUND: GROUND, OBJECTS: OBJECTS, BIGGER: BIGGER, items: items, tool: tool, toolOfKey: toolOfKey, paints: paints, places: places, usable: usable, teams: teams, itemOf: itemOf };
+    return { TOOLS: TOOLS, GROUND: GROUND, OBJECTS: OBJECTS, PLANTS: PLANTS, BIGGER: BIGGER, items: items, tool: tool, toolOfKey: toolOfKey, paints: paints, places: places, usable: usable, teams: teams, itemOf: itemOf };
 });

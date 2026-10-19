@@ -95,8 +95,8 @@
   {
    "id": "ground_sheet_brush_row",
    "file": "web/front/mapmaker_ground.js",
-   "old": "[1, 3, 5, 9].forEach",
-   "new": "[1, 3, 5, 7].forEach",
+   "old": "r.max = '9';",
+   "new": "r.max = '7';",
    "test": "node tests/scripts/web_mapmaker_ground_check.js"
   },
   {
@@ -447,6 +447,27 @@
    "file": "web/front/mapmaker_view.js",
    "old": "function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= sprites.FROM; }",
    "new": "function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= 5; }",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_food_pile_without_layer2_not_drawn",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "if (id === EMPTY2 && ft) id = ft;",
+   "new": "if (false) id = ft;",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_food_pile_takes_the_empty_last_stage",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "if (u(a + 4) <= u(a + 10 + 4 * s))",
+   "new": "if (true)",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "view_minimap_forgets_food_piles",
+   "file": "web/front/mapmaker_view.js",
+   "old": "for (i = 0; file.food && i < file.food.length; i++)",
+   "new": "for (i = 0; false && i < file.food.length; i++)",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   },
   {

@@ -955,9 +955,9 @@ class ThePage(unittest.TestCase):
             self.assertIn(part, self.page, part)
         self.assertNotIn("come next", self.code["mapmaker_tools.js"])
         self.assertRegex(self.page, r'data-tool="ground" aria-pressed="true"', "Ground is the tool at the start, as in the picture")
-        for part in ('id="undo-btn"', 'id="redo-btn"', 'id="fill-btn"', 'id="palette"', 'role="radiogroup"', 'aria-keyshortcuts="Control+Z Meta+Z"', 'data-brush="9"'):
+        for part in ('id="undo-btn"', 'id="redo-btn"', 'id="fill-btn"', 'id="palette"', 'id="brush-range"', 'id="brush-val"', 'type="range"', 'min="1" max="9" step="1"', 'aria-keyshortcuts="Control+Z Meta+Z"', 'data-brush="1"'):
             self.assertIn(part, self.page, part)
-        self.assertEqual(re.findall(r'data-brush="(\d+)"', self.page), ["1", "3", "5", "9"])
+        self.assertEqual(re.findall(r'data-brush="(\d+)"', self.page), ["1"])
         palette = self.code["mapmaker_palette.js"]
         self.assertEqual(re.findall(r"key: '([a-z])'", palette), ["g", "o", "k", "h", "a", "f", "e", "m"])
 

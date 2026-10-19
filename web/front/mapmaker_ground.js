@@ -78,7 +78,7 @@
     // env: {doc, kind (the key), chosen() -> the tile id painted now, choose(id), pic(node, id, px) puts the tile's picture in `node` (a flat color when there is no atlas), brush() -> 1/3/5/9, setBrush(n)}
     // Fills `body` (a dialog's body); returns {refresh()} that puts the gold ring on the chosen tile again.
     function sheet(env, body) {
-        var doc = env.doc, k = kind(env.kind), chips = [], brushes = [];
+        var doc = env.doc, k = kind(env.kind), chips = [], r = null, out = null;
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function chip(id, cls, dim) {
             var b = el('button', 'gt' + (cls ? ' ' + cls : '')), i = el('i'), t = INFO[id];
@@ -102,9 +102,9 @@
             return line;
         }
         function refresh() {
-            var on = String(env.chosen());
+            var on = String(env.chosen()), br = String(env.brush());
             chips.forEach(function (b) { b.setAttribute('aria-checked', String(b.getAttribute('data-tile') === on)); });
-            brushes.forEach(function (b) { b.setAttribute('aria-checked', String(+b.getAttribute('data-brush') === env.brush())); });
+            if (r) { r.value = br; r.setAttribute('data-brush', br); out.textContent = br; }
         }
         var low = k.label.toLowerCase(), plain = plainIds(k.key);
         body.appendChild(el('p', 'lead', 'Pick any single tile to paint with. The picture shows what the tile looks like; the pictures around the plain tile are the edge and corner pieces that blend ' + low + ' into the other kinds.'));
@@ -133,14 +133,10 @@
         sheetEl.appendChild(groups);
         body.appendChild(sheetEl);
         var brush = el('div', 'kbrush');
-        brush.setAttribute('role', 'radiogroup'); brush.setAttribute('aria-label', 'Brush size in cells');
-        brush.appendChild(el('span', '', 'Brush'));
-        [1, 3, 5, 9].forEach(function (n) {
-            var b = el('button', 'eb', String(n));
-            b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('data-brush', String(n)); b.setAttribute('aria-label', 'Brush of ' + n + (n === 1 ? ' cell' : ' cells across'));
-            b.addEventListener('click', function () { env.setBrush(n); refresh(); });
-            brushes.push(b); brush.appendChild(b);
-        });
+        r = el('input', 'brange'); out = el('output', 'bval');
+        r.type = 'range'; r.min = '1'; r.max = '9'; r.step = '1'; r.setAttribute('data-brush', '1'); r.setAttribute('aria-label', 'Brush size in cells');
+        r.addEventListener('input', function () { env.setBrush(+r.value); refresh(); });
+        brush.appendChild(el('span', '', 'Brush')); brush.appendChild(r); brush.appendChild(out);
         body.appendChild(brush);
         refresh();
         return { refresh: refresh };

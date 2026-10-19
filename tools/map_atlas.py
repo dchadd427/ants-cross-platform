@@ -26,10 +26,17 @@ import zlib
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 GROUND_FIRST, GROUND_LAST, GROUND_COLUMNS, TILE = 431, 669, 16, 32
 ANT = 811                                        # agst301: the standing worker ant (the starting ants' picture)
+ANT_RAMPS = {                                    # the 14-step palette ramps (+0 black, +20 blue, +40 red, +60 green) for the standing worker ant
+    "black": [(23, 23, 27), (39, 23, 51), (47, 27, 59), (47, 31, 51), (55, 35, 71), (67, 51, 71), (71, 51, 83), (87, 71, 91), (87, 71, 99), (107, 95, 111), (135, 131, 139), (167, 159, 171), (195, 195, 207), (251, 255, 247)],
+    "blue": [(15, 19, 35), (31, 31, 59), (35, 35, 71), (23, 27, 55), (39, 43, 83), (35, 39, 79), (51, 59, 99), (47, 47, 103), (71, 79, 115), (75, 75, 135), (107, 107, 167), (147, 147, 199), (195, 195, 231), (239, 243, 255)],
+    "red": [(39, 23, 27), (55, 31, 39), (67, 31, 39), (55, 27, 35), (79, 35, 43), (71, 31, 47), (91, 43, 55), (91, 35, 55), (103, 59, 67), (111, 35, 71), (147, 67, 87), (183, 111, 111), (219, 179, 167), (255, 247, 243)],
+    "green": [(11, 35, 31), (31, 47, 43), (39, 55, 55), (19, 55, 47), (39, 63, 63), (27, 75, 63), (55, 75, 75), (39, 95, 79), (71, 99, 95), (55, 119, 99), (87, 151, 111), (127, 183, 127), (187, 215, 175), (251, 255, 251)],
+}
 FOOD_STAGES = list(range(264, 272)) + [280] + list(range(373, 377))        # the stages of the piles that the Food tool puts (mapmaker_blocks.js)
+PLANTS = [404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421]     # the 14 top-layer plants (clovers and flowers, walk-under canopy and power-up droppers)
 BIGGER = [1323, 1324, 1321, 1322, 1320, 1326, 301, 237, 1329, 1327, 242, 346, 329, 236, 238, 350, 326, 418, 417, 289, 325, 409, 324, 349, 315, 345, 292, 354, 352]      # mapmaker_palette.js BIGGER
 COMMON_SMALL = [134, 317, 318, 294, 336, 344, 309, 341, 340, 302, 303, 305]      # small and in the most library maps (the power-ups and rocks above are the others)
-IN_THE_SHEET = sorted(set(list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + FOOD_STAGES + BIGGER + COMMON_SMALL))
+IN_THE_SHEET = sorted(set(list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + FOOD_STAGES + PLANTS + BIGGER + COMMON_SMALL))
 # every other object that a library map anchors on layer 2 and that is a thing on the ground (not a screen element of the menus): fetched one by one
 FAR_RANGES = [(34, 38), (133, 134), (236, 242), (245, 430), (1320, 1334)]
 FAR_NOT = {243, 244}                             # the mouse pictures of the menus
@@ -190,15 +197,30 @@ def build(sprites, catalog_path, out):
 
     objects, items = Sheet(1024), {}
     order = []
+    ant_rgba = None
     for ident in IN_THE_SHEET:
         found = first_frame(table, ident)
         if not found:
             raise SystemExit("object %d has no picture" % ident)
         w, h, rgba = sprite(found[0])
+        if ident == ANT:
+            ant_rgba = (w, h, rgba)
         order.append((h, w, ident, found, rgba))
     for h, w, ident, found, rgba in sorted(order, key=lambda t: (-t[0], -t[1], t[2])):
         x, y = objects.add(ident, w, h, rgba)
         items[str(ident)] = [x, y, w, h, found[1], found[2], average(rgba)]
+
+    ants = {"black": items[str(ANT)][:2]}
+    aw, ah, argba = ant_rgba
+    for team in ("blue", "red", "green"):
+        remap = dict(zip(ANT_RAMPS["black"], ANT_RAMPS[team]))
+        recolored = bytearray(argba)
+        for i in range(0, len(recolored), 4):
+            if recolored[i + 3] >= 128:
+                r, g, b = remap.get((recolored[i], recolored[i + 1], recolored[i + 2]), (recolored[i], recolored[i + 1], recolored[i + 2]))
+                recolored[i], recolored[i + 1], recolored[i + 2] = r, g, b
+        ax, ay = objects.add("ant_" + team, aw, ah, bytes(recolored))
+        ants[team] = [ax, ay]
 
     far = {}
     for lo, hi in FAR_RANGES:
@@ -221,6 +243,7 @@ def build(sprites, catalog_path, out):
         "objects": {"png": "objects.png", "w": w, "h": h, "items": items},
         "far": far,
         "ant": ANT,
+        "ants": ants,
     }
     text = json.dumps(index, sort_keys=True, separators=(",", ":"))
     with open(os.path.join(out, "atlas.json"), "w", encoding="utf-8") as f:

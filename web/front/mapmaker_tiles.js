@@ -28,12 +28,31 @@
     var TEAMS = { black: '#262626', blue: '#4a5fc8', green: '#2f9a52', red: '#c0392b' };
     var FOOD = '#f2c230';
 
+    // The original game's minimap colors (include/ants_app/minimap_tables.hpp, src/ants_app/minimap_tables.inc, from the CHD palette at offset 28)
+    var MINI_GROUND = {
+        gravel: ['#8f776f', '#bb7b7f', '#9d6a4d', '#8f776f', '#8f776f'],
+        slate: ['#8f8fab', '#8f8fab', '#8f8fab', '#8f8fab', '#8f8fab'],
+        water: ['#3b3bbf', '#3b3bbf', '#3b3bbf', '#3b3bbf', '#3b3bbf'],
+        mud: ['#5b574b', '#5b574b', '#5b574b', '#5b574b', '#5b574b'],
+        dirt: ['#b3a79b', '#9f9787', '#b7b3cf', '#b3a79b', '#b3a79b'],
+        other: ['#77777f', '#77777f', '#77777f', '#77777f', '#77777f']
+    };
+    var MINI_OBJECTS = [
+        [34, 37, '#5b574b'], [62, 66, '#e7930b'], [134, 134, '#ffff61'], [152, 152, '#000000'], [153, 153, '#37132b'], [154, 154, '#3b976f'], [155, 155, '#e4c336'],
+        [236, 244, '#235b33'], [245, 245, '#132327'], [246, 246, '#276bbf'], [247, 247, '#dd1184'], [248, 248, '#55c01e'], [253, 286, '#e7930b'], [287, 339, '#235b33'],
+        [340, 343, '#e7930b'], [344, 355, '#235b33'], [356, 376, '#e7930b'], [377, 377, '#235b33'], [378, 388, '#e7930b'], [389, 389, '#235b33'], [390, 403, '#e7930b'],
+        [404, 421, '#235b33'], [427, 430, '#235b33'], [1320, 1330, '#235b33'], [1331, 1333, '#e7930b'], [1334, 1334, '#235b33']
+    ];
+    var MINI_ANTS = { green: '#55c01e', red: '#dd1184', blue: '#276bbf', black: '#132327' };
+    var MINI_PLANT = '#235b33';
+    var MINI_FOOD = '#e7930b';
+
     function hexToPacked(hex) {          // 0xAABBGGRR, what a little-endian Uint32Array view of an ImageData holds
         var n = parseInt(hex.slice(1), 16);
         return (0xFF000000 | ((n & 0xFF) << 16) | (n & 0xFF00) | (n >> 16)) >>> 0;
     }
 
-    var css1 = new Array(65536), css2 = new Array(65536), packed1 = null, packed2 = null;
+    var css1 = new Array(65536), css2 = new Array(65536), packed1 = null, packed2 = null, mini1 = null, mini2 = null;
 
     function build() {
         var i, j, k;
@@ -70,5 +89,26 @@
         return { ground: packed1, objects: packed2 };
     }
 
-    return { css: css, kindOf: kindOf, setAverages: setAverages, packedTables: packedTables, hexToPacked: hexToPacked, TEAMS: TEAMS, FOOD: FOOD, EMPTY2: EMPTY2 };
+    // Packed color tables for the original game's minimap: 5 speckle entries per ground tile id, and one entry per layer-2 object id (0 for empty or bomb tiles 129..132 so terrain shows)
+    function miniTables() {
+        if (!mini1) {
+            var i, j, s, defG = MINI_GROUND.other.map(hexToPacked), defO = hexToPacked('#77777f');
+            mini1 = new Uint32Array(65536 * 5); mini2 = new Uint32Array(65536);
+            for (i = 0; i < 65536; i++) {
+                for (s = 0; s < 5; s++) mini1[i * 5 + s] = defG[s];
+                mini2[i] = i === EMPTY2 || (i >= 129 && i <= 132) ? 0 : defO;
+            }
+            for (i = 0; i < GROUND_IDS.length; i++) {
+                var row = GROUND_IDS[i], sp = MINI_GROUND[row[2]].map(hexToPacked);
+                for (j = row[0]; j <= row[1]; j++) for (s = 0; s < 5; s++) mini1[j * 5 + s] = sp[s];
+            }
+            for (i = 0; i < MINI_OBJECTS.length; i++) {
+                var o = MINI_OBJECTS[i], p = hexToPacked(o[2]);
+                for (j = o[0]; j <= o[1]; j++) mini2[j] = p;
+            }
+        }
+        return { ground: mini1, objects: mini2 };
+    }
+
+    return { css: css, kindOf: kindOf, setAverages: setAverages, packedTables: packedTables, miniTables: miniTables, hexToPacked: hexToPacked, TEAMS: TEAMS, FOOD: FOOD, MINI_ANTS: MINI_ANTS, MINI_PLANT: MINI_PLANT, MINI_FOOD: MINI_FOOD, EMPTY2: EMPTY2 };
 });
