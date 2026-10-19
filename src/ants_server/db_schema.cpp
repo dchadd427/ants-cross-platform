@@ -143,6 +143,56 @@ const char* const kSubmissionsSql =
     " detail TEXT NOT NULL"
     ");";
 
+// Version 6. The accounts of the owner's page (docs/MAP_SUBMISSIONS.md, "Accounts"). admin_users: one row for each account; `pw_hash` is "pbkdf2-sha256$<rounds>$<salt>$<hash>" (the password itself is never kept),
+// `must_change` is 1 while the password is the starting one, `session_gen` goes up whenever the user's sessions must end. admin_locks: the counts of wrong tries (scope pair = one name from one address,
+// addr = one address, user = one name from everywhere; `key` is a keyed hash, never a name or an address). admin_known_addr: the addresses (keyed hashes) that signed a user in. admin_audit: who did what and
+// when (`addr_key` a keyed hash). map_submissions.decided_by is the name of the account that approved, declined, took down or put back a map; the maps decided before this version get the name that
+// review_log recorded.
+const char* const kAccountsSql =
+    "CREATE TABLE admin_users ("
+    " id INTEGER PRIMARY KEY,"
+    " name TEXT NOT NULL,"
+    " name_key TEXT NOT NULL UNIQUE,"
+    " role TEXT NOT NULL CHECK (role IN ('admin', 'moderator')),"
+    " pw_hash TEXT NOT NULL,"
+    " must_change INTEGER NOT NULL DEFAULT 1 CHECK (must_change IN (0, 1)),"
+    " disabled INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1)),"
+    " session_gen INTEGER NOT NULL DEFAULT 1,"
+    " created_at INTEGER NOT NULL,"
+    " created_by TEXT NOT NULL DEFAULT '',"
+    " last_login_at INTEGER NOT NULL DEFAULT 0"
+    ");"
+    "CREATE TABLE admin_locks ("
+    " scope TEXT NOT NULL CHECK (scope IN ('pair', 'addr', 'user')),"
+    " key TEXT NOT NULL,"
+    " user_ref TEXT NOT NULL DEFAULT '',"
+    " fails INTEGER NOT NULL,"
+    " first_at INTEGER NOT NULL,"
+    " locked_until INTEGER NOT NULL DEFAULT 0,"
+    " PRIMARY KEY (scope, key)"
+    ") WITHOUT ROWID;"
+    "CREATE INDEX admin_locks_user ON admin_locks (user_ref);"
+    "CREATE TABLE admin_known_addr ("
+    " user_id INTEGER NOT NULL,"
+    " addr_key TEXT NOT NULL,"
+    " last_ok INTEGER NOT NULL,"
+    " PRIMARY KEY (user_id, addr_key)"
+    ") WITHOUT ROWID;"
+    "CREATE TABLE admin_audit ("
+    " id INTEGER PRIMARY KEY,"
+    " at INTEGER NOT NULL,"
+    " actor TEXT NOT NULL,"
+    " actor_id INTEGER NOT NULL DEFAULT 0,"
+    " action TEXT NOT NULL,"
+    " target TEXT NOT NULL DEFAULT '',"
+    " detail TEXT NOT NULL DEFAULT '',"
+    " addr_key TEXT NOT NULL DEFAULT ''"
+    ");"
+    "CREATE INDEX admin_audit_at ON admin_audit (at, id);"
+    "ALTER TABLE map_submissions ADD COLUMN decided_by TEXT NOT NULL DEFAULT '';"
+    "UPDATE map_submissions SET decided_by = COALESCE((SELECT r.actor_name FROM review_log r WHERE r.submission = map_submissions.id AND r.action IN ('approve', 'decline', 'take_down', 'put_back') ORDER BY r.id DESC LIMIT 1), '')"
+    " WHERE state IN ('approved', 'declined', 'taken_down');";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -154,6 +204,7 @@ const std::vector<db::Migration>& db_migrations() {
         {3, "map_plays", kMapPlaysSql},
         {4, "site_stats", kSiteStatsSql},
         {5, "map_submissions", kSubmissionsSql},
+        {6, "admin_accounts", kAccountsSql},
     };
     return list;
 }

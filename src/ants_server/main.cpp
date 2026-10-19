@@ -94,8 +94,11 @@
 //                      how many maps may wait for the owner (default 200) and how many one address may send in a UTC day (default 3)
 //   --submit-ignore-client-header
 //                      count an address by the connection's own address instead of the X-Client-Address that the site's nginx sets (for a door that no proxy stands in front of)
-//   The owner's page needs two settings in the environment (never on the command line): ANTS_ADMIN_DISCORD_ID (the owner's Discord user id) and ANTS_ADMIN_SESSION_SECRET (32 or more characters,
-//   shared with the login helper tools/admin_login.py). Without both, every /admin/api path answers 404.
+//   The owner's page needs one setting in the environment (never on the command line): ANTS_ADMIN_SESSION_SECRET (32 or more characters; it signs the sign-in cookie). Without it, every /admin/api
+//   path answers 404. ANTS_ADMIN_ALLOW_HTTP=1 drops the Secure flag of the cookie, for a trial over plain http on this machine only.
+//   --admin-create NAME   makes the first Admin account (3 to 32 letters, digits, dot, dash, underscore), prints its random starting password ONCE on standard output and stops. It refuses when an Admin exists.
+//   --admin-reset NAME    gives that user a new random starting password (printed once), signs the user out, clears the locks and enables the account, and stops.
+//                      Both need --db FILE or --results-dir DIR (ants.db in it) and may run beside the server. (docs/MAP_SUBMISSIONS.md, "Accounts")
 //   --version, --help
 //
 // SIGTERM and SIGINT stop the server within a moment: the records of the running rooms are made durable (fsync) and left where they are (docker stop: give the container a grace period, the stack
@@ -107,6 +110,7 @@
 // from the file (docker exec <container> cat /results/control-secret). A secret in the environment wins. A file that exists is used as it is (secret.hpp).
 
 #include <algorithm>
+#include <iostream>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -125,6 +129,8 @@
 #include "ants_net/tcp.hpp"
 #include "ants_net/ws.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_server/admin_accounts.hpp"
+#include "ants_server/admin_cli.hpp"
 #include "ants_server/control.hpp"
 #include "ants_db/database.hpp"
 #include "ants_db/migrations.hpp"
@@ -189,6 +195,7 @@ struct Options {
     size_t submit_max_waiting{200};
     size_t submit_per_address{3};
     bool submit_ignore_client_header{false};
+    std::string admin_create, admin_reset;     // --admin-create, --admin-reset: the account commands
 };
 
 void usage(FILE* to) {
@@ -202,6 +209,7 @@ void usage(FILE* to) {
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
+                 "       ants_server (--admin-create NAME | --admin-reset NAME) (--db FILE | --results-dir DIR)\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -268,6 +276,8 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "--submit-port takes a port number (0 - 65535)\n");
                 return 2;
             }
+        } else if (a == "--admin-create" || a == "--admin-reset") {
+            (a == "--admin-create" ? o.admin_create : o.admin_reset) = value(a.c_str());
         } else if (a == "--submit-any-interface") {
             o.submit_any_interface = true;
         } else if (a == "--submit-ignore-client-header") {
@@ -414,6 +424,17 @@ int main(int argc, char** argv) {
             usage(stderr);
             return 2;
         }
+    }
+    if (!o.admin_create.empty() || !o.admin_reset.empty()) {            // the account commands: no server, no maps folder
+        if (!o.admin_create.empty() && !o.admin_reset.empty()) {
+            std::fprintf(stderr, "--admin-create and --admin-reset exclude each other\n");
+            return 2;
+        }
+        ants::server::AdminCommand command;
+        command.kind = o.admin_create.empty() ? ants::server::AdminCommand::Kind::Reset : ants::server::AdminCommand::Kind::Create;
+        command.name = o.admin_create.empty() ? o.admin_reset : o.admin_create;
+        command.db_path = !o.db_file.empty() ? o.db_file : o.results_dir.empty() ? std::string() : (std::filesystem::path(o.results_dir) / "ants.db").u8string();
+        return ants::server::run_admin_command(command, std::cout, std::cerr);
     }
     if (o.maps_dir.empty()) {
         usage(stderr);
@@ -714,6 +735,7 @@ int main(int argc, char** argv) {
     // The map submissions (submissions.hpp, docs/MAP_SUBMISSIONS.md): the store needs the database and a folder; the owner's page needs two settings of the environment. What is missing switches a part off with a line in
     // the log; a door that was asked for and cannot work stops the server (the operator asked for it).
     std::unique_ptr<ants::server::SubmissionStore> submissions;
+    std::unique_ptr<ants::server::AdminAccounts> accounts;
     std::unique_ptr<ants::server::SubmissionApi> submit_api;
     if (submit_http) {
         if (!database.is_open()) {
@@ -734,17 +756,23 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "map submissions: %s\n", why.c_str());
             return 1;
         }
+        accounts = std::make_unique<ants::server::AdminAccounts>(database);
+        if (!accounts->open(why)) {
+            std::fprintf(stderr, "accounts: %s\n", why.c_str());
+            return 1;
+        }
         ants::server::SubmissionApiConfig ac;
-        if (const char* id = std::getenv("ANTS_ADMIN_DISCORD_ID")) ac.owner_id = id;
         if (const char* session_key = std::getenv("ANTS_ADMIN_SESSION_SECRET")) ac.session_secret = session_key;
+        const char* plain_http = std::getenv("ANTS_ADMIN_ALLOW_HTTP");
+        ac.cookie_secure = !(plain_http != nullptr && std::string(plain_http) == "1");
         ac.trust_client_header = !o.submit_ignore_client_header;
-        submit_api = std::make_unique<ants::server::SubmissionApi>(*submissions, ac);
+        submit_api = std::make_unique<ants::server::SubmissionApi>(*submissions, *accounts, ac);
         auto refresh = [&rooms, &submissions]() { rooms.mutable_store().set_approved(submissions->approved_maps()); };
         refresh();
         submissions->take_approved_changed();
         submit_api->set_on_approved_changed(refresh);
         log("map submissions on: files in " + sc.dir + ", at most " + std::to_string(sc.max_waiting) + " waiting and " + std::to_string(sc.per_address_per_day) + " a day from one address; " +
-            (submit_api->owner_api_on() ? "the owner's review page is on" : "the owner's review page is OFF (ANTS_ADMIN_DISCORD_ID and ANTS_ADMIN_SESSION_SECRET, 32 characters or more, are both needed)") +
+            (submit_api->owner_api_on() ? "the owner's review page is on" + std::string(ac.cookie_secure ? "" : " (ANTS_ADMIN_ALLOW_HTTP: the cookie is not marked Secure)") : "the owner's review page is OFF (ANTS_ADMIN_SESSION_SECRET, 32 characters or more, is needed)") +
             "; " + std::to_string(submissions->approved_maps().size()) + " approved maps in the lobby's list");
         for (const std::string& line : submissions->take_notices()) log(line);
     }
@@ -804,6 +832,7 @@ int main(int argc, char** argv) {
             if (static_cast<uint32_t>(now - last_submission_upkeep_ms) >= 3600u * 1000u) {                 // (once an hour: the files of declined maps, old rows and counters)
                 last_submission_upkeep_ms = now;
                 submissions->maintenance(static_cast<int64_t>(std::time(nullptr)));
+                if (accounts) accounts->maintenance(static_cast<int64_t>(std::time(nullptr)));
             }
             for (const std::string& line : submissions->take_notices()) log(line);
         }

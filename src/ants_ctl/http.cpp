@@ -136,8 +136,8 @@ bool valid_secret(const std::string& s) {
 
 // What may be put into a response header from a program's hands: visible ASCII and spaces, so no CR, LF or other control character can end the
 // line and start another
-bool safe_header_value(std::string_view s) {
-    if (s.empty() || s.size() > 256) return false;
+bool safe_header_value(std::string_view s, size_t max_size = 256) {
+    if (s.empty() || s.size() > max_size) return false;
     return std::all_of(s.begin(), s.end(), [](char c) {
         const unsigned char u = static_cast<unsigned char>(c);
         return u >= 0x20 && u <= 0x7E;
@@ -588,7 +588,12 @@ void HttpServer::Impl::dispatch(Conn& c, uint32_t now, const Handler& handler) {
         return respond_error(c, now, 500, "internal error");
     }
     const std::string_view type = safe_header_value(response.content_type) ? std::string_view(response.content_type) : std::string_view("application/json");
-    respond(c, now, response.status, type, response.body);
+    std::string extra;
+    for (const std::string& cookie : response.set_cookies) {
+        if (!safe_header_value(cookie, 512)) continue;
+        extra += "Set-Cookie: " + cookie + "\r\n";
+    }
+    respond(c, now, response.status, type, response.body, extra.c_str());
 }
 
 // One connection's turn. False when it is finished (or lost) and must be dropped.
