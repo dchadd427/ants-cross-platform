@@ -182,6 +182,14 @@ async function caseC() {
     check(idb.log.every((l) => /^getAll/.test(l)), 'showing the list writes nothing');
     s.p.els['mine-new'].click(); s.p.els['mine-back'].click();
     equal(s.calls.slice(2), [['new'], ['back']], 'New map and Back to the map go to the page');
+    // a saved map whose bytes cannot be read, newest of all: the page's picture maker throws on a missing map, and the rows after it still get their picture and check line
+    const idb2 = fakeIdb();
+    idb2.stores.drafts.set('broken', rec('Broken', 'classic', 300, new Uint8Array([0, 0, 0])));
+    idb2.stores.drafts.set('good', rec('Good', 'classic', 200));
+    const tdoc = makeDocument();
+    const t = await loaded(await opened(idb2), { thumb: (file) => { if (!file) throw new TypeError('Cannot read properties of null'); return tdoc.createElement('canvas'); } });
+    const [bad2, good2] = t.p.els['mine-list'].children;
+    equal([good2.querySelector('.mthumb').children.length, /Works in the original game/.test(good2.querySelector('.t3').textContent), bad2.querySelector('.mthumb').children.length], [1, true, 0], 'an unreadable saved map gets no picture, and the next row is still filled in');
 }
 
 // ---- D ----

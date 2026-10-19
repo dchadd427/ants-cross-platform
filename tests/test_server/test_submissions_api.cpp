@@ -481,6 +481,8 @@ int main() {
         }
         ctl::JsonValue list = parse_text(t.owner("GET", "/admin/api/maps").body);
         ASSERT_TRUE(list.get("state").str() == "waiting" && list.get("maps").size() == 4 && list.get("counts").get("waiting").as_int_or(0) == 4);
+        ASSERT_TRUE(list.get("untrusted").as_bool_or(false) && list.get("untrusted_fields").is_array() && list.get("untrusted_fields").size() == 5);          // (the list says which fields are player text)
+        ASSERT_TRUE(list.get("untrusted_fields").at(0).str() == "name" && list.get("untrusted_fields").at(1).str() == "maker" && list.get("untrusted_fields").at(2).str() == "note" && list.get("untrusted_fields").at(3).str() == "description" && list.get("untrusted_fields").at(4).str() == "approved_name");
         ASSERT_TRUE(list.get("counts").get("approved").as_int_or(-1) == 0 && list.get("counts").get("declined").as_int_or(-1) == 0 && list.get("counts").get("taken_down").as_int_or(-1) == 0);
         const ctl::JsonValue* first_map = nullptr;
         for (size_t i = 0; i < list.get("maps").size(); ++i) {
