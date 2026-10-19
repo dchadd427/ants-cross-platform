@@ -73,7 +73,7 @@ Submission read_row(db::Statement& st) {
     s.maker = st.column_text(5);
     s.note = st.column_text(6);
     s.owner_message = st.column_text(7);
-    s.description = st.column_text(8);
+    s.description = names::tidy_description(st.column_text(8));          // (a row from before the rule is cleaned when it is read)
     s.hash = st.column_text(9);
     s.file = st.column_text(10);
     s.findings_json = st.column_text(11);
@@ -250,14 +250,19 @@ SubmitOutcome SubmissionStore::submit(const SubmitInput& in, int64_t now) {
     }
     const names::Cleaned maker = names::clean_maker(in.maker);
     if (!maker.ok) {
-        out.fail = make_failure(400, "bad_maker", maker.reason == "too_long" ? "The maker name is too long (at most 24 characters)." : maker.reason == "empty" ? "Please give a name to show as the maker." : "The maker name has a character that cannot be shown here.");
+        out.fail = make_failure(400, "bad_maker", maker.reason == "too_long" ? "The maker name is too long (at most 24 characters)." : maker.reason == "empty" ? "Please give a name to show as the maker." :
+                                                  maker.reason == "reserved" ? "That maker name cannot be used. Please choose another." : maker.reason == "link" ? "The maker name cannot hold a web address or three backticks." : "The maker name has a character that cannot be shown here.");
         out.fail.extra = JsonValue::make_object();
         out.fail.extra.set("reason", JsonValue::make_string(maker.reason));
         return out;
     }
-    const names::Cleaned note = names::clean_note(in.note, names::kMaxNoteChars, false);
+    names::Cleaned note = names::clean_note(in.note, names::kMaxNoteChars, false);
+    if (note.ok && names::has_link_markup(note.text)) {
+        note.ok = false;
+        note.reason = "link";
+    }
     if (!note.ok) {
-        out.fail = make_failure(400, "bad_note", note.reason == "too_long" ? "The note is too long (at most 280 characters)." : "The note has a character that cannot be shown here.");
+        out.fail = make_failure(400, "bad_note", note.reason == "too_long" ? "The note is too long (at most 280 characters)." : note.reason == "link" ? "The note cannot hold a web address or three backticks." : "The note has a character that cannot be shown here.");
         out.fail.extra = JsonValue::make_object();
         out.fail.extra.set("reason", JsonValue::make_string(note.reason));
         return out;
@@ -346,7 +351,7 @@ SubmitOutcome SubmissionStore::submit(const SubmitInput& in, int64_t now) {
     s.height = meta.get("rows").as_int_or(0);
     s.minutes = meta.get("minutes").as_int_or(0);
     s.players = players;
-    s.description = meta.get("description").str();
+    s.description = names::clean_description(meta.get("description").str());          // (player text too: the file keeps its own bytes, the database and the lists keep the cleaned form)
     s.size = static_cast<int64_t>(canonical.size());
     s.file = s.id + ".lvl";
     s.created_at = now;
