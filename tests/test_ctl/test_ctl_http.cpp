@@ -1369,4 +1369,33 @@ void run_http_tests() {
         plain.handler = rig.handler;
         ASSERT_EQ(plain.exchange("GET /f HTTP/1.1\r\n\r\n").status, 500);                                       // (the public door keeps its 1 MiB)
     } TEST_END();
+    TEST_CASE("CTL2.28 HTTP door: a handler's cookies become Set-Cookie lines, one each; a value with a line end, a control character or a non-ASCII byte, or one that is empty or too long, is dropped, so a request cannot split the answer") {
+        Rig rig(true);
+        DoorOptions options;
+        rig.server = HttpServer::listen_door(0, options, true);
+        ASSERT_TRUE(rig.ok());
+        rig.handler = [](const HttpRequest& request) {
+            HttpResponse resp;
+            resp.body = "{}";
+            if (request.path == "/two") {
+                resp.set_cookies = {"a=1; Path=/admin; HttpOnly", "b=2; Path=/admin; Max-Age=0"};
+            } else if (request.path == "/bad") {
+                resp.set_cookies = {"a=1\r\nX-Injected: yes", "b=2\nX-Injected: yes", "c=\x01", "d=caf\xC3\xA9", "", std::string(513, 'x'), "good=1; Secure"};
+            }
+            return resp;
+        };
+        Reply r = rig.exchange("GET /two HTTP/1.1\r\n\r\n");
+        ASSERT_TRUE(r.status == 200 && r.responses == 1);
+        ASSERT_TRUE(r.raw.find("\r\nSet-Cookie: a=1; Path=/admin; HttpOnly\r\nSet-Cookie: b=2; Path=/admin; Max-Age=0\r\n") != std::string::npos);
+        ASSERT_TRUE(r.raw.find("Cache-Control: no-store\r\n") != std::string::npos);                    // (the other headers of an answer are still there)
+        r = rig.exchange("GET /bad HTTP/1.1\r\n\r\n");
+        ASSERT_TRUE(r.status == 200 && r.responses == 1);
+        ASSERT_TRUE(r.raw.find("X-Injected") == std::string::npos && r.raw.find("c=\x01") == std::string::npos && r.raw.find("caf") == std::string::npos);
+        ASSERT_TRUE(r.raw.find("\r\nSet-Cookie: good=1; Secure\r\n") != std::string::npos);
+        size_t lines = 0;
+        for (size_t at = r.raw.find("Set-Cookie:"); at != std::string::npos; at = r.raw.find("Set-Cookie:", at + 1)) ++lines;
+        ASSERT_EQ(lines, size_t{1});
+        r = rig.exchange("GET /none HTTP/1.1\r\n\r\n");
+        ASSERT_TRUE(r.status == 200 && r.raw.find("Set-Cookie") == std::string::npos);
+    } TEST_END();
 }

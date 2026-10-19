@@ -280,3 +280,20 @@ target_include_directories(test_admin_accounts PRIVATE
 
 add_test(NAME test_admin_accounts COMMAND test_admin_accounts)
 set_tests_properties(test_admin_accounts PROPERTIES COST 12)
+
+# The owner's page API for accounts (ants_server/submissions_http.hpp): the sign-in and its answers, the forced choice of a password, the change of a password, the two roles, the user pages, the log. Requests made by hand: no network
+add_executable(test_admin_api
+    test_admin_api.cpp
+)
+
+target_link_libraries(test_admin_api PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_admin_api PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_admin_api COMMAND test_admin_api)
+set_tests_properties(test_admin_api PROPERTIES COST 6)
