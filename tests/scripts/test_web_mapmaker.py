@@ -431,7 +431,7 @@ class TheCodeRuns(unittest.TestCase):
             "an undo that forces a splice on bytes that are not where it says": ("mapmaker_edit.js", "if (!sameBytes(self.file.bytes, at, out)) continue;", "void 0;"),
             "arrow keys in the team swatches that choose tiles": ("mapmaker_tools.js", "if (hasTeams()) chooseTeam(id); else chooseTile(id);", "chooseTile(id);"),
             "ants that do not all fit and say nothing": ("mapmaker_tools.js", "if (put < state.ants) fits = ' (only ' + put + ' fit)';", "void 0;"),
-            "a tap tool that begins a stroke": ("mapmaker_tools.js", "tapOnly: function () { return !!editor && places(); },", "tapOnly: function () { return false; },"),
+            "a tap tool that begins a stroke": ("mapmaker_tools.js", "tapOnly: function () { return !!editor && (mine() ? mine().tapOnly() : places()); },", "tapOnly: function () { return false; },"),
             "a hill whose square is one cell": ("mapmaker_tools.js", "(state.tool === 'hills' ? Blocks.HILL : 1)", "1"),
             "a hill without its door marked": ("mapmaker_tools.js", "door: function () { return !!editor && (state.tool === 'hills' || state.tool === 'bigger'); },", "door: function () { return false; },"),
             "a brush that takes a hill away": ("mapmaker_edit.js", "if (kind === 'objects' && hooks.guard) {", "if (false) {"),
@@ -486,7 +486,7 @@ class TheCodeRuns(unittest.TestCase):
             "a finger that paints before it is known not to be the first of two": ("mapmaker_canvas.js", "if (mouse) startStroke(e.pointerId, cell); else pending = { id: e.pointerId, cell: cell };", "startStroke(e.pointerId, cell);"),
             "a brush that does not reach the painter": ("mapmaker_tools.js", "(paints() ? state.brush : (places()", "(paints() ? 1 : (places()"),
             "a splice of the header counted from the end of layer 2": ("mapmaker_edit.js", "return s.abs ? s.at : file.blocksAt + s.rel;", "return file.blocksAt + (s.abs ? s.at : s.rel);"),
-            "a change of the properties that is not one step": ("mapmaker_tools.js", "var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; },", "var dirty = editor.act(change); if (dirty) changed(dirty); if (dirty) editor.act(change); return !!dirty; },"),
+            "a change of the properties that is not one step": ("mapmaker_tools.js", "var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; }", "var dirty = editor.act(change); if (dirty) changed(dirty); if (dirty) editor.act(change); return !!dirty; }"),
             "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "function act(change) { if (!editor || canvas.isStroking()) return false;", "function act(change) { if (!editor) return false;"),
         }
         for what, (name, old, new) in mutants.items():
