@@ -134,6 +134,17 @@ function caseA() {
     equal(['Hi', 'x'.repeat(61), 'a<b', 'Big Lake.', 'Big..Lake', '..', 'abé', ' ab', '-ab', 'A_b-c! (1), d&e.f'].map((n) => Submit.nameProblem(n) !== ''), [true, true, true, true, true, true, true, true, true, false], 'the name rules of the server');
     equal(Submit.nameProblem('x'.repeat(60)), '', '60 characters are fine');
     equal([Submit.textProblem('Mia', 24, 'player name'), Submit.textProblem('x'.repeat(25), 24, 'player name') !== '', Submit.textProblem('a<b', 24, 'note') !== '', Submit.textProblem('\u{1F600}'.repeat(24), 24, 'note')], ['', true, true, ''], 'the maker name and the note: a length by characters and no < or >');
+    // the maker's name and the links, as the server judges them again (the same cases as NM2.5 and NM2.6 of tests/test_server/test_map_names.cpp)
+    const reserved = ['Owner', 'OWNER', 'admin', 'Administrator', 'System', 'moderator', 'Mod', 'STAFF', 'Claude', 'Anthropic', 'Assistant', 'Server', 'Ants', 'The Owner', 'the-owner', 'O w n e r', 'Admin 2', 'ad-min!', 'Mod_7', 'A.n.t.s',
+        '\u041e' + 'wner', '\u0410' + 'dmin', '\u041e wner', '\u039f wner', '\u0410 dmin', '\u039f' + 'wner', 'Cl\u0430ude', '\u041c\u041e' + 'd', 'Mi\u0430', 'Mi\u03b1', 'Bot (Hard)', 'bot(x)', 'Pip (bot)', 'Pip (Bot, Hard)', 'Pip ( bot )', '\u0412\u041e\u0422 (Hard)'];
+    const allowed = ['Mia', 'Dave K', 'Anthony', 'Ownership', 'Modest', 'Staffan', 'Antsy', 'Ant', 'Servers', 'Bottle (cap)', 'Bot', 'Systematic', 'J\u00fcrgen', 'Theo', 'Thermos', "O'Neil-Smith", '\u041e\u0421\u0415', '\u041c\u041e\u0414',
+        'Mia \u0418\u0432\u0430\u043d', 'Mia-\u0418\u0432', '\u0391\u03b4\u03bc\u03b9\u03bd', '\u0418\u0432\u0430\u043d'];
+    equal(reserved.filter((n) => Submit.makerProblem(n) === ''), [], 'every name that only the owner or the site may have, a look-alike of one, a bot-like name and a word of two scripts is refused');
+    equal(allowed.filter((n) => Submit.makerProblem(n) !== ''), [], 'and an honest name is not');
+    check(/cannot be used/.test(Submit.makerProblem('Owner')), 'with a sentence');
+    equal(['a://b', 'http://x', 'WWW.x.org', 'www.a', '```a', 'x```', 'see Www.me'].filter((t) => Submit.textProblem(t, 24, 'note') === ''), [], 'a web address or three backticks are refused in a note and in a maker name');
+    equal(['``a``', 'www', 'wwwa.b', 'a:/b', 'a:b', 'slash/slash', '`one`'].filter((t) => Submit.textProblem(t, 24, 'note') !== ''), [], 'two backticks, a colon and a slash are fine');
+    check(/web address/.test(Submit.textProblem('a://b', 24, 'note')), 'and it says why');
     equal(Submit.tokensOf('#sent=' + TOKEN), [TOKEN], 'a status link has a token');
     equal(Submit.tokensOf('#sent=' + TOKEN + ',' + TOKEN2), [TOKEN, TOKEN2], 'or two');
     equal([Submit.tokensOf('#sent=abc'), Submit.tokensOf('#sent='), Submit.tokensOf(''), Submit.tokensOf('#other=' + TOKEN), Submit.tokensOf('#sent=' + TOKEN + '<b>'), Submit.tokensOf('#sent=' + TOKEN + ',zz')], [[], [], [], [], [], [TOKEN]], 'nothing else is a token');
@@ -202,8 +213,16 @@ async function caseC() {
     check(p.host.querySelector('.note.warn') !== null && p.host.querySelector('.note.bad') === null, 'as a yellow note and not as an error');
     type(p, 'sub-note', 'a<b');
     check(send.disabled && /cannot have the marks/.test(text(p)), 'a note with < stops the button');
+    type(p, 'sub-note', 'see http://example.org');
+    check(send.disabled && /web address/.test(text(p)), 'a note with a web address stops the button');
     type(p, 'sub-note', 'x'.repeat(200));
     check(!send.disabled, 'a long note is fine');
+    type(p, 'sub-maker', 'Owner');
+    check(send.disabled && /cannot be used/.test(text(p)), 'a maker name that only the owner may have stops the button');
+    type(p, 'sub-maker', '\u041e' + 'wner');
+    check(send.disabled && /cannot be used/.test(text(p)), 'also with a Cyrillic letter in it');
+    type(p, 'sub-maker', 'Mia');
+    check(!send.disabled, 'and an honest name lets it go');
     // a map that does not work
     p = await opened({ report: { works: false, headline: 'Does not work in the original game', kind: 'classic', findings: [{ severity: 'fatal', message: 'blue has no hill', row: -1 }, { severity: 'fatal', message: 'red has no starting ants (no start marker, tile 155)', row: 4, column: 9 }, { severity: 'note', message: 'a note' }] } });
     check(button(p, 'Submit for approval').disabled, 'a map that does not work cannot be submitted');

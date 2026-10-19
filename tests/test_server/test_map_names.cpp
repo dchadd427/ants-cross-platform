@@ -220,6 +220,8 @@ int main() {
         ASSERT_EQ(reason("\xD0\x9E" "wner"), std::string("reserved"));                          // a Cyrillic O in "Owner"
         ASSERT_EQ(reason("\xD0\x90" "dmin"), std::string("reserved"));                          // a Cyrillic A in "Admin"
         ASSERT_EQ(reason("\xCE\x9F" "wner"), std::string("reserved"));                          // a Greek omicron in "Owner"
+        ASSERT_EQ(reason("\xD0\x9E wner"), std::string("reserved"));                          // (a Cyrillic O as a word of its own: no mixed word, but the folded name is "owner")
+        ASSERT_EQ(reason("\xCE\x9F wner"), std::string("reserved"));
         ASSERT_EQ(reason("Cl\xD0\xB0ude"), std::string("reserved"));                            // a small Cyrillic a
         ASSERT_EQ(reason("\xD0\x9E\xD0\xA1\xD0\x95"), std::string("ok"));                       // (only Cyrillic letters that spell "oce": not a reserved word, and not mixed)
         ASSERT_EQ(reason("\xD0\x9C\xD0\x9E\xD0\x94"), std::string("ok"));                       // (a Cyrillic word that is no look-alike of "mod": Д has no Latin twin)
@@ -282,6 +284,31 @@ int main() {
         ASSERT_EQ(names::clean_description(two_characters), std::string("\xC3\xA9"));                              // read as the file's bytes: one letter
         ASSERT_EQ(names::tidy_description(two_characters), std::string("\xC3\x83?"));                              // read as characters (a row of the database): never decoded a second time, the sign is not allowed
         ASSERT_EQ(names::tidy_description("Raw\nrow <b>\x1B"), std::string("Raw row ?b?"));                       // what the readers of the database do with an old row
+    } TEST_END();
+
+    TEST_CASE("NM2.8 Every look-alike letter of the Cyrillic and Greek alphabets that the server folds is listed here, with its Latin letter (the page's copy of the table is held to this list by tests/scripts/test_web_mapmaker.py), and nothing else is folded") {
+        const struct {
+            const char* from;
+            const char* to;
+        } kPairs[] = {
+            {"\xD0\x90", "a"}, {"\xD0\x92", "b"}, {"\xD0\x95", "e"}, {"\xD0\x9A", "k"}, {"\xD0\x9C", "m"}, {"\xD0\x9D", "h"},
+            {"\xD0\x9E", "o"}, {"\xD0\xA0", "p"}, {"\xD0\xA1", "c"}, {"\xD0\xA2", "t"}, {"\xD0\xA3", "y"}, {"\xD0\xA5", "x"},
+            {"\xD0\xB0", "a"}, {"\xD0\xB5", "e"}, {"\xD0\xBA", "k"}, {"\xD0\xBE", "o"}, {"\xD1\x80", "p"}, {"\xD1\x81", "c"},
+            {"\xD1\x83", "y"}, {"\xD1\x85", "x"}, {"\xCE\x91", "a"}, {"\xCE\x92", "b"}, {"\xCE\x95", "e"}, {"\xCE\x96", "z"},
+            {"\xCE\x97", "h"}, {"\xCE\x99", "i"}, {"\xCE\x9A", "k"}, {"\xCE\x9C", "m"}, {"\xCE\x9D", "n"}, {"\xCE\x9F", "o"},
+            {"\xCE\xA1", "p"}, {"\xCE\xA4", "t"}, {"\xCE\xA5", "y"}, {"\xCE\xA7", "x"}, {"\xCE\xB1", "a"}, {"\xCE\xB9", "i"},
+            {"\xCE\xBA", "k"}, {"\xCE\xBD", "v"}, {"\xCE\xBF", "o"}, {"\xCF\x81", "p"}, {"\xCF\x85", "u"}, {"\xCF\x87", "x"},
+            {"\xCF\x89", "w"},
+        };
+        size_t count = 0;
+        for (const auto& p : kPairs) {
+            ASSERT_EQ(names::fold_lookalikes(p.from), std::string(p.to));
+            ++count;
+        }
+        ASSERT_EQ(count, size_t{43});
+        ASSERT_EQ(names::fold_lookalikes("Owner ADMIN 123 _-. J\xC3\xBCrgen"), std::string("owner admin 123 _-. j\xC3\xBCrgen"));      // (ASCII letters to lower case, a Latin-1 letter stays)
+        ASSERT_EQ(names::fold_lookalikes("\xD0\x94\xCE\xB4\xCE\x98\xE6\x97\xA5"), std::string("\xD0\x94\xCE\xB4\xCE\x98\xE6\x97\xA5"));      // (letters without a Latin twin stay as they are)
+        ASSERT_EQ(names::fold_lookalikes("\xC3\x28"), std::string("\xC3\x28"));                                                                  // (not UTF-8: unchanged)
     } TEST_END();
 
     TEST_CASE("NM3.1 The next free name: from 2, the number it ends in is replaced, a taken number is skipped, the name is cut to fit, no name is free after 999") {

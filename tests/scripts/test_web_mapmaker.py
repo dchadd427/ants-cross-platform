@@ -845,6 +845,31 @@ class ThePage(unittest.TestCase):
                         shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
                     self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
+    def test_the_pages_rules_for_the_makers_name_are_the_servers(self):
+        """The page's copy of the maker-name rules (mapmaker_submit.js: LOOK, makerProblem) is held to the server's (src/ants_server/map_names.cpp: kLookalikes, kWords): the same look-alike letters
+        with the same Latin letters, the same reserved words, the same script ranges, the same bot rule and the same link marks"""
+        cpp = read("src", "ants_server", "map_names.cpp")
+        server = dict((chr(int(code, 16)), letter) for code, letter in re.findall(r"\{(0x[0-9A-F]{4}), '(\w)'\}", cpp))
+        look = re.search(r"var LOOK = '([^']+)';", read("web", "front", "mapmaker_submit.js")).group(1)
+        self.assertEqual(len(look) % 2, 0)
+        page = dict((look[i], look[i + 1].lower()) for i in range(0, len(look), 2))      # (the page lower-cases the whole name afterwards)
+        self.assertEqual(len(page) * 2, len(look), "a letter twice in LOOK")
+        self.assertEqual(page, server, "the look-alike letters of the page and of the server")
+        self.assertGreaterEqual(len(server), 40)
+        words = re.search(r"kWords\[\] = \{([^}]+)\}", cpp).group(1)
+        server_words = re.findall(r'"(\w+)"', words)
+        page_words = re.search(r"\^\(the\)\?\(([a-z|]+)\)\$", read("web", "front", "mapmaker_submit.js")).group(1).split("|")
+        self.assertEqual(sorted(page_words), sorted(server_words), "the reserved words")
+        self.assertEqual(len(server_words), 12)
+        # the ranges of the scripts (a Latin letter, and a Greek or Cyrillic one) and the link marks are the same text in both
+        self.assertIn("(c >= 0x00C0 && c <= 0x024F)", cpp)
+        self.assertIn("c >= 0x0391 && c <= 0x0451", cpp)
+        submit = read("web", "front", "mapmaker_submit.js")
+        self.assertIn("/[A-Za-z\\u00c0-\\u024f]/.test(w) && /[\\u0391-\\u0451]/.test(w)", submit)
+        self.assertIn('lower.find("://")', cpp)
+        self.assertIn('lower.find("www.")', cpp)
+        self.assertIn('lower.find("```")', cpp)
+
     def test_a_player_never_publishes_and_nothing_can_be_replaced_by_the_script_that_sends_maps(self):
         submit = read("web", "front", "mapmaker_submit.js")
         # the calls: a map goes to the owner's queue (POST /submissions), the list is read (GET), a waiting map is withdrawn: nothing else, nothing of the owner's side or the lobby's lists

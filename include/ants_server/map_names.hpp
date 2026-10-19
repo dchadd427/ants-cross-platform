@@ -46,6 +46,8 @@ Cleaned clean_map_name(std::string_view raw);
 /// The maker's display name (1 .. kMaxMakerChars characters, one line): also refused are a web address or three backticks ("link") and a name that only the owner or the site may have, or that mixes
 /// scripts in one word, or that looks like a bot's ("reserved")
 Cleaned clean_maker(std::string_view raw);
+/// The text with every look-alike letter of the Cyrillic and Greek alphabets as its Latin letter and every ASCII letter in lower case (the form on which a maker's name is judged); nothing else changes
+std::string fold_lookalikes(std::string_view text);
 /// Does the (cleaned) text hold "://", "www." (any case) or three backticks in a row: what a note and a maker's name may not have
 bool has_link_markup(std::string_view cleaned_text);
 /// A note or a reason: 0 .. max_chars characters, line ends kept (at most three in a row are kept as two), `required` false lets an empty text through

@@ -455,6 +455,118 @@
    "old": "(res.status === 201 && !(res.json && res.json.submission))",
    "new": "false",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_owner_is_free",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "(owner|admin|",
+   "new": "(admin|",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_claude_is_free",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "|claude|",
+   "new": "|",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_the_owner_is_free",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "/^(the)?(owner",
+   "new": "/^(owner",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_skeleton_keeps_marks",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "f.replace(/[^a-z\\u0080-\\uffff]/g, '')",
+   "new": "f.replace(/[^a-z \\u0080-\\uffff]/g, '')",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_lookalikes_not_folded",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "return i < 0 ? c : LOOK.charAt(i + 1);",
+   "new": "return c;",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_lookalike_greek_omicron_missing",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "ΟOΡP",
+   "new": "ΡP",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_bot_start_is_free",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "/^bot\\(|",
+   "new": "/^bat\\(|",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_bot_end_is_free",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "\\(bot(,[^()]+)?\\)$/",
+   "new": "\\(bat(,[^()]+)?\\)$/",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_bot_blanks_count",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "f.replace(/\\s/g, '')",
+   "new": "f",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_mixed_words_are_free",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "return /[A-Za-z\\u00c0-\\u024f]/.test(w) && /[\\u0391-\\u0451]/.test(w);",
+   "new": "return false;",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_mixed_words_need_cyrillic_only",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "/[\\u0391-\\u0451]/.test(w)",
+   "new": "/[\\u0400-\\u0451]/.test(w)",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_check_is_not_wired",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "|| makerProblem(v.maker))",
+   "new": "))",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_with_scheme_is_fine",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "/:\\/\\/|www\\./i.test(text)",
+   "new": "/www\\./i.test(text)",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_with_www_is_fine",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "/:\\/\\/|www\\./i.test(text)",
+   "new": "/:\\/\\//i.test(text)",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_in_capitals_is_fine",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "/:\\/\\/|www\\./i.test(text)",
+   "new": "/:\\/\\/|www\\./.test(text)",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "backticks_are_fine",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "|| text.indexOf('```') >= 0",
+   "new": "|| false",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
   }
  ]
 }

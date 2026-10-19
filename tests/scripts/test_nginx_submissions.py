@@ -86,7 +86,7 @@ def stub(name):
 
 
 class Rig:
-    def __init__(self, trusted="", relaxed=True):
+    def __init__(self, trusted="", relaxed=True, log=False):
         self.work = tempfile.mkdtemp(prefix="ants_nginx_submit_")
         for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp", "html", "trusted"):
             os.makedirs(os.path.join(self.work, sub), exist_ok=True)
@@ -114,6 +114,8 @@ class Rig:
             text = re.sub(r"(zone=ants_submit_post:1m rate=)10r/m", r"\g<1>100000r/s", text)
             text = re.sub(r"(zone=ants_submit_read:1m rate=)10r/s", r"\g<1>100000r/s", text)
         text = text.replace("/srv/community-maps/", self.work + "/srv/").replace("/var/cache/nginx/", self.work + "/cache/")
+        self.log_file = os.path.join(self.work, "access.log")
+        text = text.replace("access_log /dev/stdout ants_noquery;", ("access_log %s ants_noquery;" % self.log_file) if log else "access_log off;")          # (the image logs to its output)
         user = "user root;\n" if hasattr(os, "geteuid") and os.geteuid() == 0 else ""
         full = user + "pid %s/nginx.pid;\nerror_log %s/error.log;\nevents { worker_connections 256; }\nhttp {\n access_log off;\n client_body_temp_path %s/tmp/body;\n proxy_temp_path %s/tmp/proxy;\n fastcgi_temp_path %s/tmp/fcgi;\n uwsgi_temp_path %s/tmp/uwsgi;\n scgi_temp_path %s/tmp/scgi;\n%s\n}\n" % ((self.work,) * 7 + (text,))
         conf = os.path.join(self.work, "nginx.conf")

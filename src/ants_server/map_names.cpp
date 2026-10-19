@@ -295,6 +295,12 @@ Cleaned clean_maker(std::string_view raw) {
     return out;
 }
 
+std::string fold_lookalikes(std::string_view text) {
+    std::vector<char32_t> v;
+    if (!decode_utf8(text, v)) return std::string(text);
+    return encode(folded(v));
+}
+
 bool has_link_markup(std::string_view cleaned_text) {
     const std::string lower = lower_ascii(std::string(cleaned_text));
     return lower.find("://") != std::string::npos || lower.find("www.") != std::string::npos || lower.find("```") != std::string::npos;
