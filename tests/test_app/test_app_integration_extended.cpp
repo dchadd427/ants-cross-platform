@@ -3,6 +3,14 @@
 // the camera, the edge scroll and the minimap at that size. (The refusals of a room are in test_map_fetch_app.cpp, the ticks of four bots twice in tests/test_ai/test_ai_extended.cpp.)
 #include "app_integration_fixtures.hpp"
 
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "ants_app/edge_scroll.hpp"
 #include "crowd_level.hpp"
 

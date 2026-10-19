@@ -7,6 +7,9 @@
 //   AI31.4  the same match on a map that is 120 columns wide and one that is 128 rows tall (the largest the game plays); one column or row more is refused by the game's limits
 #include <array>
 #include <chrono>
+#include <iostream>
+#include <string>
+#include <utility>
 #include <cstdlib>
 
 #include "ai_test.hpp"
