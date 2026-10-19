@@ -137,7 +137,7 @@ function caseA() {
     // the maker's name and the links, as the server judges them again (the same cases as NM2.5 and NM2.6 of tests/test_server/test_map_names.cpp)
     const reserved = ['Owner', 'OWNER', 'admin', 'Administrator', 'System', 'moderator', 'Mod', 'STAFF', 'Claude', 'Anthropic', 'Assistant', 'Server', 'Ants', 'The Owner', 'the-owner', 'O w n e r', 'Admin 2', 'ad-min!', 'Mod_7', 'A.n.t.s',
         '\u041e' + 'wner', '\u0410' + 'dmin', '\u041e wner', '\u039f wner', '\u0410 dmin', '\u039f' + 'wner', 'Cl\u0430ude', '\u041c\u041e' + 'd', 'Mi\u0430', 'Mi\u03b1', 'Bot (Hard)', 'bot(x)', 'Pip (bot)', 'Pip (Bot, Hard)', 'Pip ( bot )', '\u0412\u041e\u0422 (Hard)'];
-    const allowed = ['Mia', 'Dave K', 'Anthony', 'Ownership', 'Modest', 'Staffan', 'Antsy', 'Ant', 'Servers', 'Bottle (cap)', 'Bot', 'Systematic', 'J\u00fcrgen', 'Theo', 'Thermos', "O'Neil-Smith", '\u041e\u0421\u0415', '\u041c\u041e\u0414',
+    const allowed = ['Mia', 'Dave K', 'Anthony', 'Ownership', 'Modest', 'Staffan', 'Antsy', 'Ant', 'Servers', 'Bottle (cap)', 'Bot', 'Systematic', 'J\u00fcrgen', 'Theo', 'Thermos', "O'Neil-Smith", 'Adm\u00e9in', 'Ow\u00f1er', '\u041e\u0421\u0415', '\u041c\u041e\u0414',
         'Mia \u0418\u0432\u0430\u043d', 'Mia-\u0418\u0432', '\u0391\u03b4\u03bc\u03b9\u03bd', '\u0418\u0432\u0430\u043d'];
     equal(reserved.filter((n) => Submit.makerProblem(n) === ''), [], 'every name that only the owner or the site may have, a look-alike of one, a bot-like name and a word of two scripts is refused');
     equal(allowed.filter((n) => Submit.makerProblem(n) !== ''), [], 'and an honest name is not');

@@ -723,7 +723,7 @@
    "id": "description_not_cut",
    "file": "src/ants_server/map_names.cpp",
    "old": "    cut_to(v, kMaxDescriptionChars);\n    return encode(v);",
-   "new": "    return encode(v);"
+   "new": "    cut_to(v, 100000);\n    return encode(v);"
   },
   {
    "id": "description_cut_leaves_a_space",
@@ -771,19 +771,19 @@
    "id": "maker_reserved_words_allowed",
    "file": "src/ants_server/map_names.cpp",
    "old": "has_mixed_script_word(v) || reserved_maker_word(look) || looks_like_bot(look)",
-   "new": "has_mixed_script_word(v) || looks_like_bot(look)"
+   "new": "has_mixed_script_word(v) || (reserved_maker_word(look) && false) || looks_like_bot(look)"
   },
   {
    "id": "maker_bot_names_allowed",
    "file": "src/ants_server/map_names.cpp",
    "old": "has_mixed_script_word(v) || reserved_maker_word(look) || looks_like_bot(look)",
-   "new": "has_mixed_script_word(v) || reserved_maker_word(look)"
+   "new": "has_mixed_script_word(v) || reserved_maker_word(look) || (looks_like_bot(look) && false)"
   },
   {
    "id": "maker_mixed_words_allowed",
    "file": "src/ants_server/map_names.cpp",
    "old": "has_mixed_script_word(v) || reserved_maker_word(look) || looks_like_bot(look)",
-   "new": "reserved_maker_word(look) || looks_like_bot(look)"
+   "new": "(has_mixed_script_word(v) && false) || reserved_maker_word(look) || looks_like_bot(look)"
   },
   {
    "id": "maker_the_owner_allowed",
@@ -855,7 +855,7 @@
    "id": "maker_mixed_word_ends_at_a_blank",
    "file": "src/ants_server/map_names.cpp",
    "old": "        if (!letter) {\n            if (latin && other) return true;\n            latin = other = false;\n            continue;\n        }",
-   "new": "        if (!letter) {\n            latin = other = false;\n            continue;\n        }"
+   "new": "        if (!letter) {\n            if (latin && other && false) return true;\n            latin = other = false;\n            continue;\n        }"
   },
   {
    "id": "maker_bot_rule_never_fires",
@@ -1059,7 +1059,7 @@
    "id": "lvl_tool_prints_the_description_raw",
    "file": "tools/lvl_tool.cpp",
    "old": "escaped(level.description)",
-   "new": "level.description",
+   "new": "(false ? escaped(level.description) : level.description)",
    "test": "./build/lvl_tool --selftest",
    "build": [
     "lvl_tool"

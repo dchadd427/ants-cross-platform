@@ -233,7 +233,7 @@ int main() {
         ASSERT_EQ(reason("Mia-\xD0\x98\xD0\xB2"), std::string("ok"));
         for (const char* bot : {"Bot (Hard)", "bot(x)", "Pip (bot)", "Pip (Bot, Hard)", "Pip ( bot )"}) ASSERT_EQ(reason(bot), std::string("reserved"));
         ASSERT_EQ(reason("\xD0\x92\xD0\x9E\xD0\xA2 (Hard)"), std::string("reserved"));            // "BOT (Hard)" written with Cyrillic capitals
-        for (const char* fine : {"Mia", "Dave K", "Anthony", "Ownership", "Modest", "Staffan", "Antsy", "Ant", "Servers", "Bottle (cap)", "Bot", "Systematic", "J\xC3\xBCrgen", "Theo", "Thermos", "O'Neil-Smith"}) {
+        for (const char* fine : {"Mia", "Dave K", "Anthony", "Ownership", "Modest", "Staffan", "Antsy", "Ant", "Servers", "Bottle (cap)", "Bot", "Systematic", "J\xC3\xBCrgen", "Theo", "Thermos", "O'Neil-Smith", "Adm\xC3\xA9in", "Ow\xC3\xB1" "er"}) {
             ASSERT_EQ(reason(fine), std::string("ok"));
         }
         ASSERT_EQ(names::clean_maker("Owner").text, std::string());                                // (a refusal has no text)
