@@ -279,6 +279,7 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
 
     # ---- refusals
     print("[web map maker] Play this map: the refusals")
+    page.ev("(function () { var t = document.getElementById('play-toast'); if (t) t.parentNode.removeChild(t); })()")
     page.press_act("new")
     mod.wait_for(lambda: page.ev("!!document.querySelector('.kinds') || !!document.querySelector('.dlg')"), 10)
     leave_unsaved(page, mod)
@@ -352,6 +353,7 @@ def run_play_phone(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     check(mod.wait_for(lambda: page.ev("!!document.getElementById('play-toast')"), 5, 0.1), "back in the map maker, a line says so")
     page.shot(args.shots, shots_prefix + "-phone-back")
     # the refusal on a phone: Menu, New, an Extended map of 100 x 100
+    page.ev("(function () { var t = document.getElementById('play-toast'); if (t) t.parentNode.removeChild(t); })()")
     page.press_act("menu")
     mod.wait_for(lambda: page.ev("!!document.querySelector('.menulist')"), 5)
     page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent === 'New'; })[0].click()")

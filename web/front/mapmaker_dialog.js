@@ -97,6 +97,7 @@
                         if (it.disabled) b.disabled = true;
                         b.addEventListener('click', function () { current.close(); it.onClick(); });
                         list.appendChild(b);
+                        if (it.hint) list.appendChild(el('p', 'menuhint', it.hint));
                     });
                     body.appendChild(list);
                 }, buttons: [{ text: 'Close', ghost: true }]

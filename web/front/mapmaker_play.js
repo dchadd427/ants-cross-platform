@@ -62,7 +62,7 @@
             });
             if (!(t.start_markers > 0) && !why.length) why.push(SEATS[s].name + ' has no starting ants');
             if (!(t.hill_cells > 0) && !why.length) why.push(SEATS[s].name + ' has no hill');
-            out.seats.push({ seat: s, name: SEATS[s].name, dot: SEATS[s].dot, ants: t.start_markers || 0, hills: hills, usable: !why.length && t.start_markers > 0 && t.hill_cells > 0, why: why });
+            out.seats.push({ seat: s, name: SEATS[s].name, dot: SEATS[s].dot, ants: t.start_markers || 0, hills: hills, usable: !why.length, why: why });
         }
         if (out.seats.filter(function (x) { return x.usable; }).length < 2) {
             out.title = 'This map cannot be played yet';
@@ -250,6 +250,7 @@
             buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'start', text: '\u25b6 Start the game', keepOpen: true, onClick: start }]
         });
         startButton = ctl.buttons.start;
+        startButton.className += ' gold';
         refresh();
         return ctl;
     }

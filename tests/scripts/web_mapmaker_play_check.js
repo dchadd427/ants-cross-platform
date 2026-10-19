@@ -86,6 +86,13 @@ function verdictChecks() {
     check(usable(v) === '1111', 'a note about a hill that is not whole does not stop a color');
     v = verdictOf({ extra: [finding('food_pile_not_shown', 'warning', -1, 'a pile is not shown'), finding('tile_not_drawn', 'info', -1, 'x')] });
     check(v.ok && usable(v) === '1111', 'warnings and notes about other things do not stop a test game');
+    // the check's own findings are not the only reason: a color that the first reading finds empty is out too
+    {
+        const a = answers({ teams: [[3, 16], [0, 16], [3, 0], [3, 16]] });
+        a.check.findings = [];
+        v = Play.verdict(a.check, a.read);
+        check(v.ok && usable(v) === '1001' && v.seats[1].why[0] === 'Red has no starting ants' && v.seats[2].why[0] === 'Blue has no hill', 'a color with no ants or no hill in the first reading cannot play, though the check said nothing, and says why');
+    }
     // fewer than two colors
     v = verdictOf({ teams: [[3, 16], [0, 0], [0, 0], [0, 0]] });
     check(!v.ok && /two colors that each have a hill and starting ants/.test(v.text) && v.list.length === 6 && v.list[0] === 'Red has no hill', 'one color is not enough: refused with the reasons of the others');
@@ -197,8 +204,8 @@ function gameChecks() {
     check(Game.take(windowOf(Object.assign(tabOf({ [ID]: { name: 'x', bytes } }), { closed: true })), ID) === null, 'a tab that is closed: nothing');
     check(Game.take(windowOf({}), ID) === null && Game.take(windowOf({ antsTestGameHandoff: 5 }), ID) === null, 'a tab without the hand-over: nothing');
     check(Game.take(windowOf({ antsTestGameHandoff() { throw new Error('gone'); } }), ID) === null, 'a tab that throws: nothing');
-    check(Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(0) } })), ID) === null && Game.take(windowOf(tabOf({ [ID]: { name: 'x' } })), ID) === null && Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(Game.MAX_BYTES + 1) } })), ID) === null, 'no bytes, no map; more than a megabyte is no map');
-    check(Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(Game.MAX_BYTES) } })), ID) !== null, 'a megabyte is still taken');
+    check(Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(0) } })), ID) === null && Game.take(windowOf(tabOf({ [ID]: { name: 'x' } })), ID) === null && Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(1024 * 1024 + 1) } })), ID) === null, 'no bytes, no map; more than a megabyte is no map');
+    check(Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(1024 * 1024) } })), ID) !== null, 'a megabyte is still taken');
     equal(Game.take(windowOf(tabOf({ [ID]: { name: '<b>x</b>\u0000', bytes } })), ID).name, '<b>x</b>', 'the name is cleaned');
     // begin: the bytes are written where the game looks, the strip is up, the game starts
     {
@@ -238,7 +245,7 @@ function gameChecks() {
         w.document.querySelector('[role=dialog]').querySelectorAll('button')[1].click();
         equal([w.closes, opener2.back, w.timers.length, w.timers[0] && w.timers[0][1]], [1, [ID], 1, 300], 'Back to editor tells the map maker\'s tab, closes this tab, and waits for it');
         w.timers[0][0]();
-        equal(w.assigned, [Game.EDITOR || '/mapmaker.html'], 'a tab that the browser did not close goes to the map maker');
+        equal(w.assigned, ['/mapmaker.html'], 'a tab that the browser did not close goes to the map maker');
         const w2 = windowOf(tabOf({ [ID]: { name: 'x', bytes } })), m2 = { preRun: [], FS: {} };
         Game.begin(test, w2, () => m2, () => {});
         w2.document.getElementById('test-strip').querySelector('button').click();
@@ -274,7 +281,7 @@ function pageOf() {
 }
 function dialogChecks() {
     const bytes = new Uint8Array(200).map((_, i) => (i * 7) & 255);
-    const a = answers();
+    const a = answers({ columns: 40, teams: [[3, 16], [3, 16], [1, 16], [3, 16]] });
     let converted = 0, asked = [];
     function env(p, over) {
         return Object.assign({ doc: p.doc, win: p.win, dialogs: p.dialogs, map: () => ({ name: 'Mosh Pit', bytes, file: {} }), convert: () => { converted++; },
@@ -291,9 +298,9 @@ function dialogChecks() {
     Play.open(env(p));
     equal(asked, [['checkMap', true, 'extended'], ['readReport', true, 'extended']], 'the check and the first reading are of the open file\'s own bytes, by the profile that takes both kinds');
     check(p.dialogs.isOpen() && q(p, 'h2').textContent === 'Play this map', 'the dialog opens with its name');
-    equal(q(p, '.play-lead').textContent, 'A test game on Mosh Pit (31 x 31) as it is now. Nothing is saved and no score is kept.', 'it says what this is, with the name and the size');
+    equal(q(p, '.play-lead').textContent, 'A test game on Mosh Pit (31 x 40) as it is now. Nothing is saved and no score is kept.', 'it says what this is, with the name and the size');
     equal(all(p, '.pseat').map((r) => r.querySelector('.pn').textContent), ['Black', 'Blue', 'Green', 'Red'], 'one row for each color, in the alphabet\'s order');
-    equal(all(p, '.pseat').map((r) => r.querySelector('.pf').textContent), ['3 ants, 1 hill', '3 ants, 1 hill', '3 ants, 1 hill', '3 ants, 1 hill'], 'with its ants and hills');
+    equal(all(p, '.pseat').map((r) => r.querySelector('.pf').textContent), ['3 ants, 1 hill', '1 ant, 1 hill', '3 ants, 1 hill', '3 ants, 1 hill'], 'with its ants and hills (a singular for one)');
     equal(rowOf(p, 'Red').querySelectorAll('.pc').map((l) => l.textContent), ['You', 'Bot Easy', 'Bot Medium', 'Bot Hard', 'Empty'], 'five choices for each');
     equal(checked(p), 'ymnn', 'it starts with you at Green and a Medium bot at Red');
     equal(q(p, '.play-status').textContent, 'You and 1 bot.', 'and says so');
@@ -306,7 +313,8 @@ function dialogChecks() {
     equal(checked(p), 'nynn', 'You at Red takes You away from Green (that color is Empty)');
     check(startButton(p).disabled && q(p, '.play-status').textContent === 'Add at least one bot.' && q(p, '.play-status').className.indexOf('no') > 0, 'with no bot Start is off and says what is missing');
     startButton(p).click();
-    check(p.opened.length === 0, 'a Start that is off does nothing');
+    startButton(p).fire('click', {});
+    check(p.opened.length === 0, 'a Start that is off does nothing (not even when the click comes through)');
     choose(p, 'Blue', 'h'); choose(p, 'Black', 'e');
     equal(checked(p), 'nyhe', 'bots of the three levels');
     equal(q(p, '.play-status').textContent, 'You and 2 bots.', 'two bots');
@@ -341,10 +349,12 @@ function dialogChecks() {
     p.win.antsTestGameBack(m[1]);
     let toast = p.doc.getElementById('play-toast');
     check(toast && toast.textContent === 'Back from the test game. Your map is as you left it.' && toast.getAttribute('role') === 'status', 'the way back is told in a line');
-    p.win.antsTestGameBack('nobody123456');
-    check(p.doc.body.all().filter((n) => n.id === 'play-toast').length === 1, 'an id that is not ours says nothing');
+    p.win.antsTestGameBack(m[1]);
+    check(p.doc.body.all().filter((n) => n.id === 'play-toast').length === 1, 'a second way back replaces the line, it does not add one');
     p.timers[p.timers.length - 1][0]();
     check(p.doc.getElementById('play-toast') === null, 'the line goes away by itself');
+    p.win.antsTestGameBack('nobody123456');
+    check(p.doc.getElementById('play-toast') === null, 'an id that is not ours says nothing');
     // three are kept; a fourth takes the first one's place
     const ids = [m[1]];
     for (let i = 0; i < 3; i++) {
