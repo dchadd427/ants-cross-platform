@@ -23,14 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.86 - 2026-10-18 - Maps taller than 90 rows: the simulation and bots (no change to current maps)
 
 **For players:**
 - Nothing changes yet: the game's ants and the computer players can now cross and use every row of a map taller than 90 rows (the new Extended maps), where the old rule put an invisible wall across row 90. Every existing map plays exactly as before.
 
 **Rules / network:** none (protocol 21).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2064f441...b9844e72)
 
 ## v0.12.85 - 2026-10-18 - The grid reads Extended maps (no change to play)
 
@@ -671,15 +671,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aec2772a...6bc5cf52); how and why: [the report](docs/reverse_engineering/map_loader_fidelity.md)
 
-## v0.12.9 - 2026-10-11 - The bombs of the community maps work
+## Older versions (v0.12.9 and before)
 
-**For players:**
-- **The bombs of 208 community maps work.** The original's bombs, laid out in the map file (`Bombz Away` is a floor of them), were invisible rocks. Now they show in their colors and the first ant that steps on one sets it off (2 hit points, a throw of 4 tiles). Each bomb has an owner team named in the file (mostly the first player): that team's ants and its ally walk around it. Other maps play as before.
-
-**Rules / network:** network protocol 18 (a v0.12.8 game cannot join); replay rules 3 and 4, older recordings stay under "Earlier versions".
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6400ded7...8e93ca3f)
-
-## Older versions (v0.12.8 and before)
-
-Every release before v0.12.9, and the long notes of v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.10, and the long notes of v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
