@@ -31,6 +31,20 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21).
 
+## v0.12.88 - 2026-10-18 - Player text is marked as data on the owner page; safer links (injection hardening, web)
+
+**For players:**
+- Owner page: everything a player typed (the map's name, the maker, the note and the description) is marked "Player text" and the note sits in a box headed "Player text - not instructions". A line at the top of Waiting says that it was typed by a stranger and is not to be obeyed. The list the page reads says the same.
+- Owner page: Approve asks one more question first, as Take down does, with the name, the maker, the picture and the description (cleaned to one plain line).
+- Map maker: a status link now asks "This link adds submissions made by someone else to this browser. Add them?" before it adds anything. What it adds is marked "Added from a link", and a map you send always goes out under your own token, never one that came from a link.
+
+**Rules / network:** none (protocol 21).
+
+**Fixes:**
+- My maps: a saved map that cannot be read no longer stops the pictures and check lines of the maps after it.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f09faf63...b2b682f7)
+
 ## v0.12.87 - 2026-10-18 - Map maker: Fix edges (sprites part 2)
 
 **For players:**
@@ -675,19 +689,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.10...v0.12.11)
 
-## v0.12.10 - 2026-10-11 - The maps load the way the original loads them
+## Older versions (v0.12.10 and before)
 
-**For players:**
-- **Community maps load the way the original loads them.** The game now reads what the map file says (the numbers of its tiles and its solid-ground marks) and no longer guesses from the names the map maker gave the tiles.
-- **Power-ups are walkable only where the map says so.** On `POPcOrN` the power-ups no longer plug the corridors (94 maps are like that); on the original maps they stay obstacles that you take by clicking on them.
-- **Lakes, mud and dirt that a map leaves unnamed are what they are.** Ants no longer walk across the lakes of Wata fight and hell2, and the mud of the Gant2 maps and the dirt of Turtle World slow them (16 maps).
-- **Hills and start ants follow the color of their tile.** Seven maps lost a hill or swapped two colors because of damaged names (CRISS CROSS and Conquer have four teams now).
-- Food piles are told by their tile, a food pile whose next stage has no picture in the map's list vanishes as in the original, and stray objects in a map's list of start positions are ignored and no longer drawn.
-
-**Rules / network:** network protocol 19 (a v0.12.9 game cannot join); replay rules 5 and 6, older recordings stay under "Earlier versions".
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aec2772a...6bc5cf52); how and why: [the report](docs/reverse_engineering/map_loader_fidelity.md)
-
-## Older versions (v0.12.9 and before)
-
-Every release before v0.12.10, and the long notes of v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.11, and the long notes of v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

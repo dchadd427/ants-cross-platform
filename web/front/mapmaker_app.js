@@ -318,7 +318,7 @@
     }
     // A status link: its tokens join this browser's, the address loses its fragment, and the list opens
     function linkOpened() {
-        if (sent.fromAddress(win.location.hash, function () { try { win.history.replaceState(null, '', win.location.pathname + win.location.search); } catch (e) {} })) mine.show('sent');
+        sent.fromAddress(win.location.hash, function () { try { win.history.replaceState(null, '', win.location.pathname + win.location.search); } catch (e) {} }, function () { mine.show('sent'); });
     }
     // What My maps is given in place of the player's submissions: the real thing once the script is there
     function sentProxy() {
