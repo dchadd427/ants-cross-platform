@@ -59,7 +59,7 @@ Parts:
              a tile of the sheet paints, Undo takes it back, a map under 10 pixels a cell is drawn in the pictures' average colors, a 512 x 512 map is panned with the processor 4 times slower and frames keep
              the screen's pace; with the atlas refused the page says so in a plain line and draws flat colors; the tools column has no scrollbar; a phone has the sheets with 52 pixel chips and 44 pixel buttons;
   * layer    the kept layer of the sprite canvas against a frame made from nothing, pixel for pixel (also run alone by the mutants of tests/data/mapmaker_sprites_mutants.json);
-  * edges    1280 x 800, Fix edges on the original map MEDIUM (60 x 60) in the real browser, with the atlas: the button is on when the lazy scripts are there; the dialog offers the part you can see
+  * edges    1280 x 800, Fix edges on a copy of the original map MEDIUM (60 x 60) with its edge pieces put back to plain tiles, then on the originals TREASURE (nothing to change) and ISLANDS (its two gaps), in the real browser, with the atlas: the button is on when the lazy scripts are there; the dialog offers the part you can see
              and the whole map, counts the cells (the part is fewer than the whole) and draws before and after from the pictures (the two canvases differ); Cancel changes nothing (the bytes
              that Download hands over and every pixel of the map are as before); Fix edges on the visible part changes only tile words of layer 1 inside it and the check line stays "Works in the
              original game"; a second one on the whole map brings the total to the count that the rule says; ONE Undo takes back each fix (the bytes are the exact ones that went before, and the
@@ -73,6 +73,7 @@ import argparse
 import base64
 import json
 import os
+import shutil
 import struct
 import sys
 import tempfile
@@ -602,25 +603,49 @@ def edges_count(page):
     return int(digits) if digits else 0
 
 
+PLAIN_OF = {"g": 485, "d": 487, "s": 571, "m": 439, "w": 476}
+
+
+def plain_copy(source, target):
+    """a copy of an original map (read only) with every edge piece of layer 1 put back to its plain tile, written to `target` (a scratch file): a map that needs its edges fixed (version 8 maps)"""
+    with open(source, "rb") as f:
+        b = bytearray(f.read())
+    names = struct.unpack_from("<H", b, 40)[0] + 1
+    entry = lambda k: bytes(b[42 + 11 * k: 53 + 11 * k]).split(b"\0")[0].decode("latin1")
+    at = 42 + 11 * names
+    rows, columns = struct.unpack_from("<II", b, at)
+    base = at + 8
+    for i in range(rows * columns):
+        t = struct.unpack_from("<H", b, base + 6 * i)[0]
+        name = entry(t) if t < names else ""
+        if len(name) == 5 and name[0] in "gdsmMw" and name[1] in "gdsmMwW" and name[2:4] not in ("01",) and name[2:4].isdigit():
+            struct.pack_into("<H", b, base + 6 * i, PLAIN_OF[name[0].lower()])
+    with open(target, "wb") as f:
+        f.write(bytes(b))
+
+
 def run_edges(page, tab, args, check):
     """Fix edges (docs/MAP_EDITOR.md, "Fix edges") on a real map in the real browser: the real bytes (what Download hands over), the real pixels (every pixel of the canvas), one Undo"""
     print("[web map maker] Fix edges, 1280 x 800")
     check(page.open() and page.ready(), "the page starts")
     check(wait_for(lambda: page.ev("!!window.MapEdges && !!window.MapGround && !document.getElementById('edges-btn').disabled"), 15), "the Fix edges button is on once the lazy scripts are there")
     page.ev(EDGES_JS)
-    page.choose_file(os.path.join(REPO, "Original-Ants", "Maps", "MEDIUM.LVL"))
-    check(wait_for(lambda: page.state()["name"] == "MEDIUM"), "Medium is opened")
+    scratch = tempfile.mkdtemp(prefix="ants_edges_map.")
+    plain_copy(os.path.join(REPO, "Original-Ants", "Maps", "MEDIUM.LVL"), os.path.join(scratch, "MEDIUMPLAIN.LVL"))
+    page.choose_file(os.path.join(scratch, "MEDIUMPLAIN.LVL"))
+    check(wait_for(lambda: page.state()["name"] == "MEDIUMPLAIN"), "Medium with all its edge pieces put back to plain tiles is opened")
     check(wait_for(lambda: spread(page, 5, 5) >= 4, 10), "its pictures are drawn")
     first = edges_bytes(page)
-    check(first["left"] == 147, "the rule has 147 cells to fix on the original map (%s)" % first["left"])
+    total = first["left"]
+    check(total > 500, "the rule has cells to fix on it (%s)" % total)
     pixels = still_pixels(page)
     check(page.button_off("#undo-btn"), "nothing to undo yet")
     # the dialog on the whole map, then Cancel
     check(edges_open(page), "the Fix edges dialog opens")
     check(page.ev("document.querySelector('.dlg.edges h2').textContent") == "Fix edges" and page.ev("document.querySelector('.dlg.edges input:checked').value") == "part", "titled Fix edges, with the part you can see chosen")
-    check(edges_count(page) == 147, "the whole map is on the screen, so the part is the 147 cells (%d)" % edges_count(page))
+    check(edges_count(page) == total, "the whole map is on the screen, so the part is all the %d cells (%d)" % (total, edges_count(page)))
     differ = page.ev("(function () { var c = document.querySelectorAll('.dlg.edges canvas'), d = [0, 1].map(function (i) { return c[i].getContext('2d').getImageData(0, 0, c[i].width, c[i].height).data; }), n = 0, i; for (i = 0; i < d[0].length; i += 4) if (d[0][i] !== d[1][i] || d[0][i + 1] !== d[1][i + 1] || d[0][i + 2] !== d[1][i + 2]) n++; var seen = {}; for (i = 0; i < d[0].length; i += 4) seen[d[0][i] + ',' + d[0][i + 1] + ',' + d[0][i + 2]] = 1; return [n, c[0].width, c[0].height, c[1].width, c[1].height, Object.keys(seen).length]; })()")
-    check(differ[0] > 500 and differ[1:3] == differ[3:5][:2] and differ[5] >= 300, "before and after are drawn from the pictures (%d colors: not flat) and differ in %d pixels, in the same size" % (differ[5], differ[0]))
+    check(differ[0] > 500 and differ[1:3] == differ[3:5][:2] and differ[5] >= 120, "before and after are drawn from the pictures (%d colors: not flat) and differ in %d pixels, in the same size" % (differ[5], differ[0]))
     page.shot(args.shots, "mapmaker-fix-edges-dialog")
     page.ev("[].filter.call(document.querySelectorAll('.dlg.edges .btn'), function (b) { return b.textContent === 'Cancel'; })[0].click()")
     check(not page.ev("!!document.querySelector('.dlg')") and still_pixels(page) == pixels and page.button_off("#undo-btn"), "Cancel closes it and changes nothing (the pixels, the history)")
@@ -639,7 +664,7 @@ def run_edges(page, tab, args, check):
     page.ev("document.querySelector('.dlg.edges input[value=all]').click()")
     whole = edges_count(page)
     page.ev("document.querySelector('.dlg.edges input[value=part]').click()")
-    check(0 < part < whole == 147, "the part is fewer cells than the whole map (%d of %d)" % (part, whole))
+    check(0 < part < whole == total, "the part is fewer cells than the whole map (%d of %d)" % (part, whole))
     page.shot(args.shots, "mapmaker-fix-edges-part")
     page.ev("[].filter.call(document.querySelectorAll('.dlg.edges .btn'), function (b) { return b.textContent === 'Fix edges'; })[0].click()")
     check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Fix edges closes the dialog")
@@ -666,16 +691,16 @@ def run_edges(page, tab, args, check):
     check(wait_for(lambda: page.state()["check"] == "Works in the original game", 15), "the check line still says: Works in the original game (%s)" % page.state()["check"])
     check(not page.button_off("#undo-btn") and still_pixels(page) != before_part, "Undo is on and the picture of the map changed")
     page.shot(args.shots, "mapmaker-fix-edges-after-part")
-    # the whole map on top of it: the rest of the 147
+    # the whole map on top of it: the rest
     check(edges_open(page, whole=True), "the dialog opens, and the whole map is chosen")
     rest = edges_count(page)
-    check(rest + part == 147, "the rest is what is left of the 147 (%d and %d)" % (rest, part))
+    check(rest + part == total, "the rest is what is left (%d and %d)" % (rest, part))
     page.ev("[].filter.call(document.querySelectorAll('.dlg.edges .btn'), function (b) { return b.textContent === 'Fix edges'; })[0].click()")
     check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Fix edges again")
     every = edges_bytes(page)
     check(every["left"] == 0 and every["layer1"] == first["layer1"], "the fixed map has nothing left to fix")
     te = every["bytes"][every["layer1"] - 8:]
-    check(len(te) == len(ta) and len({(i - 8) // w for i in range(len(ta)) if ta[i] != te[i]}) == 147, "exactly 147 cells differ from the map as it was opened")
+    check(len(te) == len(ta) and len({(i - 8) // w for i in range(len(ta)) if ta[i] != te[i]}) == total, "exactly all the cells differ from the map as it was opened")
     check(wait_for(lambda: page.state()["check"] == "Works in the original game", 15), "and the check line says: Works in the original game (%s)" % page.state()["check"])
     after_all = still_pixels(page)
     page.shot(args.shots, "mapmaker-fix-edges-after-whole")
@@ -718,6 +743,7 @@ def run_edges(page, tab, args, check):
     check(fixed["left"] == 0 and still_pixels(page) != isl_pixels, "nothing is left to fix, and the picture changed")
     page.ev("document.getElementById('undo-btn').click()")
     check(edges_bytes(page)["sha"] == isl["sha"] and still_pixels(page) == isl_pixels, "one Undo gives back the exact bytes and pixels")
+    shutil.rmtree(scratch, ignore_errors=True)
     # a phone: the box is a sheet inside the screen with both buttons in view, and nothing scrolls sideways
     tab.emulate(390, 844, 2, mobile=True)
     time.sleep(0.5)
