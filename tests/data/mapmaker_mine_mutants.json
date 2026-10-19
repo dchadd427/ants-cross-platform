@@ -266,6 +266,13 @@
    "old": "mine.hide(); var b = doc.querySelector('[data-act=\"mine\"]'); (b && b.offsetParent ? b : doc.querySelector('[data-act=\"menu\"]')).focus(); },",
    "new": "mine.hide(); },",
    "test": "python3 -m unittest tests.scripts.test_web_mapmaker.ThePage.test_my_maps_is_in_the_page_and_the_menu_and_only_the_players_own_saved_copy_can_be_deleted"
+  },
+  {
+   "id": "unreadable_map_gets_a_picture_call",
+   "file": "web/front/mapmaker_mine.js",
+   "old": "var pic = r.file ? env.thumb(r.file) : null,",
+   "new": "var pic = env.thumb(r.file),",
+   "test": "node tests/scripts/web_mapmaker_mine_check.js"
   }
  ]
 }

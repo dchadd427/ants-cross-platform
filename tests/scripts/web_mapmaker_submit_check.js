@@ -426,6 +426,12 @@ async function caseF() {
     check(linkedSend && !linkedSend.headers.Authorization, 'a send from a browser that only has a linked token goes out with no token, so the server makes a fresh one');
     equal(p7.sub.tokens()[0], TOKEN, 'and the token the server made is the first one');
     check(p7.idb.m.get('#tokens').linked.indexOf(TOKEN) < 0, 'and is not marked as linked');
+    // the mark survives a reload of the page
+    const p7b = await loadedPage({ idb: p7.idb, server: p7.server });
+    const l7b = listUi(p7b); p7b.sub.show(l7b.ui); await later();
+    equal([p7b.sub.tokens().length, /Added from a link/.test(l7b.list.textContent)], [2, true], 'after a reload the linked submissions are still marked');
+    p7b.cfg.bytes = new Uint8Array([8, 9, 9, 9]); p7b.sub.open(); await later(); button(p7b, 'Submit for approval').click(); await later();
+    check(p7b.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization === 'Bearer ' + TOKEN, 'and a send after the reload still uses the browser\'s own token');
     // a browser that has its own token: a link adds a second one behind it, and a send still uses its own
     const p10 = await loadedPage({ idb: fakeIdb() }); p10.idb.m.set('#tokens', { id: '#tokens', list: [TOKEN] });
     const p11 = await loadedPage({ idb: p10.idb });

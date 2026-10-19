@@ -455,6 +455,83 @@
    "old": "(res.status === 201 && !(res.json && res.json.submission))",
    "new": "false",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_adopts_without_asking",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "if (!fresh.length) { if (added) added(); return true; }",
+   "new": "if (true) { fresh.forEach(function (t) { tokens.push(t); linked.push(t); }); keepMeta(); if (added) added(); return true; }",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_asks_even_when_known",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "return tokens.indexOf(t) < 0; });\n            if (!fresh.length)",
+   "new": "return true; });\n            if (!fresh.length)",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_do_not_add_adds",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "{ id: 'no', text: 'Do not add', ghost: true }",
+   "new": "{ id: 'no', text: 'Do not add', ghost: true, onClick: function () { fresh.forEach(function (t) { if (tokens.indexOf(t) < 0) { tokens.push(t); linked.push(t); } }); keepMeta(); } }",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_address_not_cleared",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "clear();\n            var fresh",
+   "new": "var fresh",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_token_not_marked",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "if (tokens.indexOf(t) < 0) { tokens.push(t); linked.push(t); }",
+   "new": "if (tokens.indexOf(t) < 0) { tokens.push(t); }",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_mark_not_kept",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "list: tokens, linked: linked }",
+   "new": "list: tokens }",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_mark_not_read_back",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "(Array.isArray(r.linked) ? r.linked : [])",
+   "new": "[]",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_record_not_marked",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "if (linked.indexOf(t) >= 0) r.linked = true;",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_row_not_labeled",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "if (rec.linked) mid.appendChild(",
+   "new": "if (false) mid.appendChild(",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "send_uses_first_token",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "calls('POST', '/submissions' + q, own()[0], bytes,",
+   "new": "calls('POST', '/submissions' + q, tokens[0], bytes,",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "send_keeps_first_token_when_none_new",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "TOKEN.test(j.token) ? j.token : own()[0], rec",
+   "new": "TOKEN.test(j.token) ? j.token : tokens[0], rec",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
   }
  ]
 }
