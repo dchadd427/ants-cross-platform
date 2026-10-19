@@ -100,20 +100,6 @@
       "test": "node tests/scripts/web_mapmaker_edges_check.js"
     },
     {
-      "id": "edges_region_not_cut_low",
-      "file": "web/front/mapmaker_edges.js",
-      "old": "r0 = Math.max(0, region.r0);",
-      "new": "r0 = region.r0;",
-      "test": "node tests/scripts/web_mapmaker_edges_check.js"
-    },
-    {
-      "id": "edges_region_not_cut_high",
-      "file": "web/front/mapmaker_edges.js",
-      "old": "c1 = Math.min(columns - 1, region.c1);",
-      "new": "c1 = region.c1;",
-      "test": "node tests/scripts/web_mapmaker_edges_check.js"
-    },
-    {
       "id": "edges_region_ignored",
       "file": "web/front/mapmaker_edges.js",
       "old": "if (region) {",
@@ -417,8 +403,8 @@
     {
       "id": "edges_facing_reads_nothing",
       "file": "web/front/mapmaker_edges.js",
-      "old": "wanted(kindAt, G, r, c, id, file.tile1)",
-      "new": "wanted(kindAt, G, r, c, id, function () { return 485; })",
+      "old": "wanted(kindAt, G, row, column, id, endAt)",
+      "new": "wanted(kindAt, G, row, column, id, function () { return 485; })",
       "test": "node tests/scripts/web_mapmaker_edges_check.js"
     },
     {

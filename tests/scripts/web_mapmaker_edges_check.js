@@ -97,6 +97,7 @@ function ruleChecks() {
     f = grid(['gm'], { '0,1': Ground.FIRST + Ground.NAMES.indexOf('mg06a') }); equal(Edges.plan(f, null, Ground).count, 1, 'a piece that does not face this cell (mg06a points east) is no reason to leave the boundary bare');
     // a corner piece that faces this cell counts like an edge piece (the mud at north-east wears mg07a toward the gravel at north-west; the gravel keeps only its south side)
     f = grid(['gm', 'mg'], { '0,1': Ground.FIRST + Ground.NAMES.indexOf('mg07a') }); apply(f, Edges.plan(f, null, Ground)); equal(names(f, 0, 0), ['gm08a mg07a'], 'a corner piece that faces a cell is already drawn: only the other side of that cell counts');
+    f = grid(['g', 's'], { '1,0': Ground.FIRST + Ground.NAMES.indexOf('sd03a') }); equal(Edges.plan(f, null, Ground).cells.map((c) => c[0]), [0], 'a piece of the neighbor that points here but toward ANOTHER kind (slate toward dirt) does not draw this boundary');
     // the pass is one pass: a neighbor that swaps its piece in the same pass still wears one (the case of two passes: gravel above slate with a piece, mud beside it)
     f = grid(['gg', 'sm'], { '1,0': Ground.FIRST + Ground.NAMES.indexOf('sg03a'), '1,1': Ground.FIRST + Ground.NAMES.indexOf('md06b') });
     apply(f, Edges.plan(f, null, Ground)); equal(Edges.plan(f, null, Ground).count, 0, 'two cells whose pieces depend on each other need no second pass');
