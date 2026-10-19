@@ -108,7 +108,11 @@ private:
         c.tile_y = t.y;
     }
     Tile random_tile(Lcg& rng) const {
-        return clamp(static_cast<int32_t>(rng.below(static_cast<uint32_t>(width_))), static_cast<int32_t>(rng.below(static_cast<uint32_t>(height_))));
+        // (the row is drawn first, then the column: two calls in one argument list are evaluated in an order the language leaves open - GCC and MSVC right to left, Clang left
+        // to right - so the plays, and every state hash that a test pins, would differ by compiler)
+        const int32_t row = static_cast<int32_t>(rng.below(static_cast<uint32_t>(height_)));
+        const int32_t column = static_cast<int32_t>(rng.below(static_cast<uint32_t>(width_)));
+        return clamp(column, row);
     }
     // kind: 0 move, 1 attack, 2 special
     Tile target(uint8_t p, int kind, const std::array<std::vector<const ants::sim::AntSnapshot*>, 4>& by_team, Lcg& rng) {
@@ -135,7 +139,9 @@ private:
             if (r < 65 && !hills_[p].empty()) return hills_[p][rng.below(static_cast<uint32_t>(hills_[p].size()))];
         } else if (r < 50 && !by_team[p].empty()) {
             const sim::AntSnapshot* a = by_team[p][rng.below(static_cast<uint32_t>(by_team[p].size()))];
-            return clamp(a->tile_x + static_cast<int32_t>(rng.below(5)) - 2, a->tile_y + static_cast<int32_t>(rng.below(5)) - 2);
+            const int32_t dy = static_cast<int32_t>(rng.below(5)) - 2;     // (the row's offset is drawn first: see random_tile)
+            const int32_t dx = static_cast<int32_t>(rng.below(5)) - 2;
+            return clamp(a->tile_x + dx, a->tile_y + dy);
         }
         return random_tile(rng);
     }

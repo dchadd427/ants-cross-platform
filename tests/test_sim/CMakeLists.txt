@@ -270,6 +270,21 @@ target_link_libraries(test_map_roundtrip PRIVATE ants_test_paths)
 
 add_test(NAME test_map_roundtrip COMMAND test_map_roundtrip)
 
+# The hash ledger (docs/TESTING.md): the 540 maps' state hashes at ticks 0, 200 and 2,400 in a file that two builds are compared with. A tool, run by hand (the whole library takes minutes)
+add_executable(hash_ledger
+    hash_ledger.cpp
+)
+
+target_link_libraries(hash_ledger PRIVATE
+    ants_sim
+    ants_assets
+    ants_test_paths
+)
+
+target_include_directories(hash_ledger PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
 add_executable(test_commands
     test_commands.cpp
 )

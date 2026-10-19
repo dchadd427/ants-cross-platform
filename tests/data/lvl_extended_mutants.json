@@ -249,8 +249,8 @@
   {
    "id": "extended_maps_do_not_allow_extended",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "3584u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "old": "262144, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "262144, 3584u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
