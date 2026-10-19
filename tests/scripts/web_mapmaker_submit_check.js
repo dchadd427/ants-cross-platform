@@ -438,6 +438,11 @@ async function caseF() {
     p11.sub.fromAddress('#sent=' + TOKEN2, () => {}, () => {}); await later(); button(p11, 'Add them').click(); await later();
     p11.sub.open(); await later(); type(p11, 'sub-maker', 'Mia'); button(p11, 'Submit for approval').click(); await later();
     equal(p11.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, 'Bearer ' + TOKEN, 'with its own token and a linked one, a send uses its own');
+    // a linked token that is kept first: the send and the record use the browser's own token even when the server makes no new one
+    const p13i = fakeIdb(); p13i.m.set('#tokens', { id: '#tokens', list: [TOKEN2, TOKEN], linked: [TOKEN2] });
+    const p13 = await loadedPage({ idb: p13i }); p13.server.state.tokenIsNew = false;
+    p13.sub.open(); await later(); type(p13, 'sub-maker', 'Mia'); button(p13, 'Submit for approval').click(); await later();
+    equal([p13.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, p13.sub.tokens()[0], p13.idb.m.get(ID1) && p13.idb.m.get(ID1).tok], ['Bearer ' + TOKEN, TOKEN, TOKEN], 'a send answered with no new token is kept under the browser\'s own token');
     // a link whose tokens this browser has already: no question
     let again = 0;
     const p12 = await loadedPage({ idb: p10.idb });

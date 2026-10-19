@@ -172,14 +172,14 @@
   {
    "id": "another_copy_of_the_bytes_is_sent",
    "file": "web/front/mapmaker_submit.js",
-   "old": "tokens[0], bytes, function (res)",
-   "new": "tokens[0], bytes.slice(), function (res)",
+   "old": "own()[0], bytes, function (res)",
+   "new": "own()[0], bytes.slice(), function (res)",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
    "id": "the_token_is_not_used_again",
    "file": "web/front/mapmaker_submit.js",
-   "old": "calls('POST', '/submissions' + q, tokens[0], bytes,",
+   "old": "calls('POST', '/submissions' + q, own()[0], bytes,",
    "new": "calls('POST', '/submissions' + q, null, bytes,",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
@@ -389,14 +389,14 @@
   {
    "id": "a_lost_answer_is_not_said_to_be_possible",
    "file": "web/front/mapmaker_submit.js",
-   "old": "(lost ? MAYBE + (tokens.length ? '' : LOST) : '')",
+   "old": "(lost ? MAYBE + (own().length ? '' : LOST) : '')",
    "new": "''",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
    "id": "the_lost_token_is_always_said",
    "file": "web/front/mapmaker_submit.js",
-   "old": "(tokens.length ? '' : LOST)",
+   "old": "(own().length ? '' : LOST)",
    "new": "LOST",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
