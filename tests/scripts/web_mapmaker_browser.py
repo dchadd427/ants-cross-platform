@@ -90,8 +90,8 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play")
-WITH_ATLAS = ("panel", "sprites", "layer", "edges", "play")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
+PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants")
+WITH_ATLAS = ("panel", "sprites", "layer", "edges", "play", "ants")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 VIOLATIONS = []                   # what the browser refused for the page's content security policy (the console's "Refused to ..." lines and the audit issues), kept for the part that is running
 
@@ -2076,6 +2076,13 @@ def run_part(part, tab, args, check, tiny, junk):
         tab.emulate(1280, 800, 1)
         import web_mapmaker_browser_edges
         web_mapmaker_browser_edges.run_edges(Page(tab, args.web), tab, args, check, {"wait_for": wait_for, "spread": spread, "REPO": REPO})
+    elif part == "ants":
+        import web_mapmaker_browser_ants as ants_part                  # (the Ants tool's box: its own file, this one is at the limit of lines)
+        env = {"wait_for": wait_for, "make_extended": make_extended, "REPO": REPO}
+        tab.emulate(1280, 800, 1)
+        ants_part.run_ants(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
+        tab.emulate(390, 844, 2, mobile=True)
+        ants_part.run_ants_phone(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
     elif part == "play":
         import web_mapmaker_play_browser as play                      # (Play this map: its own file, this one is at the limit of lines)
         tab.emulate(1280, 800, 1)

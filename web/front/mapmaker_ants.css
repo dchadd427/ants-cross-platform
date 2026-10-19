@@ -37,7 +37,7 @@
 .am-said { font-size: 13px; line-height: 1.35; color: var(--cream); }
 .cv canvas.am-over { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
 @media (pointer: coarse), (max-width: 600px), (min-width: 601px) and (max-height: 450px) {
-    .am-b, .am-team, .am-n, .am-clear { min-height: 44px; } .am-s { min-width: 44px; height: 44px; } .am-n { height: 44px; } .am-step { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+    .am-b, .am-team, .am-n, .am-clear, .am-link { min-height: 44px; } .am-link { display: inline-flex; align-items: center; } .am-s { min-width: 44px; height: 44px; } .am-n { height: 44px; } .am-step { grid-template-columns: 44px minmax(0, 1fr) 44px; }
     .am-mixteam { min-height: 56px; }
 }
 @media (max-width: 600px) {

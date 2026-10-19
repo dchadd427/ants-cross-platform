@@ -46,8 +46,9 @@ OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_che
 GROUND_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ground_check.js")
 SPRITES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_sprites_check.js")
 EDGES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edges_check.js")
+ANTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ants_check.js")
 SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
-LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
+LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js", "mapmaker_ants.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
 ALL_SCRIPTS = SCRIPTS + LAZY_SCRIPTS
 
 
@@ -1035,6 +1036,7 @@ class TheGroundAndTheSprites(unittest.TestCase):
             raise AssertionError("the atlas could not be made: " + made.stdout + made.stderr)
         cls.page = read("web", "mapmaker.html")
         cls.app = read("web", "front", "mapmaker_app.js")
+        cls.tools = read("web", "front", "mapmaker_tools.js")
 
     @classmethod
     def tearDownClass(cls):
@@ -1123,6 +1125,47 @@ class TheGroundAndTheSprites(unittest.TestCase):
                     finally:
                         shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
                     self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_ants_box_passes_its_checks_on_the_library(self):
+        done = run_check(script=ANTS_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertRegex(done.stdout, r"\d+ checks, 0 failed")
+
+    def test_the_checks_can_fail_on_the_broken_copies_of_the_ants_box(self):
+        """tests/data/mapmaker_ants_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check named for it"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_ants_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 30)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    if "web_mapmaker_browser" in m["test"]:
+                        continue                # (a mutant that only the real browser can notice: tools/mutate.py runs it with ANTS_WEB_URL set)
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, ANTS_CHECK, [])
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_ants_box_is_loaded_on_demand_with_its_style_and_the_tool_hands_it_the_canvas(self):
+        tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
+        self.assertNotIn("front/mapmaker_ants.js", tags)
+        self.assertIn("s.src = 'front/mapmaker_ants.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_ants.css';", self.app)
+        self.assertIn("if (id === 'ants') askAnts();", self.tools)
+        self.assertNotIn("MapAnts", self.app.split("var NEEDED = ")[1].split("];")[0], "the page does not need the box to start: without it the tool is the clump of before")
+        self.assertIn("act: act", self.tools, "one change, one step of the history")
+        self.assertRegex(read(".github", "workflows", "ci.yml"), r"ls -l [^\n]*\bfront/mapmaker_ants\.js\b[^\n]*\bfront/mapmaker_ants\.css\b")
+        ants = read("web", "front", "mapmaker_ants.js")
+        self.assertNotRegex(ants, r"innerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function", "words are put in with textContent only")
 
     def test_the_fix_edges_button_is_in_the_page_and_wired_by_the_app_once_the_parts_are_there(self):
         self.assertRegex(self.page, r'<button class="eb" type="button" id="edges-btn" disabled>Fix edges\.\.\.</button>')
