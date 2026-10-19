@@ -111,7 +111,7 @@
                 if (status !== 'ready') return done();
                 env.sent.all(function (error, list) {
                     (list || []).forEach(function (r) {
-                        if (r.id === '#tokens') { addTokens(r.list || []); (Array.isArray(r.linked) ? r.linked : []).forEach(function (t) { if (tokens.indexOf(t) >= 0 && linked.indexOf(t) < 0) linked.push(t); }); }
+                        if (r.id === '#tokens') { (Array.isArray(r.linked) ? r.linked : []).forEach(function (t) { if (TOKEN.test(t) && linked.indexOf(t) < 0) linked.push(t); }); addTokens(r.list || []); }          // (what came from a link is known before anything is written back)
                         else if (r.id === '#maker') maker = maker || (typeof r.name === 'string' ? r.name : '');
                         else if (typeof r.id === 'string' && !recs[r.id]) recs[r.id] = r;
                     });
@@ -344,7 +344,7 @@
 
         // A status link opened in this browser: the address loses its fragment at once, then the page asks before it adds anything (a link can carry a stranger's token). added() runs once they are added
         function fromAddress(hash, clear, added) {
-            var list = tokensOf(hash);
+            var list = tokensOf(hash).slice(0, 10);                                          // (a link adds at most 10)
             if (!list.length) return false;
             clear();
             var fresh = list.filter(function (t) { return tokens.indexOf(t) < 0; });

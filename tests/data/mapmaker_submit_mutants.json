@@ -532,6 +532,20 @@
    "old": "TOKEN.test(j.token) ? j.token : own()[0], rec",
    "new": "TOKEN.test(j.token) ? j.token : tokens[0], rec",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "load_marks_linked_after_writing_back",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "(Array.isArray(r.linked) ? r.linked : []).forEach(function (t) { if (TOKEN.test(t) && linked.indexOf(t) < 0) linked.push(t); }); addTokens(r.list || []);",
+   "new": "addTokens(r.list || []); (Array.isArray(r.linked) ? r.linked : []).forEach(function (t) { if (tokens.indexOf(t) >= 0 && linked.indexOf(t) < 0) linked.push(t); });",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "link_adds_every_token",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "var list = tokensOf(hash).slice(0, 10);",
+   "new": "var list = tokensOf(hash);",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
   }
  ]
 }

@@ -42,8 +42,8 @@ function fakeIdb(opts) {
             return r;
         }
         return {
-            put(rec) { log.push('put ' + rec.id); return job(() => { if (opts.full) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' }); m.set(rec.id, rec); }); },
-            getAll() { return job(() => Array.from(m.values())); },
+            put(rec) { log.push('put ' + rec.id); const copy = structuredClone(rec); return job(() => { if (opts.full) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' }); m.set(rec.id, copy); }); },
+            getAll() { return job(() => Array.from(m.values()).map((v) => structuredClone(v))); },
             delete(id) { log.push('delete ' + id); return job(() => { m.delete(id); }); }
         };
     }
@@ -273,7 +273,7 @@ async function caseD() {
     check(/The owner looks at it and decides\. This can take a while\./.test(text(p)) && /You can see the answer in My submissions\./.test(text(p)), 'with what happens next');
     equal(p.sub.tokens(), [TOKEN], 'the token is kept');
     equal([p.idb.m.get('#tokens').list, p.idb.m.get('#maker').name, p.idb.m.get(ID1).state], [[TOKEN], 'Zoë & Co', 'waiting'], 'in the browser, with the maker’s name and the record');
-    check(p.idb.m.get(ID1).bytes === p.bytes, 'and the player’s own copy of the map');
+    check(JSON.stringify(Array.from(p.idb.m.get(ID1).bytes)) === JSON.stringify(Array.from(p.bytes)), 'and the player’s own copy of the map');
     button(p, 'See my submissions').click();
     equal(p.events, [['see']], 'See my submissions goes to the list');
     // the second map uses the token
@@ -438,6 +438,24 @@ async function caseF() {
     p11.sub.fromAddress('#sent=' + TOKEN2, () => {}, () => {}); await later(); button(p11, 'Add them').click(); await later();
     p11.sub.open(); await later(); type(p11, 'sub-maker', 'Mia'); button(p11, 'Submit for approval').click(); await later();
     equal(p11.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, 'Bearer ' + TOKEN, 'with its own token and a linked one, a send uses its own');
+    // two cold loads with no send between: the stored mark is not rewritten to nothing, and the next send still uses the browser's own token
+    const p14i = fakeIdb(); p14i.m.set('#tokens', { id: '#tokens', list: [TOKEN2, TOKEN], linked: [TOKEN2] });
+    await loadedPage({ idb: p14i }); await later();
+    await loadedPage({ idb: p14i }); await later();
+    equal(p14i.m.get('#tokens').linked, [TOKEN2], 'after two page loads the stored linked list is still there');
+    const p14 = await loadedPage({ idb: p14i }); p14.server.state.tokenIsNew = false;
+    p14.sub.open(); await later(); type(p14, 'sub-maker', 'Mia'); button(p14, 'Submit for approval').click(); await later();
+    equal(p14.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, 'Bearer ' + TOKEN, 'and the send after the reloads goes out under the own token, not the linked one');
+    const p15i = fakeIdb(); p15i.m.set('#tokens', { id: '#tokens', list: [TOKEN2], linked: [TOKEN2] });
+    await loadedPage({ idb: p15i }); await later();
+    const p15 = await loadedPage({ idb: p15i });
+    p15.sub.open(); await later(); type(p15, 'sub-maker', 'Mia'); button(p15, 'Submit for approval').click(); await later();
+    check(!p15.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, 'a browser that only has a linked token, loaded twice, still sends with no token');
+    // a link adds at most 10 tokens
+    const many = Array.from({ length: 14 }, (_, i) => String.fromCharCode(97 + i).repeat(43));
+    const p16 = await loadedPage({ idb: fakeIdb() });
+    p16.sub.fromAddress('#sent=' + many.join(','), () => {}, () => {}); await later(); button(p16, 'Add them').click(); await later();
+    equal(p16.sub.tokens().length, 10, 'a link adds at most 10 tokens');
     // a linked token that is kept first: the send and the record use the browser's own token even when the server makes no new one
     const p13i = fakeIdb(); p13i.m.set('#tokens', { id: '#tokens', list: [TOKEN2, TOKEN], linked: [TOKEN2] });
     const p13 = await loadedPage({ idb: p13i }); p13.server.state.tokenIsNew = false;
