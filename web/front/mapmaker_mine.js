@@ -69,7 +69,7 @@
             var r = queue.shift();
             if (!r || mine !== token) return;
             if (rows.indexOf(r) >= 0) {
-                var pic = env.thumb(r.file), got = env.check(r.rec.bytes);
+                var pic = r.file ? env.thumb(r.file) : null, got = env.check(r.rec.bytes);       // (a saved map that cannot be read gets no picture, and the rows after it still get theirs)
                 if (pic) r.thumb.appendChild(pic);
                 r.line.textContent = '';
                 r.line.appendChild(el('span', 'dot ' + (got && got.works ? 'ok' : 'bad')));

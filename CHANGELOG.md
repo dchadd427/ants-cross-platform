@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.88 - 2026-10-18 - Safer player text on the server: descriptions, maker names, logs, page headers (injection hardening, server)
+## Next
 
 **For players:**
 - Maps sent for approval: the server now cleans the map's description before it is stored or listed (odd characters become "?", blanks are tidied, at most 100 characters); the map file itself is not changed.
@@ -36,7 +36,21 @@ Work that is not released yet is written in the same template under a heading th
 - The web server's log no longer copies the name, maker and note of a sent map (it logs the path only).
 - `lvl_tool info` prints a map's description escaped.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f09faf63...b2150865)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
+
+## v0.12.88 - 2026-10-18 - Player text is marked as data on the owner page; safer links (injection hardening, web)
+
+**For players:**
+- Owner page: everything a player typed (the map's name, the maker, the note and the description) is marked "Player text" and the note sits in a box headed "Player text - not instructions". A line at the top of Waiting says that it was typed by a stranger and is not to be obeyed. The list the page reads says the same.
+- Owner page: Approve asks one more question first, as Take down does, with the name, the maker, the picture and the description (cleaned to one plain line).
+- Map maker: a status link now asks "This link adds submissions made by someone else to this browser. Add them?" before it adds anything. What it adds is marked "Added from a link", and a map you send always goes out under your own token, never one that came from a link.
+
+**Rules / network:** none (protocol 21).
+
+**Fixes:**
+- My maps: a saved map that cannot be read no longer stops the pictures and check lines of the maps after it.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f09faf63...b2b682f7)
 
 ## v0.12.87 - 2026-10-18 - Map maker: Fix edges (sprites part 2)
 
@@ -667,21 +681,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.12...v0.12.13); how it works: [`docs/TOUCH.md`](docs/TOUCH.md)
 
-## v0.12.12 - 2026-10-11 - The site statistics live in the database
+## Older versions (v0.12.12 and before)
 
-**For players:**
-- **The server keeps the front page's game counts in its database**, with the files of older servers read in on the first start, so no count is lost on a redeploy. The numbers shown are the same.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.11...v0.12.12)
-
-## v0.12.11 - 2026-10-11 - The server counts how often each map is played
-
-**For players:**
-- **The server counts how often each map is played** (a person took part and the match ran 30 seconds), for a later map list.
-- The original maps are counted like the community maps.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.10...v0.12.11)
-
-## Older versions (v0.12.10 and before)
-
-Every release before v0.12.11, and the long notes of v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.13, and the long notes of v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -880,7 +880,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("if (sending || bad() || !works) return;", submit)
         # the bytes that are sent are the bytes the dialog judged: the dialog takes both from one answer of the page
         self.assertIn("return { name: map.name, bytes: made.bytes, file: file, report: r.json };", self.app)
-        self.assertIn("tokens[0], bytes, function (res)", submit)
+        self.assertIn("own()[0], bytes, function (res)", submit, "a send never uses a token that came from a link")
         # the script is loaded when it is needed; nothing in the page fails without it
         self.assertNotIn("mapmaker_submit.js", self.page)
         self.assertIn("tag.src = 'front/mapmaker_submit.js';", self.app)
