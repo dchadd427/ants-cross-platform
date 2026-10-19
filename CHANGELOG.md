@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.94 - 2026-10-19 - Play maps taller than 90 rows (on this computer and in the browser test game)
+
+**For players:**
+- **Maps taller than 90 rows can be played on your own computer.** The map maker's "Play this map" now starts a test game against bots on an Extended map of up to 120 columns and 128 rows (a 100 x 100 map with four teams of 25 ants in the middle runs at full speed), and the desktop game does the same with `--map`.
+- A map wider than 120 columns or taller than 128 rows is refused in plain words, and the game's own map list does not show Extended maps.
+- Online play is unchanged: hosting, joining and the server's rooms and lists refuse an Extended map with "Extended maps can't be played online yet".
+
+**Rules / network:** none (protocol 21).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6948051a...LAST); how it works: [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md)
+
 ## v0.12.93 - 2026-10-19 - Owner page: sign in with a username and a password (replaces Discord)
 
 **For players:**
@@ -658,20 +669,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a7d610d...11ee3bf6)
 
-## v0.12.21 - 2026-10-12 - Fullscreen replays hold the mouse like the game
+## Older versions (v0.12.21 and before)
 
-**For players:**
-- **Fullscreen holds the mouse in a replay and in a live match you watch, as it does in a game.** The cursor stays on the picture and the edges and corners scroll the map; leaving fullscreen gives the mouse back (in Chrome and Edge hold Esc: a short press goes to the game, as in a match). The bar stays clickable: move the cursor onto it (a small arrow shows there) and click, or drag the timeline. "Fullscreen mouse: Free" in a game keeps the plain browser fullscreen here too.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.20...v0.12.21); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
-
-## v0.12.20 - 2026-10-12 - Crisp zoom levels between 1 and 2
-
-**For players:**
-- **The zoom levels between 1 and 2 are drawn with the nearest pixel, like 1 and 2.** Before, those levels were smoothed with a linear filter, which blurred the pixel art; now every level from 1 up stays crisp. Below 1 the picture is averaged as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b54ec65...zoom-nearest)
-
-## Older versions (v0.12.19 and before)
-
-Every release before v0.12.20, and the long notes of v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.22, and the long notes of v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
