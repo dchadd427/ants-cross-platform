@@ -31,7 +31,6 @@
 #include <iterator>
 #include <map>
 #include <string>
-#include <tuple>
 #include <vector>
 
 using ants::assets::LevelConversion;
@@ -258,7 +257,10 @@ void the_play_limits() {
     std::vector<std::string> names(1344, ".");
     const LevelLimits all = LevelLimits::for_extended_maps();
     // each side at its limit passes, one past it is refused by the writer and by the reader
-    for (const auto& [rows, columns, fits] : {std::tuple<uint32_t, uint32_t, bool>{100, 100, true}, {128, 120, true}, {91, 120, true}, {128, 121, false}, {129, 120, false}, {129, 121, false}, {100, 200, false}, {300, 100, false}}) {
+    struct Shape { uint32_t rows, columns; bool fits; };
+    for (const Shape& shape : {Shape{100, 100, true}, Shape{128, 120, true}, Shape{91, 120, true}, Shape{128, 121, false}, Shape{129, 120, false}, Shape{129, 121, false}, Shape{100, 200, false}, Shape{300, 100, false}}) {
+        const uint32_t rows = shape.rows, columns = shape.columns;
+        const bool fits = shape.fits;
         const LevelData level = ants::assets::blank_extended_level(rows, columns, names, all);
         const std::string what = "a blank Extended map of " + std::to_string(rows) + " x " + std::to_string(columns);
         const LevelWriteResult w = ants::assets::write_level(level, play);

@@ -805,8 +805,7 @@ std::string RoomManager::map_refusal(const RestartHead& head, MapEntry& entry, a
     std::string why;
     if (!store_.find(head.map, entry, &why)) return "ended by a restart of the server: the map " + head.map + " is not on this server (" + why + ")";
     if (entry.hash != head.map_hash) return "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
-    assets::LevelValidation loaded;
-    if (!level.load_from_file(entry.path, &loaded)) return "ended by a restart of the server: the map " + head.map + (loaded.has(assets::LevelProblemKind::VersionNotSupported) ? ": " + loaded.online_reason() : " cannot be played by this engine");
+    if (!level.load_from_file(entry.path)) return "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
     if (!level.validate(head.start.roster).playable) return "ended by a restart of the server: the map cannot be played by the seats of the match";
     return std::string();
 }

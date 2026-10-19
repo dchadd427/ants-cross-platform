@@ -204,7 +204,9 @@
    "old": "else if (s == \"--extended\") o.extended = true;",
    "new": "else if (s == \"--extended\") o.extended = false;",
    "build": [
-    "bot_arena"
+    "bot_arena",
+    "map_sweep",
+    "replay_tool"
    ],
    "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
    "expect": "ExtendedTools"
@@ -215,7 +217,9 @@
    "old": "s.limits = assets::LevelLimits::for_game(o.extended);",
    "new": "",
    "build": [
-    "bot_arena"
+    "bot_arena",
+    "map_sweep",
+    "replay_tool"
    ],
    "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
    "expect": "ExtendedTools"
@@ -226,7 +230,9 @@
    "old": "load_from_file(p.string(), nullptr, assets::LevelLimits::for_game(o.extended))",
    "new": "load_from_file(p.string(), nullptr, assets::LevelLimits{})",
    "build": [
-    "bot_arena"
+    "bot_arena",
+    "map_sweep",
+    "replay_tool"
    ],
    "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
    "expect": "ExtendedTools"
@@ -237,7 +243,9 @@
    "old": "if (o.extended) a.push_back(\"--extended\");",
    "new": "",
    "build": [
-    "map_sweep"
+    "bot_arena",
+    "map_sweep",
+    "replay_tool"
    ],
    "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
    "expect": "ExtendedTools"
@@ -245,10 +253,12 @@
   {
    "id": "tool_sweep_loads_classic_only",
    "file": "tools/map_sweep.cpp",
-   "old": "assets::LevelLimits::for_game(extended));",
-   "new": "assets::LevelLimits{});",
+   "old": "info.loads = level.load_from_memory(bytes.data(), bytes.size(), &verdict, assets::LevelLimits::for_game(extended));",
+   "new": "info.loads = level.load_from_memory(bytes.data(), bytes.size(), &verdict, assets::LevelLimits::for_game(extended && false));",
    "build": [
-    "map_sweep"
+    "bot_arena",
+    "map_sweep",
+    "replay_tool"
    ],
    "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
    "expect": "ExtendedTools"
@@ -259,6 +269,8 @@
    "old": "assets::LevelLimits::for_game(o.extended))) {",
    "new": "assets::LevelLimits{})) {",
    "build": [
+    "bot_arena",
+    "map_sweep",
     "replay_tool"
    ],
    "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",
@@ -270,6 +282,8 @@
    "old": "assets::LevelLimits::for_game(o.extended))) {",
    "new": "assets::LevelLimits::for_game(true))) {",
    "build": [
+    "bot_arena",
+    "map_sweep",
     "replay_tool"
    ],
    "test": "BUILD_DIR=build python3 tests/scripts/extended_tools_check.py",

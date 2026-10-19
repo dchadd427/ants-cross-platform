@@ -15,7 +15,7 @@
    "id": "empty_world_keeps_the_old_rules_word",
    "file": "include/ants_sim/grid.hpp",
    "old": "        rules_ = rules;\n        return true;",
-   "new": "        return true;"
+   "new": "        (void)rules;\n        return true;"
   },
   {
    "id": "anchor_row_and_column_swapped",
@@ -81,13 +81,13 @@
    "id": "for_game_online_reads_play_limits",
    "file": "include/ants_assets/lvl_parser.hpp",
    "old": "return local ? for_play_extended() : LevelLimits{};",
-   "new": "return for_play_extended();"
+   "new": "return (void)local, for_play_extended();"
   },
   {
    "id": "for_game_local_reads_classic_limits",
    "file": "include/ants_assets/lvl_parser.hpp",
    "old": "return local ? for_play_extended() : LevelLimits{};",
-   "new": "return LevelLimits{};"
+   "new": "return (void)local, LevelLimits{};"
   },
   {
    "id": "for_game_inverted",
