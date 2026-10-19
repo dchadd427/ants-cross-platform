@@ -692,6 +692,32 @@ def run_edges(page, tab, args, check):
     check(edges_bytes(page)["sha"] == every["sha"] and still_pixels(page) == after_all, "Redo twice makes both again: the same bytes and the same pixels")
     check(edges_open(page, whole=True) and edges_count(page) == 0 and page.button_off(".dlg.edges .dlg-foot .btn:last-child"), "the dialog says that nothing changes, and Fix edges is off")
     page.key("Escape")
+    # the game's own maps are the gold standard: TREASURE needs nothing, ISLANDS two cells that the author left plain; no boundary gets a piece on both facing cells (a dark seam)
+    page.choose_file(os.path.join(REPO, "Original-Ants", "Maps", "TREASURE.LVL"))
+    check(wait_for(lambda: page.state()["name"] == "TREASURE"), "Treasure is opened")
+    check(wait_for(lambda: spread(page, 5, 5) >= 4, 10), "its pictures are drawn")
+    gold = still_pixels(page)
+    check(edges_open(page, whole=True) and edges_count(page) == 0 and page.button_off(".dlg.edges .dlg-foot .btn:last-child"), "Fix edges on the original Treasure map: nothing changes, and the button is off")
+    page.key("Escape")
+    check(still_pixels(page) == gold and page.button_off("#undo-btn"), "and its pixels and history are as they were")
+    page.choose_file(os.path.join(REPO, "Original-Ants", "Maps", "ISLANDS.LVL"))
+    check(wait_for(lambda: page.state()["name"] == "ISLANDS"), "Islands is opened")
+    check(wait_for(lambda: spread(page, 5, 5) >= 4, 10), "its pictures are drawn")
+    isl = edges_bytes(page)
+    isl_pixels = still_pixels(page)
+    check(edges_open(page, whole=True) and edges_count(page) == 2, "Fix edges on the original Islands map: the two plain cells that the author left (%d)" % edges_count(page))
+    page.ev("[].filter.call(document.querySelectorAll('.dlg.edges .btn'), function (b) { return b.textContent === 'Fix edges'; })[0].click()")
+    check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Fix edges closes the dialog")
+    fixed = edges_bytes(page)
+    ta, tb = isl["bytes"][isl["layer1"] - 8:], fixed["bytes"][fixed["layer1"] - 8:]
+    cells = sorted({(i - 8) // 6 for i in range(len(ta)) if ta[i] != tb[i]}) if len(ta) == len(tb) else []
+    names = [tb[8 + 6 * c] | (tb[9 + 6 * c] << 8) for c in cells]
+    entry = lambda k: fixed["bytes"][fixed["dictAt"] + 2 + 11 * k: fixed["dictAt"] + 13 + 11 * k].split(b"\0")[0].decode("latin1")
+    columns = fixed["columns"]
+    check([(c // columns, c % columns, entry(n)) for c, n in zip(cells, names)] == [(34, 53, "wm06a"), (46, 17, "gm03a")], "exactly those two cells have the expected pieces (%s)" % [(c // columns, c % columns, entry(n)) for c, n in zip(cells, names)])
+    check(fixed["left"] == 0 and still_pixels(page) != isl_pixels, "nothing is left to fix, and the picture changed")
+    page.ev("document.getElementById('undo-btn').click()")
+    check(edges_bytes(page)["sha"] == isl["sha"] and still_pixels(page) == isl_pixels, "one Undo gives back the exact bytes and pixels")
     # a phone: the box is a sheet inside the screen with both buttons in view, and nothing scrolls sideways
     tab.emulate(390, 844, 2, mobile=True)
     time.sleep(0.5)
