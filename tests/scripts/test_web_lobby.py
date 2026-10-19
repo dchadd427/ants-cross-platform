@@ -666,7 +666,7 @@ class TheCheckIsNotVacuous(unittest.TestCase):
         self.must_fail("web/shell.html", "if ((out.map || out.file) && !out.bots) out.args.push('--alone');", "if (out.map && !out.bots) out.args.push('--alone');")
 
     def test_the_game_page_forgets_the_name_of_a_game_on_a_file(self):
-        self.must_fail("web/shell.html", "(q.has('map') || q.has('mapfile') || q.has('bots'))", "(q.has('map') || q.has('bots'))")
+        self.must_fail("web/shell.html", "(q.has('map') || q.has('mapfile') || q.has('bots') || test)", "(q.has('map') || q.has('bots') || test)")
 
     def test_the_game_page_lets_a_file_win_over_a_key(self):
         self.must_fail("web/shell.html", "if (!out.map && window.AntsMapFiles && (out.file =", "if (window.AntsMapFiles && (out.file =")

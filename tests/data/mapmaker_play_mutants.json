@@ -1,0 +1,1069 @@
+{
+  "note": "Mutants of the map maker's Play this map for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the verdict, the start rules and the dialogs of web/front/mapmaker_play.js and the game page's side, web/front/test_game.js, against tests/scripts/web_mapmaker_play_check.js; the glue in web/shell.html, web/front/mapmaker_app.js, web/mapmaker.html and mapmaker_dialog.js against tests/scripts/web_lobby_check.js, tests/scripts/web_report_check.js (through test_web_report.py) and the pinned source of tests/scripts/test_web_mapmaker_play.py. Run from the checkout: tools/mutate.py tests/data/mapmaker_play_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker_play.py runs the node ones on a copy of the files.",
+  "mutants": [
+    {
+      "id": "play_rows_limit_91",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_ROWS = 90;",
+      "new": "var MAX_ROWS = 91;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_rows_limit_inclusive",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (rows > MAX_ROWS) {",
+      "new": "if (rows >= MAX_ROWS) {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_big_extended_no_copy",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.convert = extended;",
+      "new": "out.convert = false;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_big_classic_copy",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.convert = extended;",
+      "new": "out.convert = true;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_small_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "        if (extended) {\n            out.text = 'This is an Extended map,",
+      "new": "        if (extended && rows > 60) {\n            out.text = 'This is an Extended map,",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_small_no_copy",
+      "file": "web/front/mapmaker_play.js",
+      "old": "            out.convert = true;\n            return out;\n        }\n        var general",
+      "new": "            out.convert = false;\n            return out;\n        }\n        var general",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_kind_swapped",
+      "file": "web/front/mapmaker_play.js",
+      "old": "extended = check && check.kind === 'extended'",
+      "new": "extended = check && check.kind === 'classic'",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_unjudged_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!check || check.judged === false || !read || read.loaded === false) {",
+      "new": "if (!check || !read) {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_unloaded_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "|| !read || read.loaded === false) {",
+      "new": "|| !read) {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_general_stop_ignored",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (general.length) {",
+      "new": "if (general.length > 99) {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_team_stop_is_general",
+      "file": "web/front/mapmaker_play.js",
+      "old": "f.severity === 'fatal' && !(typeof f.team === 'number' && f.team >= 0)",
+      "new": "f.severity === 'fatal'",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_warning_is_general",
+      "file": "web/front/mapmaker_play.js",
+      "old": "f.severity === 'fatal' && !(typeof f.team === 'number' && f.team >= 0)",
+      "new": "f.severity !== 'info' && !(typeof f.team === 'number' && f.team >= 0)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_general_sentence_not_capital",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.list = general.map(function (f) { return capital(f.message); });",
+      "new": "out.list = general.map(function (f) { return f.message; });",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_team_stop_ignored",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (f.severity === 'fatal' || TEAM_CODES[f.code]) why.push(capital(f.message));",
+      "new": "if (TEAM_CODES[f.code]) why.push(capital(f.message));",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_hills_several_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "hills_several: 1, ",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_hill_missing_finding_ignored",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var TEAM_CODES = { hill_missing: 1, ",
+      "new": "var TEAM_CODES = { ",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_no_entrance_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "hill_without_entrance: 1, ",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_ants_missing_finding_ignored",
+      "file": "web/front/mapmaker_play.js",
+      "old": ", starting_ants_missing: 1 }",
+      "new": " }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_hill_count_not_said",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (f.code === 'hills_several' && f.count > 1) hills = f.count;",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_no_ants_no_reason",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!(t.start_markers > 0) && !why.length) why.push(SEATS[s].name + ' has no starting ants');",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_no_hill_no_reason",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!(t.hill_cells > 0) && !why.length) why.push(SEATS[s].name + ' has no hill');",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_one_color_enough",
+      "file": "web/front/mapmaker_play.js",
+      "old": "}).length < 2) {",
+      "new": "}).length < 1) {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_three_colors_needed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "}).length < 2) {",
+      "new": "}).length < 3) {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_reasons_dropped",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.list = [].concat.apply([], out.seats.map(function (x) { return x.why; }));",
+      "new": "out.list = [];",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_ok_never",
+      "file": "web/front/mapmaker_play.js",
+      "old": "        out.ok = true;\n        return out;\n    }\n\n    // The four letters",
+      "new": "        out.ok = false;\n        return out;\n    }\n\n    // The four letters",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_seat_order_swapped",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var SEATS = [{ name: 'Green', dot: '#3aa655' }, { name: 'Red', dot: '#c8402f' },",
+      "new": "var SEATS = [{ name: 'Red', dot: '#c8402f' }, { name: 'Green', dot: '#3aa655' },",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_code_order",
+      "file": "web/front/mapmaker_play.js",
+      "old": "function code(choice) { return [0, 1, 2, 3].map(",
+      "new": "function code(choice) { return [3, 2, 1, 0].map(",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_first_bot_easy",
+      "file": "web/front/mapmaker_play.js",
+      "old": "choice[usable[1].seat] = 'm';",
+      "new": "choice[usable[1].seat] = 'e';",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_first_you_second",
+      "file": "web/front/mapmaker_play.js",
+      "old": "choice[usable[0].seat] = 'y';",
+      "new": "choice[usable[1].seat] = 'y';",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_two_yous_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (you !== 1) return",
+      "new": "if (you < 1) return",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_no_you_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (you !== 1) return",
+      "new": "if (you > 1) return",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_no_bot_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!bots) return { ok: false, text: 'Add at least one bot.' };",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_unusable_seat_allowed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (c !== 'n' && !seats[s].usable) bad = true;",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_unusable_you_only",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (c !== 'n' && !seats[s].usable) bad = true;",
+      "new": "if (c === 'y' && !seats[s].usable) bad = true;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_bots_text_plural",
+      "file": "web/front/mapmaker_play.js",
+      "old": "(bots === 1 ? ' bot.' : ' bots.')",
+      "new": "' bots.'",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_quick_from_zero",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var s = (you + i) % 4;",
+      "new": "var s = i % 4;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_quick_unusable_taken",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (seats[s].usable) { next[s] = 'm'; left--; }",
+      "new": "{ next[s] = 'm'; left--; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_quick_partial",
+      "file": "web/front/mapmaker_play.js",
+      "old": "return left ? null : next;",
+      "new": "return next;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_quick_hard",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (seats[s].usable) { next[s] = 'm'; left--; }",
+      "new": "if (seats[s].usable) { next[s] = 'h'; left--; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_core_profile",
+      "file": "web/front/mapmaker_play.js",
+      "old": "env.core.checkMap(m.bytes, 'extended')",
+      "new": "env.core.checkMap(m.bytes, 'new_map')",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_core_read_profile",
+      "file": "web/front/mapmaker_play.js",
+      "old": "env.core.readReport(m.bytes, 'extended')",
+      "new": "env.core.readReport(m.bytes, 'new_map')",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_core_error_ignored",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (checked.status !== 0 || read.status !== 0) return",
+      "new": "if (checked.status !== 0 && read.status !== 0) return",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_bytes_not_copied",
+      "file": "web/front/mapmaker_play.js",
+      "old": "bytes: m.bytes.slice() }",
+      "new": "bytes: m.bytes }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_new_tab_replaced",
+      "file": "web/front/mapmaker_play.js",
+      "old": "'&seats=' + code(choice), '_blank');",
+      "new": "'&seats=' + code(choice), '_self');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_address_without_id",
+      "file": "web/front/mapmaker_play.js",
+      "old": "'/play.html?testmap=' + rec.id + '&seats='",
+      "new": "'/play.html?testmap=' + rec.id.slice(1) + '&seats='",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_blocked_tab_kept",
+      "file": "web/front/mapmaker_play.js",
+      "old": "            if (!tab) {\n                ctl.close();",
+      "new": "            kept.push(rec);\n            if (!tab) {\n                ctl.close();",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_blocked_tab_silent",
+      "file": "web/front/mapmaker_play.js",
+      "old": "                return dialogs.message('The test game could not open',",
+      "new": "                return (function () {})('The test game could not open',",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_never_kept",
+      "file": "web/front/mapmaker_play.js",
+      "old": "            kept.push(rec);                                                          //",
+      "new": "            //",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_kept_five",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var KEPT = 3;",
+      "new": "var KEPT = 5;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_kept_never_let_go",
+      "file": "web/front/mapmaker_play.js",
+      "old": "while (kept.length > KEPT) kept.shift();",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_dialog_stays_open",
+      "file": "web/front/mapmaker_play.js",
+      "old": "            while (kept.length > KEPT) kept.shift();\n            ctl.close();",
+      "new": "            while (kept.length > KEPT) kept.shift();",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_start_when_off",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!go.ok || started) return;",
+      "new": "if (started) return;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_handoff_any_id",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (kept[i].id === id) return { name: kept[i].name, bytes: kept[i].bytes };",
+      "new": "return { name: kept[i].name, bytes: kept[i].bytes };",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_handoff_not_a_copy_name",
+      "file": "web/front/mapmaker_play.js",
+      "old": "return { name: kept[i].name, bytes: kept[i].bytes };\n",
+      "new": "return { name: 'x', bytes: kept[i].bytes };\n",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_back_any_id",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (kept[i].id === id) return toast(",
+      "new": "return toast(",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_back_words",
+      "file": "web/front/mapmaker_play.js",
+      "old": "'Back from the test game. Your map is as you left it.'",
+      "new": "'Back.'",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_toast_stays",
+      "file": "web/front/mapmaker_play.js",
+      "old": "toastTimer = win.setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, TOAST_MS);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_toast_no_role",
+      "file": "web/front/mapmaker_play.js",
+      "old": "t.setAttribute('role', 'status');",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_toast_twice",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (old) old.parentNode.removeChild(old);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_you_moves_not",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (value === 'y') for (var s = 0; s < 4; s++) if (choice[s] === 'y') choice[s] = 'n';",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_unusable_seat_open",
+      "file": "web/front/mapmaker_play.js",
+      "old": "i.disabled = !v.seats[g.seat].usable && i.value !== 'n';",
+      "new": "i.disabled = false;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_unusable_empty_closed",
+      "file": "web/front/mapmaker_play.js",
+      "old": "i.disabled = !v.seats[g.seat].usable && i.value !== 'n';",
+      "new": "i.disabled = !v.seats[g.seat].usable;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_quick_always_on",
+      "file": "web/front/mapmaker_play.js",
+      "old": "q.button.disabled = !quick(choice, v.seats, q.count);",
+      "new": "q.button.disabled = false;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_start_always_on",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (startButton) startButton.disabled = !go.ok;",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_status_class",
+      "file": "web/front/mapmaker_play.js",
+      "old": "status.className = 'play-status' + (go.ok ? '' : ' no');",
+      "new": "status.className = 'play-status';",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_quick_does_nothing",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (next) { choice = next; refresh(); } });",
+      "new": "if (next) { refresh(); } });",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_name_as_html",
+      "file": "web/front/mapmaker_play.js",
+      "old": "parent.appendChild(el('b', '', name));",
+      "new": "parent.appendChild(el('b', '', String(name).toUpperCase()));",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_note_dropped",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (v.note) body.appendChild(el('div', 'note', v.note));",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_list_dropped",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (v.list.length) {",
+      "new": "if (false) {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_convert_always",
+      "file": "web/front/mapmaker_play.js",
+      "old": "buttons: (v.convert && env.convert ? [",
+      "new": "buttons: (env.convert ? [",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_convert_at_once",
+      "file": "web/front/mapmaker_play.js",
+      "old": "onClick: function () { win.setTimeout(env.convert, 0); }",
+      "new": "onClick: function () { env.convert(); }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_refusal_has_start",
+      "file": "web/front/mapmaker_play.js",
+      "old": "{ id: 'ok', text: 'OK' }])",
+      "new": "{ id: 'ok', text: 'OK' }, { id: 'start', text: 'Start the game' }])",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_rows_columns_swapped",
+      "file": "web/front/mapmaker_play.js",
+      "old": "shape = read.json.rows + ' x ' + read.json.columns",
+      "new": "shape = read.json.columns + ' x ' + read.json.rows",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_order_of_rows",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var ORDER = [3, 2, 0, 1];",
+      "new": "var ORDER = [0, 1, 2, 3];",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_choices_order",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var CHOICES = [['y', 'You'], ['e', 'Bot Easy'], ['m', 'Bot Medium'], ['h', 'Bot Hard'], ['n', 'Empty']];",
+      "new": "var CHOICES = [['y', 'You'], ['m', 'Bot Medium'], ['e', 'Bot Easy'], ['h', 'Bot Hard'], ['n', 'Empty']];",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_ants_text",
+      "file": "web/front/mapmaker_play.js",
+      "old": "function antText(n) { return n === 1 ? '1 ant' : n + ' ants'; }",
+      "new": "function antText(n) { return n + ' ants'; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_id_too_long",
+      "file": "web/front/test_game.js",
+      "old": "/^[a-z0-9]{6,32}$/.test(id)",
+      "new": "/^[a-z0-9]{6,64}$/.test(id)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_id_short",
+      "file": "web/front/test_game.js",
+      "old": "/^[a-z0-9]{6,32}$/.test(id)",
+      "new": "/^[a-z0-9]{1,32}$/.test(id)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_id_capitals",
+      "file": "web/front/test_game.js",
+      "old": "/^[a-z0-9]{6,32}$/.test(id)",
+      "new": "/^[a-zA-Z0-9]{6,32}$/.test(id)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_id_dots",
+      "file": "web/front/test_game.js",
+      "old": "/^[a-z0-9]{6,32}$/.test(id)",
+      "new": "/^[a-z0-9.\\-]{6,32}$/.test(id)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_seats_letters",
+      "file": "web/front/test_game.js",
+      "old": "/^[yemhn]{4}$/.test(seats)",
+      "new": "/^[yemhnx]{4}$/.test(seats)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_seats_case",
+      "file": "web/front/test_game.js",
+      "old": "/^[yemhn]{4}$/.test(seats)",
+      "new": "/^[yemhnYEMHN]{4}$/.test(seats)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_two_yous",
+      "file": "web/front/test_game.js",
+      "old": "if (c === 'y') { if (you >= 0) return null; you = s; }",
+      "new": "if (c === 'y') { you = s; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_no_you",
+      "file": "web/front/test_game.js",
+      "old": "if (you < 0 || !bots.length) return null;",
+      "new": "if (!bots.length) return null;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_no_bot",
+      "file": "web/front/test_game.js",
+      "old": "if (you < 0 || !bots.length) return null;",
+      "new": "if (you < 0) return null;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_levels_swapped",
+      "file": "web/front/test_game.js",
+      "old": "var LEVELS = { e: 'easy', m: 'medium', h: 'hard' };",
+      "new": "var LEVELS = { e: 'hard', m: 'medium', h: 'easy' };",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_player_zero",
+      "file": "web/front/test_game.js",
+      "old": "args.push('--player', String(you));",
+      "new": "args.push('--player', '0');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_bot_seat",
+      "file": "web/front/test_game.js",
+      "old": "args.push('--bot', b[0] + ':' + LEVELS[b[1]]);",
+      "new": "args.push('--bot', (b[0] + 1) % 4 + ':' + LEVELS[b[1]]);",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_file_name",
+      "file": "web/front/test_game.js",
+      "old": "'--map', 'Original-Ants/Maps/' + FILE, '--play']",
+      "new": "'--map', 'Original-Ants/Maps/' + FILE]",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_alone",
+      "file": "web/front/test_game.js",
+      "old": "var you = -1, bots = [], args = ['--map', 'Original-Ants/Maps/' + FILE, '--play'];",
+      "new": "var you = -1, bots = [], args = ['--alone', '--map', 'Original-Ants/Maps/' + FILE, '--play'];",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_strip_names_unsorted",
+      "file": "web/front/test_game.js",
+      "old": ".sort();\n        return { you:",
+      "new": ";\n        return { you:",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_strip_you_seat",
+      "file": "web/front/test_game.js",
+      "old": "you: 'You: ' + TEAMS[test.you]",
+      "new": "you: 'You: ' + TEAMS[(test.you + 1) % 4]",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_name_controls",
+      "file": "web/front/test_game.js",
+      "old": "\\u0000-\\u001f\\u007f-\\u009f",
+      "new": "\\u0001-\\u001e",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_name_direction_marks",
+      "file": "web/front/test_game.js",
+      "old": "\\u202a-\\u202e\\u2066-\\u2069",
+      "new": "\\u202a-\\u202d",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_name_length",
+      "file": "web/front/test_game.js",
+      "old": "Array.from(text).slice(0, 40)",
+      "new": "Array.from(text).slice(0, 50)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_name_cut_in_a_character",
+      "file": "web/front/test_game.js",
+      "old": "Array.from(text).slice(0, 40).join('')",
+      "new": "text.slice(0, 40)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_name_default",
+      "file": "web/front/test_game.js",
+      "old": "|| 'Test map';",
+      "new": "|| '';",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_take_closed_tab",
+      "file": "web/front/test_game.js",
+      "old": "if (!opener || opener.closed || typeof opener.antsTestGameHandoff !== 'function') return null;",
+      "new": "if (!opener || typeof opener.antsTestGameHandoff !== 'function') return null;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_take_no_bytes",
+      "file": "web/front/test_game.js",
+      "old": "if (!rec || !rec.bytes || !(rec.bytes.length > 0) || rec.bytes.length > MAX_BYTES) return null;",
+      "new": "if (!rec || rec.bytes.length > MAX_BYTES) return null;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_take_empty",
+      "file": "web/front/test_game.js",
+      "old": "!(rec.bytes.length > 0) ||",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_take_big",
+      "file": "web/front/test_game.js",
+      "old": " || rec.bytes.length > MAX_BYTES) return null;",
+      "new": ") return null;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_take_not_a_copy",
+      "file": "web/front/test_game.js",
+      "old": "bytes: new Uint8Array(rec.bytes) }",
+      "new": "bytes: rec.bytes }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_take_throw",
+      "file": "web/front/test_game.js",
+      "old": "} catch (e) { return null; }\n    }\n\n    function el(",
+      "new": "} catch (e) { throw e; }\n    }\n\n    function el(",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_take_name",
+      "file": "web/front/test_game.js",
+      "old": "name: cleanName(rec.name)",
+      "new": "name: String(rec.name)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_max_bytes",
+      "file": "web/front/test_game.js",
+      "old": "var MAX_BYTES = 1024 * 1024;",
+      "new": "var MAX_BYTES = 4 * 1024 * 1024;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_begin_no_card",
+      "file": "web/front/test_game.js",
+      "old": "            return false;\n        }\n        getModule()",
+      "new": "            return true;\n        }\n        getModule()",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_begin_card_way",
+      "file": "web/front/test_game.js",
+      "old": "'Open the map maker', EDITOR);",
+      "new": "'Open the map maker', '/');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_begin_no_write",
+      "file": "web/front/test_game.js",
+      "old": "getModule().preRun.push(win.AntsMapFiles.writer(function () { return getModule().FS; }, FILE, rec.bytes));",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_begin_file",
+      "file": "web/front/test_game.js",
+      "old": "var FILE = 'playtest.lvl';",
+      "new": "var FILE = 'play.lvl';",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_begin_no_strip",
+      "file": "web/front/test_game.js",
+      "old": "        strip(win, test, rec);\n        return true;",
+      "new": "        return true;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_strip_not_first",
+      "file": "web/front/test_game.js",
+      "old": "doc.body.insertBefore(bar, doc.body.firstChild);",
+      "new": "doc.body.appendChild(bar);",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_strip_html",
+      "file": "web/front/test_game.js",
+      "old": "name = el(doc, 'span', 'color:#f4ece2;', rec.name);",
+      "new": "name = el(doc, 'span', 'color:#f4ece2;', rec.name.toUpperCase());",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_strip_button_small",
+      "file": "web/front/test_game.js",
+      "old": "var back = el(doc, 'button', 'min-height:44px;', '\\u25c0 Back to editor');",
+      "new": "var back = el(doc, 'button', 'min-height:30px;', '\\u25c0 Back to editor');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_strip_no_ask",
+      "file": "web/front/test_game.js",
+      "old": "back.addEventListener('click', function () { ask(win, test.id); });",
+      "new": "back.addEventListener('click', function () { leave(win, test.id); });",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_strip_note",
+      "file": "web/front/test_game.js",
+      "old": "'Not saved. Not counted.'",
+      "new": "'Saved.'",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_leave_no_tell",
+      "file": "web/front/test_game.js",
+      "old": "win.opener.antsTestGameBack(id); } catch",
+      "new": "} } catch",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_leave_no_close",
+      "file": "web/front/test_game.js",
+      "old": "try { win.close(); }",
+      "new": "try { void 0; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_leave_no_fallback",
+      "file": "web/front/test_game.js",
+      "old": "if (!win.closed) win.location.assign(EDITOR);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_leave_always_goes",
+      "file": "web/front/test_game.js",
+      "old": "if (!win.closed) win.location.assign(EDITOR);",
+      "new": "win.location.assign(EDITOR);",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_leave_delay",
+      "file": "web/front/test_game.js",
+      "old": "}, 300);",
+      "new": "}, 3000);",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_ask_keep_leaves",
+      "file": "web/front/test_game.js",
+      "old": "keep.addEventListener('click', close);",
+      "new": "keep.addEventListener('click', function () { close(); leave(win, id); });",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_ask_out_stays",
+      "file": "web/front/test_game.js",
+      "old": "out.addEventListener('click', function () { close(); leave(win, id); });",
+      "new": "out.addEventListener('click', function () { close(); });",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_ask_escape",
+      "file": "web/front/test_game.js",
+      "old": "if (e.key === 'Escape') { e.stopPropagation(); close(); }",
+      "new": "if (e.key === 'Escape') { e.stopPropagation(); }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_ask_key_leak",
+      "file": "web/front/test_game.js",
+      "old": "function close() { doc.removeEventListener('keydown', onKey, true);",
+      "new": "function close() {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_ask_words",
+      "file": "web/front/test_game.js",
+      "old": "'Leave the test game?'",
+      "new": "'Leave?'",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_card_way",
+      "file": "web/front/test_game.js",
+      "old": "go.addEventListener('click', function () { doc.defaultView.location.assign(href); });",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "game_card_loading_screen",
+      "file": "web/front/test_game.js",
+      "old": "if (progress) progress.style.display = 'none';",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "shell_name_not_remembered",
+      "file": "web/shell.html",
+      "old": "q.has('bots') || test) ? remembered : '');",
+      "new": "q.has('bots')) ? remembered : '');",
+      "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "shell_bots_mixed_in",
+      "file": "web/shell.html",
+      "old": "var levels = test ? null : localBots(q.get('bots'));",
+      "new": "var levels = localBots(q.get('bots'));",
+      "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "shell_test_beats_map",
+      "file": "web/shell.html",
+      "old": "var test = !out.map && !out.file && window.AntsTestGame",
+      "new": "var test = window.AntsTestGame",
+      "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "shell_args_not_passed",
+      "file": "web/shell.html",
+      "old": "if (test) { out.test = test; test.args.forEach(function (a) { out.args.push(a); }); }",
+      "new": "if (test) { out.test = test; }",
+      "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "shell_test_not_kept",
+      "file": "web/shell.html",
+      "old": "if (test) { out.test = test; test.args",
+      "new": "if (test) { test.args",
+      "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "shell_script_missing",
+      "file": "web/shell.html",
+      "old": "<script src=\"front/test_game.js\"></script>",
+      "new": "",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "shell_test_after_community",
+      "file": "web/shell.html",
+      "old": "ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test;",
+      "new": "ANTS_LOCAL_FILE = local.file;",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "app_play_unwired",
+      "file": "web/front/mapmaker_app.js",
+      "old": "        play: playMap,\n",
+      "new": "",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "app_play_busy",
+      "file": "web/front/mapmaker_app.js",
+      "old": "if (dialogs.isOpen() || canvas.isStroking()) return;\n        var left = 2, bad = false;",
+      "new": "var left = 2, bad = false;",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "app_play_rewritten_bytes",
+      "file": "web/front/mapmaker_app.js",
+      "old": "map: function () { return map; }, convert: ACTIONS.convert }); }",
+      "new": "map: function () { var made = fileBytes(); return { name: map.name, bytes: made.bytes }; }, convert: ACTIONS.convert }); }",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "app_play_menu_missing",
+      "file": "web/front/mapmaker_app.js",
+      "old": ", { text: '\\u25b6 Play this map', cls: 'gold', hint:",
+      "new": ", { text: '\\u25b6 Play this map', hint:",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "app_play_style_not_loaded",
+      "file": "web/front/mapmaker_app.js",
+      "old": "c.href = 'front/mapmaker_play.css';",
+      "new": "c.href = 'front/mapmaker.css';",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "app_play_needed_at_start",
+      "file": "web/front/mapmaker_app.js",
+      "old": "'MapStore', 'MapMine', 'MapCanvas', 'MapTools'];",
+      "new": "'MapStore', 'MapMine', 'MapCanvas', 'MapTools', 'MapPlay'];",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "page_play_button_gone",
+      "file": "web/mapmaker.html",
+      "old": "        <button class=\"btn sm gold\" type=\"button\" data-act=\"play\" disabled>&#9654; Play this map</button>\n",
+      "new": "",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "page_play_button_last",
+      "file": "web/mapmaker.html",
+      "old": "        <button class=\"btn sm gold\" type=\"button\" data-act=\"play\" disabled>&#9654; Play this map</button>\n        <button class=\"btn sm\" type=\"button\" data-act=\"new\" disabled>New</button>",
+      "new": "        <button class=\"btn sm\" type=\"button\" data-act=\"new\" disabled>New</button>\n        <button class=\"btn sm gold\" type=\"button\" data-act=\"play\" disabled>&#9654; Play this map</button>",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "dialog_menu_hint_dropped",
+      "file": "web/front/mapmaker_dialog.js",
+      "old": "if (it.hint) list.appendChild(el('p', 'menuhint', it.hint));",
+      "new": "",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "dialog_menu_class_dropped",
+      "file": "web/front/mapmaker_dialog.js",
+      "old": "'btn' + (it.cls ? ' ' + it.cls : '')",
+      "new": "'btn'",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "shell_test_not_started",
+      "file": "web/shell.html",
+      "old": "else if (ANTS_TEST && !window.AntsTestGame.begin(ANTS_TEST, window, function () { return Module; })) { /* a card says why the test game cannot start */ } else window.AntsMapFiles",
+      "new": "else window.AntsMapFiles",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "shell_test_started_when_card",
+      "file": "web/shell.html",
+      "old": "else if (ANTS_TEST && !window.AntsTestGame.begin(",
+      "new": "else if (ANTS_TEST && window.AntsTestGame.begin(",
+      "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
+    },
+    {
+      "id": "shell_test_counted",
+      "file": "web/shell.html",
+      "old": "if (typeof ANTS_TEST !== 'undefined' && ANTS_TEST) return; var sent = fetch(",
+      "new": "var sent = fetch(",
+      "test": "python3 -m unittest tests.scripts.test_web_report.ThePagesOwnCode"
+    },
+    {
+      "id": "shell_everything_not_counted",
+      "file": "web/shell.html",
+      "old": "if (typeof ANTS_TEST !== 'undefined' && ANTS_TEST) return; var sent = fetch(",
+      "new": "if (true) return; var sent = fetch(",
+      "test": "python3 -m unittest tests.scripts.test_web_report.ThePagesOwnCode"
+    },
+    {
+      "id": "game_begin_no_return",
+      "file": "web/front/test_game.js",
+      "old": "        strip(win, test, rec);\n        return true;",
+      "new": "        strip(win, test, rec);\n        return false;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_second_start_opens_second_tab",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!go.ok || started) return;",
+      "new": "if (!go.ok) return;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_row_words_sentence",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!info.hills) parts.push('no hill');",
+      "new": "if (!info.hills) parts.push('no hill (' + info.name + ')');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_row_words_ants",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!info.ants) parts.push('no starting ants');",
+      "new": "if (!info.ants) parts.push('no ants');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    }
+  ]
+}

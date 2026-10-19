@@ -29,6 +29,15 @@ button { font: inherit; color: inherit; }
 .adm .arow .t1 { font-size: 22px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; overflow-wrap: anywhere; }
 .adm .arow .am { margin-top: 4px; font-size: 15px; color: var(--muted); overflow-wrap: anywhere; }
 .adm .arow .quote { margin-top: 6px; font-size: 14.5px; line-height: 1.4; color: var(--cream); padding: 6px 10px; background: #0d1b16; border-left: 3px solid var(--rule); border-radius: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.adm .ptag { display: inline-block; padding: 0 7px; font-size: 12.5px; line-height: 1.5; color: #b9c4c0; background: #26302d; border: 1px solid #4a5753; border-radius: 3px; white-space: nowrap; vertical-align: middle; }
+.adm .qbox { margin-top: 6px; background: #26302d; border: 1px solid #4a5753; border-radius: 3px; }
+.adm .qbox .qhead { padding: 3px 10px; font-size: 12.5px; letter-spacing: .03em; color: #b9c4c0; border-bottom: 1px solid #4a5753; }
+.adm .qbox .quote { margin-top: 0; border-radius: 0 0 2px 2px; }
+.adm .zone { margin: 0 0 12px; padding: 8px 12px; font-size: 15px; color: #e3e9e6; background: #4a5551; border: 1px solid #7d8a85; border-radius: 4px; }
+.adm .ptnote { margin: 0 0 8px; font-size: 14px; color: #b9c4c0; }
+.adm [data-untrusted] { unicode-bidi: isolate; }
+.adm .srcrow > div { min-width: 0; }
+.adm .srcrow, .adm .srcrow .nm, .adm .srcrow .sm, .adm .srcrow .dsc { overflow-wrap: anywhere; }
 .adm .arow .ab { display: flex; gap: 10px; }
 .adm .btn.big { min-height: 52px; font-size: 19px; padding: 8px 26px; }
 .adm .arow .ab .btn.big { padding: 8px 16px; font-size: 18px; }

@@ -34,7 +34,18 @@
     }
     function textProblem(text, most, what) {
         if (chars(text) > most) return 'The ' + what + ' can have ' + most + ' characters at most.';
-        return /[<>]/.test(text) ? 'The ' + what + ' cannot have the marks < and >.' : '';
+        return /[<>]/.test(text) ? 'The ' + what + ' cannot have the marks < and >.' : /:\/\/|www\./i.test(text) || text.indexOf('```') >= 0 ? 'The ' + what + ' cannot have a web address or three backticks.' : '';
+    }
+    // The maker's name as the server judges it again (map_names.cpp): look-alike letters, accents, "l" as "i" and digits as letters are folded; LOOK and ACCENTS are pairs (from, to)
+    var LOOK = 'АAВBЕEКKМMНHОOРPСCТTУYХXаaеeкkоoрpсcуyхxΑAΒBΕEΖZΗHΙIΚKΜMΝNΟOΡPΤTΥYΧXαaιiκkνvοoρpυuχxωw', ACCENTS = 'ıiøołlđdðdħhŧt';
+    function fold(t) { return t.replace(/[^\x00-\x7f]/g, function (c) { var i = LOOK.indexOf(c); return i < 0 ? c : LOOK.charAt(i + 1); }).toLowerCase(); }
+    function skeletons(t) {
+        var f = fold(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[ıøłđðħŧ]/g, function (c) { return ACCENTS.charAt(ACCENTS.indexOf(c) + 1); }).replace(/l/g, 'i');
+        return [f, f.replace(/[0-5]/g, function (c) { return 'oi eas'.charAt(c); })].map(function (x) { return x.replace(/[^a-z\u0080-\uffff]/g, ''); });
+    }
+    function makerProblem(t) {
+        return skeletons(t).some(function (k) { return /^(the)?(owner|admin|administrator|system|moderator|mod|staff|assistant|server|ants|root)$/.test(k); }) || /^bot\(|\(bot(,[^()]+)?\)$/.test(fold(t).replace(/\s/g, '')) ?
+            'That player name cannot be used. Please choose another.' : '';
     }
     function when(sec, now) {
         var d = new Date(sec * 1000), t = new Date(now);
@@ -88,7 +99,7 @@
     //       Abort (AbortController or null),
     //       current() -> {name, bytes, file, report} | {error}, showFinding(f), onOpenCopy(rec), onSee(), clipboard, link() -> the page's address without a fragment, now()}
     function create(env) {
-        var doc = env.doc, dialogs = env.dialogs, calls = api(env).call, pending = false, recs = Object.create(null), tokens = [], maker = '', token = 0, loaded = false;
+        var doc = env.doc, dialogs = env.dialogs, calls = api(env).call, pending = false, recs = Object.create(null), tokens = [], linked = [], maker = '', token = 0, loaded = false;
         function h(tag, cls, kids, attrs) {
             var n = doc.createElement(tag), k;
             if (cls) n.className = cls;
@@ -101,7 +112,8 @@
         function say(title, text) { return dialogs.message(title, text); }
         function visible() { return Object.keys(recs).map(function (k) { return recs[k]; }).filter(function (r) { return r.state !== 'withdrawn'; }).sort(function (a, b) { return (b.sent_at || 0) - (a.sent_at || 0); }); }
         function keep(rec) { env.sent.put(rec, function () {}); }
-        function keepMeta() { env.sent.put({ id: '#tokens', list: tokens }, function () {}); env.sent.put({ id: '#maker', name: maker }, function () {}); }
+        function own() { return tokens.filter(function (t) { return linked.indexOf(t) < 0; }); }                  // (the tokens this browser made itself: a send never uses one that came from a link)
+        function keepMeta() { env.sent.put({ id: '#tokens', list: tokens, linked: linked }, function () {}); env.sent.put({ id: '#maker', name: maker }, function () {}); }
         function addTokens(list) { var n = tokens.length; list.forEach(function (t) { if (TOKEN.test(t) && tokens.indexOf(t) < 0) tokens.push(t); }); if (tokens.length !== n) keepMeta(); return tokens.length !== n; }
 
         // What this browser kept (merged into what is in memory, so a late answer never takes anything away)
@@ -110,7 +122,7 @@
                 if (status !== 'ready') return done();
                 env.sent.all(function (error, list) {
                     (list || []).forEach(function (r) {
-                        if (r.id === '#tokens') addTokens(r.list || []);
+                        if (r.id === '#tokens') { (Array.isArray(r.linked) ? r.linked : []).forEach(function (t) { if (TOKEN.test(t) && linked.indexOf(t) < 0) linked.push(t); }); addTokens(r.list || []); }          // (what came from a link is known before anything is written back)
                         else if (r.id === '#maker') maker = maker || (typeof r.name === 'string' ? r.name : '');
                         else if (typeof r.id === 'string' && !recs[r.id]) recs[r.id] = r;
                     });
@@ -146,7 +158,7 @@
             function values() { return { name: Store.clean(nameIn.value), maker: Store.clean(makerIn.value), note: noteIn.value.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '') }; }
             function bad() {
                 var v = values();
-                return nameProblem(v.name) || (chars(v.maker) < 1 ? 'Please type the name that players will see as the maker.' : textProblem(v.maker, 24, 'player name')) || textProblem(v.note, 280, 'note');
+                return nameProblem(v.name) || (chars(v.maker) < 1 ? 'Please type the name that players will see as the maker.' : textProblem(v.maker, 24, 'player name') || makerProblem(v.maker)) || textProblem(v.note, 280, 'note');
             }
             function paint() {
                 var v = values(), nm = nameProblem(v.name), lib = env.store.libraryState();
@@ -210,7 +222,7 @@
                 var box = errBox, list = res.json && Array.isArray(res.json.findings) ? res.json.findings : [];
                 box.textContent = '';
                 var lost = res.net || res.timeout || (res.status === 201 && !(res.json && res.json.submission));
-                box.appendChild(note('bad', '!', [why(res) + (lost ? MAYBE + (tokens.length ? '' : LOST) : '')].concat(lost ? [h('div', '', button('btn sm', 'See my submissions', function () { ctl.close(); env.onSee(); }))] : []).concat(list.length ? [h('ul', 'subfin', list.map(function (f) { return h('li', '', Checks.capital(String(f.message))); }))] : [])));
+                box.appendChild(note('bad', '!', [why(res) + (lost ? MAYBE + (own().length ? '' : LOST) : '')].concat(lost ? [h('div', '', button('btn sm', 'See my submissions', function () { ctl.close(); env.onSee(); }))] : []).concat(list.length ? [h('ul', 'subfin', list.map(function (f) { return h('li', '', Checks.capital(String(f.message))); }))] : [])));
                 if (isOff(res)) door = 'off';
                 paint();
             }
@@ -220,11 +232,11 @@
                 if (sending || bad() || !works) return;
                 sending = pending = true; paint();
                 errBox.textContent = '';
-                calls('POST', '/submissions' + q, tokens[0], bytes, function (res) {
+                calls('POST', '/submissions' + q, own()[0], bytes, function (res) {
                     sending = pending = false;
                     var j = res.json || {};
                     if (res.status !== 201 || !j.submission || typeof j.submission.id !== 'string') return attempt.closed ? undefined : fail(res);
-                    var t = TOKEN.test(j.token) ? j.token : tokens[0], rec = { tok: t, bytes: bytes, rows: cur.file.rows, columns: cur.file.columns }, k;
+                    var t = TOKEN.test(j.token) ? j.token : own()[0], rec = { tok: t, bytes: bytes, rows: cur.file.rows, columns: cur.file.columns }, k;
                     for (k in j.submission) rec[k] = j.submission[k];
                     if (t) tokens = [t].concat(tokens.filter(function (x) { return x !== t; }));
                     maker = v.maker; keepMeta();
@@ -261,6 +273,7 @@
             var r = recs[view.id] || (recs[view.id] = { id: view.id }), before = [r.state, r.message, r.approved_name, r.decided_at, r.name].join('|'), k;
             for (k in view) r[k] = view[k];
             r.tok = t;
+            if (linked.indexOf(t) >= 0) r.linked = true;
             if (before !== [r.state, r.message, r.approved_name, r.decided_at, r.name].join('|')) keep(r);
         }
         function show(ui) {
@@ -299,6 +312,7 @@
             mid.appendChild(h('div', 't1', [name + ' ', tags]));
             mid.appendChild(h('div', 't2', 'Sent ' + when(rec.sent_at || 0, env.now()) + (rows && cols ? ' · ' + rows + ' x ' + cols : '')));
             mid.appendChild(h('div', 't3', [h('i', 'dot ' + st[0]), h('span', 'st-' + st[0], st[1])]));
+            if (rec.linked) mid.appendChild(h('div', 't2', 'Added from a link'));
             if (rec.message) mid.appendChild(h('div', 'owrote', [h('span', '', 'The owner wrote: '), String(rec.message)]));
             node.appendChild(h('span', 'mthumb', pic || '', { 'aria-hidden': 'true' }));
             node.appendChild(mid);
@@ -339,17 +353,27 @@
             p.then(function () { ui.link.textContent = 'Link copied'; env.later(function () { ui.link.textContent = 'Copy my status link'; }, 2500); }, manual);
         }
 
-        // A status link opened in this browser: its tokens join the ones kept here, and the address loses its fragment
-        function fromAddress(hash, clear) {
-            var list = tokensOf(hash);
+        // A status link opened in this browser: the address loses its fragment at once, then the page asks before it adds anything (a link can carry a stranger's token). added() runs once they are added
+        function fromAddress(hash, clear, added) {
+            var list = tokensOf(hash).slice(0, 10);                                          // (a link adds at most 10)
             if (!list.length) return false;
             clear();
-            addTokens(list);
+            var fresh = list.filter(function (t) { return tokens.indexOf(t) < 0; });
+            if (!fresh.length) { if (added) added(); return true; }
+            dialogs.open({
+                title: 'Add submissions from a link?', cls: 'narrow',
+                build: function (body) { body.appendChild(h('p', 'fatalmsg', 'This link adds submissions made by someone else to this browser. Add them?')); },
+                buttons: [{ id: 'no', text: 'Do not add', ghost: true }, { id: 'add', text: 'Add them', onClick: function () {
+                    fresh.forEach(function (t) { if (tokens.indexOf(t) < 0) { tokens.push(t); linked.push(t); } });
+                    keepMeta();
+                    if (added) added();
+                } }]
+            });
             return true;
         }
 
         return { load: load, open: open, show: show, hide: function () { token++; }, count: function () { return visible().length; }, fromAddress: fromAddress, tokens: function () { return tokens.slice(); } };
     }
 
-    return { create: create, api: api, nameProblem: nameProblem, textProblem: textProblem, tokensOf: tokensOf, statusOf: statusOf, why: why, when: when, isOff: isOff };
+    return { create: create, api: api, nameProblem: nameProblem, textProblem: textProblem, makerProblem: makerProblem, skeletons: skeletons, tokensOf: tokensOf, statusOf: statusOf, why: why, when: when, isOff: isOff };
 });

@@ -47,7 +47,7 @@ function makeDocument() {
         n.hasAttribute = (k) => k in n.attrs;
         n.addEventListener = (t, f) => { (n.listeners[t] = n.listeners[t] || []).push(f); };
         n.removeEventListener = (t, f) => { n.listeners[t] = (n.listeners[t] || []).filter((x) => x !== f); };
-        n.classList = { toggle: (c, on) => { const l = n.className.split(/\s+/).filter(Boolean).filter((x) => x !== c); if (on) l.push(c); n.className = l.join(' '); } };
+        n.classList = { add: (c) => { if (!n.className.split(/\s+/).includes(c)) n.className = (n.className + ' ' + c).trim(); }, toggle: (c, on) => { const l = n.className.split(/\s+/).filter(Boolean).filter((x) => x !== c); if (on) l.push(c); n.className = l.join(' '); } };
         n.all = () => n.children.reduce((a, c) => a.concat([c], c.all ? c.all() : []), []);
         n.querySelectorAll = (s) => n.all().filter((x) => matches(x, s));
         n.querySelector = (s) => n.querySelectorAll(s)[0] || null;
@@ -55,6 +55,7 @@ function makeDocument() {
         n.focus = () => { doc.activeElement = n; };
         n.click = () => { if (!n.disabled) n.fire('click', {}); };
         n.fire = (type, e) => { e.type = type; e.target = e.target || n; for (const f of n.listeners[type] || []) f(e); };
+        Object.defineProperty(n, 'firstChild', { get: () => n.children[0] || null });
         Object.defineProperty(n, 'offsetParent', { get: () => (doc.body.contains(n) ? doc.body : null) });
         Object.defineProperty(n, 'textContent', { get: () => n.own + n.children.map((c) => c.textContent).join(''), set: (v) => { n.own = String(v); n.children.forEach((c) => { c.parentNode = null; }); n.children = []; } });
         return n;
@@ -62,6 +63,9 @@ function makeDocument() {
     doc.createElement = node;
     doc.createTextNode = (t) => { const n = node('#text'); n.own = String(t); return n; };
     doc.body = node('body');
+    doc.querySelectorAll = (sel) => doc.body.querySelectorAll(sel);
+    doc.querySelector = (sel) => doc.body.querySelector(sel);
+    doc.getElementById = (id) => doc.body.all().find((x) => x.id === id) || null;
     doc.activeElement = doc.body;
     doc.addEventListener = (t, f) => { (doc.listeners[t] = doc.listeners[t] || []).push(f); };
     doc.removeEventListener = (t, f) => { doc.listeners[t] = (doc.listeners[t] || []).filter((x) => x !== f); };

@@ -1417,7 +1417,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="replay_page.js"></script><script src="history_page.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script>
+    <script src="replay_page.js"></script><script src="history_page.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1757,7 +1757,7 @@
                 return levels;
             }
             function localArguments(search, remembered) {
-                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '' }, q;
+                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '', test: null }, q;
                 try { q = new URLSearchParams(search); } catch (e) { return out; }
                 var map = (q.get('map') || '').toLowerCase();
                 if (Object.prototype.hasOwnProperty.call(LOCAL_MAPS, map)) {
@@ -1765,7 +1765,8 @@
                     out.args.push('--map', 'Original-Ants/Maps/' + LOCAL_MAPS[map], '--play');
                 }
                 if (!out.map && window.AntsMapFiles && (out.file = window.AntsMapFiles.communityFile(q.get('mapfile')))) out.args.push('--map', 'Original-Ants/Maps/' + out.file, '--play');
-                var levels = localBots(q.get('bots'));
+                var test = !out.map && !out.file && window.AntsTestGame ? window.AntsTestGame.fromAddress(q.get('testmap'), q.get('seats')) : null;       // a test game from the map maker (front/test_game.js): its map comes from the map maker's tab, its seats from four letters
+                if (test) { out.test = test; test.args.forEach(function (a) { out.args.push(a); }); }  var levels = test ? null : localBots(q.get('bots'));
                 if (levels) {
                     if (levels[0] || levels[1] || levels[2]) out.bots = levels[0] === levels[1] && levels[1] === levels[2] ? levels[0] : levels.map(function (l) { return l || 'none'; }).join(',');
                     for (var seat = 1; seat <= 3; seat++) if (levels[seat - 1]) out.args.push('--bot', seat + ':' + levels[seat - 1]);
@@ -1776,7 +1777,7 @@
                     out.teams = '0+' + teams[1];
                     out.args.push('--teams', out.teams);
                 }
-                var name = q.has('name') ? q.get('name') : ((q.has('map') || q.has('mapfile') || q.has('bots')) ? remembered : '');
+                var name = q.has('name') ? q.get('name') : ((q.has('map') || q.has('mapfile') || q.has('bots') || test) ? remembered : '');
                 name = typeof name === 'string' ? name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32) : '';
                 if (name) {
                     out.name = name;
@@ -1893,7 +1894,7 @@
         //          (every start of such a room has them)
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
-        var ANTS_ARGS = [], ANTS_LOCAL_FILE = '';       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
+        var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
         // Watching a replay: play.html?replay=<file>, or a match that is still being played: play.html?live=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
         // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live"; an address with both is a replay). The game gets nothing else from the address then (no room,
         // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else 16:9) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
@@ -1909,7 +1910,7 @@
             if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play.html?map=...&bots=...): its local parameters, through a whitelist
                 var remembered = '';
                 try { remembered = window.localStorage.getItem('ants.name') || ''; } catch (e) { /* private window: not remembered */ }
-                var local = ANTS_PAGE.localArguments(window.location.search, remembered); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file;
+                var local = ANTS_PAGE.localArguments(window.location.search, remembered); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test;
             }
         })();
 
@@ -2110,10 +2111,10 @@
         })();
 
         // ANTS_REPORT_BEGIN (tests/scripts/web_report_check.js runs this function with a fake fetch and a table of failures)
-        // The game calls this when a game on THIS computer begins (its first tick; a match of the network never does): the server counts it for the numbers of the front page (docs/SERVER.md, the section on the site statistics). One POST with nothing in it; no retry, nothing on the page, and no failure (no fetch, a throw, a refused or lost request, a 503) is ever the game's business.
+        // The game calls this when a game on THIS computer begins (its first tick; a match of the network never does): the server counts it for the numbers of the front page (docs/SERVER.md, the section on the site statistics), except a test game from the map maker (ANTS_TEST), which is not counted. One POST with nothing in it; no retry, nothing on the page, and no failure (no fetch, a throw, a refused or lost request, a 503) is ever the game's business.
         function antsReportLocalGame() {
             try {
-                var sent = fetch('/stats/local', { method: 'POST', keepalive: true });
+                if (typeof ANTS_TEST !== 'undefined' && ANTS_TEST) return; var sent = fetch('/stats/local', { method: 'POST', keepalive: true });
                 if (sent && typeof sent.catch === 'function') sent.catch(function () { /* only the front page's numbers depend on it: nobody is told */ });
             } catch (e) { /* no fetch in this browser: nothing is counted */ }
         }
@@ -3882,7 +3883,7 @@
             // (a recording starts the game once the file is here too: the replay block above)
             function begin() {
                 if (ANTS_REPLAY_MODE) window.antsAfterReplay(function () { ANTS_NAME_GATE.when(startGame); });
-                else window.AntsMapFiles.beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE, function () { return Module; }, function (text, gone) { showDownloadError(new Error(text), 'map', gone); }, function () { ANTS_NAME_GATE.when(startGame); });
+                else if (ANTS_TEST && !window.AntsTestGame.begin(ANTS_TEST, window, function () { return Module; })) { /* a card says why the test game cannot start */ } else window.AntsMapFiles.beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE, function () { return Module; }, function (text, gone) { showDownloadError(new Error(text), 'map', gone); }, function () { ANTS_NAME_GATE.when(startGame); });
             }
             if (!window.fetch || !window.Promise || !window.Uint8Array) { begin(); return; }
 

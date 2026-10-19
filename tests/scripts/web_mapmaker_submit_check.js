@@ -42,8 +42,8 @@ function fakeIdb(opts) {
             return r;
         }
         return {
-            put(rec) { log.push('put ' + rec.id); return job(() => { if (opts.full) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' }); m.set(rec.id, rec); }); },
-            getAll() { return job(() => Array.from(m.values())); },
+            put(rec) { log.push('put ' + rec.id); const copy = structuredClone(rec); return job(() => { if (opts.full) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' }); m.set(rec.id, copy); }); },
+            getAll() { return job(() => Array.from(m.values()).map((v) => structuredClone(v))); },
             delete(id) { log.push('delete ' + id); return job(() => { m.delete(id); }); }
         };
     }
@@ -134,6 +134,17 @@ function caseA() {
     equal(['Hi', 'x'.repeat(61), 'a<b', 'Big Lake.', 'Big..Lake', '..', 'abé', ' ab', '-ab', 'A_b-c! (1), d&e.f'].map((n) => Submit.nameProblem(n) !== ''), [true, true, true, true, true, true, true, true, true, false], 'the name rules of the server');
     equal(Submit.nameProblem('x'.repeat(60)), '', '60 characters are fine');
     equal([Submit.textProblem('Mia', 24, 'player name'), Submit.textProblem('x'.repeat(25), 24, 'player name') !== '', Submit.textProblem('a<b', 24, 'note') !== '', Submit.textProblem('\u{1F600}'.repeat(24), 24, 'note')], ['', true, true, ''], 'the maker name and the note: a length by characters and no < or >');
+    // the maker's name and the links, as the server judges them again: the very cases of the server's NM2.5 and NM2.6 (tests/data/maker_name_cases.json)
+    const cases = JSON.parse(require('fs').readFileSync(path.join(__dirname, '..', 'data', 'maker_name_cases.json'), 'utf8'));
+    const mine = (n) => Submit.makerProblem(Store.clean(n)) || Submit.textProblem(Store.clean(n), 24, 'player name');
+    equal(cases.reserved.filter((n) => Submit.makerProblem(Store.clean(n)) === ''), [], 'every name that only the owner or the site may have, a look-alike, a digit-or-accent disguise of one and a bot-like name is refused');
+    equal(cases.ok.filter((n) => mine(n) !== ''), [], 'and an honest name (also of two alphabets) is not');
+    equal(cases.link.filter((n) => mine(n) === ''), [], 'a web address or three backticks, also behind an invisible character, are refused in a maker name');
+    equal(cases.link.filter((n) => Submit.textProblem(Store.clean(n), 280, 'note') === ''), [], 'and in a note');
+    equal(cases.no_link.filter((n) => Submit.textProblem(Store.clean(n), 24, 'note') !== ''), [], 'two backticks, a colon and a slash are fine');
+    equal(Submit.skeletons('0wn3r 5'), ['wnr', 'owners'], 'the skeletons: digits left out, and digits as the letters they look like');
+    check(/cannot be used/.test(Submit.makerProblem('Owner')), 'with a sentence');
+    check(/web address/.test(Submit.textProblem('a://b', 24, 'note')), 'and it says why');
     equal(Submit.tokensOf('#sent=' + TOKEN), [TOKEN], 'a status link has a token');
     equal(Submit.tokensOf('#sent=' + TOKEN + ',' + TOKEN2), [TOKEN, TOKEN2], 'or two');
     equal([Submit.tokensOf('#sent=abc'), Submit.tokensOf('#sent='), Submit.tokensOf(''), Submit.tokensOf('#other=' + TOKEN), Submit.tokensOf('#sent=' + TOKEN + '<b>'), Submit.tokensOf('#sent=' + TOKEN + ',zz')], [[], [], [], [], [], [TOKEN]], 'nothing else is a token');
@@ -202,8 +213,16 @@ async function caseC() {
     check(p.host.querySelector('.note.warn') !== null && p.host.querySelector('.note.bad') === null, 'as a yellow note and not as an error');
     type(p, 'sub-note', 'a<b');
     check(send.disabled && /cannot have the marks/.test(text(p)), 'a note with < stops the button');
+    type(p, 'sub-note', 'see http://example.org');
+    check(send.disabled && /web address/.test(text(p)), 'a note with a web address stops the button');
     type(p, 'sub-note', 'x'.repeat(200));
     check(!send.disabled, 'a long note is fine');
+    type(p, 'sub-maker', 'Owner');
+    check(send.disabled && /cannot be used/.test(text(p)), 'a maker name that only the owner may have stops the button');
+    type(p, 'sub-maker', '\u041e' + 'wner');
+    check(send.disabled && /cannot be used/.test(text(p)), 'also with a Cyrillic letter in it');
+    type(p, 'sub-maker', 'Mia');
+    check(!send.disabled, 'and an honest name lets it go');
     // a map that does not work
     p = await opened({ report: { works: false, headline: 'Does not work in the original game', kind: 'classic', findings: [{ severity: 'fatal', message: 'blue has no hill', row: -1 }, { severity: 'fatal', message: 'red has no starting ants (no start marker, tile 155)', row: 4, column: 9 }, { severity: 'note', message: 'a note' }] } });
     check(button(p, 'Submit for approval').disabled, 'a map that does not work cannot be submitted');
@@ -273,7 +292,7 @@ async function caseD() {
     check(/The owner looks at it and decides\. This can take a while\./.test(text(p)) && /You can see the answer in My submissions\./.test(text(p)), 'with what happens next');
     equal(p.sub.tokens(), [TOKEN], 'the token is kept');
     equal([p.idb.m.get('#tokens').list, p.idb.m.get('#maker').name, p.idb.m.get(ID1).state], [[TOKEN], 'Zoë & Co', 'waiting'], 'in the browser, with the maker’s name and the record');
-    check(p.idb.m.get(ID1).bytes === p.bytes, 'and the player’s own copy of the map');
+    check(JSON.stringify(Array.from(p.idb.m.get(ID1).bytes)) === JSON.stringify(Array.from(p.bytes)), 'and the player’s own copy of the map');
     button(p, 'See my submissions').click();
     equal(p.events, [['see']], 'See my submissions goes to the list');
     // the second map uses the token
@@ -408,11 +427,64 @@ async function caseF() {
     // arriving by a status link
     const p7 = await loadedPage({ idb: fakeIdb() }); let cleared = 0;
     equal([p7.sub.fromAddress('', () => cleared++), p7.sub.fromAddress('#sent=nope', () => cleared++), cleared], [false, false, 0], 'an address with no token does nothing');
-    const joined = p7.sub.fromAddress('#sent=' + TOKEN2, () => cleared++); await later();
-    equal([joined, cleared, p7.sub.tokens(), p7.idb.m.get('#tokens').list], [true, 1, [TOKEN2], [TOKEN2]], 'a status link joins the token to this browser and the address loses it');
+    let added = 0;
+    const joined = p7.sub.fromAddress('#sent=' + TOKEN2, () => cleared++, () => added++); await later();
+    equal([joined, cleared, added, p7.sub.tokens(), p7.idb.m.has('#tokens')], [true, 1, 0, [], false], 'a status link clears the address and asks first: nothing is adopted yet');
+    check(p7.dialogs.isOpen() && /This link adds submissions made by someone else to this browser\. Add them\?/.test(text(p7)), 'the question says whose submissions they are');
+    button(p7, 'Do not add').click(); await later();
+    equal([added, p7.sub.tokens(), p7.idb.m.has('#tokens'), p7.dialogs.isOpen()], [0, [], false, false], 'Do not add changes nothing');
+    p7.sub.fromAddress('#sent=' + TOKEN2, () => cleared++, () => added++); await later();
+    button(p7, 'Add them').click(); await later();
+    equal([added, p7.sub.tokens(), p7.idb.m.get('#tokens').list, p7.idb.m.get('#tokens').linked], [1, [TOKEN2], [TOKEN2], [TOKEN2]], 'Add them joins the token to this browser and remembers that it came from a link');
     p7.server.state.list = [view(ID1, 'approved', { name: 'From elsewhere' })];
-    p7.sub.show(listUi(p7).ui); await later();
-    equal(p7.idb.m.has(ID1), true, 'the submissions of that link are listed and kept');
+    const l7 = listUi(p7); p7.sub.show(l7.ui); await later();
+    equal([p7.idb.m.has(ID1), p7.idb.m.get(ID1).linked, /Added from a link/.test(l7.list.textContent)], [true, true, true], 'the submissions of that link are listed and kept, marked as added from a link');
+    // a token from a link is never the one a send uses
+    p7.sub.open(); await later(); type(p7, 'sub-maker', 'Mia'); button(p7, 'Submit for approval').click(); await later();
+    const linkedSend = p7.server.calls.filter((c) => c.method === 'POST').pop();
+    check(linkedSend && !linkedSend.headers.Authorization, 'a send from a browser that only has a linked token goes out with no token, so the server makes a fresh one');
+    equal(p7.sub.tokens()[0], TOKEN, 'and the token the server made is the first one');
+    check(p7.idb.m.get('#tokens').linked.indexOf(TOKEN) < 0, 'and is not marked as linked');
+    // the mark survives a reload of the page
+    const p7b = await loadedPage({ idb: p7.idb, server: p7.server });
+    const l7b = listUi(p7b); p7b.sub.show(l7b.ui); await later();
+    equal([p7b.sub.tokens().length, /Added from a link/.test(l7b.list.textContent)], [2, true], 'after a reload the linked submissions are still marked');
+    p7b.cfg.bytes = new Uint8Array([8, 9, 9, 9]); p7b.sub.open(); await later(); button(p7b, 'Submit for approval').click(); await later();
+    check(p7b.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization === 'Bearer ' + TOKEN, 'and a send after the reload still uses the browser\'s own token');
+    // a browser that has its own token: a link adds a second one behind it, and a send still uses its own
+    const p10 = await loadedPage({ idb: fakeIdb() }); p10.idb.m.set('#tokens', { id: '#tokens', list: [TOKEN] });
+    const p11 = await loadedPage({ idb: p10.idb });
+    p11.sub.fromAddress('#sent=' + TOKEN2, () => {}, () => {}); await later(); button(p11, 'Add them').click(); await later();
+    p11.sub.open(); await later(); type(p11, 'sub-maker', 'Mia'); button(p11, 'Submit for approval').click(); await later();
+    equal(p11.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, 'Bearer ' + TOKEN, 'with its own token and a linked one, a send uses its own');
+    // two cold loads with no send between: the stored mark is not rewritten to nothing, and the next send still uses the browser's own token
+    const p14i = fakeIdb(); p14i.m.set('#tokens', { id: '#tokens', list: [TOKEN2, TOKEN], linked: [TOKEN2] });
+    await loadedPage({ idb: p14i }); await later();
+    await loadedPage({ idb: p14i }); await later();
+    equal(p14i.m.get('#tokens').linked, [TOKEN2], 'after two page loads the stored linked list is still there');
+    const p14 = await loadedPage({ idb: p14i }); p14.server.state.tokenIsNew = false;
+    p14.sub.open(); await later(); type(p14, 'sub-maker', 'Mia'); button(p14, 'Submit for approval').click(); await later();
+    equal(p14.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, 'Bearer ' + TOKEN, 'and the send after the reloads goes out under the own token, not the linked one');
+    const p15i = fakeIdb(); p15i.m.set('#tokens', { id: '#tokens', list: [TOKEN2], linked: [TOKEN2] });
+    await loadedPage({ idb: p15i }); await later();
+    const p15 = await loadedPage({ idb: p15i });
+    p15.sub.open(); await later(); type(p15, 'sub-maker', 'Mia'); button(p15, 'Submit for approval').click(); await later();
+    check(!p15.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, 'a browser that only has a linked token, loaded twice, still sends with no token');
+    // a link adds at most 10 tokens
+    const many = Array.from({ length: 14 }, (_, i) => String.fromCharCode(97 + i).repeat(43));
+    const p16 = await loadedPage({ idb: fakeIdb() });
+    p16.sub.fromAddress('#sent=' + many.join(','), () => {}, () => {}); await later(); button(p16, 'Add them').click(); await later();
+    equal(p16.sub.tokens().length, 10, 'a link adds at most 10 tokens');
+    // a linked token that is kept first: the send and the record use the browser's own token even when the server makes no new one
+    const p13i = fakeIdb(); p13i.m.set('#tokens', { id: '#tokens', list: [TOKEN2, TOKEN], linked: [TOKEN2] });
+    const p13 = await loadedPage({ idb: p13i }); p13.server.state.tokenIsNew = false;
+    p13.sub.open(); await later(); type(p13, 'sub-maker', 'Mia'); button(p13, 'Submit for approval').click(); await later();
+    equal([p13.server.calls.filter((c) => c.method === 'POST').pop().headers.Authorization, p13.sub.tokens()[0], p13.idb.m.get(ID1) && p13.idb.m.get(ID1).tok], ['Bearer ' + TOKEN, TOKEN, TOKEN], 'a send answered with no new token is kept under the browser\'s own token');
+    // a link whose tokens this browser has already: no question
+    let again = 0;
+    const p12 = await loadedPage({ idb: p10.idb });
+    p12.sub.fromAddress('#sent=' + TOKEN, () => {}, () => again++); await later();
+    equal([again, p12.dialogs.isOpen()], [1, false], 'a link with only tokens that are already here asks nothing');
     // XSS in a name from the server
     server.state.list = [view(ID1, 'waiting', { name: '<img src=x onerror=alert(1)>' })];
     const p8 = await loadedPage({ server, idb: fakeIdb() }); p8.idb.m.set('#tokens', { id: '#tokens', list: [TOKEN] });
