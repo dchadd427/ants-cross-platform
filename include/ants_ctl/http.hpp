@@ -162,5 +162,7 @@ int parse_http_head(std::string_view head, HttpHead& out, std::string* error, si
 
 /// True when the two texts are equal; the time depends on the longer of them and not on where they differ
 bool constant_time_equal(std::string_view a, std::string_view b);
+/// How many times constant_time_equal has run (tests: the owner's cookie signature and CSRF token are compared with it, and a comparison written as == would give the same answers)
+uint64_t constant_time_equal_calls();
 
 }  // namespace ants::ctl

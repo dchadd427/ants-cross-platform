@@ -347,7 +347,9 @@ int main() {
         ASSERT_TRUE(answer.body.find(kOwnerPassword) == std::string::npos);                       // (the answer never holds the password)
         const ctl::JsonValue login = parse_text(answer.body);
         ASSERT_TRUE(login.get("signed_in").as_bool_or(false) && login.get("name").str() == "dave" && login.get("role").str() == "admin" && !login.get("must_change").as_bool_or(true) && login.get("csrf").str().size() == 32);
+        const uint64_t compares = ctl::constant_time_equal_calls();
         m = t.me(pair);
+        ASSERT_EQ(ctl::constant_time_equal_calls(), compares + 1);                                  // (the signature of the cookie is compared in constant time)
         ASSERT_TRUE(m.get("signed_in").as_bool_or(false) && m.get("role").str() == "admin" && m.get("name").str() == "dave" && m.get("csrf").str() == login.get("csrf").str() && !m.has("owner"));
         m = t.me("other=1; " + pair + "; more=2");
         ASSERT_TRUE(m.get("signed_in").as_bool_or(false));                                       // (among other cookies)
@@ -408,6 +410,12 @@ int main() {
         ASSERT_TRUE(u.me(u.login_cookie("dave", kOwnerPassword)).get("signed_in").as_bool_or(false));
         Api same_secret;
         ASSERT_TRUE(same_secret.me(same_secret.cookie()).get("signed_in").as_bool_or(false));
+        // a user that is disabled in the database is nobody, whatever the generation of the cookie says (a second lock behind the generation)
+        Api d;
+        const std::string alive = d.cookie();
+        ASSERT_TRUE(d.me(alive).get("signed_in").as_bool_or(false));
+        ASSERT_TRUE(d.database.exec("UPDATE admin_users SET disabled = 1").ok());
+        ASSERT_FALSE(d.me(alive).get("signed_in").as_bool_or(true));
     } TEST_END();
 
     TEST_CASE("API2.2 A visitor and a stranger get, for every call of the owner's, the answer of a path that does not exist, byte for byte; so does everything when the owner's page is not set up") {
@@ -513,7 +521,9 @@ int main() {
         ASSERT_EQ(post({{"x-ants-csrf", csrf}}, "{not json").status, 400);
         ASSERT_EQ(t.text_of_state(sent.submission.id), std::string("waiting"));                  // (nothing of that changed anything)
         ASSERT_EQ(t.refreshed, 0);
+        const uint64_t compares = ctl::constant_time_equal_calls();
         ASSERT_EQ(post({{"x-ants-csrf", csrf}, {"sec-fetch-site", "same-origin"}}).status, 200);
+        ASSERT_EQ(ctl::constant_time_equal_calls(), compares + 2);                                // (the cookie's signature and the page's token: each compared in constant time)
         ASSERT_EQ(t.refreshed, 1);
         const HttpResponse cross_read = t.call(t.req("GET", "/admin/api/maps", "", {{"cookie", c}, {"sec-fetch-site", "cross-site"}}));
         ASSERT_EQ(cross_read.status, 404);                                                        // (a read that another site sets off learns nothing)

@@ -299,7 +299,14 @@ bool authenticated(const HttpRequest& r, const std::string& secret) {
 
 // ------------------------------------------------------------------------------------------------
 
+namespace {
+uint64_t g_constant_time_calls = 0;
+}
+
+uint64_t constant_time_equal_calls() { return g_constant_time_calls; }
+
 bool constant_time_equal(std::string_view a, std::string_view b) {
+    ++g_constant_time_calls;
     const size_t n = std::max(a.size(), b.size());
     size_t diff = a.size() ^ b.size();
     for (size_t i = 0; i < n; ++i) {

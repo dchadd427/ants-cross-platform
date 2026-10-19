@@ -33,7 +33,7 @@
    "id": "pbkdf2_salt_ignored",
    "file": "src/ants_server/crypto.cpp",
    "old": "std::string first(salt);",
-   "new": "std::string first;"
+   "new": "std::string first; (void)salt;"
   },
   {
    "id": "compare_stops_at_the_first_difference",
@@ -63,7 +63,7 @@
    "id": "old_hash_never_outdated",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "if (outdated != nullptr) *outdated = stored_rounds < rounds;",
-   "new": "if (outdated != nullptr) *outdated = false;"
+   "new": "if (outdated != nullptr) *outdated = stored_rounds < rounds && false;"
   },
   {
    "id": "hash_compared_with_equals",
@@ -105,13 +105,13 @@
    "id": "password_may_be_the_username",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "    if (username_key(password) == username_key(username)) return \"same_as_name\";\n",
-   "new": ""
+   "new": "    (void)username;\n"
   },
   {
    "id": "password_may_hold_controls",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "if (c < 0x20 || (c >= 0x7F && c < 0xA0)) return \"characters\";",
-   "new": "if (false) return \"characters\";"
+   "new": "if (c == 0x110000) return \"characters\";"
   },
   {
    "id": "password_cost_too_low",
@@ -195,7 +195,7 @@
    "id": "slow_mode_never_comes",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "if (slow && !known) return Attempt::Locked;",
-   "new": ""
+   "new": "(void)slow;"
   },
   {
    "id": "slow_mode_after_11",
@@ -207,7 +207,7 @@
    "id": "known_addresses_never_forgotten",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "AND last_ok >= ?\", {id, addr, now - config_.known_days * 86400}",
-   "new": "AND last_ok >= ?\", {id, addr, int64_t{0}}"
+   "new": "AND last_ok >= ?\", {id, addr, now - now}"
   },
   {
    "id": "known_addresses_unbounded",
@@ -219,7 +219,7 @@
    "id": "password_checks_not_counted",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "if (!take_check(known, now_ms)) return Attempt::Busy;",
-   "new": ""
+   "new": "(void)now_ms;"
   },
   {
    "id": "the_kept_place_is_not_one",
@@ -231,7 +231,7 @@
    "id": "starting_password_check_not_counted",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "    if (!take_check(false, now_ms)) return Attempt::Busy;\n    std::string stored;",
-   "new": "    std::string stored;"
+   "new": "    (void)now_ms;\n    std::string stored;"
   },
   {
    "id": "the_table_of_locks_has_no_end",
@@ -260,8 +260,8 @@
   {
    "id": "the_admin_counts_itself",
    "file": "src/ants_server/admin_accounts.cpp",
-   "old": "WHERE role = 'admin' AND disabled = 0 AND id <> ?\", {excluding_id}",
-   "new": "WHERE role = 'admin' AND disabled = 0 AND id <> ?\", {int64_t{-1}}"
+   "old": "WHERE role = 'admin' AND disabled = 0 AND id <> ?",
+   "new": "WHERE role = 'admin' AND disabled = 0 AND id <> -?"
   },
   {
    "id": "reset_keeps_the_sessions",
@@ -291,7 +291,7 @@
    "id": "console_reset_leaves_it_disabled",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "(console ? \", disabled = 0\" : \"\")",
-   "new": "\"\""
+   "new": "(console ? \"\" : \"\")"
   },
   {
    "id": "disable_keeps_the_sessions",
@@ -315,7 +315,7 @@
    "id": "a_second_first_admin",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "    if (any) {\n        why = failure(409, \"admin_exists\"",
-   "new": "    if (false) {\n        why = failure(409, \"admin_exists\""
+   "new": "    if (any && false) {\n        why = failure(409, \"admin_exists\""
   },
   {
    "id": "any_role_is_taken",
@@ -327,7 +327,7 @@
    "id": "names_are_case_sensitive",
    "file": "src/ants_server/admin_accounts.cpp",
    "old": "        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');",
-   "new": ""
+   "new": "        if (c == 0) c = 0;"
   },
   {
    "id": "the_address_is_logged_plain",
@@ -351,7 +351,7 @@
    "id": "a_moderator_may_manage_users",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "        if (!admin) return forbidden_like_missing();",
-   "new": ""
+   "new": "        if (!admin && false) return forbidden_like_missing();"
   },
   {
    "id": "a_moderator_is_told_what_is_there",
@@ -459,13 +459,7 @@
    "id": "the_cookie_is_not_secure",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "+ (secure ? \"; Secure\" : \"\");",
-   "new": "+ \"\";"
-  },
-  {
-   "id": "the_sign_in_takes_another_site",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (site != nullptr && *site != \"same-origin\") return error_reply(403, \"cross_site\", \"This request must come from the site's own page.\");\n    if (!content_type_is(request, \"application/json\")) return error_reply(415, \"bad_content_type\", \"Send JSON.\");\n    const std::string identity",
-   "new": "    if (!content_type_is(request, \"application/json\")) return error_reply(415, \"bad_content_type\", \"Send JSON.\");\n    const std::string identity"
+   "new": "+ (secure ? \"\" : \"\");"
   },
   {
    "id": "the_sign_in_wants_no_json",
@@ -478,24 +472,6 @@
    "file": "src/ants_server/submissions_http.cpp",
    "old": "        case Attempt::Wrong: return wrong;",
    "new": "        case Attempt::Wrong: return error_reply(401, \"bad_login\", \"Wrong password.\");"
-  },
-  {
-   "id": "csrf_not_checked",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) {\n        refusal",
-   "new": "    if (false) {\n        refusal"
-  },
-  {
-   "id": "csrf_of_any_session",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "\"csrf2|\" + nonce + \"|\" + std::to_string(user.id) + \"|\" + std::to_string(user.session_gen)",
-   "new": "\"csrf2|\" + std::to_string(user.id)"
-  },
-  {
-   "id": "other_site_may_change",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (site != nullptr && *site != \"same-origin\") {\n        refusal = error_reply(403, \"csrf\"",
-   "new": "    if (false) {\n        refusal = error_reply(403, \"csrf\""
   },
   {
    "id": "other_site_may_read",
@@ -522,22 +498,10 @@
    "new": "    if (!who.valid && (path.size() < 8 || path.compare(path.size() - 8, 8, \"/picture\") != 0)) return not_found();"
   },
   {
-   "id": "sign_out_needs_no_token",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "        if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) return error_reply(403, \"csrf\", \"The page's token is missing or old. Reload the page.\");\n    }\n    JsonValue o = JsonValue::make_object();\n    o.set(\"signed_in\", JsonValue::make_bool(false));",
-   "new": "    }\n    JsonValue o = JsonValue::make_object();\n    o.set(\"signed_in\", JsonValue::make_bool(false));"
-  },
-  {
    "id": "a_new_password_leaves_no_new_cookie",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "r.set_cookies.push_back(cookie.empty() ? clear_cookie() : cookie);",
    "new": "r.set_cookies.push_back(clear_cookie());"
-  },
-  {
-   "id": "decisions_are_not_logged",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    accounts_.audit(actor, now_s, logged, s.final_name.empty() ? s.name : s.final_name, detail);",
-   "new": ""
   },
   {
    "id": "the_decider_is_not_kept",
@@ -561,19 +525,71 @@
    "id": "a_role_may_be_anything",
    "file": "src/ants_server/db_schema.cpp",
    "old": "\" role TEXT NOT NULL CHECK (role IN ('admin', 'moderator')),\"",
-   "new": "\" role TEXT NOT NULL,\""
+   "new": "\" role TEXT NOT NULL,\"",
+   "build": "test_db",
+   "test": "./build/tests/test_db/test_db"
   },
   {
    "id": "a_name_may_be_taken_twice",
    "file": "src/ants_server/db_schema.cpp",
    "old": "\" name_key TEXT NOT NULL UNIQUE,\"",
-   "new": "\" name_key TEXT NOT NULL,\""
+   "new": "\" name_key TEXT NOT NULL,\"",
+   "build": "test_db",
+   "test": "./build/tests/test_db/test_db"
+  },
+  {
+   "id": "the_sign_in_takes_another_site",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (site != nullptr && *site != \"same-origin\") return error_reply(403, \"cross_site\", \"This request must come from the site's own page.\");\n    if (!content_type_is(request, \"application/json\")) return error_reply(415, \"bad_content_type\", \"Send JSON.\");\n    const std::string identity",
+   "new": "    if (site != nullptr && *site != \"same-origin\" && false) return error_reply(403, \"cross_site\", \"This request must come from the site's own page.\");\n    if (!content_type_is(request, \"application/json\")) return error_reply(415, \"bad_content_type\", \"Send JSON.\");\n    const std::string identity"
+  },
+  {
+   "id": "csrf_not_checked",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) {\n        refusal",
+   "new": "    if (false && token != nullptr && *token == csrf_for(who.nonce, who.user)) {\n        refusal"
+  },
+  {
+   "id": "csrf_of_any_session",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "\"csrf2|\" + nonce + \"|\" + std::to_string(user.id) + \"|\" + std::to_string(user.session_gen)",
+   "new": "\"csrf2|\" + nonce.substr(0, 0) + std::to_string(user.id)"
+  },
+  {
+   "id": "csrf_compared_with_equals",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) {\n        refusal",
+   "new": "    if (token == nullptr || *token != csrf_for(who.nonce, who.user)) {\n        refusal"
+  },
+  {
+   "id": "cookie_signature_compared_with_equals",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!ctl::constant_time_equal(mac, expected)) return none;",
+   "new": "    if (mac != expected) return none;"
+  },
+  {
+   "id": "other_site_may_change",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (site != nullptr && *site != \"same-origin\") {\n        refusal = error_reply(403, \"csrf\"",
+   "new": "    if (site != nullptr && *site != \"same-origin\" && false) {\n        refusal = error_reply(403, \"csrf\""
+  },
+  {
+   "id": "sign_out_needs_no_token",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) return error_reply(403, \"csrf\", \"The page's token is missing or old. Reload the page.\");\n    }\n    JsonValue o = JsonValue::make_object();\n    o.set(\"signed_in\", JsonValue::make_bool(false));",
+   "new": "        (void)token;\n    }\n    JsonValue o = JsonValue::make_object();\n    o.set(\"signed_in\", JsonValue::make_bool(false));"
+  },
+  {
+   "id": "decisions_are_not_logged",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    accounts_.audit(actor, now_s, logged, s.final_name.empty() ? s.name : s.final_name, detail);",
+   "new": "    (void)actor; (void)logged; (void)detail;"
   },
   {
    "id": "the_cookie_is_secure_only_on_request",
    "file": "src/ants_server/main.cpp",
    "old": "ac.cookie_secure = !(plain_http != nullptr && std::string(plain_http) == \"1\");",
-   "new": "ac.cookie_secure = false;",
+   "new": "ac.cookie_secure = plain_http != nullptr && false;",
    "build": "ants_server lvl_tool",
    "test": "BUILD_DIR=build python3 tests/scripts/submissions_server_check.py"
   },
@@ -589,9 +605,7 @@
    "id": "the_reset_is_not_enabled_on_the_console",
    "file": "src/ants_server/admin_cli.cpp",
    "old": "accounts.reset(Actor(), id, now, password, failure, true)",
-   "new": "accounts.reset(Actor(), id, now, password, failure, false)",
-   "build": "ants_server lvl_tool",
-   "test": "BUILD_DIR=build python3 tests/scripts/submissions_server_check.py"
+   "new": "accounts.reset(Actor(), id, now, password, failure, false)"
   }
  ]
 }

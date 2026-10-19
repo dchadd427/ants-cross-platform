@@ -146,7 +146,14 @@ bool pbkdf2_hmac_sha256(std::string_view password, std::string_view salt, uint32
     return true;
 }
 
+namespace {
+uint64_t g_equal_calls = 0;
+}
+
+uint64_t equal_constant_time_calls() { return g_equal_calls; }
+
 bool equal_constant_time(std::string_view a, std::string_view b, size_t* steps) {
+    ++g_equal_calls;
     const size_t n = a.size() > b.size() ? a.size() : b.size();
     size_t diff = a.size() ^ b.size();
     size_t looked = 0;

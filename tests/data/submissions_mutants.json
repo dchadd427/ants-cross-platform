@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map submissions (src/ants_server/submissions.cpp, submissions_http.cpp, map_names.cpp, crypto.cpp, the submissions part of map_store.cpp and the door of src/ants_ctl/http.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/submissions_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md (the server's own check, the canonical file, a limit, a protected name, the token, the session cookie's time, CSRF, what a visitor is told, a text rule, the door's size and method rules). The test command runs the three suites of the store, the routes and the text rules, and the door cases of test_ctl. Not listed on purpose: a longer-than-45-characters address text (inet_pton refuses any such text anyway, so the cap is a second lock and the mutant is equivalent). The two mutants fits_not_required and canonical_not_rechecked are second locks behind check_map's own 'works' and the canonical rewrite: a map that works but does not fit the place cannot be built from the map maker's output, and the rewritten file is checked again only as defense in depth; they are expected to survive. short_secret_accepted is not listed either: the owner's API is off in two places (the constructor and owner_api_on(), both at 32 characters), so changing one of them changes nothing a caller can see; the tests of a 31-character secret hold the pair. The mutants of the accounts, the roles and the sign-in are tests/data/admin_accounts_mutants.json.",
+ "note": "Mutants of the map submissions (src/ants_server/submissions.cpp, submissions_http.cpp, map_names.cpp, crypto.cpp, the submissions part of map_store.cpp and the door of src/ants_ctl/http.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/submissions_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md (the server's own check, the canonical file, a limit, a protected name, the token, the session cookie's time, CSRF, what a visitor is told, a text rule, the door's size and method rules). The test command runs the three suites of the store, the routes and the text rules, and the door cases of test_ctl. Not listed on purpose: a longer-than-45-characters address text (inet_pton refuses any such text anyway, so the cap is a second lock and the mutant is equivalent). The two mutants fits_not_required and canonical_not_rechecked are second locks behind check_map's own 'works' and the canonical rewrite: a map that works but does not fit the place cannot be built from the map maker's output, and the rewritten file is checked again only as defense in depth; they are expected to survive. short_secret_accepted is not listed either: the owner's API is off in two places (the constructor and owner_api_on(), both at 32 characters), so changing one of them changes nothing a caller can see; the tests of a 31-character secret hold the pair. The mutants of the accounts, the roles, the sign-in and the CSRF token are tests/data/admin_accounts_mutants.json.",
  "defaults": {
   "build": "test_submissions test_submissions_api test_map_names test_ctl test_map_list",
   "test": "./build/tests/test_server/test_submissions && ./build/tests/test_server/test_submissions_api && ./build/tests/test_server/test_map_names && ./build/tests/test_ctl/test_ctl && ./build/tests/test_server/test_map_list"
@@ -376,24 +376,6 @@
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    if (exp <= now_s || exp > now_s + config_.session_seconds + kSessionSlackS) return none;",
    "new": "    if (exp <= now_s) return none;"
-  },
-  {
-   "id": "csrf_not_checked",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) {\n        refusal",
-   "new": "    if (false) {\n        refusal"
-  },
-  {
-   "id": "csrf_of_any_session",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "\"csrf2|\" + nonce + \"|\" + std::to_string(user.id) + \"|\" + std::to_string(user.session_gen)",
-   "new": "\"csrf2|\" + std::to_string(user.id)"
-  },
-  {
-   "id": "other_site_may_change",
-   "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (site != nullptr && *site != \"same-origin\") {\n        refusal = error_reply(403, \"csrf\"",
-   "new": "    if (false) {\n        refusal = error_reply(403, \"csrf\""
   },
   {
    "id": "other_site_may_read",

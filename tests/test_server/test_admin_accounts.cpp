@@ -164,6 +164,13 @@ int main() {
         ASSERT_TRUE(password_verify("same password", a, kFast, &outdated) && !outdated);
         ASSERT_TRUE(password_verify("same password", a, kFast + 1, &outdated) && outdated);        // (a later program asks for more rounds)
         ASSERT_TRUE(password_verify("same password", a, kFast - 1, &outdated) && !outdated);
+        const uint64_t compares = equal_constant_time_calls();                                      // (the hash is compared by the comparison that looks at every byte, and by nothing else)
+        ASSERT_TRUE(password_verify("same password", a, kFast));
+        ASSERT_EQ(equal_constant_time_calls(), compares + 1);
+        ASSERT_FALSE(password_verify("another password", a, kFast));
+        ASSERT_EQ(equal_constant_time_calls(), compares + 2);
+        ASSERT_FALSE(password_verify("same password", "not a hash", kFast));
+        ASSERT_EQ(equal_constant_time_calls(), compares + 2);
         ASSERT_TRUE(password_hash("x", 0).empty());
         ASSERT_TRUE(password_hash("x", 10000001).empty());
     } TEST_END();
@@ -757,6 +764,11 @@ int main() {
         std::ostringstream out2, err2;
         ASSERT_EQ(run_admin_command(create, out2, err2), 1);                                       // (an Admin exists)
         ASSERT_TRUE(out2.str().empty() && err2.str().find("exists already") != std::string::npos && err2.str().find(password) == std::string::npos);
+        {
+            db::Database database;                                                                  // (the account is disabled: the command is the way back in, so the reset enables it)
+            ASSERT_TRUE(open_server_db(database, create.db_path));
+            ASSERT_TRUE(database.exec("UPDATE admin_users SET disabled = 1").ok());
+        }
         AdminCommand reset;
         reset.kind = AdminCommand::Kind::Reset;
         reset.name = "owner";

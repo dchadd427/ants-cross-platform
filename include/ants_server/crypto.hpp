@@ -24,6 +24,8 @@ uint64_t pbkdf2_runs();
 /// Whether two byte strings are equal, looking at every byte of the longer one whatever the answer is (no early exit), so that the time says nothing about where they differ. `steps` (optional) receives
 /// how many byte pairs were looked at: a test holds the property by it (equal to the longer length for every pair), since a clock cannot.
 bool equal_constant_time(std::string_view a, std::string_view b, size_t* steps = nullptr);
+/// How many times equal_constant_time has run (a test holds that a password hash is compared with it and not with ==, which no answer could show)
+uint64_t equal_constant_time_calls();
 /// Lower-case hex of the bytes
 std::string hex_encode(std::string_view bytes);
 /// Base64url without padding (RFC 4648 section 5)
