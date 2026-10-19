@@ -146,36 +146,41 @@ std::vector<char32_t> folded(const std::vector<char32_t>& v) {
     return out;
 }
 
-bool is_latin_letter(char32_t c) { return (c >= U'A' && c <= U'Z') || (c >= U'a' && c <= U'z') || (c >= 0x00C0 && c <= 0x024F); }
-bool is_greek_or_cyrillic_letter(char32_t c) { return c >= 0x0391 && c <= 0x0451; }
+// The base letter of a Latin letter with an accent or a stroke, U+00C0 .. U+017F, in lower case ('.' where there is none): the accents are not allowed in a maker's name, but "Ownér" is still the word
+// "owner" to a reader. The browser's copy is the same rule (NFD without the marks, and the strokes in ACCENTS of web/front/mapmaker_submit.js); a test holds both to this table.
+constexpr char32_t kAccentsFrom = 0x00C0;
+const char kAccents[] = "aaaaaa.ceeeeiiiidnooooo.ouuuuy..aaaaaa.ceeeeiiiidnooooo.ouuuuy.yaaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiii..jjkk.llllll..llnnnnnn...oooooo..rrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzz.";
 
-// A word (a run of letters of the three alphabets) that holds a Latin letter and a Cyrillic or Greek one: what a look-alike name is made of
-bool has_mixed_script_word(const std::vector<char32_t>& v) {
-    bool latin = false, other = false;
-    for (size_t i = 0; i <= v.size(); ++i) {
-        const bool letter = i < v.size() && (is_latin_letter(v[i]) || is_greek_or_cyrillic_letter(v[i]));
-        if (!letter) {
-            if (latin && other) return true;
-            latin = other = false;
-            continue;
+// The letters of a folded name as a reader takes them for a word: lower case, an accented letter as its base letter, "l" as "i", any other letter that is not ASCII as '?', no space, mark or digit
+// (`digits` false), or, with `digits` true, a digit that is drawn like a letter as that letter (0 o, 1 i, 3 e, 4 a, 5 s) and no other digit
+std::string skeleton_of(const std::vector<char32_t>& folded_name, bool digits) {
+    std::string skeleton;
+    for (char32_t c : folded_name) {
+        if (c >= kAccentsFrom && c < kAccentsFrom + sizeof kAccents - 1 && kAccents[c - kAccentsFrom] != '.') c = static_cast<char32_t>(kAccents[c - kAccentsFrom]);
+        if (digits && c >= U'0' && c <= U'5') {
+            const char letter = "oi eas"[c - U'0'];
+            if (letter != ' ') skeleton.push_back(letter);
+        } else if (c == U'l') {
+            skeleton.push_back('i');
+        } else if (c >= U'a' && c <= U'z') {
+            skeleton.push_back(static_cast<char>(c));
+        } else if (c >= 0x80) {
+            skeleton.push_back('?');
         }
-        if (is_latin_letter(v[i])) latin = true;
-        else other = true;
     }
-    return false;
+    return skeleton;
 }
 
-// The names that only the owner or the site may have, as the letters of the folded name spell them (digits, spaces and marks between them do not matter), also with "the" in front
+// The names that only the owner or the site may have, as the letters of the folded name spell them (spaces and marks between them do not matter), also with "the" in front, with the digits left out or
+// read as the letters they look like
 bool reserved_maker_word(const std::vector<char32_t>& folded_name) {
-    std::string skeleton;
-    for (const char32_t c : folded_name) {
-        if (c >= U'a' && c <= U'z') skeleton.push_back(static_cast<char>(c));
-        else if (c >= 0x80) skeleton.push_back('?');
-    }
-    static const char* const kWords[] = {"owner", "admin", "administrator", "system", "moderator", "mod", "staff", "claude", "anthropic", "assistant", "server", "ants"};
-    if (skeleton.size() > 3 && skeleton.compare(0, 3, "the") == 0) skeleton.erase(0, 3);
-    for (const char* word : kWords) {
-        if (skeleton == word) return true;
+    static const char* const kWords[] = {"owner", "admin", "administrator", "system", "moderator", "mod", "staff", "assistant", "server", "ants", "root"};
+    for (const bool digits : {false, true}) {
+        std::string skeleton = skeleton_of(folded_name, digits);
+        if (skeleton.size() > 3 && skeleton.compare(0, 3, "the") == 0) skeleton.erase(0, 3);
+        for (const char* word : kWords) {
+            if (skeleton == word) return true;
+        }
     }
     return false;
 }
@@ -290,7 +295,7 @@ Cleaned clean_maker(std::string_view raw) {
     out.text = encode(v);
     if (has_link_markup(out.text)) return fail("link");
     const std::vector<char32_t> look = folded(v);
-    if (has_mixed_script_word(v) || reserved_maker_word(look) || looks_like_bot(look)) return fail("reserved");
+    if (reserved_maker_word(look) || looks_like_bot(look)) return fail("reserved");
     out.ok = true;
     return out;
 }

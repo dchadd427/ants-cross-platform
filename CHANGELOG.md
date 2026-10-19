@@ -27,7 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - Maps sent for approval: the server now cleans the map's description before it is stored or listed (odd characters become "?", blanks are tidied, at most 100 characters); the map file itself is not changed.
-- A maker's name can no longer pass for the owner or the site ("Owner", "Admin", "System", "Claude" and the like, also written with look-alike Cyrillic or Greek letters), and a note or a maker's name cannot hold a web address or three backticks. The map maker tells you while you type.
+- A maker's name can no longer pass for the owner or the site ("Owner", "Admin", "System", "Root" and the like, also written with look-alike letters, accents or digits such as 0wner), and a note or a maker's name cannot hold a web address or three backticks. The map maker tells you while you type.
 - The map maker page is now sent with a strict content security policy and cannot be put inside another page.
 
 **Rules / network:** none (protocol 21).

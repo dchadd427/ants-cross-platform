@@ -423,7 +423,8 @@ int main() {
         ASSERT_EQ(code("Good Name", "Owner", ""), std::string("bad_maker"));               // (the maker's name cannot be the owner's or the site's, also with look-alike letters)
         ASSERT_EQ(code("Good Name", "\xD0\x9E" "wner", ""), std::string("bad_maker"));
         ASSERT_EQ(code("Good Name", "Bot (Hard)", ""), std::string("bad_maker"));
-        ASSERT_EQ(code("Good Name", "Mi\xD0\xB0", ""), std::string("bad_maker"));             // (a word of two scripts)
+        ASSERT_EQ(code("Good Name", "0wn3r", ""), std::string("bad_maker"));                // (digits that look like letters)
+        ASSERT_EQ(code("Good Name", "\xCE\xBC" "Torrent", ""), std::string(""));              // (an ordinary tag of two alphabets is fine)
         ASSERT_EQ(code("Good Name", "see www.x.org", ""), std::string("bad_maker"));
         ASSERT_EQ(code("Good Name", "Mia", "go to http://x.org"), std::string("bad_note"));
         ASSERT_EQ(code("Good Name", "Mia", "WWW.x.org"), std::string("bad_note"));

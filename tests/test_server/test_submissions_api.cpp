@@ -587,7 +587,7 @@ int main() {
         };
         ctl::JsonValue r = answer("kind=classic&name=Abc%20One&maker=Owner");
         ASSERT_TRUE(r.get("error").str() == "bad_maker" && r.get("reason").str() == "reserved" && r.get("message").str().find("cannot be used") != std::string::npos);
-        r = answer("kind=classic&name=Abc%20One&maker=%D0%9Er%D0%B0cle");                      // (Cyrillic O and a: one word of two scripts)
+        r = answer("kind=classic&name=Abc%20One&maker=%D0%9Ewner");                          // (a Cyrillic O in "Owner")
         ASSERT_TRUE(r.get("error").str() == "bad_maker" && r.get("reason").str() == "reserved");
         r = answer("kind=classic&name=Abc%20One&maker=Mia&note=see%20http%3A%2F%2Fexample.org");
         ASSERT_TRUE(r.get("error").str() == "bad_note" && r.get("reason").str() == "link" && r.get("message").str().find("web address") != std::string::npos);

@@ -8,9 +8,9 @@
 //    A control character (anything below U+0020 but a note's line end, U+007F, U+0080..U+009F) refuses the text.
 //  * Normalization form C without tables: a text may only hold characters that are their own NFC form and never start a combining sequence (see allowed_display_char), so there is no
 //    second spelling of the same text. A combining mark, a compatibility form or a letter outside the allowed scripts refuses the text; it is never silently changed.
-//  * The maker's name has three more rules (docs/MAP_SUBMISSIONS.md, "The text"): a letter of the Cyrillic or Greek alphabet that is drawn like a Latin one is folded to it before the name is judged, a name
-//    whose folded letters spell a word that only the owner or the site may use ("owner", "admin", "system", "claude" ...) or that looks like a bot's (ai::is_reserved_bot_name) is refused with the reason
-//    "reserved", and so is a word that mixes Latin letters with Cyrillic or Greek ones. A note and a maker's name may not hold a web address ("://", "www.") or three backticks (reason "link").
+//  * The maker's name has two more rules (docs/MAP_SUBMISSIONS.md, "The text"): a letter of the Cyrillic or Greek alphabet that is drawn like a Latin one is folded to it before the name is judged, and a name
+//    whose folded letters (accents taken off, "l" as "i", digits that look like letters as those letters) spell a word that only the owner or the site may use ("owner", "admin", "system", "root" ...) or that
+//    looks like a bot's (ai::is_reserved_bot_name) is refused with the reason "reserved". A note and a maker's name may not hold a web address ("://", "www.") or three backticks (reason "link").
 //  * The description inside a map file is player text too: clean_description makes the form that the database and the lists keep (the file keeps its own bytes).
 //  * A MAP NAME is more strict: the game takes the map's file name as its name in the network protocol (valid_map_name: printable ASCII), so a name is letters, digits, spaces and a few
 //    marks, 3 to 60 characters, and the file is "<name>.lvl". No separator, no leading or trailing dot, no ".." and no name that a Windows machine reserves for a device.

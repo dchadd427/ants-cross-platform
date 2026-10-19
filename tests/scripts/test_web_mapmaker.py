@@ -850,7 +850,7 @@ class ThePage(unittest.TestCase):
         with the same Latin letters, the same reserved words, the same script ranges, the same bot rule and the same link marks"""
         cpp = read("src", "ants_server", "map_names.cpp")
         server = dict((chr(int(code, 16)), letter) for code, letter in re.findall(r"\{(0x[0-9A-F]{4}), '(\w)'\}", cpp))
-        look = re.search(r"var LOOK = '([^']+)';", read("web", "front", "mapmaker_submit.js")).group(1)
+        look = re.search(r"var LOOK = '([^']+)'", read("web", "front", "mapmaker_submit.js")).group(1)
         self.assertEqual(len(look) % 2, 0)
         page = dict((look[i], look[i + 1].lower()) for i in range(0, len(look), 2))      # (the page lower-cases the whole name afterwards)
         self.assertEqual(len(page) * 2, len(look), "a letter twice in LOOK")
@@ -860,12 +860,21 @@ class ThePage(unittest.TestCase):
         server_words = re.findall(r'"(\w+)"', words)
         page_words = re.search(r"\^\(the\)\?\(([a-z|]+)\)\$", read("web", "front", "mapmaker_submit.js")).group(1).split("|")
         self.assertEqual(sorted(page_words), sorted(server_words), "the reserved words")
-        self.assertEqual(len(server_words), 12)
-        # the ranges of the scripts (a Latin letter, and a Greek or Cyrillic one) and the link marks are the same text in both
-        self.assertIn("(c >= 0x00C0 && c <= 0x024F)", cpp)
-        self.assertIn("c >= 0x0391 && c <= 0x0451", cpp)
-        submit = read("web", "front", "mapmaker_submit.js")
-        self.assertIn("/[A-Za-z\\u00c0-\\u024f]/.test(w) && /[\\u0391-\\u0451]/.test(w)", submit)
+        self.assertEqual(len(server_words), 11)
+        # the accents: the server's table (U+00C0 .. U+017F) is the page's rule (NFD without the marks, and the strokes of ACCENTS) on every one of those characters
+        table = re.search(r'const char kAccents\[\] = "([^"]+)";', cpp).group(1)
+        self.assertEqual(len(table), 0x180 - 0xC0)
+        probe = "".join(chr(c) for c in range(0xC0, 0x180))
+        done = subprocess.run([NODE, "-e", "const S = require(%s); const o = []; for (const c of %s) o.push(S.skeletons(c)[0] || '.'); console.log(JSON.stringify(o));" %
+                               (json.dumps(os.path.join(FRONT, "mapmaker_submit.js")), json.dumps(probe))], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        page_table = "".join("." if x == "." else ("?" if ord(x[0]) >= 0x80 else x) for x in json.loads(done.stdout))
+        expected = "".join("." if t == "." else ("i" if t == "l" else t) for t in table)          # (the page's "l" is "i" too)
+        self.assertEqual(page_table.replace("?", "."), expected, "the accents of the page and of the server")
+        # the digits that look like letters, and the "l"
+        self.assertIn('"oi eas"', cpp)
+        self.assertIn("'oi eas'", read("web", "front", "mapmaker_submit.js"))
+        # the link marks are the same text in both
         self.assertIn('lower.find("://")', cpp)
         self.assertIn('lower.find("www.")', cpp)
         self.assertIn('lower.find("```")', cpp)
