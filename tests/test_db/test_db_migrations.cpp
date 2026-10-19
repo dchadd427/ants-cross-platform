@@ -226,9 +226,9 @@ void run_migration_tests() {
         DB_CHECK(open_and_migrate(db, ":memory:", ants::server::db_migrations(), OpenOptions(), &v, &mode).ok() && mode == "memory");
     } DB_END;
 
-    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics; version 5 the map submissions") {
+    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics; version 5 the map submissions; version 6 the accounts of the owner's page") {
         const auto& list = ants::server::db_migrations();
-        DB_CHECK(list.size() == 5 && list.front().version == 1 && list.back().version == 5);
+        DB_CHECK(list.size() == 6 && list.front().version == 1 && list.back().version == 6);
         DB_CHECK(ants::server::db_schema_version() == list.back().version);
         Database db;
         DB_CHECK(db.open(":memory:").ok());
@@ -241,7 +241,7 @@ void run_migration_tests() {
         const std::string created = st.column_text(0);
         DB_CHECK(created.size() == 20 && created.substr(0, 2) == "20" && created.back() == 'Z');
         DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version') ORDER BY name)").ok());
-        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,submission_limits");
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,admin_known_addr,admin_locks,admin_revoked,admin_users,history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,submission_limits");
         DB_CHECK(migrate(db, list).ok());
         DB_CHECK(rows_in(db, "meta") == 1);
     } DB_END;
@@ -318,8 +318,9 @@ void run_migration_tests() {
         int v = 0;
         DB_CHECK(migrate(db, list.data(), 4, &v).ok() && v == 4 && !has_table(db, "map_submissions"));
         DB_CHECK(db.exec("INSERT INTO site_stats VALUES ('online', 5)").ok());
-        DB_CHECK(migrate(db, list, &v).ok() && v == 5 && has_table(db, "map_submissions") && has_table(db, "submission_limits") && has_table(db, "review_log") && rows_in(db, "map_submissions") == 0);
+        DB_CHECK(migrate(db, list.data(), 5, &v).ok() && v == 5 && has_table(db, "map_submissions") && has_table(db, "submission_limits") && has_table(db, "review_log") && rows_in(db, "map_submissions") == 0);
         DB_CHECK(rows_in(db, "site_stats") == 1 && rows_in(db, "schema_version") == 5);                         // (the older data is as it was)
+        DB_CHECK(!has_table(db, "admin_users"));
         const std::string id(32, 'a');
         const std::string hash(64, 'b');
         const auto row = [&](const std::string& id_text, const std::string& state, const std::string& kind, const std::string& final_key) {
@@ -335,5 +336,31 @@ void run_migration_tests() {
         DB_CHECK(!db.exec(row(std::string(32, 'e'), "taken_down", "extended", "river")).ok());                  // (the name has one holder: the index, not the code, says so)
         DB_CHECK(db.exec(row(std::string(32, 'e'), "taken_down", "extended", "lake")).ok() && rows_in(db, "map_submissions") == 3);
         DB_CHECK(db.exec("INSERT INTO submission_limits VALUES ('k', 20000, 1)").ok() && !db.exec("INSERT INTO submission_limits VALUES ('k', 20000, 1)").ok() && !db.exec("INSERT INTO submission_limits VALUES ('j', 20000, 0)").ok());
+    } DB_END;
+    DB_CASE("SV1.6 Version 6 (the accounts): a database of version 5 is brought to it with its data kept; a role is Admin or Moderator, a name is held once in any capitals, a lock row has a known scope, and a map has a decider") {
+        const auto& list = ants::server::db_migrations();
+        Database db;
+        DB_CHECK(db.open(":memory:").ok());
+        int v = 0;
+        DB_CHECK(migrate(db, list.data(), 5, &v).ok() && v == 5 && !has_table(db, "admin_users"));
+        DB_CHECK(db.exec("INSERT INTO site_stats VALUES ('online', 5)").ok());
+        DB_CHECK(migrate(db, list, &v).ok() && v == 6 && has_table(db, "admin_users") && has_table(db, "admin_locks") && has_table(db, "admin_known_addr") && has_table(db, "admin_audit"));
+        DB_CHECK(rows_in(db, "site_stats") == 1 && rows_in(db, "schema_version") == 6 && rows_in(db, "admin_users") == 0);
+        const auto user = [&](const std::string& name, const std::string& key, const std::string& role) {
+            return "INSERT INTO admin_users (name, name_key, role, pw_hash, created_at) VALUES ('" + name + "', '" + key + "', '" + role + "', 'x', 1)";
+        };
+        DB_CHECK(db.exec(user("Mia", "mia", "admin")).ok() && db.exec(user("Bob", "bob", "moderator")).ok());
+        DB_CHECK(!db.exec(user("MIA", "mia", "admin")).ok());                                                   // (a name is held once)
+        DB_CHECK(!db.exec(user("Zed", "zed", "owner")).ok() && !db.exec(user("Zed", "zed", "ADMIN")).ok());     // (two roles)
+        DB_CHECK(!db.exec("INSERT INTO admin_users (name, name_key, role, pw_hash, must_change, created_at) VALUES ('A', 'a', 'admin', 'x', 2, 1)").ok());
+        Statement st;
+        DB_CHECK(db.prepare(st, "SELECT must_change, disabled, session_gen, last_login_at FROM admin_users WHERE name_key = 'mia'").ok() && st.step() == Statement::Step::Row);
+        DB_CHECK(st.column_int64(0) == 1 && st.column_int64(1) == 0 && st.column_int64(2) == 1 && st.column_int64(3) == 0);          // (a new account must choose a password, is enabled, is at generation 1, never signed in)
+        DB_CHECK(db.exec("INSERT INTO admin_locks (scope, key, fails, first_at) VALUES ('pair', 'k', 1, 5)").ok() && !db.exec("INSERT INTO admin_locks (scope, key, fails, first_at) VALUES ('pair', 'k', 2, 5)").ok());
+        DB_CHECK(!db.exec("INSERT INTO admin_locks (scope, key, fails, first_at) VALUES ('other', 'k', 1, 5)").ok());
+        DB_CHECK(db.exec("INSERT INTO admin_known_addr VALUES (1, 'a', 5)").ok() && !db.exec("INSERT INTO admin_known_addr VALUES (1, 'a', 6)").ok());
+        DB_CHECK(db.exec("INSERT INTO admin_audit (at, actor, action) VALUES (1, 'x', 'y')").ok() && rows_in(db, "admin_audit") == 1);
+        DB_CHECK(db.exec("INSERT INTO map_submissions (id, token_hash, state, kind, name, name_key, maker, note, width, height, minutes, players, description, size, hash, findings, file, created_at) VALUES ('" + std::string(32, 'a') + "', '" + std::string(64, 'b') + "', 'waiting', 'classic', 'N', 'n', 'M', '', 1, 1, 1, 4, '', 1, '0123456789abcdef', '[]', 'f.lvl', 1)").ok());
+        DB_CHECK(db.prepare(st, "SELECT decided_by FROM map_submissions").ok() && st.step() == Statement::Step::Row && st.column_text(0).empty());
     } DB_END;
 }

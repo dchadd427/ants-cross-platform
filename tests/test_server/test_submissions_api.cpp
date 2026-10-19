@@ -1,6 +1,6 @@
-// Tests of the routes of the map submissions (SubmissionApi, docs/MAP_SUBMISSIONS.md): what a player's browser may do and how it is limited by address, and what only the owner may do: the session cookie that the login
-// helper signs (every way to forge, change, age or misuse one), the CSRF token, the answer that a visitor gets for everything of the owner's (the answer of a path that does not exist, byte for byte), the owner's decisions
-// through the API, and the page's text (nothing is HTML). Requests are made by hand: no sockets.
+// Tests of the routes of the map submissions (SubmissionApi, docs/MAP_SUBMISSIONS.md): what a player's browser may do and how it is limited by address, and what only a signed-in account may do: the session cookie that
+// the server signs at the sign-in (every way to forge, change, age or misuse one), the CSRF token, the answer that a visitor gets for everything of the owner's (the answer of a path that does not exist, byte for byte),
+// the decisions through the API, and the page's text (nothing is HTML). The accounts themselves, the roles and the guessing limits are test_admin_accounts. Requests are made by hand: no sockets.
 #include <cstdlib>
 #include <fstream>
 #include <functional>
@@ -10,6 +10,7 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_assets/lvl_core.hpp"
+#include "ants_server/admin_accounts.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_server/crypto.hpp"
@@ -57,7 +58,7 @@ using ctl::HttpRequest;
 using ctl::HttpResponse;
 
 const char* const kSecret = "0123456789abcdef0123456789abcdef0123";
-const char* const kOwner = "111222333444";
+const char* const kOwnerPassword = "correct horse battery staple";
 
 std::string tiny() {
     std::ifstream in(fs::path(maps_dir()) / "TINY.LVL", std::ios::binary);
@@ -74,10 +75,10 @@ std::string tiny_described(const std::string& text) {
     return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 
-// The cookie that tools/admin_login.py makes: v1.<base64url of the JSON>.<hex HMAC of "v1.<payload>">
-std::string cookie_value(const std::string& secret, const std::string& id, const std::string& name, int64_t exp, const std::string& nonce = "n0nce") {
-    const std::string payload = "{\"id\":\"" + id + "\",\"name\":\"" + name + "\",\"exp\":" + std::to_string(exp) + (nonce.empty() ? "" : ",\"n\":\"" + nonce + "\"") + "}";
-    const std::string signed_part = "v1." + base64url_encode(payload);
+// A cookie as this server makes one, for a user id and generation (the tests forge with it: a wrong secret, a wrong generation, a wrong time)
+std::string cookie_value(const std::string& secret, int64_t uid, int64_t gen, int64_t exp, const std::string& nonce = "n0nce", const std::string& prefix = "v2.") {
+    const std::string payload = "{\"u\":" + std::to_string(uid) + ",\"g\":" + std::to_string(gen) + ",\"exp\":" + std::to_string(exp) + (nonce.empty() ? "" : ",\"n\":\"" + nonce + "\"") + "}";
+    const std::string signed_part = prefix + base64url_encode(payload);
     return signed_part + "." + hex_encode(hmac_sha256(secret, signed_part));
 }
 
@@ -95,7 +96,10 @@ struct Api {
     db::Database database;
     SubmissionConfig config;
     std::unique_ptr<SubmissionStore> store;
+    std::unique_ptr<AdminAccounts> accounts;
     std::unique_ptr<SubmissionApi> api;
+    int64_t owner_id{0};
+    std::string owner_cookie;
     int64_t now{kT0};
     uint32_t now_ms{1000};
     int refreshed{0};
@@ -110,14 +114,22 @@ struct Api {
         store = std::make_unique<SubmissionStore>(database, config, [](const std::string& key) { return library().library_has_name(key); });
         std::string why;
         store->open(now, why);
+        AccountConfig account_config;
+        account_config.rounds = 1000;                                        // (the real cost is 600,000 rounds: test_admin_accounts holds that, and one check of it)
+        accounts = std::make_unique<AdminAccounts>(database, account_config);
+        accounts->open(why);
+        User dave;
+        std::string starting;
+        Failure refusal;
+        int64_t gen = 0;
+        accounts->create(Actor(), "dave", "admin", now, dave, starting, refusal);
+        accounts->change_password(Actor(), dave.id, kOwnerPassword, now, gen, refusal);            // (the starting password is changed: the account is as the owner uses it)
+        owner_id = dave.id;
         SubmissionApiConfig ac;
-        if (owner_on) {
-            ac.owner_id = kOwner;
-            ac.session_secret = kSecret;
-        }
+        if (owner_on) ac.session_secret = kSecret;
         ac.attempts_per_hour = 1000;
         if (tune) tune(ac);
-        api = std::make_unique<SubmissionApi>(*store, ac);
+        api = std::make_unique<SubmissionApi>(*store, *accounts, ac);
         api->set_on_approved_changed([this] { ++refreshed; });
     }
 
@@ -146,9 +158,20 @@ struct Api {
         return call(r);
     }
 
-    std::string cookie(const std::string& id = kOwner, const std::string& name = "Dave", int64_t exp = 0, const std::string& nonce = "n0nce", const std::string& secret = kSecret) {
-        return "ants_admin=" + cookie_value(secret, id, name, exp != 0 ? exp : now + 3600, nonce);
+    // Signs in through the API and returns the cookie pair ("ants_admin=v2...."), "" when it fails. Each sign-in moves the steady clock on, so that the budget of password checks is a new window.
+    std::string login_cookie(const std::string& name, const std::string& password, const std::string& address = "198.51.100.7", HttpResponse* answer = nullptr) {
+        now_ms += 20000;
+        const HttpResponse r = call(req("POST", "/admin/api/login", "", {{"content-type", "application/json"}, {"x-client-address", address}, {"sec-fetch-site", "same-origin"}}, "{\"username\":\"" + name + "\",\"password\":\"" + password + "\"}"));
+        if (answer != nullptr) *answer = r;
+        return r.status == 200 && !r.set_cookies.empty() ? r.set_cookies[0].substr(0, r.set_cookies[0].find(';')) : std::string();
     }
+
+    std::string cookie() {
+        if (owner_cookie.empty()) owner_cookie = login_cookie("dave", kOwnerPassword);
+        return owner_cookie;
+    }
+
+    std::string forged(int64_t uid, int64_t gen, int64_t exp, const std::string& nonce = "n0nce", const std::string& secret = kSecret, const std::string& prefix = "v2.") { return "ants_admin=" + cookie_value(secret, uid, gen, exp, nonce, prefix); }
 
     ctl::JsonValue me(const std::string& cookie_header) {
         std::map<std::string, std::string> h;
@@ -323,18 +346,27 @@ int main() {
         ASSERT_EQ(flood.submit("Good%20Map", "203.0.113.2").status, 201);                       // (thirty junk files from thirty addresses did not make the server busy)
     } TEST_END();
 
-    TEST_CASE("API2.1 The owner's cookie: the one the helper makes is the owner; a signed cookie of another person is a visitor who signed in, and shown as such; everything else is nobody") {
+    TEST_CASE("API2.1 The session cookie: a sign-in makes it (HttpOnly, Secure, SameSite=Strict, 12 hours); a changed, forged, old, over-long or out-of-date one is nobody; the generation of the user's sessions decides") {
         Api t;
         ctl::JsonValue m = t.me("");
-        ASSERT_TRUE(!m.get("signed_in").as_bool_or(true) && !m.has("csrf") && !m.has("name"));
-        m = t.me(t.cookie());
-        ASSERT_TRUE(m.get("signed_in").as_bool_or(false) && m.get("owner").as_bool_or(false) && m.get("name").str() == "Dave" && m.get("csrf").str().size() == 32);
-        m = t.me(t.cookie("999888777"));
-        ASSERT_TRUE(m.get("signed_in").as_bool_or(false) && !m.get("owner").as_bool_or(true) && m.get("name").str() == "Dave" && !m.has("csrf"));
-        m = t.me("other=1; " + t.cookie() + "; more=2");
-        ASSERT_TRUE(m.get("owner").as_bool_or(false));                                           // (among other cookies)
-        const std::string good = t.cookie().substr(11);
-        const auto signed_in = [&](const std::string& header) { return t.me(header).get("signed_in").as_bool_or(false); };
+        ASSERT_TRUE(!m.get("signed_in").as_bool_or(true) && !m.has("csrf") && !m.has("name") && !m.has("role"));
+        HttpResponse answer;
+        const std::string pair = t.login_cookie("dave", kOwnerPassword, "198.51.100.7", &answer);
+        ASSERT_FALSE(pair.empty());
+        const std::string& header = answer.set_cookies[0];
+        for (const char* flag : {"; Path=/admin", "; Max-Age=43200", "; HttpOnly", "; Secure", "; SameSite=Strict"}) ASSERT_MSG(header.find(flag) != std::string::npos, std::string("missing ") + flag);
+        ASSERT_TRUE(header.compare(0, 14, "ants_admin=v2.") == 0 && answer.set_cookies.size() == 1);
+        ASSERT_TRUE(answer.body.find(kOwnerPassword) == std::string::npos);                       // (the answer never holds the password)
+        const ctl::JsonValue login = parse_text(answer.body);
+        ASSERT_TRUE(login.get("signed_in").as_bool_or(false) && login.get("name").str() == "dave" && login.get("role").str() == "admin" && !login.get("must_change").as_bool_or(true) && login.get("csrf").str().size() == 32);
+        const uint64_t compares = ctl::constant_time_equal_calls();
+        m = t.me(pair);
+        ASSERT_EQ(ctl::constant_time_equal_calls(), compares + 1);                                  // (the signature of the cookie is compared in constant time)
+        ASSERT_TRUE(m.get("signed_in").as_bool_or(false) && m.get("role").str() == "admin" && m.get("name").str() == "dave" && m.get("csrf").str() == login.get("csrf").str() && !m.has("owner"));
+        m = t.me("other=1; " + pair + "; more=2");
+        ASSERT_TRUE(m.get("signed_in").as_bool_or(false));                                       // (among other cookies)
+        const std::string good = pair.substr(11);
+        const auto signed_in = [&](const std::string& header_text) { return t.me(header_text).get("signed_in").as_bool_or(false); };
         ASSERT_FALSE(signed_in("ants_admin="));
         ASSERT_FALSE(signed_in("ants_admin=" + good + "x"));                                      // (a changed signature)
         ASSERT_FALSE(signed_in("ants_admin=" + good.substr(0, good.size() - 1)));
@@ -344,38 +376,71 @@ int main() {
         std::string changed_payload = good;
         changed_payload[5] = changed_payload[5] == 'A' ? 'B' : 'A';                               // (a changed payload with the old signature)
         ASSERT_FALSE(signed_in("ants_admin=" + changed_payload));
-        ASSERT_FALSE(signed_in("ants_admin=v2" + good.substr(2)));
+        ASSERT_FALSE(signed_in("ants_admin=v3" + good.substr(2)));
         ASSERT_FALSE(signed_in("ants_admin=" + good.substr(3)));
         ASSERT_FALSE(signed_in("Ants_Admin=" + good));                                            // (the name is exact)
         ASSERT_FALSE(signed_in("xants_admin=" + good));
         ASSERT_FALSE(signed_in("ants_admin2=" + good));
         ASSERT_FALSE(signed_in("ants_admin=\"" + good + "\""));
-        ASSERT_FALSE(signed_in(t.cookie(kOwner, "Dave", 0, "n0nce", "another-secret-another-secret-another")));        // (signed with another secret)
-        ASSERT_FALSE(signed_in(t.cookie(kOwner, "Dave", t.now - 1)));                             // (over)
-        ASSERT_FALSE(signed_in(t.cookie(kOwner, "Dave", t.now)));
-        ASSERT_FALSE(signed_in(t.cookie(kOwner, "Dave", t.now + 3 * 86400)));                     // (claims to last longer than the helper's cookies)
-        ASSERT_TRUE(signed_in(t.cookie(kOwner, "Dave", t.now + 2 * 86400)));
-        ASSERT_FALSE(signed_in(t.cookie(kOwner, "Dave", 0, "")));                                 // (no nonce)
-        ASSERT_FALSE(signed_in(t.cookie("12a4", "Dave")));                                        // (an id that is not digits)
-        ASSERT_FALSE(signed_in(t.cookie("", "Dave")));
-        ASSERT_FALSE(signed_in(t.cookie(std::string(40, '1'), "Dave")));
+        const int64_t uid = t.owner_id;
+        ASSERT_TRUE(signed_in(t.forged(uid, 1 + 1, t.now + 3600)));                                // (the user's generation is 2 after the password change: a cookie of that generation is good)
+        ASSERT_FALSE(signed_in(t.forged(uid, 1, t.now + 3600)));                                   // (the old generation: every session from before the password change is over)
+        ASSERT_FALSE(signed_in(t.forged(uid, 3, t.now + 3600)));                                   // (a generation that does not exist yet)
+        ASSERT_FALSE(signed_in(t.forged(uid, 0, t.now + 3600)));
+        ASSERT_FALSE(signed_in(t.forged(uid + 1, 2, t.now + 3600)));                               // (no such user)
+        ASSERT_FALSE(signed_in(t.forged(0, 2, t.now + 3600)));
+        ASSERT_FALSE(signed_in(t.forged(uid, 2, t.now + 3600, "n0nce", "another-secret-another-secret-another")));        // (signed with another secret)
+        ASSERT_FALSE(signed_in(t.forged(uid, 2, t.now - 1)));                                      // (over)
+        ASSERT_FALSE(signed_in(t.forged(uid, 2, t.now)));
+        ASSERT_TRUE(signed_in(t.forged(uid, 2, t.now + 43200)));                                   // (12 hours: what this server makes)
+        ASSERT_TRUE(signed_in(t.forged(uid, 2, t.now + 43200 + 60)));
+        ASSERT_FALSE(signed_in(t.forged(uid, 2, t.now + 43200 + 61)));                             // (claims to last longer than a session of this server)
+        ASSERT_FALSE(signed_in(t.forged(uid, 2, t.now + 3 * 86400)));
+        ASSERT_FALSE(signed_in(t.forged(uid, 2, t.now + 3600, "")));                               // (no nonce)
+        ASSERT_FALSE(signed_in(t.forged(uid, 2, t.now + 3600, "n0nce", kSecret, "v1.")));          // (the format of the cookie of the sign-in that this one replaced)
         ASSERT_FALSE(signed_in("ants_admin=" + std::string(3000, 'a')));                         // (a huge cookie header is not even read)
-        ASSERT_FALSE(signed_in(std::string(3000, ';') + t.cookie()));
-        m = t.me(t.cookie(kOwner, "<img src=x onerror=alert(1)>"));
-        ASSERT_TRUE(m.get("signed_in").as_bool_or(false) && m.get("name").str() == "someone");    // (a name that cannot be shown is replaced, not passed on)
-        Api other(nullptr, true);
-        ASSERT_TRUE(other.me(t.cookie()).get("owner").as_bool_or(false));                         // (the same secret, the same owner: the cookie works for any server that holds the secret)
+        ASSERT_FALSE(signed_in(std::string(3000, ';') + pair));
+        // the cookie ends when its time does: 12 hours after the sign-in, to the second
+        const std::string made = t.login_cookie("dave", kOwnerPassword);
+        t.now += 43199;
+        ASSERT_TRUE(signed_in(made));
+        t.now += 1;
+        ASSERT_FALSE(signed_in(made));
+        t.now -= 43200;
+        // a session ends when the user is disabled, enabled again does not bring it back, and a removed user has none
+        Api u;
+        const std::string before = u.cookie();
+        ASSERT_TRUE(u.me(before).get("signed_in").as_bool_or(false));
+        User second;
+        std::string pw;
+        Failure why;
+        ASSERT_MSG(u.accounts->create(Actor(), "second", "admin", u.now, second, pw, why), why.code + why.message);
+        ASSERT_TRUE(u.accounts->set_disabled(Actor(), u.owner_id, true, u.now, why));
+        ASSERT_FALSE(u.me(before).get("signed_in").as_bool_or(false));
+        ASSERT_TRUE(u.accounts->set_disabled(Actor(), u.owner_id, false, u.now, why));
+        ASSERT_FALSE(u.me(before).get("signed_in").as_bool_or(false));
+        ASSERT_TRUE(u.me(u.login_cookie("dave", kOwnerPassword)).get("signed_in").as_bool_or(false));
+        Api same_secret;
+        ASSERT_TRUE(same_secret.me(same_secret.cookie()).get("signed_in").as_bool_or(false));
+        // a user that is disabled in the database is nobody, whatever the generation of the cookie says (a second lock behind the generation)
+        Api d;
+        const std::string alive = d.cookie();
+        ASSERT_TRUE(d.me(alive).get("signed_in").as_bool_or(false));
+        ASSERT_TRUE(d.database.exec("UPDATE admin_users SET disabled = 1").ok());
+        ASSERT_FALSE(d.me(alive).get("signed_in").as_bool_or(true));
     } TEST_END();
 
     TEST_CASE("API2.2 A visitor and a stranger get, for every call of the owner's, the answer of a path that does not exist, byte for byte; so does everything when the owner's page is not set up") {
         Api t;
+        const std::string some_id(32, 'a');
         const std::vector<std::pair<std::string, std::string>> owner_calls = {
-            {"GET", "/admin/api/maps"}, {"GET", "/admin/api/maps?state=approved"}, {"GET", "/admin/api/next-name"}, {"GET", "/admin/api/maps/" + std::string(32, 'a') + "/picture"},
-            {"POST", "/admin/api/maps/" + std::string(32, 'a') + "/approve"}, {"POST", "/admin/api/maps/" + std::string(32, 'a') + "/decline"}, {"POST", "/admin/api/maps/" + std::string(32, 'a') + "/take-down"},
-            {"POST", "/admin/api/maps/" + std::string(32, 'a') + "/put-back"}, {"POST", "/admin/api/maps/x/y"}};
+            {"GET", "/admin/api/maps"}, {"GET", "/admin/api/maps?state=approved"}, {"GET", "/admin/api/next-name"}, {"GET", "/admin/api/maps/" + some_id + "/picture"},
+            {"POST", "/admin/api/maps/" + some_id + "/approve"}, {"POST", "/admin/api/maps/" + some_id + "/decline"}, {"POST", "/admin/api/maps/" + some_id + "/take-down"},
+            {"POST", "/admin/api/maps/" + some_id + "/put-back"}, {"POST", "/admin/api/maps/x/y"}, {"GET", "/admin/api/users"}, {"POST", "/admin/api/users"}, {"POST", "/admin/api/users/1/reset"},
+            {"POST", "/admin/api/users/1/disable"}, {"POST", "/admin/api/users/1/enable"}, {"POST", "/admin/api/users/1/remove"}, {"GET", "/admin/api/audit"}, {"POST", "/admin/api/password"}};
         const HttpResponse nothing = t.call(t.req("GET", "/admin/api/does-not-exist"));
         ASSERT_EQ(nothing.status, 404);
-        const std::vector<std::string> cookies = {"", t.cookie("999888777"), t.cookie(kOwner, "Dave", t.now - 5), "ants_admin=garbage"};
+        const std::vector<std::string> cookies = {"", t.forged(t.owner_id + 5, 2, t.now + 3600), t.forged(t.owner_id, 2, t.now - 5), t.forged(t.owner_id, 1, t.now + 3600), "ants_admin=garbage"};
         for (const auto& call : owner_calls) {
             for (const std::string& c : cookies) {
                 std::map<std::string, std::string> h;
@@ -387,35 +452,31 @@ int main() {
                 const std::string path = call.second.substr(0, call.second.find('?'));
                 const std::string query = call.second.find('?') == std::string::npos ? "" : call.second.substr(call.second.find('?') + 1);
                 const HttpResponse r = t.call(t.req(call.first, path, query, h));
-                ASSERT_MSG(r.status == nothing.status && r.body == nothing.body && r.content_type == nothing.content_type, call.first + " " + call.second + " with cookie '" + c.substr(0, 20) + "'");
+                ASSERT_MSG(r.status == nothing.status && r.body == nothing.body && r.content_type == nothing.content_type && r.set_cookies.empty(), call.first + " " + call.second + " with cookie '" + c.substr(0, 20) + "'");
             }
         }
         for (const char* method : {"PUT", "DELETE", "PATCH"}) ASSERT_EQ(t.call(t.req(method, "/admin/api/me")).body, nothing.body);
         ASSERT_EQ(t.call(t.req("GET", "/admin/api")).body, nothing.body);
+        ASSERT_EQ(t.call(t.req("GET", "/admin/api/login")).body, nothing.body);                  // (the sign-in is a POST; any other method is a missing path)
+        ASSERT_EQ(t.call(t.req("GET", "/admin/api/logout")).body, nothing.body);
         Api off(nullptr, false);
         for (const auto& call : owner_calls) {
             const HttpResponse r = off.call(off.req(call.first, call.second.substr(0, call.second.find('?')), "", {{"cookie", t.cookie()}}));
             ASSERT_MSG(r.status == 404 && r.body == nothing.body, call.second);
         }
         ASSERT_EQ(off.call(off.req("GET", "/admin/api/me", "", {{"cookie", t.cookie()}})).body, nothing.body);        // (not even /me: there is nothing to say)
+        const HttpResponse off_login = off.call(off.req("POST", "/admin/api/login", "", {{"content-type", "application/json"}, {"x-client-address", "198.51.100.7"}}, std::string("{\"username\":\"dave\",\"password\":\"") + kOwnerPassword + "\"}"));
+        ASSERT_TRUE(off_login.status == 404 && off_login.body == nothing.body && off_login.set_cookies.empty());           // (no secret, no sign-in)
         Api half([](SubmissionApiConfig& c) { c.session_secret = "short"; });                                          // (a secret that is too short is no secret)
         ASSERT_EQ(half.call(half.req("GET", "/admin/api/me")).status, 404);
-        Api no_id([](SubmissionApiConfig& c) { c.owner_id.clear(); });
-        ASSERT_EQ(no_id.call(no_id.req("GET", "/admin/api/me")).status, 404);
-        Api bad_id([](SubmissionApiConfig& c) { c.owner_id = "not digits"; });
-        ASSERT_EQ(bad_id.call(bad_id.req("GET", "/admin/api/me")).status, 404);
-        // A cookie that is signed with the short secret is no cookie either: 31 characters are too few, 32 are enough (the check is on the length, not only on "a request without a cookie")
+        // A secret of 31 characters is too few, 32 are enough (the check is on the length, not only on "a request without a cookie")
         const std::string s31(31, 'k'), s32(32, 'k');
         Api short31([&](SubmissionApiConfig& c) { c.session_secret = s31; });
-        ASSERT_EQ(short31.call(short31.req("GET", "/admin/api/me", "", {{"cookie", short31.cookie(kOwner, "Dave", 0, "n0nce", s31)}})).body, nothing.body);
-        ASSERT_EQ(short31.call(short31.req("GET", "/admin/api/maps", "", {{"cookie", short31.cookie(kOwner, "Dave", 0, "n0nce", s31)}})).body, nothing.body);
+        ASSERT_EQ(short31.call(short31.req("GET", "/admin/api/me", "", {{"cookie", short31.forged(short31.owner_id, 2, short31.now + 3600, "n0nce", s31)}})).body, nothing.body);
+        ASSERT_EQ(short31.call(short31.req("GET", "/admin/api/maps", "", {{"cookie", short31.forged(short31.owner_id, 2, short31.now + 3600, "n0nce", s31)}})).body, nothing.body);
         Api short32([&](SubmissionApiConfig& c) { c.session_secret = s32; });
-        ASSERT_TRUE(short32.me(short32.cookie(kOwner, "Dave", 0, "n0nce", s32)).get("owner").as_bool_or(false));
-        // The owner is the id itself, not an id that begins with it (nor one it begins)
-        ASSERT_FALSE(t.me(t.cookie(std::string(kOwner) + "7")).get("owner").as_bool_or(false));
-        ASSERT_FALSE(t.me(t.cookie(std::string(kOwner).substr(0, 5))).get("owner").as_bool_or(false));
-        ASSERT_EQ(t.call(t.req("GET", "/admin/api/maps", "", {{"cookie", t.cookie(std::string(kOwner) + "7")}})).body, nothing.body);
-        // The picture of a map that exists is for the owner alone: a visitor and a stranger get the answer of a missing path
+        ASSERT_TRUE(short32.me(short32.forged(short32.owner_id, 2, short32.now + 3600, "n0nce", s32)).get("signed_in").as_bool_or(false));
+        // The picture of a map that exists is for a signed-in account alone: a visitor and a stranger get the answer of a missing path
         SubmitInput in;
         in.kind = "classic";
         in.name = "River Run";
@@ -426,10 +487,10 @@ int main() {
         ASSERT_TRUE(sent.ok);
         const std::string picture = "/admin/api/maps/" + sent.submission.id + "/picture";
         ASSERT_EQ(t.call(t.req("GET", picture)).body, nothing.body);
-        ASSERT_EQ(t.call(t.req("GET", picture, "", {{"cookie", t.cookie("999")}})).body, nothing.body);
+        ASSERT_EQ(t.call(t.req("GET", picture, "", {{"cookie", t.forged(999, 1, t.now + 3600)}})).body, nothing.body);
         ASSERT_EQ(t.call(t.req("GET", picture)).status, 404);
         ASSERT_EQ(t.call(t.req("GET", picture, "", {{"cookie", t.cookie()}})).status, 200);
-        ASSERT_EQ(t.call(t.req("GET", "/admin/api", "", {{"cookie", t.cookie()}})).body, nothing.body);        // ("/admin/api" itself, 10 characters: no route, and no exception for the owner)
+        ASSERT_EQ(t.call(t.req("GET", "/admin/api", "", {{"cookie", t.cookie()}})).body, nothing.body);        // ("/admin/api" itself, 10 characters: no route, and no exception for a signed-in user)
         ASSERT_EQ(t.call(t.req("GET", "/admin/api/", "", {{"cookie", t.cookie()}})).status, 404);
     } TEST_END();
 
@@ -460,7 +521,7 @@ int main() {
         ASSERT_EQ(post({{"x-ants-csrf", ""}}).status, 403);
         ASSERT_EQ(post({{"x-ants-csrf", csrf.substr(1)}}).status, 403);
         ASSERT_EQ(post({{"x-ants-csrf", csrf + "0"}}).status, 403);
-        const std::string other_session = t.me(t.cookie(kOwner, "Dave", 0, "another-nonce")).get("csrf").str();
+        const std::string other_session = t.me(t.login_cookie("dave", kOwnerPassword)).get("csrf").str();
         ASSERT_NE(other_session, csrf);
         ASSERT_EQ(post({{"x-ants-csrf", other_session}}).status, 403);                            // (the token of another session)
         ASSERT_EQ(post({{"x-ants-csrf", csrf}, {"sec-fetch-site", "cross-site"}}).status, 404);       // (from another site: the answer of a path that is not there)
@@ -472,7 +533,9 @@ int main() {
         ASSERT_EQ(post({{"x-ants-csrf", csrf}}, "{not json").status, 400);
         ASSERT_EQ(t.text_of_state(sent.submission.id), std::string("waiting"));                  // (nothing of that changed anything)
         ASSERT_EQ(t.refreshed, 0);
+        const uint64_t compares = ctl::constant_time_equal_calls();
         ASSERT_EQ(post({{"x-ants-csrf", csrf}, {"sec-fetch-site", "same-origin"}}).status, 200);
+        ASSERT_EQ(ctl::constant_time_equal_calls(), compares + 2);                                // (the cookie's signature and the page's token: each compared in constant time)
         ASSERT_EQ(t.refreshed, 1);
         const HttpResponse cross_read = t.call(t.req("GET", "/admin/api/maps", "", {{"cookie", c}, {"sec-fetch-site", "cross-site"}}));
         ASSERT_EQ(cross_read.status, 404);                                                        // (a read that another site sets off learns nothing)
@@ -493,8 +556,8 @@ int main() {
         }
         ctl::JsonValue list = parse_text(t.owner("GET", "/admin/api/maps").body);
         ASSERT_TRUE(list.get("state").str() == "waiting" && list.get("maps").size() == 4 && list.get("counts").get("waiting").as_int_or(0) == 4);
-        ASSERT_TRUE(list.get("untrusted").as_bool_or(false) && list.get("untrusted_fields").is_array() && list.get("untrusted_fields").size() == 5);          // (the list says which fields are player text)
-        ASSERT_TRUE(list.get("untrusted_fields").at(0).str() == "name" && list.get("untrusted_fields").at(1).str() == "maker" && list.get("untrusted_fields").at(2).str() == "note" && list.get("untrusted_fields").at(3).str() == "description" && list.get("untrusted_fields").at(4).str() == "approved_name");
+        ASSERT_TRUE(list.get("untrusted").as_bool_or(false) && list.get("untrusted_fields").is_array() && list.get("untrusted_fields").size() == 6);          // (the list says which fields are player text)
+        ASSERT_TRUE(list.get("untrusted_fields").at(0).str() == "name" && list.get("untrusted_fields").at(1).str() == "maker" && list.get("untrusted_fields").at(2).str() == "note" && list.get("untrusted_fields").at(3).str() == "description" && list.get("untrusted_fields").at(4).str() == "approved_name" && list.get("untrusted_fields").at(5).str() == "decided_by");
         ASSERT_TRUE(list.get("counts").get("approved").as_int_or(-1) == 0 && list.get("counts").get("declined").as_int_or(-1) == 0 && list.get("counts").get("taken_down").as_int_or(-1) == 0);
         const ctl::JsonValue* first_map = nullptr;
         for (size_t i = 0; i < list.get("maps").size(); ++i) {

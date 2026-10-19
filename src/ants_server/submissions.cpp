@@ -36,7 +36,7 @@ constexpr size_t kMaxFindingChars = 240;           // one finding's message at m
 constexpr int64_t kDay = 86400;
 
 const char* const kColumns =
-    "id, state, kind, name, final_name, maker, note, owner_message, description, hash, file, findings, renamed, file_kept, width, height, minutes, players, size, created_at, decided_at";
+    "id, state, kind, name, final_name, maker, note, owner_message, description, hash, file, findings, renamed, file_kept, width, height, minutes, players, size, created_at, decided_at, decided_by";
 
 Failure make_failure(int status, const char* code, const char* message) {
     Failure f;
@@ -86,6 +86,7 @@ Submission read_row(db::Statement& st) {
     s.size = st.column_int64(18);
     s.created_at = st.column_int64(19);
     s.decided_at = st.column_is_null(20) ? 0 : st.column_int64(20);
+    s.decided_by = st.column_text(21);
     return s;
 }
 
@@ -540,8 +541,9 @@ bool SubmissionStore::approve(const std::string& id, const std::string& name, co
     }
     db::Statement st;
     const bool renamed = chosen != out.name;
-    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'approved', final_name = ?, final_key = ?, renamed = ?, owner_message = ?, decided_at = ? WHERE id = ? AND state = 'waiting'").ok() ||
-        !st.bind_text(1, chosen).ok() || !st.bind_text(2, key).ok() || !st.bind_int64(3, renamed ? 1 : 0).ok() || !st.bind_text(4, note.text).ok() || !st.bind_int64(5, now).ok() || !st.bind_text(6, id).ok()) {
+    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'approved', final_name = ?, final_key = ?, renamed = ?, owner_message = ?, decided_at = ?, decided_by = ? WHERE id = ? AND state = 'waiting'").ok() ||
+        !st.bind_text(1, chosen).ok() || !st.bind_text(2, key).ok() || !st.bind_int64(3, renamed ? 1 : 0).ok() || !st.bind_text(4, note.text).ok() || !st.bind_int64(5, now).ok() || !st.bind_text(6, actor_name).ok() ||
+        !st.bind_text(7, id).ok()) {
         return database_failed(why, "a write");
     }
     if (st.step() != db::Statement::Step::Done) {
@@ -568,8 +570,8 @@ bool SubmissionStore::decline(const std::string& id, const std::string& reason, 
         return false;
     }
     db::Statement st;
-    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'declined', owner_message = ?, decided_at = ?, file_kept = 0 WHERE id = ? AND state = 'waiting'").ok() || !st.bind_text(1, text.text).ok() || !st.bind_int64(2, now).ok() ||
-        !st.bind_text(3, id).ok() || st.step() != db::Statement::Step::Done) {
+    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'declined', owner_message = ?, decided_at = ?, decided_by = ?, file_kept = 0 WHERE id = ? AND state = 'waiting'").ok() || !st.bind_text(1, text.text).ok() ||
+        !st.bind_int64(2, now).ok() || !st.bind_text(3, actor_name).ok() || !st.bind_text(4, id).ok() || st.step() != db::Statement::Step::Done) {
         return database_failed(why, "a write");
     }
     remove_quietly(path_of(config_, out.file));                // (a declined map is never shown again: its file does not use the kept budget for 30 days)
@@ -593,7 +595,8 @@ bool SubmissionStore::decide(const std::string& id, const char* from_state, Subm
 bool SubmissionStore::take_down(const std::string& id, const std::string& actor_id, const std::string& actor_name, int64_t now, Submission& out, Failure& why) {
     if (!decide(id, "approved", out, why)) return false;
     db::Statement st;
-    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'taken_down', decided_at = ? WHERE id = ? AND state = 'approved'").ok() || !st.bind_int64(1, now).ok() || !st.bind_text(2, id).ok() ||
+    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'taken_down', decided_at = ?, decided_by = ? WHERE id = ? AND state = 'approved'").ok() || !st.bind_int64(1, now).ok() || !st.bind_text(2, actor_name).ok() ||
+        !st.bind_text(3, id).ok() ||
         st.step() != db::Statement::Step::Done) {
         return database_failed(why, "a write");
     }
@@ -605,7 +608,8 @@ bool SubmissionStore::take_down(const std::string& id, const std::string& actor_
 bool SubmissionStore::put_back(const std::string& id, const std::string& actor_id, const std::string& actor_name, int64_t now, Submission& out, Failure& why) {
     if (!decide(id, "taken_down", out, why)) return false;
     db::Statement st;
-    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'approved', decided_at = ? WHERE id = ? AND state = 'taken_down'").ok() || !st.bind_int64(1, now).ok() || !st.bind_text(2, id).ok() ||
+    if (!db_.prepare(st, "UPDATE map_submissions SET state = 'approved', decided_at = ?, decided_by = ? WHERE id = ? AND state = 'taken_down'").ok() || !st.bind_int64(1, now).ok() || !st.bind_text(2, actor_name).ok() ||
+        !st.bind_text(3, id).ok() ||
         st.step() != db::Statement::Step::Done) {
         return database_failed(why, "a write");
     }
@@ -793,6 +797,7 @@ JsonValue owner_view(const Submission& s, bool name_is_taken) {
     if (!ctl::parse_json(s.findings_json, findings, nullptr)) findings = JsonValue::make_array();
     o.set("findings", std::move(findings));
     if (s.state != "approved" && s.state != "taken_down") o.set("message", JsonValue::make_string(s.owner_message));
+    if (s.state != "waiting" && s.state != "withdrawn") o.set("decided_by", JsonValue::make_string(s.decided_by));          // (the account that decided: an Admin typed that name, so it is text to show, never to obey)
     return o;
 }
 
