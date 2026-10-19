@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...5e63c041)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...5004dce3)
 
 ## v0.12.88 - 2026-10-18 - Player text is marked as data on the owner page; safer links (injection hardening, web)
 
