@@ -40,7 +40,9 @@
             if (count > bestCount || (count && count === bestCount && (o === t.other || (best !== t.other && RANK[o] < RANK[best])))) { best = o; bestCount = count; }
         }
         // One boundary, one wearer: the game's own maps never have both facing cells wearing a piece. A side whose neighbor already wears a piece that faces this cell (its other kind is this cell's
-        // kind and its shape points here: the neighbor to the north faces south with 7, 8 or 9, and so on) is already drawn and does not count.
+        // kind and its shape points here: the neighbor to the north faces south with 7, 8 or 9, and so on) is already drawn and does not count. `tileAt` gives the tile that a cell ENDS with (the
+        // neighbor may change its own piece in the same pass), so a boundary never loses its wearer between two passes. (Only a side that holds a LOWER kind asks, so the asking goes down in rank
+        // and stops.)
         function worn(dr, dc, faces) { var u = G.info(tileAt(r + dr, c + dc)); return !!(u && u.other === t.kind && faces.indexOf(u.shape) >= 0); }
         var shape = best ? shapeOf(n === best && !worn(-1, 0, [7, 8, 9]), s === best && !worn(1, 0, [2, 3, 4]), w === best && !worn(0, -1, [4, 6, 9]), e === best && !worn(0, 1, [2, 5, 7])) : 0;
         if (!shape || (t.other === best && t.shape === shape)) return id;
@@ -54,8 +56,17 @@
         var rows = file.rows, columns = file.columns, r0 = 0, r1 = rows - 1, c0 = 0, c1 = columns - 1, cells = [], r, c;
         if (region) { r0 = Math.max(0, region.r0); r1 = Math.min(rows - 1, region.r1); c0 = Math.max(0, region.c0); c1 = Math.min(columns - 1, region.c1); }
         function kindAt(row, column) { return row < 0 || column < 0 || row >= rows || column >= columns ? null : G.kindOf(file.tile1(row, column)); }
+        // The tile that a cell ends with: what the rule wants inside the area, its own tile outside. Worked out once for each cell, on the tiles as they were when the button was pressed (the result does
+        // not depend on the order of the scan).
+        var ends = new Int32Array(rows * columns).fill(-1);
+        function endAt(row, column) {
+            if (row < 0 || column < 0 || row >= rows || column >= columns) return file.tile1(row, column);
+            var k = row * columns + column;
+            if (ends[k] < 0) { var id = file.tile1(row, column); ends[k] = row >= r0 && row <= r1 && column >= c0 && column <= c1 ? wanted(kindAt, G, row, column, id, endAt) : id; }
+            return ends[k];
+        }
         for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
-            var id = file.tile1(r, c), now = wanted(kindAt, G, r, c, id, file.tile1);
+            var id = file.tile1(r, c), now = endAt(r, c);
             if (now !== id) cells.push([r * columns + c, now]);
         }
         return { cells: cells, count: cells.length, region: { r0: r0, r1: r1, c0: c0, c1: c1 } };

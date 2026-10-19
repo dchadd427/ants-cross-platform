@@ -427,6 +427,20 @@
       "old": "u.other === t.kind && faces.indexOf(u.shape) >= 0",
       "new": "false",
       "test": "python3 tests/scripts/web_mapmaker_browser.py --web \"$ANTS_WEB_URL\" --only edges"
+    },
+    {
+      "id": "edges_facing_reads_original_tiles",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "wanted(kindAt, G, row, column, id, endAt)",
+      "new": "wanted(kindAt, G, row, column, id, file.tile1)",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_end_ignores_region",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "row >= r0 && row <= r1 && column >= c0 && column <= c1 ? wanted(",
+      "new": "true ? wanted(",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
     }
   ]
 }

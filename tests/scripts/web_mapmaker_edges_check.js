@@ -95,6 +95,14 @@ function ruleChecks() {
     f = grid(['g', 'm'], { '1,0': Ground.FIRST + Ground.NAMES.indexOf('mg03a') }); equal(Edges.plan(f, null, Ground).count, 0, 'and with the facing cell to the south');
     f = grid(['m', 'g'], { '0,0': Ground.FIRST + Ground.NAMES.indexOf('mg08a') }); equal(Edges.plan(f, null, Ground).count, 0, 'and to the north');
     f = grid(['gm'], { '0,1': Ground.FIRST + Ground.NAMES.indexOf('mg06a') }); equal(Edges.plan(f, null, Ground).count, 1, 'a piece that does not face this cell (mg06a points east) is no reason to leave the boundary bare');
+    // a corner piece that faces this cell counts like an edge piece (the mud at north-east wears mg07a toward the gravel at north-west; the gravel keeps only its south side)
+    f = grid(['gm', 'mg'], { '0,1': Ground.FIRST + Ground.NAMES.indexOf('mg07a') }); apply(f, Edges.plan(f, null, Ground)); equal(names(f, 0, 0), ['gm08a mg07a'], 'a corner piece that faces a cell is already drawn: only the other side of that cell counts');
+    // the pass is one pass: a neighbor that swaps its piece in the same pass still wears one (the case of two passes: gravel above slate with a piece, mud beside it)
+    f = grid(['gg', 'sm'], { '1,0': Ground.FIRST + Ground.NAMES.indexOf('sg03a'), '1,1': Ground.FIRST + Ground.NAMES.indexOf('md06b') });
+    apply(f, Edges.plan(f, null, Ground)); equal(Edges.plan(f, null, Ground).count, 0, 'two cells whose pieces depend on each other need no second pass');
+    // a cell outside the area keeps its piece, so it still counts as drawn (the same four cells, but only the top row is the area)
+    f = grid(['gg', 'sm'], { '1,0': Ground.FIRST + Ground.NAMES.indexOf('sg03a'), '1,1': Ground.FIRST + Ground.NAMES.indexOf('md06b') });
+    equal(Edges.plan(f, { r0: 0, r1: 0, c0: 0, c1: 1 }, Ground).cells.map((c) => c[0]), [1], 'a piece outside the area that the rule would change if it were inside is still the piece that counts');
     // the walking class: a cell is never given a tile that walks differently (s01f is a plain look-alike of another class than the slate piece)
     const odd = Ground.FIRST + Ground.NAMES.indexOf('s01f');
     check(Ground.terrain(odd) !== Ground.terrain(Ground.FIRST + Ground.NAMES.indexOf('sm03a')), 'the made-up case has two classes');
@@ -132,11 +140,46 @@ function libraryFiles() {
     return out;
 }
 
-const SHARE_CAP = 0.03;          // the share of the library's ground cells that Fix edges changes (3.6 in 100 when this was written; no piece is ever taken away)
+const SHARE_CAP = 0.03;          // the share of the library's ground cells that Fix edges changes (2.2 in 100 when this was written; no piece is ever taken away)
 
 function inc() {
     const text = fs.readFileSync(path.join(ROOT, 'src', 'ants_sim', 'movement_tables_data.inc'), 'utf8'), at = text.indexOf('kTileTerrain[1344] = {');
     return text.slice(text.indexOf('{', at) + 1, text.indexOf('};', at)).replace(/\/\*.*?\*\//g, '').split(',').map((x) => x.trim()).filter(Boolean).map(Number);
+}
+
+// a small seeded generator (the same maps on every run)
+function seeded(seed) { let x = seed >>> 0; return () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; }; }
+
+// idempotence: after one pass nothing is left for a second one, on random hand-made grids of any tile of the ground table (pieces everywhere, wrong ones too) and on library maps after random edits
+function randomChecks() {
+    const rnd = seeded(20261019), pick = (n) => Math.floor(rnd() * n), table = Ground.LAST - Ground.FIRST + 1;
+    let again = 0, grids = 0;
+    for (let k = 0; k < 400; k++) {
+        const rows = 3 + pick(8), columns = 3 + pick(8), cells = [];
+        for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < columns; c++) row.push(rnd() < 0.5 ? Ground.FIRST + pick(table) : PLAIN[Object.keys(PLAIN)[pick(5)]]); cells.push(row); }
+        const f = { rows, columns, tile1: (r, c) => (r < 0 || c < 0 || r >= rows || c >= columns ? 485 : cells[r][c]), cells };
+        const made = Edges.plan(f, null, Ground); apply(f, made); grids++;
+        if (Edges.plan(f, null, Ground).count) again++;
+    }
+    equal([grids, again], [400, 0], 'random grids of any tiles (pieces too): a second pass changes nothing');
+    const list = libraryFiles().filter((_, i) => i % 9 === 0);
+    let edited = 0, left = 0;
+    list.forEach((file) => {
+        const m = File.parse(new Uint8Array(fs.readFileSync(file)));
+        if (!m.ok) return;
+        const cells = []; for (let r = 0; r < m.rows; r++) { const row = []; for (let c = 0; c < m.columns; c++) row.push(m.tile1(r, c)); cells.push(row); }
+        for (let e = 0; e < 6; e++) {                                          // (six rectangles of the map put to a plain kind or to any tile of the table)
+            const r0 = pick(m.rows), c0 = pick(m.columns), r1 = Math.min(m.rows - 1, r0 + pick(6)), c1 = Math.min(m.columns - 1, c0 + pick(6)), any = rnd() < 0.4, plain = PLAIN[Object.keys(PLAIN)[pick(5)]];
+            for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells[r][c] = any ? Ground.FIRST + pick(table) : plain;
+        }
+        const f = { rows: m.rows, columns: m.columns, tile1: (r, c) => (r < 0 || c < 0 || r >= m.rows || c >= m.columns ? 485 : cells[r][c]), cells };
+        apply(f, Edges.plan(f, null, Ground)); edited++;
+        if (Edges.plan(f, null, Ground).count) left++;
+    });
+    equal([edited >= 55, left], [true, 0], 'library maps after six random edits: a second pass changes nothing (' + edited + ' maps)');
+    // a region: the cells outside it are never given a tile, and the rest of the map is not looked at for a second pass of the same region
+    const f = grid(['gggg', 'gggg', 'mmmm', 'mmmm']), region = { r0: 0, r1: 1, c0: 1, c1: 2 };
+    apply(f, Edges.plan(f, region, Ground)); equal(Edges.plan(f, region, Ground).count, 0, 'the same area a second time changes nothing');
 }
 
 function speedChecks() {
@@ -201,7 +244,7 @@ function libraryChecks() {
     });
     console.log('    library: ' + sum.maps + ' maps, ' + sum.cells + ' ground cells; Fix edges changes ' + sum.changed + ' (' + (100 * sum.changed / sum.cells).toFixed(1) + ' in 100: ' + sum.toPiece + ' get a piece, ' + sum.toPlain + ' go back to plain); ' + sum.same + ' maps stay as they are; the most changed map: ' + (100 * sum.worst).toFixed(1) + ' in 100');
     check(sum.maps >= 540, 'the library has its 540 maps (' + sum.maps + ')');
-    equal(bad, { kind: 0, table: 0, again: 0, order: 0, walk: 0, doubled: 0 }, 'the library: no kind or walking class changes, no map gets a boundary with two facing pieces, only tiles of the table, a fixed map is left as it is, cells in row order');
+    equal(bad, { kind: 0, table: 0, again: 0, order: 0, walk: 0, doubled: 0 }, 'the library: no kind or walking class changes, the rule creates no boundary with two facing pieces (57 hand-made ones remain in 6 community maps), only tiles of the table, a fixed map is left as it is, cells in row order');
     check(sum.changed / sum.cells < SHARE_CAP, 'the share of the library changed is under ' + SHARE_CAP + ': ' + (sum.changed / sum.cells));
     check(sum.doubleAfter === sum.doubleBefore, 'boundaries with two facing pieces: ' + sum.doubleBefore + ' placed by hand in the library, ' + sum.doubleAfter + ' after Fix edges');
     check(sum.toPlain === 0, 'no piece goes back to plain: the rule only puts pieces where it has an answer');
@@ -354,6 +397,7 @@ shapeChecks();
 ruleChecks();
 goldChecks();
 libraryChecks();
+randomChecks();
 speedChecks();
 bytesChecks();
 dialogChecks();

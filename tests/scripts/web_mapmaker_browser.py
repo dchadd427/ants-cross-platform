@@ -625,12 +625,19 @@ def plain_copy(source, target):
 
 
 def run_edges(page, tab, args, check):
+    scratch = tempfile.mkdtemp(prefix="ants_edges_map.")
+    try:
+        run_edges_in(page, tab, args, check, scratch)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def run_edges_in(page, tab, args, check, scratch):
     """Fix edges (docs/MAP_EDITOR.md, "Fix edges") on a real map in the real browser: the real bytes (what Download hands over), the real pixels (every pixel of the canvas), one Undo"""
     print("[web map maker] Fix edges, 1280 x 800")
     check(page.open() and page.ready(), "the page starts")
     check(wait_for(lambda: page.ev("!!window.MapEdges && !!window.MapGround && !document.getElementById('edges-btn').disabled"), 15), "the Fix edges button is on once the lazy scripts are there")
     page.ev(EDGES_JS)
-    scratch = tempfile.mkdtemp(prefix="ants_edges_map.")
     plain_copy(os.path.join(REPO, "Original-Ants", "Maps", "MEDIUM.LVL"), os.path.join(scratch, "MEDIUMPLAIN.LVL"))
     page.choose_file(os.path.join(scratch, "MEDIUMPLAIN.LVL"))
     check(wait_for(lambda: page.state()["name"] == "MEDIUMPLAIN"), "Medium with all its edge pieces put back to plain tiles is opened")
@@ -743,7 +750,6 @@ def run_edges(page, tab, args, check):
     check(fixed["left"] == 0 and still_pixels(page) != isl_pixels, "nothing is left to fix, and the picture changed")
     page.ev("document.getElementById('undo-btn').click()")
     check(edges_bytes(page)["sha"] == isl["sha"] and still_pixels(page) == isl_pixels, "one Undo gives back the exact bytes and pixels")
-    shutil.rmtree(scratch, ignore_errors=True)
     # a phone: the box is a sheet inside the screen with both buttons in view, and nothing scrolls sideways
     tab.emulate(390, 844, 2, mobile=True)
     time.sleep(0.5)
