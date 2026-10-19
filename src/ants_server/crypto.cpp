@@ -139,6 +139,20 @@ bool pbkdf2_hmac_sha256(std::string_view password, std::string_view salt, uint32
     return true;
 }
 
+bool equal_constant_time(std::string_view a, std::string_view b, size_t* steps) {
+    const size_t n = a.size() > b.size() ? a.size() : b.size();
+    size_t diff = a.size() ^ b.size();
+    size_t looked = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const unsigned char ca = i < a.size() ? static_cast<unsigned char>(a[i]) : 0;
+        const unsigned char cb = i < b.size() ? static_cast<unsigned char>(b[i]) : 0;
+        diff |= static_cast<size_t>(ca ^ cb);
+        ++looked;
+    }
+    if (steps != nullptr) *steps = looked;
+    return diff == 0;
+}
+
 std::string hex_encode(std::string_view bytes) {
     static const char* const kHex = "0123456789abcdef";
     std::string out;

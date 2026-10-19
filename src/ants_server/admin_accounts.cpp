@@ -122,7 +122,7 @@ bool password_verify(std::string_view password, std::string_view stored, uint32_
     if (salt.size() < 8 || salt.size() > 64 || want.size() != kHashBytes) return false;
     std::string got;
     if (!pbkdf2_hmac_sha256(password, salt, stored_rounds, kHashBytes, got)) return false;
-    if (!ctl::constant_time_equal(got, want)) return false;
+    if (!equal_constant_time(got, want)) return false;
     if (outdated != nullptr) *outdated = stored_rounds < rounds;
     return true;
 }
@@ -410,6 +410,7 @@ Attempt AdminAccounts::attempt(const std::string& typed_name, const User* user, 
     }
     bool outdated = false;
     bool match = false;
+    ++verifies_;
     if (usable && !stored.empty()) match = password_verify(password, stored, config_.rounds, &outdated);
     else password_verify(password, dummy_hash_, config_.rounds, nullptr);                     // (an unknown or disabled name costs the same work)
     if (match) {
@@ -506,8 +507,9 @@ bool AdminAccounts::create(const Actor& by, const std::string& typed_name, const
         password.clear();
         return fail_db(why, "a write");
     }
+    const int64_t id = db_.last_insert_rowid();                       // (before the log line: that insert has a row id of its own)
     audit(by, now, "user_added", name, role);
-    return find(db_.last_insert_rowid(), out) || fail_db(why, "a read");
+    return find(id, out) || fail_db(why, "a read");
 }
 
 bool AdminAccounts::create_first_admin(const std::string& typed_name, int64_t now, User& out, std::string& password, Failure& why) {

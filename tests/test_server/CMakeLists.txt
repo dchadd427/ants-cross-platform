@@ -262,3 +262,21 @@ target_include_directories(test_submissions_api PRIVATE
 
 add_test(NAME test_submissions_api COMMAND test_submissions_api)
 set_tests_properties(test_submissions_api PROPERTIES COST 8)
+
+# The accounts of the owner's page (ants_server/admin_accounts.hpp, admin_cli.hpp): PBKDF2 against published vectors, the hash and its upgrade, the random password, the limits on guessing, the generation of the sessions,
+# the last Admin, the log, the migration of a copy of a version 5 database, and the command line of the first account. No network
+add_executable(test_admin_accounts
+    test_admin_accounts.cpp
+)
+
+target_link_libraries(test_admin_accounts PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_admin_accounts PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_admin_accounts COMMAND test_admin_accounts)
+set_tests_properties(test_admin_accounts PROPERTIES COST 12)

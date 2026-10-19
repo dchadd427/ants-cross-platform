@@ -104,6 +104,8 @@ public:
     /// Reads or makes the salt that keys the address hashes, makes the hash that unknown names are checked against. False with a sentence when the database cannot be used.
     bool open(std::string& why);
     bool is_open() const { return open_; }
+    /// How many passwords were checked by a sign-in or a confirmation (a test holds that an unknown name costs the same as a known one)
+    size_t verifies() const { return verifies_; }
     const AccountConfig& config() const { return config_; }
 
     /// The identity of a request (client_identity) as a keyed hash, never the address
@@ -169,6 +171,7 @@ private:
     size_t window_used_{0}, window_reserved_used_{0};
     bool window_started_{false};
     size_t lock_rows_{0};
+    size_t verifies_{0};
 };
 
 }  // namespace ants::server
