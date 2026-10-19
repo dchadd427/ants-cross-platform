@@ -295,6 +295,7 @@
         var idx = row * file.columns + column, why = inTheWay(file, idx);
         if (why) return { error: blockedText(file, idx) };
         var change = emptyChange(), records = [], waypoints = [], i;
+        if (Edit.tile(file, 2, idx) !== EMPTY2) takeObject(file, change, idx);
         for (i = 0; i < lay.records.length; i++) {
             var r = lay.records[i];
             if (!(PLANT_NAMES[r.tile] && r.row === row && r.column === column)) records.push(r);
@@ -486,6 +487,7 @@
                 var mc = movedCells[i], w = file.version === 8 ? ((ar & 255) | ((ac & 255) << 8)) : (((ar - mc.r) & 255) | (((ac - mc.c) & 255) << 8));
                 putCell(change, mc.idx, t2, mc.flag, w);
                 if (Solid && Solid.sets(t2)) change.solid.push([mc.idx, true]);
+                else if (Solid && Solid.clears(Edit.tile(file, 2, mc.idx))) change.solid.push([mc.idx, false]);
             }
             return change;
         }
