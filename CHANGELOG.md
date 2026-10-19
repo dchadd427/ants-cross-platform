@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2064f441...8f2490af)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2064f441...e0d700b2)
 
 ## v0.12.85 - 2026-10-18 - The grid reads Extended maps (no change to play)
 
