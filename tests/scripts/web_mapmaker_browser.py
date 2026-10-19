@@ -366,6 +366,12 @@ def spread(page, row, column, size=8):
     return len({tuple(page.pixel(x + dx, y + dy)) for dx in range(-size // 2, size // 2, 2) for dy in range(-size // 2, size // 2, 2)})
 
 
+def clump_box(page):
+    """the Ants tool's box (loaded the first time the tool is chosen) set to Group and Clump, the way of the tool before it"""
+    wait_for(lambda: page.ev("!!document.querySelector('.am') && !document.querySelector('.am').hidden"), 10)
+    page.ev("(function () { var b = document.querySelector('.am [data-k=group]'); if (b.getAttribute('aria-pressed') !== 'true') b.click(); document.querySelector('.am [data-k=clump]').click(); })()")
+
+
 def make_extended(page, rows, columns):
     page.press_act("new")
     wait_for(lambda: page.ev("!!document.querySelector('.kinds')"))
@@ -966,14 +972,15 @@ def run_part(part, tab, args, check, tiny, junk):
         # ants
         page.ev("document.getElementById('map').focus()")
         page.key("a")
-        check(page.ev("document.querySelector('[data-tool=ants]').getAttribute('aria-pressed')") == "true" and page.ev("document.getElementById('stepper').hidden") is False, "the letter A chooses Ants: a stepper shows")
-        check(page.ev("document.getElementById('step-val').textContent") == "4", "4 ants to begin with")
-        page.ev("document.getElementById('step-more').click()")
-        page.ev("document.getElementById('step-less').click()")
-        page.ev("document.getElementById('step-less').click()")
-        check(page.ev("document.getElementById('step-val').textContent") == "3", "the stepper makes it 3")
+        clump_box(page)
+        check(page.ev("document.querySelector('[data-tool=ants]').getAttribute('aria-pressed')") == "true" and page.ev("!!document.querySelector('.am [data-k=\"clump+\"]')"), "the letter A chooses Ants: the box shows a stepper for the clump")
+        check(page.ev("document.querySelector('.am .am-n').value") == "4", "4 ants to begin with")
+        page.ev("document.querySelector('.am [data-k=\"clump+\"]').click()")
+        page.ev("document.querySelector('.am [data-k=\"clump-\"]').click()")
+        page.ev("document.querySelector('.am [data-k=\"clump-\"]').click()")
+        check(page.ev("document.querySelector('.am .am-n').value") == "3", "the stepper makes it 3")
         for team in order:
-            page.ev("document.querySelector('#palette .swatch:nth-child(%d)').click()" % (order.index(team) + 1))
+            page.ev("document.querySelector('.am [data-k=\"t%d\"]').click()" % order.index(team))
             r, c = spots[team]
             page.tab.click(*page.cell_point(r + (5 if r < 14 else -3), c + 1))
             time.sleep(0.15)
@@ -1050,8 +1057,9 @@ def run_part(part, tab, args, check, tiny, junk):
             page.tab.click(*page.cell_point(8 + 20 * (i // 2), 10 + 30 * (i % 2)))
             time.sleep(0.15)
         page.tool("ants")
+        clump_box(page)
         for i, team in enumerate(order):
-            page.ev("document.querySelector('#palette .swatch:nth-child(%d)').click()" % (i + 1))
+            page.ev("document.querySelector('.am [data-k=\"t%d\"]').click()" % i)
             page.tab.click(*page.cell_point(14 + 20 * (i // 2) - (i // 2) * 2, 10 + 30 * (i % 2)))
             time.sleep(0.15)
         check(wait_for(lambda: page.state()["check"] == "Works in the new version", 4), "an Extended map with four hills and four starts: Works in the new version (%s)" % page.state()["check"])
@@ -1093,20 +1101,19 @@ def run_part(part, tab, args, check, tiny, junk):
         page.key("0")                                            # (the pinch zoomed in: the whole map again, so that the cells are where cell_point says)
         time.sleep(0.2)
         page.tool("ants")
-        page.ev("document.getElementById('tile-btn').click()")
-        check(wait_for(lambda: page.ev("document.querySelectorAll('.stepper.sheet .stp').length") == 2), "the sheet of Ants has the teams and the stepper")
-        page.ev("document.querySelector('.stepper.sheet .stbtns .stp:last-child').click()")
-        check(page.ev("document.querySelector('.stepper.sheet output').textContent") == "5" and page.ev("document.getElementById('tile-name').textContent") == "Blue · 5 ants", "its More makes 5 ants: the button says so")
+        clump_box(page)
+        check(page.ev("document.querySelector('.tools').contains(document.querySelector('.am'))"), "a phone's Ants box is under the tool buttons (no sheet)")
+        page.ev("document.querySelector('.am [data-k=\"t2\"]').click(); document.querySelector('.am [data-k=\"clump+\"]').click()")
+        check(page.ev("document.querySelector('.am .am-n').value") == "5" and page.ev("document.querySelector('.am [data-k=t2]').getAttribute('aria-pressed')") == "true", "its More makes 5 ants for Blue")
         page.shot(args.shots, "mapmaker-blocks-sheet-ants")
-        page.key("Escape")
         g = page.cell_point(20, 12)
         touch("touchStart", {1: g})
         touch("touchEnd", {})
         time.sleep(0.3)
-        check(page.pixel(*page.cell_point(19, 12)) == team_color["blue"] or page.pixel(*page.cell_point(20, 11)) == team_color["blue"] or page.pixel(*page.cell_point(20, 13)) == team_color["blue"], "a tap puts 5 ants of Blue: a dot in its color next to the cell that was tapped")
+        check(page.ev("document.querySelector('.am [data-k=\"t2\"]').textContent") == "Blue5", "a tap puts 5 ants of Blue (the box counts them)")
         page.ev("document.getElementById('undo-btn').click()")
         time.sleep(0.2)
-        check(page.pixel(*page.cell_point(19, 12)) != team_color["blue"] and page.pixel(*page.cell_point(20, 13)) != team_color["blue"], "Undo takes the ants away")
+        check(page.ev("document.querySelector('.am [data-k=\"t2\"]').textContent") == "Blue0", "Undo takes the ants away (the box counts none)")
         page.tool("food")
         h = page.cell_point(10, 20)
         touch("touchStart", {1: h})
@@ -2121,6 +2128,7 @@ def run_part(part, tab, args, check, tiny, junk):
             if (w, h) == (1280, 720):
                 page.tool("ants")
                 page.shot(args.shots, "mapmaker-panel-1280x720-ants")
+                page.tool("ground")                       # (the Ants box takes the right-hand column over: the summary below is read with another tool)
             # the side panel with its summary, with the longest description a map can have: nothing is cut or hidden under a scrollbar, the Check button is inside it
             page.press_act("new")
             wait_for(lambda: page.ev("!!document.querySelector('.kinds')"))
@@ -2158,7 +2166,8 @@ def run_part(part, tab, args, check, tiny, junk):
                     [].forEach.call(document.querySelectorAll('button, input'), function (n) {
                         if (n.offsetParent === null || n.type === 'file' || n.disabled) return;
                         var b = n.getBoundingClientRect(), card = n.closest('.panel, header'), c = card ? card.getBoundingClientRect() : {left: 0, right: innerWidth, top: 0, bottom: 1e9}, name = (n.id || n.textContent || n.className).slice(0, 14);
-                        if (b.left < c.left - 1 || b.right > c.right + 1 || b.top < c.top - 1 || b.bottom > c.bottom + 1 || b.right > innerWidth + 1 || b.left < -1) bad.push(name + ' ' + Math.round(b.right - c.right) + ',' + Math.round(b.bottom - c.bottom));
+                        var scrolled = !!n.closest('.am') && card && card.scrollHeight > card.clientHeight;          // (the Ants box in a column that scrolls: the part below the card's edge is reached by scrolling)
+                        if (b.left < c.left - 1 || b.right > c.right + 1 || (!scrolled && (b.top < c.top - 1 || b.bottom > c.bottom + 1)) || b.right > innerWidth + 1 || b.left < -1) bad.push(name + ' ' + Math.round(b.right - c.right) + ',' + Math.round(b.bottom - c.bottom));
                         if (b.width < 43.5 || b.height < 43.5) small.push(name + ' ' + Math.round(b.width) + 'x' + Math.round(b.height));
                     });
                     var cv = document.getElementById('map').getBoundingClientRect();

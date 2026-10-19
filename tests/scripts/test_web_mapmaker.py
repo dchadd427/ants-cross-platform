@@ -487,7 +487,7 @@ class TheCodeRuns(unittest.TestCase):
             "a brush that does not reach the painter": ("mapmaker_tools.js", "(paints() ? state.brush : (places()", "(paints() ? 1 : (places()"),
             "a splice of the header counted from the end of layer 2": ("mapmaker_edit.js", "return s.abs ? s.at : file.blocksAt + s.rel;", "return file.blocksAt + (s.abs ? s.at : s.rel);"),
             "a change of the properties that is not one step": ("mapmaker_tools.js", "var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; },", "var dirty = editor.act(change); if (dirty) changed(dirty); if (dirty) editor.act(change); return !!dirty; },"),
-            "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "act: function (change) { if (!editor || canvas.isStroking()) return false;", "act: function (change) { if (!editor) return false;"),
+            "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "function act(change) { if (!editor || canvas.isStroking()) return false;", "function act(change) { if (!editor) return false;"),
         }
         for what, (name, old, new) in mutants.items():
             with self.subTest(what):
