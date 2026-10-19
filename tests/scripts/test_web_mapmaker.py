@@ -45,8 +45,9 @@ BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check
 OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
 GROUND_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ground_check.js")
 SPRITES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_sprites_check.js")
+EDGES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edges_check.js")
 SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
-LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
+LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
 ALL_SCRIPTS = SCRIPTS + LAZY_SCRIPTS
 
 
@@ -1046,22 +1047,61 @@ class TheGroundAndTheSprites(unittest.TestCase):
                         shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
                     self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
-    def test_the_two_lazy_scripts_are_loaded_by_the_app_and_not_by_the_page(self):
+    def test_the_three_lazy_scripts_are_loaded_by_the_app_and_not_by_the_page(self):
         tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
         for name in LAZY_SCRIPTS:
             self.assertNotIn("front/" + name, tags, name + " loads after the page is up")
             self.assertIn(name, self.app)
-        self.assertIn("script('mapmaker_ground.js'); script('mapmaker_sprites.js');", self.app)
+        self.assertIn("script('mapmaker_ground.js'); script('mapmaker_sprites.js'); script('mapmaker_edges.js');", self.app)
         self.assertIn("s.src = 'front/' + name;", self.app)
         self.assertIn('<div class="atlasnote" id="atlas-note" role="status" hidden></div>', self.page, "the plain line over the map when the atlas does not load")
         self.assertIn("The game\\u2019s pictures could not be loaded, so the map is drawn in flat colors. Your map is not affected.", self.app)
         self.assertIn("onFail: function () { canvas.setSprites(null); tools.use(win.MapGround, null); note(flat); }", self.app, "a failed atlas leaves the flat colors")
         self.assertNotIn("MapGround", self.app.split("var NEEDED = ")[1].split("];")[0], "the page does not need the lazy parts to start")
 
+    def test_fix_edges_passes_its_checks_on_the_library_and_on_real_bytes(self):
+        done = run_check(script=EDGES_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertRegex(done.stdout, r"edges check: \d+ checks passed")
+        self.assertIn("library: 540 maps", done.stdout)
+
+    def test_the_checks_can_fail_on_the_broken_copies_of_fix_edges(self):
+        """tests/data/mapmaker_edges_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check named for it"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_edges_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 35)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    if "web_mapmaker_browser" in m["test"]:
+                        continue                # (a mutant that only the real browser can notice: tools/mutate.py runs it with ANTS_WEB_URL set)
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, EDGES_CHECK, [])
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_fix_edges_button_is_in_the_page_and_wired_by_the_app_once_the_parts_are_there(self):
+        self.assertRegex(self.page, r'<button class="eb" type="button" id="edges-btn" disabled>Fix edges\.\.\.</button>')
+        self.assertIn("if (!win.MapEdges || !win.MapGround) return;", self.app, "the button works only when both lazy scripts are there")
+        self.assertIn("apply: tools.act", self.app, "one change, one step of the history")
+        self.assertIn("MapView.visible(st.view, map.file, st.width, st.height)", self.app, "the part you see is the one that the canvas draws")
+        self.assertNotIn("MapEdges", self.app.split("var NEEDED = ")[1].split("];")[0], "the page does not need Fix edges to start")
+        self.assertRegex(read(".github", "workflows", "ci.yml"), r"ls -l [^\n]*\bfront/mapmaker_edges\.js\b")
+
     def test_the_editor_is_not_changed_by_the_pictures(self):
         """the bytes of the open file stay the one copy: nothing of the new code writes a byte, and the sprite layer only reads"""
-        sprites, ground = read("web", "front", "mapmaker_sprites.js"), read("web", "front", "mapmaker_ground.js")
-        for name, text in (("mapmaker_sprites.js", sprites), ("mapmaker_ground.js", ground)):
+        sprites, ground, edges = read("web", "front", "mapmaker_sprites.js"), read("web", "front", "mapmaker_ground.js"), read("web", "front", "mapmaker_edges.js")
+        for name, text in (("mapmaker_sprites.js", sprites), ("mapmaker_ground.js", ground), ("mapmaker_edges.js", edges)):
             self.assertNotRegex(text, r"\.bytes\[[^\]]*\]\s*=[^=]|\.set\(|createObjectURL|indexedDB|localStorage|\.put\(", name + " reads the map and writes nothing")
         self.assertNotIn("XMLHttpRequest", sprites)
         self.assertEqual(re.findall(r"farBase \+ ", sprites), ["farBase + "], "the one request besides the atlas: a toy's own sprite file")

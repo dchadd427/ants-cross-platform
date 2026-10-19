@@ -241,6 +241,13 @@
         return {
             load: load, FROM: FROM, ANT_FROM: ANT_FROM, draw: draw, chip: chip,
             ready: function () { return ready; }, failed: function () { return failed; },
+            // A ground tile's picture drawn s by s pixels at (x, y) of a canvas (the before and after of Fix edges: mapmaker_edges.js); false when there is none
+            ground: function (ctx, id, x, y, s) {
+                var g = index && index.ground, k = g ? id - g.first : -1;
+                if (!ready || k < 0 || k >= g.count) return false;
+                ctx.drawImage(groundImg, (k % g.columns) * CELL, ((k / g.columns) | 0) * CELL, CELL, CELL, x, y, s, s);
+                return true;
+            },
             // cells (indexes, row * columns + column) that changed: the ground layer paints them again in the next frame
             invalidate: function (list) { if (pending.length + list.length > MAX_DIRTY) { everything = true; pending = []; return; } for (var i = 0; i < list.length; i++) pending.push(list[i]); },
             // everything must be painted again (another map, other bytes)
