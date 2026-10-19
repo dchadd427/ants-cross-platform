@@ -131,9 +131,10 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
         return nullptr;
     }
     assets::LevelData level;
-    if (!level.load_from_file(entry.path)) {
+    assets::LevelValidation loaded;
+    if (!level.load_from_file(entry.path, &loaded)) {
         r.http_status = 422;
-        r.error = "the map '" + spec.map + "' cannot be played by this engine";
+        r.error = loaded.has(assets::LevelProblemKind::VersionNotSupported) ? "the map '" + spec.map + "': " + loaded.online_reason() : "the map '" + spec.map + "' cannot be played by this engine";
         return nullptr;
     }
     uint32_t seed = spec.seed;
@@ -356,7 +357,13 @@ LobbyServices RoomManager::lobby_services() {
         // a Plan message costs no disk read and no hashing; a name that is not in the list is refused. The file is read when the room loads its map (load_map).
         return store_.listed_name(name);
     };
-    s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) { return store_.find(file, entry) && level.load_from_file(entry.path); };
+    s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) {
+        if (!store_.find(file, entry)) return false;
+        assets::LevelValidation loaded;
+        if (level.load_from_file(entry.path, &loaded)) return true;
+        if (loaded.has(assets::LevelProblemKind::VersionNotSupported)) entry.refusal = loaded.online_reason();       // (the room says so to the players: an Extended map is not played online yet)
+        return false;
+    };
     s.match_place = [this](uint32_t now_ms) { return take_match_place(now_ms); };
     return s;
 }
@@ -804,7 +811,8 @@ std::string RoomManager::map_refusal(const RestartHead& head, MapEntry& entry, a
     std::string why;
     if (!store_.find(head.map, entry, &why)) return "ended by a restart of the server: the map " + head.map + " is not on this server (" + why + ")";
     if (entry.hash != head.map_hash) return "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
-    if (!level.load_from_file(entry.path)) return "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
+    assets::LevelValidation loaded;
+    if (!level.load_from_file(entry.path, &loaded)) return "ended by a restart of the server: the map " + head.map + (loaded.has(assets::LevelProblemKind::VersionNotSupported) ? ": " + loaded.online_reason() : " cannot be played by this engine");
     if (!level.validate(head.start.roster).playable) return "ended by a restart of the server: the map cannot be played by the seats of the match";
     return std::string();
 }

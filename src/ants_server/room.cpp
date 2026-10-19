@@ -463,7 +463,7 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     if (lobby_.map_name() != map_.name) {                    // the plan's map (the room's map, as the lobby shows it): the server's own copy is loaded for the match
         MapEntry entry;
         assets::LevelData level;
-        if (!services_.load_map || !services_.load_map(lobby_.map_name(), entry, level)) return lobby_.end_start(net::kNoticeMapLost);
+        if (!services_.load_map || !services_.load_map(lobby_.map_name(), entry, level)) return lobby_.end_start(entry.refusal.empty() ? std::string(net::kNoticeMapLost) : entry.refusal);
         map_ = std::move(entry);
         level_ = std::move(level);
     }

@@ -227,3 +227,4 @@ void run_gate_tests();
 void run_gate_goal_tests();
 void run_field_tests();
 void run_brawl_tests();
+void run_extended_tests();

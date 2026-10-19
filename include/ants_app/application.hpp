@@ -776,7 +776,7 @@ private:
     bool pointer_outside_{false};                          // the pointer is not over the window (the window has been left, see handle_window_event)
 
     // The match set-up shared by the local game and the network game
-    bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog, uint8_t game_mode);   // level, simulation, renderer (no HUD, no sound)
+    bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog, uint8_t game_mode, bool local);   // level, simulation, renderer (no HUD, no sound); local: a game of this computer (an Extended map may play), else a match of the network (it may not)
     void enter_match(bool rejoin = false);                // music, start sound, camera, HUD reset, "Get ready", state Playing (a match that this machine rejoins: no start sound, no dialog)
     void post_tick();                                     // what every simulation tick shows: HUD, events, audio, the end of the match
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes

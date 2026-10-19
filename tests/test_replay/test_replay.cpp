@@ -17,6 +17,7 @@
 #include "ants_replay/replay.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
+#include "crowd_level.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -1290,6 +1291,33 @@ int main(int argc, char* argv[]) {
         h.map_hash = broken_hash;
         ASSERT_FALSE(load_map(h, dir.path.string(), level, error));
         ASSERT_TRUE(contains(error, "cannot be loaded"));
+    } TEST_END();
+
+    TEST_CASE("RP6.2 The Replay Of A Game Of This Computer On An Extended Map (100 x 100, Rules 1) Finds The Map And Plays Out To Its Hashes; A Server's Reading (Classic Maps Only) Refuses The Map In The Plain Sentence") {
+        TempDir dir;
+        Map crowd;
+        crowd.level = ants_test::crowd_level();
+        ASSERT_TRUE(ants_test::write_crowd_file((dir.path / "CROWD.LVL").string(), crowd.level));
+        crowd.path = (dir.path / "CROWD.LVL").string();
+        ASSERT_TRUE(net::hash_file(crowd.path, crowd.hash));
+        assets::LevelData read_back;
+        ASSERT_TRUE(read_back.load_from_file(crowd.path, nullptr, assets::LevelLimits::for_game(true)));
+        crowd.level = read_back;                                                     // (what the game plays is what the file holds)
+        Played p = play_scripted(crowd, 5, 400);
+        ASSERT_TRUE(!p.file.empty() && p.replay.head.map_hash == crowd.hash);
+        p.replay.head.map_name = "CROWD.LVL";                                        // (play_scripted names every map TINY)
+        assets::LevelData level;
+        std::string error;
+        ASSERT_FALSE(load_map(p.replay.head, dir.path.string(), level, error));      // the default reading is a server's: Classic maps only
+        ASSERT_EQ(error, std::string("the map CROWD.LVL cannot be loaded: Extended maps can't be played online yet"));
+        ASSERT_FALSE(load_map(p.replay.head, dir.path.string(), level, error, assets::LevelLimits::for_game(false)));
+        ASSERT_TRUE(contains(error, "Extended maps can't be played online yet"));
+        ASSERT_TRUE(load_map(p.replay.head, dir.path.string(), level, error, assets::LevelLimits::for_game(true)) && error.empty());
+        ASSERT_TRUE(level.width() == 100u && level.height() == 100u && level.rules == assets::LVL_RULES_EXTENDED);
+        const Outcome o = play(p.replay, level);
+        ASSERT_TRUE(o.ran && o.ok && o.turns == 400 && o.hashes_checked > 0);
+        ASSERT_EQ(o.hash, p.hash);
+        ASSERT_EQ(p.replay.head.sim_rules, kSimRules);                               // (the rules number stays: an older build only says that the map cannot be loaded)
     } TEST_END();
 
     // ---- the rules number of the simulation (kSimRules) ---------------------------------------------------------------------------

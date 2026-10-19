@@ -2,48 +2,6 @@
   "note": "Mutants of the map maker's Play this map for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the verdict, the start rules and the dialogs of web/front/mapmaker_play.js and the game page's side, web/front/test_game.js, against tests/scripts/web_mapmaker_play_check.js; the glue in web/shell.html, web/front/mapmaker_app.js, web/mapmaker.html and mapmaker_dialog.js against tests/scripts/web_lobby_check.js, tests/scripts/web_report_check.js (through test_web_report.py) and the pinned source of tests/scripts/test_web_mapmaker_play.py. Run from the checkout: tools/mutate.py tests/data/mapmaker_play_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker_play.py runs the node ones on a copy of the files.",
   "mutants": [
     {
-      "id": "play_rows_limit_91",
-      "file": "web/front/mapmaker_play.js",
-      "old": "var MAX_ROWS = 90;",
-      "new": "var MAX_ROWS = 91;",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
-      "id": "play_rows_limit_inclusive",
-      "file": "web/front/mapmaker_play.js",
-      "old": "if (rows > MAX_ROWS) {",
-      "new": "if (rows >= MAX_ROWS) {",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
-      "id": "play_big_extended_no_copy",
-      "file": "web/front/mapmaker_play.js",
-      "old": "out.convert = extended;",
-      "new": "out.convert = false;",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
-      "id": "play_big_classic_copy",
-      "file": "web/front/mapmaker_play.js",
-      "old": "out.convert = extended;",
-      "new": "out.convert = true;",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
-      "id": "play_extended_small_allowed",
-      "file": "web/front/mapmaker_play.js",
-      "old": "        if (extended) {\n            out.text = 'This is an Extended map,",
-      "new": "        if (extended && rows > 60) {\n            out.text = 'This is an Extended map,",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
-      "id": "play_extended_small_no_copy",
-      "file": "web/front/mapmaker_play.js",
-      "old": "            out.convert = true;\n            return out;\n        }\n        var general",
-      "new": "            out.convert = false;\n            return out;\n        }\n        var general",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
       "id": "play_kind_swapped",
       "file": "web/front/mapmaker_play.js",
       "old": "extended = check && check.kind === 'extended'",
@@ -1063,6 +1021,104 @@
       "file": "web/front/mapmaker_play.js",
       "old": "if (!info.ants) parts.push('no starting ants');",
       "new": "if (!info.ants) parts.push('no ants');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_classic_rows_limit_91",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_ROWS = 90;",
+      "new": "var MAX_ROWS = 91;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_classic_rows_limit_inclusive",
+      "file": "web/front/mapmaker_play.js",
+      "old": "} else if (rows > MAX_ROWS) {",
+      "new": "} else if (rows >= MAX_ROWS) {",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_columns_limit_121",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var EXT_MAX_ROWS = 128, EXT_MAX_COLUMNS = 120;",
+      "new": "var EXT_MAX_ROWS = 128, EXT_MAX_COLUMNS = 121;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_columns_limit_119",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var EXT_MAX_ROWS = 128, EXT_MAX_COLUMNS = 120;",
+      "new": "var EXT_MAX_ROWS = 128, EXT_MAX_COLUMNS = 119;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_columns_inclusive",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (columns > EXT_MAX_COLUMNS) sizes.push",
+      "new": "if (columns >= EXT_MAX_COLUMNS) sizes.push",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_rows_limit_129",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var EXT_MAX_ROWS = 128, EXT_MAX_COLUMNS = 120;",
+      "new": "var EXT_MAX_ROWS = 129, EXT_MAX_COLUMNS = 120;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_rows_limit_127",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var EXT_MAX_ROWS = 128, EXT_MAX_COLUMNS = 120;",
+      "new": "var EXT_MAX_ROWS = 127, EXT_MAX_COLUMNS = 120;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_rows_inclusive",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (rows > EXT_MAX_ROWS) sizes.push",
+      "new": "if (rows >= EXT_MAX_ROWS) sizes.push",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_refused_whatever_its_size",
+      "file": "web/front/mapmaker_play.js",
+      "old": "        if (extended) {\n            var sizes = [];",
+      "new": "        if (extended && false) {\n            var sizes = [];",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_wide_no_copy",
+      "file": "web/front/mapmaker_play.js",
+      "old": "                out.convert = true;\n                return out;",
+      "new": "                out.convert = false;\n                return out;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_wide_text_not_said",
+      "file": "web/front/mapmaker_play.js",
+      "old": "sizes.push('wider than ' + EXT_MAX_COLUMNS + ' columns');",
+      "new": "sizes.push('bigger than the game can play yet');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_tall_text_not_said",
+      "file": "web/front/mapmaker_play.js",
+      "old": "sizes.push('taller than ' + EXT_MAX_ROWS + ' rows');",
+      "new": "sizes.push('bigger than the game can play yet');",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_classic_big_has_a_copy",
+      "file": "web/front/mapmaker_play.js",
+      "old": "            out.note = 'What you can do: make the map ' + MAX_ROWS + ' rows or fewer, or try again after the game learns bigger maps. Your map was not changed.';\n            return out;",
+      "new": "            out.note = 'What you can do: make the map ' + MAX_ROWS + ' rows or fewer, or try again after the game learns bigger maps. Your map was not changed.';\n            out.convert = true;\n            return out;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_only_by_columns",
+      "file": "web/front/mapmaker_play.js",
+      "old": "            if (rows > EXT_MAX_ROWS) sizes.push('taller than ' + EXT_MAX_ROWS + ' rows');\n",
+      "new": "",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     }
   ]

@@ -1,13 +1,14 @@
 // replay_tool: reads a replay file (docs/REPLAYS.md), checks that it plays out the same here, and lists every order of the match with its time, seat, place and ant type.
 //
 //   replay_tool info FILE                              what the file says about the match (no map needed)
-//   replay_tool verify FILE [--maps-dir DIR]           plays it on the engine and compares every hash it holds and the final state
-//   replay_tool orders FILE [--maps-dir DIR] [--seat N] [--type ANT] [--csv]
+//   replay_tool verify FILE [--maps-dir DIR] [--extended]   plays it on the engine and compares every hash it holds and the final state
+//   replay_tool orders FILE [--maps-dir DIR] [--extended] [--seat N] [--type ANT] [--csv]
 //                                                      plays it and lists every order: time, turn, seat, order, place, the ants by type, where the first stood, what the engine said
 //       --seat N     only the orders of seat N (0 green, 1 red, 2 blue, 3 black)
 //       --type ANT   only the orders that name an ant of that type (worker, bomber, fire, thief, combat, swimmer)
 //       --csv        one comma separated line for each order (every text quoted) instead of the table
 //   --maps-dir DIR   where the maps are looked for by the name that the file holds (default: the shipped maps of this checkout)
+//   --extended       the map may be an Extended map (version 9, at most 128 rows and 120 columns): the replay of a game of this computer on one
 //   replay_tool --selftest                             checks the tool itself (the command line, the three commands and their exit codes, damaged files) on a match that it makes
 //
 // Exit status: 0 the file was read (and, for verify and orders, played to the end with every hash right); 1 the file is refused, its map is not found, or it does not play out the same;
@@ -41,8 +42,8 @@ namespace fs = std::filesystem;
 
 void usage(std::ostream& out) {
     out << "usage: replay_tool info FILE\n"
-           "       replay_tool verify FILE [--maps-dir DIR]\n"
-           "       replay_tool orders FILE [--maps-dir DIR] [--seat N] [--type ANT] [--csv]\n"
+           "       replay_tool verify FILE [--maps-dir DIR] [--extended]\n"
+           "       replay_tool orders FILE [--maps-dir DIR] [--extended] [--seat N] [--type ANT] [--csv]\n"
            "       replay_tool --selftest\n"
            "  info    what the file says about the match (no map needed)\n"
            "  verify  plays the match on the engine and compares every hash that the file holds and the final state\n"
@@ -51,6 +52,7 @@ void usage(std::ostream& out) {
            "  --type ANT    only the orders that name an ant of that type (worker, bomber, fire, thief, combat, swimmer)\n"
            "  --csv         one comma separated line for each order (every text quoted)\n"
            "  --maps-dir D  where the maps are looked for (default: the shipped maps of this checkout)\n"
+           "  --extended    the map may be an Extended map (version 9, at most 128 rows and 120 columns), as in a game of this computer\n"
            "  --selftest    check the tool itself\n";
 }
 
@@ -127,6 +129,7 @@ struct Options {
     std::string command;
     std::string file;
     std::string maps_dir;
+    bool extended{false};
     int seat{-1};
     bool has_type{false};
     sim::AntType type{sim::AntType::Worker};
@@ -160,6 +163,8 @@ bool parse_args(const std::vector<std::string>& args, Options& o) {
         std::string text;
         if (arg == "--maps-dir" && o.command != "info") {
             if (!value(o.maps_dir)) return false;
+        } else if (arg == "--extended" && o.command != "info") {
+            o.extended = true;
         } else if (arg == "--seat" && o.command == "orders") {
             if (!value(text) || text.size() != 1 || text[0] < '0' || text[0] > '3') return false;
             o.seat = text[0] - '0';
@@ -290,8 +295,9 @@ int run_tool(const std::vector<std::string>& args, std::ostream& out, std::ostre
     }
     const std::string maps_dir = !o.maps_dir.empty() ? o.maps_dir : std::string(ORIGINAL_ASSETS_DIR) + "/Maps";
     assets::LevelData level;
-    if (!load_map(replay.head, maps_dir, level, why)) {
+    if (!load_map(replay.head, maps_dir, level, why, assets::LevelLimits::for_game(o.extended))) {
         err << "replay_tool: " << why << "\n";
+        if (why.find(assets::kExtendedNotOnlineText) != std::string::npos) err << "replay_tool: a replay of a game of this computer on an Extended map is opened with --extended\n";
         return 1;
     }
     Outcome outcome;

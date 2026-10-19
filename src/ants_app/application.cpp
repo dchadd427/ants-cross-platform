@@ -594,15 +594,17 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
     ants::assets::LevelValidation start_verdict;
-    if (!current_level_.load_from_file(config_.default_map_path, &start_verdict)) {
+    // A game of this computer (no --host, --join, --join-url) may start on an Extended map up to the play limits; the startup map of a room's machine is a Classic map like every map of the network
+    const bool local_game = config_.net_role == ApplicationConfig::NetRole::None;
+    if (!current_level_.load_from_file(config_.default_map_path, &start_verdict, ants::assets::LevelLimits::for_game(local_game))) {
         std::cerr << "[Application] Failed to load Level: " << config_.default_map_path << std::endl;
-        if (start_verdict.first_fatal()) std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
+        if (start_verdict.first_fatal()) std::cerr << "[Application]   " << (local_game ? start_verdict.reason() : start_verdict.online_reason()) << std::endl;
         return false;
     }
     // A game that starts straight into its match (--map, no setup screen, no network) plays the seats that are taken (all four, or you and the bots, or you alone): the level must be
     // playable by them, as load_match demands of every match that starts from the setup screen (a start marker outside the grid has no behaviour in the original)
     if (!config_.start_in_map_select && config_.net_role == ApplicationConfig::NetRole::None) {
-        start_verdict = current_level_.validate(local_roster_);
+        start_verdict = current_level_.validate(local_roster_, ants::assets::LevelLimits::for_game(local_game));
         if (!start_verdict.playable) {
             std::cerr << "[Application] The level cannot be played: " << config_.default_map_path << std::endl;
             std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
@@ -1145,7 +1147,7 @@ bool Application::start_game(const std::string& map_path) {
         roster = bot_roster(local_player_id_ < 4 ? local_player_id_ : uint8_t{0});
         local_roster_ = roster;
     }
-    if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled(), config_.game_mode)) return false;
+    if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled(), config_.game_mode, true)) return false;
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
     enter_match();
     const bool teams_made = form_start_teams();                       // --teams: the teams are made before the first tick (the dialog of the start is up)
@@ -1156,16 +1158,17 @@ bool Application::start_game(const std::string& map_path) {
 }
 
 // The level, the simulation and the renderer of a match (the map file, the seed, the teams that play, the Fog of War option and the game mode are the whole
-// shared state: every machine of a network match calls this with the same values).
-bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog, uint8_t game_mode) {
+// shared state: every machine of a network match calls this with the same values). `local`: a game of this computer, which may be played on an Extended map (LevelLimits::for_game); a match of a
+// room, a LAN or a direct game is never local, and an Extended map is refused there with kExtendedNotOnlineText.
+bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog, uint8_t game_mode, bool local) {
     ants::assets::LevelValidation verdict;
-    if (!current_level_.load_from_file(map_path, &verdict)) {
+    if (!current_level_.load_from_file(map_path, &verdict, ants::assets::LevelLimits::for_game(local))) {
         std::cerr << "[Application] Failed to load level: " << map_path << std::endl;
-        if (verdict.first_fatal()) std::cerr << "[Application]   " << verdict.reason() << std::endl;
+        if (verdict.first_fatal()) std::cerr << "[Application]   " << (local ? verdict.reason() : verdict.online_reason()) << std::endl;
         return false;
     }
     // Is the map playable by the teams of this match? (a start marker of a team that plays must lie inside the grid: the original has no behaviour for one outside)
-    verdict = current_level_.validate(roster);
+    verdict = current_level_.validate(roster, ants::assets::LevelLimits::for_game(local));
     if (!verdict.playable) {
         std::cerr << "[Application] The level cannot be played: " << map_path << std::endl;
         std::cerr << "[Application]   " << verdict.reason() << std::endl;

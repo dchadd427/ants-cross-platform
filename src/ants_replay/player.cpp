@@ -40,11 +40,11 @@ std::string find_map_file(const std::string& maps_dir, const std::string& name) 
 
 }  // namespace
 
-bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData& level, std::string& error) {
-    return load_map(head, std::vector<std::string>{maps_dir}, level, error);
+bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits) {
+    return load_map(head, std::vector<std::string>{maps_dir}, level, error, limits);
 }
 
-bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error) {
+bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits) {
     error.clear();
     if (!net::valid_map_name(head.map_name)) {
         error = "the replay's map name cannot name a map file";
@@ -71,8 +71,8 @@ bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::
         return false;
     }
     assets::LevelValidation verdict;
-    if (!level.load_from_file(path, &verdict)) {
-        error = "the map " + head.map_name + " cannot be loaded" + (verdict.first_fatal() ? ": " + verdict.reason() : std::string());
+    if (!level.load_from_file(path, &verdict, limits)) {
+        error = "the map " + head.map_name + " cannot be loaded" + (verdict.first_fatal() ? ": " + (limits.allow_extended ? verdict.reason() : verdict.online_reason()) : std::string());
         return false;
     }
     return true;

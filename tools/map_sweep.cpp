@@ -25,7 +25,8 @@
 // the matches run in the sweep process itself (one map at a time, the wall clock limit is checked between ticks only, a crash ends the sweep).
 //
 // Usage:
-//   map_sweep <maps-dir> [--ticks N] [--roster MASK] [--jobs J] [--timeout-seconds S] [--out report.json] [--only text] [--skip-run]
+//   map_sweep <maps-dir> [--ticks N] [--roster MASK] [--jobs J] [--timeout-seconds S] [--out report.json] [--only text] [--skip-run] [--extended]
+// (--extended: a file may be an Extended map, version 9, up to the size a game of this computer plays; without it such a file is reported as not loading)
 //   map_sweep --selftest
 // Exit code: 0 only when every map loads, plays every roster, runs without a crash, hang or error and is deterministic. Bad names do not fail it (they are counted
 // apart: whether the protocol should accept them is a decision of the protocol). 1: findings, 2: bad usage or an unreadable folder.
@@ -419,6 +420,7 @@ struct Options {
     std::string out;
     std::string only;
     bool skip_run{false};
+    bool extended{false};           // --extended: a file may be an Extended map (version 9) up to what a game of this computer plays (LevelLimits::for_play_extended())
     bool topup{true};               // the scripted players are given the points of a hatch whenever they have less (tests/common/scripted_players.hpp)
     bool selftest{false};
     bool help{false};
@@ -466,6 +468,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE            write the JSON report\n"
         "  --only TEXT           only the maps whose file name contains TEXT (any case)\n"
         "  --skip-run            load and check the maps only, play nothing\n"
+        "  --extended            a map file may be an Extended map (version 9, at most 128 rows and 120 columns): the maps a game of this computer plays; without it such a file does not load\n"
         "  --no-topup            do not give the scripted players the points of a hatch (200) whenever they have less: by default they have them,\n"
         "                        as a player who has harvested would, so that Hatch orders hatch and the hatching code of every map is played\n"
         "  --selftest            check the tool on the six shipped maps (and on faults it must notice)\n",
@@ -494,6 +497,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--skip-run") o.skip_run = true;
         else if (s == "--no-run") o.no_run = true;
         else if (s == "--no-topup") o.topup = false;
+        else if (s == "--extended") o.extended = true;
         else if (s == "--ticks") { if (!need_uint(a, i, "--ticks", 0, 100000000u, v, err)) return false; o.ticks = static_cast<uint32_t>(v); }
         else if (s == "--roster") { if (!need_uint(a, i, "--roster", 1, 15, v, err)) return false; o.roster = static_cast<int>(v); }
         else if (s == "--jobs") { if (!need_uint(a, i, "--jobs", 1, 256, v, err)) return false; o.jobs = static_cast<unsigned>(v); }
@@ -618,7 +622,7 @@ void read_header(const std::vector<uint8_t>& d, MapInfo& info) {
 }
 
 // Reads the file, fills what can be known about it and loads the level (`level` is only valid when info.loads)
-void analyze_map(const std::string& path, MapInfo& info, assets::LevelData& level) {
+void analyze_map(const std::string& path, MapInfo& info, assets::LevelData& level, bool extended = false) {
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     if (!f.is_open()) {
         info.load_error = "the file cannot be opened";
@@ -635,7 +639,7 @@ void analyze_map(const std::string& path, MapInfo& info, assets::LevelData& leve
     // LevelData::load_from_file reads the file and calls load_from_memory: the bytes read here serve the header and the loader alike. The loader names why
     // it refuses a file (LevelValidation), and lists every finding about one that it reads (the original's partial reads, tiles outside the dictionary, ...).
     assets::LevelValidation verdict;
-    info.loads = level.load_from_memory(bytes.data(), bytes.size(), &verdict);
+    info.loads = level.load_from_memory(bytes.data(), bytes.size(), &verdict, assets::LevelLimits::for_game(extended));
     info.problems = verdict.problems;
     info.playable = verdict.playable;
     if (!info.loads) {
@@ -988,7 +992,7 @@ int child_main(const Options& o, std::ostream& out) {
     if (o.fault.kind == "abortload") std::abort();
     MapInfo info;
     assets::LevelData level;
-    analyze_map(o.child_file, info, level);
+    analyze_map(o.child_file, info, level, o.extended);
     out << info_line(info) << '\n' << std::flush;
     if (!info.loads || o.no_run) return 0;
     // a match of a team whose start marker lies outside the grid is refused, not played (the parent records the refusal)
@@ -1331,6 +1335,7 @@ std::vector<std::string> child_args(const Options& o, const std::string& path, u
                                   "--timeout-seconds", std::to_string(o.timeout_s), "--memory-mb", std::to_string(o.memory_mb), "--seed", std::to_string(o.seed)};
     if (no_run) a.push_back("--no-run");
     if (!o.topup) a.push_back("--no-topup");
+    if (o.extended) a.push_back("--extended");
     if (!o.fault_text.empty()) {
         a.push_back("--fault");
         a.push_back(o.fault_text);

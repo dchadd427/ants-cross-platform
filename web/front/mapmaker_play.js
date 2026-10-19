@@ -10,7 +10,8 @@
 })(this, function () {
     'use strict';
 
-    var MAX_ROWS = 90;                                                                  // the game plays maps of up to 90 rows for now (a map of an Extended size is not loadable by it yet)
+    var MAX_ROWS = 90;                                                                  // a Classic map of up to 90 rows (a taller one has the original's wall across it)
+    var EXT_MAX_ROWS = 128, EXT_MAX_COLUMNS = 120;                                       // an Extended map is played up to these (LevelLimits::for_play_extended(): 120 x 128 is 15,360 cells, inside its 16,384; beyond 120 columns the no-order marker would be a real tile)
     var SEATS = [{ name: 'Green', dot: '#3aa655' }, { name: 'Red', dot: '#c8402f' }, { name: 'Blue', dot: '#4a63d8' }, { name: 'Black', dot: '#171717' }];       // by the game's seat numbers (the core's team numbers)
     var ORDER = [3, 2, 0, 1];                                                           // as the dialog lists them: Black, Blue, Green, Red
     var CHOICES = [['y', 'You'], ['e', 'Bot Easy'], ['m', 'Bot Medium'], ['h', 'Bot Hard'], ['n', 'Empty']];
@@ -22,7 +23,7 @@
 
     // What the check and the first reading say of the open map, as the dialog needs it: { ok, title, text, note, list, convert, seats }
     //   seats[seat] = { seat, name, dot, ants, hills, usable, why: [the check's own sentences about this color] }
-    // A map is refused for the game when: the check could not judge it, it is bigger than 90 rows or an Extended map (the game cannot load one yet), a finding that is about no color stops it, or fewer than
+    // A map is refused for the game when: the check could not judge it, it is a Classic map of more than 90 rows or an Extended map beyond 120 columns or 128 rows (the most the game plays), a finding that is about no color stops it, or fewer than
     // two colors have a hill and starting ants (one seat for you and one for a bot)
     function verdict(check, read) {
         var out = { ok: false, title: 'This map cannot be played yet', text: '', note: '', list: [], convert: false, seats: [] };
@@ -32,16 +33,20 @@
             out.text = 'The check could not read this map, so it cannot be played.';
             return out;
         }
-        if (rows > MAX_ROWS) {
-            out.text = 'This map is bigger than the game can play yet. Test games work on maps of up to ' + MAX_ROWS + ' rows for now.';
-            out.note = 'What you can do: ' + (extended ? 'make a Classic copy that fits (Make a Classic copy...), or ' : 'make the map ' + MAX_ROWS + ' rows or fewer, or ') + 'try again after the game learns bigger maps. Your map was not changed.';
-            out.convert = extended;
-            return out;
-        }
+        var columns = read && typeof read.columns === 'number' ? read.columns : 0;
         if (extended) {
-            out.text = 'This is an Extended map, and the game cannot play an Extended map yet. Test games work on Classic maps for now.';
-            out.note = 'What you can do: make a Classic copy (Make a Classic copy...), or try again after the game learns Extended maps. Your map was not changed.';
-            out.convert = true;
+            var sizes = [];
+            if (columns > EXT_MAX_COLUMNS) sizes.push('wider than ' + EXT_MAX_COLUMNS + ' columns');
+            if (rows > EXT_MAX_ROWS) sizes.push('taller than ' + EXT_MAX_ROWS + ' rows');
+            if (sizes.length) {
+                out.text = 'This map is ' + sizes.join(' and ') + '. Test games work on Extended maps of up to ' + EXT_MAX_COLUMNS + ' columns and ' + EXT_MAX_ROWS + ' rows for now.';
+                out.note = 'What you can do: make a Classic copy that fits (Make a Classic copy...), or try again after the game learns bigger maps. Your map was not changed.';
+                out.convert = true;
+                return out;
+            }
+        } else if (rows > MAX_ROWS) {
+            out.text = 'This map is bigger than the game can play yet. Test games work on Classic maps of up to ' + MAX_ROWS + ' rows for now.';
+            out.note = 'What you can do: make the map ' + MAX_ROWS + ' rows or fewer, or try again after the game learns bigger maps. Your map was not changed.';
             return out;
         }
         var general = findings.filter(function (f) { return f.severity === 'fatal' && !(typeof f.team === 'number' && f.team >= 0); });

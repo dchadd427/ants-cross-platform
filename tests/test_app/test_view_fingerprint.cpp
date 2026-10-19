@@ -652,6 +652,28 @@ const Golden kGoldens[] = {
     {"px.wide.app.start.ISLANDS", 0x77dc81d9280a5b04, 518400},
     {"px.wide.app.start.GAUNTLET", 0x79e2b3de5175248b, 518400},
     {"px.wide.app.start.TREASURE", 0xffb65b08c16cda77, 518400},
+    // an Extended game: 100 x 100 and 120 x 128 tiles (test_view_fingerprint_extended.cpp; new numbers, none of the numbers above moved)
+    {"ext.edge.100x100.rate50.all9", 0x99d56a4a8c614c05, 2764800},
+    {"ext.minimap.point.100x100", 0xc179ed58d4de6cf5, 307200},
+    {"ext.minimap.scroll.100x100.all9", 0xb88938b4f3812f65, 2764800},
+    {"ext.start_view.origins.100x100", 0x56464bea14e1c1a5, 10000},
+    {"ext.camera.clamp.100x100", 0xce563799fed8b674, 361},
+    {"ext.camera.center_on.100x100", 0x657816c70f5b5340, 2750},
+    {"ext.edge.120x128.rate50.all9", 0x99d56a4a8c614c05, 2764800},
+    {"ext.minimap.point.120x128", 0x7b8d1b5feaaee635, 307200},
+    {"ext.minimap.scroll.120x128.all9", 0x17be930351684a3d, 2764800},
+    {"ext.start_view.origins.120x128", 0xb65a60ee163e06a5, 15360},
+    {"ext.camera.clamp.120x128", 0x612c7ebee035735a, 361},
+    {"ext.camera.center_on.120x128", 0x9c3a0f51fd8ed90d, 4200},
+    {"ext.hud.100x100.cam_tl", 0x0e0eb2cc3437abec, 80},
+    {"ext.hud.100x100.cam_t", 0xe54b3f2bf585d262, 80},
+    {"ext.hud.100x100.cam_tr", 0xbf45c042ef3c4e65, 80},
+    {"ext.hud.100x100.cam_l", 0xf1d03e6a0a9f01df, 80},
+    {"ext.hud.100x100.cam_mid", 0x89b0aef5da3045dd, 80},
+    {"ext.hud.100x100.cam_r", 0x70dfe5a5adabdefa, 80},
+    {"ext.hud.100x100.cam_bl", 0x22d0bf304a618c02, 80},
+    {"ext.hud.100x100.cam_b", 0x6a1297b100608ecc, 80},
+    {"ext.hud.100x100.cam_br", 0x5c7d7b37b3529a67, 80},
 };
 
 }  // namespace
@@ -708,6 +730,7 @@ int main(int argc, char** argv) {
     app_pixel_scenarios();
     app_pointer_scenarios();
     wide_scenarios(arc);
+    extended_scenarios(arc);
 
     SDL_Quit();
     if (list_only) {

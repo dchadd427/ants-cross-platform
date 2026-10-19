@@ -245,13 +245,13 @@ void Application::prepare_replay() {
         replay_file_ = std::move(replay);                                  // (its head is shown: the page says who recorded it)
         return;
     }
-    if (!replay::load_map(replay->head, config_.maps_dir, replay_level_, why)) {
+    if (!replay::load_map(replay->head, config_.maps_dir, replay_level_, why, assets::LevelLimits::for_game(true))) {
         replay_failure_ = ReplayFailure::NoMap;
         replay_failure_text_ = why;
         replay_file_ = std::move(replay);
         return;
     }
-    const assets::LevelValidation verdict = replay_level_.validate(replay->head.roster);
+    const assets::LevelValidation verdict = replay_level_.validate(replay->head.roster, assets::LevelLimits::for_game(true));
     if (!verdict.playable) {
         replay_failure_ = ReplayFailure::NoMap;
         replay_failure_text_ = "the map cannot be played by the seats of this match: " + verdict.reason();

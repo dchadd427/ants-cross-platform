@@ -9,6 +9,7 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "crowd_level.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -431,6 +432,55 @@ int main() {
         ASSERT_TRUE(fs::path(entry.path).lexically_normal() == (fs::path(community_dir()) / "!!!BLOCKADES!!!.lvl").lexically_normal());      // (paths, not strings: the separators differ on Windows)
         ASSERT_TRUE(level.width > 0 && level.height > 0);
         ASSERT_FALSE(s.load_map("../x.lvl", entry, level));
+    } TEST_END();
+
+    TEST_CASE("ML5.1 An Extended map is not played in a room: it is not listed, not chosen, not made into a room and not loaded for a start, and every refusal says that Extended maps are not played online yet") {
+        const std::string sentence = "Extended maps can't be played online yet";
+        TempDir t;
+        const fs::path dir = t.path / "maps";
+        fs::create_directories(dir);
+        copy_map(maps_dir() + "/TINY.LVL", dir, "TINY.LVL");
+        ASSERT_TRUE(ants_test::write_crowd_file((dir / "Big One.lvl").string(), ants_test::crowd_level()));
+        RoomManager mgr{MapStore(dir.string())};
+        const LobbyServices s = mgr.lobby_services();
+        // not in the list of the maps, and a lobby does not choose it
+        MapStore store(dir.string());
+        store.scan();
+        ASSERT_TRUE(entry_of(list_of(store), "Big One.lvl") == nullptr);
+        ASSERT_TRUE(entry_of(list_of(store), "TINY.LVL") != nullptr);
+        ASSERT_EQ(s.choose_map("Big One.lvl"), std::string());
+        // a room cannot be made on it (the create block of a visitor and the control door's POST /rooms both come here)
+        RoomSpec spec;
+        spec.code = "BIG-1";
+        spec.map = "Big One.lvl";
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 1;
+        const CreateResult made = mgr.create_room(spec, 0);
+        ASSERT_TRUE(!made.ok && made.http_status == 422 && made.error.find(sentence) != std::string::npos);
+        ASSERT_EQ(mgr.room_count(), size_t{0});
+        // the room's start loads its map through this service: the refusal is carried to the players
+        MapEntry entry;
+        assets::LevelData level;
+        ASSERT_FALSE(s.load_map("Big One.lvl", entry, level));
+        ASSERT_EQ(entry.refusal, sentence);
+        MapEntry fine;
+        ASSERT_TRUE(s.load_map("TINY.LVL", fine, level) && fine.refusal.empty());
+        // an approved Extended map of a player: listed only for the library page (format 2), never found for a room
+        ApprovedMap approved;
+        approved.name = "Approved Big.lvl";
+        approved.path = (dir / "Big One.lvl").string();
+        approved.kind = "extended";
+        approved.width = approved.height = 100;
+        store.set_approved({approved});
+        MapEntry unused;
+        std::string why;
+        ASSERT_FALSE(store.find("Approved Big.lvl", unused, &why));
+        ASSERT_EQ(why, sentence);
+        ASSERT_EQ(store.listed_name("Approved Big.lvl"), std::string());
+        ASSERT_TRUE(entry_of(list_of(store), "Approved Big.lvl") == nullptr);
+        ASSERT_FALSE(store.find("No such map.lvl", unused, &why));
+        ASSERT_TRUE(why != sentence);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

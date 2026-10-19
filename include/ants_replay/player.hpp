@@ -21,10 +21,11 @@
 namespace ants::replay {
 
 /// Finds the replay's map in `maps_dir` by the file name that the head holds (the name as written, else the same name in another case), checks that it is the same file (the head's hash)
-/// and loads it. False with `error` otherwise: a missing map is refused by name, a map of the same name that is another file with both hashes.
-bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData& level, std::string& error);
+/// and loads it under `limits`. False with `error` otherwise: a missing map is refused by name, a map of the same name that is another file with both hashes. The default limits read Classic maps
+/// only, as a server does (an Extended map is then refused with assets::kExtendedNotOnlineText); a place that shows a replay of a game of this computer passes LevelLimits::for_play_extended().
+bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits = assets::LevelLimits{});
 /// The same with several folders, asked in order (the server's maps folder, then its community folder): the first that holds the name is the map's, as in the server's own list of maps.
-bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error);
+bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits = assets::LevelLimits{});
 
 /// Why this build does not play `head`'s match (its rules number and the game that made it): "recorded by v0.10.0 with simulation rules 0 ...". Only for a head that plays_here() says no to.
 std::string rules_refusal(const Header& head);

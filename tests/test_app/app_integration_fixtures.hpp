@@ -312,3 +312,4 @@ void run_suite_12_unit_selection_and_occupied_tile_movement();
 void run_suite_12_unit_selection_and_occupied_tile_movement_2();
 void run_suite_12_unit_selection_and_occupied_tile_movement_3();
 void run_suite_12_unit_selection_and_occupied_tile_movement_4();
+void run_suite_13_extended_play();

@@ -23,6 +23,7 @@ struct MapEntry {
     std::string path;          // folder + name
     uint64_t hash{0};          // FNV-1a 64 of the file
     uint64_t size{0};          // bytes
+    std::string refusal;       // set by the room's load of the file when the engine reads it as a map that a room cannot play (an Extended map: assets::kExtendedNotOnlineText), else empty
 };
 
 /// One map of the list (GET /maps): what maps.json says (or, for a file it does not know, what the level file itself says), the real hash of the file and the picture of it.

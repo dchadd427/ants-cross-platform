@@ -108,6 +108,7 @@ bool MapStore::find(const std::string& name, MapEntry& out, std::string* why) co
     if (!fs::is_regular_file(path, ec) || ec) {
         ec.clear();
         const ApprovedMap* approved_map = approved(name);              // (the approved maps of the players: Classic ones only; the owner's take-down removes one from here)
+        if (approved_map != nullptr && approved_map->kind == "extended") return fail(assets::kExtendedNotOnlineText);
         if (approved_map == nullptr || approved_map->kind != "classic") return fail("no such map on this server");
         path = approved_map->path;
     }

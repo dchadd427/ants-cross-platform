@@ -46,7 +46,7 @@ void Application::net_finish_load() {
     local_player_id_ = net_->my_seat();
     bool ok = net::hash_file(path, hash) && hash == start.map_hash;
     if (!ok) std::cerr << "[Application] The map " << start.map_name << " here is not the host's file" << std::endl;
-    ok = ok && load_match(path, start.seed, start.roster, start.fog, start.mode);
+    ok = ok && load_match(path, start.seed, start.roster, start.fog, start.mode, false);
     if (ok) {
         if (renderer_) renderer_->set_hud_team(local_player_id_);
         apply_team_names(start.names, start.roster);

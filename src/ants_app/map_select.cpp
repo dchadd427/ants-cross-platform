@@ -15,8 +15,9 @@ MapSelectScreen::MapSelectScreen() = default;
 
 namespace {
 
-// One map of the list: the name without its extension, and what the header of the file says (description, size, minutes)
-MapSelectEntry make_entry(const std::string& file_name, const std::string& full_path) {
+// One map of the list: the name without its extension, and what the header of the file says (description, size, minutes). `extended` is set when the file is an Extended map
+// (version 9): the list is the list of a room as well as of a game on this computer, and an Extended map is not played online yet, so it is not listed
+MapSelectEntry make_entry(const std::string& file_name, const std::string& full_path, bool& extended) {
     MapSelectEntry entry;
     entry.filename = file_name;
     entry.full_path = full_path;
@@ -25,11 +26,15 @@ MapSelectEntry make_entry(const std::string& file_name, const std::string& full_
     entry.height = 0;
     entry.minutes = 0;
     ants::assets::LevelData lvl;
-    if (lvl.load_from_file(full_path)) {
+    ants::assets::LevelValidation verdict;
+    extended = false;
+    if (lvl.load_from_file(full_path, &verdict)) {
         entry.minutes = lvl.default_minutes;
         entry.width = lvl.width();
         entry.height = lvl.height();
         entry.description = lvl.description;
+    } else {
+        extended = verdict.has(ants::assets::LevelProblemKind::VersionNotSupported);
     }
     return entry;
 }
@@ -59,7 +64,11 @@ void MapSelectScreen::init(const std::string& maps_dir) {
         }
     }
     std::sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-    for (const auto& f : found) maps_.push_back(make_entry(f.first, f.second));
+    for (const auto& f : found) {
+        bool extended = false;
+        MapSelectEntry entry = make_entry(f.first, f.second, extended);
+        if (!extended) maps_.push_back(std::move(entry));          // (a map of the version 9 is not in the list: Extended maps are not played online yet; a game of this computer names its file itself)
+    }
     previews_.clear();                                                      // (the pictures of the wide screen belong to the files that were listed)
 
     // The highlight. The original selects the first entry of its list: FUN_01013de7 ends with FindClose and FUN_010298fc(list, 0), which puts the list's cursor on its head, and the screen's

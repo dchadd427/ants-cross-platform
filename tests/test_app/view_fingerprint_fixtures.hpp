@@ -996,3 +996,4 @@ void world_pixel_scenarios(const assets::AssetArchive& arc);
 void app_pixel_scenarios();
 void app_pointer_scenarios();
 void wide_scenarios(const assets::AssetArchive& arc);
+void extended_scenarios(const assets::AssetArchive& arc);

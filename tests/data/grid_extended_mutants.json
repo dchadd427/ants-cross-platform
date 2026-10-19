@@ -56,38 +56,32 @@
   {
    "id": "play_limits_allow_129_rows",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{129, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{129, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
   },
   {
-   "id": "play_limits_allow_129_columns",
+   "id": "play_limits_allow_121_columns",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{128, 129, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
-  },
-  {
-   "id": "play_limits_allow_more_cells",
-   "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16385, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 121, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
   },
   {
    "id": "play_limits_refuse_extended_maps",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};"
   },
   {
    "id": "play_limits_read_a_smaller_file",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
   },
   {
    "id": "play_limits_write_a_smaller_file",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3000u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "return LevelLimits{128, 120, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3000u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
   }
  ]
 }

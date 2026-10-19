@@ -31,6 +31,7 @@
 #include <iterator>
 #include <map>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using ants::assets::LevelConversion;
@@ -243,28 +244,26 @@ void the_grid_reads_relative_anchors() {
     check(g.rules() == tall.rules && tall.rules == ants::assets::LVL_RULES_EXTENDED, "a blank Extended map above 90 rows is at rules 1 and the Grid says so");
 }
 
-// LevelLimits::for_play_extended() (used by no loader yet): Extended maps, up to 128 a side and 16,384 cells.
+// LevelLimits::for_play_extended(), what a game of this computer plays: Extended maps, up to 128 rows, 120 columns (15,360 cells, inside the 16,384 of the cell limit).
 void the_play_limits() {
     constexpr LevelLimits play = LevelLimits::for_play_extended();
     check(play.allow_extended, "the play limits allow Extended maps");
-    check(play.rows() == 128 && play.columns() == 128 && play.cells() == 16384, "the play limits are 128 a side and 16,384 cells");
+    check(play.rows() == 128 && play.columns() == 120 && play.cells() == 16384, "the play limits are 128 rows, 120 columns and 16,384 cells");
     check(play.rows() < LevelLimits::for_extended_maps().rows() && play.cells() < LevelLimits::for_extended_maps().cells(), "the play limits are tighter than those of an Extended map");
     check(play.read_bytes() == 4u * 1024u * 1024u && play.write_bytes() == 3584u * 1024u, "a file of at most 4 MiB is read and a canonical file of 3.5 MiB written");
     std::vector<std::string> names(1344, ".");
-    for (const uint32_t side : {100u, 128u}) {
-        const LevelData level = ants::assets::blank_extended_level(side, side, names, LevelLimits::for_extended_maps());
+    const LevelLimits all = LevelLimits::for_extended_maps();
+    // each side at its limit passes, one past it is refused by the writer and by the reader
+    for (const auto& [rows, columns, fits] : {std::tuple<uint32_t, uint32_t, bool>{100, 100, true}, {128, 120, true}, {91, 120, true}, {128, 121, false}, {129, 120, false}, {129, 121, false}, {100, 200, false}, {300, 100, false}}) {
+        const LevelData level = ants::assets::blank_extended_level(rows, columns, names, all);
+        const std::string what = "a blank Extended map of " + std::to_string(rows) + " x " + std::to_string(columns);
         const LevelWriteResult w = ants::assets::write_level(level, play);
+        check(w.ok == fits, what + (fits ? " is written under the play limits" : " is refused by the writer under the play limits"));
+        const LevelWriteResult whole = ants::assets::write_level(level, all);
         LevelData back;
-        check(w.ok && back.load_from_memory(w.bytes.data(), w.bytes.size(), nullptr, play) && back.version == 9 && back.height == side, "a blank Extended map of " + std::to_string(side) + " a side passes the play limits");
+        check(whole.ok && back.load_from_memory(whole.bytes.data(), whole.bytes.size(), nullptr, play) == fits && (!fits || (back.version == 9 && back.height == rows && back.width == columns)),
+              what + (fits ? " is read under the play limits" : " is refused by the reader under the play limits"));
     }
-    const LevelData wide = ants::assets::blank_extended_level(129, 100, names, LevelLimits::for_extended_maps());
-    check(!ants::assets::write_level(wide, play).ok, "129 rows are beyond the play limits");
-    const LevelWriteResult wide_file = ants::assets::write_level(wide, LevelLimits::for_extended_maps());
-    LevelData refused;
-    check(wide_file.ok && !refused.load_from_memory(wide_file.bytes.data(), wide_file.bytes.size(), nullptr, play), "and a file of 129 rows is refused by the play limits");
-    // 128 x 129 cells (a side within, the product above) is refused by the cell limit, not by a side
-    const LevelData dense = ants::assets::blank_extended_level(128, 129, names, LevelLimits::for_extended_maps());
-    check(!ants::assets::write_level(dense, play).ok, "128 x 129 cells are beyond the play limits");
     // a Classic level keeps the limits of the game under them
     LevelData tiny;
     check(tiny.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL"), "TINY.LVL loads (play limits)");

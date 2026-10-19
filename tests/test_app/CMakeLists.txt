@@ -6,6 +6,7 @@ add_executable(test_app_integration
     test_app_integration_units_2.cpp
     test_app_integration_units_3.cpp
     test_app_integration_units_4.cpp
+    test_app_integration_extended.cpp
 )
 
 target_include_directories(test_app_integration PRIVATE
@@ -393,6 +394,7 @@ add_executable(test_view_fingerprint
     test_view_fingerprint_pointer.cpp
     test_view_fingerprint_pixels.cpp
     test_view_fingerprint_wide.cpp
+    test_view_fingerprint_extended.cpp
 )
 
 target_include_directories(test_view_fingerprint PRIVATE

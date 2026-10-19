@@ -208,6 +208,10 @@ std::string LevelValidation::reason() const {
     return playable ? std::string() : std::string("the file was not read");
 }
 
+std::string LevelValidation::online_reason() const {
+    return has(LevelProblemKind::VersionNotSupported) ? std::string(kExtendedNotOnlineText) : reason();
+}
+
 std::string LevelValidation::describe() const {
     std::string out;
     for (const LevelProblem& p : problems) {

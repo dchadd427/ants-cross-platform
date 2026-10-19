@@ -121,6 +121,7 @@ private:
 
 struct ArenaSpec {
     const assets::LevelData* level{nullptr};   // the map (must outlive the call)
+    assets::LevelLimits limits{};              // what the map is judged by (LevelData::validate): Classic maps only by default; an Extended map needs LevelLimits::for_game(true) (a game of this computer)
     uint32_t seed{1};                          // the engine's seed AND the controller's match seed
     std::vector<BotSpec> bots;                 // the seats that play: one bot each, seat 0 to 3, every seat once
     sim::GameMode game_mode{sim::GameMode::HighestScore};   // the rules of the match (set before init, like a room's Start does): Kills187 plays the game type 187

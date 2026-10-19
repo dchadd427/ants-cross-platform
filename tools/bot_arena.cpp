@@ -3,7 +3,7 @@
 //
 // Usage:
 //   bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N] [--replay-check]
-//             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-standard | --ally-pairs]
+//             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-standard | --ally-pairs] [--extended]
 //   bot_arena --selftest
 //   bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc
 //
@@ -453,8 +453,7 @@ struct Options {
     std::string save_replays;                      // a folder: every match is kept there as a replay (the server's store names and keeps them; the site's list shows them)
     unsigned threads{1};
     std::string out;
-    bool quiet{false};
-    bool wall_time{true};
+    bool quiet{false}, wall_time{true}, extended{false};   // extended (--extended): a map file may be an Extended map (version 9) up to what a game of this computer plays
     bool selftest{false};
     bool write_baselines{false};
     bool ally_standard{false};                     // the first two standard bots of a match team up (the lower seat invites)
@@ -465,11 +464,11 @@ struct Options {
 void print_usage(std::FILE* to) {
     std::fprintf(to,
         "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
-        "                 [--game-mode highest-score|187] [--replay-check] [--save-replays DIR] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs]\n"
+        "                 [--game-mode highest-score|187] [--replay-check] [--save-replays DIR] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs] [--extended]\n"
         "       bot_arena --selftest\n"
         "       bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc\n"
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
-        "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
+        "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY); --extended also lets a file be an Extended map (version 9, at most 128 rows and 120 columns)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
         "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE (kinds idle worker standard and the bench bots aggressor aggressor2\n"
         "                     saboteur rusher aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
@@ -656,6 +655,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--rotate") o.rotate = true;
         else if (s == "--ally-standard") o.ally_standard = true;
         else if (s == "--ally-pairs") o.ally_pairs = true;
+        else if (s == "--extended") o.extended = true;
         else if (s == "--replay-check") o.replay_check = true;
         else if (s == "--save-replays") {
             if (!value("--save-replays", v)) return false;
@@ -801,7 +801,7 @@ std::vector<LoadedMap> load_maps(const Options& o) {
         }
         const std::string stem = stem_of_path(p.string());
         m.name = looks_like_path(o.maps[i]) ? stem : upper(stem);
-        if (!m.level.load_from_file(p.string())) {
+        if (!m.level.load_from_file(p.string(), nullptr, assets::LevelLimits::for_game(o.extended))) {
             m.error = "map '" + stem + "' does not load";
             continue;
         }
@@ -943,7 +943,7 @@ std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> ally_pairs_factory(c
 
 ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool record) {
     ai::ArenaSpec s;
-    s.level = &m.level;
+    s.level = &m.level; s.limits = assets::LevelLimits::for_game(o.extended);
     s.seed = j.seed;
     s.bots = j.bots;
     s.max_ticks = o.ticks;

@@ -7,6 +7,7 @@
 #include "ants_replay/replay.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
+#include "crowd_level.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -19,6 +20,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -59,6 +61,20 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 }
 
 namespace {
+
+// What the game writes to its error stream while the object lives (its refusals are said there)
+struct CerrCapture {
+    std::ostringstream buffer;
+    std::streambuf* old;
+    CerrCapture() : old(std::cerr.rdbuf(buffer.rdbuf())) {}
+    ~CerrCapture() { std::cerr.rdbuf(old); }
+    CerrCapture(const CerrCapture&) = delete;
+    CerrCapture& operator=(const CerrCapture&) = delete;
+    std::string text() const { return buffer.str(); }
+};
+
+const char* const kExtendedSentence = "Extended maps can't be played online yet";
+const char* const kExtended = "Big Extended.lvl";
 
 const char* const kCommunity = "Test Players Map (1).lvl";               // a name with spaces and brackets, as the community's have
 
@@ -159,6 +175,7 @@ struct Peer {
     int starts = 0;
     int cancels = 0;
     bool fail_load = false;                 // true: this machine reports that it cannot load (the room cancels the start for everybody)
+    bool allow_extended = false;            // true: this machine reads an Extended map (a bare machine of the test; the game never does in a room)
     Peer() { net.set_discovery(0); }
     void update() {
         net.update(now);
@@ -170,7 +187,7 @@ struct Peer {
             assets::LevelData level;
             uint64_t hash = 0;
             const std::string path = (folder / s.map_name).string();
-            const bool ok = !fail_load && level.load_lvl(path) && net::hash_file(path, hash) && hash == s.map_hash;
+            const bool ok = !fail_load && level.load_from_file(path, nullptr, assets::LevelLimits::for_game(allow_extended)) && net::hash_file(path, hash) && hash == s.map_hash;
             if (ok) {
                 sim.set_fog_of_war_enabled(s.fog);
                 sim.set_game_mode(s.game_mode());
@@ -366,6 +383,69 @@ int main(int argc, char* argv[]) {
         app.shutdown();
     } TEST_END();
 
+
+    TEST_CASE("MF1.6 A room whose host names an Extended map: this machine refuses the Start in the plain sentence (Extended maps can't be played online yet), loads nothing, and the room is as it was") {
+        Folders dirs;
+        ASSERT_TRUE(dirs.ok());
+        const assets::LevelData crowd = ants_test::crowd_level();
+        ASSERT_TRUE(ants_test::write_crowd_file((dirs.host() / kExtended).string(), crowd));
+        ASSERT_TRUE(ants_test::write_crowd_file((dirs.guest() / kExtended).string(), crowd));            // (the same file is here: the refusal is not about the hash)
+        Application app;
+        Peer host;
+        host.allow_extended = true;                                                                       // (a machine that would play it: the room still cannot)
+        std::unique_ptr<Duo> owner;
+        Duo* duo = nullptr;
+        auto fake = std::make_unique<FakeFetcher>(dirs.host() / kExtended, 0);
+        CerrCapture said;
+        ASSERT_TRUE(join_room(app, host, duo, owner, dirs, std::move(fake), kExtended));
+        ASSERT_TRUE(start(host, kExtended));
+        ASSERT_TRUE(duo->until([&]() { return host.cancels > 0 && app.net()->phase() == net::NetGame::Phase::Room; }, 8000));
+        ASSERT_TRUE(app.state() != AppState::Playing && !app.match_running());
+        ASSERT_EQ(app.sim().current_tick(), 0u);
+        ASSERT_TRUE(app.recorder() == nullptr);
+        ASSERT_TRUE(said.text().find(std::string("[Application]   ") + kExtendedSentence) != std::string::npos);
+        ASSERT_TRUE(host.net.phase() == net::NetGame::Phase::Room);
+        app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("MF1.7 A game that is started as a host, a guest or a guest by address (--host, --join, --join-url) on an Extended map is refused before anything is opened, in the plain sentence; a game of this computer plays the same file") {
+        Folders dirs;
+        ASSERT_TRUE(dirs.ok());
+        const fs::path big = dirs.guest() / kExtended;
+        ASSERT_TRUE(ants_test::write_crowd_file(big.string(), ants_test::crowd_level()));
+        const auto config = [&]() {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = false;
+            cfg.lan_port = 0;
+            cfg.maps_dir = dirs.guest().string();
+            cfg.default_map_path = big.string();
+            return cfg;
+        };
+        for (int role = 0; role < 3; ++role) {
+            ApplicationConfig cfg = config();
+            cfg.net_role = role == 0 ? ApplicationConfig::NetRole::Host : ApplicationConfig::NetRole::Join;
+            if (role == 1) cfg.net_address = "127.0.0.1";
+            if (role == 2) cfg.net_url = "ws://127.0.0.1/never";
+            cfg.net_loopback_only = true;
+            CerrCapture said;
+            Application app;
+            ASSERT_FALSE(app.init(cfg));
+            ASSERT_TRUE(said.text().find(std::string("[Application]   ") + kExtendedSentence) != std::string::npos);
+            ASSERT_TRUE(app.net() == nullptr);                                                            // (no room was opened, no address was looked up)
+            app.shutdown();
+        }
+        {
+            ApplicationConfig cfg = config();                                                             // the same file, a game of this computer
+            Application app;
+            CerrCapture said;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_TRUE(said.text().empty());
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().grid().width(), 100u);
+            app.shutdown();
+        }
+    } TEST_END();
 
     TEST_CASE("MF2.1 The head of a recording names the map as tests/data/replay_head.hex holds it byte for byte (the page reads the map and its hash from there before the game starts: tests/scripts/web_map_files_check.js reads the same file)") {
         replay::Replay r;

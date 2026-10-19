@@ -26,6 +26,7 @@ int main(int argc, char* argv[]) {
     run_suite_12_unit_selection_and_occupied_tile_movement_2();
     run_suite_12_unit_selection_and_occupied_tile_movement_3();
     run_suite_12_unit_selection_and_occupied_tile_movement_4();
+    run_suite_13_extended_play();
 
     std::cout << "\n=======================================================\n"
               << " INTEGRATION TEST SUMMARY\n"
