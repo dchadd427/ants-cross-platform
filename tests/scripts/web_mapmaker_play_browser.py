@@ -230,6 +230,17 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     dt.handlers.remove(seen)
     ctl.close()
 
+    # a game tab that no map maker opened (a typed address, or the map maker's tab is gone): a card with a way to the map maker, not a game
+    orphan = Tab(types.SimpleNamespace(devtools=dt))
+    orphan.emulate(1280, 800, 1)
+    orphan.call("Page.navigate", {"url": args.web.rstrip("/") + "/play.html?testmap=abcdef123456&seats=ymnn"})
+    check(mod.wait_for(lambda: orphan.ev("!!document.getElementById('load-failure')"), 20, 0.3) and "This test game cannot start" in orphan.ev("document.getElementById('load-failure').textContent")
+          and not orphan.ev("!!document.getElementById('test-strip')"), "a game tab that no map maker opened shows a card, with no strip and no game")
+    orphan.save_shot(args.shots, shots_prefix + "-desktop-no-opener")
+    orphan.ev("setTimeout(function () { document.querySelector('#load-failure button').click(); }, 0); 1")
+    check(mod.wait_for(lambda: orphan.ev("location.pathname") == "/mapmaker.html", 15, 0.3), "and its button goes to the map maker")
+    orphan.close()
+
     # ---- the drawn map: a stroke, the unsaved work, the history
     print("[web map maker] Play this map: a map that was drawn on")
     page.tool("ground")

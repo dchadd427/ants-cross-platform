@@ -175,6 +175,7 @@
                 g.inputs.forEach(function (i) {
                     i.checked = choice[g.seat] === i.value;
                     i.disabled = !v.seats[g.seat].usable && i.value !== 'n';
+                    i.parentNode.className = 'pc' + (i.checked ? ' on' : '') + (i.disabled ? ' dis' : '');          // (the style does not rely on :has)
                 });
             });
             quicks.forEach(function (q) { q.button.disabled = !quick(choice, v.seats, q.count); });

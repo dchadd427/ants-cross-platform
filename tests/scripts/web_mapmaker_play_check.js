@@ -389,6 +389,7 @@ function dialogChecks() {
     check(rowOf(p, 'Red').className.indexOf('off') > 0 && rowOf(p, 'Black').className.indexOf('off') > 0 && rowOf(p, 'Red').querySelector('.pf').textContent === 'Red has no hill', 'a color without a hill is marked, with the check\'s sentence');
     equal(rowOf(p, 'Black').querySelector('.pf').textContent, 'Black has no starting ants (no start marker, tile 154)', 'and one without ants too');
     equal(['Green', 'Red', 'Blue', 'Black'].map((n) => rowOf(p, n).querySelectorAll('input').map((i) => (i.disabled ? 1 : 0)).join('')), ['00000', '11110', '00000', '11110'], 'only Empty is open on it');
+    equal(rowOf(p, 'Red').querySelectorAll('.pc').map((l) => l.className), ['pc dis', 'pc dis', 'pc dis', 'pc dis', 'pc on'], 'the style marks what is chosen and what is off (a class of its own, no :has)');
     equal(checked(p), 'ynmn', 'the first choice skips it');
     all(p, '.play-quick button')[2].click();
     equal(all(p, '.play-quick button').map((b) => (b.disabled ? 0 : 1)), [1, 0, 0], 'with two colors that can play only "1 bot" is on');

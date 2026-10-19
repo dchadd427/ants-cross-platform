@@ -15,9 +15,9 @@
 .pc { position: relative; display: flex; align-items: center; justify-content: center; min-height: 46px; padding: 3px 4px; text-align: center; font-size: 15px; line-height: 1.15; color: var(--cream); background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); cursor: pointer; }
 .pc input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .pc:hover { background-color: var(--teal-hi); }
-.pc:has(input:checked) { background: var(--pressed); color: var(--pressed-ink); box-shadow: var(--btn-shadow-chosen); transform: translate(1px, 2px); }
-.pc:has(input:focus-visible) { outline: 3px solid var(--gold); outline-offset: 2px; }
-.pc:has(input:disabled) { opacity: .4; cursor: default; box-shadow: none; }
+.pc.on { background: var(--pressed); color: var(--pressed-ink); box-shadow: var(--btn-shadow-chosen); transform: translate(1px, 2px); }
+.pc:focus-within { outline: 3px solid var(--gold); outline-offset: 2px; }
+.pc.dis { opacity: .4; cursor: default; box-shadow: none; }
 .play-help { font-size: 14.5px; line-height: 1.4; color: var(--muted); margin: 10px 0 4px; }
 .play-status { font-size: 15px; line-height: 1.4; min-height: 22px; margin: 4px 0 8px; color: var(--ok); } .play-status.no { color: var(--warn); }
 .play-why { margin: 8px 0 4px 20px; font-size: 15px; line-height: 1.4; } .play-why li { margin-bottom: 4px; }
