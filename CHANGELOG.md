@@ -23,12 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.92 - 2026-10-19 - Map maker: place ants one at a time, and mix teams
 
 **For players:**
 - **Map maker: place ants one at a time.** Choose Ants, tap a cell and one ant of the picked team stands there; tap an ant (any team) and it is taken away. "Take one away" makes every tap a removal. Each team shows how many ants it has, with plain warnings (a team with none, too many for the file, ants packed too tight).
 - **Group** keeps the clump of before and adds **Mix**: pick the teams and how many ants for each, choose every cell or every other cell, drag a box and the teams are mixed cell by cell, with a preview and one Undo. Good for a "mosh pit" start.
-- **Clear <team> ants...** takes one team's ants away after asking, and says how many.
+- **Clear (team) ants...** takes one team's ants away after asking, and says how many.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...2304d240); how it works: [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
 
 ## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
 
