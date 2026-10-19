@@ -10,6 +10,9 @@ Parts:
              512 x 512 (the most) and refuses 513 x 513; the 512 x 512 map is panned with the mouse (the point under the pointer moves with it), zoomed with the wheel (the point under the pointer
              stays, and a whole map at 512 x 512 paints in a moment), moved by the keyboard (a marked square, plus, minus, zero), and its small map shows while only a part is on the screen;
              Check map shows the card of the kind (the neutral badge for an Extended map) and Escape closes it with the focus back where it was; Download hands over the map's bytes;
+  * csp      1280 x 800, the page's content security policy (docker/nginx.conf; the check only judges a policy that the server sends, a plain folder has none): the policy is there with its
+             frame, base and plug-in rules, the page starts (WebAssembly core, pictures, IndexedDB, downloads) with nothing refused, and the check really sees a refusal (an inline script that the
+             page is made to add is blocked and counted); in every other part nothing may be refused either;
   * draw     1280 x 800, the tools: a click and a drag of the mouse paint ground and objects (the canvas is read pixel by pixel), only the cells that changed are painted again, a brush of 3, Fill, Erase,
              undo and redo (the buttons and the keys), the Move tool, the space key held down and the middle button pan instead of painting, the check of an opened map is run again after the eraser takes
              a hill away and again after undo, a map that was drawn on is handed over as the core writes it, the page asks before a map that was drawn on is left, and on a 512 x 512 map with the
@@ -83,9 +86,10 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges")
+PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges")
 WITH_ATLAS = ("panel", "sprites", "layer", "edges")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
+VIOLATIONS = []                   # what the browser refused for the page's content security policy (the console's "Refused to ..." lines and the audit issues), kept for the part that is running
 
 
 def tiny_hill():
@@ -304,11 +308,31 @@ def main():
                         pass
 
             tab.dt.handlers.append(on_dialog)
+            VIOLATIONS[:] = []
+
+            def on_log(msg, tab=tab):
+                # a refusal for the content security policy: the console line (source "security" or "Refused to ... Content Security Policy") and the audit issue
+                if msg.get("sessionId") != tab.session:
+                    return
+                params = msg.get("params", {})
+                if msg.get("method") == "Log.entryAdded":
+                    entry = params.get("entry", {})
+                    if "Content Security Policy" in entry.get("text", "") or "violates the following" in entry.get("text", ""):
+                        VIOLATIONS.append(entry.get("text", "")[:200])
+                elif msg.get("method") == "Audits.issueAdded" and params.get("issue", {}).get("code") == "ContentSecurityPolicyIssue":
+                    VIOLATIONS.append(json.dumps(params["issue"].get("details", {}).get("contentSecurityPolicyIssueDetails", {}))[:200])
+
+            tab.dt.handlers.append(on_log)
+            tab.call("Log.enable")
+            tab.call("Audits.enable")
             if part not in WITH_ATLAS:
                 tab.call("Network.enable")
                 tab.call("Network.setBlockedURLs", {"urls": ["*mapmaker_atlas/*"]})
             try:
                 run_part(part, tab, args, check, tiny, junk)
+                if part != "csp":
+                    time.sleep(0.3)
+                    check(not VIOLATIONS, "%s: the browser refused nothing for the content security policy%s" % (part, " (%s)" % VIOLATIONS[:3] if VIOLATIONS else ""))
             finally:
                 tab.close()
     except NotReachable as e:
@@ -714,6 +738,36 @@ def tab_browser(tab):
 
 
 def run_part(part, tab, args, check, tiny, junk):
+    if part == "csp":
+        print("[web map maker] the content security policy, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts with its map core")
+        page.ev("(function () { fetch(location.href, {cache: 'no-store'}).then(function (r) { window.__csp = [r.headers.get('content-security-policy') || '', r.headers.get('x-frame-options') || '', r.headers.get('referrer-policy') || '']; }); return true; })()")
+        wait_for(lambda: page.ev("!!window.__csp"), 5)
+        header, frame, referrer = page.ev("window.__csp") or ["", "", ""]
+        if not header:
+            print("  (this server sends no content security policy: only the plain folder is judged, nothing is refused to be seen)")
+            return
+        check(all(part in header for part in ("default-src 'self'", "script-src 'self' 'wasm-unsafe-eval'", "object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'")) and "unsafe-eval'" not in header.replace("'wasm-unsafe-eval'", ""),
+              "the page comes with the policy: %s" % header)
+        check(frame == "DENY" and referrer == "no-referrer", "and cannot be framed and sends no referrer (%s, %s)" % (frame, referrer))
+        s = page.state()
+        check(s["rows"] == "31" and s["tags"] == ["Classic map"], "the core (WebAssembly) and the map are there under the policy: %s" % s)
+        page.choose_file(tiny)
+        check(wait_for(lambda: page.state()["name"] == "TINY"), "a file is opened (the core reads it)")
+        page.press_act("download")
+        time.sleep(0.5)
+        page.press_act("save")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg')")), "the dialogs open (their style attributes are allowed)")
+        page.key("Escape")
+        time.sleep(0.5)
+        check(not VIOLATIONS, "nothing was refused while the page started, a file was opened, the map was handed over (a blob address) and a dialog opened%s" % (": %s" % VIOLATIONS[:3] if VIOLATIONS else ""))
+        # the check really sees a refusal: an inline script and a request to another site are both against the policy
+        page.ev("(function () { var s = document.createElement('script'); s.textContent = 'window.__ran = 1'; document.body.appendChild(s); fetch('https://example.invalid/x').catch(function () {}); })()")
+        check(wait_for(lambda: len(VIOLATIONS) >= 1, 5) and not page.ev("!!window.__ran"), "an inline script that the page is made to add does not run, and the check sees the refusal (%d seen)" % len(VIOLATIONS))
+        VIOLATIONS[:] = []
+        return
     if part == "desktop":
         print("[web map maker] desktop, 1280 x 800")
         tab.emulate(1280, 800, 1)

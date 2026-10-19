@@ -23,6 +23,21 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Maps sent for approval: the server now cleans the map's description before it is stored or listed (odd characters become "?", blanks are tidied, at most 100 characters); the map file itself is not changed.
+- A maker's name can no longer pass for the owner or the site ("Owner", "Admin", "System", "Claude" and the like, also written with look-alike Cyrillic or Greek letters), and a note or a maker's name cannot hold a web address or three backticks. The map maker tells you while you type.
+- The map maker page is now sent with a strict content security policy and cannot be put inside another page.
+
+**Rules / network:** none (protocol 21).
+
+**Fixes:**
+- The web server's log no longer copies the name, maker and note of a sent map (it logs the path only).
+- `lvl_tool info` prints a map's description escaped.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
+
 ## v0.12.87 - 2026-10-18 - Map maker: Fix edges (sprites part 2)
 
 **For players:**
