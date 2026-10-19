@@ -11,6 +11,7 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     width_ = level.width;
     height_ = level.height;
     if (width_ == 0 || height_ == 0) return false;
+    rules_ = level.rules;
 
     // A level load starts from empty cells: nothing of a previously loaded map may survive (an engine that plays a second map must equal a
     // fresh engine, which the lock-step state hash relies on)
@@ -87,10 +88,14 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             const auto& c2 = level.get_cell_layer2(x, y);
             auto& cell = get_cell_mut(x, y);
             cell.interactive_id = c2.tile_index;
-            // Layer-2 cell bytes 2 and 3: the anchor row and column of the object the cell belongs to (FUN_010076b6)
-            const bool has_l2_tile = (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE);
-            cell.anchor_y = has_l2_tile ? static_cast<int16_t>(c2.properties & 0xFFu) : int16_t{-1};
-            cell.anchor_x = has_l2_tile ? static_cast<int16_t>((c2.properties >> 8) & 0xFFu) : int16_t{-1};
+            // Layer-2 cell bytes 2 and 3: the anchor row and column of the object the cell belongs to (FUN_010076b6). LevelData::object_anchor reads them for both versions: the
+            // absolute bytes of version 8, or the sum of the cell and the relative offset of version 9 (so the same map as a version 9 file gives the same cells).
+            // (an empty cell, 0xFFFF and an original bomb tile have none: the cell keeps -1)
+            int32_t anchor_row = 0;
+            int32_t anchor_column = 0;
+            const bool has_anchor = level.object_anchor(y, x, anchor_row, anchor_column);
+            cell.anchor_y = has_anchor ? static_cast<int16_t>(anchor_row) : int16_t{-1};
+            cell.anchor_x = has_anchor ? static_cast<int16_t>(anchor_column) : int16_t{-1};
             cell.interactive_owner = 255;
             cell.timer_ticks = 0;
             cell.is_food = false;
