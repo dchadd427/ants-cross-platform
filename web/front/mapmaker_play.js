@@ -191,15 +191,14 @@
         function start(ctl) {
             var go = startable(choice, v.seats);
             if (!go.ok) return;
-            var rec = { id: randomId(win), name: m.name, bytes: m.bytes.slice() }, letters = code(choice);
-            kept.push(rec);
-            while (kept.length > KEPT) kept.shift();
-            var tab = win.open('/play.html?testmap=' + rec.id + '&seats=' + letters, '_blank');
+            var rec = { id: randomId(win), name: m.name, bytes: m.bytes.slice() };
+            var tab = win.open('/play.html?testmap=' + rec.id + '&seats=' + code(choice), '_blank');
             if (!tab) {
-                kept.pop();
                 ctl.close();
                 return dialogs.message('The test game could not open', 'Your browser did not open a new tab for it. Allow pop-ups for this site and try again. Your map was not changed.');
             }
+            kept.push(rec);                                                          // (the new tab asks for it when its page has loaded: this task is over by then)
+            while (kept.length > KEPT) kept.shift();
             ctl.close();
         }
 
@@ -248,7 +247,7 @@
                 body.appendChild(status);
                 refresh();
             },
-            buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'start', text: '▶ Start the game', keepOpen: true, onClick: start }]
+            buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'start', text: '\u25b6 Start the game', keepOpen: true, onClick: start }]
         });
         startButton = ctl.buttons.start;
         refresh();

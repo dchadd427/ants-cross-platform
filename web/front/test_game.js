@@ -40,7 +40,7 @@
 
     // A name for the strip: printable text only (no controls, no direction marks), 40 characters at most
     function cleanName(name) {
-        var text = typeof name === 'string' ? name.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/g, '').replace(/\s+/g, ' ').trim() : '';
+        var text = typeof name === 'string' ? name.replace(/\s+/g, ' ').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '').trim().replace(/ {2,}/g, ' ') : '';
         return Array.from(text).slice(0, 40).join('') || 'Test map';
     }
 
@@ -122,14 +122,14 @@
         bar.id = 'test-strip';
         bar.setAttribute('role', 'region');
         bar.setAttribute('aria-label', 'Test game');
-        var back = el(doc, 'button', 'min-height:44px;', '◀ Back to editor');
+        var back = el(doc, 'button', 'min-height:44px;', '\u25c0 Back to editor');
         back.type = 'button';
         back.className = 'btn';
         back.addEventListener('click', function () { ask(win, test.id); });
         var title = el(doc, 'strong', 'font-weight:500;font-size:18px;color:#f6d058;', 'Test game');
         var who = el(doc, 'span', 'flex:1 1 260px;font-size:15px;color:#b9c8bf;', ''), name = el(doc, 'span', 'color:#f4ece2;', rec.name);
         who.appendChild(name);
-        who.appendChild(doc.createTextNode(' · ' + lines.you + ' · ' + lines.bots));
+        who.appendChild(doc.createTextNode(' \u00b7 ' + lines.you + ' \u00b7 ' + lines.bots));
         var note = el(doc, 'span', 'font-size:14px;color:#8fa59a;', 'Not saved. Not counted.');
         bar.appendChild(back); bar.appendChild(title); bar.appendChild(who); bar.appendChild(note);
         doc.body.insertBefore(bar, doc.body.firstChild);
