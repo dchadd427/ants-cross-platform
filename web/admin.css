@@ -35,6 +35,9 @@ button { font: inherit; color: inherit; }
 .adm .qbox .quote { margin-top: 0; border-radius: 0 0 2px 2px; }
 .adm .zone { margin: 0 0 12px; padding: 8px 12px; font-size: 15px; color: #e3e9e6; background: #4a5551; border: 1px solid #7d8a85; border-radius: 4px; }
 .adm .ptnote { margin: 0 0 8px; font-size: 14px; color: #b9c4c0; }
+.adm [data-untrusted] { unicode-bidi: isolate; }
+.adm .srcrow > div { min-width: 0; }
+.adm .srcrow, .adm .srcrow .nm, .adm .srcrow .sm, .adm .srcrow .dsc { overflow-wrap: anywhere; }
 .adm .arow .ab { display: flex; gap: 10px; }
 .adm .btn.big { min-height: 52px; font-size: 19px; padding: 8px 26px; }
 .adm .arow .ab .btn.big { padding: 8px 16px; font-size: 18px; }

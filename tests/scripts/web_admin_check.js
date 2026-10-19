@@ -178,6 +178,8 @@ function noMarkup(label, app) {
         input.value = 'Gold Rush';
         w.calls.length = 0;
         await press(app, 'Save name and approve');
+        same('Save name and approve asks first, showing the new name, and sends nothing yet', [w.calls.length, texts(app, '.srcrow .nm')], [0, ['Gold Rush Classic map']]);
+        await press(app, 'Approve', 2);
         same('Save name and approve: the owner\'s name goes in the body', [w.calls[0].url, w.calls[0].body], ['/admin/api/maps/' + 'a'.repeat(32) + '/approve', { name: 'Gold Rush' }]);
         // Cancel closes the box and sends nothing
         const o = await open(world());
@@ -192,6 +194,7 @@ function noMarkup(label, app) {
         const o3 = await open(w3);
         await press(o3.app, 'Rename and approve', 1);
         await press(o3.app, 'Save name and approve');
+        await press(o3.app, 'Approve', 2);
         same('a name that is taken is refused in the box, with the next free name in it', [texts(o3.app, '.why'), all(o3.app, 'input')[0].value], [['That name is taken. The next free name is “Big Lake 2”.'], 'Big Lake 2']);
         check('and the box is still open (the map is still waiting)', all(o3.app, '.rn').length === 1);
     }
@@ -215,7 +218,7 @@ function noMarkup(label, app) {
     // ---- the Approved tab, C4, the question C5
     {
         const w = world();
-        const { app } = await open(w);
+        const { app, doc } = await open(w);
         await press(app, 'Approved (1)');
         same('approved: the lead, the row (the approved name, not the first one) and its large red button', [texts(app, '.alead'), texts(app, '.t1'), texts(app, '.am'), button(app, 'Take down').length], [['These maps are in the lobby map list now. Press “Take down” to remove one.'], ['Treasure 2Classic mapPlayer text'], ['By Mia Player text · 34 x 34 · Approved today, 09:20'], 1]);
         check('approved: the button is the red one', button(app, 'Take down')[0].className.indexOf('bad') > 0 && button(app, 'Take down')[0].className.indexOf('big') > 0);
@@ -228,7 +231,7 @@ function noMarkup(label, app) {
         await press(app, 'Cancel');
         same('Cancel: the question goes, nothing was sent', [all(app, '.dlg').length, w.calls.length], [0, 0]);
         await press(app, 'Take down');
-        all(app, '.scrim')[0].fire('keydown', { key: 'Escape' });
+        doc.key('Escape');
         await settle();
         same('Escape closes it too', [all(app, '.dlg').length, w.calls.length], [0, 0]);
         await press(app, 'Take down');
@@ -248,7 +251,7 @@ function noMarkup(label, app) {
         const dlg = all(app, '.dlg')[0];
         const cancelButton = all(app, '.dlg-foot button')[0], goButton = all(app, '.dlg-foot button')[1];
         check('the question starts with the focus on Cancel', doc.activeElement === cancelButton);
-        const tabAt = (node, shift) => { node.focus(); const e = { key: 'Tab', shiftKey: !!shift, prevented: false, preventDefault() { this.prevented = true; } }; all(app, '.scrim')[0].fire('keydown', e); return e; };
+        const tabAt = (node, shift) => { node.focus(); return doc.key('Tab', { shiftKey: !!shift }); };
         let e = tabAt(goButton, false);
         check('Tab from the last button goes to the first and is held', e.prevented && doc.activeElement === cancelButton);
         e = tabAt(cancelButton, true);
@@ -262,7 +265,7 @@ function noMarkup(label, app) {
         await press(app, 'Cancel');
         check('Cancel gives the focus back to the button that opened the question', doc.activeElement && doc.activeElement.getAttribute('data-take') === 'c'.repeat(32));
         await press(app, 'Take down');
-        all(app, '.scrim')[0].fire('keydown', { key: 'Escape' });
+        doc.key('Escape');
         await settle();
         check('Escape gives it back too', doc.activeElement && doc.activeElement.getAttribute('data-take') === 'c'.repeat(32));
         // the list is held back after the change
@@ -367,7 +370,7 @@ function noMarkup(label, app) {
         same('Cancel: the question goes and nothing is sent', [all(app, '.dlg').length, w.calls.length], [0, 0]);
         check('Cancel gives the focus back to the Approve button that opened the question', doc.activeElement && doc.activeElement.getAttribute('data-approve') === 'f'.repeat(32));
         await press(app, 'Approve', 0);
-        all(app, '.scrim')[0].fire('keydown', { key: 'Escape' });
+        doc.key('Escape');
         await settle();
         same('Escape closes the Approve question and sends nothing', [all(app, '.dlg').length, w.calls.length], [0, 0]);
         await press(app, 'Approve', 0);
@@ -386,6 +389,38 @@ function noMarkup(label, app) {
         await press(app, 'Approve', 0);
         await press(app, 'Approve', 2);
         same('taken name: the question is gone and the rename box is open, with the name marked', [all(app, '.dlg').length, all(app, '.rn').length, all(app, '.rn1 [data-untrusted]').map((n) => n.textContent)], [0, 1, ['Treasure']]);
+    }
+    // ---- the question hears the keys on the document, and the page behind it is inert
+    {
+        const w = world();
+        const { app, doc } = await open(w);
+        await press(app, 'Approve', 0);
+        check('while the question is open the page behind it is inert and the box is not', all(app, '.mtools')[0].getAttribute('inert') !== null && all(app, '.alist')[0].getAttribute('inert') !== null && all(app, '.dlg')[0].getAttribute('inert') === null && all(app, '.scrim')[0].getAttribute('inert') === null);
+        same('and one key listener is on the document', (doc.listeners.keydown || []).length, 1);
+        doc.body.focus();                                                              // (a click on plain text: the focus is on the body)
+        const tab = doc.key('Tab');
+        check('Tab with the focus on the body is brought into the box', tab.prevented && doc.activeElement === all(app, '.dlg-foot button')[0]);
+        doc.body.focus();
+        doc.key('Escape');
+        await settle();
+        same('Escape with the focus on the body closes the question, and no listener is left', [all(app, '.dlg').length, (doc.listeners.keydown || []).length], [0, 0]);
+        check('the page is live again', all(app, '.alist')[0].getAttribute('inert') === null);
+        // Cancel in the rename box's question keeps what the owner typed
+        await press(app, 'Rename and approve', 1);
+        all(app, 'input')[0].value = 'My Own Name';
+        await press(app, 'Save name and approve');
+        await press(app, 'Cancel', 1);
+        same('Cancel of the question brings the rename box back with the typed name', all(app, 'input')[0].value, 'My Own Name');
+    }
+    // ---- a bidirectional control in player text is dropped, and the marked values are isolated
+    {
+        const mean = 'Maya‮' + 'live⁦' + 'x؜';
+        const w = world({ lists: { waiting: [map('f'.repeat(32), { name: mean, maker: mean, note: mean })], approved: [], declined: [], taken_down: [] } });
+        const { app } = await open(w);
+        const marked = all(app, '[data-untrusted]').map((n) => n.textContent);
+        check('bidi controls are not in any marked value', marked.length >= 3 && marked.every((t) => !/[؜‎‏‪-‮⁦-⁩]/.test(t)) && marked[0] === 'Mayalivex');
+        const css = require('fs').readFileSync(path.resolve(__dirname, '..', '..', 'web', 'admin.css'), 'utf8');
+        check('and the style isolates them', /\[data-untrusted\] \{ unicode-bidi: isolate; \}/.test(css) && /\.srcrow \.dsc \{ overflow-wrap: anywhere; \}/.test(css));
     }
     // ---- a session that ends, and an error
     {

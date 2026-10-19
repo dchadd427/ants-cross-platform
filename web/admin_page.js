@@ -78,7 +78,7 @@
         }
         // A value that a player typed: its own element, marked as data (the mark does not depend on the words around it)
         function player(tag, cls, text) {
-            var n = el(tag, cls, text);
+            var n = el(tag, cls, String(text === undefined || text === null ? '' : text).replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ''));        // (bidirectional controls are dropped: an unclosed one would scramble the words around the value)
             n.setAttribute('data-untrusted', UNTRUSTED);
             return n;
         }
@@ -170,7 +170,7 @@
 
         // ---- the section "Maps players sent" ----
         function renderMaps(host, signed) {
-            var st = { tab: 'waiting', data: null, open: null, busy: false, dialog: null, dialogKind: null, focusBack: null };
+            var st = { tab: 'waiting', data: null, open: null, busy: false, dialog: null, dialogKind: null, dialogBody: null, keyOff: null, focusBack: null };
 
             function load(tab) {
                 st.tab = tab || st.tab;
@@ -232,12 +232,13 @@
                 input.type = 'text';
                 input.id = 'rename-' + m.id;
                 input.maxLength = 60;
-                input.value = st.open.suggestion || m.name;
+                input.value = st.open.typed || st.open.suggestion || m.name;
                 var label = el('label', null, 'Name for this map');
                 label.setAttribute('for', input.id);
                 var fld = add(el('span', 'fld'), label, input);
                 var why = el('div', 'why');
-                why.hidden = true;
+                why.hidden = !st.open.why;
+                if (st.open.why) why.textContent = st.open.why;
                 function nextName() {
                     call('GET', '/admin/api/next-name?name=' + encodeURIComponent(input.value)).then(function (r) {
                         if (r.status === 200) { input.value = r.json.name; why.hidden = true; }
@@ -246,18 +247,7 @@
                 }
                 add(box, add(el('div', 'rn2'), fld, button('Use next name', 'sm', nextName)));
                 add(box, el('div', 'rn3', '“Use next name” puts the next free name in the box' + (st.open.suggestion ? ' (here: ' + st.open.suggestion + ')' : '') + '. You can also type your own. A name that is already taken is never replaced.'), why);
-                var save = button('Save name and approve', 'ok', function () {
-                    act(m.id, 'approve', { name: input.value }, function (r) {
-                        if (r.json && r.json.error === 'name_taken') {
-                            why.textContent = 'That name is taken.' + (r.json.suggestion ? ' The next free name is “' + r.json.suggestion + '”.' : '');
-                            why.hidden = false;
-                            if (r.json.suggestion) input.value = r.json.suggestion;
-                            return true;
-                        }
-                        if (r.json && r.json.error === 'bad_name') { why.textContent = r.json.message; why.hidden = false; return true; }
-                        return false;
-                    });
-                });
+                var save = button('Save name and approve', 'ok', function () { st.open.typed = input.value; st.dialog = m; st.dialogKind = 'approve'; st.dialogBody = { name: input.value }; draw(); });
                 add(box, add(el('div', 'rn4'), button('Cancel', 'ghost', function () { st.open = null; draw(); }), save));
                 return box;
             }
@@ -292,7 +282,7 @@
                 if (st.tab === 'declined' && m.message) add(info, el('div', 'quote', 'Reason: ' + m.message));
                 var acts = el('div', 'ab');
                 if (st.tab === 'waiting') {
-                    var ap = button('Approve', 'big ok', function () { st.dialog = m; st.dialogKind = 'approve'; draw(); });
+                    var ap = button('Approve', 'big ok', function () { st.dialog = m; st.dialogKind = 'approve'; st.dialogBody = null; draw(); });
                     ap.setAttribute('data-approve', m.id);
                     add(acts, ap);
                     add(acts, button('Rename and approve', 'big', function () {
@@ -305,7 +295,7 @@
                     }));
                     add(acts, button('Decline', 'big bad', function () { st.open = { id: m.id, kind: 'decline' }; draw(); }));
                 } else if (st.tab === 'approved') {
-                    var td = button('Take down', 'big bad', function () { st.dialog = m; st.dialogKind = 'take-down'; draw(); });
+                    var td = button('Take down', 'big bad', function () { st.dialog = m; st.dialogKind = 'take-down'; st.dialogBody = null; draw(); });
                     td.setAttribute('data-take', m.id);
                     add(acts, td);
                 } else if (st.tab === 'taken_down') {
@@ -318,7 +308,7 @@
             }
 
             // The one small question for Approve and Take down: the map as the owner will decide on it (name, maker, picture, cleaned description), then the button
-            function confirmDialog(m, kind) {
+            function confirmDialog(m, kind, body) {
                 var approve = kind === 'approve';
                 var scrim = el('div', 'scrim');
                 var dlg = el('div', 'dlg');
@@ -331,7 +321,7 @@
                 var src = el('div', 'srcrow');
                 var info = el('div');
                 var desc = cleanDescription(m.description);
-                add(info, add(el('div', 'nm'), player('span', null, shown(m)), doc.createTextNode(' '), tags(m)), add(el('div', 'sm'), meta(m)));
+                add(info, add(el('div', 'nm'), player('span', null, body && body.name ? body.name : shown(m)), doc.createTextNode(' '), tags(m)), add(el('div', 'sm'), meta(m)));
                 add(info, add(el('div', 'sm dsc'), doc.createTextNode('Description: '), desc ? player('span', null, desc) : doc.createTextNode('none')));
                 var img = picture(m);
                 img.width = 56;
@@ -342,24 +332,35 @@
                 var cancel = button('Cancel', 'ghost', closeDialog);
                 var go = button(approve ? 'Approve' : 'Take down', approve ? 'ok' : 'bad', function () {
                     if (!approve) return act(m.id, 'take-down', {});
-                    act(m.id, 'approve', {}, function (res) {
-                        if (res.json && res.json.error === 'name_taken') { st.dialog = null; st.open = { id: m.id, kind: 'rename', suggestion: res.json.suggestion || '' }; m.name_taken = true; draw(); return true; }
+                    act(m.id, 'approve', body || {}, function (res) {
+                        var sug = res.json && res.json.suggestion ? res.json.suggestion : '';
+                        if (res.json && res.json.error === 'name_taken') {
+                            st.dialog = null;
+                            st.open = { id: m.id, kind: 'rename', suggestion: sug, why: body ? 'That name is taken.' + (sug ? ' The next free name is “' + sug + '”.' : '') : '' };
+                            if (!body) m.name_taken = true;
+                            draw();
+                            return true;
+                        }
+                        if (body && res.json && res.json.error === 'bad_name') { st.dialog = null; st.open = { id: m.id, kind: 'rename', suggestion: '', typed: body.name, why: res.json.message }; draw(); return true; }
                         return false;
                     });
                 });
                 add(dlg, inner, add(el('div', 'dlg-foot'), cancel, go));
-                scrim.addEventListener('keydown', function (e) {
+                // the keys are heard on the document (a click on plain text moves the focus to the body, and Escape must still close the box)
+                function onKey(e) {
                     if (e.key === 'Escape') { closeDialog(); return; }
                     if (e.key !== 'Tab') return;                                  // (the focus stays inside the box: Tab from the last button goes to the first, Shift+Tab the other way)
                     var now = doc.activeElement;
                     if (!dlg.contains(now) || (e.shiftKey && now === cancel)) { e.preventDefault(); (e.shiftKey ? go : cancel).focus(); }
                     else if (!e.shiftKey && now === go) { e.preventDefault(); cancel.focus(); }
-                });
+                }
                 add(scrim, dlg);
-                return { node: scrim, focus: cancel };
+                return { node: scrim, focus: cancel, onKey: onKey };
             }
 
             function draw() {
+                if (st.keyOff) { st.keyOff(); st.keyOff = null; }
+                if (!st.dialog) st.dialogBody = null;
                 host.textContent = '';
                 var counts = st.data ? st.data.counts : { waiting: 0, approved: 0, declined: 0, taken_down: 0 };
                 var tools = el('div', 'mtools');
@@ -389,8 +390,13 @@
                 }
                 add(host, el('div', 'qfoot', FOOTS[st.tab]));
                 if (st.dialog) {
-                    var d = confirmDialog(st.dialog, st.dialogKind);
+                    var d = confirmDialog(st.dialog, st.dialogKind, st.dialogBody);
                     add(host, d.node);
+                    [host.children, app.children, host.parentNode ? host.parentNode.parentNode.children : []].forEach(function (list) {          // (the page behind the box is inert: Tab cannot walk into it)
+                        Array.prototype.slice.call(list).forEach(function (n) { if (n !== d.node && n !== host.parentNode && n !== app) n.setAttribute('inert', ''); });
+                    });
+                    doc.addEventListener('keydown', d.onKey, true);
+                    st.keyOff = function () { doc.removeEventListener('keydown', d.onKey, true); };
                     d.focus.focus();
                 } else if (st.focusBack) {                                       // (the box is gone: the focus goes back to the button that opened it, else to the chosen tab)
                     var back = host.querySelector('[data-take="' + st.focusBack + '"]') || host.querySelector('[data-approve="' + st.focusBack + '"]') || host.querySelector('.chip.on');
