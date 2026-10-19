@@ -84,8 +84,13 @@ function ruleChecks() {
     f = grid(['ggg', 'mmm'], { '0,1': Ground.NAMES.indexOf('gm03a') + Ground.FIRST }); apply(f, Edges.plan(f, null, Ground)); equal(nameAt(f, 0, 1), 'gm08a', 'a wrong piece is chosen again');
     f = grid(['mg', 'mm'], { '0,0': Ground.NAMES.indexOf('mg06a') + Ground.FIRST });
     equal(Edges.plan(f, null, Ground).cells.map((c) => c[0]), [1], 'a piece toward a higher kind that is the right one (mud with gravel on its east side) stays');
-    f = grid(['mmm', 'mmm'], { '0,0': Ground.NAMES.indexOf('mg06a') + Ground.FIRST }); apply(f, Edges.plan(f, null, Ground)); equal(nameAt(f, 0, 0), 'M01a', 'a piece with nothing beside it is the plain tile again');
+    f = grid(['mmm', 'mmm'], { '0,0': Ground.NAMES.indexOf('mg06a') + Ground.FIRST }); apply(f, Edges.plan(f, null, Ground)); equal(nameAt(f, 0, 0), 'mg06a', 'a piece that the rule cannot place (nothing beside it) stays: it is the map maker\'s choice');
     f = grid(['mmm', 'mmm'], { '0,0': Ground.NAMES.indexOf('M01b') + Ground.FIRST }); equal(Edges.plan(f, null, Ground).count, 0, 'a plain look-alike stays');
+    f = grid(['www', 'ggg'], { '0,1': Ground.FIRST + Ground.NAMES.indexOf('wm03a') }); equal(Edges.plan(f, null, Ground).count, 0, 'a wm piece on water beside gravel (no piece exists there) stays');
+    // the walking class: a cell is never given a tile that walks differently (s01f is a plain look-alike of another class than the slate piece)
+    const odd = Ground.FIRST + Ground.NAMES.indexOf('s01f');
+    check(Ground.terrain(odd) !== Ground.terrain(Ground.FIRST + Ground.NAMES.indexOf('sm03a')), 'the made-up case has two classes');
+    f = grid(['mmm', 'sss'], { '1,1': odd }); equal(Edges.plan(f, null, Ground).cells.map((c) => c[0]), [3, 5], 'a cell whose new tile would walk differently stays');
     // two other kinds: the one with more sides wins
     f = grid(['mmm', 'mgd', 'ggg']); apply(f, Edges.plan(f, null, Ground)); equal(nameAt(f, 1, 1), 'gm02a', 'gravel with mud on two sides and dirt on one: the kind with more sides wins (mud)');
     f = grid(['ddd', 'dgm', 'ggg']); apply(f, Edges.plan(f, null, Ground)); equal(nameAt(f, 1, 1), 'gd02a', 'gravel with dirt on two sides and mud on one: dirt');
@@ -119,10 +124,26 @@ function libraryFiles() {
     return out;
 }
 
-const SHARE_CAP = 0.06;          // the share of the library's ground cells that Fix edges changes (5.3 in 100 when this was written: pieces on both sides, channels and the maps made to show every tile)
+const SHARE_CAP = 0.045;          // the share of the library's ground cells that Fix edges changes (3.6 in 100 when this was written; no piece is ever taken away)
+
+function inc() {
+    const text = fs.readFileSync(path.join(ROOT, 'src', 'ants_sim', 'movement_tables_data.inc'), 'utf8'), at = text.indexOf('kTileTerrain[1344] = {');
+    return text.slice(text.indexOf('{', at) + 1, text.indexOf('};', at)).replace(/\/\*.*?\*\//g, '').split(',').map((x) => x.trim()).filter(Boolean).map(Number);
+}
+
+function speedChecks() {
+    const n = 512, cells = [];
+    for (let r = 0; r < n; r++) { const row = []; for (let c = 0; c < n; c++) row.push(((r >> 3) + (c >> 3)) % 3 === 0 ? 485 : 439); cells.push(row); }
+    const f = { rows: n, columns: n, tile1: (r, c) => (r < 0 || c < 0 || r >= n || c >= n ? 485 : cells[r][c]) }, t0 = Date.now(), made = Edges.plan(f, null, Ground), took = Date.now() - t0;
+    check(made.count > 30000 && took < 1500, 'a 512 x 512 map is planned in under 1.5 seconds (' + took + ' ms, ' + made.count + ' cells)');
+}
 
 function libraryChecks() {
-    const list = libraryFiles(), sum = { maps: 0, cells: 0, changed: 0, same: 0, toPiece: 0, toPlain: 0, other: 0, worst: 0 }, bad = { kind: 0, table: 0, again: 0, order: 0 };
+    const table = inc();
+    equal(Ground.TERRAIN, table.slice(Ground.FIRST, Ground.LAST + 1).join(''), 'the walking classes of the ground table are those of the engine (kTileTerrain)');
+    let wrong = 0; for (let id = Ground.FIRST; id <= Ground.LAST; id++) if (Ground.terrain(id) !== table[id]) wrong++;
+    equal([wrong, Ground.terrain(1), Ground.terrain(Ground.LAST + 1)], [0, -1, -1], 'terrain(id) answers with the engine\'s class for every ground tile and -1 for a tile outside the table');
+    const list = libraryFiles(), sum = { maps: 0, cells: 0, changed: 0, same: 0, toPiece: 0, toPlain: 0, other: 0, worst: 0 }, bad = { kind: 0, table: 0, again: 0, order: 0, walk: 0 };
     list.forEach((file) => {
         const f = File.parse(new Uint8Array(fs.readFileSync(file)));
         if (!f.ok) return;
@@ -135,6 +156,7 @@ function libraryChecks() {
             if (!a || !b) { bad.table++; return; }
             if (a.kind !== b.kind) bad.kind++;
             if (i <= last) bad.order++;
+            if (Ground.terrain(was[i]) !== Ground.terrain(t)) bad.walk++;
             last = i; cells[i] = t;
             if (b.other) sum.toPiece++; else sum.toPlain++;
         });
@@ -145,8 +167,9 @@ function libraryChecks() {
     });
     console.log('    library: ' + sum.maps + ' maps, ' + sum.cells + ' ground cells; Fix edges changes ' + sum.changed + ' (' + (100 * sum.changed / sum.cells).toFixed(1) + ' in 100: ' + sum.toPiece + ' get a piece, ' + sum.toPlain + ' go back to plain); ' + sum.same + ' maps stay as they are; the most changed map: ' + (100 * sum.worst).toFixed(1) + ' in 100');
     check(sum.maps >= 540, 'the library has its 540 maps (' + sum.maps + ')');
-    equal(bad, { kind: 0, table: 0, again: 0, order: 0 }, 'the library: no kind changes, only tiles of the table, a fixed map is left as it is, cells in row order');
+    equal(bad, { kind: 0, table: 0, again: 0, order: 0, walk: 0 }, 'the library: no kind or walking class changes, only tiles of the table, a fixed map is left as it is, cells in row order');
     check(sum.changed / sum.cells < SHARE_CAP, 'the share of the library changed is under ' + SHARE_CAP + ': ' + (sum.changed / sum.cells));
+    check(sum.toPlain === 0, 'no piece goes back to plain: the rule only puts pieces where it has an answer');
     check(sum.same >= 100, 'at least 100 maps are already right (' + sum.same + ')');
 }
 
@@ -295,6 +318,7 @@ function dialogChecks() {
 shapeChecks();
 ruleChecks();
 libraryChecks();
+speedChecks();
 bytesChecks();
 dialogChecks();
 console.log(failures ? failures + ' of ' + checks + ' checks FAILED' : 'edges check: ' + checks + ' checks passed');

@@ -9,12 +9,12 @@
 })(this, function (File, Tiles) {
     'use strict';
 
-    var WINDOW = { columns: 48, rows: 32 };               // the most cells that a preview shows (the cells round the first change)
-    var NOTE = 'Edge pieces you placed by hand in this area are chosen again too. Where the game has no edge piece (for example water beside gravel, dirt or slate) the plain tile stays. One Undo brings everything back.';
+    var WINDOW = { columns: 48, rows: 32 };               // the most cells that a preview shows (the cells around the first change)
+    var NOTE = 'Edge pieces you placed by hand stay, unless the rule has a better one for that cell. Where the game has no edge piece (for example water beside gravel, dirt or slate) the plain tile stays. One Undo brings everything back.';
 
-    // Who wears the piece where two kinds meet: only ONE of the two cells gets it (the game's own maps do it that way: 98 in 100 of the boundaries that have a piece have it on one side only), the
-    // kind of the higher rank. The order is what those maps show for each pair (gravel, dirt and slate wear it toward mud 94 to 96 times in 100, water 77, gravel toward slate 75, slate toward
-    // dirt 88; gravel and dirt split evenly)
+    // Who wears the piece where two kinds meet: only ONE of the two cells gets it (the game's own maps do it that way: almost every boundary that has a piece has it on one side only), the kind of
+    // the higher rank. The order is what those maps show for each pair (gravel, dirt and slate wear it toward mud 93 to 96 times in 100, water 75, gravel toward slate 75, slate toward dirt 88;
+    // gravel and dirt split evenly)
     var RANK = { mud: 0, dirt: 1, slate: 2, gravel: 3, water: 4 };
 
     // The piece for a cell that has the other kind on these orthogonal sides (n, s, w, e): one side makes an edge piece, two sides that meet a corner piece (02 NW, 03 N, 04 NE, 05 W, 06 E,
@@ -26,8 +26,9 @@
         return n ? (w ? 2 : 4) : (w ? 7 : 9);
     }
 
-    // The tile that a cell of layer 1 should have (its own, when it is right or no piece exists), by the kinds of its four sides. The cell wears a piece toward a kind of a lower rank; toward a
-    // kind of a higher rank it keeps the piece it has when that is the right one (a piece placed by hand) and is the plain tile otherwise.
+    // The tile that a cell of layer 1 should have: its own when it is right, when the rule has no answer for it, or when the new tile would walk differently. The rule has an answer only where a
+    // cell of the higher kind touches a lower kind (a piece to put in) and the pieces of that pair exist; a piece that the rule cannot place (water beside gravel with a wm piece, a piece toward
+    // a kind that is not beside it) is a choice of the person who made the map and stays.
     function wanted(kindAt, G, r, c, id) {
         var t = G.info(id);
         if (!t) return id;
@@ -39,13 +40,9 @@
             if (count > bestCount || (count && count === bestCount && (o === t.other || (best !== t.other && RANK[o] < RANK[best])))) { best = o; bestCount = count; }
         }
         var shape = best ? shapeOf(n === best, s === best, w === best, e === best) : 0;
-        if (!shape) {
-            if (t.other && RANK[t.other] > RANK[t.kind] && shapeOf(n === t.other, s === t.other, w === t.other, e === t.other) === t.shape) return id;      // (a right piece toward a higher kind, placed by hand)
-            return t.other ? G.kind(t.kind).plain : id;                              // (a piece that is not right is the plain tile again; a plain look-alike stays)
-        }
-        if (t.other === best && t.shape === shape) return id;                          // (the right piece, in whichever look-alike it was placed)
+        if (!shape || (t.other === best && t.shape === shape)) return id;
         var pieces = G.edges(t.kind, best);
-        for (i = 0; i < pieces.length; i++) if (pieces[i].shape === shape) return pieces[i].id || id;
+        for (i = 0; i < pieces.length; i++) if (pieces[i].shape === shape) return pieces[i].id && G.terrain(pieces[i].id) === G.terrain(id) ? pieces[i].id : id;
         return id;
     }
 
@@ -96,7 +93,7 @@
 
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
-    // The cells a preview shows: the region, or the window of WINDOW round the first change when it is bigger
+    // The cells a preview shows: the region, or the window of WINDOW around the first change when it is bigger
     function windowOf(made, columns) {
         var g = made.region, w = Math.min(WINDOW.columns, g.c1 - g.c0 + 1), h = Math.min(WINDOW.rows, g.r1 - g.r0 + 1);
         var mid = made.count ? made.cells[0][0] : 0, row = made.count ? (mid / columns) | 0 : (g.r0 + g.r1) >> 1, col = made.count ? mid - row * columns : (g.c0 + g.c1) >> 1;
@@ -128,7 +125,7 @@
             Object.keys(cards).forEach(function (k) { cards[k].label.classList.toggle('on', k === scope); cards[k].input.checked = k === scope; });
             paint(before, m, win, false); paint(after, m, win, true);
             count.textContent = 'After: ' + (m.count ? plural(m.count, 'cell', 'cells') + (m.count === 1 ? ' changes' : ' change') : 'nothing changes');
-            sample.textContent = win.w * win.h < (m.region.r1 - m.region.r0 + 1) * (m.region.c1 - m.region.c0 + 1) ? 'The pictures show ' + win.w + ' by ' + win.h + ' cells of this area, round the first change.' : '';
+            sample.textContent = win.w * win.h < (m.region.r1 - m.region.r0 + 1) * (m.region.c1 - m.region.c0 + 1) ? 'The pictures show ' + win.w + ' by ' + win.h + ' cells of this area, around the first change.' : '';
             sample.hidden = !sample.textContent;
             ctl.setDisabled('fix', !m.count);
             shown = m;

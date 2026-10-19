@@ -576,6 +576,18 @@ def edges_bytes(page):
     return got
 
 
+def still_pixels(page):
+    """a digest of the map's pixels once they have stopped changing (a toy's picture that was fetched alone may arrive late)"""
+    last = None
+    for _ in range(40):
+        now = page.ev("window.__pixels('map')")
+        if now == last:
+            return now
+        last = now
+        time.sleep(0.25)
+    return last
+
+
 def edges_open(page, whole=False):
     page.ev("document.getElementById('edges-btn').click()")
     ok = wait_for(lambda: page.ev("!!document.querySelector('.dlg.edges')"), 8)
@@ -601,7 +613,7 @@ def run_edges(page, tab, args, check):
     check(wait_for(lambda: spread(page, 5, 5) >= 4, 10), "its pictures are drawn")
     first = edges_bytes(page)
     check(first["left"] == 147, "the rule has 147 cells to fix on the original map (%s)" % first["left"])
-    pixels = page.ev("window.__pixels('map')")
+    pixels = still_pixels(page)
     check(page.button_off("#undo-btn"), "nothing to undo yet")
     # the dialog on the whole map, then Cancel
     check(edges_open(page), "the Fix edges dialog opens")
@@ -611,7 +623,7 @@ def run_edges(page, tab, args, check):
     check(differ[0] > 500 and differ[1:3] == differ[3:5][:2] and differ[5] >= 300, "before and after are drawn from the pictures (%d colors: not flat) and differ in %d pixels, in the same size" % (differ[5], differ[0]))
     page.shot(args.shots, "mapmaker-fix-edges-dialog")
     page.ev("[].filter.call(document.querySelectorAll('.dlg.edges .btn'), function (b) { return b.textContent === 'Cancel'; })[0].click()")
-    check(not page.ev("!!document.querySelector('.dlg')") and page.ev("window.__pixels('map')") == pixels and page.button_off("#undo-btn"), "Cancel closes it and changes nothing (the pixels, the history)")
+    check(not page.ev("!!document.querySelector('.dlg')") and still_pixels(page) == pixels and page.button_off("#undo-btn"), "Cancel closes it and changes nothing (the pixels, the history)")
     check(edges_bytes(page)["sha"] == first["sha"], "and the bytes are the same")
     # zoom in so that only a part is on the screen: the part is fewer cells than the whole
     box = page.box("#map")
@@ -620,7 +632,7 @@ def run_edges(page, tab, args, check):
     time.sleep(0.4)
     s = page.state()
     check(s["scale"] > 20 and s["mini"], "zoomed in: only a part of the map is on the screen (%s pixels a cell)" % s["scale"])
-    before_part = page.ev("window.__pixels('map')")
+    before_part = still_pixels(page)
     check(edges_open(page), "the dialog opens again")
     part = edges_count(page)
     check(page.ev("document.querySelector('.dlg.edges input:checked').value") == "part", "with the part you can see chosen")
@@ -647,12 +659,12 @@ def run_edges(page, tab, args, check):
     check(all(n == o or o == "." for n, o in zip(new_names, old_names)) and all(n != "." for n in put), "the dictionary keeps its names, and every piece that was put has its name there (%d new names: the original draws no tile named \".\")" % sum(1 for n, o in zip(new_names, old_names) if n != o))
     check(len(words) == part, "as many cells changed as the dialog said (%d of %d)" % (len(words), part))
     st = page.state()
-    centre_row, centre_col = [int(v) for v in st["center"].split(",")]
+    center_row, center_col = [int(v) for v in st["center"].split(",")]
     half_c, half_r = box["w"] / 2 / st["scale"] + 1.5, box["h"] / 2 / st["scale"] + 1.5
-    inside = all(abs(i // first["columns"] - centre_row) <= half_r and abs(i % first["columns"] - centre_col) <= half_c for i in words)
+    inside = all(abs(i // first["columns"] - center_row) <= half_r and abs(i % first["columns"] - center_col) <= half_c for i in words)
     check(inside, "and all of them are in the part that was on the screen")
     check(wait_for(lambda: page.state()["check"] == "Works in the original game", 15), "the check line still says: Works in the original game (%s)" % page.state()["check"])
-    check(not page.button_off("#undo-btn") and page.ev("window.__pixels('map')") != before_part, "Undo is on and the picture of the map changed")
+    check(not page.button_off("#undo-btn") and still_pixels(page) != before_part, "Undo is on and the picture of the map changed")
     page.shot(args.shots, "mapmaker-fix-edges-after-part")
     # the whole map on top of it: the rest of the 147
     check(edges_open(page, whole=True), "the dialog opens, and the whole map is chosen")
@@ -665,7 +677,7 @@ def run_edges(page, tab, args, check):
     te = every["bytes"][every["layer1"] - 8:]
     check(len(te) == len(ta) and len({(i - 8) // w for i in range(len(ta)) if ta[i] != te[i]}) == 147, "exactly 147 cells differ from the map as it was opened")
     check(wait_for(lambda: page.state()["check"] == "Works in the original game", 15), "and the check line says: Works in the original game (%s)" % page.state()["check"])
-    after_all = page.ev("window.__pixels('map')")
+    after_all = still_pixels(page)
     page.shot(args.shots, "mapmaker-fix-edges-after-whole")
     # ONE Undo each
     page.ev("document.getElementById('undo-btn').click()")
@@ -673,13 +685,23 @@ def run_edges(page, tab, args, check):
     check(back["sha"] == done["sha"], "one Undo takes back the second fix: the exact bytes of before it")
     page.ev("document.getElementById('undo-btn').click()")
     back = edges_bytes(page)
-    check(back["sha"] == first["sha"] and page.ev("window.__pixels('map')") == before_part, "one more Undo takes back the first: the exact bytes of the map as it was opened, and its pixels")
+    check(back["sha"] == first["sha"] and still_pixels(page) == before_part, "one more Undo takes back the first: the exact bytes of the map as it was opened, and its pixels")
     check(page.button_off("#undo-btn"), "nothing is left to undo")
     page.ev("document.getElementById('redo-btn').click()")
     page.ev("document.getElementById('redo-btn').click()")
-    check(edges_bytes(page)["sha"] == every["sha"] and page.ev("window.__pixels('map')") == after_all, "Redo twice makes both again: the same bytes and the same pixels")
+    check(edges_bytes(page)["sha"] == every["sha"] and still_pixels(page) == after_all, "Redo twice makes both again: the same bytes and the same pixels")
     check(edges_open(page, whole=True) and edges_count(page) == 0 and page.button_off(".dlg.edges .dlg-foot .btn:last-child"), "the dialog says that nothing changes, and Fix edges is off")
     page.key("Escape")
+    # a phone: the box is a sheet inside the screen with both buttons in view, and nothing scrolls sideways
+    tab.emulate(390, 844, 2, mobile=True)
+    time.sleep(0.5)
+    check(edges_open(page, whole=True), "on a phone (390 x 844) the dialog opens")
+    got = json.loads(page.ev("""JSON.stringify((function () { var d = document.querySelector('.dlg.edges'), r = d.getBoundingClientRect(), out = [];
+        [].forEach.call(d.querySelectorAll('.dlg-foot .btn, .kind, canvas'), function (n) { var b = n.getBoundingClientRect(); if (b.left < -0.5 || b.right > innerWidth + 0.5 || b.bottom > innerHeight + 0.5) out.push(n.textContent || n.tagName); });
+        return {inside: r.left >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, out: out, sideways: document.documentElement.scrollWidth > innerWidth,
+                small: [].filter.call(d.querySelectorAll('.dlg-foot .btn, .kind'), function (n) { return n.getBoundingClientRect().height < 43.5; }).length}; })())"""))
+    check(got["inside"] and not got["out"] and not got["sideways"] and got["small"] == 0, "the sheet, its choices, pictures and buttons are inside the screen, 44 pixels high, no sideways scroll (%s)" % got)
+    page.shot(args.shots, "mapmaker-fix-edges-phone-check")
 
 
 def tab_browser(tab):
