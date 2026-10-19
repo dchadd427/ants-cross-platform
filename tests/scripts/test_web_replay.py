@@ -337,12 +337,6 @@ class TheSpectatorsPicture(unittest.TestCase):
 
     def test_the_arrows_choose_a_shape_and_the_keys_are_not_overstated(self):
         self.assertIn("['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key)", self.glue)
-        entry = read("CHANGELOG.md")
-        if "## v0.12.8 " not in entry:                                                                       # (the entry has been retired from the changelog: nothing to promise or overstate)
-            return
-        entry = entry[entry.index("## v0.12.8 "):entry.index("\n## ", entry.index("## v0.12.8 ") + 1)]
-        self.assertNotIn("Tab", entry)
-        self.assertNotIn("keyboard", entry.lower())                                                          # (Tab does not move the focus on the game page: the entry promises no keyboard reach)
 
     def test_the_bar_stays_while_the_window_is_open_and_esc_is_the_windows(self):
         self.assertIn("if (dragging || !$('picpop').hidden) {", self.glue)

@@ -21,9 +21,10 @@ constexpr int kDx[8] = {0, 1, 1, 1, 0, -1, -1, -1};
 constexpr int kDy[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
 
 // Row 90 of a map taller than 90 rows: the engine's path finder never generates a tile of it (path_planner.cpp PathSearch::step skips every neighbour whose row is the invalid
-// marker 0x5a = 90; the original does the same: Ants.exe 0x1019b23, docs/legacy/Ants.exe.c FUN_01019a66 `if (*local_14 != 0x5a)`)
+// marker 0x5a = 90; the original does the same: Ants.exe 0x1019b23, docs/legacy/Ants.exe.c FUN_01019a66 `if (*local_14 != 0x5a)`). Only a map of rules 0 has the wall: a map of rules 1
+// (Grid::rules(), the level's rules word) takes it down, and the engine's searches take the same flag from the same word (movement_system.cpp, go_to)
 bool in_sentinel_row(const sim::Grid& grid, sim::TileCoord t) noexcept {
-    return t.y == MapInfo::kPathSentinelRow && grid.height() > static_cast<uint32_t>(MapInfo::kPathSentinelRow);
+    return grid.rules() == 0 && t.y == MapInfo::kPathSentinelRow && grid.height() > static_cast<uint32_t>(MapInfo::kPathSentinelRow);
 }
 
 // The walkable tiles of the queue row of the hill whose origin is (bx, by), left to right, in the given mask

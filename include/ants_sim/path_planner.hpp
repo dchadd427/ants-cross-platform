@@ -21,7 +21,10 @@
 //   * A popped node with f >= 8000 ends the search with failure, and that test precedes the goal test.
 //   * Invalid neighbours at the map edge are marked by writing row 0x5a (90) and skipped by testing
 //     row == 90, so a real tile in row 90 is never generated as a neighbour (no shipped map has more
-//     than 60 rows).
+//     than 60 rows). A map of rules 1 (Extended maps, docs/MAP_FORMAT.md) takes this wall down: its
+//     searches mark an invalid neighbour with row -1 instead, which is never a real row, so every
+//     row of a tall map can be walked. Rules 0 (every map that exists today, at most 81 rows) is
+//     untouched: the wall is the default of every constructor below.
 //
 // Coordinates: the original's tile is {int16 row, int16 col}. This port uses ants::sim::TileCoord with
 // x = column and y = row throughout.
@@ -121,6 +124,7 @@ public:
     static constexpr uint32_t kFailF = 8000u;              ///< popped f >= 8000 -> no path (0x1019ae0)
     static constexpr uint16_t kDefaultBudget = 1000u;      ///< expansions per PATHMGR run (0x10247ac)
     static constexpr int32_t kSentinelRow = 0x5a;          ///< invalid-neighbour marker (0x1019cbd)
+    static constexpr int32_t kNoSentinelRow = -1;          ///< the marker when the wall is down (rules 1): never a real row
 
     /**
      * @param ant_id  id of the requesting ant (passed back with the result)
@@ -129,8 +133,9 @@ public:
      * @param rows    map rows (the original copies map+0xd0 at creation)
      * @param cols    map columns (map+0xd2)
      * @param pool    grid pool; must outlive this search
+     * @param wall_at_row_90  the default true means the wall is UP (rules 0): every engine caller must pass grid_.rules() == 0. True (the original, rules 0): a real tile in row 90 is never entered; false (rules 1): the wall is down and every row can be walked
      */
-    PathSearch(uint32_t ant_id, TileCoord start, TileCoord goal, uint16_t rows, uint16_t cols, PathGridPool& pool);
+    PathSearch(uint32_t ant_id, TileCoord start, TileCoord goal, uint16_t rows, uint16_t cols, PathGridPool& pool, bool wall_at_row_90 = true);
     ~PathSearch();
 
     PathSearch(const PathSearch&) = delete;
@@ -182,6 +187,7 @@ private:
     uint16_t rows_;
     uint16_t cols_;
     PathGridPool* pool_;
+    int32_t sentinel_row_{kSentinelRow};  // kSentinelRow (rules 0) or kNoSentinelRow (rules 1): the row that marks an invalid neighbour
     int slot_{-1};
     uint32_t* grid_{nullptr};
     std::vector<TileCoord> heap_;
@@ -224,8 +230,9 @@ public:
     /**
      * @brief PathMgr::Request (0x10246e8): removes the first queued request of the same ant (releasing its
      *        grid slot), then appends a new request, which takes a free grid slot immediately if there is one.
+     *        @p wall_at_row_90 is PathSearch's. Its default true means the wall is up: every engine caller must pass grid_.rules() == 0.
      */
-    void request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols);
+    void request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols, bool wall_at_row_90 = true);
 
     /**
      * @brief One PATHMGR run (0x1024786).

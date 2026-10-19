@@ -198,7 +198,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     }
 }
 
-void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms) {
+void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms, uint16_t rules) {
     impl_->roster_mask_ = 0x0Fu;
     impl_->dropped_mask_ = 0;
     impl_->out_of_ants_told_ = 0;
@@ -208,7 +208,7 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     impl_->active_effects_.clear();
     impl_->battle_clouds_.clear();
     impl_->score_bubbles_.clear();
-    impl_->grid_.init_empty(width, height);
+    impl_->grid_.init_empty(width, height, rules);
     impl_->stats_.reset();
     impl_->last_attacked_ms_.fill(-1000000);          // player +0x4c: no team has been attacked yet
     impl_->set_match_clock(static_cast<int64_t>(match_time_ms));
@@ -626,7 +626,7 @@ bool SimulationEngine::stop_ant(uint32_t ant_id) {
         const uint8_t act = impl_->orig_action_of(*a);
         if (act == 0 || (act > 2 && act <= 9) || act == 0x0B) return false;
     }
-    if (!a->has_order_tile()) return false;
+    if (!a->has_order_tile(impl_->grid_.rules())) return false;
     return impl_->go_to(*a, t, false, false);
 }
 

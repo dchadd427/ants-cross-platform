@@ -20,6 +20,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 #include "ants_test_paths.hpp"
 #include "../common/test_assert.hpp"
@@ -822,6 +823,106 @@ static void run_suite_6_before_the_first_tick() {
     } TEST_END();
 }
 
+// ============================================================================
+// Suite 7: Rules 1 (a map of more than 90 rows: the wall at row 90 is down)
+// ============================================================================
+// A level of rules 1 (Grid::rules(), docs/MAP_FORMAT.md) has no wall at row 90 in the path finder, and "this ant has no order tile" is the marker (column 120, row 90) itself and no
+// longer "a row of 90 or more". A level of rules 0 is as it was: its walls stay (the first case of each pair pins that, on the same tall world).
+static std::vector<std::pair<int32_t, int32_t>> relative_path(SimulationEngine& sim, uint32_t id, int32_t base_row) {
+    std::vector<std::pair<int32_t, int32_t>> out;
+    for (const TileCoord& t : sim.get_unit(id).waypoints) out.emplace_back(t.x, t.y - base_row);
+    return out;
+}
+
+static void run_suite_7_rules_one() {
+    TEST_SUITE("Suite 7: Rules 1, The Wall At Row 90 Is Down");
+
+    TEST_CASE("7.1 A walk across row 90 on a 100-row world: delivered and walked at rules 1, refused at rules 0") {
+        for (const uint16_t rules : {uint16_t{0}, uint16_t{1}}) {
+            SimulationEngine sim;
+            sim.init_test_world(20, 100, 7, 600000, rules);
+            const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 80});
+            sim.tick();
+            sim.issue_move_order(id, TileCoord{5, 95});
+            for (int t = 0; t < 1200; ++t) sim.tick();
+            const AntUnit& a = sim.get_unit(id);
+            const TileCoord at{a.pixel_x / 32, a.pixel_y / 32};
+            if (rules == 1) {
+                ASSERT_TRUE(at == (TileCoord{5, 95}));
+                ASSERT_TRUE(a.waypoints.empty());
+            } else {
+                ASSERT_TRUE(at.y < 90);                                     // the wall: no tile of row 90 is ever entered
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("7.2 Stop works below row 90 at rules 1 (the order tile of row 97 is an order tile); at rules 0 it keeps its old answer there, and above row 90 both agree") {
+        const auto stop_midwalk = [](uint16_t rules, int32_t base, bool* walking, TileCoord* end) {
+            SimulationEngine sim;
+            sim.init_test_world(20, 100, 7, 600000, rules);
+            const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{5, base});
+            sim.tick();
+            sim.issue_move_order(id, TileCoord{5, base + 5});
+            for (int t = 0; t < 40; ++t) sim.tick();
+            *walking = !sim.get_unit(id).waypoints.empty();
+            const bool stopped = sim.stop_ant(id);
+            for (int t = 0; t < 600; ++t) sim.tick();
+            *end = TileCoord{sim.get_unit(id).pixel_x / 32, sim.get_unit(id).pixel_y / 32};
+            return stopped;
+        };
+        bool walking = false;
+        TileCoord end{};
+        ASSERT_TRUE(stop_midwalk(0, 40, &walking, &end) && walking);                    // above row 90: Stop works at either rules
+        ASSERT_TRUE(end.y < 45);
+        ASSERT_TRUE(stop_midwalk(1, 40, &walking, &end) && walking);
+        ASSERT_TRUE(end.y < 45);
+        ASSERT_TRUE(stop_midwalk(1, 92, &walking, &end) && walking);                    // rows 92 to 97 at rules 1: the walk ends early
+        ASSERT_TRUE(end.y > 92 && end.y < 97);
+        ASSERT_FALSE(stop_midwalk(0, 92, &walking, &end));                              // at rules 0 the order tile of row 97 reads as "none": nothing happens
+        ASSERT_TRUE(walking && end.y == 97);
+        // only the marker itself (column 120, row 90) is "none": a target in column 120 or in row 90 is a target (a world of 130 columns has both)
+        const struct { TileCoord from; TileCoord to; } near_marker[] = {{TileCoord{120, 92}, TileCoord{120, 98}}, {TileCoord{110, 90}, TileCoord{125, 90}}, {TileCoord{110, 85}, TileCoord{125, 90}}};
+        for (const auto& w : near_marker) {
+            SimulationEngine sim;
+            sim.init_test_world(130, 100, 7, 600000, 1);
+            const uint32_t id = sim.spawn_unit(0, AntType::Worker, w.from);
+            sim.tick();
+            sim.issue_move_order(id, w.to);
+            for (int t = 0; t < 40; ++t) sim.tick();
+            ASSERT_FALSE(sim.get_unit(id).waypoints.empty());
+            ASSERT_TRUE(sim.stop_ant(id));
+        }
+    } TEST_END();
+
+    TEST_CASE("7.3 An idle team-mate with a target tile is not an idle blocker below row 90 at rules 1: the same path as the same scene in row 40; at rules 0 the old answer stays") {
+        const auto scene = [](uint16_t rules, int32_t base) {
+            SimulationEngine sim;
+            sim.init_test_world(20, 100, 7, 600000, rules);
+            const uint32_t walker = sim.spawn_unit(0, AntType::Worker, TileCoord{5, base});
+            const uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{7, base});
+            sim.tick();                                                             // both start their idle clip
+            sim.get_unit(blocker).orig_order_tile = TileCoord{7, base};            // an ant that stands on its target: it has an order tile
+            sim.issue_move_order(walker, TileCoord{9, base});
+            sim.tick();                                                             // the path is delivered
+            return relative_path(sim, walker, base);
+        };
+        const auto straight = scene(0, 40);
+        ASSERT_EQ(straight.size(), static_cast<size_t>(5));                         // through the ant with a target (it is bumped aside when the walker meets it, 3.1)
+        ASSERT_TRUE(scene(1, 40) == straight);
+        ASSERT_TRUE(scene(1, 92) == straight);
+        ASSERT_TRUE(scene(0, 92) != straight);                                      // rules 0: the tile of row 92 reads as "no target", the blocker is idle, the path goes round it
+        // an idle ant with NO target is a blocker below row 90 too (the marker is what means "none")
+        SimulationEngine sim;
+        sim.init_test_world(20, 100, 7, 600000, 1);
+        const uint32_t walker = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 92});
+        sim.spawn_unit(0, AntType::Worker, TileCoord{7, 92});
+        sim.tick();
+        sim.issue_move_order(walker, TileCoord{9, 92});
+        sim.tick();
+        ASSERT_TRUE(relative_path(sim, walker, 92) != straight);
+    } TEST_END();
+}
+
 int main() {
     std::cout << "=======================================================\n"
               << " ANTS - ORIGINAL MOVEMENT GOLDEN TEST SUITE\n"
@@ -833,6 +934,7 @@ int main() {
     run_suite_4_cant_go();
     run_suite_5_terrain();
     run_suite_6_before_the_first_tick();
+    run_suite_7_rules_one();
 
     std::cout << "\n=======================================================\n"
               << " MOVEMENT GOLDEN TEST SUMMARY\n"

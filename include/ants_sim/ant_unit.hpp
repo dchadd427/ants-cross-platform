@@ -309,8 +309,15 @@ public:
         orig_order_tile = TileCoord{kNoOrderTileX, kNoOrderTileY};
         ++move_serial;
     }
-    bool has_order_tile() const noexcept {
-        return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kNoOrderTileY);
+    // Does the ant have a target tile? @p rules is the level's rules word (Grid::rules()).
+    // Rules 0 (as ported): "none" is any row of 90 or more, or a negative row (the original's unsigned test `row < 90`), so no ant of a real map of at most 81 rows
+    // ever has a tile in that range except the marker itself.
+    // Rules 1 (maps taller than 90 rows): rows of 90 and more are real, so "none" is the marker itself, (column 120, row 90), and nothing else. The marker stays what it
+    // always was (every ant, with its hash, is the same at both rules); it is a real tile only on a map of more than 120 columns AND more than 90 rows, which the
+    // simulation does not play yet (docs/MAP_FORMAT.md, "Rules").
+    bool has_order_tile(uint16_t rules) const noexcept {
+        if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kNoOrderTileY);
+        return orig_order_tile.x != kNoOrderTileX || orig_order_tile.y != kNoOrderTileY;
     }
 
     void tick_timers() noexcept;
