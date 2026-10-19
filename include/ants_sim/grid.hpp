@@ -238,7 +238,8 @@ class Grid {
 public:
     Grid() = default;
 
-    bool init_empty(uint32_t w, uint32_t h) {
+    /// A world made by hand (tests and tools); @p rules is the rules word that a level of that rules would have (0 = the original's, 1 = extended rules).
+    bool init_empty(uint32_t w, uint32_t h, uint16_t rules = 0) {
         width_ = w;
         height_ = h;
         if (width_ == 0 || height_ == 0) return false;
@@ -255,7 +256,7 @@ public:
         plants_.clear();
         food_objects_.clear();
         default_ant_tile_ = TILE_EMPTY;
-        rules_ = 0;
+        rules_ = rules;
         return true;
     }
 

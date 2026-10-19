@@ -493,6 +493,10 @@ struct World {
         }
         // the game clock is virtual but the sockets are real: on a busy machine the kernel can be late with bytes that were sent long ago in game time. It gets up to two more seconds of real time
         // with the game clock standing still, so that nothing times out meanwhile; a wait that succeeds never gets here
+        return wait_real(cond);
+    }
+    // Up to two seconds of real time with the game clock standing still: for a test that has to see a state from the moment it began (the kernel hands over a close a little late on a busy or slow machine)
+    bool wait_real(const std::function<bool()>& cond) {
         for (int i = 0; i < 2000 && !cond(); ++i) {
             pump(0.0f);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1117,6 +1121,7 @@ void run_screen_tests() {
         ASSERT_TRUE(app.net_overlay_now().lines.empty());                                       // (a match that runs says nothing)
         app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });           // (the network is down: no new link can be made)
         ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        ASSERT_TRUE(w.wait_real([&]() { return app.net()->pause_info().reconnecting; }));          // (the machine knows of the cut when its kernel hands the close over: the 5.2 s below count from then)
         std::vector<std::string> seen;                                                           // every first line, in order, without repeats
         bool waiting_shown = false;
         bool second_line_ok = true;
@@ -1596,6 +1601,7 @@ void run_way_back_tests() {
         const std::string words = sim::strings::text(sim::strings::kNeed200Points);
         app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
         ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->pause_info().reconnecting; }, 3000));     // (the machine knows of the cut when its kernel hands the close over: a moment of real time, not a number of game seconds)
         w.run(3000);                                                                              // (the runner has run what it held: no tick comes until the match is back)
         ASSERT_TRUE(app.net()->pause_info().reconnecting);
         // the engine queues a sound and a line of the status, as the turns of a replay do: an order of the player's own that is refused (it changes nothing of the match)

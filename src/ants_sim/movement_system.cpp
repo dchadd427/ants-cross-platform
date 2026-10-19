@@ -1193,7 +1193,7 @@ uint32_t SimulationEngineImpl::step_cost(const AntUnit& a, TileCoord from, TileC
         if (occ) {
             if (occ->player_id == lt) {
                 if (occ->pause_active) return kBlockedCost;
-                if (occ->waypoints.empty() && is_stationary_action(orig_action_of(*occ)) && !occ->has_order_tile()) {
+                if (occ->waypoints.empty() && is_stationary_action(orig_action_of(*occ)) && !occ->has_order_tile(grid_.rules())) {
                     return kBlockedCost;
                 }
             } else if (!(a.orig_order == AntUnit::kOrderAttack && a.orig_target_team == occ->player_id &&
@@ -1533,7 +1533,7 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
         return false;
     }
     path_managers_[a.player_id < MAX_PLAYERS ? a.player_id : 0].request(
-        a.id, cur, t, static_cast<uint16_t>(grid_.height()), static_cast<uint16_t>(grid_.width()));
+        a.id, cur, t, static_cast<uint16_t>(grid_.height()), static_cast<uint16_t>(grid_.width()), grid_.rules() == 0);   // rules 1: the wall at row 90 is down
     path_request_serial_[a.id] = a.move_serial;
     // Remake bookkeeping: player orders (and the ability orders, which the re-path gives again) report the resolved destination;
     // orders from remake systems keep the tile they asked for, so that repeating the same order is recognised as such.

@@ -1006,6 +1006,42 @@ void run_b2fix_tests() {
         ASSERT_TRUE(MapInfo::walkable(small.grid(), 0, tc(50, 59)) && MapInfo::walkable(small.grid(), 0, tc(50, 30)));
     } TEST_END();
 
+    TEST_CASE("AI1.31b Rules 1 Takes The Wall Down: Row 90 Is Walkable, The Map Is One Piece, The Pile Below It Is Reachable, And The Engine Walks There (The Mirror Of AI1.31 On A Map Of Rules 1)") {
+        const auto world = [](sim::SimulationEngine& sim) {
+            sim.init_test_world(100, 100, 65, 720000, 1);
+            sim.set_anthill(0, tc(10, 10));
+            place_crackers(sim, 50, 88, 25);
+            place_crackers(sim, 50, 95, 25);
+        };
+        sim::SimulationEngine sim;
+        world(sim);
+        ASSERT_EQ(sim.grid().rules(), 1u);
+        const MapInfo mi(sim);
+        ASSERT_TRUE(MapInfo::walkable(sim.grid(), 0, tc(50, 90)) && MapInfo::walkable(sim.grid(), 0, tc(50, 89)) && MapInfo::walkable(sim.grid(), 0, tc(50, 91)));
+        ASSERT_TRUE(MapInfo::walkable(sim.grid(), 0, tc(0, 90)) && MapInfo::walkable(sim.grid(), 3, tc(99, 90)));
+        ASSERT_TRUE(MapInfo::can_step_onto(sim.grid(), 0, tc(50, 90)));
+        ASSERT_TRUE(mi.component(0, tc(50, 89)) >= 0);
+        ASSERT_EQ(mi.component(0, tc(50, 89)), mi.component(0, tc(50, 91)));                   // one piece
+        ASSERT_EQ(mi.component(0, tc(50, 90)), mi.component(0, tc(50, 89)));
+        ASSERT_TRUE(mi.piles()[0].approach[0].reachable() && mi.piles()[1].approach[0].reachable());
+        ASSERT_EQ(mi.reachable_points(), 200u);
+        // the engine agrees with every one of these: a walk to row 89, 90, 91 and 99 is delivered, and the hill's worker reaches the pile at row 95
+        for (const TileCoord to : {tc(50, 89), tc(50, 90), tc(50, 91), tc(50, 99)}) {
+            sim::SimulationEngine e;
+            world(e);
+            const Walk r = order_and_wait(e, 0, tc(50, 60), to, 400);
+            ASSERT_TRUE(r.delivered && !r.failed);
+            ASSERT_TRUE(r.path.back() == to);
+        }
+        sim::SimulationEngine far_e;
+        world(far_e);
+        ASSERT_TRUE(order_and_wait(far_e, 0, mi.hill(0).starts.front(), mi.piles()[1].approach[0].click, 600).delivered);
+        // the same world with the rules of the original is cut in two (AI1.31): only the word differs
+        sim::SimulationEngine old_rules;
+        old_rules.init_test_world(100, 100, 65, 720000, 0);
+        ASSERT_FALSE(MapInfo::walkable(old_rules.grid(), 0, tc(50, 90)));
+    } TEST_END();
+
     TEST_CASE("AI1.32 approach_now For Every Object Of The Engine's Table, Also One Dropped After The Start (A Lunchbox), A Leftover Crumb Of A Picture Is Not A Pile, And One Field Serves Every Pile (The Same Answers As A Field Per Call)") {
         sim::SimulationEngine sim;
         sim.init_test_world(40, 40, 67, 720000);

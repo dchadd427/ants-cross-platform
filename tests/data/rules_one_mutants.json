@@ -1,0 +1,248 @@
+{
+ "note": "Mutants of rules 1 in the simulation and the bots (docs/MAP_FORMAT.md, 'Rules'; docs/TESTING.md 2.3, 2.4, 2.20): the flag of the path finder and its manager, the rules-aware order tile, the bots' copy of the wall. Run: python3 tools/mutate.py tests/data/rules_one_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Every mutant must be caught by the test named in its expect. (The west and east edge marks of PathSearch::neighbours are not mutated: with the wall down a neighbour whose column is outside the map is refused by the search's own in_grid guard whatever its row says, so a change of their row cannot be seen.)",
+ "mutants": [
+  {
+   "id": "search_keeps_the_wall_at_rules_1",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "sentinel_row_(wall_at_row_90 ? kSentinelRow : kNoSentinelRow)",
+   "new": "sentinel_row_(wall_at_row_90 ? kSentinelRow : kSentinelRow)",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4b"
+  },
+  {
+   "id": "search_drops_the_wall_at_rules_0",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "sentinel_row_(wall_at_row_90 ? kSentinelRow : kNoSentinelRow)",
+   "new": "sentinel_row_(wall_at_row_90 ? kNoSentinelRow : kNoSentinelRow)",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4"
+  },
+  {
+   "id": "search_flag_inverted",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "sentinel_row_(wall_at_row_90 ? kSentinelRow : kNoSentinelRow)",
+   "new": "sentinel_row_(wall_at_row_90 ? kNoSentinelRow : kSentinelRow)",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4"
+  },
+  {
+   "id": "copy_of_a_search_forgets_the_flag",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "      sentinel_row_(other.sentinel_row_),\n",
+   "new": "",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4d"
+  },
+  {
+   "id": "manager_forgets_the_flag",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "*pool_, wall_at_row_90)",
+   "new": "*pool_, (wall_at_row_90 && false) || true)",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4d"
+  },
+  {
+   "id": "step_skips_the_constant_row_90",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "if (n.y == sentinel_row_) continue;",
+   "new": "if (n.y == kSentinelRow) continue;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4b"
+  },
+  {
+   "id": "step_skips_nothing",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "if (n.y == sentinel_row_) continue;",
+   "new": "if (n.y == -2) continue;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4"
+  },
+  {
+   "id": "north_edge_marks_row_90",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "out[1].y = out[0].y = out[7].y = sentinel_row_;",
+   "new": "out[1].y = out[0].y = out[7].y = kSentinelRow;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4b"
+  },
+  {
+   "id": "south_edge_marks_row_90",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "out[3].y = out[4].y = out[5].y = sentinel_row_;",
+   "new": "out[3].y = out[4].y = out[5].y = kSentinelRow;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "5.4b"
+  },
+  {
+   "id": "simulation_always_keeps_the_wall",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "grid_.rules() == 0);   // rules 1",
+   "new": "true);   // rules 1",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.1"
+  },
+  {
+   "id": "simulation_always_takes_the_wall_down",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "grid_.rules() == 0);   // rules 1",
+   "new": "false);   // rules 1",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.1"
+  },
+  {
+   "id": "simulation_wall_flag_inverted",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "grid_.rules() == 0);   // rules 1",
+   "new": "grid_.rules() != 0);   // rules 1",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.1"
+  },
+  {
+   "id": "stop_reads_rules_0",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "has_order_tile(impl_->grid_.rules())",
+   "new": "has_order_tile(0)",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
+  },
+  {
+   "id": "idle_blocker_reads_rules_0",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "!occ->has_order_tile(grid_.rules())",
+   "new": "!occ->has_order_tile(0)",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.3"
+  },
+  {
+   "id": "idle_blocker_reads_rules_1",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "!occ->has_order_tile(grid_.rules())",
+   "new": "!occ->has_order_tile(1)",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.3"
+  },
+  {
+   "id": "order_tile_is_the_old_test_at_every_rules",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "if (rules == 0) return static_cast<uint16_t>",
+   "new": "if (rules == 0 || rules != 0) return static_cast<uint16_t>",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
+  },
+  {
+   "id": "order_tile_never_none_at_rules_1",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "return orig_order_tile.x != kNoOrderTileX || orig_order_tile.y != kNoOrderTileY;",
+   "new": "return true;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.3"
+  },
+  {
+   "id": "order_tile_always_none_at_rules_1",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "return orig_order_tile.x != kNoOrderTileX || orig_order_tile.y != kNoOrderTileY;",
+   "new": "return false;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
+  },
+  {
+   "id": "order_tile_marker_needs_both_to_differ",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "orig_order_tile.x != kNoOrderTileX || orig_order_tile.y != kNoOrderTileY;",
+   "new": "orig_order_tile.x != kNoOrderTileX && orig_order_tile.y != kNoOrderTileY;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
+  },
+  {
+   "id": "order_tile_marker_row_only",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "orig_order_tile.x != kNoOrderTileX || orig_order_tile.y != kNoOrderTileY;",
+   "new": "orig_order_tile.y != kNoOrderTileY;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
+  },
+  {
+   "id": "order_tile_marker_column_only",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "orig_order_tile.x != kNoOrderTileX || orig_order_tile.y != kNoOrderTileY;",
+   "new": "orig_order_tile.x != kNoOrderTileX;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
+  },
+  {
+   "id": "order_tile_rules_0_test_widened",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kNoOrderTileY);",
+   "new": "if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < 100;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
+  },
+  {
+   "id": "test_world_ignores_the_rules",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "impl_->grid_.init_empty(width, height, rules);",
+   "new": "impl_->grid_.init_empty(width, height, static_cast<uint16_t>(rules & 0u));",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.1"
+  },
+  {
+   "id": "empty_grid_ignores_the_rules",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "        rules_ = rules;\n        return true;",
+   "new": "        rules_ = static_cast<uint16_t>(rules & 0u);\n        return true;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.1"
+  },
+  {
+   "id": "bots_keep_the_wall_at_rules_1",
+   "file": "src/ants_ai/map_info.cpp",
+   "old": "return grid.rules() == 0 && t.y ==",
+   "new": "return t.y ==",
+   "build": "test_ai",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI1.31 ./build/tests/test_ai/test_ai",
+   "expect": "AI1.31b"
+  },
+  {
+   "id": "bots_lose_the_wall_at_rules_0",
+   "file": "src/ants_ai/map_info.cpp",
+   "old": "return grid.rules() == 0 && t.y ==",
+   "new": "return grid.rules() != 0 && t.y ==",
+   "build": "test_ai",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI1.31 ./build/tests/test_ai/test_ai",
+   "expect": "AI1.31"
+  },
+  {
+   "id": "bots_never_have_the_wall",
+   "file": "src/ants_ai/map_info.cpp",
+   "old": "return grid.rules() == 0 && t.y == MapInfo::kPathSentinelRow && grid.height() > static_cast<uint32_t>(MapInfo::kPathSentinelRow);",
+   "new": "return grid.rules() == 77 && t.y == MapInfo::kPathSentinelRow && grid.height() > static_cast<uint32_t>(MapInfo::kPathSentinelRow);",
+   "build": "test_ai",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI1.31 ./build/tests/test_ai/test_ai",
+   "expect": "AI1.31"
+  }
+ ]
+}

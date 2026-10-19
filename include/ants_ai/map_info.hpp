@@ -96,7 +96,7 @@ public:
     static constexpr int32_t kPathCostLimit = 8000;
     /// The engine's path finder never generates a tile of this row (the neighbour routine writes it as the "invalid" marker and the search skips every neighbour in it:
     /// src/ants_sim/path_planner.cpp, FUN_01019c31 and the test `!= 0x5a` at 0x1019b23 in Ants.exe), so on a map taller than 90 rows nothing can be walked INTO row 90 and the
-    /// map is cut in two there. `walkable` models it. (The shipped maps have at most 60 rows; the loader takes up to 256.)
+    /// map is cut in two there. `walkable` models it for a map of rules 0 (Grid::rules()); on a map of rules 1 the wall is down in the engine and here. (The shipped maps have at most 60 rows.)
     static constexpr int kPathSentinelRow = 90;
     /// Walking time in ticks = cost * 2 / 5 for an ORTHOGONAL run on every terrain (grass: weight 20 = 8 ticks, sand 16 = 6.4, dirt 24 = 9.6, mud 48 = 19.2: the weights ARE the
     /// walking times of the original's animations, 0.4 tick per unit; mud walks about 7 percent faster than its weight says). A DIAGONAL step is charged 1.4 times by the path finder

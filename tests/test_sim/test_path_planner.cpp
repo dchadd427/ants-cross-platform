@@ -144,9 +144,9 @@ struct SearchOutcome {
 
 // Runs one PathSearch to completion with the given per-slice budget.
 SearchOutcome run_search(TileCoord start, TileCoord goal, uint16_t rows, uint16_t cols,
-                         const PathSearch::StepCostFn& cost, uint16_t budget = PathSearch::kDefaultBudget) {
+                         const PathSearch::StepCostFn& cost, uint16_t budget = PathSearch::kDefaultBudget, bool wall_at_row_90 = true) {
     PathGridPool pool;
-    PathSearch search(1, start, goal, rows, cols, pool);
+    PathSearch search(1, start, goal, rows, cols, pool, wall_at_row_90);
     SearchOutcome out;
     while (!search.finished() && out.slices < 1000000) {
         search.step(budget, cost);
@@ -157,13 +157,13 @@ SearchOutcome run_search(TileCoord start, TileCoord goal, uint16_t rows, uint16_
 }
 
 SearchOutcome run_search(const TerrainMap& map, TileCoord start, TileCoord goal,
-                         uint16_t budget = PathSearch::kDefaultBudget) {
-    return run_search(start, goal, map.height(), map.width(), map.step_cost(), budget);
+                         uint16_t budget = PathSearch::kDefaultBudget, bool wall_at_row_90 = true) {
+    return run_search(start, goal, map.height(), map.width(), map.step_cost(), budget, wall_at_row_90);
 }
 
 // A slice with budget 1 performs exactly one expansion (heap pop), so the slice count is the expansion count.
-int count_expansions(const TerrainMap& map, TileCoord start, TileCoord goal) {
-    return run_search(map, start, goal, 1).slices;
+int count_expansions(const TerrainMap& map, TileCoord start, TileCoord goal, bool wall_at_row_90 = true) {
+    return run_search(map, start, goal, 1, wall_at_row_90).slices;
 }
 
 uint32_t path_cost(const std::vector<TileCoord>& path, const PathSearch::StepCostFn& cost) {
@@ -505,6 +505,65 @@ void run_suite_5_edges() {
         ASSERT_PATH(run_search(m, {2, 85}, {2, 89}).path, {{2, 85}, {2, 86}, {2, 87}, {2, 88}, {2, 89}});
         // A start on row 90 is expanded normally and can leave it.
         ASSERT_PATH(run_search(m, {2, 90}, {2, 92}).path, {{2, 90}, {2, 91}, {2, 92}});
+    } TEST_END();
+
+    TEST_CASE("5.4b Rules 1: the wall at row 90 is down (a map of rules 1 can be crossed at row 90 and walked below it)") {
+        const TerrainMap m = TerrainMap::filled(5, 100);
+        const bool down = false;
+        // across row 90, and onto it, and from row 90 on: every one of them is empty with the wall up (5.4)
+        ASSERT_PATH(run_search(m, {2, 85}, {2, 95}, PathSearch::kDefaultBudget, down).path,
+                    {{2, 85}, {2, 86}, {2, 87}, {2, 88}, {2, 89}, {2, 90}, {2, 91}, {2, 92}, {2, 93}, {2, 94}, {2, 95}});
+        ASSERT_PATH(run_search(m, {2, 88}, {2, 90}, PathSearch::kDefaultBudget, down).path, {{2, 88}, {2, 89}, {2, 90}});
+        ASSERT_PATH(run_search(m, {2, 90}, {2, 92}, PathSearch::kDefaultBudget, down).path, {{2, 90}, {2, 91}, {2, 92}});
+        // along the left and the right edge (the edge neighbours are still invalid: the marker is row -1 now) and down to the last row
+        ASSERT_EQ(run_search(m, {0, 80}, {0, 99}, PathSearch::kDefaultBudget, down).path.size(), 20u);
+        ASSERT_EQ(run_search(m, {4, 99}, {4, 80}, PathSearch::kDefaultBudget, down).path.size(), 20u);
+        ASSERT_EQ(run_search(m, {2, 0}, {2, 99}, PathSearch::kDefaultBudget, down).path.size(), 100u);
+        // the way up from the last row to row 0 and the corners are found too; no tile outside the map is ever in a path
+        for (const TileCoord goal : {TileCoord{0, 0}, TileCoord{4, 0}, TileCoord{4, 99}, TileCoord{0, 99}}) {
+            const SearchOutcome r = run_search(m, {2, 50}, goal, PathSearch::kDefaultBudget, down);
+            ASSERT_FALSE(r.path.empty());
+            ASSERT_TRUE(r.path.front() == (TileCoord{2, 50}) && r.path.back() == goal && is_connected(r.path));
+            for (const TileCoord& t : r.path) ASSERT_TRUE(t.x >= 0 && t.x < 5 && t.y >= 0 && t.y < 100);
+        }
+        // a wall of rock across row 90 still stops it (the wall that is down is the sentinel, not the terrain)
+        TerrainMap rock = TerrainMap::filled(5, 100);
+        for (int x = 0; x < 5; ++x) rock.set(x, 90, '#');
+        ASSERT_TRUE(run_search(rock, {2, 85}, {2, 95}, PathSearch::kDefaultBudget, down).path.empty());
+    } TEST_END();
+
+    TEST_CASE("5.4c The wall flag changes nothing on a map of at most 90 rows (the same path, the same number of expansions)") {
+        const TerrainMap wall = wall_map();
+        ASSERT_TRUE(wall.height() <= 90);
+        ASSERT_EQ(count_expansions(wall, {5, 30}, {54, 30}, false), count_expansions(wall, {5, 30}, {54, 30}, true));
+        ASSERT_TRUE(run_search(wall, {5, 30}, {54, 30}, PathSearch::kDefaultBudget, false).path == run_search(wall, {5, 30}, {54, 30}).path);
+        const TerrainMap tall = TerrainMap::filled(7, 90);       // 90 rows: rows 0..89, the last row has no row 90 to meet
+        for (const TileCoord goal : {TileCoord{0, 0}, TileCoord{6, 89}, TileCoord{3, 89}}) {
+            ASSERT_EQ(count_expansions(tall, {3, 45}, goal, false), count_expansions(tall, {3, 45}, goal, true));
+            ASSERT_TRUE(run_search(tall, {3, 45}, goal, PathSearch::kDefaultBudget, false).path == run_search(tall, {3, 45}, goal).path);
+        }
+    } TEST_END();
+
+    TEST_CASE("5.4d The manager and its copy: the flag is carried to the search (request with the wall down delivers a path across row 90, the default does not, a copy of the manager does as the original does)") {
+        const TerrainMap m = TerrainMap::filled(5, 100);
+        const PathManager::CostProvider cost = m.provider();
+        const auto drain_one = [&](PathManager& pm) {
+            for (int i = 0; i < 20; ++i) {
+                if (const std::optional<PathManager::Delivery> d = pm.run(cost)) return d->path;
+            }
+            return std::vector<TileCoord>{{-9, -9}};
+        };
+        PathManager down;
+        down.request(7, {2, 85}, {2, 95}, m.height(), m.width(), false);
+        PathManager copy(down);                                                      // a copy made before the search ran
+        PathManager up;
+        up.request(7, {2, 85}, {2, 95}, m.height(), m.width());                      // the default: the wall is up
+        PathManager up_explicit;
+        up_explicit.request(7, {2, 85}, {2, 95}, m.height(), m.width(), true);
+        const std::vector<TileCoord> crossed = drain_one(down);
+        ASSERT_EQ(crossed.size(), 11u);
+        ASSERT_TRUE(drain_one(copy) == crossed);
+        ASSERT_TRUE(drain_one(up).empty() && drain_one(up_explicit).empty());
     } TEST_END();
 
     TEST_CASE("5.5 Remake guards: 1-row / 1-column maps and a start outside the map") {

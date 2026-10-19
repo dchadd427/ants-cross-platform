@@ -420,7 +420,8 @@ public:
     /// the original keeps a NULL entry for it in its team table, which CHECKGO skips (Ants.exe 0x1024921). init(level, seed) plays with every team.
     void init(const ants::assets::LevelData& level, uint32_t random_seed, uint8_t roster_mask);
     uint8_t roster_mask() const noexcept;
-    void init_test_world(uint32_t width, uint32_t height, uint32_t random_seed = 1, uint32_t match_time_ms = 720000);
+    /// A world made by hand for tests and tools; @p rules as Grid::init_empty (1 = a map of extended rules: the wall at row 90 is down).
+    void init_test_world(uint32_t width, uint32_t height, uint32_t random_seed = 1, uint32_t match_time_ms = 720000, uint16_t rules = 0);
 
     void tick();
     /// The one entry through which a player changes the simulation (command.hpp): validates the command (issuer, ownership, ranges) and applies

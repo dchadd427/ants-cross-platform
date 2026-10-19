@@ -58,15 +58,6 @@ void check(bool ok, const std::string& what) {
     }
 }
 
-// Every field of two cells (TileCell has no operator==; the fields are those that hash_cell of src/ants_sim/state_hash.cpp mixes, and the grid's other tables)
-bool same_cell(const ants::sim::TileCell& a, const ants::sim::TileCell& b) {
-    return a.terrain_id == b.terrain_id && a.terrain_type == b.terrain_type && a.surface_type == b.surface_type && a.flags == b.flags && a.interactive_id == b.interactive_id &&
-           a.interactive_owner == b.interactive_owner && a.timer_ticks == b.timer_ticks && a.anchor_x == b.anchor_x && a.anchor_y == b.anchor_y && a.is_food == b.is_food &&
-           a.is_mud == b.is_mud && a.is_powerup == b.is_powerup && a.powerup_type == b.powerup_type && a.is_obstacle_overlay == b.is_obstacle_overlay &&
-           a.is_thief_only == b.is_thief_only && a.is_corridor_team_locked == b.is_corridor_team_locked && a.is_base_hole == b.is_base_hole &&
-           a.base_owner_team == b.base_owner_team && a.occupant_ant_id == b.occupant_ant_id && a.static_solid == b.static_solid;
-}
-
 // The two grids are the same grid: the size, every cell, the hills, the plants, the food piles, the default ant type and the solid-bit source. "" when they are, else the first
 // difference in words.
 std::string grid_difference(const ants::assets::LevelData& a, const ants::assets::LevelData& b) {
@@ -75,7 +66,7 @@ std::string grid_difference(const ants::assets::LevelData& a, const ants::assets
     if (!ga.init_from_level(a) || !gb.init_from_level(b)) return "a grid did not load";
     if (ga.width() != gb.width() || ga.height() != gb.height()) return "the size";
     for (size_t i = 0; i < ga.cells().size(); ++i) {
-        if (!same_cell(ga.cells()[i], gb.cells()[i])) {
+        if (!ants_test::same_cell(ga.cells()[i], gb.cells()[i])) {
             return "the cell at row " + std::to_string(i / ga.width()) + ", column " + std::to_string(i % ga.width());
         }
     }
