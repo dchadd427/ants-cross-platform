@@ -109,31 +109,54 @@
         return n;
     }
 
-    // The mix: the teams of `teams` (indexes of Blocks.TEAMS) put cell by cell, in the order of the rows, into the box {r0, c0, r1, c1}: `per` ants for each team, on every cell (gap 1) or every other
-    // cell (gap 2: the cells whose row and column, counted from the box's corner, add up to an even number, so no two ants touch side by side). Cells that are not free (an object, solid ground, a hill, a
-    // pile, an ant) are passed over. The k-th ant that finds a cell is of team k mod (the number of teams), so the counts are exact and the pattern is the same every time.
+    // The mix: the teams of `teams` (indexes of Blocks.TEAMS) put into the box {r0, c0, r1, c1}: `per` ants for each team, on every cell (gap 1) or every other cell (gap 2: the cells whose row and column,
+    // counted from the box's corner, add up to an even number, so no two ants touch side by side). Cells that are not free (an object, solid ground, a hill, a pile, an ant) are passed over. The ants
+    // are spread evenly over the free cells of the pattern (a box with room to spare is filled from edge to edge, a tight one is filled whole), and the teams are dealt to them in an order that is
+    // shuffled by a generator seeded from the box and the choices (so the pattern is the same every time, the counts are exact, and no row or column is one team). The preview is this plan.
     // Answers {ok, cells: [{r, c, team}], need (cells), have (cells of the box), free (cells that are free and on the pattern), ants, text}.
     function planMix(file, box, teams, per, gap) {
         var lay = Blocks.layout(file), n = teams.length, ants = per * n, rows = box.r1 - box.r0 + 1, cols = box.c1 - box.c0 + 1;
         var out = { ok: false, cells: [], need: ants * gap, have: rows * cols, free: 0, ants: ants, text: '' };
         if (!lay.ok1) { out.text = LIST_ERROR; return out; }
         if (!n) { out.text = 'Choose at least one team for the mix.'; return out; }
-        var map = antMap(file, lay), r, c, found = [];
+        var map = antMap(file, lay), r, c, found = [], i;
         for (r = box.r0; r <= box.r1; r++) for (c = box.c0; c <= box.c1; c++) {
             if (gap === 2 && ((r - box.r0) + (c - box.c0)) % 2) continue;
             var idx = r * file.columns + c;
             if (map[idx] !== undefined || whyNot(file, idx)) continue;
-            out.free++;
-            if (found.length < ants) found.push({ r: r, c: c });
+            found.push({ r: r, c: c });
         }
+        out.free = found.length;
         var sentence = num(ants) + ' ants need ' + num(out.need) + ' cells; your box has ' + num(out.have) + '.';
         if (found.length < ants) {
             out.text = out.have < out.need ? 'This box is too small. ' + sentence + ' Drag a bigger box, or put fewer ants.' : 'Too few free cells. ' + sentence + ' Only ' + num(out.free) + ' of them are free for an ant (objects, solid ground and ants are passed over). Drag a bigger box, or put fewer ants.';
             return out;
         }
-        out.cells = found.map(function (cell, k) { return { r: cell.r, c: cell.c, team: teams[k % n] }; });
+        var order = [];
+        for (i = 0; i < ants; i++) order.push(teams[i % n]);
+        var seed = (box.r0 * 73856093) ^ (box.c0 * 19349663) ^ (box.r1 * 83492791) ^ (box.c1 * 2654435761) ^ (per * 40503) ^ (gap * 977);
+        for (i = 0; i < teams.length; i++) seed ^= (teams[i] + 1) * 69069;
+        function next() { seed = (seed + 0x6D2B79F5) | 0; var t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+        for (i = ants - 1; i > 0; i--) { var j = Math.floor(next() * (i + 1)), t = order[i]; order[i] = order[j]; order[j] = t; }
+        var cells = order.map(function (team, k) { var at = found[Math.floor((k + 0.5) * found.length / ants)]; return { r: at.r, c: at.c, team: team }; });
+        // a row or a column of two or more ants that are all one team gets one of them swapped with another team's ant elsewhere (the counts stay exact); the passes are few and the same every time
+        for (var pass = 0; pass < 12 && n > 1; pass++) {
+            var lines = {}, changed = false;
+            cells.forEach(function (cell, k) { ['r' + cell.r, 'c' + cell.c].forEach(function (key) { (lines[key] = lines[key] || []).push(k); }); });
+            Object.keys(lines).sort().forEach(function (key) {
+                var list = lines[key];
+                if (list.length < 2 || list.some(function (k) { return cells[k].team !== cells[list[0]].team; })) return;
+                var mine = cells[list[0]].team, start = Math.floor(next() * cells.length), m;
+                for (m = 0; m < cells.length; m++) {
+                    var o = (start + m) % cells.length;
+                    if (cells[o].team !== mine && list.indexOf(o) < 0) { var other = cells[o].team; cells[o].team = mine; cells[list[0]].team = other; changed = true; break; }
+                }
+            });
+            if (!changed) break;
+        }
+        out.cells = cells;
         out.ok = true;
-        out.text = sentence;
+        out.text = out.have >= out.need ? sentence : num(ants) + ' ants fit: ' + num(out.free) + ' cells of your box are free at this spacing.';
         return out;
     }
 
@@ -145,7 +168,7 @@
         if (lay.records.length + plan.cells.length > MAX_RECORDS) return { error: tooMany(lay.records.length + plan.cells.length) };
         return added(file, lay, plan.cells.map(function (cell) { return record(cell.team, cell.r, cell.c); }));
     }
-    function tooMany(total) { return num(total) + ' ants. The file holds ' + num(MAX_RECORDS) + ' at most (all teams, plants included). Take ' + num(total - MAX_RECORDS) + ' ants away. The Put buttons stop.'; }
+    function tooMany(total) { return num(total) + ' ants. The file holds ' + num(MAX_RECORDS) + ' at most (all teams, plants included). Take ' + num(total - MAX_RECORDS) + (total - MAX_RECORDS === 1 ? ' ant' : ' ants') + ' away. The Put buttons stop.'; }
 
     // All the ants of a team taken away (Blocks.eraseStart): a CHANGE that is empty when the team has none
     function clearTeam(file, team) { return Blocks.eraseStart(file, team); }
@@ -162,6 +185,7 @@
         else if (missing.length === 1) lines.push({ kind: 'warn', text: missing[0] + ' has no ants. The Check says: this map cannot be played with ' + missing[0] + '. Put at least one ' + missing[0] + ' ant, or leave it.' });
         else if (missing.length) lines.push({ kind: 'warn', text: join(missing) + ' have no ants. The Check says: this map cannot be played with them. Put at least one ant for each, or leave them.' });
         else lines.push({ kind: 'ok', text: 'Every team has ants. The map can be played with four seats.' });
+        if (file.rows > 90) lines.push({ kind: 'note', text: 'The game cannot play a map of more than 90 rows yet (this one has ' + file.rows + '): the check is fine, and Play this map will say so.' });
         out.packed = packedCount(file, extra);
         if (out.packed) lines.push({ kind: 'warn', text: 'Ants shoulder to shoulder cannot find a way out. Leave a free cell now and then. (Soft hint, the map still saves.)' });
         return out;
@@ -305,9 +329,11 @@
                 panel.appendChild(r);
                 var total = st.per * chosenMix().length, need = total * st.gap, says = st.plan ? st.plan.text : (st.box ? '' : 'Drag a box on the map. ' + num(total) + ' ants need ' + num(need) + ' cells.');
                 if (st.box && painting) says = 'Box: ' + plural(st.box.r1 - st.box.r0 + 1, 'row', 'rows') + ' x ' + plural(st.box.c1 - st.box.c0 + 1, 'column', 'columns') + '.';
+                var about0 = env.about ? env.about() : null;
                 var status = el('p', 'am-status' + (st.plan && !st.plan.ok ? ' warn' : ''), says);
                 status.setAttribute('role', 'status');
                 panel.appendChild(status);
+                if (about0 && /^No default/.test(about0.ant)) panel.appendChild(el('p', 'am-note', 'This map has no default ant type, so the ants will not fight. Choose Combat ants in Properties for a brawl.'));
                 r = row('am-two am-go');
                 r.appendChild(button('cancel', 'Cancel', 'ghost', null, function () { clearBox(); render(); drawOver(); }));
                 var put = button('put-mix', 'Put ' + num(total) + ' ants', 'go', null, putMixNow);

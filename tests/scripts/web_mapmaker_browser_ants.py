@@ -34,6 +34,16 @@ def bytes_now(page, edges_bytes):
     return edges_bytes(page)["bytes"]
 
 
+def wait_counts(page, edges_bytes, want, timeout=8.0):
+    """true once the bytes that Download hands over hold exactly these ants (a dict of tile: count); the page needs a moment after a tap"""
+    last = [None]
+
+    def same():
+        last[0] = counts(bytes_now(page, edges_bytes))
+        return last[0] == want
+    return wait_for(same, timeout, 0.2)
+
+
 def button(page, key):
     return page.ev("(function () { var b = document.querySelector('.am [data-k=\"%s\"]'); if (!b) return false; b.click(); return true; })()" % key)
 
@@ -76,27 +86,27 @@ def run_ants(page, tab, args, check, env, edges_bytes, edges_js):
     # One at a time: a tap puts one ant of the picked team
     button(page, "t3")                                                  # Black
     tap_cell(page, 20, 20)
-    first = counts(bytes_now(page, edges_bytes))
-    check(first == {TEAM_TILES["black"]: 1}, "a tap puts exactly one Black ant (%s)" % first)
+    check(wait_counts(page, edges_bytes, {TEAM_TILES["black"]: 1}), "a tap puts exactly one Black ant")
+    check("more than 90 rows" in panel_text(page), "a 100-row map says in the box that the game cannot play more than 90 rows yet")
     check("Black1" in panel_text(page).replace(" ", ""), "the count of Black is 1 at once")
     button(page, "t2")
     tap_cell(page, 20, 22)
-    check(counts(bytes_now(page, edges_bytes)) == {152: 1, 153: 1}, "a Blue ant on another cell")
+    check(wait_counts(page, edges_bytes, {152: 1, 153: 1}), "a Blue ant on another cell")
     tap_cell(page, 20, 22)
-    check(counts(bytes_now(page, edges_bytes)) == {152: 1}, "a tap on an ant again takes it away, whatever team is picked")
+    check(wait_counts(page, edges_bytes, {152: 1}), "a tap on an ant again takes it away, whatever team is picked")
     page.ev("document.getElementById('undo-btn').click()")
-    check(counts(bytes_now(page, edges_bytes)) == {152: 1, 153: 1}, "one Undo brings it back")
+    check(wait_counts(page, edges_bytes, {152: 1, 153: 1}), "one Undo brings it back")
     button(page, "take")
     tap_cell(page, 20, 20)
-    check(counts(bytes_now(page, edges_bytes)) == {153: 1}, "Take one away takes the Black ant")
+    check(wait_counts(page, edges_bytes, {153: 1}), "Take one away takes the Black ant")
     tap_cell(page, 30, 30)
-    check(counts(bytes_now(page, edges_bytes)) == {153: 1}, "Take one away on an empty cell changes nothing")
+    check(wait_counts(page, edges_bytes, {153: 1}), "Take one away on an empty cell changes nothing")
     button(page, "put")
     page.ev("document.querySelector('[data-act=zoom-in]').click(); document.querySelector('[data-act=zoom-in]').click()")
     x, y = page.box("#map")["x"] + 300, page.box("#map")["y"] + 300
     before = page.state()["center"]
     page.drag(x, y, x + 60, y + 40)
-    check(counts(bytes_now(page, edges_bytes)) == {153: 1} and page.state()["center"] != before, "a drag looks around and puts nothing")
+    check(wait_counts(page, edges_bytes, {153: 1}) and page.state()["center"] != before, "a drag looks around and puts nothing")
     page.shot(args.shots, "mapmaker-ants-one-desktop")
     # Mix: the Mosh Pit
     button(page, "group"); button(page, "mix")
@@ -104,15 +114,14 @@ def run_ants(page, tab, args, check, env, edges_bytes, edges_js):
     x0, y0 = box["x"] + box["w"] / 2 - 120, box["y"] + box["h"] / 2 - 110
     page.drag(x0, y0, x0 + 250, y0 + 230)
     check(wait_for(lambda: page.ev("document.querySelector('.am [data-k=put-mix]') && !document.querySelector('.am [data-k=put-mix]').disabled"), 5), "a dragged box gives a preview and turns on Put 100 ants: %s" % panel_text(page)[-260:])
-    check(counts(bytes_now(page, edges_bytes)) == {153: 1}, "nothing is put before the button")
+    check(wait_counts(page, edges_bytes, {153: 1}), "nothing is put before the button")
     page.shot(args.shots, "mapmaker-ants-mix-desktop")
     button(page, "put-mix")
-    got = counts(bytes_now(page, edges_bytes))
-    check(got == {152: 25, 153: 26, 154: 25, 155: 25}, "Put makes 25 ants of each team (%s)" % got)
+    check(wait_counts(page, edges_bytes, {152: 25, 153: 26, 154: 25, 155: 25}), "Put makes 25 ants of each team")
     page.ev("document.getElementById('undo-btn').click()")
-    check(counts(bytes_now(page, edges_bytes)) == {153: 1}, "one Undo takes all 100 away")
+    check(wait_counts(page, edges_bytes, {153: 1}), "one Undo takes all 100 away")
     page.ev("document.getElementById('redo-btn').click()")
-    check(counts(bytes_now(page, edges_bytes)) == {152: 25, 153: 26, 154: 25, 155: 25}, "Redo puts them back")
+    check(wait_counts(page, edges_bytes, {152: 25, 153: 26, 154: 25, 155: 25}), "Redo puts them back")
     # a box that is too small
     page.drag(x0, y0 + 300, x0 + 40, y0 + 330)
     check(page.ev("document.querySelector('.am [data-k=put-mix]').disabled") and "too small" in panel_text(page), "a box that is too small is refused politely and the button is off")
@@ -123,13 +132,13 @@ def run_ants(page, tab, args, check, env, edges_bytes, edges_js):
     check(wait_for(lambda: page.ev("!!document.querySelector('.dlg')")) and "Clear the Red ants?" in page.ev("document.querySelector('.dlg h2').textContent"), "Clear Red ants asks first")
     page.shot(args.shots, "mapmaker-ants-clear-desktop")
     page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Keep them'; })[0].click()")
-    check(counts(bytes_now(page, edges_bytes))[155] == 25, "Keep them changes nothing")
+    check(wait_counts(page, edges_bytes, {152: 25, 153: 26, 154: 25, 155: 25}), "Keep them changes nothing")
     button(page, "clear")
     wait_for(lambda: page.ev("!!document.querySelector('.dlg')"))
     page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Take away 25 Red ants'; })[0].click()")
-    check(155 not in counts(bytes_now(page, edges_bytes)), "the other button takes the 25 Red ants away, one step")
+    check(wait_counts(page, edges_bytes, {152: 25, 153: 26, 154: 25}), "the other button takes the 25 Red ants away, one step")
     page.ev("document.getElementById('undo-btn').click()")
-    check(counts(bytes_now(page, edges_bytes))[155] == 25, "one Undo brings them back")
+    check(wait_counts(page, edges_bytes, {152: 25, 153: 26, 154: 25, 155: 25}), "one Undo brings them back")
     # the Mosh Pit with its four hills: the check's verdict on a 100 x 100 Extended map with 4 x 25 mixed ants in the middle
     page.ev("document.getElementById('map').focus()")
     page.key("0")
@@ -186,6 +195,7 @@ def run_ants_phone(page, tab, args, check, env, edges_bytes, edges_js):
     page.ev("(function () { var n = document.querySelector('.am .am-n'); n.value = '3'; n.dispatchEvent(new Event('change')); })()")
     check(wait_for(lambda: page.ev("document.querySelector('.am [data-k=put-mix]') && !document.querySelector('.am [data-k=put-mix]').disabled"), 5), "a box and 3 for each team gives Put 12 ants: %s" % panel_text(page)[-200:])
     page.ev("document.querySelector('.am [data-k=put-mix]').click()")
-    got = counts(bytes_now(page, edges_bytes))
-    check(got == {152: 3, 153: 3, 154: 3, 155: 3}, "12 ants, 3 of each team (%s)" % got)
+    check(wait_counts(page, edges_bytes, {152: 3, 153: 3, 154: 3, 155: 3}), "12 ants, 3 of each team")
+    visible = page.ev("(function () { var b = document.querySelector('.am [data-k=put-mix]'); var r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight && r.height >= 43.5; })()")
+    check(visible, "Put is in view on a phone without scrolling, and 44 pixels high")
     page.shot(args.shots, "mapmaker-ants-phone")

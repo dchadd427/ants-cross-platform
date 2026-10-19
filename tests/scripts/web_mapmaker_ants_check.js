@@ -51,7 +51,7 @@ for (const rel of MAPS) {
     check(count(f) === n0 + 1 && ants(f)[2] === a0[2] + 1 && Ants.teamAt(f, cell[0], cell[1]) === 2, rel + ': one more record, of the right team, on the cell');
     const after = Uint8Array.from(f.bytes);
     ed.undo();
-    check(same(ed.file.bytes.subarray(ed.file.blocksAt), before.subarray(f0.blocksAt)) || ed.file.bytes.length >= before.length, rel + ': undo gives the lists back');
+    check(same(Blocks.block1Bytes(Blocks.layout(ed.file).records), Blocks.block1Bytes(Blocks.layout(f0).records)), rel + ': undo gives the list back, record for record');
     check(count(ed.file) === n0 && Ants.teamAt(ed.file, cell[0], cell[1]) === -1, rel + ': Undo takes it away');
     ed.redo(); check(same(ed.file.bytes, after), rel + ': Redo gives the same bytes');
     // every byte outside block 1's count and the new record is as before (the dictionary may hold a marker name more)
@@ -91,9 +91,26 @@ for (const rel of MAPS) {
     check(set.size === 100 && p1.cells.every((c) => !set.has((c.r + 1) * 1000 + c.c) && !set.has(c.r * 1000 + c.c + 1)), 'mix: every other cell, no two ants side by side, no cell twice');
     check(p1.cells.every((c) => c.r >= box.r0 && c.r <= box.r1 && c.c >= box.c0 && c.c <= box.c1 && !Ants.whyNot(f0, c.r * f0.columns + c.c)), 'mix: every ant is inside the box on a free cell');
     const p3 = Ants.planMix(f0, box, [3, 2], 7, 1);
-    check(p3.ok && p3.cells.length === 14 && p3.cells.map((c) => c.team).join('') === '32323232323232', 'mix: two teams alternate cell by cell');
+    check(p3.ok && p3.cells.length === 14 && p3.cells.filter((c) => c.team === 3).length === 7 && p3.cells.filter((c) => c.team === 2).length === 7, 'mix: two teams, seven ants each');
+    // measured mixing: no row and no column is one team, few neighbors share a team, the ants are spread over the box, for widths 16 to 24 and both spacings
+    for (let width = 16; width <= 24; width++) for (const gap of [1, 2]) {
+        const bx = { r0: 3, c0: 3, r1: 3 + 21, c1: 3 + width - 1 }, q = Ants.planMix(f0, bx, all, 25, gap);
+        if (!q.ok) { check(false, 'mix ' + width + ' wide, gap ' + gap + ' is planned'); continue; }
+        const rowsOf = {}, colsOf = {}, at = {}, cnt = {};
+        q.cells.forEach((c) => { (rowsOf[c.r] = rowsOf[c.r] || new Set()).add(c.team); (colsOf[c.c] = colsOf[c.c] || new Set()).add(c.team); cnt['r' + c.r] = (cnt['r' + c.r] || 0) + 1; cnt['c' + c.c] = (cnt['c' + c.c] || 0) + 1; at[c.r * 1000 + c.c] = c.team; });
+        const single = Object.keys(rowsOf).filter((k) => cnt['r' + k] >= 2 && rowsOf[k].size < 2).length + Object.keys(colsOf).filter((k) => cnt['c' + k] >= 2 && colsOf[k].size < 2).length;
+        let pairs = 0, same = 0;
+        q.cells.forEach((c) => { for (const d of [1, 1000]) { const o = at[c.r * 1000 + c.c + d]; if (o !== undefined) { pairs++; if (o === c.team) same++; } } });
+        const top = Math.min(...q.cells.map((c) => c.r)), bottom = Math.max(...q.cells.map((c) => c.r));
+        check(single === 0, 'mix ' + width + ' wide, gap ' + gap + ': no row or column is one team (' + single + ')');
+        check(pairs === 0 || same / pairs < 0.4, 'mix ' + width + ' wide, gap ' + gap + ': few neighbors share a team (' + same + ' of ' + pairs + ')');
+        check(bottom - top >= 15, 'mix ' + width + ' wide, gap ' + gap + ': the ants are spread over the box (' + top + ' to ' + bottom + ')');
+        check(JSON.stringify(Ants.planMix(f0, bx, all, 25, gap).cells) === JSON.stringify(q.cells), 'mix ' + width + ' wide, gap ' + gap + ': the same plan again');
+    }
+    const lineBox = Ants.planMix(f0, { r0: 4, c0: 0, r1: 4, c1: 198 }, [0], 100, 2);
+    check(lineBox.ok === (lineBox.free >= 100) && /fit|need/.test(lineBox.text), 'mix: a one-row box is judged by its spaced cells');
     const edm = editor(open('Original-Ants/Maps/TREASURE.LVL')), seen = Blocks.layout(edm.file).records.filter((r) => Blocks.teamOfMarker(r.tile) >= 0).slice(0, 3);
-    if (seen.length) { const bx = { r0: Math.max(0, seen[0].row - 3), c0: Math.max(0, seen[0].column - 3), r1: seen[0].row + 3, c1: seen[0].column + 3 }, q = Ants.planMix(edm.file, bx, [0, 1], 20, 1); check(q.cells.length > 0 && q.cells.every((c) => !(c.r === seen[0].row && c.c === seen[0].column)), 'mix: a cell that has an ant is passed over'); }
+    if (seen.length) { const bx = { r0: Math.max(0, seen[0].row - 2), c0: Math.max(0, seen[0].column - 2), r1: seen[0].row + 4, c1: seen[0].column + 4 }, room = Ants.planMix(edm.file, bx, [0, 1], 1, 1).free, q = Ants.planMix(edm.file, bx, [0, 1], Math.floor(room / 2), 1); check(q.ok && q.cells.every((c) => !(c.r === seen[0].row && c.c === seen[0].column)), 'mix: a cell that has an ant is passed over'); }
     const small = Ants.planMix(f0, { r0: 5, c0: 5, r1: 8, c1: 8 }, all, 25, 2);
     check(!small.ok && /100 ants need 200 cells; your box has 16/.test(small.text) && /bigger box/.test(small.text), 'mix: a box that is too small is refused politely, with the numbers');
     check(Ants.putMix(f0, small).error, 'mix: the change of a refused plan is an error');
@@ -101,7 +118,7 @@ for (const rel of MAPS) {
     check(!!ed.act(Ants.putMix(f0, p1)), 'mix: one change');
     const f = ed.file, a1 = ants(f);
     check(count(f) === n0 + 100 && [0, 1, 2, 3].every((t) => a1[t] === a0[t] + 25), 'mix: 25 more of each team');
-    ed.undo(); check(count(ed.file) === n0 && ed.file.bytes.length - before.length < 100, 'mix: one Undo takes all 100 away');
+    ed.undo(); check(count(ed.file) === n0 && same(Blocks.block1Bytes(Blocks.layout(ed.file).records), Blocks.block1Bytes(Blocks.layout(f0).records)), 'mix: one Undo takes all 100 away, record for record');
     check(Blocks.layout(ed.file).records.length === n0, 'mix: the list is as long as before');
 }
 
@@ -115,7 +132,8 @@ for (const rel of MAPS) {
     const had = ants(ed2.file)[t], total = count(ed2.file);
     check(had > 0 && !!ed2.act(Ants.clearTeam(ed2.file, t)) && ants(ed2.file)[t] === 0 && count(ed2.file) === total - had, 'clear: all ants of one team go, in one step, the others stay');
     ed2.undo(); check(ants(ed2.file)[t] === had, 'clear: one Undo brings them back');
-    check(Ants.clearTeam(open('Original-Ants/Maps/TINY.LVL'), 0).splices.length >= 0, 'clear: a change (empty when nothing to take)');
+    const none = editor(open('Original-Ants/Maps/TINY.LVL')); none.act(Ants.clearTeam(none.file, 0));
+    check(Ants.clearTeam(none.file, 0).splices.length === 0, 'clear: a team with no ants gives an empty change');
 }
 
 // D
@@ -129,7 +147,7 @@ for (const rel of MAPS) {
     check(!Ants.putOne(ed.file, 1, c1[0], c1[1]).error, 'limit: one more fits');
     const plan = { ok: true, cells: [0, 1, 2, 3, 4, 5].map((i) => ({ r: i, c: 0, team: 0 })) };
     const err = Ants.putMix(ed.file, plan).error;
-    check(err && /65,535 at most/.test(err) && /Take 1 ants away/.test(err), 'limit: a mix over 65,535 is refused with the numbers (' + err + ')');
+    check(err && /65,535 at most/.test(err) && /Take 1 ant away/.test(err), 'limit: a mix over 65,535 is refused with the numbers (' + err + ')');
     const s = Ants.summary(ed.file, plan.cells);
     check(s.over && s.lines[0].kind === 'bad', 'limit: the warning is red');
     const w = Ants.summary(f0, null);
@@ -147,8 +165,15 @@ for (const rel of MAPS) {
     const pileFile = open('Original-Ants/Maps/TREASURE.LVL'), pl = Blocks.layout(pileFile).piles[0];
     if (pl && pl.row < pileFile.rows && pl.column < pileFile.columns) check(Ants.putOne(pileFile, 0, pl.row, pl.column).error, 'refusal: the cell of a food pile is refused');
     const f1 = open('Original-Ants/Maps/MEDIUM.LVL');
-    const tight = Ants.planMix(f1, { r0: 3, c0: 3, r1: 30, c1: 30 }, [0, 1, 2, 3], 50, 1);
+    const tight = Ants.planMix(f1, { r0: 3, c0: 3, r1: 16, c1: 18 }, [0, 1, 2, 3], 50, 1);
     check(tight.ok && Ants.packedCount(f1, tight.cells) > 0, 'warnings: ants shoulder to shoulder give the soft hint');
+    // a free 5 x 5 square: the middle ant is packed in when the other eight cells are taken, and not when one is free
+    let sq = null;
+    for (let i = 0; i < f1.cells && !sq; i++) { const r = Math.floor(i / f1.columns), c = i % f1.columns; let ok = r > 1 && c > 1 && r < f1.rows - 3 && c < f1.columns - 3; for (let dr = -2; dr <= 2 && ok; dr++) for (let dc = -2; dc <= 2; dc++) if (Ants.whyNot(f1, (r + dr) * f1.columns + c + dc) || Ants.teamAt(f1, r + dr, c + dc) >= 0) { ok = false; break; } if (ok) sq = [r, c]; }
+    const ring = []; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) ring.push({ r: sq[0] + dr, c: sq[1] + dc });
+    check(Ants.packedCount(f1, ring) === Ants.packedCount(f1, null) + 1, 'warnings: an ant with all eight cells round it taken is packed in');
+    check(Ants.packedCount(f1, ring.filter((c) => !(c.r === sq[0] && c.c === sq[1] - 1))) === Ants.packedCount(f1, null), 'warnings: one free cell beside it and it is not');
+    check(Ants.summary(Object.assign({}, f1, { rows: 120 }), null).lines.some((l) => /more than 90 rows/.test(l.text)), 'warnings: a map of more than 90 rows says that the game cannot play it yet');
     const loose = Ants.planMix(f1, { r0: 3, c0: 3, r1: 40, c1: 40 }, [0, 1, 2, 3], 10, 2);
     check(loose.ok && Ants.packedCount(f1, loose.cells) === Ants.packedCount(f1, null), 'warnings: every other cell gives none');
 }

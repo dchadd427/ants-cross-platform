@@ -49,3 +49,8 @@
 .side.am-on > *:not(.am):not(.checkline) { display: none; }
 .side.am-on { overflow-y: auto; }
 .side .am { border-top: 0; padding-top: 0; flex: 1 1 auto; }
+.am-w.note { border-color: var(--note); color: var(--note); }
+@media (max-width: 600px) {
+    .am-go { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; margin: 0; padding: 8px 14px calc(8px + env(safe-area-inset-bottom)); background: #08130f; border-top: 2px solid var(--gold); }
+    .am { padding-bottom: 72px; }
+}
