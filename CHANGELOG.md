@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none (protocol 21).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6948051a...LAST); how it works: [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46824e4c...f2d4791b); how it works: [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md)
 
 ## v0.12.93 - 2026-10-19 - Owner page: sign in with a username and a password (replaces Discord)
 
