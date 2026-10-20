@@ -185,8 +185,8 @@
 
         // One object's picture at a cell, see-through (the ghost of a bigger object or plant that follows the pointer)
         function ghost(ctx, view, w, h, id, row, column) {
-            var it = index.objects.items[id], s = view.scale, k = s / CELL, half = (id >= 404 && id <= 421 && id !== 409 && id !== 417 && id !== 418) ? 0.5 : 0;
-            if (!it) return;
+            var it = index.objects.items[id], s = view.scale, k = s / CELL, half = (id >= 404 && id <= 421 && id !== 409 && id !== 417 && id !== 418) ? 0.5 : 0; if (!it) return;
+
             ctx.save(); ctx.globalAlpha = 0.62; ctx.imageSmoothingEnabled = true;
             ctx.drawImage(objectsImg, it[0], it[1], it[2], it[3], w / 2 + (column + half - view.cx) * s + it[4] * k, h / 2 + (row + half - view.cy) * s + it[5] * k, it[2] * k, it[3] * k);
             ctx.restore();
@@ -194,13 +194,14 @@
 
         // The starting ants: the game's standing ant of the map's default type (or worker ant when none) in its team's color on its cell center, with a ring in the team's color at its feet (black has a thin white edge)
         function ants(ctx, view, file, w, h, vis) {
-            var spec = file.defaultType && index.antTypes && index.antTypes[file.defaultType];
-            var it = index.objects.items[spec ? spec.id : index.ant], teamAnts = spec || index.ants, s = view.scale, k = s / CELL, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s;
-            if (!it) return;
+            var defSpec = file.defaultType && index.antTypes && index.antTypes[file.defaultType], byType = { 1: 64, 2: 66, 3: 63, 4: 62, 5: 65 };
+            var defIt = index.objects.items[defSpec ? defSpec.id : index.ant], defTeams = defSpec || index.ants, s = view.scale, k = s / CELL, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s; if (!defIt) return;
+
             ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'medium';
             for (var i = 0; i < file.markers.length; i++) {
                 var m = file.markers[i];
                 if (m.row < vis.r0 - 2 || m.row > vis.r1 + 2 || m.column < vis.c0 - 2 || m.column > vis.c1 + 2) continue;
+                var mSpec = m.antType && index.antTypes && index.antTypes[byType[m.antType]], it = (mSpec && index.objects.items[mSpec.id]) || defIt, teamAnts = (mSpec && index.objects.items[mSpec.id]) ? mSpec : defTeams;
                 var cx = x0 + (m.column + 0.5) * s, ay = y0 + (m.row + 0.5) * s, cy = ay + 11 * k, rx = 12 * k, ry = 5.5 * k, line = Math.max(1.6, 2.4 * k), src = teamAnts && teamAnts[m.team] || it;
                 ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 6.2832);
                 ctx.fillStyle = Tiles.TEAMS[m.team]; ctx.globalAlpha = 0.28; ctx.fill(); ctx.globalAlpha = 1;

@@ -15,11 +15,13 @@
     var MAX_RECORDS = 65535;                         // block 1 holds a word's worth of records, the ants and the plants together (docs/MAP_FORMAT.md, "Limits")
     var ORDER = [3, 2, 0, 1];                        // the buttons' order: Black, Blue, Green, Red (the indexes of Blocks.TEAMS, which has the game's seats)
     var COLORS = ['#2f9a52', '#c0392b', '#4a5fc8', '#262626'];      // (the same colors as mapmaker_tiles.js, by seat)
+    var ANT_TYPES = [[0, 'Default / Worker', 811], [4, 'Combat', 897], [3, 'Thief', 1085], [1, 'Bomber', 774], [5, 'Swimmer', 963], [2, 'Fire', 676]];
     var LIST_ERROR = 'The list of starting ants in this file cannot be changed here: the file ends in the middle of it.';
 
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
     function num(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
     function label(t) { return Blocks.TEAMS[t].label; }
+    function typeLabel(at) { for (var i = 0; i < ANT_TYPES.length; i++) if (ANT_TYPES[i][0] === at) return ANT_TYPES[i][1]; return ''; }
     function join(names) { return names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]; }
     function word(v) { return [v & 255, (v >> 8) & 255]; }
 
@@ -70,10 +72,10 @@
         for (i = 0; i < records.length; i++) { var t = Blocks.teamOfMarker(records[i].tile); if (teams.indexOf(t) < 0) teams.push(t); }
         return listChange(file, lay, { rel: lay.b1.length, removed: new Uint8Array(0), inserted: bytesOf(records), teams: teams }, lay.records.length + records.length);
     }
-    function record(team, row, column) { return { tile: Blocks.TEAMS[team].marker, row: row, column: column }; }
+    function record(team, row, column, antType, file) { return { tile: Blocks.markerTile ? Blocks.markerTile(file, team, antType) : Blocks.TEAMS[team].marker, row: row, column: column }; }
 
     // One ant of `team` put on (row, column): a CHANGE, or {error}. A tap on a cell that has an ant is not this (takeOne).
-    function putOne(file, team, row, column) {
+    function putOne(file, team, row, column, antType) {
         var lay = Blocks.layout(file);
         if (!Blocks.TEAMS[team]) return { error: 'There is no such team.' };
         if (!lay.ok1) return { error: LIST_ERROR };
@@ -82,7 +84,7 @@
         var why = whyNot(file, row * file.columns + column);
         if (why) return { error: why };
         if (lay.records.length + 1 > MAX_RECORDS) return { error: 'The file holds at most ' + num(MAX_RECORDS) + ' starting ants and plants together, and it has them. Take some away first.' };
-        return added(file, lay, [record(team, row, column)]);
+        return added(file, lay, [record(team, row, column, antType, file)]);
     }
 
     // The ant on (row, column) taken away, whatever its team: a CHANGE, or null when there is none
@@ -161,12 +163,12 @@
     }
 
     // A mix as a CHANGE, or {error}: the ants of the plan appended to the list (one splice and the count word)
-    function putMix(file, plan) {
+    function putMix(file, plan, antType) {
         var lay = Blocks.layout(file);
         if (!lay.ok1) return { error: LIST_ERROR };
         if (!plan || !plan.ok) return { error: plan && plan.text || 'There is nothing to put.' };
         if (lay.records.length + plan.cells.length > MAX_RECORDS) return { error: tooMany(lay.records.length + plan.cells.length) };
-        return added(file, lay, plan.cells.map(function (cell) { return record(cell.team, cell.r, cell.c); }));
+        return added(file, lay, plan.cells.map(function (cell) { return record(cell.team, cell.r, cell.c, cell.antType || antType, file); }));
     }
     function tooMany(total) { return num(total) + ' ants. The file holds ' + num(MAX_RECORDS) + ' at most (all teams, plants included). Take ' + num(total - MAX_RECORDS) + (total - MAX_RECORDS === 1 ? ' ant' : ' ants') + ' away. The Put buttons stop.'; }
 
@@ -197,7 +199,7 @@
     //       is in), map (the map canvas)}, file(), act(change) -> bool, say(title, text), dialogs,
     //       team() / setTeam(seat), ants() / setAnts(n) (the clump's count), view() -> {view, width, height}, about() -> {ant, eggs} or null, props() (open the properties), onTool(on) }
     function create(env) {
-        var doc = env.doc, win = env.win || {}, st = { mode: 'one', tap: 'put', shape: 'clump', mix: [true, true, true, true], per: 25, gap: 2, box: null, plan: null, note: '' };
+        var doc = env.doc, win = env.win || {}, st = { mode: 'one', tap: 'put', shape: 'clump', antType: env.antType ? env.antType() : 0, mix: [true, true, true, true], per: 25, gap: 2, box: null, plan: null, note: '' };
         var panel = doc.createElement('div'), painting = false, shown = false, over = null, loop = 0, last = '';
         panel.className = 'am'; panel.hidden = true;
         panel.setAttribute('aria-label', 'Starting ants'); panel.setAttribute('role', 'group');
@@ -233,15 +235,16 @@
             if (at >= 0) { change = takeOne(f, cell.row, cell.column); st.note = 'Took away the ' + label(at) + ' ant at row ' + cell.row + ', column ' + cell.column + '. One Undo brings it back.'; }
             else if (st.tap === 'take') { st.note = 'There is no ant on row ' + cell.row + ', column ' + cell.column + ' to take away.'; render(); return; }
             else {
-                change = putOne(f, env.team(), cell.row, cell.column);
+                var aType = f.version === 9 ? st.antType : 0;
+                change = putOne(f, env.team(), cell.row, cell.column, aType);
                 if (change.error) { st.note = ''; render(); return env.say('It cannot be put there', change.error); }
-                st.note = 'Put one ' + label(env.team()) + ' ant at row ' + cell.row + ', column ' + cell.column + '.';
+                st.note = 'Put one ' + label(env.team()) + (aType ? ' ' + typeLabel(aType) : '') + ' ant at row ' + cell.row + ', column ' + cell.column + '.';
             }
             if (!env.act(change)) { st.note = ''; render(); }
         }
 
         function putMixNow() {
-            var change = putMix(file(), st.plan);
+            var change = putMix(file(), st.plan, file() && file().version === 9 ? st.antType : 0);
             if (change.error) return env.say('It cannot be put there', change.error);
             var n = st.plan.cells.length;
             st.box = null; st.plan = null; st.note = 'Put ' + plural(n, 'ant', 'ants') + '. One Undo takes them all away.';
@@ -351,12 +354,29 @@
                     panel.appendChild(el('p', 'am-note', 'A tap starts the clump for the team. Put it again to move it.'));
                 }
             }
+            if (f.version === 9) {
+                panel.appendChild(head('Ant type'));
+                var tgrid = row('am-two am-types');
+                ANT_TYPES.forEach(function (item) {
+                    var b = button('at' + item[0], '', 'am-type', st.antType === item[0], function () { st.antType = item[0]; if (env.setAntType) env.setAntType(item[0]); st.note = ''; render(); });
+                    var ic = el('i', 'am-pic'); if (env.pic) env.pic(ic, item[2], 22); b.appendChild(ic);
+                    b.appendChild(el('span', 'am-tn', item[1]));
+                    tgrid.appendChild(b);
+                });
+                panel.appendChild(tgrid);
+            }
             panel.appendChild(el('p', 'am-total', num(sum.total) + (sum.total === 1 ? ' ant' : ' ants') + ' in all'));
             var about = env.about ? env.about() : null;
             if (about) {
                 var same = el('p', 'am-note', 'Same for every team: ' + about.ant + ', ' + plural(about.eggs, 'egg', 'eggs') + ' each. ');
                 var link = el('button', 'am-link', 'Change in Properties'); link.type = 'button'; link.setAttribute('data-k', 'props'); link.addEventListener('click', function () { env.props(); });
-                same.appendChild(link); panel.appendChild(same);
+                same.appendChild(link);
+                if (f.version !== 9 && env.convert) {
+                    same.appendChild(doc.createTextNode(' \u00b7 '));
+                    var conv = el('button', 'am-link', 'Switch to Extended map for per-ant types'); conv.type = 'button'; conv.setAttribute('data-k', 'convert'); conv.addEventListener('click', function () { env.convert(); });
+                    same.appendChild(conv);
+                }
+                panel.appendChild(same);
             }
             if (!mix) {
                 var clear = button('clear', 'Clear ' + label(t) + ' ants...', 'am-clear', null, clearNow);
@@ -445,13 +465,13 @@
             // the map changed (a tap, an Undo, a clear), or another was opened: the counts are made again, and a box that was dragged is made again against the new bytes
             refresh: function () { if (!shown) return; if (st.box && !painting) setPlan(); render(); drawOver(); },
             setMap: function () { clearBox(); st.note = ''; if (shown) render(); },
-            state: function () { return { mode: st.mode, tap: st.tap, shape: st.shape, mix: st.mix.slice(), per: st.per, gap: st.gap, box: st.box, plan: st.plan, note: st.note }; },
+            state: function () { return { mode: st.mode, tap: st.tap, shape: st.shape, antType: st.antType, mix: st.mix.slice(), per: st.per, gap: st.gap, box: st.box, plan: st.plan, note: st.note }; },
             panel: panel
         };
     }
 
     return {
-        create: create, ORDER: ORDER, MAX_RECORDS: MAX_RECORDS,
+        create: create, ORDER: ORDER, ANT_TYPES: ANT_TYPES, MAX_RECORDS: MAX_RECORDS,
         teamAt: teamAt, whyNot: whyNot, putOne: putOne, takeOne: takeOne, planMix: planMix, putMix: putMix, clearTeam: clearTeam, summary: summary, packedCount: packedCount, tooMany: tooMany
     };
 });

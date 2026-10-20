@@ -1603,6 +1603,41 @@ int main() {
         ASSERT_EQ(sim.get_world_state().flower_droppers[0].x, 15);
     } TEST_END();
 
+    TEST_CASE("6.7 An Extended map (version 9) with per-ant starting types spawns each starting ant with its own AntType (0..5), while ant_type 0 uses the map's Default Ant Type") {
+        LevelData level = tiny_level();
+        level.version = 9;
+        level.anthill_spawns.clear();
+        for (uint8_t t = 0; t <= 5; ++t) {
+            AnthillSpawn sp;
+            sp.tile_id = 155;
+            sp.x = static_cast<uint16_t>(10 + t);
+            sp.y = 10;
+            sp.team_id = 1;
+            sp.ant_type = t;
+            level.anthill_spawns.push_back(sp);
+        }
+        SimulationEngine sim;
+        sim.init(level, 1, 0x02);
+        const auto& ants = sim.get_world_state().ants;
+        ASSERT_EQ(ants.size(), 6u);
+        for (size_t i = 0; i < 6; ++i) {
+            ASSERT_EQ(ants[i].type, static_cast<AntType>(i));
+            ASSERT_EQ(ants[i].tile_x, static_cast<int>(10 + i));
+            ASSERT_EQ(ants[i].tile_y, 10);
+        }
+        // With a Block 3 Default Ant Type (e.g. tile 65 = Swimmer), ant_type 0 (Worker own type) takes the default type, while explicit 1..5 keep their own specialist type
+        level.ambient_flag = 0;
+        level.ambient_tile_or_sound = 65;
+        SimulationEngine sim_def;
+        sim_def.init(level, 1, 0x02);
+        const auto& ants_def = sim_def.get_world_state().ants;
+        ASSERT_EQ(ants_def.size(), 6u);
+        ASSERT_EQ(ants_def[0].type, AntType::Swimmer);
+        for (size_t i = 1; i < 6; ++i) {
+            ASSERT_EQ(ants_def[i].type, static_cast<AntType>(i));
+        }
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " TEST SUMMARY: Total test cases: " << g_test_count << ", Total assertions: " << g_assert_count << ", Failed: " << g_test_failures << "\n"
               << "=======================================================\n";

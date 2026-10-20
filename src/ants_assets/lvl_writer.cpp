@@ -135,11 +135,28 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
     if (level.anthill_spawns.size() > kMaxBlockEntries) return "block 1 has " + num(level.anthill_spawns.size()) + " records, a file holds at most 65,535";
     for (size_t i = 0; i < level.anthill_spawns.size(); ++i) {
         const AnthillSpawn& sp = level.anthill_spawns[i];
+        if (extended && (sp.tile_id >> 12) >= 1u && (sp.tile_id >> 12) <= 5u &&
+            start_marker_team_of_id(static_cast<uint16_t>(sp.tile_id & 0x0FFFu)) >= 0) {
+            return "block 1 record #" + num(i) + " holds tile " + num(sp.tile_id) +
+                   ", which encodes a start marker and ant_type in its upper bits: store tile_id " + num(sp.tile_id & 0x0FFFu) +
+                   " and ant_type " + num(sp.tile_id >> 12);
+        }
         const int team = start_marker_team_of_id(sp.tile_id);
         const uint8_t expected = team >= 0 ? static_cast<uint8_t>(team) : uint8_t{255};
         if (sp.team_id != expected) {
             return "block 1 record #" + num(i) + " (tile " + num(sp.tile_id) + ", row " + num(sp.y) + ", column " + num(sp.x) + ") says team " + num(sp.team_id) +
                    ", the team of its tile is " + num(expected) + " (255: no team)";
+        }
+        if (sp.ant_type != 0) {
+            if (!extended) {
+                return "block 1 record #" + num(i) + " sets ant_type " + num(sp.ant_type) + ", a Classic map (version 8) holds ant_type 0 only";
+            }
+            if (expected == 255) {
+                return "block 1 record #" + num(i) + " (tile " + num(sp.tile_id) + ") sets ant_type " + num(sp.ant_type) + " on a record that is not a start marker";
+            }
+            if (sp.ant_type > 5) {
+                return "block 1 record #" + num(i) + " sets ant_type " + num(sp.ant_type) + ", only 0 .. 5 are known";
+            }
         }
     }
     if (level.food_schedules.size() > kMaxBlockEntries) return "block 2 has " + num(level.food_schedules.size()) + " food piles, a file holds at most 65,535";
@@ -222,7 +239,7 @@ void serialize(const LevelData& level, Out& o) {
     for (const MapCell& c : level.layer2_interactive) o.cell(c);
     o.u16(static_cast<uint16_t>(level.anthill_spawns.size()));
     for (const AnthillSpawn& sp : level.anthill_spawns) {
-        o.u16(sp.tile_id);
+        o.u16(static_cast<uint16_t>(sp.tile_id | (static_cast<uint16_t>(sp.ant_type) << 12)));
         o.u16(sp.y);
         o.u16(sp.x);
     }
@@ -330,9 +347,9 @@ bool same_level(const LevelData& a, const LevelData& b, std::string* difference)
     for (size_t i = 0; i < a.anthill_spawns.size(); ++i) {
         const AnthillSpawn& p = a.anthill_spawns[i];
         const AnthillSpawn& q = b.anthill_spawns[i];
-        if (p.tile_id != q.tile_id || p.y != q.y || p.x != q.x || p.team_id != q.team_id) {
-            return differ("block 1 record #" + num(i) + ": tile " + num(p.tile_id) + " at row " + num(p.y) + ", column " + num(p.x) + " (team " + num(p.team_id) + ") / tile " +
-                          num(q.tile_id) + " at row " + num(q.y) + ", column " + num(q.x) + " (team " + num(q.team_id) + ")");
+        if (p.tile_id != q.tile_id || p.y != q.y || p.x != q.x || p.team_id != q.team_id || p.ant_type != q.ant_type) {
+            return differ("block 1 record #" + num(i) + ": tile " + num(p.tile_id) + " at row " + num(p.y) + ", column " + num(p.x) + " (team " + num(p.team_id) + ", ant_type " + num(p.ant_type) + ") / tile " +
+                          num(q.tile_id) + " at row " + num(q.y) + ", column " + num(q.x) + " (team " + num(q.team_id) + ", ant_type " + num(q.ant_type) + ")");
         }
     }
     if (a.food_schedules.size() != b.food_schedules.size()) return differ("block 2: " + num(a.food_schedules.size()) + " / " + num(b.food_schedules.size()) + " food piles");
@@ -588,6 +605,14 @@ std::vector<Reason> classic_reasons(const LevelData& level, std::vector<Reason>*
         notes->push_back({"rules_extended_dropped", "the map asks for the extended rules (rules 1); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
                                                     "and a long path order can fail)"});
     }
+    if (notes != nullptr) {
+        for (const AnthillSpawn& sp : level.anthill_spawns) {
+            if (sp.ant_type != 0) {
+                notes->push_back({"starting_ant_types_dropped", "the map has starting ants of specific types; a Classic map gives every starting ant the map's default ant type"});
+                break;
+            }
+        }
+    }
     // every object anchor must fit the byte of a Classic map. This loop (O(cells)) can never fire for a version 9 map of 256 x 256 or less, whose anchors are bytes modulo 256
     // (LevelData::object_anchor), and for a larger map it only adds a reason on top of the size reasons above; it stays so that the list is complete, and tells an editor
     // which objects to move when the map is cropped.
@@ -687,6 +712,7 @@ LevelConversion convert_to_classic(const LevelData& level) {
             copy.version = LVL_EXPECTED_VERSION;
             copy.format_flags = 0;
             copy.rules = 0;
+            for (AnthillSpawn& sp : copy.anthill_spawns) sp.ant_type = 0;
             const uint32_t columns = copy.width;
             for (size_t i = 0; i < copy.layer2_interactive.size(); ++i) {
                 const uint32_t row = static_cast<uint32_t>(i / columns);

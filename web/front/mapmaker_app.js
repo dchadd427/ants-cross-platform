@@ -433,7 +433,7 @@
                 tile: $('tile-btn'), map: $('map'), side: doc.querySelector('aside.side'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn'),
                 stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more')
             },
-            loadAnts: loadAnts, about: antsAbout, props: function () { ACTIONS.props(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
+            loadAnts: loadAnts, about: antsAbout, props: function () { ACTIONS.props(); }, convert: function () { ACTIONS.convert(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
         // The page asks before it is closed only when the work is not safe in the browser (the browser keeps nothing, or the last change has not been written yet)
         win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending)) { e.preventDefault(); e.returnValue = ''; } });

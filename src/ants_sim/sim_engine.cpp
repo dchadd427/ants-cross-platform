@@ -188,7 +188,10 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
                     }
                 }
             }
-            spawn_unit(a.team_id, AntType::Worker, TileCoord{static_cast<uint16_t>(sx), static_cast<uint16_t>(sy)}, true);
+            const AntType spawn_type = a.ant_type <= static_cast<uint8_t>(AntType::Swimmer)
+                                           ? static_cast<AntType>(a.ant_type)
+                                           : AntType::Worker;
+            spawn_unit(a.team_id, spawn_type, TileCoord{static_cast<uint16_t>(sx), static_cast<uint16_t>(sy)}, true);
         }
     }
 

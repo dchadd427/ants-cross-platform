@@ -217,6 +217,7 @@ struct AnthillSpawn {
     uint16_t y{0};       // Grid row coordinate
     uint16_t x{0};       // Grid column coordinate
     uint8_t  team_id{0}; // the remake's team of a start marker tile (start_marker_team_of_id: 0 green, 1 red, 2 blue, 3 black), 255 = any other record (a plant ...)
+    uint8_t  ant_type{0}; // Extended map (version 9): bits 12..15 of word 0 on a start marker (0 default/worker, 1 bomber, 2 fire, 3 thief, 4 combat, 5 swimmer); 0 on Classic maps
 };
 
 /**
