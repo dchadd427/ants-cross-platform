@@ -225,6 +225,41 @@ for (const rel of MAPS) {
     check(ants(ed.file)[3] === 0 && acts === 4, 'page: the question\'s button clears one team in one step');
     check(side.className.indexOf('am-on') >= 0, 'page: on a wide screen the box takes the right-hand column');
     part.show(false); check(part.panel.hidden && side.className.indexOf('am-on') < 0, 'page: it goes away with the tool');
+
+    // F: Extended map per-spawn ant types (One at a time, Clump, Mix, and UI selector)
+    const tiny = open('Original-Ants/Maps/TINY.LVL');
+    const v9 = new Uint8Array(tiny.bytes.length - 40 + 18);
+    v9[0] = 9;
+    v9.set(tiny.bytes.subarray(4, 10), 4);
+    v9.set(tiny.bytes.subarray(40), 18);
+    const f9 = File.parse(v9), ed9 = editor(f9);
+    check(f9.ok && f9.version === 9 && f9.kind === 'extended', 'v9: parsed as Extended map');
+    const [c1, c2] = free(ed9.file, 2, ed9.file.columns * 5 + 5), n9 = count(ed9.file);
+    check(!!ed9.act(Ants.putOne(ed9.file, 1, c1[0], c1[1], 4)), 'v9: putOne Combat ant');
+    check(!!ed9.act(Ants.putOne(ed9.file, 2, c2[0], c2[1], 1)), 'v9: putOne Bomber ant');
+    const recs = Blocks.layout(ed9.file).records;
+    check(Blocks.teamOfMarker(recs[n9].tile) === 1 && Blocks.typeOfMarker(recs[n9].tile) === 4, 'v9: record 1 has team Red and antType 4 (Combat)');
+    check(Blocks.teamOfMarker(recs[n9 + 1].tile) === 2 && Blocks.typeOfMarker(recs[n9 + 1].tile) === 1, 'v9: record 2 has team Blue and antType 1 (Bomber)');
+    const lastTwo = ed9.file.markers.slice(-2);
+    check(lastTwo[0].team === 'red' && lastTwo[0].antType === 4 && lastTwo[1].team === 'blue' && lastTwo[1].antType === 1, 'v9: MapFile.parse reads antType on markers');
+    check(!!ed9.act(Blocks.placeStart(ed9.file, 1, 10, 10, 3, 5)), 'v9: placeStart clump of 3 Swimmer ants');
+    const redRecs = Blocks.layout(ed9.file).records.filter((r) => Blocks.teamOfMarker(r.tile) === 1);
+    check(redRecs.length === 3 && redRecs.every((r) => Blocks.typeOfMarker(r.tile) === 5), 'v9: clump replaced Red markers with 3 Swimmer ants');
+    check(!!ed9.act(Ants.clearTeam(ed9.file, 1)) && !!ed9.act(Ants.clearTeam(ed9.file, 2)) && ants(ed9.file)[1] === 0, 'v9: clearTeam removes typed markers');
+    check(!!ed9.act(Ants.putOne(ed9.file, 1, c1[0], c1[1], 4)) && !!ed9.act(Ants.putOne(ed9.file, 1, c2[0], c2[1], 2)), 'v9: put mixed Red Combat + Fire ants');
+    check(!!ed9.act(Blocks.eraseAt(ed9.file, c1[0] * ed9.file.columns + c1[1])) && ants(ed9.file)[1] === 0, 'v9: eraseAt on one ant removes all starting ants of that team even with mixed types');
+    let pickedType = 0;
+    const part9 = Ants.create({
+        doc, win: {}, host: { tools, hint, side }, file: () => ed9.file, act: (c) => { const d = ed9.act(c); part9.refresh(); return !!d; }, say: () => {},
+        dialogs: { open: () => {} }, team: () => 0, setTeam: () => {}, ants: () => 4, setAnts: () => {}, antType: () => pickedType, setAntType: (at) => { pickedType = at; },
+        convert: () => {}, view: () => null, about: () => ({ ant: 'Worker ants', eggs: 2 }), props: () => {}, refresh: () => {}
+    });
+    part9.show(true);
+    const btn9 = (k) => part9.panel.querySelector('[data-k="' + k + '"]');
+    check(btn9('at4') && btn9('at1') && btn9('at5'), 'v9 UI: Ant type buttons rendered on Extended map');
+    btn9('at4').click();
+    check(pickedType === 4 && part9.state().antType === 4, 'v9 UI: clicking Combat selects antType 4');
+    part9.show(false);
 }
 
 console.log(checks + ' checks, ' + failures + ' failed');

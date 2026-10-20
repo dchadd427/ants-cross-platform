@@ -582,7 +582,17 @@ void parse_level(const uint8_t* data, size_t size, const LevelLimits& limits, Pa
     lvl.anthill_spawns.resize(b1_count);
     for (size_t i = 0; i < b1_count; ++i) {
         AnthillSpawn& sp = lvl.anthill_spawns[i];
-        r.read_u16(sp.tile_id); r.read_u16(sp.y); r.read_u16(sp.x);
+        uint16_t raw_tile = 0;
+        r.read_u16(raw_tile); r.read_u16(sp.y); r.read_u16(sp.x);
+        const uint8_t raw_type = static_cast<uint8_t>(raw_tile >> 12);
+        const uint16_t base_tile = static_cast<uint16_t>(raw_tile & 0x0FFFu);
+        if (extended && raw_type <= 5 && start_marker_team_of_id(base_tile) >= 0) {
+            sp.tile_id = base_tile;
+            sp.ant_type = raw_type;
+        } else {
+            sp.tile_id = raw_tile;
+            sp.ant_type = 0;
+        }
 
         // A start marker is its tile id (the table at 0x1002468 by color, FUN_0100ec18), whatever the dictionary calls the entry; every other record is no marker
         const int marker_team = start_marker_team_of_id(sp.tile_id);

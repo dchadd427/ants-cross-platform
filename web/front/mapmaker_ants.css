@@ -13,6 +13,9 @@
 .am-b:focus-visible, .am-link:focus-visible, .am-n:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .am-team { justify-content: flex-start; padding: 0 8px; background: #0d1b16; border-color: var(--rule); }
 .am-team.on { background: #14332b; border-color: var(--gold); color: var(--cream); }
+.am-type { justify-content: flex-start; padding: 3px 6px; font-size: 13px; background: #0d1b16; border-color: var(--rule); }
+.am-type[aria-pressed="true"] { background: #14332b; border-color: var(--gold); color: var(--cream); }
+.am-pic { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; }
 .am-mixteam { flex-direction: column; justify-content: center; gap: 1px; padding: 4px 2px; font-size: 13px; min-height: 52px; }
 .am-mixteam[aria-pressed="true"] { background: #14332b; border-color: var(--gold); color: var(--cream); }
 .am-mixteam[aria-pressed="false"] { opacity: .6; }

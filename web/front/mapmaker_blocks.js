@@ -95,7 +95,9 @@
     function wr(b, at, v) { b[at] = v & 255; b[at + 1] = (v >> 8) & 255; }
     function wr32(b, at, v) { b[at] = v & 255; b[at + 1] = (v >>> 8) & 255; b[at + 2] = (v >>> 16) & 255; b[at + 3] = (v >>> 24) & 255; }
     function team(index) { return TEAMS[index] || null; }
-    function teamOfMarker(tile) { for (var i = 0; i < 4; i++) if (TEAMS[i].marker === tile) return i; return -1; }
+    function teamOfMarker(tile) { var base = (tile >> 12) <= 5 ? (tile & 0x0FFF) : tile; for (var i = 0; i < 4; i++) if (TEAMS[i].marker === base) return i; return -1; }
+    function typeOfMarker(tile) { return teamOfMarker(tile) >= 0 ? ((tile >> 12) & 15) : 0; }
+    function markerTile(file, teamIndex, antType) { var m = TEAMS[teamIndex].marker; return file && file.version === 9 && antType > 0 && antType <= 5 ? (m | ((antType & 15) << 12)) : m; }
     function teamOfHill(tile) { for (var i = 0; i < 4; i++) if (TEAMS[i].hill === tile) return i; return -1; }
     function clampTo(n, lo, hi) { n = Math.round(+n); return isNaN(n) ? lo : Math.max(lo, Math.min(hi, n)); }
 
@@ -280,16 +282,16 @@
     }
 
     // The starting ants of a team put round (row, column): `count` records of the team's start marker, standing together; the team's ants that were there go (only one start for each team).
-    function placeStart(file, teamIndex, row, column, count) {
+    function placeStart(file, teamIndex, row, column, count, antType) {
         var t = TEAMS[teamIndex], lay = layout(file);
         if (!t) return { error: 'There is no such team.' };
         if (!lay.ok1) return { error: 'The list of starting ants in this file cannot be changed here: the file ends in the middle of it.' };
         var n = clampTo(count, MIN_ANTS, MAX_ANTS), cells = startCells(file, lay, row, column, n, teamIndex), kept = [], insertAt = -1, i;
         for (i = 0; i < lay.records.length; i++) {
-            if (lay.records[i].tile === t.marker) { if (insertAt < 0) insertAt = kept.length; } else kept.push(lay.records[i]);
+            if (teamOfMarker(lay.records[i].tile) === teamIndex) { if (insertAt < 0) insertAt = kept.length; } else kept.push(lay.records[i]);
         }
         if (insertAt < 0) insertAt = kept.length;
-        var fresh = cells.map(function (cell) { return { tile: t.marker, row: cell.r, column: cell.c }; });
+        var mTile = markerTile(file, teamIndex, antType), fresh = cells.map(function (cell) { return { tile: mTile, row: cell.r, column: cell.c }; });
         var records = kept.slice(0, insertAt).concat(fresh, kept.slice(insertAt)), change = emptyChange(), splice = diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(records));
         if (splice) change.splices.push(splice);
         addName(change, t.marker, t.markerName);
@@ -299,7 +301,7 @@
     function eraseStart(file, teamIndex) {
         var t = TEAMS[teamIndex], lay = layout(file), change = emptyChange();
         if (!t || !lay.ok1) return change;
-        var kept = lay.records.filter(function (rec) { return rec.tile !== t.marker; });
+        var kept = lay.records.filter(function (rec) { return teamOfMarker(rec.tile) !== teamIndex; });
         if (kept.length === lay.records.length) return change;
         change.splices.push(diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(kept)));
         return change;
@@ -423,9 +425,9 @@
         var tiles = lay.ok1 ? ix.markers[idx] : null, plantHits = lay.ok1 ? ix.plants[idx] : null;
         if (tiles || plantHits) {
             var gone = {}, dropIdx = {};
-            if (tiles) for (i = 0; i < tiles.length; i++) gone[tiles[i]] = true;
+            if (tiles) for (i = 0; i < tiles.length; i++) gone[teamOfMarker(tiles[i])] = true;
             if (plantHits) for (i = 0; i < plantHits.length; i++) dropIdx[plantHits[i]] = true;
-            var kept = lay.records.filter(function (rec, k) { return !gone[rec.tile] && !dropIdx[k]; });
+            var kept = lay.records.filter(function (rec, k) { return !gone[teamOfMarker(rec.tile)] && !dropIdx[k]; });
             var sp1 = diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(kept));
             if (sp1) change.splices.push(sp1);
         }
@@ -701,7 +703,7 @@
 
     return {
         EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES, FOOD_ITEMS: FOOD_ITEMS, PLANT_NAMES: PLANT_NAMES,
-        team: team, teamOfMarker: teamOfMarker, teamOfHill: teamOfHill, clampTo: clampTo, foodItem: foodItem,
+        team: team, teamOfMarker: teamOfMarker, typeOfMarker: typeOfMarker, markerTile: markerTile, teamOfHill: teamOfHill, clampTo: clampTo, foodItem: foodItem,
         layout: layout, block1Bytes: block1Bytes, block2Bytes: block2Bytes, block4Bytes: block4Bytes, diffSplice: diffSplice,
         hillCells: hillCells, placeHill: placeHill, startCells: startCells, placeStart: placeStart, eraseStart: eraseStart, placePile: placePile, placePlant: placePlant,
         eraseAt: eraseAt, hasMovable: hasMovable, moveAt: moveAt, resizeMap: resizeMap, inTheWay: inTheWay, blockedText: blockedText, facts: facts

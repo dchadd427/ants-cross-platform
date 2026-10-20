@@ -405,7 +405,7 @@ class TheCodeRuns(unittest.TestCase):
             "a hill that is put where half of it is off the map": ("mapmaker_blocks.js", "if (row < 1 || column < 1 || row + 2 >= file.rows", "if (row < 0 || column < 0 || row + 2 >= file.rows"),
             "a hill whose tile the dictionary is not told of": ("mapmaker_blocks.js", "addName(change, t.hill, t.hillName);", "void 0;"),
             "ants that all stand on one cell": ("mapmaker_blocks.js", "return good.concat(rest).slice(0, count);", "return good.concat(rest).slice(0, count).map(function (c) { return good[0] || c; });"),
-            "ants of a team that take the plants and the other teams' ants with them": ("mapmaker_blocks.js", "if (lay.records[i].tile === t.marker) { if (insertAt < 0)", "if (true) { if (insertAt < 0)"),
+            "ants of a team that take the plants and the other teams' ants with them": ("mapmaker_blocks.js", "if (teamOfMarker(lay.records[i].tile) === teamIndex) { if (insertAt < 0)", "if (true) { if (insertAt < 0)"),
             "a number of ants that is not kept in its range": ("mapmaker_blocks.js", "var n = clampTo(count, MIN_ANTS, MAX_ANTS), cells", "var n = count, cells"),
             "ants put on objects and on solid ground": ("mapmaker_blocks.js", "if (Edit.tile(file, 2, idx) === EMPTY2 && (Edit.flags(file, 1, idx) & 1) === 0) good.push(item); else rest.push(item);", "good.push(item);"),
             "ants put on the ants of another team": ("mapmaker_blocks.js", "if (taken[idx]) continue;", "void 0;"),

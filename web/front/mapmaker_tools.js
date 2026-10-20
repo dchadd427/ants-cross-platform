@@ -33,7 +33,7 @@
     //       dialogs (MapDialog.create: the palette of a phone is a sheet), say(title, text) -> a plain message}
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
-        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4, dropper: 0, food: 0, units: 0, points: 0 };
+        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, antType: 0, stages: 4, dropper: 0, food: 0, units: 0, points: 0 };
         var editor = null, current = null, moving = null, told = false, fits = '';      // `fits`: a note when fewer ants than asked for found room, until the next choice
         var ground = null, sprites = null, ants = null, asked = false;                  // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js: the kinds' sheets and the game's pictures; mapmaker_ants.js: the Ants tool's box, asked for when the tool is first chosen)
         var ICONS = { ground: [0, 485], objects: [1, 302], bigger: [1, 1323], hills: [1, 248], food: [1, 264] };           // the tool buttons' pictures: [layer 2?, tile]
@@ -361,8 +361,8 @@
             env.loadAnts(function (Part) {
                 if (!Part) { asked = false; return; }
                 ants = Part.create({
-                    doc: doc, win: env.win, host: { tools: host.hint.parentNode, hint: host.hint, side: host.side, cv: host.map && host.map.parentNode, map: host.map }, file: env.file, act: act, say: env.say, dialogs: env.dialogs, about: env.about, props: env.props,
-                    team: function () { return state.team; }, setTeam: chooseTeam, ants: function () { return state.ants; }, setAnts: function (n) { state.ants = n; fits = ''; }, fits: function () { return fits; },
+                    doc: doc, win: env.win, host: { tools: host.hint.parentNode, hint: host.hint, side: host.side, cv: host.map && host.map.parentNode, map: host.map }, file: env.file, act: act, say: env.say, dialogs: env.dialogs, about: env.about, props: env.props, convert: env.convert, pic: function (node, id, px) { picture(node, true, id, px); },
+                    team: function () { return state.team; }, setTeam: chooseTeam, ants: function () { return state.ants; }, setAnts: function (n) { state.ants = n; fits = ''; }, antType: function () { return state.antType; }, setAntType: function (at) { state.antType = at; }, fits: function () { return fits; },
                     view: function () { return canvas.state(); }, refresh: function () { canvas.refresh(); }
                 });
                 if (editor) ants.setMap();
@@ -409,7 +409,7 @@
         function place(cell) {
             var file = env.file(), change;
             if (state.tool === 'hills') change = Blocks.placeHill(file, state.team, cell.row, cell.column);
-            else if (state.tool === 'ants') change = Blocks.placeStart(file, state.team, cell.row, cell.column, state.ants);
+            else if (state.tool === 'ants') change = Blocks.placeStart(file, state.team, cell.row, cell.column, state.ants, state.antType);
             else if (state.tool === 'bigger') change = Objects.place(file, bigNow(), cell.row, cell.column);
             else if (isPlant()) change = Blocks.placePlant(file, cell.row, cell.column, state.objects, state.dropper);
             else change = Blocks.placePile(file, cell.row, cell.column, state.stages, state.food || state.units || state.points ? { id: state.food, units: foodUnits(), points: foodPoints() } : null);
@@ -569,6 +569,7 @@
                 sprites = s || null;
                 Array.prototype.forEach.call(host.tools, function (b) { var icon = ICONS[b.getAttribute('data-tool')], i = b.querySelector('i'); if (icon && i) picture(i, !!icon[0], icon[1], 18); });
                 showPalette();
+                if (ants) ants.refresh();
             },
             act: act,
             isClean: function () { return !editor || editor.history.isClean(); },

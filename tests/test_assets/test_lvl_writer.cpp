@@ -674,11 +674,12 @@ void walk(OneChange& c, MapCell& cell, const std::string& member, const std::str
 }
 
 void walk(OneChange& c, AnthillSpawn& record, const std::string& member, const std::string& place) {
-    auto& [tile_id, row, column, team_id] = record;
+    auto& [tile_id, row, column, team_id, ant_type] = record;
     c.number(tile_id, member + ".tile_id", {place});
     c.number(row, member + ".y", {place});
     c.number(column, member + ".x", {place});
     c.number(team_id, member + ".team_id", {place});
+    c.number(ant_type, member + ".ant_type", {place});
 }
 
 void walk(OneChange& c, FoodItemVariant& stage, const std::string& member, const std::string& place) {
@@ -818,7 +819,7 @@ void w3_random_levels() {
             CHECK_MSG(!same, change.member() + ": the change is not seen");
             for (const std::string& words : change.words()) CHECK_MSG(why.find(words) != std::string::npos, change.member() + ": \"" + why + "\" does not say \"" + words + "\"");
         }
-        CHECK_MSG(walked == 108u, std::to_string(walked) + " changes walked");
+        CHECK_MSG(walked == 111u, std::to_string(walked) + " changes walked");
     });
 }
 
@@ -1519,6 +1520,16 @@ void w7_extended_maps() {
             l.description.clear();
             const size_t len = r.below(256);
             for (size_t k = 0; k < len; ++k) l.description += static_cast<char>(1 + r.below(255));
+            for (AnthillSpawn& sp : l.anthill_spawns) {
+                if ((sp.tile_id >> 12) >= 1u && (sp.tile_id >> 12) <= 5u &&
+                    start_marker_team_of_id(static_cast<uint16_t>(sp.tile_id & 0x0FFFu)) >= 0) {
+                    sp.ant_type = static_cast<uint8_t>(sp.tile_id >> 12);
+                    sp.tile_id = static_cast<uint16_t>(sp.tile_id & 0x0FFFu);
+                    sp.team_id = static_cast<uint8_t>(start_marker_team_of_id(sp.tile_id));
+                } else if (sp.team_id != 255u) {
+                    sp.ant_type = static_cast<uint8_t>(r.below(6));
+                }
+            }
             const LevelWriteResult w = write_level(l, extended_limits());
             CHECK_MSG(w.ok, "level " + std::to_string(i) + ": " + w.error);
             if (!w.ok) continue;
@@ -2261,6 +2272,42 @@ void w7_extended_maps() {
         CHECK(c.reasons.size() == 4u && c.reasons[0].find("700 columns wide") != std::string::npos && c.reasons[1].find("300 rows tall") != std::string::npos &&
               c.reasons[2].find("this map has 300 rows; a Classic map made now has at most 90") == 0 && c.reasons[3].find("object cells are anchored outside the 0 to 255") != std::string::npos);
         CHECK(c.reason_codes == (std::vector<std::string>{"columns_beyond_classic", "rows_beyond_classic", "rows_beyond_wall", "anchor_beyond_byte"}));
+    });
+
+    run_case("W7.14 Extended Map Starting Ant Types (0..5 In High Nibble Of Block 1 Start Marker Word 0): Round Trip, Refusals On Classic Or Non-Marker Or > 5, Reset With Note On convert_to_classic", [] {
+        const std::vector<std::string> names(200, "n");
+        LevelData ext = blank_extended_level(10, 10, names);
+        for (uint8_t t = 0; t <= 5; ++t) {
+            AnthillSpawn sp;
+            sp.tile_id = static_cast<uint16_t>(152u + (t % 4u));
+            sp.y = t;
+            sp.x = t + 1u;
+            sp.team_id = static_cast<uint8_t>(start_marker_team_of_id(sp.tile_id));
+            sp.ant_type = t;
+            ext.anthill_spawns.push_back(sp);
+        }
+        const LevelWriteResult w = write_level(ext, extended_limits());
+        CHECK_MSG(w.ok, w.error);
+        LevelData back;
+        CHECK(back.load_from_memory(w.bytes.data(), w.bytes.size(), nullptr, extended_limits()));
+        std::string why;
+        CHECK_MSG(same_level(ext, back, &why), why);
+        for (size_t i = 0; i < back.anthill_spawns.size(); ++i) {
+            CHECK(back.anthill_spawns[i].ant_type == static_cast<uint8_t>(i));
+            CHECK(back.anthill_spawns[i].tile_id == static_cast<uint16_t>(152u + (i % 4u)));
+        }
+        LevelData classic = blank_level(10, 10, names);
+        classic.anthill_spawns.push_back(AnthillSpawn{153, 2, 2, 2, 4});
+        CHECK(refused_with(write_level(classic), "a Classic map (version 8) holds ant_type 0 only"));
+        LevelData bad_plant = ext;
+        bad_plant.anthill_spawns.push_back(AnthillSpawn{33, 4, 4, 255, 2});
+        CHECK(refused_with(write_level(bad_plant, extended_limits()), "on a record that is not a start marker"));
+        LevelData bad_type = ext;
+        bad_type.anthill_spawns[0].ant_type = 6;
+        CHECK(refused_with(write_level(bad_type, extended_limits()), "only 0 .. 5 are known"));
+        const LevelConversion conv = convert_to_classic(ext);
+        CHECK(conv.ok && conv.note_codes == std::vector<std::string>{"starting_ant_types_dropped"});
+        for (const AnthillSpawn& sp : conv.level.anthill_spawns) CHECK(sp.ant_type == 0u);
     });
 }
 

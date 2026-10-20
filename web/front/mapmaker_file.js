@@ -56,8 +56,8 @@
         n = u16(b, at); at += 2;
         if (at + 6 * n > b.length) return;
         for (i = 0; i < n; i++, at += 6) {
-            var id = u16(b, at), r = u16(b, at + 2), c = u16(b, at + 4), team = TEAM_OF_MARKER[id];
-            if (team) file.markers.push({ team: team, row: r, column: c });
+            var id = u16(b, at), r = u16(b, at + 2), c = u16(b, at + 4), rawType = id >> 12, baseId = (file.version === 9 && rawType <= 5) ? (id & 0x0FFF) : id, team = TEAM_OF_MARKER[baseId];
+            if (team) { var m = { team: team, row: r, column: c }; if (file.version === 9 && rawType > 0 && rawType <= 5) m.antType = rawType; file.markers.push(m); }
             else if (PLANT_TILES[id]) file.plants.push({ id: id, row: r, column: c });
         }
         if (at + 2 > b.length) return;
