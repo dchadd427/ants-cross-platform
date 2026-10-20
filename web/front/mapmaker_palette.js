@@ -84,8 +84,15 @@
         return biggerItems;
     }
 
+    function food() {
+        return (Blocks.FOOD_ITEMS || []).map(function (row) {
+            return { id: row[0], name: Blocks.FOOD_NAMES[row[0]], label: row[1], units: row[2], points: row[3], tiles: row[4], stages: row[4].length + 1, color: Tiles.FOOD };
+        });
+    }
+
     function items(tool) {
         if (tool === 'bigger') return bigger();
+        if (tool === 'food') return food();
         var list = tool === 'ground' ? GROUND : (tool === 'objects' ? OBJECTS.concat(PLANTS) : (tool === 'plants' ? PLANTS : []));
         return list.map(function (row) {
             return { id: row[0], name: row[1], label: row[2], kind: tool === 'ground' ? Tiles.kindOf(row[0]) : null, color: tool === 'ground' ? Tiles.css(row[0], Tiles.EMPTY2) : Tiles.css(0, row[0]), plant: !!(Blocks.PLANT_NAMES && Blocks.PLANT_NAMES[row[0]]) };

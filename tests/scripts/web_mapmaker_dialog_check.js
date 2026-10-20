@@ -77,7 +77,11 @@ function boxChecks() {
     check(chose === 1 && !p.dialogs.isOpen(), 'an item closes the menu and does its work');
     p.dialogs.message('Oops', 'A <b>sentence</b> with markup');
     equal(p.host.querySelector('.fatalmsg').textContent, 'A <b>sentence</b> with markup', 'a message is text');
-    p.doc.key('Escape');
+    // clicking inside .dlg does not close it; clicking the outer .scrim closes it
+    p.host.querySelector('.dlg').fire('click', { target: p.host.querySelector('.dlg') });
+    check(p.dialogs.isOpen(), 'clicking inside the dialog keeps it open');
+    p.host.querySelector('.scrim').fire('click', { target: p.host.querySelector('.scrim') });
+    check(!p.dialogs.isOpen(), 'clicking the outer scrim closes the dialog');
 }
 
 function newMapChecks() {
@@ -123,7 +127,24 @@ function newMapChecks() {
     equal(p.doc.activeElement === p.opener, true, 'the focus is back');
 }
 
-for (const [name, fn] of [['A the box', boxChecks], ['B New map', newMapChecks]]) {
+function resizeMapChecks() {
+    const p = page(), limits = Sizes.limitsOf({ classic: { rows: 90, columns: 130, cells: 10000 } }, { classic: { rows: 256, columns: 256, cells: 65536 }, extended: { rows: 1024, columns: 1024, cells: 262144 } });
+    const resized = [];
+    Dialog.resizeMap({ doc: p.doc, dialogs: p.dialogs, limits, kind: 'classic', rows: 31, columns: 31, onResize: (r, c) => resized.push([r, c]) });
+    const q = (s) => p.host.querySelector(s), btn = () => q('.dlg-foot').querySelectorAll('button')[1];
+    const type = (id, text) => { const i = q('#' + id); i.value = text; i.fire('input', {}); };
+    equal([q('#resize-rows').value, q('#resize-columns').value, btn().disabled], ['31', '31', true], 'starts with current size and Resize map disabled');
+    type('resize-rows', '20');
+    check(!btn().disabled && btn().textContent === 'Choose part to keep...' && q('.note') !== null, 'shrinking enables the button and offers Choose part to keep...');
+    type('resize-rows', '100');
+    check(btn().disabled && q('.note.bad') !== null, 'a size beyond Classic limits is refused');
+    type('resize-rows', '40'); type('resize-columns', '50');
+    check(!btn().disabled && btn().textContent === 'Resize map' && q('.note') === null, 'growing enables Resize map');
+    btn().click();
+    equal(resized, [[40, 50]], 'clicking Resize map calls onResize with the new rows and columns');
+}
+
+for (const [name, fn] of [['A the box', boxChecks], ['B New map', newMapChecks], ['C Resize map', resizeMapChecks]]) {
     process.stdout.write('  RUNNING: ' + name + ' ... ');
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }

@@ -367,6 +367,11 @@ async function caseG() {
     check(blacks > 0 && strokes === inView.length + blacks, 'in the color of its team, and the black one with a thin white edge (' + strokes + ' lines for ' + inView.length + ' rings and ' + blacks + ' black ones)');
     const small = frame(rig, f, { scale: 11, cx: f.columns / 2, cy: f.rows / 2 }, w, h);
     check(small.calls.filter((c) => c.op === 'drawImage' && antXs.has(c.a[0]) && c.a[2] === 23).length === 0 && small.calls.filter((c) => c.op === 'arc').length >= 20, 'below 12 pixels a cell the ants are dots in the team\'s color');
+    // when the map has a specialist Default Ant Type (e.g. 64 Bomber ant), starting ants draw that specialist sprite in each team's color
+    const bomberMap = Object.assign({}, f, { defaultType: 64 }), bomberEntry = INDEX.antTypes['64'];
+    const bomberXs = new Set(['black', 'blue', 'red', 'green'].map((t) => bomberEntry[t][0])), bomberSample = INDEX.objects.items[String(bomberEntry.id)];
+    const bomberFrame = frame(rig, bomberMap, view, w, h), bomberDraws = bomberFrame.calls.filter((c) => c.op === 'drawImage' && bomberXs.has(c.a[0]) && c.a[2] === bomberSample[2] && c.a[3] === bomberSample[3] && Number.isFinite(c.a[4]) && Number.isFinite(c.a[5]) && c.a[6] > 0 && c.a[7] > 0);
+    check(bomberSample[2] > 0 && bomberSample[3] > 0 && bomberDraws.length === inView.length, 'with defaultType=64 (Bomber ant), every starting ant in view is drawn with the team-colored Bomber sprite: ' + bomberDraws.length);
     const ghosted = frame(rig, f, view, w, h, { ghost: { id: 346, row: 30, column: 30 } }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1);
     check(ghosted.length === 1 && ghosted[0].a[2] === INDEX.objects.items['346'][2], 'the ghost of a bigger object is its own picture, see-through (' + (ghosted[0] || { alpha: 'none' }).alpha + ')');
     const plain = frame(rig, f, view, w, h, { ghost: null }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1);

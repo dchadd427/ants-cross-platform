@@ -166,7 +166,7 @@ function caseE() {
     const lines = g.body.querySelectorAll('.kmore');
     equal(lines.map((l) => l.textContent), ['1 more looks the same:g01b', 'The same look:gd02bgd03bgd04bgd05bgd06bgd07bgd08bgd09b', 'The same look:gs02bgs03bgs04bgs05bgs06bgs07bgs08bgs09b', 'The same look:gm02bgm03bgm04bgm05bgm06bgm07bgm08bgm09b'], 'the look-alikes are listed in one line each, not as chips');
     equal(ringed(g.body), [485], 'the gold ring is on the chosen tile');
-    check(g.asked.pics.length === 1 + 3 * 9 && g.asked.pics.every((p) => p[1] === 52), 'every tile has its picture, 52 pixels');
+    check(g.asked.pics.filter((p) => p[1] === 52).length === 1 + 3 * 9 && g.asked.pics.filter((p) => p[1] === 24).length === 1 + 3 * 8 && g.body.querySelectorAll('.gl i').length === 1 + 3 * 8, 'every tile has its picture, 52 pixels for chips and 24 pixels for look-alike thumbnails');
     compasses[0].children[1].click();
     equal([g.asked.picked, ringed(g.body)], [[503], [503]], 'any tile can be chosen: gd03a, and the ring moves to it');
     g.body.querySelectorAll('.gl')[0].click();

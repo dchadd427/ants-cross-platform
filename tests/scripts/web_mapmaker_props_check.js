@@ -114,6 +114,7 @@ function caseA() {
     equal(Props.summary({ description: '', minutes: 1, eggs: 1, tile: 63 }), { description: 'No description', time: '1 minute · 1 egg for each team', ant: 'Thief ant by default', phone: 'No description · 1 min' }, 'no description, one minute, one egg, a type');
     equal([62, 63, 64, 65, 66, 0x7FFE, 0, 67, 65535].map(Props.typeIndex), [1, 2, 3, 4, 5, 0, 0, 0, 0], 'a tile id is a default ant type (62 to 66), any other is none');
     equal(Props.TYPES.map((t) => t.label), ['None', 'Combat ant', 'Thief ant', 'Bomber ant', 'Swimmer ant', 'Fire ant'], 'the six choices, in the order of the picture');
+    equal(Props.TYPES.map((t) => t.sprite), [811, 897, 1085, 774, 963, 676], 'each choice carries its standing ant sprite id');
     equal([Props.RANGES.minutes, Props.RANGES.eggs], [{ min: 1, max: 120 }, { min: 0, max: 255 }], 'minutes 1 to 120, eggs 0 to 255');
     const file = makeFile('classic', DESC, 12, 9, 0x7FFE); file.kind = 'classic';
     const read = Props.read(standIn([]), file);

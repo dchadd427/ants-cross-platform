@@ -1008,7 +1008,13 @@ function caseK() {
     check(piles.length === 1 && piles[0].stages.length === 3 && piles[0].row === 3 && piles[0].column === 3 && /1 pile on the map/.test(p.host.name.textContent), 'a tap puts a pile of 3 stages: ' + p.host.name.textContent);
     p.host.tile.click();
     const fsheet = p.sheets[p.sheets.length - 1];
-    check(fsheet.spec.title === 'Food' && fsheet.body.children[0].className === 'stepper sheet' && fsheet.body.children.length === 2, 'the sheet of Food has a stepper and its line');
+    check(fsheet.spec.title === 'Food' && fsheet.body.children[0].className === 'stepper sheet' && fsheet.body.children.length === 5 && fsheet.body.children[4].children.length === 32, 'the sheet of Food has Stages, Bites, Points steppers, 32 food items and its line');
+    fsheet.body.children[2].querySelectorAll('button')[1].click();
+    fsheet.body.children[3].querySelectorAll('button')[1].click();
+    check(p.tools.state().units === 25 && p.tools.state().points === 30, 'stepping Bites and Points updates the Food state');
+    fsheet.body.children[4].children[1].click();
+    check(p.tools.state().food === 256 && p.tools.state().units === 40 && p.tools.state().points === 25, 'picking Lollipop sets its item id, default bites and points');
+    p.host.stepLess.click(); p.host.stepMore.click();
     // the history is one: hill, ants, pile, in the order they were made
     p.button('hills').click(); p.host.swatches.children[0].click(); pt.begin({ row: 15, column: 15 });
     p.doc.key('z', { ctrlKey: true });
@@ -1250,6 +1256,30 @@ function caseN() {
     pm.doc.key('z', { ctrlKey: true });
     play = Blocks.layout(pm.file());
     check(play.records[0].row === 6 && play.records[0].column === 6, 'Ctrl+Z undoes the move in one step');
+
+    // Moving a Bigger object or erasing a leftover solid ground cell clears the Layer-1 solid footprint so starting ants do not avoid the area
+    const hb = toolsPage(File.parse(mapWith(8, 24, 24, 486, [], []))), hbt = hb.painter();
+    hb.button('bigger').click(); hbt.begin({ row: 10, column: 10 });
+    check((Edit.flags(hb.file(), 1, 10 * 24 + 10) & 1) === 1, 'placing a Bigger object marks its footprint solid on Layer 1');
+    hb.button('move').click(); hbt.begin({ row: 10, column: 10 }); hbt.extend({ row: 10, column: 10 }, { row: 16, column: 16 }); hbt.end();
+    check((Edit.flags(hb.file(), 1, 10 * 24 + 10) & 1) === 0 && (Edit.flags(hb.file(), 1, 16 * 24 + 16) & 1) === 1, 'moving the Bigger object clears the old Layer-1 solid footprint and sets the new one');
+    put(hb.file(), 1, 12, 12, 486, 1, 0);
+    hb.button('erase').click(); hbt.begin({ row: 12, column: 12 }); hbt.end();
+    check((Edit.flags(hb.file(), 1, 12 * 24 + 12) & 1) === 0, 'erasing an empty cell with a leftover solid flag clears the solid bit');
+    hb.button('ants').click(); hbt.begin({ row: 10, column: 10 });
+    check(Blocks.layout(hb.file()).records.some((r) => r.row === 10 && r.column === 10), 'starting ants can be placed directly on the cell where the moved object stood');
+
+    // Resizing a map (growing and cropping) updates dimensions, cells, anchors and Blocks 1..4 in one undoable step, and drops partially clipped multi-cell objects whole
+    const rs = toolsPage(File.parse(mapWith(8, 20, 20, 486, [], []))), rst = rs.painter();
+    rs.button('bigger').click(); rst.begin({ row: 4, column: 6 });
+    const grow = Blocks.resizeMap(rs.file(), 26, 30, 0, 0);
+    check(rs.tools.act(grow) === true && rs.file().rows === 26 && rs.file().columns === 30, 'growing a 20x20 map to 26x30 updates rows and columns');
+    const shrink = Blocks.resizeMap(rs.file(), 16, 18, 7, 6);
+    check(rs.tools.act(shrink) === true && rs.file().rows === 16 && rs.file().columns === 18 && Edit.tile(rs.file(), 2, 0 * 18 + 5) === File.EMPTY2 && (Edit.flags(rs.file(), 1, 1 * 18 + 5) & 1) === 0, 'shrinking the map to 16x18 drops a partially clipped multi-cell object whole and clears its solid bit');
+    rs.doc.key('z', { ctrlKey: true });
+    check(rs.file().rows === 26 && rs.file().columns === 30, 'Ctrl+Z undoes the shrink back to 26x30');
+    rs.doc.key('z', { ctrlKey: true });
+    check(rs.file().rows === 20 && rs.file().columns === 20, 'Ctrl+Z undoes the grow back to 20x20');
 }
 
 const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN]];

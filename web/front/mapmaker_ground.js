@@ -95,6 +95,7 @@
             line.appendChild(el('span', '', text));
             ids.forEach(function (id) {
                 var b = el('button', 'gl', INFO[id].name);
+                var thumb = el('i'); env.pic(thumb, id, 24); b.appendChild(thumb);
                 b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('data-tile', String(id)); b.setAttribute('aria-label', INFO[id].name + ': a tile that looks the same');
                 b.addEventListener('click', function () { env.choose(id); refresh(); });
                 chips.push(b); line.appendChild(b);

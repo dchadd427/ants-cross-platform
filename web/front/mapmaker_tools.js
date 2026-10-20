@@ -16,7 +16,7 @@
         bigger: 'Tap or click to put the object whole. The dot is the cell you tap. Erase takes it away whole.',
         hills: 'Tap or click to put the hill. The dot is its door. Put it again to move it.',
         ants: 'Tap or click to start the team\u2019s ants here. Put them again to move them.',
-        food: 'Tap or click to put a food pile.',
+        food: 'Tap or click to put a food pile. Click the food button above to pick from all 32 foods or change bites and points.',
         erase: 'Tap or click to take something away: an object, a hill, a team\u2019s ants or a pile.',
         move: 'Drag an object, hill, ant, food pile or plant to move it. Drag empty ground to look around.'
     };
@@ -33,7 +33,7 @@
     //       dialogs (MapDialog.create: the palette of a phone is a sheet), say(title, text) -> a plain message}
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
-        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4, dropper: 0 };
+        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4, dropper: 0, food: 0, units: 0, points: 0 };
         var editor = null, current = null, moving = null, told = false, fits = '';      // `fits`: a note when fewer ants than asked for found room, until the next choice
         var ground = null, sprites = null, ants = null, asked = false;                  // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js: the kinds' sheets and the game's pictures; mapmaker_ants.js: the Ants tool's box, asked for when the tool is first chosen)
         var ICONS = { ground: [0, 485], objects: [1, 302], bigger: [1, 1323], hills: [1, 248], food: [1, 264] };           // the tool buttons' pictures: [layer 2?, tile]
@@ -55,6 +55,9 @@
         function tileOf() { return state.tool === 'ground' ? state.ground : (state.tool === 'objects' ? state.objects : null); }
         function teamNow() { return Palette.teams()[state.team]; }
         function bigNow() { return Palette.itemOf('bigger', state.big); }
+        function foodNow() { return state.food ? Palette.itemOf('food', state.food) : null; }
+        function foodUnits() { var fd = foodNow(); return state.units || (fd ? fd.units : Blocks.FOOD[state.stages].units); }
+        function foodPoints() { var fd = foodNow(); return state.points || (fd ? fd.points : Blocks.FOOD[state.stages].points); }
         function bigText(item) { return item.label + ' \u00b7 ' + plural(item.cells.length, 'cell', 'cells'); }
         // the name and, under it, the cells, in a node (a button or a pick): two lines, so that a long name does not break in the middle
         function bigLines(node, item) {
@@ -106,7 +109,10 @@
                 b.setAttribute('aria-pressed', String(tool.id === state.tool));
             });
             var own = !!ants && state.tool === 'ants', hasPalette = !!(Palette.tool(state.tool) || {}).palette && !own, panel = host.box.parentNode;
-            if (panel && panel.classList) panel.classList.toggle('tilemode', state.tool === 'bigger');          // (a long list: the one button and its sheet, on a desktop too)
+            if (panel && panel.classList) {
+                panel.classList.toggle('tilemode', state.tool === 'bigger');          // (a long list: the one button and its sheet, on a desktop too)
+                panel.classList.toggle('foodmode', state.tool === 'food');
+            }
             host.box.hidden = !hasPalette;
             host.tile.hidden = !hasPalette;
             host.hint.textContent = '';
@@ -128,10 +134,10 @@
             if (state.tool === 'bigger') return bigText(bigNow());
             var file = env.file ? env.file() : null;
             if (!file || !(state.tool === 'hills' || state.tool === 'ants' || state.tool === 'food')) return '';
-            var facts = Blocks.facts(file, state.tool === 'hills'), who = teamNow().label, set = Blocks.FOOD[state.stages];
+            var facts = Blocks.facts(file, state.tool === 'hills'), who = teamNow().label, fd = foodNow();
             if (state.tool === 'hills') return who + ': ' + (facts.hills[state.team] ? 'has a hill' : 'no hill yet');
             if (state.tool === 'ants') return who + ': ' + (facts.ants[state.team] ? plural(facts.ants[state.team], 'ant', 'ants') + fits : 'no ants yet');
-            return plural(set.units, 'bite', 'bites') + ' of ' + set.points + ' points. ' + (facts.piles < 0 ? '' : plural(facts.piles, 'pile', 'piles') + ' on the map.');
+            return (fd ? fd.label + ' \u00b7 ' : '') + plural(foodUnits(), 'bite', 'bites') + ' of ' + foodPoints() + ' points. ' + (facts.piles < 0 ? '' : plural(facts.piles, 'pile', 'piles') + ' on the map.');
         }
 
         function stepValue() { return state.tool === 'ants' ? state.ants : (isPlant() ? state.dropper : state.stages); }
@@ -141,7 +147,7 @@
         function stepNoun() { return state.tool === 'ants' ? 'ants' : (isPlant() ? 'seconds between drops' : 'stages'); }
         function stepBy(d) {
             var r = stepRange(), v = Math.max(r[0], Math.min(r[1], stepValue() + d * (isPlant() ? 15 : 1)));
-            if (state.tool === 'ants') state.ants = v; else if (isPlant()) state.dropper = v; else state.stages = v;
+            if (state.tool === 'ants') state.ants = v; else if (isPlant()) state.dropper = v; else { state.stages = v; state.food = 0; state.units = 0; state.points = 0; }
             fits = '';
             showPalette();
         }
@@ -183,8 +189,9 @@
                 bigLines(text, big);
                 host.tile.setAttribute('aria-label', label + ': ' + bigText(big) + '. Change');
             } else if (tool === 'food') {
-                chip.className = ''; chip.style.background = Tiles.FOOD; picture(chip, true, Blocks.FOOD[state.stages].stages[0][1], 26);
-                text.textContent = plural(state.stages, 'stage', 'stages');
+                var fd = foodNow();
+                chip.className = ''; chip.style.background = Tiles.FOOD; picture(chip, true, fd ? fd.id : Blocks.FOOD[state.stages].stages[0][1], 26);
+                text.textContent = fd ? fd.label + ' \u00b7 ' + plural(state.stages, 'stage', 'stages') : plural(state.stages, 'stage', 'stages');
                 host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
             } else {
                 var list = Palette.items(tool), chosen = tileOf(), have = itemOf(tool, chosen), kinded = tool === 'ground';
@@ -228,12 +235,61 @@
             return row;
         }
 
+        function foodStepper(labelText, noun, getVal, setVal, onChange) {
+            var row = el('div', 'stepper sheet'), minus = el('button', 'stp', '\u2212'), plus = el('button', 'stp', '+'), val = el('output', 'stv');
+            minus.type = 'button'; plus.type = 'button'; minus.setAttribute('aria-label', 'Fewer ' + noun); plus.setAttribute('aria-label', 'More ' + noun); val.setAttribute('aria-live', 'polite');
+            function sync() { var v = getVal(); val.textContent = String(v); minus.disabled = v <= 5; plus.disabled = v >= 200; }
+            minus.addEventListener('click', function () { setVal(Math.max(5, Math.min(200, getVal() - 5))); showPalette(); sync(); onChange(); });
+            plus.addEventListener('click', function () { setVal(Math.max(5, Math.min(200, getVal() + 5))); showPalette(); sync(); onChange(); });
+            row.appendChild(el('span', 'stl', labelText));
+            var group = el('span', 'stbtns'); group.appendChild(minus); group.appendChild(val); group.appendChild(plus); row.appendChild(group);
+            row.sync = sync;
+            sync();
+            return row;
+        }
+
+        function chooseFood(item) {
+            state.food = item.id;
+            state.stages = Math.max(Blocks.MIN_STAGES, Math.min(Blocks.MAX_STAGES, item.stages));
+            state.units = item.units;
+            state.points = item.points;
+            showPalette();
+            showButtons();
+            canvas.refresh();
+        }
+
+        function buildFoodSheet(body, ctl, about) {
+            var bStep = foodStepper('Bites (uses)', 'bites', foodUnits, function (v) { state.units = v; }, function () { about.textContent = infoText(); });
+            var pStep = foodStepper('Points per bite', 'points', foodPoints, function (v) { state.points = v; }, function () { about.textContent = infoText(); });
+            body.appendChild(bStep);
+            body.appendChild(pStep);
+            var fgrid = el('div', 'pickgrid'), chosen = state.food || Blocks.FOOD[state.stages].stages[0][1];
+            fgrid.setAttribute('role', 'radiogroup'); fgrid.setAttribute('aria-label', 'Food item');
+            Palette.items('food').forEach(function (item) {
+                var b = el('button', 'pick'), chip = el('i'), on = item.id === chosen;
+                b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(on)); b.setAttribute('data-tile', String(item.id));
+                chip.style.background = item.color; picture(chip, true, item.id, 30); b.appendChild(chip);
+                var who = el('span', '', '');
+                who.appendChild(el('b', 'pkn', item.label));
+                who.appendChild(el('small', 'pkc', item.units + ' bites \u00d7 ' + item.points + ' pts'));
+                b.appendChild(who);
+                b.addEventListener('click', function () { chooseFood(item); ctl.close(); });
+                fgrid.appendChild(b);
+            });
+            body.appendChild(fgrid);
+            return function () {
+                bStep.sync(); pStep.sync();
+                var cur = state.food || Blocks.FOOD[state.stages].stages[0][1];
+                Array.prototype.forEach.call(fgrid.children, function (b) { b.setAttribute('aria-checked', String(Number(b.getAttribute('data-tile')) === cur)); });
+            };
+        }
+
         // A phone has no room for the palette beside the map: its one button opens the same choices as a sheet, with their names
         function openPicker() {
             if (!env.dialogs || env.busy()) return;
             var tool = state.tool, label = heading(tool);
             env.dialogs.open({
-                title: label, cls: 'narrow',
+                title: label, cls: tool === 'food' ? '' : 'narrow',
                 build: function (body, ctl) {
                     var grid = el('div', 'pickgrid');
                     if (hasTeams()) {
@@ -260,9 +316,10 @@
                         if (tool === 'ground') body.appendChild(el('p', 'pickinfo', 'The ground changes how fast ants walk. Tap one to paint with it' + (ground ? ', or tap the chosen one again for all its tiles.' : '.')));
                     }
                     if (tool === 'ants' || tool === 'food' || isPlant()) {
-                        var about = el('p', 'pickinfo', infoText());
-                        body.appendChild(sheetStepper(function () { about.textContent = infoText(); }));
+                        var about = el('p', 'pickinfo', infoText()), syncFood = null;
+                        body.appendChild(sheetStepper(function () { about.textContent = infoText(); if (syncFood) syncFood(); }));
                         body.appendChild(about);
+                        if (tool === 'food') syncFood = buildFoodSheet(body, ctl, about);
                     }
                 },
                 focus: tool === 'food' ? '.stp:not([disabled])' : '.pick[aria-checked="true"]',
@@ -355,7 +412,7 @@
             else if (state.tool === 'ants') change = Blocks.placeStart(file, state.team, cell.row, cell.column, state.ants);
             else if (state.tool === 'bigger') change = Objects.place(file, bigNow(), cell.row, cell.column);
             else if (isPlant()) change = Blocks.placePlant(file, cell.row, cell.column, state.objects, state.dropper);
-            else change = Blocks.placePile(file, cell.row, cell.column, state.stages);
+            else change = Blocks.placePile(file, cell.row, cell.column, state.stages, state.food || state.units || state.points ? { id: state.food, units: foodUnits(), points: foodPoints() } : null);
             if (change.error) { if (env.say) env.say('It cannot be put there', change.error); return; }
             var was = env.file(), dirty = editor.act(change);
             fits = '';
@@ -518,7 +575,7 @@
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },
             markUnsaved: function () { if (editor) editor.history.markUnsaved(); },
-            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, team: state.team, ants: state.ants, stages: state.stages, dropper: state.dropper, big: state.big, history: editor ? editor.history.size() : null }; }
+            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, team: state.team, ants: state.ants, stages: state.stages, dropper: state.dropper, food: state.food, units: foodUnits(), points: foodPoints(), big: state.big, history: editor ? editor.history.size() : null }; }
         };
     }
 

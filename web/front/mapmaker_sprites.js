@@ -192,9 +192,10 @@
             ctx.restore();
         }
 
-        // The starting ants: the game's standing worker ant in its team's color on its cell center, with a ring in the team's color at its feet (black has a thin white edge)
+        // The starting ants: the game's standing ant of the map's default type (or worker ant when none) in its team's color on its cell center, with a ring in the team's color at its feet (black has a thin white edge)
         function ants(ctx, view, file, w, h, vis) {
-            var it = index.objects.items[index.ant], teamAnts = index.ants, s = view.scale, k = s / CELL, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s;
+            var spec = file.defaultType && index.antTypes && index.antTypes[file.defaultType];
+            var it = index.objects.items[spec ? spec.id : index.ant], teamAnts = spec || index.ants, s = view.scale, k = s / CELL, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s;
             if (!it) return;
             ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'medium';
             for (var i = 0; i < file.markers.length; i++) {

@@ -35,7 +35,58 @@
         5: { units: 30, points: 25, stages: [[30, 373], [20, 374], [10, 375], [5, 376], [0, EMPTY2]] },
         6: { units: 80, points: 20, stages: [[80, 267], [60, 268], [40, 269], [20, 270], [10, 271], [0, EMPTY2]] }
     };
-    var FOOD_NAMES = { 280: 'fdfrl1', 264: 'fdpretz1', 265: 'fdpretz2', 266: 'fdpretz3', 373: 'fdcraks1', 374: 'fdcraks2', 375: 'fdcraks3', 376: 'fdcraks4', 267: 'fdskit1', 268: 'fdskit2', 269: 'fdskit3', 270: 'fdskit4', 271: 'fdskit5' };
+    var FOOD_NAMES = {
+        280: 'fdfrl1', 281: 'fdfrl2', 282: 'fdfrl3', 283: 'fdfrl4', 284: 'fdfrl5', 285: 'fdfrl6', 286: 'fdfrl7',
+        253: 'fdburgr1', 254: 'fdburgr2', 255: 'fdburgr3', 256: 'fdsuckr1', 257: 'fdsuckr2', 258: 'fdsuckr3', 259: 'fdsuckr4',
+        260: 'fdchoc1', 261: 'fdchoc2', 262: 'fdchoc3', 263: 'fdchoc4', 264: 'fdpretz1', 265: 'fdpretz2', 266: 'fdpretz3',
+        267: 'fdskit1', 268: 'fdskit2', 269: 'fdskit3', 270: 'fdskit4', 271: 'fdskit5',
+        272: 'fdgumw1', 273: 'fdgumw2', 274: 'fdgumw3', 275: 'fdgumw4', 276: 'fdcola1', 277: 'fdcola2', 278: 'fdcola3', 279: 'fdcola4',
+        340: 'fdpezp1', 341: 'fdpezb1', 342: 'fdpez2p1', 343: 'fdpez2b1',
+        356: 'lunchbox', 357: 'fdpmeat1', 358: 'fdpmeat2', 359: 'fdpmeat3', 360: 'fdpmeat4',
+        361: 'fdcornd1', 362: 'fdcornd2', 363: 'fdcornd3', 364: 'fdcornd4', 365: 'fdcornd5',
+        366: 'fdjelo1', 367: 'fdjelo2', 368: 'fdjelo3',
+        369: 'fdcrakr1', 370: 'fdcrakr2', 371: 'fdcrakr3', 372: 'fdcrakr4', 373: 'fdcraks1', 374: 'fdcraks2', 375: 'fdcraks3', 376: 'fdcraks4',
+        378: 'fdsteak1', 379: 'fdsteak2', 380: 'fdsteak3', 381: 'fdsteak4',
+        382: 'fdtwink1', 383: 'fdtwink2', 384: 'fdtwink3', 385: 'fdeggs1', 386: 'fdeggs2', 387: 'fdeggs3', 388: 'fdeggs4',
+        390: 'fdpizz1', 391: 'fdpizz2', 392: 'fdpizz3', 393: 'fdpizz4',
+        394: 'fdfish1', 395: 'fdfish2', 396: 'fdfish3', 397: 'fdfish4', 398: 'fdfish5',
+        399: 'fdchick1', 400: 'fdchick2', 401: 'fdchick3', 402: 'fdchick4', 403: 'fdchick5',
+        1331: 'fdcer1', 1332: 'fdcer2', 1333: 'fdcer3'
+    };
+    var FOOD_ITEMS = [
+        [253, 'Burger', 30, 30, [253, 254, 255]],
+        [256, 'Lollipop', 40, 25, [256, 257, 258, 259]],
+        [260, 'Chocolate bar', 40, 30, [260, 261, 262, 263]],
+        [264, 'Pretzel', 30, 25, [264, 265, 266]],
+        [267, 'Skittles', 80, 20, [267, 268, 269, 270, 271]],
+        [272, 'Gummy worms', 40, 25, [272, 273, 274, 275]],
+        [275, 'Single gummy worm', 10, 25, [275]],
+        [276, 'Cola cap', 30, 25, [276, 277, 278, 279]],
+        [280, 'Froot Loop (yellow)', 10, 30, [280]],
+        [281, 'Froot Loop (blue)', 10, 30, [281]],
+        [282, 'Froot Loop (orange)', 10, 30, [282]],
+        [283, 'Froot Loop (purple)', 10, 30, [283]],
+        [284, 'Froot Loop (green)', 10, 30, [284]],
+        [285, 'Froot Loop (pink)', 10, 30, [285]],
+        [286, 'Froot Loop (red)', 10, 30, [286]],
+        [340, 'PEZ candy (pink)', 10, 30, [340]],
+        [341, 'PEZ candy (yellow)', 10, 30, [341]],
+        [342, 'PEZ candy (orange)', 10, 30, [342]],
+        [343, 'PEZ candy (purple)', 10, 30, [343]],
+        [356, 'Lunchbox', 60, 30, [356, 357, 358, 359, 360]],
+        [357, 'Potted meat', 40, 25, [357, 358, 359, 360]],
+        [361, 'Corn dog', 50, 30, [361, 362, 363, 364, 365]],
+        [366, 'Jell-O', 30, 25, [366, 367, 368]],
+        [369, 'Round crackers', 30, 25, [369, 370, 371, 372]],
+        [373, 'Square crackers', 30, 25, [373, 374, 375, 376]],
+        [378, 'Steak', 50, 35, [378, 379, 380, 381]],
+        [382, 'Twinkie', 30, 30, [382, 383, 384]],
+        [385, 'Fried eggs', 40, 30, [385, 386, 387, 388]],
+        [390, 'Pizza slice', 40, 30, [390, 391, 392, 393]],
+        [394, 'Fish', 50, 30, [394, 395, 396, 397, 398]],
+        [399, 'Chicken leg', 50, 30, [399, 400, 401, 402, 403]],
+        [1331, 'Cereal', 30, 25, [1331, 1332, 1333]]
+    ];
     var PLANT_NAMES = { 404: 'clover1', 405: 'clover2', 406: 'clover3', 407: 'clover4', 408: 'clovers', 410: 'flower1a', 411: 'flower1b', 412: 'flower2a', 413: 'flower2b', 414: 'flower3a', 415: 'flower3b', 416: 'flower3c', 420: 'dflower1', 421: 'flower1' };
     var POWERUP_NAMES = [[62, 'pu_comb'], [63, 'pu_thief'], [64, 'pu_bomb'], [65, 'pu_swim'], [66, 'pu_mason']];
 
@@ -265,12 +316,33 @@
         if (tile !== EMPTY2 && stageTiles(pile).indexOf(tile) >= 0) takeObject(file, change, idx);
     }
 
-    // A food pile put on (row, column) with `stages` stages (a pile that was on that cell goes)
-    function placePile(file, row, column, stages) {
+    function foodItem(id) {
+        for (var i = 0; i < FOOD_ITEMS.length; i++) if (FOOD_ITEMS[i][0] === id) return { id: FOOD_ITEMS[i][0], name: FOOD_NAMES[FOOD_ITEMS[i][0]], label: FOOD_ITEMS[i][1], units: FOOD_ITEMS[i][2], points: FOOD_ITEMS[i][3], tiles: FOOD_ITEMS[i][4] };
+        return null;
+    }
+
+    function customPile(set, custom) {
+        if (!custom) return set;
+        var it = custom.id ? foodItem(custom.id) : null;
+        var tiles = it ? it.tiles : set.stages.slice(0, -1).map(function (s) { return s[1]; });
+        var m = tiles.length, units = clampTo(custom.units || (it ? it.units : set.units), m, 1000), points = clampTo(custom.points || (it ? it.points : set.points), 1, 500);
+        if (!it && units === set.units && points === set.points) return set;
+        var stages = [[units, tiles[0]]], prev = units;
+        for (var k = 1; k < m; k++) {
+            var th = Math.max(m - k, Math.min(prev - 1, Math.round(units * (m - k) / m)));
+            stages.push([th, tiles[k]]); prev = th;
+        }
+        stages.push([0, EMPTY2]);
+        return { units: units, points: points, stages: stages };
+    }
+
+    // A food pile put on (row, column) with `stages` stages (or `custom` {id, units, points}; a pile that was on that cell goes)
+    function placePile(file, row, column, stages, custom) {
         var lay = layout(file);
         if (!lay.ok2) return { error: 'The list of food piles in this file cannot be changed here: it does not end where its count says.' };
         if (row < 0 || column < 0 || row >= file.rows || column >= file.columns) return { error: 'There is no room for a food pile there.' };
         var set = FOOD[clampTo(stages, MIN_STAGES, MAX_STAGES)], change = emptyChange(), i;
+        if (custom) set = customPile(set, custom);
         var list = [];
         for (i = 0; i < lay.piles.length; i++) {
             var p = lay.piles[i];
@@ -526,11 +598,112 @@
         return out;
     }
 
+    // Resize the open map to (newRows x newCols), keeping rows from `keepRow` and columns from `keepCol` when shrinking, or padding at `padRow` and `padCol` when growing, as one undoable CHANGE.
+    function resizeMap(file, newRows, newCols, keepRow, keepCol, padRow, padCol) {
+        newRows = clampTo(newRows, 1, 1024); newCols = clampTo(newCols, 1, 1024);
+        var oldRows = file.rows, oldCols = file.columns;
+        var kr = newRows < oldRows ? clampTo(keepRow || 0, 0, oldRows - newRows) : 0;
+        var kc = newCols < oldCols ? clampTo(keepCol || 0, 0, oldCols - newCols) : 0;
+        var pr = newRows > oldRows ? clampTo(padRow !== undefined ? padRow : Math.floor((newRows - oldRows) / 2), 0, newRows - oldRows) : 0;
+        var pc = newCols > oldCols ? clampTo(padCol !== undefined ? padCol : Math.floor((newCols - oldCols) / 2), 0, newCols - oldCols) : 0;
+        var dr = pr - kr, dc = pc - kc, newCells = newRows * newCols, lay = layout(file);
+        var l1 = new Uint8Array(6 * newCells), l2 = new Uint8Array(6 * newCells), r, c, i;
+        for (i = 0; i < newCells; i++) wr(l2, 6 * i, EMPTY2);
+        // hills and multi-cell objects whose footprint does not fit whole in the resized map are dropped whole
+        var dropHills = {}, dropCells = {};
+        for (var tm = 0; tm < 4; tm++) {
+            var hc = hillCells(file, tm);
+            for (i = 0; i < hc.length; i++) {
+                var hr = ((hc[i] / oldCols) | 0) + dr, hcol = (hc[i] % oldCols) + dc;
+                if (hr < 0 || hcol < 0 || hr >= newRows || hcol >= newCols) { dropHills[TEAMS[tm].hill] = true; break; }
+                if (Edit.flags(file, 2, hc[i]) & 1) {
+                    if (hr < 1 || hcol < 1 || hr + 2 >= newRows || hcol + 2 >= newCols) { dropHills[TEAMS[tm].hill] = true; break; }
+                }
+            }
+        }
+        for (i = 0; i < file.cells; i++) {
+            var ot = Edit.tile(file, 2, i);
+            if (ot === EMPTY2 || teamOfHill(ot) >= 0 || dropCells[i]) continue;
+            var ocells = Edit.objectCells(file, i), clipped = false, k;
+            for (k = 0; k < ocells.length; k++) {
+                var cr = ((ocells[k] / oldCols) | 0) + dr, cc = (ocells[k] % oldCols) + dc;
+                if (cr < 0 || cc < 0 || cr >= newRows || cc >= newCols) { clipped = true; break; }
+            }
+            if (clipped) for (k = 0; k < ocells.length; k++) dropCells[ocells[k]] = true;
+        }
+        for (r = 0; r < newRows; r++) for (c = 0; c < newCols; c++) {
+            var or = r - dr, oc = c - dc, nIdx = r * newCols + c;
+            if (or >= 0 && or < oldRows && oc >= 0 && oc < oldCols) {
+                var oIdx = or * oldCols + oc, t1 = Edit.tile(file, 1, oIdx), f1 = Edit.flags(file, 1, oIdx), a1 = Edit.third(file, 1, oIdx);
+                var t2 = Edit.tile(file, 2, oIdx), f2 = Edit.flags(file, 2, oIdx), a2 = Edit.third(file, 2, oIdx);
+                if (or === 0 && r > 0 && !(Solid && Solid.sets(t2))) f1 &= ~1;
+                if (r === 0) f1 |= 1;
+                if (t2 !== EMPTY2) {
+                    var anc = Edit.anchorIndex(file, oIdx), ar = anc >= 0 ? ((anc / oldCols) | 0) : or, ac = anc >= 0 ? (anc % oldCols) : oc;
+                    var nar = ar + dr, nac = ac + dc;
+                    if (dropHills[t2] || dropCells[oIdx] || nar < 0 || nac < 0 || nar >= newRows || nac >= newCols) {
+                        if (r > 0 && (Solid && Solid.clears(t2) || dropHills[t2])) f1 &= ~1;
+                        t2 = EMPTY2; f2 = 0; a2 = 0;
+                    } else if (file.version === 8) {
+                        a2 = (nar & 255) | ((nac & 255) << 8);
+                    } else if (!(t2 >= 129 && t2 <= 132)) {
+                        a2 = ((nar - r) & 255) | (((nac - c) & 255) << 8);
+                    }
+                }
+                wr(l1, 6 * nIdx, t1); wr(l1, 6 * nIdx + 2, f1); wr(l1, 6 * nIdx + 4, a1);
+                wr(l2, 6 * nIdx, t2); wr(l2, 6 * nIdx + 2, f2); wr(l2, 6 * nIdx + 4, a2);
+            } else {
+                var er = clampTo(or, 0, oldRows - 1), ec = clampTo(oc, 0, oldCols - 1), gt = Edit.tile(file, 1, er * oldCols + ec);
+                wr(l1, 6 * nIdx, gt); wr(l1, 6 * nIdx + 2, r === 0 ? 1 : 0); wr(l1, 6 * nIdx + 4, 0xCDCD);
+            }
+        }
+        var b1 = new Uint8Array(0), b2 = new Uint8Array(0), b34 = file.bytes.subarray(file.blocksAt);
+        if (lay.ok1) {
+            var recs = [];
+            for (i = 0; i < lay.records.length; i++) {
+                var nr = lay.records[i].row + dr, nc = lay.records[i].column + dc;
+                if (nr >= 0 && nc >= 0 && nr < newRows && nc < newCols) recs.push({ tile: lay.records[i].tile, row: nr, column: nc });
+            }
+            b1 = block1Bytes(recs);
+            b34 = file.bytes.subarray(file.blocksAt + lay.b1.length);
+        }
+        if (lay.ok1 && lay.ok2) {
+            var piles = [];
+            for (i = 0; i < lay.piles.length; i++) {
+                var p = lay.piles[i], pr2 = p.row + dr, pc2 = p.column + dc;
+                if (pr2 >= 0 && pc2 >= 0 && pr2 < newRows && pc2 < newCols) piles.push({ row: pr2, column: pc2, units: p.units, points: p.points, stages: p.stages });
+            }
+            b2 = block2Bytes(file, piles);
+            b34 = file.bytes.subarray(file.blocksAt + lay.b2.rel + lay.b2.length);
+        }
+        if (lay.ok1 && lay.ok2 && lay.ok4) {
+            var wps = [];
+            for (i = 0; i < lay.waypoints.length; i++) {
+                var w = lay.waypoints[i], wr2 = w.row + dr, wc2 = w.column + dc;
+                if (wr2 >= 0 && wc2 >= 0 && wr2 < newRows && wc2 < newCols) wps.push({ keep: true, rel: w.rel, length: w.length, row: wr2, column: wc2 });
+            }
+            var b3 = file.bytes.subarray(file.blocksAt + lay.b2.rel + lay.b2.length, file.blocksAt + lay.b4.rel);
+            var b4 = block4Bytes(file, wps);
+            var rest = file.bytes.subarray(file.blocksAt + lay.b4.rel + lay.b4.length);
+            b34 = new Uint8Array(b3.length + b4.length + rest.length);
+            b34.set(b3, 0); b34.set(b4, b3.length); b34.set(rest, b3.length + b4.length);
+        }
+        var dims = new Uint8Array(8); wr32(dims, 0, newRows); wr32(dims, 4, newCols);
+        var next = new Uint8Array(8 + l1.length + l2.length + b1.length + b2.length + b34.length), pos = 0;
+        [dims, l1, l2, b1, b2, b34].forEach(function (part) { next.set(part, pos); pos += part.length; });
+        var baseAt = file.layer1 - 8, prev = file.bytes.subarray(baseAt), h = 0, t = 0;
+        while (h < prev.length && h < next.length && prev[h] === next[h]) h++;
+        while (t < prev.length - h && t < next.length - h && prev[prev.length - 1 - t] === next[next.length - 1 - t]) t++;
+        var change = emptyChange();
+        if (h < prev.length || h < next.length) change.splices.push({ abs: true, at: baseAt + h, removed: prev.slice(h, prev.length - t), inserted: next.slice(h, next.length - t) });
+        return change;
+    }
+
     return {
-        EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES, PLANT_NAMES: PLANT_NAMES,
-        team: team, teamOfMarker: teamOfMarker, teamOfHill: teamOfHill, clampTo: clampTo,
+        EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES, FOOD_ITEMS: FOOD_ITEMS, PLANT_NAMES: PLANT_NAMES,
+        team: team, teamOfMarker: teamOfMarker, teamOfHill: teamOfHill, clampTo: clampTo, foodItem: foodItem,
         layout: layout, block1Bytes: block1Bytes, block2Bytes: block2Bytes, block4Bytes: block4Bytes, diffSplice: diffSplice,
         hillCells: hillCells, placeHill: placeHill, startCells: startCells, placeStart: placeStart, eraseStart: eraseStart, placePile: placePile, placePlant: placePlant,
-        eraseAt: eraseAt, hasMovable: hasMovable, moveAt: moveAt, inTheWay: inTheWay, blockedText: blockedText, facts: facts
+        eraseAt: eraseAt, hasMovable: hasMovable, moveAt: moveAt, resizeMap: resizeMap, inTheWay: inTheWay, blockedText: blockedText, facts: facts
     };
 });
