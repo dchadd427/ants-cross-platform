@@ -1280,6 +1280,11 @@ function caseN() {
     check(rs.file().rows === 26 && rs.file().columns === 30, 'Ctrl+Z undoes the shrink back to 26x30');
     rs.doc.key('z', { ctrlKey: true });
     check(rs.file().rows === 20 && rs.file().columns === 20, 'Ctrl+Z undoes the grow back to 20x20');
+    const raw9 = mapWith(9, 20, 20, 486, [], []); raw9[14] = 0;
+    const rs9 = toolsPage(File.parse(raw9));
+    check(rs9.file().bytes[14] === 0 && rs9.tools.act(Blocks.resizeMap(rs9.file(), 95, 20, 0, 0)) === true && rs9.file().rows === 95 && rs9.file().bytes[14] === 1, 'resizing an Extended map past 90 rows upgrades rules to 1');
+    rs9.doc.key('z', { ctrlKey: true });
+    check(rs9.file().rows === 20 && rs9.file().bytes[14] === 0, 'Ctrl+Z undoes the Extended map resize and restores rules to 0');
 }
 
 const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN]];

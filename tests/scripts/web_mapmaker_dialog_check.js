@@ -144,7 +144,44 @@ function resizeMapChecks() {
     equal(resized, [[40, 50]], 'clicking Resize map calls onResize with the new rows and columns');
 }
 
-for (const [name, fn] of [['A the box', boxChecks], ['B New map', newMapChecks], ['C Resize map', resizeMapChecks]]) {
+function openMapChecks() {
+    const p = page();
+    const entries = [
+        { file: 'TINY.LVL', name: 'Tiny', original: true, order: 0, width: 31, height: 31, minutes: 5, players: 4, description: 'Small battle', plays: 12, thumb: '/front/preview_tiny.png' },
+        { file: 'Mosh Pit.lvl', name: 'Mosh Pit', original: false, order: 1, width: 40, height: 40, minutes: 10, players: 4, description: 'Brawl in the center', plays: 50, thumb: '' }
+    ];
+    let diskClicked = 0, chosen = [];
+    const store = {
+        loadLibrary() {},
+        libraryState: () => 'ready',
+        libraryList: () => entries,
+        fetchMap: (file, cb) => cb('', new Uint8Array([8, 0, file.length]))
+    };
+    Dialog.openMap({
+        doc: p.doc, dialogs: p.dialogs, store,
+        numbered: (n) => n + ' 2',
+        onDisk: () => { diskClicked++; },
+        onChoose: (bytes, name) => chosen.push([bytes[2], name])
+    });
+    const q = (s) => p.host.querySelector(s), all = (s) => p.host.querySelectorAll(s);
+    equal(q('h2').textContent, 'Open a map', 'Open a map dialog title');
+    equal(all('.open-row').length, 2, 'shows the two library maps');
+    check(/Tiny 2/.test(q('.open-copy-note').textContent), 'shows the free numbered copy name for the selected map');
+    // search filters the list
+    q('.open-q').value = 'brawl'; q('.open-q').fire('input', {});
+    equal(all('.open-row').length, 1, 'search filters by description');
+    check(/Mosh Pit 2/.test(q('.open-copy-note').textContent), 'updates the selected map and its copy name');
+    // clicking Use as starting point downloads and opens the map
+    q('.dlg-foot').querySelectorAll('button')[1].click();
+    equal(chosen, [[12, 'Mosh Pit 2']], 'Use as starting point fetches the map and opens it under its numbered copy name');
+    check(!p.dialogs.isOpen(), 'and closes the dialog');
+    // clicking Open a .lvl file from your device... closes the dialog and triggers onDisk
+    Dialog.openMap({ doc: p.doc, dialogs: p.dialogs, store, numbered: (n) => n + ' 2', onDisk: () => { diskClicked++; }, onChoose() {} });
+    q('#open-disk-btn').click();
+    equal([diskClicked, p.dialogs.isOpen()], [1, false], 'Open from device triggers onDisk and closes the dialog');
+}
+
+for (const [name, fn] of [['A the box', boxChecks], ['B New map', newMapChecks], ['C Resize map', resizeMapChecks], ['D Open a map', openMapChecks]]) {
     process.stdout.write('  RUNNING: ' + name + ' ... ');
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }

@@ -55,7 +55,7 @@ const MapPreview* MapSelectScreen::preview_of(const MapSelectEntry& entry, int32
     slot.path = entry.full_path;
     slot.inner = inner;
     ants::assets::LevelData level;
-    if (level.load_from_file(entry.full_path)) {
+    if (level.load_from_file(entry.full_path, nullptr, ants::assets::LevelLimits::for_play_extended())) {
         std::string why;
         slot.preview = render_map_preview_world(renderer, level, inner, &why);
         if (!slot.preview.valid()) {

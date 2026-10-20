@@ -11,36 +11,36 @@
     {
       "id": "play_rows_limit_inclusive",
       "file": "web/front/mapmaker_play.js",
-      "old": "if (rows > MAX_ROWS) {",
-      "new": "if (rows >= MAX_ROWS) {",
+      "old": "if (!extended && rows > MAX_ROWS) {",
+      "new": "if (!extended && rows >= MAX_ROWS) {",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
       "id": "play_big_extended_no_copy",
       "file": "web/front/mapmaker_play.js",
-      "old": "out.convert = extended;",
-      "new": "out.convert = false;",
+      "old": "            out.convert = true;\n            return out;\n        }\n        var general",
+      "new": "            out.convert = false;\n            return out;\n        }\n        var general",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
       "id": "play_big_classic_copy",
       "file": "web/front/mapmaker_play.js",
-      "old": "out.convert = extended;",
-      "new": "out.convert = true;",
+      "old": "            out.convert = false;\n            return out;\n        }",
+      "new": "            out.convert = true;\n            return out;\n        }",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_extended_small_allowed",
+      "id": "play_extended_side_limit_257",
       "file": "web/front/mapmaker_play.js",
-      "old": "        if (extended) {\n            out.text = 'This is an Extended map,",
-      "new": "        if (extended && rows > 60) {\n            out.text = 'This is an Extended map,",
+      "old": "var MAX_EXTENDED_SIDE = 256;",
+      "new": "var MAX_EXTENDED_SIDE = 257;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_extended_small_no_copy",
+      "id": "play_extended_side_inclusive",
       "file": "web/front/mapmaker_play.js",
-      "old": "            out.convert = true;\n            return out;\n        }\n        var general",
-      "new": "            out.convert = false;\n            return out;\n        }\n        var general",
+      "old": "rows > MAX_EXTENDED_SIDE || columns > MAX_EXTENDED_SIDE",
+      "new": "rows >= MAX_EXTENDED_SIDE || columns > MAX_EXTENDED_SIDE",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {

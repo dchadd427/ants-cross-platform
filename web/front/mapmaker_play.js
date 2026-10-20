@@ -10,7 +10,8 @@
 })(this, function () {
     'use strict';
 
-    var MAX_ROWS = 90;                                                                  // the game plays maps of up to 90 rows for now (a map of an Extended size is not loadable by it yet)
+    var MAX_ROWS = 90;                                                                  // a Classic map plays up to 90 rows (where the original's pathfinder wall stands)
+    var MAX_EXTENDED_SIDE = 256;                                                        // an Extended map plays up to 256 x 256 cells
     var SEATS = [{ name: 'Green', dot: '#3aa655' }, { name: 'Red', dot: '#c8402f' }, { name: 'Blue', dot: '#4a63d8' }, { name: 'Black', dot: '#171717' }];       // by the game's seat numbers (the core's team numbers)
     var ORDER = [3, 2, 0, 1];                                                           // as the dialog lists them: Black, Blue, Green, Red
     var CHOICES = [['y', 'You'], ['e', 'Bot Easy'], ['m', 'Bot Medium'], ['h', 'Bot Hard'], ['n', 'Empty']];
@@ -22,25 +23,26 @@
 
     // What the check and the first reading say of the open map, as the dialog needs it: { ok, title, text, note, list, convert, seats }
     //   seats[seat] = { seat, name, dot, ants, hills, usable, why: [the check's own sentences about this color] }
-    // A map is refused for the game when: the check could not judge it, it is bigger than 90 rows or an Extended map (the game cannot load one yet), a finding that is about no color stops it, or fewer than
+    // A map is refused for the game when: the check could not judge it, a Classic map has more than 90 rows, an Extended map is bigger than 256 x 256, a finding that is about no color stops it, or fewer than
     // two colors have a hill and starting ants (one seat for you and one for a bot)
     function verdict(check, read) {
         var out = { ok: false, title: 'This map cannot be played yet', text: '', note: '', list: [], convert: false, seats: [] };
-        var rows = read && typeof read.rows === 'number' ? read.rows : 0, extended = check && check.kind === 'extended', findings = (check && check.findings) || [];
+        var rows = read && typeof read.rows === 'number' ? read.rows : 0, columns = read && typeof read.columns === 'number' ? read.columns : 0;
+        var extended = check && check.kind === 'extended', findings = (check && check.findings) || [];
         if (!check || check.judged === false || !read || read.loaded === false) {
             out.title = 'This map cannot be checked';
             out.text = 'The check could not read this map, so it cannot be played.';
             return out;
         }
-        if (rows > MAX_ROWS) {
-            out.text = 'This map is bigger than the game can play yet. Test games work on maps of up to ' + MAX_ROWS + ' rows for now.';
-            out.note = 'What you can do: ' + (extended ? 'make a Classic copy that fits (Make a Classic copy...), or ' : 'make the map ' + MAX_ROWS + ' rows or fewer, or ') + 'try again after the game learns bigger maps. Your map was not changed.';
-            out.convert = extended;
+        if (!extended && rows > MAX_ROWS) {
+            out.text = 'This map is bigger than the game can play yet. Test games work on Classic maps of up to ' + MAX_ROWS + ' rows for now.';
+            out.note = 'What you can do: make the map ' + MAX_ROWS + ' rows or fewer, or start an Extended map from this one, then try again. Your map was not changed.';
+            out.convert = false;
             return out;
         }
-        if (extended) {
-            out.text = 'This is an Extended map, and the game cannot play an Extended map yet. Test games work on Classic maps for now.';
-            out.note = 'What you can do: make a Classic copy (Make a Classic copy...), or try again after the game learns Extended maps. Your map was not changed.';
+        if (extended && (rows > MAX_EXTENDED_SIDE || columns > MAX_EXTENDED_SIDE)) {
+            out.text = 'This map is bigger than the game can play yet. Test games work on Extended maps of up to ' + MAX_EXTENDED_SIDE + ' x ' + MAX_EXTENDED_SIDE + ' cells for now.';
+            out.note = 'What you can do: make a Classic copy that fits (Make a Classic copy...), or resize the map to ' + MAX_EXTENDED_SIDE + ' x ' + MAX_EXTENDED_SIDE + ' or smaller. Your map was not changed.';
             out.convert = true;
             return out;
         }
@@ -265,5 +267,5 @@
         return ctl;
     }
 
-    return { verdict: verdict, startable: startable, quick: quick, firstChoice: firstChoice, code: code, open: open, MAX_ROWS: MAX_ROWS, KEPT: KEPT, kept: function () { return kept; } };
+    return { verdict: verdict, startable: startable, quick: quick, firstChoice: firstChoice, code: code, open: open, MAX_ROWS: MAX_ROWS, MAX_EXTENDED_SIDE: MAX_EXTENDED_SIDE, KEPT: KEPT, kept: function () { return kept; } };
 });

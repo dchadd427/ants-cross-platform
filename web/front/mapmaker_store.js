@@ -22,6 +22,46 @@
         return out;
     }
 
+    var PICTURE = /^(?:\/maps\/previews\/(?:[A-Za-z0-9_~-]|%(?!2[fF]|5[cC]|00)[0-9A-Fa-f]{2})(?:[A-Za-z0-9._~-]|%(?!2[fF]|5[cC]|00)[0-9A-Fa-f]{2})*\.(?:webp|png)|\/front\/preview_[a-z]+\.png)$/;
+    function validMapFile(name) {
+        return typeof name === 'string' && name.length >= 5 && name.length <= 64 && /^[\x20-\x7e]+$/.test(name) && !/[\/\\:*?"<>|]/.test(name) && name.charAt(0) !== '.' && /\.(lvl|LVL)$/.test(name);
+    }
+    function fileUrl(name) {
+        var out = '';
+        for (var i = 0; i < name.length; i++) {
+            var c = name.charAt(i);
+            out += /[A-Za-z0-9\-._~]/.test(c) ? c : '%' + ('0' + name.charCodeAt(i).toString(16).toUpperCase()).slice(-2);
+        }
+        return '/maps/files/' + out;
+    }
+    function defaultEntries() {
+        return ORIGINALS.map(function (n, idx) {
+            return { file: n.toUpperCase() + '.LVL', name: n.charAt(0).toUpperCase() + n.slice(1), original: true, order: idx, width: 0, height: 0, minutes: 0, players: 4, description: '', plays: 0, thumb: '/front/preview_' + n + '.png' };
+        });
+    }
+    function libraryEntries(data) {
+        if (!libraryNames(data)) return null;
+        var out = [];
+        data.maps.forEach(function (m, idx) {
+            if (!m || !validMapFile(m.file)) return;
+            var base = m.file.slice(0, -4), low = base.toLowerCase(), isOrig = ORIGINALS.indexOf(low) >= 0, orig = m.original === true || isOrig;
+            out.push({
+                file: m.file,
+                name: orig ? low.charAt(0).toUpperCase() + low.slice(1) : base,
+                original: orig,
+                order: idx,
+                width: typeof m.width === 'number' && isFinite(m.width) && m.width > 0 ? Math.floor(m.width) : 0,
+                height: typeof m.height === 'number' && isFinite(m.height) && m.height > 0 ? Math.floor(m.height) : 0,
+                minutes: typeof m.minutes === 'number' && isFinite(m.minutes) && m.minutes > 0 ? Math.floor(m.minutes) : 0,
+                players: typeof m.players === 'number' && isFinite(m.players) && m.players > 0 ? Math.floor(m.players) : 0,
+                description: typeof m.description === 'string' ? m.description.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 200) : '',
+                plays: typeof m.plays === 'number' && isFinite(m.plays) && m.plays >= 0 ? Math.floor(m.plays) : 0,
+                thumb: typeof m.thumb === 'string' && PICTURE.test(m.thumb) ? m.thumb : (isOrig ? '/front/preview_' + low + '.png' : '')
+            });
+        });
+        return out;
+    }
+
     function guard(fn) { try { return fn(); } catch (e) { return undefined; } }
 
     // One request on one store of a database (false for no database); done(error, result): '' when it worked, 'exists' for a key that was there already (add), else 'failed'
@@ -63,7 +103,7 @@
 
     // env: {idb (the browser's indexedDB or null), fetch (or null)}
     function create(env) {
-        var db = null, status = 'pending', drafts = Object.create(null), library = Object.create(null), libraryState = env.fetch ? 'pending' : 'failed', asked = false, waiting = [];
+        var db = null, status = 'pending', drafts = Object.create(null), library = Object.create(null), libraryState = env.fetch ? 'pending' : 'failed', asked = false, waiting = [], libraryItems = defaultEntries();
         ORIGINALS.forEach(function (n) { library[n] = true; });
 
         // Opens the database and reads the names of the drafts (keys only); done(status) says 'ready' or 'unavailable'
@@ -101,15 +141,28 @@
                 if (env.later) env.later(bad, 8000);                  // (a list that never answers is a list that did not come)
                 if (guard(function () {
                     env.fetch('/maps').then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
-                        var names = libraryNames(data);
+                        var names = libraryNames(data), items = libraryEntries(data);
                         if (!names) return bad();
                         for (var k in names) library[k] = true;
+                        if (items && items.length) libraryItems = items;
                         done('ready');
                     }).then(null, bad);
                     return true;
                 }) !== true) bad();
             },
             libraryState: function () { return libraryState; },
+            libraryList: function () { return libraryItems.slice(); },
+            fetchMap: function (file, done) {
+                var fail = function () { done('The map file could not be downloaded. Check your connection and try again.', null); };
+                if (!validMapFile(file) || !env.fetch) return fail();
+                if (!guard(function () {
+                    env.fetch(fileUrl(file)).then(function (r) { return r && r.ok && r.arrayBuffer ? r.arrayBuffer() : null; }).then(function (buf) {
+                        if (!buf || !buf.byteLength) return fail();
+                        done('', new Uint8Array(buf));
+                    }).then(null, fail);
+                    return 1;
+                })) fail();
+            },
             // fn is called once when the answer has come (at once when it has)
             onLibrary: function (fn) { if (libraryState === 'pending') waiting.push(fn); else fn(); },
             // A new draft under a name that no draft has ('exists' when it is there: it is never written over)
@@ -137,5 +190,5 @@
         };
     }
 
-    return { create: create, createSent: createSent, clean: clean, key: key, libraryNames: libraryNames, ORIGINALS: ORIGINALS };
+    return { create: create, createSent: createSent, clean: clean, key: key, libraryNames: libraryNames, libraryEntries: libraryEntries, fileUrl: fileUrl, ORIGINALS: ORIGINALS };
 });

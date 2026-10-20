@@ -71,7 +71,7 @@ bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::
         return false;
     }
     assets::LevelValidation verdict;
-    if (!level.load_from_file(path, &verdict)) {
+    if (!level.load_from_file(path, &verdict, assets::LevelLimits::for_play_extended())) {
         error = "the map " + head.map_name + " cannot be loaded" + (verdict.first_fatal() ? ": " + verdict.reason() : std::string());
         return false;
     }

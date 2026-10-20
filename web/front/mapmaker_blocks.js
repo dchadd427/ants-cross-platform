@@ -697,6 +697,9 @@
         while (h < prev.length && h < next.length && prev[h] === next[h]) h++;
         while (t < prev.length - h && t < next.length - h && prev[prev.length - 1 - t] === next[next.length - 1 - t]) t++;
         var change = emptyChange();
+        if (file.version === 9 && (newRows > 90 || newCols > 256) && rd(file.bytes, 14) === 0) {
+            change.splices.push({ abs: true, at: 14, removed: file.bytes.slice(14, 16), inserted: new Uint8Array([1, 0]) });
+        }
         if (h < prev.length || h < next.length) change.splices.push({ abs: true, at: baseAt + h, removed: prev.slice(h, prev.length - t), inserted: next.slice(h, next.length - t) });
         return change;
     }

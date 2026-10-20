@@ -338,5 +338,195 @@
         return ctl;
     }
 
-    return { create: create, newMap: newMap, resizeMap: resizeMap, EXTENDED_NOTE: EXTENDED_NOTE, KIND_WORDS: KIND_WORDS };
+    var OPEN_SORTS = [
+        { id: 'default', label: 'Originals, then plays' },
+        { id: 'plays', label: 'Most played' },
+        { id: 'name', label: 'Name' },
+        { id: 'size', label: 'Size' }
+    ];
+
+    // The Open a map dialog: open a .lvl file from your device, or pick any current map from the game's library as a starting point (opened under a free numbered copy name).
+    // env: {doc, dialogs, store, numbered(name) -> freeName, onDisk(), onChoose(bytes, name)}
+    function openMap(env) {
+        var doc = env.doc, store = env.store, sort = 'default', query = '', picked = '', shown = [], byFile = Object.create(null), loading = false;
+        function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
+        var searchIn, sortBtns = {}, listBox, copyNote, countEl, ctl;
+
+        function sortEntries(items) {
+            var out = items.slice();
+            function byName(a, b) { var x = a.name.toLowerCase(), y = b.name.toLowerCase(); return x < y ? -1 : x > y ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0; }
+            out.sort(function (a, b) {
+                if (sort === 'name') return byName(a, b);
+                if (sort === 'size') return (a.width * a.height) - (b.width * b.height) || byName(a, b);
+                if (sort === 'plays') return (b.plays - a.plays) || byName(a, b);
+                if (a.original !== b.original) return a.original ? -1 : 1;
+                return a.original ? a.order - b.order : (b.plays - a.plays) || byName(a, b);
+            });
+            return out;
+        }
+
+        function filterEntries(items) {
+            var words = String(query || '').toLowerCase().split(/\s+/).filter(function (w) { return w; });
+            if (!words.length) return items.slice();
+            return items.filter(function (m) {
+                var hay = (m.name + ' ' + (m.description || '')).toLowerCase();
+                return words.every(function (w) { return hay.indexOf(w) !== -1; });
+            });
+        }
+
+        function metaLine(m) {
+            var parts = [];
+            if (m.players > 0) parts.push(m.players + ' players');
+            if (m.minutes > 0) parts.push(m.minutes + ' min');
+            if (m.width > 0 && m.height > 0) parts.push(m.width + '\u00d7' + m.height);
+            if (m.plays > 0) parts.push(Sizes.number(m.plays) + (m.plays === 1 ? ' play' : ' plays'));
+            return parts.length ? parts.join(' \u00b7 ') : (m.original ? 'Shipped with the game' : 'Community map');
+        }
+
+        function refreshSelection() {
+            var nodes = listBox.querySelectorAll('[data-file]'), m = byFile[picked] || null;
+            for (var i = 0; i < nodes.length; i++) {
+                var on = nodes[i].getAttribute('data-file') === picked;
+                nodes[i].setAttribute('aria-selected', on ? 'true' : 'false');
+                nodes[i].setAttribute('tabindex', on ? '0' : '-1');
+                nodes[i].classList.toggle('sel', on);
+            }
+            if (!loading) {
+                copyNote.className = 'open-copy-note';
+                copyNote.textContent = m ? 'Opens as a new copy (\u201c' + env.numbered(m.name) + '\u201d) so you can edit and save it right away.' : 'Select a game map above to use it as a starting point.';
+            }
+            if (ctl) ctl.setDisabled('use', loading || !m);
+        }
+
+        function renderList() {
+            var all = store ? store.libraryList() : [];
+            byFile = Object.create(null);
+            all.forEach(function (m) { byFile[m.file] = m; });
+            searchIn.placeholder = 'Search ' + all.length + ' maps by name or description\u2026';
+            OPEN_SORTS.forEach(function (s) { sortBtns[s.id].classList.toggle('on', s.id === sort); sortBtns[s.id].setAttribute('aria-pressed', s.id === sort ? 'true' : 'false'); });
+            shown = sortEntries(filterEntries(all));
+            if (!picked || !shown.some(function (m) { return m.file === picked; })) picked = shown.length ? shown[0].file : '';
+            listBox.textContent = '';
+            countEl.textContent = shown.length === all.length ? all.length + ' maps shown' : shown.length + ' of ' + all.length + ' maps shown';
+            if (!shown.length) {
+                listBox.appendChild(el('p', 'open-empty', query ? 'No map matches \u201c' + query.trim() + '\u201d.' : 'No maps available.'));
+                refreshSelection();
+                return;
+            }
+            shown.forEach(function (m) {
+                var row = el('div', 'open-row' + (m.file === picked ? ' sel' : ''));
+                row.setAttribute('role', 'option');
+                row.setAttribute('data-file', m.file);
+                row.setAttribute('aria-selected', m.file === picked ? 'true' : 'false');
+                row.setAttribute('tabindex', m.file === picked ? '0' : '-1');
+                if (m.thumb) {
+                    var img = el('img', 'open-thumb');
+                    img.src = m.thumb; img.alt = ''; img.width = 48; img.height = 48; img.loading = 'lazy';
+                    row.appendChild(img);
+                } else row.appendChild(el('span', 'open-nopic'));
+                var mid = el('div', 'open-mid'), t1 = el('div', 'open-nm', m.name);
+                if (m.original) t1.appendChild(el('span', 'open-orig', 'Original'));
+                mid.appendChild(t1);
+                mid.appendChild(el('div', 'open-meta', metaLine(m)));
+                row.appendChild(mid);
+                row.addEventListener('click', function () { if (loading) return; picked = m.file; refreshSelection(); });
+                row.addEventListener('dblclick', function () { if (loading) return; picked = m.file; refreshSelection(); choosePicked(); });
+                listBox.appendChild(row);
+            });
+            refreshSelection();
+        }
+
+        function choosePicked() {
+            var m = byFile[picked];
+            if (!m || loading || !store) return;
+            loading = true;
+            copyNote.className = 'open-copy-note';
+            copyNote.textContent = 'Loading \u201c' + m.name + '\u201d\u2026';
+            ctl.setDisabled('use', true);
+            store.fetchMap(m.file, function (err, bytes) {
+                if (ctl.closed) return;
+                loading = false;
+                if (err || !bytes) {
+                    copyNote.className = 'open-copy-note bad';
+                    copyNote.textContent = err || 'The map file could not be downloaded.';
+                    ctl.setDisabled('use', false);
+                    return;
+                }
+                var name = env.numbered(m.name);
+                ctl.close();
+                env.onChoose(bytes, name);
+            });
+        }
+
+        ctl = env.dialogs.open({
+            title: 'Open a map', cls: 'open-dlg', focus: '#open-disk-btn',
+            build: function (body) {
+                var diskSec = el('div', 'open-sec');
+                diskSec.appendChild(el('div', 'open-lbl', 'From your device'));
+                var diskBtn = el('button', 'btn full', 'Open a .lvl file from your device\u2026');
+                diskBtn.type = 'button'; diskBtn.id = 'open-disk-btn';
+                diskBtn.addEventListener('click', function () { ctl.close(); env.onDisk(); });
+                diskSec.appendChild(diskBtn);
+                diskSec.appendChild(el('p', 'open-sub', 'Or pick an existing game map below as a starting point.'));
+                body.appendChild(diskSec);
+
+                var libSec = el('div', 'open-sec');
+                libSec.appendChild(el('div', 'open-lbl', 'Start from a game map'));
+                var bar = el('div', 'open-bar');
+                searchIn = el('input', 'open-q');
+                searchIn.type = 'search'; searchIn.autocomplete = 'off'; searchIn.spellcheck = false;
+                searchIn.setAttribute('aria-label', 'Search maps by name or description');
+                searchIn.addEventListener('input', function () { query = searchIn.value; renderList(); });
+                bar.appendChild(searchIn);
+                var sorts = el('div', 'open-sorts');
+                sorts.setAttribute('role', 'group'); sorts.setAttribute('aria-label', 'Sort maps by');
+                OPEN_SORTS.forEach(function (s) {
+                    var b = el('button', 'open-chip', s.label);
+                    b.type = 'button';
+                    b.addEventListener('click', function () { sort = s.id; renderList(); });
+                    sortBtns[s.id] = b;
+                    sorts.appendChild(b);
+                });
+                bar.appendChild(sorts);
+                libSec.appendChild(bar);
+
+                listBox = el('div', 'open-list');
+                listBox.setAttribute('role', 'listbox'); listBox.setAttribute('aria-label', 'Game maps');
+                listBox.addEventListener('keydown', function (e) {
+                    if (!shown.length || loading) return;
+                    var idx = -1;
+                    for (var i = 0; i < shown.length; i++) if (shown[i].file === picked) { idx = i; break; }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(shown.length - 1, idx + 1); }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(0, idx - 1); }
+                    else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); choosePicked(); return; }
+                    else return;
+                    picked = shown[idx].file;
+                    refreshSelection();
+                    var sel = listBox.querySelector('[data-file].sel');
+                    if (sel) { sel.focus(); if (sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' }); }
+                });
+                libSec.appendChild(listBox);
+
+                copyNote = el('p', 'open-copy-note');
+                copyNote.setAttribute('aria-live', 'polite');
+                libSec.appendChild(copyNote);
+                countEl = el('div', 'open-count');
+                libSec.appendChild(countEl);
+                body.appendChild(libSec);
+            },
+            buttons: [
+                { id: 'cancel', text: 'Cancel', ghost: true },
+                { id: 'use', text: 'Use as starting point', keepOpen: true, onClick: function () { choosePicked(); } }
+            ]
+        });
+        if (ctl.buttons.use) ctl.buttons.use.className += ' gold';
+        if (store) {
+            store.loadLibrary();
+            if (store.libraryState() === 'pending') store.onLibrary(function () { if (!ctl.closed) renderList(); });
+        }
+        renderList();
+        return ctl;
+    }
+
+    return { create: create, newMap: newMap, resizeMap: resizeMap, openMap: openMap, EXTENDED_NOTE: EXTENDED_NOTE, KIND_WORDS: KIND_WORDS };
 });
