@@ -71,9 +71,9 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
 # pages are the same as ever (the same layer as the build id: the compile layers above do not depend on it). A label may hold letters, digits, dot, dash and underscore only.
 RUN SITE_LABEL="${ANTS_SITE_LABEL}" && \
     case "${SITE_LABEL}" in *[!A-Za-z0-9._-]*) echo "ANTS_SITE_LABEL may hold letters, digits, dot, dash and underscore only: ${SITE_LABEL}" >&2; exit 1 ;; esac && \
-    if [ -n "${SITE_LABEL}" ]; then SITE_TITLE=" (${SITE_LABEL})"; SITE_FOOTER="<strong id=\"site-label\">${SITE_LABEL}</strong>\&#8197;\&bull;\&#8197;"; sed -i "s|<span id=\"mapmaker-site\"></span>|<span id=\"mapmaker-site\">${SITE_FOOTER}</span>|" /src/web/mapmaker.html; else SITE_TITLE=""; SITE_FOOTER=""; fi && \
+    if [ -n "${SITE_LABEL}" ]; then SITE_TITLE=" (${SITE_LABEL})"; SITE_FOOTER="<strong id=\"site-label\">${SITE_LABEL}</strong>\&#8197;\&bull;\&#8197;"; if [ -f /src/web/mapmaker.html ]; then sed -i "s|<span id=\"mapmaker-site\"></span>|<span id=\"mapmaker-site\">${SITE_FOOTER}</span>|" /src/web/mapmaker.html; fi; else SITE_TITLE=""; SITE_FOOTER=""; fi && \
     cp /src/web/lobby.html /src/lobby.html && \
-    cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/live.html /src/live.html && cp /src/web/mapmaker.html /src/mapmaker.html && \
+    cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/live.html /src/live.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
     for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html /src/live.html; do \
         sed -i "s|@@SITE_TITLE@@|${SITE_TITLE}|g; s|@@SITE_FOOTER@@|${SITE_FOOTER}|g" "$PAGE" || exit 1; \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \

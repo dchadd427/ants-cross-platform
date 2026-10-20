@@ -30,27 +30,27 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
         const int32_t s_right = archive.find_sprite_id("x599y35.bmp");
         const int32_t s_card = archive.find_sprite_id("x480y126.bmp");
         if (s_card >= 0) {
-            const size_t card = static_cast<size_t>(s_card);
+            const uint32_t card = static_cast<uint32_t>(s_card);
             renderer.draw_sprite_region(card, full.x - 8, full.y - 5, 8, 5, 0, 6, 8, 5);
             renderer.draw_sprite_region(card, full.x, full.y - 5, 124, 5, 0, 6, 124, 5);
             renderer.draw_sprite_region(card, full.x - 8, full.y, 8, 97, 0, 6, 8, 97);
             renderer.draw_sprite_region(card, full.x, full.y, 124, 97, 0, 6, 124, 97);
         }
         if (s_top >= 0) {
-            const size_t top = static_cast<size_t>(s_top);
+            const uint32_t top = static_cast<uint32_t>(s_top);
             renderer.draw_sprite_region(top, rx - 8, ry - 5, 8 + rw, 5, 14, 8, 8 + rw, 5);
             renderer.draw_sprite_region(top, mini.right(), ry - 5, 5, 5, 141, 8, 5, 5);
         }
         if (s_left >= 0) {
-            const size_t left = static_cast<size_t>(s_left);
+            const uint32_t left = static_cast<uint32_t>(s_left);
             renderer.draw_sprite_region(left, rx - 8, ry, 8, rh, 14, 0, 8, rh);
             renderer.draw_sprite_region(left, rx - 8, mini.bottom(), 8, 6, 14, 91, 8, 6);
         }
         if (s_right >= 0) {
-            renderer.draw_sprite_region(static_cast<size_t>(s_right), mini.right(), ry, 5, rh, 0, 0, 5, rh);
+            renderer.draw_sprite_region(static_cast<uint32_t>(s_right), mini.right(), ry, 5, rh, 0, 0, 5, rh);
         }
         if (s_card >= 0) {
-            const size_t card = static_cast<size_t>(s_card);
+            const uint32_t card = static_cast<uint32_t>(s_card);
             renderer.draw_sprite_region(card, rx, mini.bottom(), rw, 6, 0, 0, rw, 6);
             renderer.draw_sprite_region(card, mini.right(), mini.bottom(), 5, 6, 119, 0, 5, 6);
         }
