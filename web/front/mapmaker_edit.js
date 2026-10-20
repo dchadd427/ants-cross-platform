@@ -20,7 +20,7 @@
     var MAX_STROKES = 200;          // the history keeps this many strokes ...
     var MAX_RECORDS = 400000;       // ... and this many changed cells in all (a record is about 16 bytes: a few megabytes at the most)
     var REACH = 32;                 // how far from its anchor the cells of one object are looked for
-    var BRUSHES = [1, 3, 5, 9];     // the sizes of the brush, in cells
+    var BRUSHES = [1, 2, 3, 4, 5, 6, 7, 8, 9];     // the sizes of the brush, in cells
 
     function rd(b, at) { return b[at] | (b[at + 1] << 8); }
     function wr(b, at, v) { b[at] = v & 255; b[at + 1] = (v >> 8) & 255; }

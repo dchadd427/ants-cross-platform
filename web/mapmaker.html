@@ -69,7 +69,7 @@
             <span class="drawopts" role="group" aria-label="Fill, Fix edges and brush size">
                 <button class="eb" type="button" id="fill-btn" aria-pressed="false" aria-keyshortcuts="B" disabled>Fill</button>
                 <button class="eb" type="button" id="edges-btn" disabled>Fix edges...</button>
-                <span class="brushes" id="brushes" role="radiogroup" aria-label="Brush size in cells"><span class="bl dsk" aria-hidden="true">Brush</span><button class="eb" type="button" role="radio" data-brush="1" aria-label="Brush of 1 cell" aria-checked="true" disabled>1</button><button class="eb" type="button" role="radio" data-brush="3" aria-label="Brush of 3 cells across" aria-checked="false" tabindex="-1" disabled>3</button><button class="eb" type="button" role="radio" data-brush="5" aria-label="Brush of 5 cells across" aria-checked="false" tabindex="-1" disabled>5</button><button class="eb" type="button" role="radio" data-brush="9" aria-label="Brush of 9 cells across" aria-checked="false" tabindex="-1" disabled>9</button></span>
+                <span class="brushes" id="brushes"><label class="bl dsk" for="brush-range">Brush</label><input class="brange" type="range" id="brush-range" data-brush="1" min="1" max="9" step="1" value="1" aria-label="Brush size in cells" disabled><output class="bval" id="brush-val" for="brush-range" aria-live="polite">1</output></span>
             </span>
             </span>
         </div>

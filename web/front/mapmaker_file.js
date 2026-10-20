@@ -10,6 +10,7 @@
 
     var EMPTY2 = 0x7FFE;            // layer 2: no object in this cell
     var TEAM_OF_MARKER = { 152: 'black', 153: 'blue', 154: 'green', 155: 'red' };
+    var PLANT_TILES = { 404: 1, 405: 1, 406: 1, 407: 1, 408: 1, 410: 1, 411: 1, 412: 1, 413: 1, 414: 1, 415: 1, 416: 1, 420: 1, 421: 1 };
 
     function u16(b, at) { return b[at] | (b[at + 1] << 8); }
     function u32(b, at) { return (b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24)) >>> 0; }
@@ -39,7 +40,7 @@
             ok: true, bytes: bytes, version: version, kind: version === 9 ? 'extended' : 'classic', rows: rows, columns: columns, cells: cells, layer1: layer1, layer2: layer2,
             dictAt: dictAt, names: names,                   // where the dictionary's word is, and how many names it has
             blocksAt: end,                                  // where the lists after the layers begin (block 1: docs/MAP_FORMAT.md, "The layout")
-            markers: [], food: [],
+            markers: [], food: [], plants: [],
             // the tile ids of one cell (a cell outside the grid is plain ground: 485)
             tile1: function (r, c) { return r < 0 || c < 0 || r >= rows || c >= columns ? 485 : u16(bytes, layer1 + 6 * (r * columns + c)); },
             tile2: function (r, c) { return r < 0 || c < 0 || r >= rows || c >= columns ? EMPTY2 : u16(bytes, layer2 + 6 * (r * columns + c)); }
@@ -55,8 +56,9 @@
         n = u16(b, at); at += 2;
         if (at + 6 * n > b.length) return;
         for (i = 0; i < n; i++, at += 6) {
-            var team = TEAM_OF_MARKER[u16(b, at)];
-            if (team) file.markers.push({ team: team, row: u16(b, at + 2), column: u16(b, at + 4) });
+            var id = u16(b, at), r = u16(b, at + 2), c = u16(b, at + 4), team = TEAM_OF_MARKER[id];
+            if (team) file.markers.push({ team: team, row: r, column: c });
+            else if (PLANT_TILES[id]) file.plants.push({ id: id, row: r, column: c });
         }
         if (at + 2 > b.length) return;
         n = u16(b, at); at += 2;

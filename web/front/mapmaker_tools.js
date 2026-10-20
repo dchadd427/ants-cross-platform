@@ -12,35 +12,36 @@
 
     var HINTS = {
         ground: 'Tap or click to paint the ground. Drag to paint a line. Fill works for one click.',
-        objects: 'Tap or click to put an object. Drag to put a line of them.',
+        objects: 'Tap or click to put an object or plant. Drag to put a line of rocks or power-ups.',
         bigger: 'Tap or click to put the object whole. The dot is the cell you tap. Erase takes it away whole.',
         hills: 'Tap or click to put the hill. The dot is its door. Put it again to move it.',
         ants: 'Tap or click to start the team\u2019s ants here. Put them again to move them.',
         food: 'Tap or click to put a food pile.',
         erase: 'Tap or click to take something away: an object, a hill, a team\u2019s ants or a pile.',
-        move: 'Drag to look around. Wheel or two fingers to zoom.'
+        move: 'Drag an object, hill, ant, food pile or plant to move it. Drag empty ground to look around.'
     };
     var PHONE_HINTS = {
         ground: 'Tap to paint. Drag for a line.', objects: 'Tap to put one. Drag for a line.', bigger: 'Tap to put one whole. Erase takes it whole.', hills: 'Tap to put the hill. Tap again to move it.', ants: 'Tap to start the ants here.',
-        food: 'Tap to put a food pile.', erase: 'Tap to take something away.', move: 'Drag to look around.'
+        food: 'Tap to put a food pile.', erase: 'Tap to take something away.', move: 'Drag something to move it, or empty ground to look around.'
     };
 
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
-    // env: {doc, win, canvas (MapCanvas), host: {tools (buttons with data-tool), box, title, swatches, name, tile (the phone's one button for the palette), hint, brushes (buttons with data-brush), fill, undo, redo,
+    // env: {doc, win, canvas (MapCanvas), host: {tools (buttons with data-tool), box, title, swatches, name, tile (the phone's one button for the palette), hint, brushes (inputs or buttons with data-brush), fill, undo, redo,
     //       stepper, stepperLabel, stepLess, stepValue, stepMore},
     //       file() -> the open map's reader view, rebase(bytes) -> the reader view of other bytes (the dictionary grew, or a list changed its length), onEdit() after a change, busy() -> a dialog is open,
     //       dialogs (MapDialog.create: the palette of a phone is a sheet), say(title, text) -> a plain message}
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
-        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4 };
-        var editor = null, current = null, told = false, fits = '';                     // `fits`: a note when fewer ants than asked for found room, until the next choice
+        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4, dropper: 0 };
+        var editor = null, current = null, moving = null, told = false, fits = '';      // `fits`: a note when fewer ants than asked for found room, until the next choice
         var ground = null, sprites = null, ants = null, asked = false;                  // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js: the kinds' sheets and the game's pictures; mapmaker_ants.js: the Ants tool's box, asked for when the tool is first chosen)
         var ICONS = { ground: [0, 485], objects: [1, 302], bigger: [1, 1323], hills: [1, 248], food: [1, 264] };           // the tool buttons' pictures: [layer 2?, tile]
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
-        function paints() { return Palette.paints(state.tool); }
-        function places() { return Palette.places(state.tool); }
+        function isPlant() { return state.tool === 'objects' && !!(Blocks.PLANT_NAMES && Blocks.PLANT_NAMES[state.objects]); }
+        function paints() { return Palette.paints(state.tool) && !isPlant(); }
+        function places() { return Palette.places(state.tool) || isPlant(); }
         function hasTeams() { return state.tool === 'hills' || state.tool === 'ants'; }
         // a picture in a chip (the atlas), or false when there is none yet (the chip keeps its flat color)
         function picture(node, layer2, id, px) { return !!sprites && sprites.ready() && sprites.chip(node, layer2, id, px); }
@@ -85,10 +86,16 @@
             host.fill.disabled = !on || state.tool === 'erase';
             host.fill.setAttribute('aria-pressed', String(state.fill && !host.fill.disabled));
             Array.prototype.forEach.call(host.brushes, function (b) {
-                var n = +b.getAttribute('data-brush');
                 b.disabled = !on;
-                b.setAttribute('aria-checked', String(n === state.brush));
-                b.tabIndex = n === state.brush ? 0 : -1;
+                if (b.type === 'range') {
+                    b.value = String(state.brush);
+                    b.setAttribute('data-brush', String(state.brush));
+                    if (b.nextSibling) b.nextSibling.textContent = String(state.brush);
+                } else {
+                    var n = +b.getAttribute('data-brush');
+                    b.setAttribute('aria-checked', String(n === state.brush));
+                    b.tabIndex = n === state.brush ? 0 : -1;
+                }
             });
         }
 
@@ -115,6 +122,7 @@
             if (state.tool === 'ground' || state.tool === 'objects') {
                 var item = itemOf(state.tool, tileOf());
                 if (!item) return '';
+                if (isPlant()) return item.label + ' \u00b7 ' + (state.dropper ? 'drops a power-up every ' + state.dropper + 's' : 'ants walk under it');
                 return state.tool === 'objects' ? item.label : (item.custom ? item.label + ' (' + item.name + ')' : item.label + (ground ? ': tap it again for all its tiles' : ''));
             }
             if (state.tool === 'bigger') return bigText(bigNow());
@@ -126,13 +134,14 @@
             return plural(set.units, 'bite', 'bites') + ' of ' + set.points + ' points. ' + (facts.piles < 0 ? '' : plural(facts.piles, 'pile', 'piles') + ' on the map.');
         }
 
-        function stepValue() { return state.tool === 'ants' ? state.ants : state.stages; }
-        function stepRange() { return state.tool === 'ants' ? [Blocks.MIN_ANTS, Blocks.MAX_ANTS] : [Blocks.MIN_STAGES, Blocks.MAX_STAGES]; }
-        function stepLabel() { return state.tool === 'ants' ? 'Ants at the start' : 'Stages of the pile'; }
-        function stepNoun() { return state.tool === 'ants' ? 'ants' : 'stages'; }
+        function stepValue() { return state.tool === 'ants' ? state.ants : (isPlant() ? state.dropper : state.stages); }
+        function stepText() { return isPlant() ? (state.dropper ? state.dropper + 's' : 'Off') : String(stepValue()); }
+        function stepRange() { return state.tool === 'ants' ? [Blocks.MIN_ANTS, Blocks.MAX_ANTS] : (isPlant() ? [0, 180] : [Blocks.MIN_STAGES, Blocks.MAX_STAGES]); }
+        function stepLabel() { return state.tool === 'ants' ? 'Ants at the start' : (isPlant() ? 'Power-up drops' : 'Stages of the pile'); }
+        function stepNoun() { return state.tool === 'ants' ? 'ants' : (isPlant() ? 'seconds between drops' : 'stages'); }
         function stepBy(d) {
-            var r = stepRange(), v = Math.max(r[0], Math.min(r[1], stepValue() + d));
-            if (state.tool === 'ants') state.ants = v; else state.stages = v;
+            var r = stepRange(), v = Math.max(r[0], Math.min(r[1], stepValue() + d * (isPlant() ? 15 : 1)));
+            if (state.tool === 'ants') state.ants = v; else if (isPlant()) state.dropper = v; else state.stages = v;
             fits = '';
             showPalette();
         }
@@ -153,9 +162,9 @@
             host.title.textContent = label;
             host.swatches.textContent = '';
             host.tile.querySelector('i').style.border = '';
-            host.stepper.hidden = !(tool === 'ants' || tool === 'food');
+            host.stepper.hidden = !(tool === 'ants' || tool === 'food' || isPlant());
             host.swatches.hidden = tool === 'food' || tool === 'bigger';
-            host.swatches.className = hasTeams() ? 'swatches teams' : (tool === 'ground' ? 'swatches grounds' : 'swatches');
+            host.swatches.className = hasTeams() ? 'swatches teams' : (tool === 'ground' ? 'swatches grounds' : (tool === 'objects' ? 'swatches objects' : 'swatches'));
             var chip = host.tile.querySelector('i'), text = host.tile.querySelector('span');
             chip.textContent = '';
             if (hasTeams()) {
@@ -185,7 +194,7 @@
                     b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(on)); b.tabIndex = on ? 0 : -1;
                     b.setAttribute('aria-label', item.label); b.title = item.label + ' (' + item.name + ')' + (kinded && on && ground ? '. Tap again for all its tiles.' : '');
                     b.setAttribute('data-tile', String(item.id));
-                    var swatchChip = el('i'); swatchChip.style.background = item.color; picture(swatchChip, !kinded, item.id, kinded ? 34 : 26); b.appendChild(swatchChip);
+                    var swatchChip = el('i'); swatchChip.style.background = item.color; picture(swatchChip, !kinded, item.id, kinded ? 34 : (tool === 'objects' ? 18 : 26)); b.appendChild(swatchChip);
                     if (kinded) b.appendChild(el('span', '', item.label));
                     b.addEventListener('click', function () { if (kinded) pickKind(item, on); else chooseTile(item.id); });
                     host.swatches.appendChild(b);
@@ -199,7 +208,7 @@
             }
             if (!host.stepper.hidden) {
                 var r = stepRange();
-                host.stepperLabel.textContent = stepLabel(); host.stepValue.textContent = String(stepValue());
+                host.stepperLabel.textContent = stepLabel(); host.stepValue.textContent = stepText();
                 host.stepLess.setAttribute('aria-label', 'Fewer ' + stepNoun()); host.stepMore.setAttribute('aria-label', 'More ' + stepNoun());
                 host.stepLess.disabled = stepValue() <= r[0]; host.stepMore.disabled = stepValue() >= r[1];
             }
@@ -210,7 +219,7 @@
         function sheetStepper(onChange) {
             var row = el('div', 'stepper sheet'), less = el('button', 'stp', '−'), more = el('button', 'stp', '+'), val = el('output', 'stv'), r = stepRange();
             less.type = 'button'; more.type = 'button'; less.setAttribute('aria-label', 'Fewer ' + stepNoun()); more.setAttribute('aria-label', 'More ' + stepNoun()); val.setAttribute('aria-live', 'polite');
-            function show() { val.textContent = String(stepValue()); less.disabled = stepValue() <= r[0]; more.disabled = stepValue() >= r[1]; }
+            function show() { val.textContent = stepText(); less.disabled = stepValue() <= r[0]; more.disabled = stepValue() >= r[1]; }
             less.addEventListener('click', function () { stepBy(-1); show(); onChange(); });
             more.addEventListener('click', function () { stepBy(1); show(); onChange(); });
             row.appendChild(el('span', 'stl', stepLabel()));
@@ -250,7 +259,7 @@
                         if (tool === 'bigger') body.appendChild(el('p', 'pickinfo', 'Each one covers several cells. A tap puts it whole, and Erase takes it away whole.'));
                         if (tool === 'ground') body.appendChild(el('p', 'pickinfo', 'The ground changes how fast ants walk. Tap one to paint with it' + (ground ? ', or tap the chosen one again for all its tiles.' : '.')));
                     }
-                    if (tool === 'ants' || tool === 'food') {
+                    if (tool === 'ants' || tool === 'food' || isPlant()) {
                         var about = el('p', 'pickinfo', infoText());
                         body.appendChild(sheetStepper(function () { about.textContent = infoText(); }));
                         body.appendChild(about);
@@ -282,6 +291,8 @@
         function chooseTile(id) {
             if (state.tool === 'ground') state.ground = id; else if (state.tool === 'bigger') state.big = id; else state.objects = id;
             showPalette();
+            showButtons();
+            canvas.refresh();
         }
 
         function chooseTeam(id) { state.team = id; fits = ''; showPalette(); }
@@ -337,12 +348,13 @@
             return editor.begin(kind, id);
         }
 
-        // A whole hill, a team's ants, a food pile or a bigger object, put with one tap
+        // A whole hill, a team's ants, a food pile, a plant or a bigger object, put with one tap
         function place(cell) {
             var file = env.file(), change;
             if (state.tool === 'hills') change = Blocks.placeHill(file, state.team, cell.row, cell.column);
             else if (state.tool === 'ants') change = Blocks.placeStart(file, state.team, cell.row, cell.column, state.ants);
             else if (state.tool === 'bigger') change = Objects.place(file, bigNow(), cell.row, cell.column);
+            else if (isPlant()) change = Blocks.placePlant(file, cell.row, cell.column, state.objects, state.dropper);
             else change = Blocks.placePile(file, cell.row, cell.column, state.stages);
             if (change.error) { if (env.say) env.say('It cannot be put there', change.error); return; }
             var was = env.file(), dirty = editor.act(change);
@@ -355,12 +367,14 @@
         // the box of the Ants tool takes the canvas's taps and drags (One at a time, and the drag of a Mix); the clump is the tool's own
         function mine() { return !!ants && state.tool === 'ants' && ants.mine() ? ants.painter : null; }
         var painter = {
-            // the size of the square that the canvas marks under the pointer: the brush, a hill (4 x 4), a cell for ants and food (a bigger object marks its own box: shape); 0 for a tool that does not mark
+            // the size of the square that the canvas marks under the pointer: the brush, a hill (4 x 4), a cell for ants, food and plants (a bigger object marks its own box: shape); 0 for a tool that does not mark
             size: function () { return !editor ? 0 : (mine() ? 1 : (paints() ? state.brush : (places() ? (state.tool === 'hills' ? Blocks.HILL : 1) : 0))); },
-            // the picture that follows the pointer: a bigger object's tile id (0 for the other tools)
-            ghost: function () { return editor && state.tool === 'bigger' ? state.big : 0; },
+            // the picture that follows the pointer: a bigger object's or a plant's tile id (0 for the other tools)
+            ghost: function () { return editor && state.tool === 'bigger' ? state.big : (editor && isPlant() ? state.objects : 0); },
             // a tool that puts one whole thing with a tap: a drag looks around instead of painting
             tapOnly: function () { return !!editor && (mine() ? mine().tapOnly() : places()); },
+            // the Move tool can drag a placed object, hill, starting ant, food pile or plant to a new cell
+            canMove: function (cell) { return !!editor && state.tool === 'move' && !!cell && Blocks.hasMovable(env.file(), cell.row, cell.column); },
             // the box of a bigger object, counted from the cell that is tapped
             shape: function () { return editor && state.tool === 'bigger' ? bigNow().box : null; },
             // the hill's door is marked in the square, and the cell that anchors a bigger object
@@ -368,6 +382,7 @@
             begin: function (cell) {
                 if (!editor) return false;
                 if (mine()) return mine().begin(cell);
+                if (state.tool === 'move' && painter.canMove(cell)) { moving = { from: cell, last: cell }; return true; }
                 if (places()) { place(cell); return false; }
                 if (!paints()) return false;
                 current = startStroke();
@@ -393,6 +408,7 @@
             },
             extend: function (from, to) {
                 if (mine()) return mine().extend(from, to);
+                if (moving) { moving.last = to; return; }
                 if (!current) return;
                 current.segment(from.row, from.column, to.row, to.column, state.brush);
                 canvas.markDirty(current.takeDirty());
@@ -401,6 +417,15 @@
             },
             end: function () {
                 if (mine()) return mine().end();
+                if (moving) {
+                    var mv = moving; moving = null;
+                    if (mv.from.row === mv.last.row && mv.from.column === mv.last.column) return;
+                    var mch = Blocks.moveAt(env.file(), mv.from.row, mv.from.column, mv.last.row, mv.last.column);
+                    if (!mch) return;
+                    if (mch.error) { if (env.say) env.say('It cannot be moved there', mch.error); return; }
+                    changed(editor.act(mch));
+                    return;
+                }
                 if (!current) return;
                 var n = current.end();
                 current = null;
@@ -408,6 +433,7 @@
             },
             cancel: function () {
                 if (mine()) return mine().cancel();
+                if (moving) { moving = null; return; }
                 if (!current) return;
                 var d = current.cancel();
                 current = null;
@@ -449,6 +475,12 @@
         // ---- wiring ----
         Array.prototype.forEach.call(host.tools, function (b) { b.addEventListener('click', function () { chooseTool(b.getAttribute('data-tool')); }); });
         Array.prototype.forEach.call(host.brushes, function (b) {
+            function syncRange() { state.brush = Math.max(1, Math.min(9, +b.value || 1)); showButtons(); canvas.refresh(); }
+            if (b.type === 'range') {
+                b.addEventListener('input', syncRange);
+                b.addEventListener('change', syncRange);
+                return;
+            }
             b.addEventListener('click', function () { state.brush = +b.getAttribute('data-brush'); showButtons(); canvas.refresh(); });
             b.addEventListener('keydown', function (e) {
                 var at = Edit.BRUSHES.indexOf(state.brush), step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0);
@@ -472,7 +504,7 @@
 
         return {
             // A map is open (a new one, or one from the disk): the history starts empty
-            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; if (ants) ants.setMap(); showButtons(); showInfo(); },
+            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; moving = null; if (ants) ants.setMap(); showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
             // The lazily loaded parts came in (mapmaker_ground.js: the sheets of the kinds; mapmaker_sprites.js: the pictures, or null when the atlas failed): the palette and the tool buttons show them
             use: function (g, s) {
@@ -486,7 +518,7 @@
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },
             markUnsaved: function () { if (editor) editor.history.markUnsaved(); },
-            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, team: state.team, ants: state.ants, stages: state.stages, big: state.big, history: editor ? editor.history.size() : null }; }
+            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, team: state.team, ants: state.ants, stages: state.stages, dropper: state.dropper, big: state.big, history: editor ? editor.history.size() : null }; }
         };
     }
 

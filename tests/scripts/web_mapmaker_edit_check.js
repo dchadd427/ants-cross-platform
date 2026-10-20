@@ -76,7 +76,7 @@ function caseA() {
     equal(Edit.brushRect(f, 0, 0, 5), { r0: 0, r1: 2, c0: 0, c1: 2 }, 'a brush at the corner is cut by the edge');
     equal(Edit.brushRect(f, 19, 29, 3), { r0: 18, r1: 19, c0: 28, c1: 29 }, 'and at the far corner');
     equal(Edit.brushRect(f, 5, 5, 2), { r0: 5, r1: 6, c0: 5, c1: 6 }, 'an even brush leans down and right');
-    equal(Edit.BRUSHES, [1, 3, 5, 9], 'the brush sizes');
+    equal(Edit.BRUSHES, [1, 2, 3, 4, 5, 6, 7, 8, 9], 'the brush sizes');
     equal(Edit.lineCells(2, 2, 2, 2), [], 'no line from a cell to itself');
     equal(Edit.lineCells(0, 0, 0, 4), [[0, 1], [0, 2], [0, 3], [0, 4]], 'a horizontal line, the first cell not counted');
     equal(Edit.lineCells(3, 3, 0, 0), [[2, 2], [1, 1], [0, 0]], 'a diagonal line backwards');
@@ -332,11 +332,11 @@ function caseE() {
 function caseF() {
     const names = fs.readFileSync(path.join(ROOT, 'src', 'ants_assets', 'lvl_tile_names.inc'), 'utf8').split('\n').filter((l) => l.startsWith('"')).map((l) => l.replace(/^"/, '').replace(/",?\s*$/, ''));
     check(names.length === 1344, 'the game\'s list has 1,344 names (' + names.length + ')');
-    for (const row of Palette.GROUND.concat(Palette.OBJECTS)) check(names[row[0]] === row[1], 'tile ' + row[0] + ' is ' + names[row[0]] + ' in the game\'s list, and ' + row[1] + ' in the palette');
+    for (const row of Palette.GROUND.concat(Palette.OBJECTS, Palette.PLANTS)) check(names[row[0]] === row[1], 'tile ' + row[0] + ' is ' + names[row[0]] + ' in the game\'s list, and ' + row[1] + ' in the palette');
     for (const row of Palette.GROUND) check(row[0] >= 431 && row[0] <= 669, 'ground ' + row[1] + ' is a ground tile (ids 431 to 669)');
-    for (const row of Palette.OBJECTS) check(row[0] < 431, 'object ' + row[1] + ' is an object tile');
+    for (const row of Palette.OBJECTS.concat(Palette.PLANTS)) check(row[0] < 431, 'object ' + row[1] + ' is an object tile');
     const ground = Palette.items('ground'), objects = Palette.items('objects');
-    check(ground.length === 5 && objects.length === 11 && Palette.items('erase').length === 0 && Palette.items('move').length === 0, 'the palettes: 5 kinds of ground, 11 objects, none for the eraser and Move');
+    check(ground.length === 5 && objects.length === 25 && Palette.items('plants').length === 14 && Palette.items('erase').length === 0 && Palette.items('move').length === 0, 'the palettes: 5 kinds of ground, 25 objects (with 14 plants), none for the eraser and Move');
     equal(ground.map((i) => [i.id, i.name, i.label, i.kind]), [[485, 'g01a', 'Gravel', 'gravel'], [487, 'd01a', 'Dirt', 'dirt'], [571, 's01a', 'Slate', 'slate'], [439, 'M01a', 'Mud', 'mud'], [476, 'w01a', 'Water', 'water']], 'the five kinds of ground and the plain tile of each: no grass, no sand');
     check(ground.every((i) => i.color === Tiles.css(i.id, Tiles.EMPTY2)) && objects.every((i) => i.color === Tiles.css(0, i.id)), 'every swatch is the color the canvas draws that tile in');
     const keys = Palette.TOOLS.map((t) => t.key);
@@ -365,7 +365,7 @@ function caseF() {
         check(set.points >= 10 && set.points <= 50 && set.units > 0, n + ' stages: a pile of ' + set.units + ' bites of ' + set.points + ' points');
     }
     check(Blocks.MIN_STAGES === 2 && Blocks.MAX_STAGES === 6 && Blocks.MIN_ANTS === 1 && Blocks.MAX_ANTS === 64, 'the ranges of the steppers');
-    check(new Set(Palette.GROUND.concat(Palette.OBJECTS).map((r) => r[2])).size === 16, 'every label is different');
+    check(new Set(Palette.GROUND.concat(Palette.OBJECTS, Palette.PLANTS).map((r) => r[2])).size === 30, 'every label is different');
 }
 
 // ---- G: the tools on a fake page ----
@@ -440,7 +440,7 @@ function caseG() {
     p.host.swatches.children[1].click();
     check(p.tools.state().ground === 487 && p.host.name.textContent === 'Dirt', 'a swatch chooses a tile and its name shows');
     p.button('objects').click();
-    check(p.host.swatches.children.length === 11 && p.host.title.textContent === 'Objects' && p.tools.state().tool === 'objects', 'Objects has its own palette of 11');
+    check(p.host.swatches.children.length === 25 && p.host.title.textContent === 'Objects' && p.tools.state().tool === 'objects', 'Objects has its own palette of 25');
     check(p.tools.state().ground === 487, 'and the ground that was chosen is kept');
     p.button('erase').click();
     check(p.host.box.hidden && p.host.tile.hidden && p.host.fill.disabled && p.brush(5).disabled === false, 'Erase has no palette (nor the phone\'s palette button) and no Fill, and keeps the brushes');
@@ -459,9 +459,10 @@ function caseG() {
     q.doc.key('F'); check(q.tools.state().tool === 'food', 'F chooses Food (either case)');
     q.doc.key('m');
     q.doc.key('g'); check(q.tools.state().tool === 'ground', 'G chooses Ground');
-    q.doc.key(']'); check(q.tools.state().brush === 3, 'the right bracket makes the brush bigger');
-    q.doc.key(']'); q.doc.key(']'); q.doc.key(']'); check(q.tools.state().brush === 9, 'up to 9');
-    q.doc.key('['); check(q.tools.state().brush === 5, 'the left bracket makes it smaller');
+    q.doc.key(']'); check(q.tools.state().brush === 2, 'the right bracket makes the brush bigger');
+    for (let i = 0; i < 8; i++) q.doc.key(']');
+    check(q.tools.state().brush === 9, 'up to 9');
+    q.doc.key('['); check(q.tools.state().brush === 8, 'the left bracket makes it smaller');
     q.doc.key('b'); check(q.tools.state().fill === true && q.host.fill.getAttribute('aria-pressed') === 'true', 'B turns Fill on');
     q.doc.key('b'); check(q.tools.state().fill === false, 'and off');
     const typing = q.doc.createElement('input');
@@ -1194,7 +1195,9 @@ function caseN() {
     chip(dg03a).click();
     check(p.tools.state().ground === dg03a && on().join() === '487' && p.host.name.textContent === 'Dirt next to gravel: north edge (dg03a)', 'any single tile of the sheet can be chosen: dg03a, and the kind chip of Dirt stays on: ' + p.host.name.textContent);
     check(p.host.tile.querySelector('span').textContent === 'Dirt \u00b7 dg03a' && !sheet.ctl.closed, 'the phone\'s button names it, and the sheet stays open for the brush');
-    sheet.body.querySelectorAll('.kbrush')[0].children.filter((b) => b.textContent === '5')[0].click();
+    const kr = sheet.body.querySelectorAll('.brange')[0];
+    kr.value = '5';
+    for (const fn of kr.listeners.input || []) fn({ type: 'input' });
     check(p.tools.state().brush === 5 && p.brush(5).getAttribute('aria-checked') === 'true', 'the sheet\'s brush row is the page\'s brush');
     p.brush(1).click();
     const pt = p.painter();
@@ -1221,6 +1224,32 @@ function caseN() {
     const q = toolsPage(open(9, 30, 30));
     q.tools.use(null, null);
     check(q.host.name.textContent === 'Gravel' && q.host.swatches.children.length === 5, 'without the sheets the page keeps its five kinds');
+
+    // Plants (walk-under canopy and power-up droppers) and Move dragging
+    const pm = toolsPage(File.parse(mapWith(8, 24, 24, 486, [], []))), pmt = pm.painter();
+    pm.button('objects').click();
+    const clover = pm.host.swatches.children.filter((b) => b.getAttribute('data-tile') === '404')[0];
+    clover.click();
+    check(pm.tools.state().objects === 404 && !pm.host.stepper.hidden && pmt.tapOnly() && pm.host.stepValue.textContent === 'Off', 'choosing a plant shows the power-up drop interval stepper (Off = walk-under canopy)');
+    pmt.begin({ row: 6, column: 6 });
+    let play = Blocks.layout(pm.file());
+    check(play.records.length === 1 && play.records[0].tile === 404 && play.waypoints.length === 1 && play.waypoints[0].flag === 0 && pm.file().plants.length === 1, 'a canopy plant writes Block 1 and an 8-byte Block 4 waypoint (flag 0)');
+    pm.host.stepMore.click(); pm.host.stepMore.click();
+    check(pm.tools.state().dropper === 30 && pm.host.stepValue.textContent === '30s', 'stepping up sets a 30s power-up dropper interval');
+    pmt.begin({ row: 8, column: 8 });
+    play = Blocks.layout(pm.file());
+    check(play.records.length === 2 && play.waypoints.length === 2 && play.waypoints[1].flag === 1 && play.waypoints[1].interval === 30, 'a power-up plant writes a 52-byte Block 4 dropper (flag 1) and names the 5 power-ups');
+    // Move tool drags placed items and undoes in one step
+    pm.button('move').click();
+    check(pmt.canMove({ row: 6, column: 6 }) === true && pmt.canMove({ row: 1, column: 1 }) === false, 'Move recognizes a placed plant and ignores empty ground');
+    check(pmt.begin({ row: 6, column: 6 }) === true, 'pressing on a placed item starts a drag move');
+    pmt.extend({ row: 6, column: 6 }, { row: 10, column: 12 });
+    pmt.end();
+    play = Blocks.layout(pm.file());
+    check(play.records[0].row === 10 && play.records[0].column === 12 && play.waypoints[0].row === 10 && play.waypoints[0].column === 12, 'dragging with Move relocates the plant and its Block 4 waypoint');
+    pm.doc.key('z', { ctrlKey: true });
+    play = Blocks.layout(pm.file());
+    check(play.records[0].row === 6 && play.records[0].column === 6, 'Ctrl+Z undoes the move in one step');
 }
 
 const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN]];

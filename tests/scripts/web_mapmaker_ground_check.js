@@ -171,10 +171,11 @@ function caseE() {
     equal([g.asked.picked, ringed(g.body)], [[503], [503]], 'any tile can be chosen: gd03a, and the ring moves to it');
     g.body.querySelectorAll('.gl')[0].click();
     equal([g.asked.picked, ringed(g.body)], [[503, 486], [486]], 'a look-alike too (g01b)');
-    const brushes = g.body.querySelectorAll('.kbrush button');
-    equal(brushes.map((b) => [b.textContent, b.getAttribute('aria-checked')]), [['1', 'true'], ['3', 'false'], ['5', 'false'], ['9', 'false']], 'the brush row: 1, 3, 5, 9');
-    brushes[2].click();
-    check(g.asked.brush === 5 && brushes[2].getAttribute('aria-checked') === 'true' && brushes[0].getAttribute('aria-checked') === 'false', 'a brush button sets the size and moves its mark');
+    const brange = g.body.querySelectorAll('.kbrush input')[0], bval = g.body.querySelectorAll('.kbrush output')[0];
+    equal([brange.min, brange.max, brange.value, bval.textContent], ['1', '9', '1', '1'], 'the brush slider: 1 to 9');
+    brange.value = '5';
+    brange.fire('input', {});
+    check(g.asked.brush === 5 && brange.getAttribute('data-brush') === '5' && bval.textContent === '5', 'moving the brush slider sets the size and updates its value');
     const m = run('mud', 439);
     equal(heads(m.body), ['Plain mud', 'Mud next to Gravel', 'Mud next to Dirt', 'Mud next to Slate', 'Mud next to Water'], 'mud has the most neighbors, water among them');
     check(m.body.querySelectorAll('.kmore')[0].textContent.indexOf('14 more look the same:') === 0 && m.body.querySelectorAll('.kmore')[0].querySelectorAll('.gl').length === 14, 'and 14 plain tiles that look alike, in one line');

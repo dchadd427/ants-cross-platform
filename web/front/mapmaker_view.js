@@ -236,14 +236,33 @@
     }
 
     function miniBase(file, width, height, makeCanvas) {
-        var size = miniSize(file, width, height), canvas = makeCanvas(size.w, size.h), ctx = canvas.getContext('2d');
-        drawPixels(ctx, { scale: size.w / file.columns, cx: file.columns / 2, cy: file.rows / 2 }, file, size.w, size.h, makeCanvas(1, 1));
-        var k = size.w / file.columns;
-        for (var i = 0; i < file.markers.length; i++) {
-            var m = file.markers[i], x = Math.round(m.column * k) - 2, y = Math.round(m.row * k) - 2;
-            ctx.fillStyle = Tiles.TEAMS[m.team]; ctx.fillRect(x, y, 5, 5);
-            ctx.strokeStyle = '#f4ece2'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, 4, 4);
+        var size = miniSize(file, width, height), rw = size.w, rh = size.h, canvas = makeCanvas(rw, rh), ctx = canvas.getContext('2d');
+        var scratch = makeCanvas(rw, rh), sctx = scratch.getContext('2d'), image = sctx.createImageData(rw, rh), px = new Uint32Array(image.data.buffer);
+        var t = Tiles.miniTables(), b = file.bytes, l1 = file.layer1, l2 = file.layer2, mapW = file.columns, mapH = file.rows;
+        var rng = (mapW * 1000 + mapH) >>> 0, x, y, i;
+        for (y = 0; y < rh; y++) {
+            var cy = Math.min(mapH - 1, Math.floor(y * mapH / rh)), base = cy * mapW, row = y * rw;
+            for (x = 0; x < rw; x++) {
+                var cx = Math.min(mapW - 1, Math.floor(x * mapW / rw)), at = 6 * (base + cx);
+                rng = (Math.imul(rng, 214013) + 2531011) >>> 0;
+                var sp = ((rng >>> 16) & 0x7FFF) % 5, o = t.objects[b[l2 + at] | (b[l2 + at + 1] << 8)];
+                px[row + x] = o !== 0 ? o : t.ground[(b[l1 + at] | (b[l1 + at + 1] << 8)) * 5 + sp];
+            }
         }
+        sctx.putImageData(image, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(scratch, 0, 0, rw, rh);
+        var worldW = mapW * 32, worldH = mapH * 32;
+        function dot(wx, wy, color, sizeFlag, minSize) {
+            var dw = Math.max(Math.floor(32 * sizeFlag * rw / worldW), minSize), dh = Math.max(Math.floor(32 * sizeFlag * rh / worldH), minSize);
+            var dcx = Math.floor(wx * rw / worldW), dcy = Math.floor(wy * rh / worldH), left, top, right, bottom;
+            if (dw > 1 && dh > 1) { left = dcx - (dw >> 1); top = dcy - (dw >> 1); right = dcx + (dw - (dw >> 1)); bottom = dcy + (dh - (dh >> 1)); }
+            else { left = Math.min(dcx, rw - 1); top = Math.min(dcy, rh - 1); right = left + dw; bottom = top + dh; }
+            if (right > left && bottom > top) { ctx.fillStyle = color; ctx.fillRect(left, top, right - left, bottom - top); }
+        }
+        for (i = 0; file.food && i < file.food.length; i++) dot(file.food[i].column * 32 + 16, file.food[i].row * 32 + 16, Tiles.MINI_FOOD, 2, 1);
+        for (i = 0; file.plants && i < file.plants.length; i++) dot(file.plants[i].column * 32 + 16, file.plants[i].row * 32 + 16, Tiles.MINI_PLANT, 2, 0);
+        for (i = 0; i < file.markers.length; i++) { var m = file.markers[i]; dot(m.column * 32 + 16, m.row * 32 + 16, Tiles.MINI_ANTS[m.team], 1, 2); }
         return canvas;
     }
 
