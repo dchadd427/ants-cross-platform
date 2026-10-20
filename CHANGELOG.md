@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.96 - 2026-10-20 - Play Extended maps up to 256 x 256 and open game maps in Map Maker v1.4.0
+
+**For players:**
+- **Playable Extended maps (`256 x 256`).** Extended maps (`version == 9`) up to `256 x 256` (`65,536` cells) now load and play in the game, map selector previews, replay player, `bot_arena`, and the Map Maker's **Play this map**, and resizing an Extended map past 90 rows or 256 columns in the Map Maker upgrades its rules word so ants can cross row 90.
+- **Map Maker v1.4.0 — Open a map from the game's library.** Clicking **Open** in the Map Maker now opens the **Open a map** dialog, where you can either open a `.lvl` file from your device or search, sort (`Originals, then plays`, `Most played`, `Name`, `Size`), and pick any existing game map (the 6 Originals and 530+ Community maps, with preview thumbnails and metadata) and click **Use as starting point** to open it under a free numbered copy name (`"Treasure 2"`, etc.).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ca107726...320c9e0b); how it works: [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md), [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
+
 ## v0.12.95 - 2026-10-20 - Extended maps: per-ant starting ant types and Map Maker v1.3.0
 
 **For players:**
@@ -634,26 +642,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e01e7f0...HEAD)
 
-## v0.12.26 - 2026-10-12 - A game for one on a map of the players
+## Older versions (v0.12.26 and before)
 
-**For players:**
-- You can start a game completely alone on any map of the players, as on the six originals: the line under START now reads "A game for one" instead of asking for a computer player, and START opens the game with only your colony on the map. The map's file is fetched from the site while the game loads.
-- If the site no longer has the map, the game page now says so ("not on the server, it may have been taken off") and offers the menu instead of Reload; a failed download still offers Reload. A room whose map the game cannot take is refused with a short line instead of starting Treasure.
-- Known broken maps, not changed here: Home Bound, Thief craker, IsLaNd FiRe BoOm (no start marker for seat 0: an empty world alone) and hell2.
-
-**Rules / network:** none.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/343a692f...66edfe93)
-
-## v0.12.24 - 2026-10-12 - Pictures of the players' maps in the match lists
-
-**For players:**
-- Watch matches: a match on a map of the players now shows that map's picture in "Live now" and "Earlier matches", as the map list does, instead of an empty dark square. The six original maps keep their pictures.
-
-**Rules / network:** none.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a0ac68d...69f88ec3)
-
-## Older versions (v0.12.23 and before)
-
-Every release before v0.12.24, and the long notes of v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.27, and the long notes of v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
