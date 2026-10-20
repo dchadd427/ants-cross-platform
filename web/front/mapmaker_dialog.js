@@ -62,6 +62,7 @@
             box.appendChild(inner);
             box.appendChild(foot);
             scrim.appendChild(box);
+            scrim.addEventListener('click', function (e) { if (e && e.target === scrim) ctl.close(); });
             // The keys are heard on the document while the dialog is open: a click on plain text moves the focus to the page's body, and Escape must still close it
             function onKey(e) {
                 if (e.key === 'Escape') { e.stopPropagation(); ctl.close(); return; }
@@ -245,5 +246,97 @@
         return ctl;
     }
 
-    return { create: create, newMap: newMap, EXTENDED_NOTE: EXTENDED_NOTE, KIND_WORDS: KIND_WORDS };
+    // The Resize map dialog. env: {doc, dialogs, limits, kind, rows, columns, onResize(rows, columns)}
+    function resizeMap(env) {
+        var doc = env.doc, limits = env.limits, kind = env.kind || 'classic';
+        function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
+        var rowsIn, columnsIn, liveEl, noteBox, ctl;
+
+        function within(rows, columns) {
+            if (kind === 'classic') { var c = limits.classic; return { rows: rows <= c.rows, columns: columns <= c.columns, cells: rows * columns <= c.cells }; }
+            var e = limits.extended;
+            return { rows: rows <= e.longest, columns: columns <= e.longest, cells: rows * columns <= e.cells };
+        }
+
+        function setNote(cls, mark, text) {
+            noteBox.textContent = '';
+            if (!text) return;
+            var note = el('div', 'note' + (cls ? ' ' + cls : ''));
+            note.appendChild(el('span', 'ic', mark)).setAttribute('aria-hidden', 'true');
+            var body = el('div');
+            body.appendChild(el('div', '', text));
+            note.appendChild(body);
+            noteBox.appendChild(note);
+        }
+
+        function update() {
+            rowsIn.removeAttribute('aria-invalid'); columnsIn.removeAttribute('aria-invalid');
+            var live = Sizes.liveLine(kind, rowsIn.value, columnsIn.value, limits);
+            liveEl.textContent = '';
+            if (!live) {
+                liveEl.textContent = 'Type a whole number of rows and of columns, at least 1.';
+                if (Sizes.wholeNumber(rowsIn.value) === null) rowsIn.setAttribute('aria-invalid', 'true');
+                if (Sizes.wholeNumber(columnsIn.value) === null) columnsIn.setAttribute('aria-invalid', 'true');
+                setNote('', '', '');
+                ctl.setDisabled('resize', true);
+                return;
+            }
+            liveEl.appendChild(el('b', '', Sizes.number(live.cells)));
+            liveEl.appendChild(doc.createTextNode((live.cells === 1 ? ' cell of ' : ' cells of ') + Sizes.number(live.max) + ' \u00b7 the file will be ' + live.text));
+            var fit = within(live.rows, live.columns);
+            if (!fit.rows || !fit.columns || !fit.cells) {
+                if (!fit.rows || !fit.cells) rowsIn.setAttribute('aria-invalid', 'true');
+                if (!fit.columns || !fit.cells) columnsIn.setAttribute('aria-invalid', 'true');
+                var lim = kind === 'classic' ? limits.classic : limits.extended;
+                var msg = !fit.cells ? 'That size has ' + Sizes.number(live.cells) + ' cells, more than the ' + Sizes.number(lim.cells) + ' allowed.' :
+                    (kind === 'classic' ? 'A Classic map can have at most ' + lim.rows + ' rows and ' + lim.columns + ' columns.' : 'An Extended map side can be at most ' + Sizes.number(lim.longest) + '.');
+                setNote('bad', '!', msg);
+                ctl.setDisabled('resize', true);
+                return;
+            }
+            if (live.rows === env.rows && live.columns === env.columns) {
+                setNote('', '', '');
+                if (ctl.buttons.resize) ctl.buttons.resize.textContent = 'Resize map';
+                ctl.setDisabled('resize', true);
+                return;
+            }
+            var shrinks = live.rows < env.rows || live.columns < env.columns;
+            setNote('', shrinks ? 'i' : '', shrinks ? 'This size is smaller than ' + env.rows + ' \u00d7 ' + env.columns + '. Next you will choose which part of the map to keep.' : '');
+            if (ctl.buttons.resize) ctl.buttons.resize.textContent = shrinks ? 'Choose part to keep...' : 'Resize map';
+            ctl.setDisabled('resize', false);
+        }
+
+        ctl = env.dialogs.open({
+            title: 'Resize map', cls: 'narrow', focus: '#resize-rows',
+            build: function (body) {
+                body.appendChild(el('p', 'lead', 'Change the number of rows or columns (' + env.rows + ' \u00d7 ' + env.columns + ' now). New rows and columns extend the map\u2019s edge ground; if the map gets smaller, you choose which part to keep.'));
+                var fields = el('div', 'fields');
+                function field(id, text, val) {
+                    var wrap = el('div', 'fld'), label = el('label', '', text), input = el('input');
+                    label.htmlFor = id; input.id = id; input.type = 'text'; input.setAttribute('inputmode', 'numeric'); input.setAttribute('autocomplete', 'off'); input.maxLength = 6;
+                    input.value = String(val);
+                    wrap.appendChild(label); wrap.appendChild(input); fields.appendChild(wrap);
+                    input.addEventListener('input', update);
+                    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !ctl.buttons.resize.disabled) { e.preventDefault(); ctl.buttons.resize.click(); } });
+                    return input;
+                }
+                rowsIn = field('resize-rows', 'Rows', env.rows);
+                fields.appendChild(el('span', 'times', '\u00d7')).setAttribute('aria-hidden', 'true');
+                columnsIn = field('resize-columns', 'Columns', env.columns);
+                liveEl = el('div', 'live'); liveEl.setAttribute('aria-live', 'polite');
+                fields.appendChild(liveEl);
+                body.appendChild(fields);
+                noteBox = el('div'); noteBox.setAttribute('aria-live', 'polite');
+                body.appendChild(noteBox);
+            },
+            buttons: [
+                { id: 'cancel', text: 'Cancel', ghost: true },
+                { id: 'resize', text: 'Resize map', keepOpen: true, onClick: function (c) { var r = Sizes.wholeNumber(rowsIn.value), col = Sizes.wholeNumber(columnsIn.value); if (r === null || col === null) return; c.close(); env.onResize(r, col); } }
+            ]
+        });
+        update();
+        return ctl;
+    }
+
+    return { create: create, newMap: newMap, resizeMap: resizeMap, EXTENDED_NOTE: EXTENDED_NOTE, KIND_WORDS: KIND_WORDS };
 });

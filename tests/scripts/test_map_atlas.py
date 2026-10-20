@@ -243,9 +243,9 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
 
     def test_the_files_are_small_and_the_same_every_time(self):
         self.assertLess(self.sizes["ground.png"], 40000, "ground.png (about 35 KB)")
-        self.assertLess(self.sizes["objects.png"], 165000, "objects.png (about 155 KB)")
-        self.assertLess(self.sizes["atlas.json"], 12000, "atlas.json (about 8 KB)")
-        self.assertLess(sum(self.sizes.values()), 210000, "the whole atlas (about 199 KB: the page fetches all of it at start)")
+        self.assertLess(self.sizes["objects.png"], 295000, "objects.png (about 285 KB)")
+        self.assertLess(self.sizes["atlas.json"], 12000, "atlas.json (about 9 KB)")
+        self.assertLess(sum(self.sizes.values()), 340000, "the whole atlas (about 330 KB: the page fetches all of it at start)")
         with tempfile.TemporaryDirectory() as again:
             map_atlas.build(SPRITES, CATALOG, again)
             for name in ("ground.png", "objects.png", "atlas.json"):

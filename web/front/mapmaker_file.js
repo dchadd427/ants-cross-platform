@@ -40,7 +40,7 @@
             ok: true, bytes: bytes, version: version, kind: version === 9 ? 'extended' : 'classic', rows: rows, columns: columns, cells: cells, layer1: layer1, layer2: layer2,
             dictAt: dictAt, names: names,                   // where the dictionary's word is, and how many names it has
             blocksAt: end,                                  // where the lists after the layers begin (block 1: docs/MAP_FORMAT.md, "The layout")
-            markers: [], food: [], plants: [],
+            markers: [], food: [], plants: [], defaultType: EMPTY2,
             // the tile ids of one cell (a cell outside the grid is plain ground: 485)
             tile1: function (r, c) { return r < 0 || c < 0 || r >= rows || c >= columns ? 485 : u16(bytes, layer1 + 6 * (r * columns + c)); },
             tile2: function (r, c) { return r < 0 || c < 0 || r >= rows || c >= columns ? EMPTY2 : u16(bytes, layer2 + 6 * (r * columns + c)); }
@@ -65,9 +65,11 @@
         for (i = 0; i < n; i++) {
             if (at + 10 > b.length) return;
             var stages = u16(b, at + 8);
+            if (stages === 0 || at + 10 + 4 * stages > b.length) return;
             file.food.push({ row: u16(b, at), column: u16(b, at + 2) });
             at += 10 + 4 * stages;
         }
+        if (at + 4 <= b.length) file.defaultType = u16(b, at + 2);
     }
 
     // The name of the file that a download of a map is saved as: the map's name without what a file name cannot hold, then ".lvl"

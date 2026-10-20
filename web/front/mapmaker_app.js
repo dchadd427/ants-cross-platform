@@ -11,7 +11,7 @@
     function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
     var opening = 0;
-    var core = null, limits = null, mine = null, sent = null, sentStore = null, sentWaiting = null, dialogs = null, canvas = null, tools = null, store = null, map = null, checkTimer = 0, summed = null;
+    var core = null, limits = null, mine = null, sent = null, sentStore = null, sentWaiting = null, dialogs = null, canvas = null, tools = null, store = null, map = null, sprites = null, checkTimer = 0, summed = null;
     var keepTimer = 0, keepReady = false, keepPending = false, keepEdits = 0;      // the unsaved work kept in the browser: a rest of 1.5 s after a change, and not before the work of the last visit was dealt with
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
@@ -81,7 +81,35 @@
         if (summed.props.error) return dialogs.message('The properties cannot be opened', MapChecks.capital(summed.props.error) + '.');
         win.MapProps.open({
             doc: doc, dialogs: dialogs, core: core, props: summed.props, bytes: function () { return map.bytes; },
+            pic: function (node, id, px) { if (sprites && sprites.ready() && sprites.chip(node, true, id, px)) node.classList.add('pic'); },
             apply: function (change) { return tools.act(change) ? '' : 'The properties could not be put into the map. Nothing was changed.'; }
+        });
+    }
+
+    function applyResize(newRows, newCols, keepRow, keepCol) {
+        var ch = win.MapBlocks.resizeMap(map.file, newRows, newCols, keepRow, keepCol);
+        if (ch && ch.error) return dialogs.message('The map could not be resized', ch.error);
+        if (ch && !tools.act(ch)) dialogs.message('The map could not be resized', 'Nothing was changed.');
+    }
+
+    function openResize() {
+        if (canvas.isStroking() || dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden) return;
+        win.MapDialog.resizeMap({
+            doc: doc, dialogs: dialogs, limits: limits, kind: map.file.kind, rows: map.file.rows, columns: map.file.columns,
+            onResize: function (newRows, newCols) {
+                if (newRows < map.file.rows || newCols < map.file.columns) {
+                    var keepRows = Math.min(map.file.rows, newRows), keepCols = Math.min(map.file.columns, newCols);
+                    MapCrop.open({
+                        doc: doc, $: $, host: $('crop'), editor: $('editor'),
+                        limits: { rows: keepRows, columns: keepCols, cells: keepRows * keepCols },
+                        rows: map.file.rows, columns: map.file.columns, name: map.name,
+                        tags: function (h) { fillTags(h, map.file.kind); },
+                        picture: function () { return MapView.miniBase(map.file, 640, 640, canvasOf); },
+                        onUse: function (frame) { applyResize(newRows < map.file.rows ? frame.rows : newRows, newCols < map.file.columns ? frame.columns : newCols, frame.row, frame.column); },
+                        onCancel: function () { openResize(); }
+                    });
+                } else applyResize(newRows, newCols, 0, 0);
+            }
         });
     }
 
@@ -379,8 +407,8 @@
     var ACTIONS = {
         play: playMap,
         submit: function () { if (!dialogs.isOpen() && !canvas.isStroking()) submitOr(function () { sent.open(); }); }, subs: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show('sent'); },
-        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }, { text: '\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }]); }
+        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, resize: openResize, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Resize...', onClick: ACTIONS.resize }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }, { text: '\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }]); }
     };
 
     function start(module) {
@@ -431,7 +459,7 @@
 
     // The parts that load after the page is up (docs/MAP_EDITOR.md, "Sprites"): the sheets of the kinds of ground and the game's pictures (the atlas). Without them the page works as before, in flat colors.
     function loadParts() {
-        var left = 3, sprites = null, flat = 'The game\u2019s pictures could not be loaded, so the map is drawn in flat colors. Your map is not affected.';
+        var left = 3, flat = 'The game\u2019s pictures could not be loaded, so the map is drawn in flat colors. Your map is not affected.';
         function note(text) { var n = $('atlas-note'); n.textContent = text; n.hidden = !text; }
         function script(name) {
             var s = el('script');

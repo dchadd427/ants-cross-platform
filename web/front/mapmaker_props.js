@@ -13,8 +13,8 @@
     var NONE = 0x7FFE;                                                    // the tile id a new map has in the place of the default ant type: no type
     // The default ant types: the tile ids that the file's block 3 holds (docs/MAP_FORMAT.md, "The layout"); any other id is none
     var TYPES = [
-        { key: 'none', label: 'None', tile: NONE, color: '#6b6b6b' }, { key: 'combat', label: 'Combat ant', tile: 62, color: '#d65db1' }, { key: 'thief', label: 'Thief ant', tile: 63, color: '#d65db1' },
-        { key: 'bomber', label: 'Bomber ant', tile: 64, color: '#d65db1' }, { key: 'swimmer', label: 'Swimmer ant', tile: 65, color: '#d65db1' }, { key: 'fire', label: 'Fire ant', tile: 66, color: '#d65db1' }
+        { key: 'none', label: 'None', tile: NONE, sprite: 811, color: '#6b6b6b' }, { key: 'combat', label: 'Combat ant', tile: 62, sprite: 897, color: '#d65db1' }, { key: 'thief', label: 'Thief ant', tile: 63, sprite: 1085, color: '#d65db1' },
+        { key: 'bomber', label: 'Bomber ant', tile: 64, sprite: 774, color: '#d65db1' }, { key: 'swimmer', label: 'Swimmer ant', tile: 65, sprite: 963, color: '#d65db1' }, { key: 'fire', label: 'Fire ant', tile: 66, sprite: 676, color: '#d65db1' }
     ];
     var RANGES = { minutes: { min: 1, max: 120 }, eggs: { min: 0, max: 255 } };       // what a person can set; a map opened with more keeps its value and shows it
 
@@ -266,7 +266,9 @@
                 TYPES.forEach(function (t, i) {
                     var b = el('button', 'ant'), chip = el('i');
                     b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('data-type', t.key);
-                    chip.style.background = t.color; b.appendChild(chip); b.appendChild(el('span', '', t.label));
+                    chip.style.background = t.color;
+                    if (env.pic) env.pic(chip, t.sprite || 811, 26);
+                    b.appendChild(chip); b.appendChild(el('span', '', t.label));
                     b.addEventListener('click', function () { pickType(i); });
                     b.addEventListener('keydown', function (e) {
                         var step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0);

@@ -303,8 +303,8 @@
 
         return {
             setFile: setFile, redraw: redraw,
-            // The same map with other bytes (the dictionary grew): the view stays where it is
-            swapFile: function (next) { file = next; full = null; if (sprites) sprites.reset(); mini = View.miniBase(file, 168, 168, makeCanvas); redraw(); },
+            // The same map with other bytes (the dictionary grew, or the map was resized): the view stays where it is
+            swapFile: function (next) { file = next; full = null; if (sprites) sprites.reset(); if (view) View.clamp(view, file, w, h); if (cursor && (cursor.row >= file.rows || cursor.column >= file.columns)) cursor = null; if (hover && (hover.row >= file.rows || hover.column >= file.columns)) hover = null; mini = View.miniBase(file, 168, 168, makeCanvas); env.miniCap.textContent = 'Whole map: ' + file.rows + ' x ' + file.columns; redraw(); },
             // The small map again, after a stroke or an undo
             refreshMini: function () { if (file) { mini = View.miniBase(file, 168, 168, makeCanvas); redraw(); } },
             // The painter (mapmaker_tools.js): {size() -> the brush in cells, 0 when the tool does not paint, shape() -> the box of a bigger object or null, ghost() -> the tile id of a bigger object whose picture follows the pointer or 0, begin(cell) -> true when a drag goes on, extend(from, to), end(), cancel()}

@@ -228,7 +228,7 @@
                     var made = ensureTile(f, ch.names[i][0], ch.names[i][1]);
                     if (made.grew) f = self.file = hooks.rebase(made.bytes);
                 }
-                for (i = 0; i < ch.cells.length; i++) { var c = ch.cells[i], was = tile(f, 2, c[0]); touch(2, c[0]); setCell(f, 2, c[0], c[1], c[2], c[3]); dirty.push(c[0]); n++; if (c[1] === EMPTY2 && Solid.clears(was)) setSolid(c[0], false); }
+                for (i = 0; i < ch.cells.length; i++) { var c = ch.cells[i], was = tile(f, 2, c[0]); touch(2, c[0]); setCell(f, 2, c[0], c[1], c[2], c[3]); dirty.push(c[0]); n++; if (c[1] === EMPTY2 && Solid.clears(was)) setSolid(c[0], false); else if (!Solid.sets(c[1]) && Solid.clears(was)) setSolid(c[0], false); }
                 for (i = 0; ch.ground && i < ch.ground.length; i++) { var g = ch.ground[i]; touch(1, g[0]); setCell(f, 1, g[0], g[1], flags(f, 1, g[0]), third(f, 1, g[0])); dirty.push(g[0]); n++; }          // (the tiles of layer 1 that mapmaker_edges.js picks again: their flags stay)
                 for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);                 // (the solid bits of layer 1 that go with the cells)
                 for (i = 0; i < ch.splices.length; i++) {
@@ -240,6 +240,7 @@
             }
             function putErase(idx) {
                 var more = hooks.erase ? hooks.erase(f, idx) : null, n = tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx);       // (what else goes is asked first: it may be told by the object's anchor)
+                if (!n && idx >= f.columns && (flags(f, 1, idx) & 1)) { setSolid(idx, false); dirty.push(idx); n++; }
                 return more ? n + change(more) : n;
             }
             var put = kind === 'ground' ? putGround : (kind === 'objects' ? putObject : putErase);
