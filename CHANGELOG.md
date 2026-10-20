@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.94 - 2026-10-20 - Adaptive minimap, crisp zoom-out, 5-digit results, and Map Maker v1.2.0
+
+**For players:**
+- **Game minimap and zoom-out:** Non-square maps now keep their true proportions in the HUD radar slot (top-aligned when wide, centered when tall) with an adapted recessed bevel and team-colored panel surface fill, and zooming out on hardware windows stays crisp at native window resolution.
+- **Game Results screen:** The `960 x 540` results table widens the Lost, Killed and Hatched columns so 5-digit counters fit cleanly without overlapping.
+- **Map Maker v1.2.0:** Added all 32 original food items with Bites (uses) and Points per bite steppers, 14 canopy and power-up dropper plants, a Move tool, a brush slider of 1 to 9 cells, Map Resizing (with an interactive crop frame when shrinking), 24 x 24 thumbnails on ground look-alike tile buttons, selected Default Ant Type sprites in Map properties and in team colors on the map canvas, outer scrim click-to-close on dialogs and sheets, and a bottom version footer bar.
+
+**Fixes:**
+- Deleting or moving a hill or object in the Map Maker now clears its Layer-1 solid footprint so starting ants do not avoid the area.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46824e4c...128cce73); how it works: [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
+
 ## v0.12.93 - 2026-10-19 - Owner page: sign in with a username and a password (replaces Discord)
 
 **For players:**
@@ -658,20 +670,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a7d610d...11ee3bf6)
 
-## v0.12.21 - 2026-10-12 - Fullscreen replays hold the mouse like the game
+## Older versions (v0.12.21 and before)
 
-**For players:**
-- **Fullscreen holds the mouse in a replay and in a live match you watch, as it does in a game.** The cursor stays on the picture and the edges and corners scroll the map; leaving fullscreen gives the mouse back (in Chrome and Edge hold Esc: a short press goes to the game, as in a match). The bar stays clickable: move the cursor onto it (a small arrow shows there) and click, or drag the timeline. "Fullscreen mouse: Free" in a game keeps the plain browser fullscreen here too.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.20...v0.12.21); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
-
-## v0.12.20 - 2026-10-12 - Crisp zoom levels between 1 and 2
-
-**For players:**
-- **The zoom levels between 1 and 2 are drawn with the nearest pixel, like 1 and 2.** Before, those levels were smoothed with a linear filter, which blurred the pixel art; now every level from 1 up stays crisp. Below 1 the picture is averaged as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b54ec65...zoom-nearest)
-
-## Older versions (v0.12.19 and before)
-
-Every release before v0.12.20, and the long notes of v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.22, and the long notes of v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
