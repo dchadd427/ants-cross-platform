@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.94 - 2026-10-20 - Adaptive minimap, crisp zoom-out, 5-digit results, and Map Maker v1.2.0
+
+**For players:**
+- **Game minimap and zoom-out:** Non-square maps now keep their true proportions in the HUD radar slot (top-aligned when wide, centered when tall) with an adapted recessed bevel and team-colored panel surface fill, and zooming out on hardware windows stays crisp at native window resolution.
+- **Game Results screen:** The `960 x 540` results table widens the Lost, Killed and Hatched columns so 5-digit counters fit cleanly without overlapping.
+- **Map Maker v1.2.0:** Added all 32 original food items with Bites (uses) and Points per bite steppers, 14 canopy and power-up dropper plants, a Move tool, a brush slider of 1 to 9 cells, Map Resizing (with an interactive crop frame when shrinking), 24 x 24 thumbnails on ground look-alike tile buttons, selected Default Ant Type sprites in Map properties and in team colors on the map canvas, outer scrim click-to-close on dialogs and sheets, and a bottom version footer bar.
+
+**Fixes:**
+- Deleting or moving a hill or object in the Map Maker now clears its Layer-1 solid footprint so starting ants do not avoid the area.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46824e4c...128cce73); how it works: [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
+
 ## v0.12.93 - 2026-10-19 - Owner page: sign in with a username and a password (replaces Discord)
 
 **For players:**
