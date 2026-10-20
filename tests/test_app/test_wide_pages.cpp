@@ -367,27 +367,27 @@ constexpr MockRect kMockResults[] = {
     {"Leave Game button, pressed picture (leave3)", 844, 14, 98, 20},
     {"\"YOUR SCORE\" art", 41, 85, 302, 127},
     {"winner box", 35, 248, 889, 59},
-    {"column headers", 662, 114, 259, 133},
+    {"column headers", 578, 114, 343, 133},
     {"\"Winner!\" label", 40, 225, 117, 19},
     {"\"other players...\" label", 40, 310, 203, 25},
     {"others box", 34, 336, 892, 159},
     {"row 1 name", 100, 265, 385, 18},
-    {"row 1 score", 805, 265, 49, 18},
-    {"row 1 friendly lost", 854, 265, 19, 18},
-    {"row 1 enemy killed", 875, 265, 21, 18},
-    {"row 1 new hatched", 896, 265, 20, 18},
+    {"row 1 score", 721, 265, 49, 18},
+    {"row 1 friendly lost", 770, 265, 47, 18},
+    {"row 1 enemy killed", 819, 265, 49, 18},
+    {"row 1 new hatched", 868, 265, 48, 18},
     {"row 1 portraits (alliance)", 36, 271, 48, 40},
     {"row 2 name", 100, 353, 385, 18},
-    {"row 2 score", 805, 353, 49, 18},
-    {"row 2 friendly lost", 854, 353, 19, 18},
-    {"row 2 enemy killed", 875, 353, 21, 18},
-    {"row 2 new hatched", 896, 353, 20, 18},
+    {"row 2 score", 721, 353, 49, 18},
+    {"row 2 friendly lost", 770, 353, 47, 18},
+    {"row 2 enemy killed", 819, 353, 49, 18},
+    {"row 2 new hatched", 868, 353, 48, 18},
     {"row 2 portrait", 51, 359, 24, 40},
     {"row 3 name", 100, 403, 385, 18},
-    {"row 3 score", 805, 403, 49, 18},
-    {"row 3 friendly lost", 854, 403, 19, 18},
-    {"row 3 enemy killed", 875, 403, 21, 18},
-    {"row 3 new hatched", 896, 403, 20, 18},
+    {"row 3 score", 721, 403, 49, 18},
+    {"row 3 friendly lost", 770, 403, 47, 18},
+    {"row 3 enemy killed", 819, 403, 49, 18},
+    {"row 3 new hatched", 868, 403, 48, 18},
     {"row 3 portrait", 51, 409, 24, 40},
 };
 
@@ -561,7 +561,7 @@ void test_layout(const assets::AssetArchive& arc) {
             check(w.name_x == m[0].x && w.name_w == m[0].w, at + "the name's label (100, 385 wide)");
             for (size_t k = 0; k < 4; ++k) check(w.column_x[k] == m[1 + k].x && w.column_w[k] == m[1 + k].w && m[1 + k].y == row_y[r], at + "number " + std::to_string(k + 1) + ": x " + std::to_string(w.column_x[k]) + ", " + std::to_string(w.column_w[k]) + " wide");
         }
-        check(w.name_x == 100 && w.name_w == 385 && w.column_x == std::array<int32_t, 4>{805, 854, 875, 896} && w.column_w == std::array<int32_t, 4>{49, 19, 21, 20}, "results, wide: the label boxes are the original's, the numbers 320 further right");
+        check(w.name_x == 100 && w.name_w == 385 && w.column_x == std::array<int32_t, 4>{721, 770, 819, 868} && w.column_w == std::array<int32_t, 4>{49, 47, 49, 48}, "results, wide: the three counter columns widen by 28 px each into the open area (721 / 770 / 819 / 868, widths 49 / 47 / 49 / 48)");
         // the ants: the first of an alliance hangs over the box's edge as in the original (x 45 stays: the left items do not move), a single team's ant at x 60
         check(w.portrait_pair_x[0] - 9 == 36 && w.portrait_pair_x[0] == 45 && w.portrait_pair_x[1] == 75 && w.portrait_alone_x - 9 == 51 && w.portrait_dy == 20, "results, wide: the ants are at the original's x (45 and 75, or 60) and 20 below the row");
         check(w.row_y(1) + w.portrait_dy - 14 == 359 && w.row_y(0) + w.portrait_dy - 14 == 271, "results, wide: and their sprites' rectangles are the mock-up's (y 271 and 359)");
@@ -579,7 +579,7 @@ void test_layout(const assets::AssetArchive& arc) {
               "results, classic: the rows' places are the original's (Y 235, then 50 i + 273; numbers at 485, 534, 555, 576)");
         // the move: left stays, right + 320, middle + 30, the banner and the button hang from the top
         check(w.your_score == c.your_score.moved(0, 30) && w.winner_label == c.winner_label.moved(0, 30) && w.others_label == c.others_label.moved(0, 30), "results: the left art stays at its x and moves down by 30");
-        check(w.headers == c.headers.moved(320, 30), "results: the column headers move right by 320 and down by 30");
+        check(w.headers == LayoutRect{c.headers.x + 320 - 84, c.headers.y + 30, c.headers.w + 84, c.headers.h}, "results: the column headers move right by 320, down by 30, and widen left by 84 for the 5-digit counter columns");
         check(w.winner_box == LayoutRect{c.winner_box.x, c.winner_box.y + 30, c.winner_box.w + 320, c.winner_box.h} && w.others_box == LayoutRect{c.others_box.x, c.others_box.y + 30, c.others_box.w + 320, c.others_box.h},
               "results: both boxes keep their left edge and are 320 columns wider");
         check(w.leave == c.leave.moved(320, 0) && w.leave_pressed == c.leave_pressed.moved(320, 0) && w.banner.y == 0 && w.banner.x == c.banner.x + 160, "results: Leave Game is at the top right, the banner hangs from the top edge, centred (x 300)");
@@ -1130,7 +1130,7 @@ void draw_menu_picture(RendererRig& rig, const assets::AssetArchive& arc, const 
 // the PNGs that the mock-up tool wrote
 constexpr uint64_t kMockLoadingDigest = 0x94eabba28aea947eull;
 constexpr uint64_t kMockQuickHelpDigest = 0x94b71b16f7a70dcdull;
-constexpr uint64_t kMockResultsDigest = 0xbb947f9aa3aa2a78ull;
+constexpr uint64_t kMockResultsDigest = 0xe41290211225dd98ull;
 constexpr uint64_t kMockMenuDigest[6] = {0x7ba0d0a4ec7fb2ddull, 0x1702617f6d84b631ull, 0x519d85125827ebc9ull, 0x82c371dda4ca0001ull, 0x8980eaac55423631ull, 0x722ef4cf407305e9ull};
 
 /// --save: the picture as a bitmap (RGBA bytes of a canvas)
@@ -1404,12 +1404,15 @@ void test_counters(const assets::AssetArchive& arc) {
             }
         }
     }
-    // a number wider than its label is cut at the label's box, as the original's label surface cuts it: a counter of four digits in the 19 px label
+    // five-digit counters fit whole inside the widened columns (47 .. 49 px hold five 8 px digits = 40 px with 7 .. 9 px to spare), and a counter wider than its box is clipped at the box's right edge
     {
         RendererRig rig(arc, 960, 540);
         if (rig.ok) {
             sim::MatchResult big = sample_result();
-            big.stats[2].friendly_lost = 1234;
+            big.stats[2].friendly_lost = 12345;
+            big.stats[2].enemy_killed = 54321;
+            big.stats[2].new_hatched = 99999;
+            big.stats[3].friendly_lost = 1234567;
             ScorecardModal card;
             card.set_wide_layout(true);
             card.show(big, 2);
@@ -1417,10 +1420,18 @@ void test_counters(const assets::AssetArchive& arc) {
             draw_results_picture(rig, arc, card);
             const std::vector<uint8_t> px = rig.read();
             const ResultsLayout& l = ResultsLayout::wide();
-            const int32_t y = l.row_y(1);
-            check(card.rows().size() == 3 && card.rows()[1].numbers[1] == "1234", "the second row (team 2) has 1234 friendly ants lost");
-            const Ink cut = ink_between(px, 960, l.column_x[1] - 1, l.column_x[2] - 1, y, y + 18);
-            check(cut.first >= 0 && cut.last <= l.column_x[1] + l.column_w[1] - 1, "a counter of four digits is cut at its label's right edge (x " + std::to_string(l.column_x[1] + l.column_w[1]) + "), it does not run into the next column (ink " + std::to_string(cut.first) + " .. " + std::to_string(cut.last) + ")");
+            const int32_t y1 = l.row_y(1);
+            check(card.rows().size() == 3 && card.rows()[1].numbers[1] == "12345" && card.rows()[1].numbers[2] == "54321" && card.rows()[1].numbers[3] == "99999",
+                  "the second row (team 2) has five-digit counters (12345, 54321, 99999)");
+            for (size_t c = 1; c < 4; ++c) {
+                const int32_t to = c + 1 < 4 ? l.column_x[c + 1] : l.column_x[3] + l.column_w[3] + 2;
+                const Ink five = ink_between(px, 960, l.column_x[c] - 1, to, y1, y1 + 18);
+                check(five.first >= l.column_x[c] - 1 && five.last <= l.column_x[c] + 5 * kResultsDigitWidth && five.last < l.column_x[c] + l.column_w[c] - 4,
+                      "column " + std::to_string(c + 1) + ": a five-digit counter fits whole inside its " + std::to_string(l.column_w[c]) + " px box without clipping (ink " + std::to_string(five.first) + " .. " + std::to_string(five.last) + ")");
+            }
+            const int32_t y2 = l.row_y(2);
+            const Ink cut = ink_between(px, 960, l.column_x[1] - 1, l.column_x[2] - 1, y2, y2 + 18);
+            check(cut.first >= 0 && cut.last <= l.column_x[1] + l.column_w[1] - 1, "a counter wider than its 47 px label is cut at its label's right edge (x " + std::to_string(l.column_x[1] + l.column_w[1]) + "), it does not run into the next column (ink " + std::to_string(cut.first) + " .. " + std::to_string(cut.last) + ")");
         }
     }
 }
@@ -1854,11 +1865,11 @@ constexpr Golden kGolden[] = {
     {"screen.wide.pages.quickhelp.rest", 0x6daa3f9a1b92e026, 48ull},
     {"screen.wide.pages.quickhelp.hover", 0x10ba0530b8d516e1, 48ull},
     {"screen.wide.pages.quickhelp.pressed", 0x65dab220ed442bee, 48ull},
-    {"screen.wide.pages.results.waiting", 0xafd37fce1ee10fa5, 149ull},
-    {"screen.wide.pages.results.rows", 0x9a0792d4170f7fb4, 200ull},
-    {"screen.wide.pages.results.hover_leave", 0x3477e747fa7d7b2b, 200ull},
-    {"screen.wide.pages.results.pressed_leave", 0xda957d5d193423c7, 200ull},
-    {"screen.wide.pages.results.big_numbers", 0x5eb6de5aa4403d36, 200ull},
+    {"screen.wide.pages.results.waiting", 0x306a6e2f30b8269e, 155ull},
+    {"screen.wide.pages.results.rows", 0x385e22dcd5888d39, 206ull},
+    {"screen.wide.pages.results.hover_leave", 0x0df868608b572f66, 206ull},
+    {"screen.wide.pages.results.pressed_leave", 0xf59f190d70dfec22, 206ull},
+    {"screen.wide.pages.results.big_numbers", 0xa23a391b3c34a713, 206ull},
     {"screen.wide.pages.results.classic_rows", 0x9e0737830f145ffa, 201ull},
     {"screen.wide.pages.menu_main", 0x0af18420436d3565, 160ull},
     {"screen.wide.pages.menu_single", 0x1dda6d1c99ab9185, 232ull},
@@ -1874,12 +1885,12 @@ constexpr Golden kGolden[] = {
     {"px.wide.pages.quickhelp.rest", 0x94b71b16f7a70dcd, 518400ull},
     {"px.wide.pages.quickhelp.hover", 0x6e22163363c6455e, 518400ull},
     {"px.wide.pages.quickhelp.pressed", 0xc2f29a11e025273b, 518400ull},
-    {"px.wide.pages.results.waiting", 0xdf33f96df0ded173, 518400ull},
-    {"px.wide.pages.results.rows", 0xbb947f9aa3aa2a78, 518400ull},
-    {"px.wide.pages.results.hover_leave", 0x1f5117ddd7aac5f7, 518400ull},
-    {"px.wide.pages.results.pressed_leave", 0x1a9b318e13f9e4c6, 518400ull},
-    {"px.wide.pages.results.big_numbers", 0xe44e9c4950a7f6e4, 518400ull},
-    {"px.wide.pages.results.four_rows", 0x3968ebeaa37249bc, 518400ull},
+    {"px.wide.pages.results.waiting", 0x02ee9d25f8245fdb, 518400ull},
+    {"px.wide.pages.results.rows", 0xe41290211225dd98, 518400ull},
+    {"px.wide.pages.results.hover_leave", 0x32d757f82b8ce827, 518400ull},
+    {"px.wide.pages.results.pressed_leave", 0xa6ae63fee7fb5756, 518400ull},
+    {"px.wide.pages.results.big_numbers", 0x082fd33bc89c484c, 518400ull},
+    {"px.wide.pages.results.four_rows", 0xe06eb62d30f909cc, 518400ull},
     {"px.wide.pages.menu_main", 0x7ba0d0a4ec7fb2dd, 518400ull},
     {"px.wide.pages.menu_single", 0x1702617f6d84b631, 518400ull},
     {"px.wide.pages.menu_join", 0x519d85125827ebc9, 518400ull},

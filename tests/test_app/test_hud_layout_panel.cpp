@@ -772,4 +772,35 @@ void test_minimap_dots(const assets::AssetArchive& arc) {
         hud.render(rr, arc, world, camera);
         check(rr.rects.size() == 1 && rr.rects[0].w == 54 && rr.rects[0].h == 41, "on a 31x31 map the frame is 54x41");
     }
+    // Non-square maps adapt the minimap image rect inside (480, 35, 119, 91): wide maps top-align 119 x mh, tall maps horizontally center mw x 91
+    {
+        const ScreenLayout classic = ScreenLayout::classic();
+        const LayoutRect wide_rect = classic.minimap_for_map(60, 20);
+        check(wide_rect.x == 480 && wide_rect.y == 35 && wide_rect.w == 119 && wide_rect.h == 40,
+              "60x20 wide map minimap rect is (480, 35, 119, 40)");
+        sim::WorldState wide_world = world_of(60, 20);
+        RecordingRenderer rr_wide(arc);
+        HUD hud_wide;
+        hud_wide.init(0);
+        hud_wide.render(rr_wide, arc, wide_world, camera);
+        check(rr_wide.images.size() == 1 && rr_wide.images[0].x == 480 && rr_wide.images[0].y == 35 &&
+              rr_wide.images[0].w == 119 && rr_wide.images[0].h == 40,
+              "HUD::render_radar draws 119x40 minimap image at (480, 35) for 60x20 wide map");
+        check(hud_wide.over_minimap(500, 50) && !hud_wide.over_minimap(500, 100),
+              "HUD::over_minimap matches adapted 119x40 rect for 60x20 wide map");
+
+        const LayoutRect tall_rect = classic.minimap_for_map(20, 60);
+        check(tall_rect.x == 480 + (119 - 30) / 2 && tall_rect.y == 35 && tall_rect.w == 30 && tall_rect.h == 91,
+              "20x60 tall map minimap rect is horizontally centered 30x91 at (524, 35)");
+        sim::WorldState tall_world = world_of(20, 60);
+        RecordingRenderer rr_tall(arc);
+        HUD hud_tall;
+        hud_tall.init(0);
+        hud_tall.render(rr_tall, arc, tall_world, camera);
+        check(rr_tall.images.size() == 1 && rr_tall.images[0].x == 524 && rr_tall.images[0].y == 35 &&
+              rr_tall.images[0].w == 30 && rr_tall.images[0].h == 91,
+              "HUD::render_radar draws 30x91 minimap image at (524, 35) for 20x60 tall map");
+        check(hud_tall.over_minimap(530, 80) && !hud_tall.over_minimap(490, 80),
+              "HUD::over_minimap matches adapted 30x91 rect for 20x60 tall map");
+    }
 }

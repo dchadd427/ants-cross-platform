@@ -132,6 +132,18 @@ struct ScreenLayout {
     constexpr LayoutRect view() const noexcept { return LayoutRect{view_x, view_y, kClassicViewW + dx(), kClassicViewH + dy()}; }
     /// The minimap's image (the hit zone of the minimap too): right anchored
     constexpr LayoutRect minimap() const noexcept { return LayoutRect{right(kMinimapX), kMinimapY, kMinimapW, kMinimapH}; }
+    /// The minimap's rectangle for a map of `cols` x `rows` tiles: the full 119 x 91 slot for a square map (cols == rows, or an empty size), top-aligned 119 x mh for a wide map
+    /// (cols > rows), and horizontally centered mw x 91 for a tall map (cols < rows)
+    constexpr LayoutRect minimap_for_map(int32_t cols, int32_t rows) const noexcept {
+        const LayoutRect full = minimap();
+        if (cols <= 0 || rows <= 0 || cols == rows) return full;
+        if (cols > rows) {
+            const int32_t mh = std::clamp(static_cast<int32_t>((static_cast<int64_t>(full.w) * rows + cols / 2) / cols), 1, full.h);
+            return LayoutRect{full.x, full.y, full.w, mh};
+        }
+        const int32_t mw = std::clamp(static_cast<int32_t>((static_cast<int64_t>(full.h) * cols + rows / 2) / rows), 1, full.w);
+        return LayoutRect{full.x + (full.w - mw) / 2, full.y, mw, full.h};
+    }
     /// The chat log's view: right anchored, and it takes the extra height
     constexpr LayoutRect chat_view() const noexcept { return LayoutRect{right(kChatViewX), kChatViewY, kChatViewW, kChatViewH + dy()}; }
     /// The panel's backing fill: right anchored, and as tall as the screen below the top bar

@@ -89,7 +89,7 @@ The wheel over the map view zooms through many levels, one a notch, towards the 
 
 ### How it is drawn
 
-- At the zoom 1 the world is drawn straight into the view. At another zoom it is drawn at one texel per world pixel into an offscreen target that covers the world that the view shows, and copied into the view: nearest at 2 and at every level between 1 and 2, the exact average of 2 x 2 world pixels at every halving below 0.5, and a last linear step. So 2, 1, 0.5 and 0.25 are exact pictures (nearest, or the average of 2 x 2 or 4 x 4 world pixels), and the levels from 1 up are all nearest (crisp), and the levels below 1 that are not a power of two are smoothed.
+- At the zoom 1 the world is drawn straight into the view. At another zoom it is drawn at one texel per world pixel into an offscreen target that covers the world that the view shows, and copied into the view: on a hardware window, every zoom-out level (`zoom < 1`) blits the `1x` world texture straight to the window viewport with nearest-neighbor sampling (`SDL_ScaleModeNearest`) so fullscreen / high-DPI windows keep full native resolution and crisp pixel art; on the software renderer (and from 1 up to 2) the target is copied into the lattice of whole screen pixels (nearest from 1 to 2, the exact average of 2 x 2 world pixels at each halving below 1 on the software renderer).
 - The origin of the view lies on a grid of one screen pixel at the zoom, so a scroll moves the picture and never makes it shimmer.
 - Everything else on the screen is drawn afterwards at its own size: the frame, the cursor, the rubber band and the hit point digits of Ctrl+L (one size at every zoom).
 - These follow the world that is seen: the edge scroll moves the same distance on the screen at every zoom (in screen pixels), the arrow cursors follow what the view can still do, the minimap's frame is the world that is seen and a press on the minimap centres it, and so do Ctrl+N / Ctrl+P, the start view (the hill stays in view at every zoom) and the sound listener.
@@ -112,6 +112,7 @@ The gestures and their numbers are in [`TOUCH.md`](TOUCH.md#the-gestures-and-why
 
 The 119 x 91 image is painted the way the original's painter does it ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.55):
 
+- Square maps (`cols == rows`) fill the full 119 x 91 slot at `(480 + dx, 35)`, identical to 1998. Non-square maps (`cols != rows`, `ScreenLayout::minimap_for_map`) adapt to the map's aspect ratio inside the slot: wide maps (`cols > rows`) use a top-aligned `119 x mh` rect (`mh = clamp(round(119 * rows / cols), 1, 91)`), tall maps (`cols < rows`) use a horizontally centered `mw x 91` rect (`mw = clamp(round(91 * cols / rows), 1, 119)`), and the surrounding `uishell` recessed bevel (`x458y22.bmp`, `x458y35.bmp`, `x599y35.bmp`, `x480y126.bmp`) hugs the resized minimap with HUD panel texture filling the unused strip.
 - Every pixel shows the object of the cell under it, in the color of the original's table. A tile that is not in the table gets palette color 0.
 - Bombs show the terrain. In fog only power-ups, food and fire walls fall back to the fog color, while rocks, toys, bridges and every colony's hill keep theirs. Fire walls show as yellow. There are no dots per object cell.
 - The dots are rectangles on top of the image: flowers and clovers (3 x 3 on a 60 x 60 map) and the ants, each at its pixel position (2 x 2 on a 60 x 60 map, 3 x 2 on 31 x 31). Every ant has its dot until it is removed, dying and drowning ants too. In fog your own ants and your ally's show, enemies only on explored ground.
@@ -179,7 +180,7 @@ The results screen is the original's ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVER
 - The winner or loser cue plays once when the rows appear. The Leave button appears with the rows.
 - Enter, C, Q and X leave at any time. Esc does nothing.
 - In the 4:3 picture the top row is at y = 235, the others at 50 i + 273, and the numbers are left aligned at x = 485 / 534 / 555 / 576.
-- The 16:9 page is recomposed for the whole canvas from the original's own pieces. The numbers and the Leave button move 320 px right (numbers at x = 805 / 854 / 875 / 896), the middle of the page moves 30 px down (top row at y = 265, the others at 50 i + 303), and both black boxes are 320 columns wider. The numbers are drawn in the original's 8 px digits.
+- The 16:9 page is recomposed for the whole canvas from the original's own pieces. The Leave button moves 320 px right, the middle of the page moves 30 px down (top row at y = 265, the others at 50 i + 303), both black boxes are 320 columns wider, and the three narrow columns of `newstats.bmp` shift left by 84 / 56 / 28 px into the open area so every column fits 5 digits (numbers at x = 721 / 770 / 819 / 868, widths 49 / 47 / 49 / 48; 187 mode keeps its three headings at x = 805 / 854 / 896). The numbers are drawn in the original's 8 px digits.
 
 ## Modern Audio & Presentation
 

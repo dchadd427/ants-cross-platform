@@ -82,7 +82,8 @@ public:
     /// Where the numbers of the open window (the options screen, the quick help) are moved to in this picture: layout().options_offset() / quick_help_offset(), (0, 0) in the
     /// original's own picture. Every pointer handler, the 50 ms poll of update() and the drawing use this one place.
     LayoutPoint open_window_offset() const noexcept { return show_quick_help_ ? layout_.quick_help_offset() : layout_.options_offset(); }
-    bool over_minimap(int32_t x, int32_t y) const noexcept { return layout_.minimap().contains(x, y); }
+    LayoutRect minimap_rect() const noexcept { return layout_.minimap_for_map(static_cast<int32_t>(radar_map_w_), static_cast<int32_t>(radar_map_h_)); }
+    bool over_minimap(int32_t x, int32_t y) const noexcept { return minimap_rect().contains(x, y); }
     /// The rectangles that the layout places (for the widescreen work and the tests); the pedestal buttons are the pedestal slots' rectangles too
     const UIButton& help_button() const noexcept { return help_button_; }
     const UIButton& options_button() const noexcept { return options_button_; }

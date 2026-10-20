@@ -80,8 +80,9 @@ ResultsLayout make_classic() {
     return l;
 }
 
-// The wide page: the right items move by 320 (the headers, the number columns, the Leave Game button and the boxes' right edges), what is in the middle moves down by 30, the banner hangs from the
-// top edge and is centred (x 300: the original's x 140 plus the page's 160), what is anchored left stays
+// The wide page: the right items move by 320 (the Leave Game button and the boxes' right edges), the three narrow counter columns widen by 28 px each into the open area (shifting the four columns and
+// the three heading/arrow groups of newstats.bmp left by 84 / 56 / 28 px so five-digit counters fit), what is in the middle moves down by 30, the banner hangs from the top edge and is centred (x 300:
+// the original's x 140 plus the page's 160), what is anchored left stays
 ResultsLayout make_wide() {
     ResultsLayout l = make_classic();
     l.is_wide = true;
@@ -89,7 +90,7 @@ ResultsLayout make_wide() {
     l.dy = 30;
     l.banner = {300, 0, 340, 34};
     l.your_score = l.your_score.moved(0, l.dy);
-    l.headers = l.headers.moved(l.dx, l.dy);
+    l.headers = {578, 114, 343, 133};
     l.winner_label = l.winner_label.moved(0, l.dy);
     l.others_label = l.others_label.moved(0, l.dy);
     l.winner_box = LayoutRect{l.winner_box.x, l.winner_box.y + l.dy, l.winner_box.w + l.dx, l.winner_box.h};
@@ -99,7 +100,8 @@ ResultsLayout make_wide() {
     l.waiting = l.waiting.moved(0, l.dy);
     l.first_row_y += l.dy;
     l.other_rows_y += l.dy;
-    for (size_t c = 0; c < 4; ++c) l.column_x[c] += l.dx;
+    l.column_x = {721, 770, 819, 868};
+    l.column_w = {49, 47, 49, 48};
     for (Results187Heading& h : l.headings187) {
         h.text_right += l.dx;
         h.text_y += l.dy;
@@ -154,7 +156,24 @@ void draw_results_art(IRenderer& renderer, const ants::assets::AssetArchive& arc
     draw_piece(renderer, "resbanr.bmp", l.banner.x, l.banner.y);
     draw_piece(renderer, "yoscore.bmp", l.your_score.x, l.your_score.y);
     draw_results_box(renderer, archive, kWinnerBox, l.dx, l.dy, find_strip(kStrips.data(), kStrips.size(), "results.winner.bottom"));
-    if (headers) draw_piece(renderer, "newstats.bmp", l.headers.x, l.headers.y);
+    if (headers) {
+        const int32_t id = archive.find_sprite_id("newstats.bmp");
+        if (id >= 0) {
+            struct HeaderSlice { int32_t sx, sy, w, h, dx; };
+            static constexpr HeaderSlice kSlices[] = {
+                {0, 75, 200, 58, -84},    // Score + Friendly Ants Lost
+                {135, 38, 105, 37, -56},  // Enemy Ants Killed: heading and horizontal stroke
+                {210, 75, 30, 30, -56},   // Enemy Ants Killed: upper vertical shaft
+                {210, 105, 12, 28, -56},  // Enemy Ants Killed: arrowhead
+                {110, 0, 149, 38, -28},   // New Ants Hatched: heading and horizontal stroke
+                {250, 38, 9, 67, -28},    // New Ants Hatched: upper vertical shaft
+                {230, 105, 29, 28, -28},  // New Ants Hatched: arrowhead
+            };
+            for (const HeaderSlice& s : kSlices) {
+                renderer.draw_sprite_region(static_cast<uint32_t>(id), 662 + s.sx + s.dx, 114 + s.sy, s.w, s.h, s.sx, s.sy, s.w, s.h);
+            }
+        }
+    }
     draw_piece(renderer, "winnr.bmp", l.winner_label.x, l.winner_label.y);
     draw_piece(renderer, "otherp.bmp", l.others_label.x, l.others_label.y);
     draw_results_box(renderer, archive, kOthersBox, l.dx, l.dy, find_strip(kStrips.data(), kStrips.size(), "results.others.bottom"));
@@ -180,8 +199,9 @@ constexpr int32_t kArrowHead[10][2] = {{1, 11}, {2, 9}, {2, 9}, {3, 7}, {3, 7}, 
 
 // The picture's order: the text, then the line (the stroke and the shaft down to the head's top row, as one shape), then the head (its own shape, so its edges lie over the line's)
 void draw_results_headings_187(IRenderer& renderer, const ResultsLayout& layout) {
-    for (const Results187Heading& h : layout.headings187) {
-        const int32_t cx = layout.column_x[static_cast<size_t>(h.column)];
+    for (size_t i = 0; i < layout.headings187.size(); ++i) {
+        const Results187Heading& h = layout.headings187[i];
+        const int32_t cx = layout.numbers187_x[i];
         const int32_t head_top = layout.arrow_tip_y187 - 9;
         draw_art_text(renderer, h.text, h.text_right - renderer.get_text_width(h.text, h.size), h.text_y, h.size);
         draw_art_rects(renderer, {LayoutRect{cx - 12, h.stroke_y, 20, 2},                                  // from the text to the shaft

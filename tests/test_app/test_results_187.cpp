@@ -531,7 +531,7 @@ void test_positions(const assets::AssetArchive& arc) {
         const int32_t col = kPictureColumn[i];
         const std::string n = str(static_cast<int64_t>(i));
         check(w.numbers187_x[i] == col, "wide: the numbers' column " + n + " is at " + str(col) + " (" + str(w.numbers187_x[i]) + ")");
-        check(w.column_x[static_cast<size_t>(w.headings187[i].column)] == col, "wide: the heading " + n + "'s arrow stands on the column " + str(col));
+        check(c.column_x[static_cast<size_t>(c.headings187[i].column)] == c.numbers187_x[i], "classic: the heading " + n + "'s arrow stands on the column " + str(c.numbers187_x[i]));
         check(w.headings187[i].text_right == col - 14, "wide: its text ends at " + str(col - 14) + " (" + str(w.headings187[i].text_right) + ")");
         check(w.headings187[i].stroke_y == kPictureStrokeY[i], "wide: its stroke is at row " + str(kPictureStrokeY[i]) + " (" + str(w.headings187[i].stroke_y) + ")");
         // the classic page: what the page moves by 320 and 30 (the layout's own dx and dy)
@@ -774,9 +774,9 @@ void test_pixels(const assets::AssetArchive& arc) {
 // The page of the original's rules (the same result as the 187 pages above), pinned as it was drawn before the 187 lettering got the look of the original's own: the draw calls of both pages (the
 // recording renderer: every sprite, rectangle and text, in order) and the pixels of the wide page (FNV-1a 64 over the RGB bytes, the rows' text areas blanked: their pixels depend on the
 // machine's font library). A mode that draws a thing of 187's on the original's page, or moves a piece of it, moves these.
-constexpr uint64_t kOriginalWideCalls = 0x4ea7cebdf5492e20ull;
+constexpr uint64_t kOriginalWideCalls = 0xb5a79fee2d070a76ull;
 constexpr uint64_t kOriginalClassicCalls = 0x95776ac41275aa82ull;
-constexpr uint64_t kOriginalWidePixels = 0xcd9f2dab73105aacull;
+constexpr uint64_t kOriginalWidePixels = 0x39b46ef17b79bdb4ull;
 
 void test_original_page(const assets::AssetArchive& arc) {
     group("original", "the page of the original's rules is as it was: the same draw calls (both pages) and the same pixels (the wide one)");

@@ -82,6 +82,8 @@ void HUD::init(uint8_t local_player_id, bool announce) {
     chat_dragging_ = false;
     chat_drag_offset_ = 0;
     chat_scroll_task_ = false;
+    radar_map_w_ = 0;
+    radar_map_h_ = 0;
     if (announce) {
         post_status_id(sim::strings::kWelcome, "Ants");    // FUN_0100dbe2 0x100e173, once when the match screen is built
         // FUN_01022432: "[0:00] News Flash:", the start message (187 has no food: its players are told what the match is about)
@@ -1147,6 +1149,10 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         return true;
     }
 
+    if (radar_map_w_ == 0 && radar_map_h_ == 0 && sim.grid().width() > 0 && sim.grid().height() > 0) {
+        radar_map_w_ = sim.grid().width();
+        radar_map_h_ = sim.grid().height();
+    }
     if (button == SDL_BUTTON_RIGHT) {
         // The press saves its point and captures the view under it (FUN_01028751); the order is given at the release (FUN_01027b51)
         right_press_x_ = x;
@@ -1410,7 +1416,8 @@ bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int
     EdgeScroll step;
     if (is_radar_dragging_) {
         step = minimap_scroll_step_px(mouse_x, mouse_y, camera.origin_screen_x(), camera.origin_screen_y(), zoom::map_screen(static_cast<int64_t>(map_w) * 32, camera.zoom),
-                                      zoom::map_screen(static_cast<int64_t>(map_h) * 32, camera.zoom), layout_);
+                                      zoom::map_screen(static_cast<int64_t>(map_h) * 32, camera.zoom), layout_,
+                                      layout_.minimap_for_map(static_cast<int32_t>(map_w), static_cast<int32_t>(map_h)));
     } else if (!is_input_captured()) {
         step = edge_step(camera, mouse_x, mouse_y, rate, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
     }
