@@ -279,6 +279,15 @@
         });
     }
 
+    function openMap() {
+        win.MapDialog.openMap({
+            doc: doc, dialogs: dialogs, store: store,
+            numbered: function (name) { return MapConvert.numbered(name, function (n) { return MapStore.key(n) === MapStore.key(map.name) || store.has(n); }); },
+            onDisk: function () { $('file-in').click(); },
+            onChoose: function (bytes, name) { openBytes(bytes, name); }
+        });
+    }
+
     function showChecks() {
         win.clearTimeout(checkTimer);
         var report = runCheck();
@@ -407,7 +416,7 @@
     var ACTIONS = {
         play: playMap,
         submit: function () { if (!dialogs.isOpen() && !canvas.isStroking()) submitOr(function () { sent.open(); }); }, subs: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show('sent'); },
-        'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks, props: openProps, resize: openResize, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
+        'new': function () { leave(newMap); }, open: function () { leave(openMap); }, download: download, check: showChecks, props: openProps, resize: openResize, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
         menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Resize...', onClick: ACTIONS.resize }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }, { text: '\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }]); }
     };
 

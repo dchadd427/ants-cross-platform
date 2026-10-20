@@ -140,6 +140,11 @@ async function caseC() {
     store.loadLibrary(); store.loadLibrary();
     await later();
     equal([asked, store.libraryState(), store.has('popcorn'), store.has('POPCORN'), store.has('Unknown')], [['/maps'], 'ready', true, true, false], 'the list is asked once, from the site itself, and its names are taken');
+    equal(store.libraryList().map((m) => m.name), ['POPcOrN', 'Tiny'], 'libraryList exposes the parsed map entries');
+    let fetched = null;
+    store = await opened(fakeIdb(), (u) => Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new Uint8Array([8, 0, u.length]).buffer) }));
+    await new Promise((res) => store.fetchMap('Mosh Pit.lvl', (err, b) => { fetched = [err, b && b[2]]; res(); }));
+    equal(fetched, ['', '/maps/files/Mosh%20Pit.lvl'.length], 'fetchMap downloads /maps/files/<percent-encoded>');
     // asking: the answer comes, or does not come (the timer says so)
     let fired = [], timer = null;
     const waits = Store.create({ idb: null, fetch: () => new Promise(() => {}), later: (f, ms) => { timer = [f, ms]; } });

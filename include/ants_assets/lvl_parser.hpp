@@ -90,11 +90,10 @@ struct LevelLimits {
         return LevelLimits{1024, 1024, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 262144, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};
     }
 
-    /// An Extended map (version 9) that the simulation is to PLAY on this computer (no loader uses it yet): the Extended policy, held to what the play code is known to carry: at most
-    /// 128 a side and 16,384 cells (the 100 x 100 maps of the first tests, 10,000 cells, have room), a file of at most 4 MiB read, a canonical file of 3.5 MiB. A bigger map is made and
-    /// kept (for_extended_maps) but not played until the large-map work has measured it.
+    /// An Extended map (version 9) that the simulation is to PLAY on this computer: the Extended policy, held to what the play code carries: at most 256 a side (LVL_MAX_GRID_SIDE) and
+    /// 65,536 cells, a file of at most 4 MiB read, a canonical file of 3.5 MiB. A bigger map is made and kept (for_extended_maps) up to 512 x 512.
     static constexpr LevelLimits for_play_extended() noexcept {
-        return LevelLimits{128, 128, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 16384, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};
+        return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};
     }
 
     /// Everything that the version 9 format holds and nothing a place adds (the hard ceiling: 2,048 a side, 4,194,304 cells, a file of 64 MiB): for a tool that reads or converts

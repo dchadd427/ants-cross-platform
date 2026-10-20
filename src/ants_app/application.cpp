@@ -594,7 +594,7 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
     ants::assets::LevelValidation start_verdict;
-    if (!current_level_.load_from_file(config_.default_map_path, &start_verdict)) {
+    if (!current_level_.load_from_file(config_.default_map_path, &start_verdict, ants::assets::LevelLimits::for_play_extended())) {
         std::cerr << "[Application] Failed to load Level: " << config_.default_map_path << std::endl;
         if (start_verdict.first_fatal()) std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
         return false;
@@ -1159,7 +1159,7 @@ bool Application::start_game(const std::string& map_path) {
 // shared state: every machine of a network match calls this with the same values).
 bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog, uint8_t game_mode) {
     ants::assets::LevelValidation verdict;
-    if (!current_level_.load_from_file(map_path, &verdict)) {
+    if (!current_level_.load_from_file(map_path, &verdict, ants::assets::LevelLimits::for_play_extended())) {
         std::cerr << "[Application] Failed to load level: " << map_path << std::endl;
         if (verdict.first_fatal()) std::cerr << "[Application]   " << verdict.reason() << std::endl;
         return false;

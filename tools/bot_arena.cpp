@@ -801,7 +801,7 @@ std::vector<LoadedMap> load_maps(const Options& o) {
         }
         const std::string stem = stem_of_path(p.string());
         m.name = looks_like_path(o.maps[i]) ? stem : upper(stem);
-        if (!m.level.load_from_file(p.string())) {
+        if (!m.level.load_from_file(p.string(), nullptr, assets::LevelLimits::for_play_extended())) {
             m.error = "map '" + stem + "' does not load";
             continue;
         }

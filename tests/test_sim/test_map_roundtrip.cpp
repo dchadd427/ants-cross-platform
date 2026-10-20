@@ -243,28 +243,28 @@ void the_grid_reads_relative_anchors() {
     check(g.rules() == tall.rules && tall.rules == ants::assets::LVL_RULES_EXTENDED, "a blank Extended map above 90 rows is at rules 1 and the Grid says so");
 }
 
-// LevelLimits::for_play_extended() (used by no loader yet): Extended maps, up to 128 a side and 16,384 cells.
+// LevelLimits::for_play_extended(): Extended maps, up to 256 a side and 65,536 cells.
 void the_play_limits() {
     constexpr LevelLimits play = LevelLimits::for_play_extended();
     check(play.allow_extended, "the play limits allow Extended maps");
-    check(play.rows() == 128 && play.columns() == 128 && play.cells() == 16384, "the play limits are 128 a side and 16,384 cells");
+    check(play.rows() == 256 && play.columns() == 256 && play.cells() == 65536, "the play limits are 256 a side and 65,536 cells");
     check(play.rows() < LevelLimits::for_extended_maps().rows() && play.cells() < LevelLimits::for_extended_maps().cells(), "the play limits are tighter than those of an Extended map");
     check(play.read_bytes() == 4u * 1024u * 1024u && play.write_bytes() == 3584u * 1024u, "a file of at most 4 MiB is read and a canonical file of 3.5 MiB written");
     std::vector<std::string> names(1344, ".");
-    for (const uint32_t side : {100u, 128u}) {
+    for (const uint32_t side : {100u, 255u, 256u}) {
         const LevelData level = ants::assets::blank_extended_level(side, side, names, LevelLimits::for_extended_maps());
         const LevelWriteResult w = ants::assets::write_level(level, play);
         LevelData back;
         check(w.ok && back.load_from_memory(w.bytes.data(), w.bytes.size(), nullptr, play) && back.version == 9 && back.height == side, "a blank Extended map of " + std::to_string(side) + " a side passes the play limits");
     }
-    const LevelData wide = ants::assets::blank_extended_level(129, 100, names, LevelLimits::for_extended_maps());
-    check(!ants::assets::write_level(wide, play).ok, "129 rows are beyond the play limits");
+    const LevelData wide = ants::assets::blank_extended_level(257, 100, names, LevelLimits::for_extended_maps());
+    check(!ants::assets::write_level(wide, play).ok, "257 rows are beyond the play limits");
     const LevelWriteResult wide_file = ants::assets::write_level(wide, LevelLimits::for_extended_maps());
     LevelData refused;
-    check(wide_file.ok && !refused.load_from_memory(wide_file.bytes.data(), wide_file.bytes.size(), nullptr, play), "and a file of 129 rows is refused by the play limits");
-    // 128 x 129 cells (a side within, the product above) is refused by the cell limit, not by a side
-    const LevelData dense = ants::assets::blank_extended_level(128, 129, names, LevelLimits::for_extended_maps());
-    check(!ants::assets::write_level(dense, play).ok, "128 x 129 cells are beyond the play limits");
+    check(wide_file.ok && !refused.load_from_memory(wide_file.bytes.data(), wide_file.bytes.size(), nullptr, play), "and a file of 257 rows is refused by the play limits");
+    // 256 x 257 cells (one side within, the other and the product above) is refused by the play limits
+    const LevelData dense = ants::assets::blank_extended_level(256, 257, names, LevelLimits::for_extended_maps());
+    check(!ants::assets::write_level(dense, play).ok, "256 x 257 cells are beyond the play limits");
     // a Classic level keeps the limits of the game under them
     LevelData tiny;
     check(tiny.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL"), "TINY.LVL loads (play limits)");
