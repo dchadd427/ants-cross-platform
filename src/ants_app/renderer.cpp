@@ -874,7 +874,7 @@ void Renderer::end_world_target() {
     const SDL_Rect clip = placed(view.x, view.y, view.w, view.h);
     SDL_RenderSetClipRect(renderer_, &clip);
     const int32_t vx0 = static_cast<int32_t>(std::max<int64_t>(0, m0x));
-    const int32_t vy0 = static_cast<int64_t>(std::max<int64_t>(0, m0y));
+    const int32_t vy0 = static_cast<int32_t>(std::max<int64_t>(0, m0y));
     const int32_t vx1 = static_cast<int32_t>(std::min<int64_t>(view.w, m0x + sw));
     const int32_t vy1 = static_cast<int32_t>(std::min<int64_t>(view.h, m0y + sh));
     if (vx0 > 0 || vy0 > 0 || vx1 < view.w || vy1 < view.h) {                      // (the picture does not cover the view: a small map; the rest is black)
