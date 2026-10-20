@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.95 - 2026-10-20 - Extended maps: per-ant starting ant types and Map Maker v1.3.0
+
+**For players:**
+- **Extended maps: per-ant starting ant types.** In Extended maps (`version == 9`), each starting ant can now be placed as any specialist type (Default / Worker, Combat, Thief, Bomber, Swimmer, or Fire), and spawns with that type when the match starts. Classic maps (`version == 8`) continue to use a single map-wide Default Ant Type.
+- **Map Maker v1.3.0:** The **Starting ants** panel adds a 2 x 3 **Ant type** selector with sprite thumbnails on Extended maps (for **One at a time**, **Clump**, and **Mix**), a one-click button to switch a Classic map to an Extended map for per-ant types, and per-ant specialist sprite rendering in each team's color on the map canvas.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/7a583081...9266739e); how it works: [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md), [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
+
 ## v0.12.94 - 2026-10-20 - Adaptive minimap, crisp zoom-out, 5-digit results, and Map Maker v1.2.0
 
 **For players:**
