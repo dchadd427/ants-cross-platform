@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.96 - 2026-10-20 - Play Extended maps up to 256 x 256 and open game maps in Map Maker v1.4.0
+
+**For players:**
+- **Playable Extended maps (`256 x 256`).** Extended maps (`version == 9`) up to `256 x 256` (`65,536` cells) now load and play in the game, map selector previews, replay player, `bot_arena`, and the Map Maker's **Play this map**, and resizing an Extended map past 90 rows or 256 columns in the Map Maker upgrades its rules word so ants can cross row 90.
+- **Map Maker v1.4.0 — Open a map from the game's library.** Clicking **Open** in the Map Maker now opens the **Open a map** dialog, where you can either open a `.lvl` file from your device or search, sort (`Originals, then plays`, `Most played`, `Name`, `Size`), and pick any existing game map (the 6 Originals and 530+ Community maps, with preview thumbnails and metadata) and click **Use as starting point** to open it under a free numbered copy name (`"Treasure 2"`, etc.).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ca107726...320c9e0b); how it works: [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md), [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
+
 ## v0.12.95 - 2026-10-20 - Extended maps: per-ant starting ant types and Map Maker v1.3.0
 
 **For players:**
