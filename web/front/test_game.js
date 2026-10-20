@@ -10,7 +10,7 @@
     'use strict';
 
     var FILE = 'playtest.lvl';                                  // the one name that the game's maps folder gets (the map's own name is never a file name)
-    var MAX_BYTES = 1024 * 1024;                                // as the players' maps (map_files.js): anything above a megabyte is no map
+    var MAX_BYTES = 4 * 1024 * 1024;                            // LevelLimits::for_extended_maps(): an Extended map up to 512 x 512 is at most 4 MiB
     var TEAMS = ['Green', 'Red', 'Blue', 'Black'];             // by the game's seat numbers
     var LEVELS = { e: 'easy', m: 'medium', h: 'hard' };
     var WORDS = { e: 'Easy', m: 'Medium', h: 'Hard' };

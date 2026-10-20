@@ -30,10 +30,24 @@
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_extended_side_limit_257",
+      "id": "play_extended_side_limit_1025",
       "file": "web/front/mapmaker_play.js",
-      "old": "var MAX_EXTENDED_SIDE = 256;",
-      "new": "var MAX_EXTENDED_SIDE = 257;",
+      "old": "var MAX_EXTENDED_SIDE = 1024;",
+      "new": "var MAX_EXTENDED_SIDE = 1025;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_cells_limit_larger",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_EXTENDED_CELLS = 262144;",
+      "new": "var MAX_EXTENDED_CELLS = 262656;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_extended_cells_inclusive",
+      "file": "web/front/mapmaker_play.js",
+      "old": "rows * columns > MAX_EXTENDED_CELLS",
+      "new": "rows * columns >= MAX_EXTENDED_CELLS",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
@@ -732,8 +746,8 @@
     {
       "id": "game_max_bytes",
       "file": "web/front/test_game.js",
-      "old": "var MAX_BYTES = 1024 * 1024;",
-      "new": "var MAX_BYTES = 4 * 1024 * 1024;",
+      "old": "var MAX_BYTES = 4 * 1024 * 1024;",
+      "new": "var MAX_BYTES = 8 * 1024 * 1024;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {

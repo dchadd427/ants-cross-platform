@@ -11,7 +11,8 @@
     'use strict';
 
     var MAX_ROWS = 90;                                                                  // a Classic map plays up to 90 rows (where the original's pathfinder wall stands)
-    var MAX_EXTENDED_SIDE = 256;                                                        // an Extended map plays up to 256 x 256 cells
+    var MAX_EXTENDED_SIDE = 1024;                                                       // an Extended map plays up to 1,024 a side and 262,144 cells (512 x 512)
+    var MAX_EXTENDED_CELLS = 262144;
     var SEATS = [{ name: 'Green', dot: '#3aa655' }, { name: 'Red', dot: '#c8402f' }, { name: 'Blue', dot: '#4a63d8' }, { name: 'Black', dot: '#171717' }];       // by the game's seat numbers (the core's team numbers)
     var ORDER = [3, 2, 0, 1];                                                           // as the dialog lists them: Black, Blue, Green, Red
     var CHOICES = [['y', 'You'], ['e', 'Bot Easy'], ['m', 'Bot Medium'], ['h', 'Bot Hard'], ['n', 'Empty']];
@@ -23,7 +24,7 @@
 
     // What the check and the first reading say of the open map, as the dialog needs it: { ok, title, text, note, list, convert, seats }
     //   seats[seat] = { seat, name, dot, ants, hills, usable, why: [the check's own sentences about this color] }
-    // A map is refused for the game when: the check could not judge it, a Classic map has more than 90 rows, an Extended map is bigger than 256 x 256, a finding that is about no color stops it, or fewer than
+    // A map is refused for the game when: the check could not judge it, a Classic map has more than 90 rows, an Extended map is bigger than 512 x 512 (262,144 cells, 1,024 a side), a finding that is about no color stops it, or fewer than
     // two colors have a hill and starting ants (one seat for you and one for a bot)
     function verdict(check, read) {
         var out = { ok: false, title: 'This map cannot be played yet', text: '', note: '', list: [], convert: false, seats: [] };
@@ -40,9 +41,9 @@
             out.convert = false;
             return out;
         }
-        if (extended && (rows > MAX_EXTENDED_SIDE || columns > MAX_EXTENDED_SIDE)) {
-            out.text = 'This map is bigger than the game can play yet. Test games work on Extended maps of up to ' + MAX_EXTENDED_SIDE + ' x ' + MAX_EXTENDED_SIDE + ' cells for now.';
-            out.note = 'What you can do: make a Classic copy that fits (Make a Classic copy...), or resize the map to ' + MAX_EXTENDED_SIDE + ' x ' + MAX_EXTENDED_SIDE + ' or smaller. Your map was not changed.';
+        if (extended && (rows > MAX_EXTENDED_SIDE || columns > MAX_EXTENDED_SIDE || rows * columns > MAX_EXTENDED_CELLS)) {
+            out.text = 'This map is bigger than the game can play yet. Test games work on Extended maps of up to 512 x 512 cells (' + MAX_EXTENDED_SIDE + ' a side) for now.';
+            out.note = 'What you can do: make a Classic copy that fits (Make a Classic copy...), or resize the map to 512 x 512 or smaller. Your map was not changed.';
             out.convert = true;
             return out;
         }

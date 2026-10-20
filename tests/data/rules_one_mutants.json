@@ -193,7 +193,7 @@
   {
    "id": "order_tile_rules_0_test_widened",
    "file": "include/ants_sim/ant_unit.hpp",
-   "old": "if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kNoOrderTileY);",
+   "old": "if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kClassicNoOrderTileY);",
    "new": "if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < 100;",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
@@ -243,6 +243,24 @@
    "build": "test_ai",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI1.31 ./build/tests/test_ai/test_ai",
    "expect": "AI1.31"
+  },
+  {
+   "id": "order_tile_marker_x_still_120",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "static constexpr int32_t kNoOrderTileX = -1;",
+   "new": "static constexpr int32_t kNoOrderTileX = 0x78;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
+  },
+  {
+   "id": "order_tile_marker_y_still_90",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "static constexpr int32_t kNoOrderTileY = -1;",
+   "new": "static constexpr int32_t kNoOrderTileY = 0x5A;",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "7.2"
   }
  ]
 }

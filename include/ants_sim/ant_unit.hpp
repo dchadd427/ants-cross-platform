@@ -113,7 +113,7 @@ public:
     static constexpr uint8_t kActionHatch  = 0x14;  // ?hatch: newborn emerges
     static constexpr uint8_t kActionNone   = 0xFF;  // state driven by other remake systems (no locomotion clip)
 
-    // Order codes (CAntUnit +0xa8) and the "no target" sentinel tile of +0xac (row 0x5a, col 0x78).
+    // Order codes (CAntUnit +0xa8) and the "no target" sentinel tile of +0xac: (-1, -1) outside every grid, with the original's (col 0x78, row 0x5a) kept for the rules-0 row wall and the state hash.
     static constexpr uint8_t kOrderNone    = 0x00;
     static constexpr uint8_t kOrderMove    = 0x01;
     static constexpr uint8_t kOrderHome    = 0x02;
@@ -128,8 +128,10 @@ public:
     static constexpr uint8_t kOrderRaid    = 0x0B;
     static constexpr uint8_t kOrderBridgeBuild = 0x0D;     // swimmer: build a bridge piece on the target water tile
     static constexpr uint8_t kOrderBridgeDemolish = 0x0E;  // swimmer: demolish the bridge on the target tile
-    static constexpr int32_t kNoOrderTileX = 0x78;
-    static constexpr int32_t kNoOrderTileY = 0x5A;
+    static constexpr int32_t kNoOrderTileX = -1;
+    static constexpr int32_t kNoOrderTileY = -1;
+    static constexpr int32_t kClassicNoOrderTileX = 0x78;
+    static constexpr int32_t kClassicNoOrderTileY = 0x5A;
 
     // Entity Public State Fields (directly inspectable & testable)
     uint32_t    id{0};
@@ -312,11 +314,11 @@ public:
     // Does the ant have a target tile? @p rules is the level's rules word (Grid::rules()).
     // Rules 0 (as ported): "none" is any row of 90 or more, or a negative row (the original's unsigned test `row < 90`), so no ant of a real map of at most 81 rows
     // ever has a tile in that range except the marker itself.
-    // Rules 1 (maps taller than 90 rows): rows of 90 and more are real, so "none" is the marker itself, (column 120, row 90), and nothing else. The marker stays what it
-    // always was (every ant, with its hash, is the same at both rules); it is a real tile only on a map of more than 120 columns AND more than 90 rows, which the
-    // simulation does not play yet (docs/MAP_FORMAT.md, "Rules").
+    // Rules 1 (maps taller than 90 rows or wider than 120 columns): rows of 90 and more are real, so "none" is the marker (-1, -1) outside every grid, and every tile
+    // of the grid, (column 120, row 90) included, is a real target (docs/MAP_FORMAT.md, "Rules").
+    // Order-tile check across Classic and Extended rules:
     bool has_order_tile(uint16_t rules) const noexcept {
-        if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kNoOrderTileY);
+        if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kClassicNoOrderTileY);
         return orig_order_tile.x != kNoOrderTileX || orig_order_tile.y != kNoOrderTileY;
     }
 

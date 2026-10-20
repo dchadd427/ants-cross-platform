@@ -14,7 +14,7 @@
   {
    "id": "empty_world_keeps_the_old_rules_word",
    "file": "include/ants_sim/grid.hpp",
-   "old": "        rules_ = 0;\n        return true;",
+   "old": "        rules_ = rules;\n        return true;",
    "new": "        return true;"
   },
   {
@@ -54,40 +54,52 @@
    "new": "        if (e.grid_.rules() != 0) h.u16(1);"
   },
   {
-   "id": "play_limits_allow_257_rows",
-   "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{257, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "id": "hash_order_tile_at_classic_marker_collides_with_no_order",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "if (a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX && a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);",
+   "new": ""
   },
   {
-   "id": "play_limits_allow_257_columns",
+   "id": "play_limits_allow_1025_rows",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{LVL_MAX_GRID_SIDE, 257, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return for_extended_maps();",
+   "new": "LevelLimits l = for_extended_maps(); l.max_rows = 1025; return l;"
+  },
+  {
+   "id": "play_limits_allow_1025_columns",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return for_extended_maps();",
+   "new": "LevelLimits l = for_extended_maps(); l.max_columns = 1025; return l;"
   },
   {
    "id": "play_limits_allow_more_cells",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65537, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return for_extended_maps();",
+   "new": "LevelLimits l = for_extended_maps(); l.max_cells = 262145; return l;"
+  },
+  {
+   "id": "play_limits_keep_256_side",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return for_extended_maps();",
+   "new": "LevelLimits l = for_extended_maps(); l.max_rows = 256; l.max_columns = 256; l.max_cells = 65536; return l;"
   },
   {
    "id": "play_limits_refuse_extended_maps",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return for_extended_maps();",
+   "new": "LevelLimits l = for_extended_maps(); l.allow_extended = false; return l;"
   },
   {
    "id": "play_limits_read_a_smaller_file",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return for_extended_maps();",
+   "new": "LevelLimits l = for_extended_maps(); l.max_read_bytes = 1024u * 1024u; return l;"
   },
   {
    "id": "play_limits_write_a_smaller_file",
    "file": "include/ants_assets/lvl_parser.hpp",
-   "old": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
-   "new": "return LevelLimits{LVL_MAX_GRID_SIDE, LVL_MAX_GRID_SIDE, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 65536, 3000u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};"
+   "old": "return for_extended_maps();",
+   "new": "LevelLimits l = for_extended_maps(); l.max_write_bytes = 3000u * 1024u; return l;"
   }
  ]
 }
