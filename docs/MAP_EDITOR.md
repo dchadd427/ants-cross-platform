@@ -31,7 +31,7 @@ The lobby's map list and the match page's "Download this map" show the kind of a
 
 ## How the page is made
 
-All of it is static files (nginx serves `mapmaker.html` with a content security policy: scripts and the core's WebAssembly from the site only, no inline script, no `eval`, requests to the site only, no frame around it, no referrer; `docker/nginx.conf`, tested by `tests/scripts/test_nginx_submissions.py`): `web/mapmaker.html` and, in `web/front/`, `mapmaker.css` and the scripts below (each a plain script that a page and node can load). The page loads the core's `lvl_core.js` and `lvl_core_api.js` first and the app last.
+All of it is static files (nginx serves `mapmaker.html` with a content security policy: scripts and the core's WebAssembly from the site only, no inline script, no `eval`, requests to the site only, no frame around it, no referrer; `docker/nginx.conf`, tested by `tests/scripts/test_nginx_submissions.py`): `web/mapmaker.html`, `web/MAPMAKER_VERSION` (the map maker's own semantic version `MAJOR.MINOR.PATCH`, printed in the bottom footer bar `#edfoot` as `Map Maker vX.Y.Z` alongside the build id, Pacific build date and links to the Lobby, Match history, Changelog and Legal pages), and, in `web/front/`, `mapmaker.css` and the scripts below (each a plain script that a page and node can load). The page loads the core's `lvl_core.js` and `lvl_core_api.js` first and the app last.
 
 | File | What it does |
 |---|---|

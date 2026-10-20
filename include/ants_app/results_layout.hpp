@@ -16,6 +16,8 @@
 //   * the numbers' columns: the original's labels are single-line labels (no wrap) 49 / 19 / 21 / 20 px wide at x 485 / 534 / 555 / 576, left aligned, whose surface clips what is wider; their face
 //     (Franklin Gothic Medium at the height 18) has digits 8 px wide, so two digits take 16 of the 19 - 21 px. The bundled substitute face has wider digits (10 px on average): the numbers are drawn
 //     squeezed to the original's 8 px a digit and clipped to the label's box (ScorecardModal::render, IRenderer::draw_text_squeezed). Before, "20", "4" and "10" ran into one another ("204 10").
+//     In the 960 x 540 wide page, each of the three narrow counter columns (Friendly Ants Lost, Enemy Ants Killed, New Ants Hatched) is widened by 28 px into the 320 px open area (49 / 47 / 49 / 48 px
+//     wide at x 721 / 770 / 819 / 868) so each counter holds up to five 8 px digits (40 px), and the three heading/arrow groups of newstats.bmp shift left by 84 / 56 / 28 px to stay over their columns.
 //
 // The 187 page (docs/GAMEPLAY.md "187"): the four baked headings (newstats.bmp: Score, Friendly Ants Lost, Enemy Ants Killed, New Ants Hatched) are not drawn. Three
 // headings of the game's own letters stand in their place, "Kills", "Ants lost" and "Ants left", each with a stroke and an arrow over the number column it names (the columns of the score, the

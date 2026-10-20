@@ -791,55 +791,50 @@ bool Renderer::begin_world_target(int64_t map_w_px, int64_t map_h_px) {
     const LayoutRect view = layout_.view();
     const zoom::Pass plan = zoom::plan(static_cast<double>(camera_.x), static_cast<double>(camera_.y), camera_.zoom, view.w, view.h, map_w_px, map_h_px, smooth_upscale_);
     if (plan.w <= 0 || plan.h <= 0) return false;                 // (nothing of the map is in the view: the zoom 1 picture of the same origin, which is that as well)
-    if (pass_levels_.size() > static_cast<size_t>(plan.depth) + 1) {
-        for (size_t k = static_cast<size_t>(plan.depth) + 1; k < pass_levels_.size(); ++k) destroy_texture(pass_levels_[k]);      // (the halvings of an earlier zoom: not kept)
-    }
-    pass_levels_.resize(static_cast<size_t>(plan.depth) + 1);
-    for (int k = 0; k <= plan.depth; ++k) {
+    const bool direct_zoom_out = !software_ && camera_.zoom < zoom::kNormal;
+    const int needed_depth = direct_zoom_out ? 0 : plan.depth;
+    for (size_t k = static_cast<size_t>(needed_depth) + 1; k < pass_levels_.size(); ++k) destroy_texture(pass_levels_[k]);
+    pass_levels_.resize(static_cast<size_t>(needed_depth) + 1);
+    for (int k = 0; k <= needed_depth; ++k) {
         if (!ensure_texture(pass_levels_[static_cast<size_t>(k)], plan.cap_w >> k, plan.cap_h >> k, true)) return false;
     }
-    if (!ensure_texture(lattice_, view.w + kLatticeMargin, view.h + kLatticeMargin, true)) return false;
-    if (SDL_SetRenderTarget(renderer_, pass_levels_[0].texture) != 0) {
-        note_world_target_error(SDL_GetError());
-        return false;
-    }
+    if (!direct_zoom_out && !ensure_texture(lattice_, view.w + kLatticeMargin, view.h + kLatticeMargin, true)) return false;
+    if (SDL_SetRenderTarget(renderer_, pass_levels_[0].texture) != 0) { note_world_target_error(SDL_GetError()); return false; }
     // The pass's own state: what is replaced is kept in pass_ and put back by end_world_target
-    pass_.camera = camera_;
-    pass_.picture = picture_;
-    pass_.picture_inset = picture_inset_;
-    pass_.origin = origin_;
+    pass_ = TargetPass{camera_, picture_, picture_inset_, origin_};
     plan_ = plan;
     camera_.zoom = zoom::kNormal;                              // (a camera of the zoom 1 whose view is the target: the world code's numbers are texels)
-    camera_.x = static_cast<float>(plan.x0);
-    camera_.y = static_cast<float>(plan.y0);
-    camera_.world_x = plan.x0;
-    camera_.world_y = plan.y0;
+    camera_.x = static_cast<float>(plan.x0); camera_.y = static_cast<float>(plan.y0);
+    camera_.world_x = plan.x0; camera_.world_y = plan.y0;
     camera_.set_view(LayoutRect{0, 0, plan.w, plan.h});
     target_view_ = LayoutRect{0, 0, plan.w, plan.h};
-    picture_ = target_view_;
-    picture_inset_ = false;
-    origin_ = LayoutPoint{};
-    in_world_target_ = true;
-    ++world_target_passes_;
+    picture_ = target_view_; picture_inset_ = false; origin_ = LayoutPoint{};
+    in_world_target_ = true; ++world_target_passes_;
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);           // (the black that the frame starts with: what the map does not cover)
     SDL_RenderClear(renderer_);
     return true;
 }
 
-// The pass ends. The world is in the first texture: it is halved as often as the plan says (a copy to half the size with the linear filter is the exact average of 2 x 2 texels), the last level is
-// scaled by the plan's scale into the lattice of whole screen pixels at the fractional place that the plan gives (nearest from the zoom 1 up, the linear filter below 1), and the view is
-// cut out of that, one screen pixel for one pixel: whatever the camera's origin is, the picture is the lattice's, so a scroll by whole screen pixels moves it and never changes it. A scaled copy
-// that a clip cuts is cut by SDL's software renderer with a rounding of its source (and it truncates a fractional rectangle), which is why the view is cut out of a texture that holds the
-// whole scaled picture, by an unscaled copy; a renderer that places a rectangle at a fraction of a pixel (every one but the software renderer) puts the last level at its exact place.
+// The pass ends. On a hardware window below zoom 1, the 1x world texture is blitted directly to the window viewport with nearest-neighbor sampling so high-DPI / fullscreen windows keep full native resolution without intermediate 762x500 down-res or linear blur. Otherwise the world is halved as often as the plan says, scaled into the lattice of whole screen pixels, and cut out into the view.
 void Renderer::end_world_target() {
     if (!in_world_target_) return;
     in_world_target_ = false;
-    camera_ = pass_.camera;
-    picture_ = pass_.picture;
-    picture_inset_ = pass_.picture_inset;
-    origin_ = pass_.origin;
+    camera_ = pass_.camera; picture_ = pass_.picture; picture_inset_ = pass_.picture_inset; origin_ = pass_.origin;
     const zoom::Pass& p = plan_;
     const LayoutRect view = layout_.view();
+    if (!software_ && camera_.zoom < zoom::kNormal) {
+        SDL_SetRenderTarget(renderer_, nullptr);
+        const SDL_Rect clip = placed(view.x, view.y, view.w, view.h);
+        SDL_RenderSetClipRect(renderer_, &clip);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+        SDL_RenderFillRect(renderer_, &clip);
+        const double z = p.scale / static_cast<double>(1 << p.depth);
+        const SDL_Rect src{0, 0, p.w, p.h};
+        const SDL_FRect dst{static_cast<float>(clip.x + p.left), static_cast<float>(clip.y + p.top), static_cast<float>(p.w * z), static_cast<float>(p.h * z)};
+        SDL_SetTextureScaleMode(pass_levels_[0].texture, SDL_ScaleModeNearest);
+        SDL_RenderCopyF(renderer_, pass_levels_[0].texture, &src, &dst);
+        return;
+    }
     int32_t lw = p.w;
     int32_t lh = p.h;
     for (int k = 1; k <= p.depth; ++k) {
@@ -879,7 +874,7 @@ void Renderer::end_world_target() {
     const SDL_Rect clip = placed(view.x, view.y, view.w, view.h);
     SDL_RenderSetClipRect(renderer_, &clip);
     const int32_t vx0 = static_cast<int32_t>(std::max<int64_t>(0, m0x));
-    const int32_t vy0 = static_cast<int32_t>(std::max<int64_t>(0, m0y));
+    const int32_t vy0 = static_cast<int64_t>(std::max<int64_t>(0, m0y));
     const int32_t vx1 = static_cast<int32_t>(std::min<int64_t>(view.w, m0x + sw));
     const int32_t vy1 = static_cast<int32_t>(std::min<int64_t>(view.h, m0y + sh));
     if (vx0 > 0 || vy0 > 0 || vx1 < view.w || vy1 < view.h) {                      // (the picture does not cover the view: a small map; the rest is black)

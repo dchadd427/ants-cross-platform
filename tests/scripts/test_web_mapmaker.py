@@ -1195,6 +1195,16 @@ class TheImageCarriesThePage(unittest.TestCase):
         ci = read(".github", "workflows", "ci.yml")
         self.assertIn("node tests/scripts/web_mapmaker_core_check.js --module lvl_core_from_image --require", ci)
 
+    def test_the_map_maker_has_its_own_version_file_and_prints_it_in_the_bottom_footer(self):
+        ver = read("web", "MAPMAKER_VERSION").strip()
+        self.assertRegex(ver, r"^\d+\.\d+\.\d+$", "web/MAPMAKER_VERSION is MAJOR.MINOR.PATCH")
+        page = read("web", "mapmaker.html")
+        self.assertIn('<footer class="bar edfoot" id="edfoot">', page)
+        self.assertIn('Map Maker <span id="mapmaker-version">v%s</span>' % ver, page)
+        self.assertIn('<span id="mapmaker-build">local</span>', page)
+        for href in ('href="/"', 'href="matches.html"', 'href="changelog.html"', 'href="legal.html"'):
+            self.assertIn(href, page)
+
     def test_every_file_of_the_page_is_in_front_and_the_folder_is_copied_whole(self):
         self.assertIn("COPY web/front/ /usr/share/nginx/html/front/", read("Dockerfile"))
         for name in ALL_SCRIPTS + ("mapmaker.css",):

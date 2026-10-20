@@ -130,14 +130,18 @@ inline EdgeScroll edge_scroll_step(int32_t mx, int32_t my, int32_t rate, int32_t
     return edge_scroll_step(mx, my, rate, ox, oy, map_tiles_w, map_tiles_h, ScreenLayout::classic());
 }
 
+/// The point under the pointer on a minimap rectangle `mini`: the offset in the rect times map pixels / mini.w and / mini.h, truncated, without a clamp.
+inline void minimap_point_px(int32_t px, int32_t py, int32_t map_w, int32_t map_h, int32_t& wx, int32_t& wy, const LayoutRect& mini) {
+    const double scale_x = static_cast<double>(map_w) / static_cast<double>(std::max(1, mini.w));
+    const double scale_y = static_cast<double>(map_h) / static_cast<double>(std::max(1, mini.h));
+    wx = static_cast<int32_t>((px - mini.x) * scale_x);
+    wy = static_cast<int32_t>((py - mini.y) * scale_y);
+}
+
 /// The point under the pointer on the minimap (the layout's minimap rect, (480, 35) - (599, 126) in the original, FUN_01009850): the offset in the rect times map pixels / 119 and / 91,
 /// truncated, without a clamp. The map's size is in whatever pixels the caller works in (world pixels; screen pixels at a zoom).
 inline void minimap_point_px(int32_t px, int32_t py, int32_t map_w, int32_t map_h, int32_t& wx, int32_t& wy, const ScreenLayout& layout) {
-    const LayoutRect mini = layout.minimap();
-    const double scale_x = static_cast<double>(map_w) / static_cast<double>(mini.w);
-    const double scale_y = static_cast<double>(map_h) / static_cast<double>(mini.h);
-    wx = static_cast<int32_t>((px - mini.x) * scale_x);
-    wy = static_cast<int32_t>((py - mini.y) * scale_y);
+    minimap_point_px(px, py, map_w, map_h, wx, wy, layout.minimap());
 }
 
 /// The world point under the pointer on the minimap, for a map of map_tiles_w x map_tiles_h tiles
@@ -150,13 +154,12 @@ inline void minimap_point(int32_t px, int32_t py, int32_t map_tiles_w, int32_t m
     minimap_point(px, py, map_tiles_w, map_tiles_h, wx, wy, ScreenLayout::classic());
 }
 
-/// One input tick with the left button held on the minimap: the view scrolls to show the square (221, 220) (half the view's size each way) around the point,
-/// clipped to the map (ScrollToShow), so it ends up centred on the point and clamped at the map's edges. The origin and the map are in screen pixels (see the top of this file):
-/// the square is half the VIEW, so at a zoom the view ends up centred on the point whatever the zoom is.
-inline EdgeScroll minimap_scroll_step_px(int32_t px, int32_t py, int32_t ox, int32_t oy, int32_t map_w, int32_t map_h, const ScreenLayout& layout) {
+/// One input tick with the left button held on a minimap rectangle `mini`: the view scrolls to show the square (half the view's size each way) around the point,
+/// clipped to the map (ScrollToShow), so it ends up centred on the point and clamped at the map's edges.
+inline EdgeScroll minimap_scroll_step_px(int32_t px, int32_t py, int32_t ox, int32_t oy, int32_t map_w, int32_t map_h, const ScreenLayout& layout, const LayoutRect& mini) {
     int32_t wx = 0;
     int32_t wy = 0;
-    minimap_point_px(px, py, map_w, map_h, wx, wy, layout);
+    minimap_point_px(px, py, map_w, map_h, wx, wy, mini);
     const LayoutRect view = layout.view();
     const int32_t half_w = view.w / 2;
     const int32_t half_h = view.h / 2;
@@ -167,6 +170,13 @@ inline EdgeScroll minimap_scroll_step_px(int32_t px, int32_t py, int32_t ox, int
     EdgeScroll out;
     detail::scroll_to_show(l, t, r, b, ox, oy, out.dx, out.dy, view.w, view.h);
     return out;
+}
+
+/// One input tick with the left button held on the minimap: the view scrolls to show the square (221, 220) (half the view's size each way) around the point,
+/// clipped to the map (ScrollToShow), so it ends up centred on the point and clamped at the map's edges. The origin and the map are in screen pixels (see the top of this file):
+/// the square is half the VIEW, so at a zoom the view ends up centred on the point whatever the zoom is.
+inline EdgeScroll minimap_scroll_step_px(int32_t px, int32_t py, int32_t ox, int32_t oy, int32_t map_w, int32_t map_h, const ScreenLayout& layout) {
+    return minimap_scroll_step_px(px, py, ox, oy, map_w, map_h, layout, layout.minimap());
 }
 
 /// ... for a map of map_tiles_w x map_tiles_h tiles at the zoom 1

@@ -449,7 +449,9 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
         if (panel != PanelMode::OneAnt && panel != PanelMode::Ants) return;
         int32_t wx = 0;
         int32_t wy = 0;
-        minimap_point(press_x, press_y, static_cast<int32_t>(sim.grid().width()), static_cast<int32_t>(sim.grid().height()), wx, wy, layout_);
+        const int32_t mw = static_cast<int32_t>(sim.grid().width());
+        const int32_t mh = static_cast<int32_t>(sim.grid().height());
+        minimap_point_px(press_x, press_y, mw * 32, mh * 32, wx, wy, layout_.minimap_for_map(mw, mh));
         const sim::TileCoord tile{wx / 32, wy / 32};
         const bool special = panel == PanelMode::OneAnt && special_target(&sim, world, tile, panel);
         spawn_click_marker(wx, wy);
