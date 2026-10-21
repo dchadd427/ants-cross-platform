@@ -880,8 +880,18 @@ static void run_suite_7_rules_one() {
         ASSERT_TRUE(end.y > 92 && end.y < 97);
         ASSERT_FALSE(stop_midwalk(0, 92, &walking, &end));                              // at rules 0 the order tile of row 97 reads as "none": nothing happens
         ASSERT_TRUE(walking && end.y == 97);
-        // only the marker itself (column 120, row 90) is "none": a target in column 120 or in row 90 is a target (a world of 130 columns has both)
-        const struct { TileCoord from; TileCoord to; } near_marker[] = {{TileCoord{120, 92}, TileCoord{120, 98}}, {TileCoord{110, 90}, TileCoord{125, 90}}, {TileCoord{110, 85}, TileCoord{125, 90}}};
+        // the marker (-1, -1) is outside every grid: (column 120, row 90) and tiles around it are all real targets on a 130 x 100 world
+        const struct { TileCoord from; TileCoord to; } near_marker[] = {{TileCoord{120, 82}, TileCoord{120, 90}}, {TileCoord{110, 90}, TileCoord{120, 90}}, {TileCoord{120, 92}, TileCoord{120, 98}}, {TileCoord{110, 90}, TileCoord{125, 90}}, {TileCoord{110, 85}, TileCoord{125, 90}}};
+        AntUnit probe(1, TeamId::Green, AntType::Worker, 5, 5);
+        ASSERT_FALSE(probe.has_order_tile(1));
+        probe.orig_order_tile = TileCoord{AntUnit::kNoOrderTileX, 0};
+        ASSERT_TRUE(probe.has_order_tile(1));
+        probe.orig_order_tile = TileCoord{0, AntUnit::kNoOrderTileY};
+        ASSERT_TRUE(probe.has_order_tile(1));
+        probe.orig_order_tile = TileCoord{AntUnit::kClassicNoOrderTileX, AntUnit::kNoOrderTileY};
+        ASSERT_TRUE(probe.has_order_tile(1));
+        probe.orig_order_tile = TileCoord{AntUnit::kNoOrderTileX, AntUnit::kClassicNoOrderTileY};
+        ASSERT_TRUE(probe.has_order_tile(1));
         for (const auto& w : near_marker) {
             SimulationEngine sim;
             sim.init_test_world(130, 100, 7, 600000, 1);
@@ -920,6 +930,18 @@ static void run_suite_7_rules_one() {
         sim.issue_move_order(walker, TileCoord{9, 92});
         sim.tick();
         ASSERT_TRUE(relative_path(sim, walker, 92) != straight);
+        // at (column 120, row 90) on a 130 x 100 world at rules 1, an ant ordered to (120, 90) has an order tile (not an idle blocker)
+        {
+            SimulationEngine wide;
+            wide.init_test_world(130, 100, 7, 600000, 1);
+            const uint32_t w = wide.spawn_unit(0, AntType::Worker, TileCoord{118, 90});
+            const uint32_t b = wide.spawn_unit(0, AntType::Worker, TileCoord{120, 90});
+            wide.tick();
+            wide.get_unit(b).orig_order_tile = TileCoord{120, 90};
+            wide.issue_move_order(w, TileCoord{122, 90});
+            wide.tick();
+            ASSERT_EQ(wide.get_unit(w).waypoints.size(), static_cast<size_t>(5));
+        }
     } TEST_END();
 }
 

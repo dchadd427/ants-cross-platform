@@ -151,7 +151,11 @@ void hash_ant(Fnv& h, const AntUnit& a) {
     h.u8(a.pause_saved_action);
     h.u8(a.pause_saved_dir);
     h.u8(a.orig_order);
-    h.tile(a.orig_order_tile);
+    // The "no order tile" marker is (-1, -1), outside every grid; it hashes as the original's (0x78, 0x5a) so that every map's hash stays what it always was,
+    // and an ant actually ordered to (0x78, 0x5a) on a wide and tall map mixes a byte in so the two states cannot collide.
+    const bool no_order = a.orig_order_tile.x == AntUnit::kNoOrderTileX && a.orig_order_tile.y == AntUnit::kNoOrderTileY;
+    h.tile(no_order ? TileCoord{AntUnit::kClassicNoOrderTileX, AntUnit::kClassicNoOrderTileY} : a.orig_order_tile);
+    if (a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX && a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);
     h.u8(a.home_state);
     h.u8(a.home_priority);
     h.u32(a.home_time_ms);

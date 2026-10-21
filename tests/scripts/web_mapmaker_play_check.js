@@ -60,18 +60,26 @@ function verdictChecks() {
     check(v.ok && v.seats.length === 4 && usable(v) === '1111', 'four colors with ants and a hill: all four can play');
     equal(v.seats.map((s) => [s.seat, s.name, s.ants, s.hills]), [[0, 'Green', 3, 1], [1, 'Red', 3, 1], [2, 'Blue', 3, 1], [3, 'Black', 3, 1]], 'the seats are the game\'s own: Green 0, Red 1, Blue 2, Black 3, with their ants and hills');
     check(verdictOf({ rows: 90 }).ok && !verdictOf({ rows: 91 }).ok, 'Classic: ninety rows play, ninety-one do not');
-    // an Extended map up to 256 x 256 plays; one bigger than 256 x 256 is refused with a way to a Classic copy
+    // an Extended map up to 512 x 512 (262,144 cells, 1,024 a side) plays; one bigger is refused with a way to a Classic copy
     v = verdictOf({ kind: 'extended', rows: 100, columns: 100 });
     check(v.ok && v.seats.length === 4 && usable(v) === '1111', 'an Extended map of 100 x 100 plays');
     v = verdictOf({ kind: 'extended', rows: 256, columns: 256 });
     check(v.ok && v.seats.length === 4 && usable(v) === '1111', 'an Extended map of 256 x 256 plays');
-    v = verdictOf({ kind: 'extended', rows: 257, columns: 100 });
-    check(!v.ok && v.title === 'This map cannot be played yet' && /This map is bigger than the game can play yet\./.test(v.text) && v.convert === true && v.seats.length === 0, 'an Extended map of 257 rows: "bigger than the game can play yet", with a way to a Classic copy');
-    v = verdictOf({ kind: 'extended', rows: 100, columns: 257 });
-    check(!v.ok && /bigger than the game can play yet/.test(v.text) && v.convert === true, 'an Extended map of 257 columns is refused too');
+    v = verdictOf({ kind: 'extended', rows: 512, columns: 512 });
+    check(v.ok && v.seats.length === 4 && usable(v) === '1111', 'an Extended map of 512 x 512 plays');
+    v = verdictOf({ kind: 'extended', rows: 1024, columns: 256 });
+    check(v.ok && v.seats.length === 4 && usable(v) === '1111', 'an Extended map of 1024 x 256 plays');
+    v = verdictOf({ kind: 'extended', rows: 256, columns: 1024 });
+    check(v.ok && v.seats.length === 4 && usable(v) === '1111', 'an Extended map of 256 x 1024 plays');
+    v = verdictOf({ kind: 'extended', rows: 512, columns: 513 });
+    check(!v.ok && /bigger than the game can play yet/.test(v.text) && v.convert === true, 'an Extended map of 512 x 513 (262,656 cells) is refused');
+    v = verdictOf({ kind: 'extended', rows: 1025, columns: 100 });
+    check(!v.ok && v.title === 'This map cannot be played yet' && /This map is bigger than the game can play yet\./.test(v.text) && v.convert === true && v.seats.length === 0, 'an Extended map of 1025 rows: "bigger than the game can play yet", with a way to a Classic copy');
+    v = verdictOf({ kind: 'extended', rows: 100, columns: 1025 });
+    check(!v.ok && /bigger than the game can play yet/.test(v.text) && v.convert === true, 'an Extended map of 1025 columns is refused too');
     v = verdictOf({ kind: 'classic', rows: 120 });
     check(!v.ok && /bigger than the game can play yet/.test(v.text) && v.convert === false && /90 rows or fewer/.test(v.note), 'a Classic map of 120 rows is bigger too, and has no Classic copy to offer');
-    check(!verdictOf({ kind: 'extended', rows: 300, teams: [[0, 0], [0, 0], [0, 0], [0, 0]] }).ok && /bigger/.test(verdictOf({ kind: 'extended', rows: 300, teams: [[0, 0], [0, 0], [0, 0], [0, 0]] }).text), 'the size is said before anything about hills');
+    check(!verdictOf({ kind: 'extended', rows: 600, columns: 600, teams: [[0, 0], [0, 0], [0, 0], [0, 0]] }).ok && /bigger/.test(verdictOf({ kind: 'extended', rows: 600, columns: 600, teams: [[0, 0], [0, 0], [0, 0], [0, 0]] }).text), 'the size is said before anything about hills');
     // a stop that is about no color
     v = verdictOf({ extra: [finding('grid_empty', 'fatal', -1, 'the grid has no cell'), finding('file_cut_short', 'fatal', -1, 'the file ends inside the dictionary')] });
     check(!v.ok && v.title === 'This map cannot be played' && v.list.length === 2 && v.list[0] === 'The grid has no cell' && v.list[1] === 'The file ends inside the dictionary', 'a stop that is about no color is refused with the check\'s own sentences (capitalized)');
@@ -208,8 +216,8 @@ function gameChecks() {
     check(Game.take(windowOf(Object.assign(tabOf({ [ID]: { name: 'x', bytes } }), { closed: true })), ID) === null, 'a tab that is closed: nothing');
     check(Game.take(windowOf({}), ID) === null && Game.take(windowOf({ antsTestGameHandoff: 5 }), ID) === null, 'a tab without the hand-over: nothing');
     check(Game.take(windowOf({ antsTestGameHandoff() { throw new Error('gone'); } }), ID) === null, 'a tab that throws: nothing');
-    check(Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(0) } })), ID) === null && Game.take(windowOf(tabOf({ [ID]: { name: 'x' } })), ID) === null && Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(1024 * 1024 + 1) } })), ID) === null, 'no bytes, no map; more than a megabyte is no map');
-    check(Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(1024 * 1024) } })), ID) !== null, 'a megabyte is still taken');
+    check(Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(0) } })), ID) === null && Game.take(windowOf(tabOf({ [ID]: { name: 'x' } })), ID) === null && Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(4 * 1024 * 1024 + 1) } })), ID) === null, 'no bytes, no map; more than four megabytes is no map');
+    check(Game.take(windowOf(tabOf({ [ID]: { name: 'x', bytes: new Uint8Array(4 * 1024 * 1024) } })), ID) !== null, 'four megabytes is still taken');
     equal(Game.take(windowOf(tabOf({ [ID]: { name: '<b>x</b>\u0000', bytes } })), ID).name, '<b>x</b>', 'the name is cleaned');
     // begin: the bytes are written where the game looks, the strip is up, the game starts
     {
@@ -397,7 +405,7 @@ function dialogChecks() {
     p.dialogs.close();
     // the refusals
     for (const [what, opts, title, words, convert] of [
-        ['an Extended map of 300 rows', { kind: 'extended', rows: 300 }, 'This map cannot be played yet', /This map is bigger than the game can play yet\./, true],
+        ['an Extended map of 1025 rows', { kind: 'extended', rows: 1025 }, 'This map cannot be played yet', /This map is bigger than the game can play yet\./, true],
         ['a Classic map of 120 rows', { kind: 'classic', rows: 120 }, 'This map cannot be played yet', /90 rows or fewer/, false],
         ['a stop', { extra: [finding('grid_empty', 'fatal', -1, 'the grid has no cell')] }, 'This map cannot be played', /The grid has no cell/, false],
         ['one color', { teams: [[3, 16], [0, 0], [0, 0], [0, 0]] }, 'This map cannot be played yet', /two colors/, false]]) {
@@ -471,13 +479,13 @@ async function coreChecks() {
         const v = Play.verdict(core.checkMap(bytes, 'extended').json, core.readReport(bytes, 'extended').json);
         check(v.ok && usable(v) === '1111', name + ' plays with four colors');
     }
-    // made maps: a blank map has no color, an Extended map up to 256 x 256 plays when it has hills and ants, one over 256 is refused
+    // made maps: a blank map has no color, an Extended map up to 512 x 512 plays when it has hills and ants
     const blank = core.blank(31, 31, 485, 6, 10, 'new_map').bytes;
     let v = Play.verdict(core.checkMap(blank, 'extended').json, core.readReport(blank, 'extended').json);
     check(!v.ok && /two colors that each have a hill and starting ants/.test(v.text) && v.list.length === 8 && v.list[0] === 'Green has no hill', 'a blank map: refused, with the eight sentences of the check');
     const big = core.blankExtended(300, 300, 485, 6, 10).bytes, small = core.blankExtended(40, 40, 485, 6, 10).bytes;
     v = Play.verdict(core.checkMap(big, 'extended').json, core.readReport(big, 'extended').json);
-    check(!v.ok && /bigger than the game can play yet/.test(v.text) && v.convert, 'a 300 x 300 Extended map: bigger than the game can play yet');
+    check(!v.ok && /two colors that each have a hill and starting ants/.test(v.text) && !v.convert, 'a 300 x 300 blank Extended map: within 512 x 512, judged for hills and ants');
     v = Play.verdict(core.checkMap(small, 'extended').json, core.readReport(small, 'extended').json);
     check(!v.ok && /two colors that each have a hill and starting ants/.test(v.text) && !v.convert, 'a 40 x 40 blank Extended map: judged for hills and ants like a Classic map');
     const tinyUp = core.convertToExtended(new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', 'TINY.LVL'))), 'extended');
