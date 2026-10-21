@@ -1038,8 +1038,7 @@
 
         // ---- the buttons and the cards ----
         function sendPlan(change) {
-            if (!client || !client.room) return false;
-            if (change.moveTo >= 0 && client.room.you !== change.moveTo) client.move(client.room.you, change.moveTo, client.guardNow());
+            if (!client || !client.room) return false; if (change.moveTo >= 0 && client.room.you !== change.moveTo) client.move(client.room.you, change.moveTo, client.guardNow());
             return client.setPlan(Rules.planWith(Rules.withMode(client.room, pendingMode), Rules.modelOf(client.room), change));
         }
         var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); } });      // (front/game_type.js)
