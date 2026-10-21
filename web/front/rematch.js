@@ -274,11 +274,18 @@
         return { state: st, back: back };
     }
 
+    function isTestFile(file) { return typeof file === 'string' && / ~test-[0-9a-f]{8}\.(lvl|LVL)$/.test(file); }
+    function testTitle(file) { return String(file || '').replace(/ ~test-[0-9a-f]{8}\.(lvl|LVL)$/, '').replace(/\.(lvl|LVL)$/, ''); }
+    function cleanTitle(name) {
+        var s = typeof name === 'string' ? name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').replace(/\s+/g, ' ').trim() : '';
+        return s.slice(0, 45) || 'Test Map';
+    }
+
     // ---- the front page ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // The strip at the top of the page: "Back from the match." The match's stats and replay are looked up in the public list (a moment after the match, twice more if they are not there yet: the list is cached
-    // for five seconds). env: { doc, before (the element that the strip goes in front of), fetch (window.fetch or null), later(fn, ms) }. show(back) and hide().
+    // for five seconds). Also drives an unlisted test-map room opened from the map maker (?testroom=<id>). env: { doc, win, before (the element that the strip goes in front of), fetch (window.fetch or null), later(fn, ms) }.
     function frontStrip(env) {
-        var bar = null, link = null, round = 0;
+        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, handoffId = '', paintedKey = '';
         function look(back, mine, tries) {
             if (!env.fetch || mine !== round) return;
             var done = function (id) {
@@ -289,6 +296,42 @@
             try {
                 env.fetch('/replays', { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (list) { done(findReplay(list, back)); }, function () { done(''); });
             } catch (e) { /* no list: the link goes to the list of matches */ }
+        }
+        function ensureTestBar() {
+            if (!tbar) {
+                tbar = el(env.doc, 'div', 'testbar');
+                tbar.setAttribute('role', 'region');
+                tbar.setAttribute('aria-label', 'Test room');
+                tbar.id = 'testbar';
+                env.before.parentNode.insertBefore(tbar, env.before);
+            }
+            return tbar;
+        }
+        function paintTestBar(lead, main, right, withBack, warn) {
+            var key = [lead, main, right, withBack ? 1 : 0, warn ? 1 : 0].join('|');
+            var b = ensureTestBar();
+            b.hidden = false;
+            b.className = 'testbar' + (warn ? ' warn' : '');
+            if (paintedKey === key) return;
+            paintedKey = key;
+            b.textContent = '';
+            if (withBack) {
+                var btn = el(env.doc, 'button', 'btn sm testbar-back', '\u25c0 Back to editor');
+                btn.type = 'button';
+                btn.addEventListener('click', function () {
+                    var win = env.win;
+                    if (!win) return;
+                    try { if (win.opener && !win.opener.closed && typeof win.opener.antsTestGameBack === 'function') win.opener.antsTestGameBack(handoffId); } catch (e) {}
+                    try { win.close(); } catch (e) {}
+                    env.later(function () { try { if (!win.closed && win.location) win.location.assign('/mapmaker.html'); } catch (e) {} }, 300);
+                });
+                b.appendChild(btn);
+            }
+            var span = el(env.doc, 'span', 'testbar-text');
+            span.appendChild(el(env.doc, 'b', '', lead));
+            span.appendChild(env.doc.createTextNode(' ' + main));
+            b.appendChild(span);
+            if (right) b.appendChild(el(env.doc, 'span', 'testbar-right', right));
         }
         return {
             show: function (back) {
@@ -313,7 +356,73 @@
                 bar.hidden = false;
                 look(back, mine, 3);
             },
-            hide: function () { ++round; if (bar) bar.hidden = true; }
+            hide: function () { ++round; if (bar) bar.hidden = true; },
+            info: function (file) {
+                if (!isTestFile(file)) return null;
+                var m = known[file], title = (m && m.name) || testTitle(file);
+                var details = m && m.width && m.height ? (m.kind === 'extended' ? 'Extended' : 'Classic') + ' \u00b7 ' + m.width + ' \u00d7 ' + m.height + ' \u00b7 Unlisted test map from Map Maker' : 'Unlisted test map from Map Maker';
+                return { name: title, info: details, thumb: '/maps/previews/' + encodeURIComponent(file.replace(/\.(lvl|LVL)$/, '')) + '.png' };
+            },
+            sync: function (model, sendPlan, warmMap) {
+                if (pendingTest && model && !model.guest && !model.starting && model.mapFile !== pendingTest.file) {
+                    var kinds = [0, 0, 0, 0];
+                    if (Array.isArray(pendingTest.usable)) for (var s = 0; s < 4; s++) if (!pendingTest.usable[s]) kinds[s] = 4;
+                    if (sendPlan && sendPlan({ file: pendingTest.file, kinds: kinds })) {
+                        if (warmMap) warmMap(pendingTest.file);
+                        pendingTest = null;
+                    }
+                }
+                if (model && isTestFile(model.mapFile)) {
+                    var m = known[model.mapFile], title = (m && m.name) || testTitle(model.mapFile);
+                    var shape = m && m.width && m.height ? ' (' + m.height + ' x ' + m.width + ')' : '';
+                    if (!model.guest) paintTestBar('Test room', title + shape + ' \u00b7 Unlisted map from Map Maker', 'Sent automatically to players who join', !!handoffId, false);
+                    else paintTestBar('Custom map room', 'Host\u2019s map: ' + title + shape, '\u25cf Map downloaded & verified \u00b7 Ready', false, false);
+                } else if (!pendingTest && tbar) {
+                    tbar.hidden = true;
+                }
+            },
+            begin: function (onReady) {
+                var win = env.win;
+                if (!win || !win.location) return false;
+                var q = null;
+                try { q = new URLSearchParams(win.location.search || ''); } catch (e) { return false; }
+                var id = q.get('testroom');
+                if (!id || !/^[a-z0-9]{6,32}$/.test(id)) return false;
+                handoffId = id;
+                try { win.history.replaceState(null, '', win.location.pathname.replace(/^\/+/, '/')); } catch (e) {}
+                var rec = null;
+                try { if (win.opener && !win.opener.closed && typeof win.opener.antsTestGameHandoff === 'function') rec = win.opener.antsTestGameHandoff(id); } catch (e) { rec = null; }
+                if (!rec || !rec.bytes || !(rec.bytes.length > 0) || !env.fetch) {
+                    paintTestBar('Test room', 'The map from the Map Maker could not be read. Go back to the editor and press Play this map again.', '', true, true);
+                    if (onReady) onReady();
+                    return true;
+                }
+                var bytes = new Uint8Array(rec.bytes), title = cleanTitle(rec.name), kind = bytes[0] === 9 ? 'extended' : 'classic';
+                paintTestBar('Test room', title + ' \u00b7 Preparing unlisted room\u2026', '', true, false);
+                try {
+                    env.fetch('/submissions?kind=' + kind + '&test=1&name=' + encodeURIComponent(title), {
+                        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: bytes, cache: 'no-store', credentials: 'same-origin'
+                    }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); }).then(function (res) {
+                        var tm = res && res.status === 201 && res.body && res.body.test_map;
+                        if (tm && typeof tm.file === 'string') {
+                            known[tm.file] = tm;
+                            pendingTest = tm;
+                            paintTestBar('Test room', (tm.name || title) + ' (' + tm.height + ' x ' + tm.width + ') \u00b7 Unlisted map from Map Maker', 'Sent automatically to players who join', true, false);
+                        } else {
+                            var msg = (res && res.body && res.body.message) || 'The server could not prepare this test map.';
+                            paintTestBar('Test room', msg, '', true, true);
+                        }
+                        if (onReady) onReady();
+                    }, function () {
+                        paintTestBar('Test room', 'Could not reach the server to upload the test map.', '', true, true);
+                        if (onReady) onReady();
+                    });
+                } catch (e) {
+                    paintTestBar('Test room', 'Could not upload the test map.', '', true, true);
+                    if (onReady) onReady();
+                }
+                return true;
+            }
         };
     }
 

@@ -15,6 +15,7 @@
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_server/crypto.hpp"
 #include "ants_server/map_names.hpp"
+#include "ants_server/map_store.hpp"
 #include "ants_server/submissions.hpp"
 #include "ants_server/submissions_http.hpp"
 #include "history_fixtures.hpp"
@@ -665,6 +666,32 @@ int main() {
         const std::string body = t.owner("GET", "/admin/api/maps").body;
         ASSERT_TRUE(body.find("Do this now [31mat once?b") != std::string::npos);
         ASSERT_TRUE(body.find("u001b") == std::string::npos && body.find('<') == std::string::npos && body.find("\\n") == std::string::npos);          // (no escape byte, no angle bracket, no line end in it)
+    } TEST_END();
+
+    TEST_CASE("API2.7 POST /submissions?test=1 saves an unlisted test map for a room without touching the submission queue, resolves in MapStore::find and test_map while staying out of list_json, and expires after kTestMapTtlS") {
+        Api t;
+        HttpRequest q = t.req("POST", "/submissions", "kind=classic&test=1&name=Popcorn%20Remix", {{"content-type", "application/octet-stream"}, {"x-client-address", "203.0.113.20"}}, tiny());
+        HttpResponse r = t.call(q);
+        ASSERT_EQ(r.status, 201);
+        ASSERT_EQ(t.refreshed, 1);
+        const ctl::JsonValue j = parse_text(r.body).get("test_map");
+        const std::string file = j.get("file").str();
+        ASSERT_TRUE(MapStore::is_test_map_name(file));
+        ASSERT_EQ(j.get("name").str(), "Popcorn Remix");
+        ASSERT_EQ(j.get("kind").str(), "classic");
+        ASSERT_EQ(j.get("usable").size(), size_t{4});
+        ASSERT_EQ(parse_text(t.owner("GET", "/admin/api/maps").body).get("maps").size(), size_t{0});        // touches no submission table
+
+        MapStore ms("", "");
+        ms.set_test_maps(t.store->test_maps(t.now));
+        MapEntry entry;
+        ASSERT_TRUE(ms.find(file, entry));
+        ASSERT_TRUE(ms.test_map(file) != nullptr);
+        ASSERT_EQ(ms.listed_name(file), file);
+        ASSERT_TRUE(ms.list_json(nullptr, false).find(file) == std::string::npos && ms.list_json(nullptr, true).find(file) == std::string::npos);
+
+        // expires after kTestMapTtlS
+        ASSERT_EQ(t.store->test_maps(t.now + SubmissionStore::kTestMapTtlS).size(), size_t{0});
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

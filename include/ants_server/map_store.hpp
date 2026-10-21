@@ -87,12 +87,18 @@ public:
     /// The approved map that has this file name (exactly), or nullptr. Used to serve its file and picture; a name that is not approved or is taken down is not found.
     const ApprovedMap* approved(const std::string& file_name) const;
 
+    /// Ephemeral unlisted test maps from the Map Maker ("<Name> ~test-<8hex>.lvl"): playable in rooms and served at /maps/files/ and /maps/previews/, never listed in GET /maps or GET /maps/all.
+    static bool is_test_map_name(const std::string& file_name) noexcept;
+    void set_test_maps(std::vector<ApprovedMap> maps);
+    const ApprovedMap* test_map(const std::string& file_name) const;
+
 private:
     std::string dir_;
     std::string community_dir_;
     std::vector<MapListing> listing_;
     std::vector<MapListing> extended_listing_;         // the approved Extended maps (never in listing_)
     std::vector<ApprovedMap> approved_;
+    std::vector<ApprovedMap> test_maps_;               // unlisted test maps from the Map Maker (never in listing_ or extended_listing_)
     bool scanned_{false};
     void add_approved_to_listing();
     void sort_listing();

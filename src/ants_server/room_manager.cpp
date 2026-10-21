@@ -143,9 +143,11 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
     }
     const bool wants_replay = spec.record_replay;
     const bool visitor_made = spec.public_room;                   // (a room that a visitor's create block made, the games of the front page: the "demo rooms" of --replay-demo)
+    const bool test_map = MapStore::is_test_map_name(spec.map);
     auto room = std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), seed, now_ms, &log_budget_);
     if (restart_ != nullptr && restart_->enabled()) room->set_restart_store(restart_.get());       // (a room that holds seats keeps a record from the start of its match: room.hpp)
-    if (replays_ == nullptr) room->set_replay_store(nullptr, "this server keeps no replays");
+    if (test_map) room->set_replay_store(nullptr, "unlisted test map");
+    else if (replays_ == nullptr) room->set_replay_store(nullptr, "this server keeps no replays");
     else if (!wants_replay) room->set_replay_store(nullptr, "the room was made with \"record\": false");
     else if (visitor_made && !replay_demo_) room->set_replay_store(nullptr, "this server does not keep the matches of demo rooms (--replay-demo)");
     else room->set_replay_store(replays_.get());
@@ -251,7 +253,9 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect) return false;
     if (!net::public_room_code(code) || !net::valid_create_block(block) || !block.lobby()) return false;
     if (!lobby_place(now_ms)) return false;
-    return create_room(lobby_spec(code, public_choice_of(block, limits_).map), now_ms).ok;      // (the map of the block when the server offers it; the plan changes it)
+    std::string map = public_choice_of(block, limits_).map;
+    if (!block.map_name.empty() && store_.test_map(block.map_name) != nullptr) map = store_.test_map(block.map_name)->name;
+    return create_room(lobby_spec(code, map), now_ms).ok;      // (the map of the block when the server offers it; the plan changes it)
 }
 
 // The pool is full, or the server has no place for another room: the lobby that nobody is in gives its place up; when there is none, the one in which nothing has been done for a long time (never a lobby that is used)

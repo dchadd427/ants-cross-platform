@@ -131,6 +131,7 @@
     }
     function hillText(n) { return n === 0 ? 'no hill' : n === 1 ? '1 hill' : n + ' hills'; }
     function antText(n) { return n === 1 ? '1 ant' : n + ' ants'; }
+    function kbText(bytes) { return Math.max(1, Math.round((bytes || 0) / 1024)) + ' KB'; }
 
     // The hand-overs of this tab (a record for each started game): the game page asks for its own through window.antsTestGameHandoff(id), and tells the way back through window.antsTestGameBack(id)
     var kept = [];
@@ -178,7 +179,7 @@
             });
         }
 
-        var choice = firstChoice(v.seats), groups = [], quicks = [], startButton, status;
+        var mode = 'bots', choice = firstChoice(v.seats), groups = [], quicks = [], tabs = [], botsPanel, friendsPanel, startButton, status;
         function refresh() {
             var go = startable(choice, v.seats);
             groups.forEach(function (g) {
@@ -191,21 +192,35 @@
             quicks.forEach(function (q) { q.button.disabled = !quick(choice, v.seats, q.count); });
             status.textContent = go.text;
             status.className = 'play-status' + (go.ok ? '' : ' no');
+            if (tabs.length) {
+                tabs[0].className = 'play-tab' + (mode === 'bots' ? ' on' : '');
+                tabs[0].setAttribute('aria-selected', mode === 'bots' ? 'true' : 'false');
+                tabs[1].className = 'play-tab' + (mode === 'friends' ? ' on' : '');
+                tabs[1].setAttribute('aria-selected', mode === 'friends' ? 'true' : 'false');
+                botsPanel.hidden = mode !== 'bots';
+                friendsPanel.hidden = mode !== 'friends';
+            }
             if (startButton) startButton.disabled = !go.ok;
+            if (startButton && mode === 'friends') { startButton.disabled = false; startButton.textContent = '\u25b6 Open a room with this map'; }
+            else if (startButton) startButton.textContent = '\u25b6 Start the game';
         }
         function set(seat, value) {
             if (value === 'y') for (var s = 0; s < 4; s++) if (choice[s] === 'y') choice[s] = 'n';
             choice[seat] = value;
             refresh();
         }
+        function setMode(nextMode) {
+            mode = nextMode;
+            refresh();
+        }
 
         var started = false;
         function start(ctl) {
-            var go = startable(choice, v.seats);
+            var go = mode === 'friends' ? { ok: true } : startable(choice, v.seats);
             if (!go.ok || started) return;
             started = true;                                                          // (a second call opens no second tab)
             var rec = { id: randomId(win), name: m.name, bytes: m.bytes.slice() };
-            var tab = win.open('/play.html?testmap=' + rec.id + '&seats=' + code(choice), '_blank');
+            var tab = win.open(mode === 'friends' ? '/lobby.html?testroom=' + rec.id : '/play.html?testmap=' + rec.id + '&seats=' + code(choice), '_blank');
             if (!tab) {
                 ctl.close();
                 return dialogs.message('The test game could not open', 'Your browser did not open a new tab for it. Allow pop-ups for this site and try again. Your map was not changed.');
@@ -218,7 +233,23 @@
         var ctl = dialogs.open({
             title: 'Play this map', cls: 'play',
             build: function (body) {
-                body.appendChild(named(el('p', 'play-lead'), 'A test game on ', m.name, ' (' + shape + ') as it is now. Nothing is saved and no score is kept.'));
+                var tablist = el('div', 'play-tabs');
+                tablist.setAttribute('role', 'tablist');
+                tablist.setAttribute('aria-label', 'Play mode');
+                [['bots', 'Against bots', '1 player on this device'], ['friends', 'With other players', 'Host an online room with a share link']].forEach(function (t) {
+                    var tb = el('button', 'play-tab');
+                    tb.type = 'button';
+                    tb.setAttribute('role', 'tab');
+                    tb.setAttribute('data-mode', t[0]);
+                    tb.appendChild(el('span', 'play-tab-t', t[1]));
+                    tb.appendChild(el('span', 'play-tab-s', t[2]));
+                    tb.addEventListener('click', function () { setMode(t[0]); });
+                    tabs.push(tb);
+                    tablist.appendChild(tb);
+                });
+                body.appendChild(tablist);
+                botsPanel = el('div', 'play-panel-bots');
+                botsPanel.appendChild(named(el('p', 'play-lead'), 'A test game on ', m.name, ' (' + shape + ') as it is now. Nothing is saved and no score is kept.'));
                 var qrow = el('div', 'play-quick');
                 qrow.appendChild(el('span', 'play-ql', 'Quick:'));
                 [1, 2, 3].forEach(function (n) {
@@ -228,7 +259,7 @@
                     quicks.push({ button: b, count: n });
                     qrow.appendChild(b);
                 });
-                body.appendChild(qrow);
+                botsPanel.appendChild(qrow);
                 var list = el('div', 'play-seats');
                 ORDER.forEach(function (seat) {
                     var info = v.seats[seat], row = el('div', 'pseat' + (info.usable ? '' : ' off')), who = el('div', 'pwho'), dot = el('span', 'pdot');
@@ -253,11 +284,37 @@
                     groups.push(g);
                     row.appendChild(who); row.appendChild(set1); list.appendChild(row);
                 });
-                body.appendChild(list);
-                body.appendChild(el('p', 'play-help', 'You play one color. The other colors are bots or empty. A color needs ants and a hill on the map to be used.'));
+                botsPanel.appendChild(list);
+                botsPanel.appendChild(el('p', 'play-help', 'You play one color. The other colors are bots or empty. A color needs ants and a hill on the map to be used.'));
                 status = el('p', 'play-status');
                 status.setAttribute('role', 'status');
-                body.appendChild(status);
+                botsPanel.appendChild(status);
+                body.appendChild(botsPanel);
+
+                friendsPanel = el('div', 'play-panel-friends');
+                friendsPanel.hidden = true;
+                var fcard = el('div', 'play-fcard'), fhead = el('div', 'play-fcard-head');
+                fhead.appendChild(el('b', 'play-fname', m.name));
+                fhead.appendChild(el('span', 'play-fbadge', checked.json.kind === 'extended' ? 'Extended map' : 'Classic map'));
+                fhead.appendChild(el('span', 'play-fbadge gold', 'Unlisted test map'));
+                fcard.appendChild(fhead);
+                fcard.appendChild(el('p', 'play-ftext', 'Opens a room in a new tab with the map as it is right now (' + kbText(m.bytes.length) + '). Anyone with your room link or 6-character room code receives the map automatically when they join.'));
+                fcard.appendChild(el('p', 'play-fnote', 'Not added to the public map list and not submitted for approval. Your editor tab stays open as you left it.'));
+                friendsPanel.appendChild(fcard);
+                var usableCount = v.seats.filter(function (x) { return x.usable; }).length;
+                friendsPanel.appendChild(el('p', 'play-fhead', 'Colors available on this map (' + usableCount + ' of 4):'));
+                var flist = el('div', 'play-fseats');
+                ORDER.forEach(function (seat) {
+                    var info = v.seats[seat], frow = el('div', 'pfseat' + (info.usable ? '' : ' off')), dot = el('span', 'pdot'), flabel = el('div', 'pname');
+                    dot.style.background = info.dot;
+                    dot.setAttribute('aria-hidden', 'true');
+                    flabel.appendChild(el('span', 'pfn', info.name));
+                    flabel.appendChild(el('span', 'pff', info.usable ? antText(info.ants) + ', ' + hillText(info.hills) + ' \u00b7 Ready' : why(info)));
+                    frow.appendChild(dot); frow.appendChild(flabel);
+                    flist.appendChild(frow);
+                });
+                friendsPanel.appendChild(flist);
+                body.appendChild(friendsPanel);
                 refresh();
             },
             buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'start', text: '\u25b6 Start the game', keepOpen: true, onClick: start }]

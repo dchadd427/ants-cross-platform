@@ -718,6 +718,11 @@ void Room::set_replay_store(ReplayStore* store, const std::string& why_not) {
 void Room::replay_begin(const net::StartMsg& start) {
     live_end(std::string());
     recorder_.reset();
+    if (MapStore::is_test_map_name(start.map_name)) {
+        replay_store_ = nullptr;
+        replay_note_ = "unlisted test map";
+        return;
+    }
     if (replay_store_ == nullptr || session_ == nullptr) return;
     replay::Header head;
     head.game_version = ascii_text(replay_store_->config().game_version, replay::kMaxTextBytes);

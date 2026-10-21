@@ -497,7 +497,8 @@ const BOTS = mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3], teamA: 0, 
     ['the game type control: 187 chosen in a room of Highest score (the map stays the room\'s)', T3, { mode: 1 }, plan('', [0, 0, 0, 0], undefined, undefined, 1)],
     ['... Highest score chosen in a room of 187', mk([P('Juniper'), P('Sam'), P('Priya'), O], { mode: 1 }), { mode: 0 }, plan('', [0, 0, 0, 0], undefined, undefined, 0)],
     ['... a mode with the map and a color in one change', T3, { mode: 1, map: 'tiny', seat: 3, kind: 'easy' }, plan('TINY.LVL', [0, 0, 0, 1], undefined, undefined, 1)],
-    ['a mode that is no number is none: the room\'s own goes back', mk([P('Juniper'), P('Sam'), O, O], { mode: 1 }), { mode: '0' }, plan('', [0, 0, 0, 0], undefined, undefined, 1)]
+    ['a mode that is no number is none: the room\'s own goes back', mk([P('Juniper'), P('Sam'), O, O], { mode: 1 }), { mode: '0' }, plan('', [0, 0, 0, 0], undefined, undefined, 1)],
+    ['a test map with initial kinds (unusable seats set to Nobody)', TWO, { file: 'Popcorn Remix ~test-a1b2c3d4.lvl', kinds: [0, 0, 4, 4] }, plan('Popcorn Remix ~test-a1b2c3d4.lvl', [0, 0, 4, 4])]
 ].forEach(([label, room, change, want]) => {
     const before = JSON.stringify(room);
     const got = PW(room, change);

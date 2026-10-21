@@ -492,6 +492,41 @@ async function main() {
         const quiet = R.frontStrip({ doc, before: screen, fetch: null, later: () => { throw new Error('nothing to wait for'); } });
         quiet.show(back);
         check('a browser without fetch: the strip and the link to the matches', body.children.length === 3 && find(body.children[1], (x) => x.tag === 'a').href === '/matches.html');
+
+        // unlisted test-map room (?testroom=<id>)
+        const tBody = node('body'), tScreen = node('div');
+        tBody.appendChild(tScreen);
+        let readyCalls = 0, closedCalls = 0, backCalls = [];
+        const tWin = {
+            location: { search: '?testroom=k7m2xq9abc12', pathname: '/lobby.html', assign: () => {} },
+            history: { replaceState: () => {} },
+            opener: { closed: false, antsTestGameHandoff: (id) => (id === 'k7m2xq9abc12' ? { name: 'Popcorn Remix', bytes: new Uint8Array([8, 0, 0, 0, 1, 2]) } : null), antsTestGameBack: (id) => backCalls.push(id) },
+            closed: false,
+            close: () => { closedCalls++; tWin.closed = true; }
+        };
+        const tFetched = [];
+        const tStrip = R.frontStrip({
+            doc, win: tWin, before: tScreen,
+            fetch: (u, i) => {
+                tFetched.push([u, i && i.method]);
+                return Promise.resolve({ status: 201, json: () => Promise.resolve({ test_map: { file: 'Popcorn Remix ~test-a1b2c3d4.lvl', name: 'Popcorn Remix', kind: 'classic', width: 31, height: 31, usable: [true, true, false, true] } }) });
+            },
+            later: (fn) => fn()
+        });
+        check('begin detects ?testroom=<id> and uploads the draft map', tStrip.begin(() => { readyCalls++; }) === true);
+        await flush(); await flush();
+        same('POSTs to /submissions?kind=classic&test=1&name=Popcorn%20Remix and calls onReady', [tFetched, readyCalls], [[['/submissions?kind=classic&test=1&name=Popcorn%20Remix', 'POST']], 1]);
+        same('info returns the title, details and preview of the unlisted test map', tStrip.info('Popcorn Remix ~test-a1b2c3d4.lvl'), {
+            name: 'Popcorn Remix', info: 'Classic \u00b7 31 \u00d7 31 \u00b7 Unlisted test map from Map Maker', thumb: '/maps/previews/Popcorn%20Remix%20~test-a1b2c3d4.png'
+        });
+        let sentPlans = [], warmed = [];
+        tStrip.sync({ guest: false, starting: false, mapFile: 'TREASURE.LVL' }, (ch) => { sentPlans.push(ch); return true; }, (f) => warmed.push(f));
+        same('sync sends the test map and sets unusable seats to Nobody (4)', [sentPlans, warmed], [[{ file: 'Popcorn Remix ~test-a1b2c3d4.lvl', kinds: [0, 0, 4, 0] }], ['Popcorn Remix ~test-a1b2c3d4.lvl']]);
+        tStrip.sync({ guest: false, starting: false, mapFile: 'Popcorn Remix ~test-a1b2c3d4.lvl' });
+        const tBar = byClass(tBody, 'testbar');
+        check('the test-room strip is shown above the screen with Back to editor', tBar && !tBar.hidden && /Popcorn Remix \(31 x 31\)/.test(tBar.textContent));
+        byClass(tBar, 'testbar-back').fire('click');
+        same('Back to editor notifies the opener and closes the tab', [backCalls, closedCalls], [['k7m2xq9abc12'], 1]);
     }
 
     for (const name of Object.keys(RAW)) if (typeof RAW[name] === 'function') check('the check called ' + name + '()', called[name] > 0);

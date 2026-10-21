@@ -433,6 +433,21 @@ function dialogChecks() {
     p = pageOf();
     Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: r.check }), readReport: () => ({ status: 0, json: r.read }) } }));
     check(!q(p, '.play-why').all().some((n) => n.tagName === 'b' || n.tagName === 'script') && q(p, '.play-why li').textContent === '<b>bold</b><script>x</script>', 'a sentence of the check is put in as text');
+    // the "With other players" tab: opens /lobby.html?testroom=<id> and hands over a copy of the bytes
+    p = pageOf();
+    Play.open(env(p));
+    const tabs = all(p, '.play-tab');
+    equal(tabs.map((t) => [t.getAttribute('data-mode'), t.getAttribute('aria-selected')]), [['bots', 'true'], ['friends', 'false']], 'two mode tabs, Against bots selected first');
+    tabs[1].click();
+    equal(tabs.map((t) => t.getAttribute('aria-selected')), ['false', 'true'], 'switching to With other players selects the second tab');
+    check(q(p, '.play-panel-bots').hidden === true && q(p, '.play-panel-friends').hidden === false, 'the friends panel is shown and the bots panel is hidden');
+    equal(all(p, '.pfseat').map((row) => row.querySelector('.pfn').textContent), ['Black', 'Blue', 'Green', 'Red'], 'four seat summary cards in alphabetical order');
+    check(!startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), 'the action button becomes Open a room with this map');
+    startButton(p).click();
+    const mr = /^\/lobby\.html\?testroom=([a-z0-9]{12})$/.exec((p.opened[0] || [])[0] || '');
+    check(!!mr && p.opened[0][1] === '_blank', 'With other players opens /lobby.html?testroom=<id> in a new tab');
+    const rrec = mr && p.win.antsTestGameHandoff(mr[1]);
+    check(rrec && rrec.name === 'Mosh Pit' && digest(rrec.bytes) === before && rrec.bytes !== bytes, 'the lobby tab receives a copy of the open map bytes');
     equal(digest(bytes), before, 'at the end the open file is still as it was');
 }
 
