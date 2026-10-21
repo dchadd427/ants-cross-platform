@@ -110,7 +110,7 @@ function caseA() {
     check(bad.length === 0, 'the table of solid tiles is the game\'s for all 1,344 ids (' + bad.slice(0, 8).join(', ') + ' are not)');
     check(solid === 192, 'the game has 192 solid tiles (' + solid + ')');
     check(!Solid.is(EMPTY2) && !Solid.is(-1) && !Solid.is(1344) && !Solid.is(65535), 'an empty cell and an id that is not a tile are not solid');
-    for (const row of Palette.OBJECTS) if (names[row[0]]) check(Solid.is(row[0]) && Solid.sets(row[0]), 'the object ' + row[1] + ' is solid, and sets the solid bit where it stands');
+    for (const row of Palette.OBJECTS) if (names[row[0]]) { const bomb = row[0] >= 129 && row[0] <= 132; check(Solid.is(row[0]) === !bomb && Solid.sets(row[0]) === !bomb, 'the object ' + row[1] + (bomb ? ' is a walkable bomb (not solid)' : ' is solid, and sets the solid bit where it stands')); }
     check([245, 246, 247, 248].every((t) => Solid.is(t) && !Solid.sets(t)) && !Solid.sets(129) && Solid.sets(302), 'a hill is solid but owns no solid bits of its cells (a library hill has them on a few cells only); a rock does');
 }
 
