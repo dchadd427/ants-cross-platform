@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.99 - 2026-10-21 - Pre-placed neutral bombs and fire walls in Map Maker
+
+**For players:**
+- **Pre-placed neutral bombs and fire walls in the Map Maker (`v1.4.3`).** The **Objects** palette in the Map Maker now includes a permanent **Fire wall** (`134`, `wallup04`) and the four colored **Bombs** (`129..132`: `Black bomb`, `Blue bomb`, `Green bomb`, `Red bomb`), matching `POPcOrN.lvl`. Pre-placed bombs are written and kept with a neutral owner word (`0x0101`) in both Classic (`v8`) and Extended (`v9`) maps so every team can step on them and no team receives kill credit or auto-avoids them.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/077a66c7...3a39dc50)
+
 ## v0.12.98 - 2026-10-21 - Serve and play approved Extended maps on the server, web lobby, and Map Maker
 
 **For players:**
