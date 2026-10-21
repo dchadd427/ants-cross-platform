@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.97 - 2026-10-20 - Play Extended maps up to 512 x 512 and out-of-grid order-tile marker
+
+**For players:**
+- **Playable Extended maps up to `512 x 512`.** Extended maps (`version == 9`) up to `512 x 512` (`262,144` cells, up to `1,024` a side, 4 MiB) now load and play in the game, map selector previews, replay player, `bot_arena`, and the Map Maker's **Play this map** (`v1.4.1`).
+- **Ordering to tile `(120, 90)` on wide and tall Extended maps.** Replaced the `(120, 90)` "no order tile" sentinel in `AntUnit::orig_order_tile` with an out-of-grid marker `(-1, -1)` (`kNoOrderTileX`, `kNoOrderTileY`), so ordering an ant directly to tile `(120, 90)` on an Extended map wider than 120 columns and taller than 90 rows works like any other tile while preserving all Classic and `rules == 1` state hashes on the 540-map library.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/30b8fe77...04a4e570)
+
 ## v0.12.96 - 2026-10-20 - Play Extended maps up to 256 x 256 and open game maps in Map Maker v1.4.0
 
 **For players:**
