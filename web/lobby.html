@@ -639,7 +639,7 @@
         var suggestion = Rules.pickName(Math.random());       // the name for a visitor who has none (the placeholder of the name card says it)
         var lis = {};                                 // the card of each color (by seat)
         var back = null;                              // the match that this tab came back from to its room (the rematch, front/rematch.js readBack): the strip at the top and the words of the colors, until START
-        var backBar = Rematch.frontStrip({ doc: document, before: $('screen'), fetch: window.fetch ? function (u, i) { return window.fetch(u, i); } : null, later: function (fn, ms) { return setTimeout(fn, ms); } });
+        var backBar = Rematch.frontStrip({ doc: document, before: $('screen'), win: window, fetch: window.fetch ? function (u, i) { return window.fetch(u, i); } : null, later: function (fn, ms) { return setTimeout(fn, ms); } });
         var chat = Chat.mount({ doc: document, host: $('chat'), colors: COLORS, say: function (text) { return !!client && client.say(text); }, toast: say });      // the chat box (front/lobby_chat.js): the room's lines, a line of one's own, a toast for a line that comes while the box is off screen
 
         function el(tag, cls, text) {
@@ -732,7 +732,7 @@
             $('teams-note').className = 'slots-note teams-note' + (v.notes.teamsWarn ? ' warn' : '');
             refusal = '';
             paintSide(v.side);
-            gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro }); setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode);
+            gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro }); setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode); backBar.sync(model, sendPlan, warmMap);
         }
         function paintCard(card, m) {
             var li = lis[card.seat], seat = card.seat, c = card.color;
@@ -1038,7 +1038,7 @@
 
         // ---- the buttons and the cards ----
         function sendPlan(change) {
-            if (!client || !client.room) return false;
+            if (!client || !client.room) return false; if (change.moveTo >= 0 && client.room.you !== change.moveTo) client.move(client.room.you, change.moveTo, client.guardNow());
             return client.setPlan(Rules.planWith(Rules.withMode(client.room, pendingMode), Rules.modelOf(client.room), change));
         }
         var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); } });      // (front/game_type.js)
@@ -1068,7 +1068,7 @@
         }
         function isHost() { return !!(model && !model.guest && !model.starting); }
         function inert(on) { [document.querySelector('header.mast'), $('banner'), $('rejoin'), $('lobby'), $('footer-bar')].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }       // (the page behind the open list takes no key or tap)
-        function communityOf(file) { var e = picker && picker.find(file); return e && !e.original ? { name: e.name, info: AntsMapPicker.infoText(e), thumb: e.thumb } : null; }
+        function communityOf(file) { var e = picker && picker.find(file); return e && !e.original ? { name: e.name, info: AntsMapPicker.infoText(e), thumb: e.thumb } : backBar.info(file); }
         function warmMap(file) { if (window.AntsMapFiles && !warmed[file]) { warmed[file] = true; AntsMapFiles.warm(window, file); } }      // the game page, a moment later, finds the file in the browser's cache
         function chooseMap(entry) {
             var known = Rules.mapOfFile(entry.file);
@@ -1366,7 +1366,7 @@
         function runLobby() {
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
-            var stored = loadSession();
+            var stored = loadSession(); if (backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); })) return;
             if (wantedCode && !(stored && stored.code === wantedCode)) {
                 askLink(wantedCode, '');
             } else if (stored) {

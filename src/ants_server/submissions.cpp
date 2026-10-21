@@ -149,6 +149,10 @@ bool SubmissionStore::open(int64_t now, std::string& why) {
     for (fs::directory_iterator it(fs::path(config_.dir) / "files", ec), end; !ec && it != end; it.increment(ec)) {        // (the leftovers of a crash while a file was written)
         if (it->path().filename().string().compare(0, 5, ".tmp-") == 0) remove_quietly(it->path().string());
     }
+    ec.clear();
+    fs::create_directories(fs::path(config_.dir) / "test", ec);
+    for (fs::directory_iterator it(fs::path(config_.dir) / "test", ec), end; !ec && it != end; it.increment(ec)) remove_quietly(it->path().string());
+    test_maps_.clear();
     db::Statement st;
     if (!db_.prepare(st, "SELECT value FROM meta WHERE key = 'submission_salt'").ok()) {
         why = "the database has no meta table";
@@ -754,6 +758,162 @@ void SubmissionStore::maintenance(int64_t now) {
     }
     db::Statement days;
     if (db_.prepare(days, "DELETE FROM submission_limits WHERE day < ?").ok() && days.bind_int64(1, now / kDay - 2).ok()) days.step();
+    prune_test_maps(now);
+}
+
+void SubmissionStore::prune_test_maps(int64_t now) {
+    for (auto it = test_maps_.begin(); it != test_maps_.end();) {
+        if (now - it->created_at >= kTestMapTtlS) {
+            remove_quietly(it->map.path);
+            it = test_maps_.erase(it);
+            approved_changed_ = true;
+        } else {
+            ++it;
+        }
+    }
+}
+
+std::vector<ApprovedMap> SubmissionStore::test_maps(int64_t now) {
+    prune_test_maps(now);
+    std::vector<ApprovedMap> out;
+    out.reserve(test_maps_.size());
+    for (const KeptTestMap& m : test_maps_) out.push_back(m.map);
+    return out;
+}
+
+TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t now) {
+    TestSubmitOutcome out;
+    const auto refuse = [&](int status, const char* code, const char* message) {
+        out.fail = make_failure(status, code, message);
+        return out;
+    };
+    if (!open_) return refuse(503, "submissions_off", "Sending maps is not switched on right now.");
+    if (in.kind != "classic" && in.kind != "extended") return refuse(400, "bad_kind", "Say whether the map is a Classic map or an Extended map.");
+    if (in.bytes.empty()) return refuse(400, "not_a_map", "No map file came with the request.");
+    if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, "too_large", "This map file is bigger than a map of this kind may be.");
+    std::error_code ec;
+    const fs::space_info space = fs::space(fs::path(config_.dir), ec);
+    if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return refuse(503, "storage_full", "The server has no room for more maps right now. Please try again later.");
+
+    const uint32_t version = version_word(in.bytes);
+    if (version != 8 && version != 9) return refuse(400, "not_a_map", "This file is not an Ants map.");
+    const std::string real_kind = version == 9 ? "extended" : "classic";
+    if (real_kind != in.kind) return refuse(400, "kind_mismatch", "The file is not the kind of map that the request says.");
+    if (in.allow_check && !in.allow_check()) return refuse(503, "busy", "The server is busy checking other maps. Please try again in a minute.");
+
+    const auto* data = reinterpret_cast<const uint8_t*>(in.bytes.data());
+    const core::Result checked = core::check_map(data, in.bytes.size(), core::Profile::Extended);
+    const core::Result info = core::read_report(data, in.bytes.size(), core::Profile::Extended);
+    JsonValue report;
+    JsonValue meta;
+    if (checked.status != 0 || info.status != 0 || !parse_big_json(checked.payload, report) || !parse_big_json(info.payload, meta) ||
+        !report.get("judged").as_bool_or(false) || !meta.get("loaded").as_bool_or(false)) {
+        return refuse(400, "not_a_map", "This file could not be read as an Ants map.");
+    }
+    const int64_t rows = meta.get("rows").as_int_or(0);
+    const int64_t columns = meta.get("columns").as_int_or(0);
+    const bool size_ok = real_kind == "extended" ? (rows >= 1 && columns >= 1 && rows <= 1024 && columns <= 1024 && rows * columns <= 262144)
+                                                 : (rows >= 1 && columns >= 1 && rows <= 90 && columns <= 256);
+    if (!size_ok) {
+        out.fail = make_failure(422, "map_too_big", "This map is bigger than a map of this kind may be.");
+        out.fail.extra = JsonValue::make_object();
+        out.fail.extra.set("findings", kept_findings(report));
+        return out;
+    }
+    const JsonValue& findings = report.get("findings");
+    bool team_bad[4] = {false, false, false, false};
+    for (size_t i = 0; i < findings.size(); ++i) {
+        const JsonValue& f = findings.at(i);
+        const std::string& sev = f.get("severity").str();
+        const int64_t team = f.get("team").as_int_or(-1);
+        const std::string& code = f.get("code").str();
+        if (sev == "fatal" && !(team >= 0 && team < 4)) {
+            out.fail = make_failure(422, "map_fails_checks", "This map does not pass the checks, so it cannot be played.");
+            out.fail.extra = JsonValue::make_object();
+            out.fail.extra.set("findings", kept_findings(report));
+            return out;
+        }
+        if (team >= 0 && team < 4 && (sev == "fatal" || code == "hill_missing" || code == "hill_without_entrance" || code == "hills_several" || code == "starting_ants_missing")) {
+            team_bad[team] = true;
+        }
+    }
+    int64_t players = 0;
+    const JsonValue& teams = meta.get("teams");
+    for (size_t s = 0; s < 4 && s < teams.size(); ++s) {
+        const JsonValue& t = teams.at(s);
+        const bool ok_team = !team_bad[s] && t.get("start_markers").as_int_or(0) > 0 && t.get("hill_cells").as_int_or(0) > 0;
+        out.usable[s] = ok_team;
+        if (ok_team) ++players;
+    }
+    if (players < 2) {
+        out.fail = make_failure(422, "map_fails_checks", "This map does not pass the checks, so it cannot be played.");
+        out.fail.extra = JsonValue::make_object();
+        out.fail.extra.set("findings", kept_findings(report));
+        return out;
+    }
+
+    constexpr size_t kMaxTestStemChars = 45;
+    std::string candidate = in.name;
+    if (candidate.size() > 4 && (candidate.compare(candidate.size() - 4, 4, ".lvl") == 0 || candidate.compare(candidate.size() - 4, 4, ".LVL") == 0)) candidate.resize(candidate.size() - 4);
+    std::string filtered;
+    for (char c : candidate) {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                        c == ' ' || c == '\'' || c == '-' || c == '_' || c == '.' || c == '!' || c == '&' || c == '(' || c == ')' || c == ',';
+        filtered.push_back(ok ? c : ' ');
+    }
+    while (!filtered.empty() && !((filtered.front() >= 'a' && filtered.front() <= 'z') || (filtered.front() >= 'A' && filtered.front() <= 'Z') || (filtered.front() >= '0' && filtered.front() <= '9'))) {
+        filtered.erase(filtered.begin());
+    }
+    if (filtered.size() > kMaxTestStemChars) filtered.resize(kMaxTestStemChars);
+    while (!filtered.empty() && (filtered.back() == ' ' || filtered.back() == '.')) filtered.pop_back();
+    const names::Cleaned cleaned = names::clean_map_name(filtered);
+    const std::string stem = cleaned.ok && cleaned.text.size() <= kMaxTestStemChars ? cleaned.text : std::string("Test Map");
+
+    prune_test_maps(now);
+    while (test_maps_.size() >= kMaxTestMaps) {
+        remove_quietly(test_maps_.front().map.path);
+        test_maps_.erase(test_maps_.begin());
+        approved_changed_ = true;
+    }
+    uint8_t id_raw[4];
+    if (!random_bytes(id_raw, sizeof id_raw)) return refuse(503, "storage_error", "The server could not save this just now. Please try again later.");
+    const std::string id8 = hex_encode(std::string(reinterpret_cast<const char*>(id_raw), sizeof id_raw));
+    const fs::path test_dir = fs::path(config_.dir) / "test";
+    fs::create_directories(test_dir, ec);
+    const std::string path = (test_dir / ("test-" + id8 + ".lvl")).string();
+    {
+        std::ofstream file(path, std::ios::binary | std::ios::trunc);
+        file.write(in.bytes.data(), static_cast<std::streamsize>(in.bytes.size()));
+        file.flush();
+        if (!file) {
+            file.close();
+            remove_quietly(path);
+            return refuse(503, "storage_full", "The server has no room for more maps right now. Please try again later.");
+        }
+    }
+    uint64_t hash = 0;
+    if (!net::hash_file(path, hash)) {
+        remove_quietly(path);
+        return refuse(503, "storage_error", "The server could not save this just now. Please try again later.");
+    }
+    ApprovedMap m;
+    m.name = stem + " ~test-" + id8 + ".lvl";
+    m.path = path;
+    m.hash = hash;
+    m.size = in.bytes.size();
+    m.width = static_cast<uint32_t>(columns);
+    m.height = static_cast<uint32_t>(rows);
+    m.minutes = static_cast<uint32_t>(meta.get("minutes").as_int_or(0));
+    m.players = static_cast<uint32_t>(players);
+    m.description = names::clean_description(meta.get("description").str());
+    m.kind = real_kind;
+    test_maps_.push_back(KeptTestMap{m, now});
+    approved_changed_ = true;
+    out.ok = true;
+    out.map = std::move(m);
+    out.clean_name = stem;
+    out.hash_text = map_hash_text(hash);
+    return out;
 }
 
 std::vector<std::string> SubmissionStore::take_notices() {

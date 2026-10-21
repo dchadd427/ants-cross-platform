@@ -108,6 +108,7 @@ bool MapStore::find(const std::string& name, MapEntry& out, std::string* why) co
     if (!fs::is_regular_file(path, ec) || ec) {
         ec.clear();
         const ApprovedMap* approved_map = approved(name);              // (the approved maps of the players: Classic and Extended; the owner's take-down removes one from here)
+        if (approved_map == nullptr) approved_map = test_map(name);    // (an unlisted test map from the Map Maker)
         if (approved_map == nullptr || (approved_map->kind != "classic" && approved_map->kind != "extended")) return fail("no such map on this server");
         path = approved_map->path;
     }
@@ -277,6 +278,28 @@ const ApprovedMap* MapStore::approved(const std::string& file_name) const {
     return nullptr;
 }
 
+bool MapStore::is_test_map_name(const std::string& file_name) noexcept {
+    if (file_name.size() < 20 || !net::valid_map_name(file_name)) return false;
+    const size_t suffix = file_name.size() - 19;
+    if (file_name.compare(suffix, 7, " ~test-") != 0 || (file_name.compare(file_name.size() - 4, 4, ".lvl") != 0 && file_name.compare(file_name.size() - 4, 4, ".LVL") != 0)) return false;
+    for (size_t i = suffix + 7; i < suffix + 15; ++i) {
+        const char c = file_name[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+    }
+    return true;
+}
+
+void MapStore::set_test_maps(std::vector<ApprovedMap> maps) {
+    test_maps_ = std::move(maps);
+}
+
+const ApprovedMap* MapStore::test_map(const std::string& file_name) const {
+    for (const ApprovedMap& m : test_maps_) {
+        if (m.name == file_name) return &m;
+    }
+    return nullptr;
+}
+
 std::string MapStore::listed_name(const std::string& name) const {
     for (const MapListing& m : listing_) {
         if (m.file == name) return m.file;
@@ -285,11 +308,17 @@ std::string MapStore::listed_name(const std::string& name) const {
     for (const MapListing& m : extended_listing_) {
         if (m.file == name) return m.file;
     }
+    for (const ApprovedMap& t : test_maps_) {
+        if (t.name == name) return t.name;
+    }
     for (const MapListing& m : listing_) {
         if (lower(m.file) == folded) return m.file;
     }
     for (const MapListing& m : extended_listing_) {
         if (lower(m.file) == folded) return m.file;
+    }
+    for (const ApprovedMap& t : test_maps_) {
+        if (lower(t.name) == folded) return t.name;
     }
     return std::string();
 }

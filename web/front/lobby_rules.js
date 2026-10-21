@@ -42,8 +42,8 @@
     function validMapFile(name) {
         return typeof name === 'string' && name.length >= 5 && name.length <= 64 && /^[\x20-\x7e]*$/.test(name) && !/[\/\\:*?"<>|]/.test(name) && name.charAt(0) !== '.' && /\.lvl$/i.test(name) && /\.(lvl|LVL)$/.test(name);
     }
-    // The name a map of the players is shown under when nothing else is known of it: its file name without the ending
-    function communityName(file) { return String(file).replace(/\.lvl$/i, ''); }
+    // The name a map of the players is shown under when nothing else is known of it: its file name without the ending (or the test-map suffix)
+    function communityName(file) { return String(file).replace(/ ~test-[0-9a-f]{8}\.lvl$/i, '').replace(/\.lvl$/i, ''); }
     // The map of a Room message's file name ("TREASURE.LVL", any case), or null for one that the page does not list (the room's own: shown as it is said)
     function mapOfFile(file) {
         var f = typeof file === 'string' ? file.toUpperCase() : '';
@@ -217,6 +217,7 @@
         var kinds = room.plan.slice(), teamA = room.teamA, teamB = room.teamB, map = '';
         if (change && change.map && mapByKey(change.map)) map = mapByKey(change.map).file;
         else if (change && validMapFile(change.file)) map = change.file;           // a map of the players, by its file name (the picker's)
+        if (change && Array.isArray(change.kinds) && change.kinds.length === PLAYERS && change.kinds.every(function (k) { return typeof k === 'number' && k >= 0 && k <= 4; })) kinds = change.kinds.slice();
         if (change && typeof change.seat === 'number' && KINDS.indexOf(change.kind) !== -1) kinds[change.seat] = KINDS.indexOf(change.kind);
         if (change && change.sides) {
             var t = teamBytes(change.sides, playingAfter(model, kinds));

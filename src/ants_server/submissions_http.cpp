@@ -244,6 +244,30 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
     in.address = identity;
     in.token = bearer_of(request);
     in.allow_check = [this, now_ms, identity]() { return check_window_open(now_ms, identity); };            // (asked only when a map is really going to be checked, after every refusal that costs nothing: those use none of the window)
+    std::string test_flag;
+    if (query_value(request.query, "test", test_flag) && test_flag == "1") {
+        const auto began = std::chrono::steady_clock::now();
+        const TestSubmitOutcome test_out = store_.submit_test(in, now_s);
+        window_spent_ms_ += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
+        if (!test_out.ok) return failure_reply(test_out.fail);
+        if (store_.take_approved_changed() && on_approved_changed_) on_approved_changed_();
+        JsonValue tm = JsonValue::make_object();
+        tm.set("file", JsonValue::make_string(test_out.map.name));
+        tm.set("name", JsonValue::make_string(test_out.clean_name));
+        tm.set("kind", JsonValue::make_string(test_out.map.kind));
+        tm.set("width", JsonValue::make_int(test_out.map.width));
+        tm.set("height", JsonValue::make_int(test_out.map.height));
+        tm.set("minutes", JsonValue::make_int(test_out.map.minutes));
+        tm.set("players", JsonValue::make_int(test_out.map.players));
+        tm.set("size", JsonValue::make_int(static_cast<int64_t>(test_out.map.size)));
+        tm.set("hash", JsonValue::make_string(test_out.hash_text));
+        JsonValue usable = JsonValue::make_array();
+        for (size_t s = 0; s < 4; ++s) usable.push_back(JsonValue::make_bool(test_out.usable[s]));
+        tm.set("usable", std::move(usable));
+        JsonValue o = JsonValue::make_object();
+        o.set("test_map", std::move(tm));
+        return json_reply(201, o);
+    }
     const auto began = std::chrono::steady_clock::now();
     const SubmitOutcome out = store_.submit(in, now_s);
     window_spent_ms_ += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());

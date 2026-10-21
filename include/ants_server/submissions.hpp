@@ -18,14 +18,13 @@
 #include <vector>
 
 #include "ants_ctl/json.hpp"
+#include "ants_server/map_store.hpp"
 
 namespace ants::db {
 class Database;
 }
 
 namespace ants::server {
-
-struct ApprovedMap;
 
 /// What the store is told at start. The defaults are the server's own.
 struct SubmissionConfig {
@@ -74,6 +73,15 @@ struct SubmitOutcome {
     bool name_taken{false};                           // the name is the name of a map already: the owner may change it or add a number (not an error)
 };
 
+struct TestSubmitOutcome {
+    bool ok{false};
+    Failure fail;
+    ApprovedMap map;
+    std::string clean_name;
+    std::string hash_text;
+    bool usable[4]{false, false, false, false};
+};
+
 /// The four lists of the owner page and their counts
 struct ReviewCounts {
     size_t waiting{0}, approved{0}, declined{0}, taken_down{0};
@@ -94,6 +102,11 @@ public:
     static size_t max_upload_bytes(const std::string& kind);
 
     SubmitOutcome submit(const SubmitInput& in, int64_t now);
+    /// Checks a draft map for an unlisted online test room (POST /submissions?test=1): keeps at most kMaxTestMaps files in dir/test for kTestMapTtlS seconds, touches no database table.
+    static constexpr size_t kMaxTestMaps = 64;
+    static constexpr int64_t kTestMapTtlS = 6 * 3600;
+    TestSubmitOutcome submit_test(const SubmitInput& in, int64_t now);
+    std::vector<ApprovedMap> test_maps(int64_t now);
 
     // the maker's side: the token's own submissions
     bool list_for_token(const std::string& token, std::vector<Submission>& out, Failure& why);
@@ -140,12 +153,19 @@ private:
     void audit(int64_t now, const std::string& actor_id, const std::string& actor_name, const char* action, const std::string& id, const std::string& detail);
     bool database_failed(Failure& why, const char* where);
     std::string address_key(const std::string& address, int64_t day) const;
+    void prune_test_maps(int64_t now);
+
+    struct KeptTestMap {
+        ApprovedMap map;
+        int64_t created_at{0};
+    };
 
     db::Database& db_;
     SubmissionConfig config_;
     std::function<bool(const std::string& key)> library_has_;
     std::string salt_;
     std::vector<std::string> notices_;
+    std::vector<KeptTestMap> test_maps_;
     bool open_{false};
     bool approved_changed_{true};
 };

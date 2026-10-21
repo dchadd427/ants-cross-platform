@@ -770,7 +770,10 @@ int main(int argc, char** argv) {
         ac.cookie_secure = !(plain_http != nullptr && std::string(plain_http) == "1");
         ac.trust_client_header = !o.submit_ignore_client_header;
         submit_api = std::make_unique<ants::server::SubmissionApi>(*submissions, *accounts, ac);
-        auto refresh = [&rooms, &submissions]() { rooms.mutable_store().set_approved(submissions->approved_maps()); };
+        auto refresh = [&rooms, &submissions]() {
+            rooms.mutable_store().set_approved(submissions->approved_maps());
+            rooms.mutable_store().set_test_maps(submissions->test_maps(static_cast<int64_t>(std::time(nullptr))));
+        };
         refresh();
         submissions->take_approved_changed();
         submit_api->set_on_approved_changed(refresh);
@@ -836,6 +839,10 @@ int main(int argc, char** argv) {
             if (static_cast<uint32_t>(now - last_submission_upkeep_ms) >= 3600u * 1000u) {                 // (once an hour: the files of declined maps, old rows and counters)
                 last_submission_upkeep_ms = now;
                 submissions->maintenance(static_cast<int64_t>(std::time(nullptr)));
+                if (submissions->take_approved_changed()) {
+                    rooms.mutable_store().set_approved(submissions->approved_maps());
+                    rooms.mutable_store().set_test_maps(submissions->test_maps(static_cast<int64_t>(std::time(nullptr))));
+                }
                 if (accounts) {
                     accounts->maintenance(static_cast<int64_t>(std::time(nullptr)));
                     for (const std::string& line : accounts->take_notices()) log(line);          // (a refused write of the accounts: never a password, a name or an address)

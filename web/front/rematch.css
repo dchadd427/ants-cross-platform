@@ -27,7 +27,13 @@
 .backbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 12px 30px; font-size: 16px; line-height: 1.4; color: #d6ffe8; background: #173b2c; border-bottom: 3px solid #2f9a68; }
 .backbar b { font-weight: 500; color: var(--gold); }
 .backbar a { margin-left: auto; color: var(--mint, #9ff0c4); }
-@media (max-width: 760px) { .backbar { padding: 10px 16px; font-size: 15px; } }
+.testbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 20px; font-size: 16px; line-height: 1.35; color: var(--cream); background: #0d1b16; border-bottom: 3px solid var(--gold); }
+.testbar[hidden] { display: none !important; }
+.testbar.warn { border-bottom-color: #d96b43; }
+.testbar b { font-weight: 500; color: var(--gold); }
+.testbar-back { min-height: 40px; padding: 4px 12px; font-size: 15px; }
+.testbar-right { margin-left: auto; font-size: 14px; color: var(--mint, #9ff0c4); }
+@media (max-width: 760px) { .backbar, .testbar { padding: 10px 16px; font-size: 15px; } .testbar-right { margin-left: 0; width: 100%; } }
 /* a person of the match on a color card: back in the room (a green dot), or still on the results screen (a grey one) */
 .pstat.back, .pstat.away { display: flex; align-items: center; }
 .pstat.back::before, .pstat.away::before { content: ""; flex: none; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; }
