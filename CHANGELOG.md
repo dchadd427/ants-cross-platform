@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.100 - 2026-10-21 - Play draft maps with other players from the Map Maker
+
+**For players:**
+- **Play draft maps with other players from the Map Maker (`v1.4.4`).** The **Play this map** box in the Map Maker now has two tabs: **Against bots** (single-player test run) and **With other players** (opens an online lobby room with the draft map). The room code and link work like any other room, the draft map is downloaded and verified automatically for everyone who joins, and the room and its match are never listed in `/maps`, `/replays`, `/live` or `/history`.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5f3d19d9...a3ed04cb)
+
 ## v0.12.99 - 2026-10-21 - Pre-placed neutral bombs and fire walls in Map Maker
 
 **For players:**
