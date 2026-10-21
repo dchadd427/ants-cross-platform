@@ -29,10 +29,13 @@
     function flags(file, layer, idx) { return rd(file.bytes, at(file, layer, idx) + 2); }
     function third(file, layer, idx) { return rd(file.bytes, at(file, layer, idx) + 4); }
     function setCell(file, layer, idx, t, f, a) { var p = at(file, layer, idx), b = file.bytes; wr(b, p, t); wr(b, p + 2, f); wr(b, p + 4, a); }
+    var NEUTRAL_BOMB = 0x0101;      // third word of a neutral pre-placed bomb (129..132), as in POPcOrN.lvl: > 4 so no team owns it
+    function isBomb(t) { return t >= 129 && t <= 132; }
     function s8(v) { return v > 127 ? v - 256 : v; }
 
-    // The anchor that a layer-2 cell names, as the index of a cell, or -1 when it names a place outside the grid (a quirk of some old maps)
+    // The anchor that a layer-2 cell names, as the index of a cell, or -1 when it names a place outside the grid (a quirk of some old maps) or is a bomb (whose third word is the owner)
     function anchorIndex(file, idx) {
+        if (isBomb(tile(file, 2, idx))) return -1;
         var w = third(file, 2, idx), r, c;
         if (file.version === 8) { r = w & 255; c = w >> 8; }
         else {
@@ -44,7 +47,8 @@
     }
 
     // The third word of an object that stands on one cell and is its own anchor
-    function ownAnchor(file, idx) {
+    function ownAnchor(file, idx, t) {
+        if (isBomb(t !== undefined ? t : tile(file, 2, idx))) return NEUTRAL_BOMB;
         if (file.version !== 8) return 0;                                  // (an offset of nothing)
         var row = (idx / file.columns) | 0;
         return (row & 255) | (((idx - row * file.columns) & 255) << 8);
@@ -212,7 +216,7 @@
                 var n = 0, old = tile(f, 2, idx);
                 if (old !== EMPTY2 && objectCells(f, idx).length > 1) n += removeObject(idx);       // (a bigger object goes whole: never half a hill)
                 else if (Solid.clears(old) && !Solid.sets(tileId)) setSolid(idx, false);
-                touch(2, idx); setCell(f, 2, idx, tileId, 1, ownAnchor(f, idx)); dirty.push(idx);
+                touch(2, idx); setCell(f, 2, idx, tileId, 1, ownAnchor(f, idx, tileId)); dirty.push(idx);
                 if (Solid.sets(tileId)) setSolid(idx, true);
                 return n + 1;
             }

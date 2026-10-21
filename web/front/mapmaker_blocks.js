@@ -558,7 +558,7 @@
             }
             change.solid = [];
             for (i = 0; i < movedCells.length; i++) {
-                var mc = movedCells[i], w = file.version === 8 ? ((ar & 255) | ((ac & 255) << 8)) : (((ar - mc.r) & 255) | (((ac - mc.c) & 255) << 8));
+                var mc = movedCells[i], w = (t2 >= 129 && t2 <= 132) ? 0x0101 : (file.version === 8 ? ((ar & 255) | ((ac & 255) << 8)) : (((ar - mc.r) & 255) | (((ac - mc.c) & 255) << 8)));
                 putCell(change, mc.idx, t2, mc.flag, w);
                 if (Solid && Solid.sets(t2)) change.solid.push([mc.idx, true]);
                 else if (Solid && Solid.clears(Edit.tile(file, 2, mc.idx))) change.solid.push([mc.idx, false]);
@@ -646,7 +646,7 @@
                     if (dropHills[t2] || dropCells[oIdx] || nar < 0 || nac < 0 || nar >= newRows || nac >= newCols) {
                         if (r > 0 && (Solid && Solid.clears(t2) || dropHills[t2])) f1 &= ~1;
                         t2 = EMPTY2; f2 = 0; a2 = 0;
-                    } else if (file.version === 8) {
+                    } else if (!(t2 >= 129 && t2 <= 132) && file.version === 8) {
                         a2 = (nar & 255) | ((nac & 255) << 8);
                     } else if (!(t2 >= 129 && t2 <= 132)) {
                         a2 = ((nar - r) & 255) | (((nac - c) & 255) << 8);

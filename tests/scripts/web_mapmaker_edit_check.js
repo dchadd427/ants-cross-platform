@@ -110,6 +110,16 @@ function caseB() {
         s.stamp(0, 5, 3);
         s.end();
         check(Edit.objectCells(f, 2 * 16 + 2).length === 1, 'and it is one cell' + tag);
+        for (const bombId of [129, 130, 131, 132]) {
+            const sb = ed.begin('objects', bombId); sb.stamp(0, 0, 1); sb.end();
+            equal(cellOf(f, 2, 0, 0), [bombId, 1, 0x0101], 'bomb ' + bombId + ' has neutral owner 0x0101' + tag);
+            check((cellOf(f, 1, 0, 0)[1] & 1) === 0 && Edit.anchorIndex(f, 0) === -1, 'bomb ' + bombId + ' is walkable and has no anchor' + tag);
+            const se = ed.begin('erase', null); se.stamp(0, 0, 1); se.end();
+        }
+        const sf = ed.begin('objects', 134); sf.stamp(4, 4, 1); sf.end();
+        check(cellOf(f, 2, 4, 4)[0] === 134 && (cellOf(f, 1, 4, 4)[1] & 1) === 1, 'fire wall 134 is solid' + tag);
+        const sfe = ed.begin('erase', null); sfe.stamp(4, 4, 1); sfe.end();
+        check((cellOf(f, 1, 4, 4)[1] & 1) === 0, 'erasing fire wall clears solid bit' + tag);
 
         s = ed.begin('erase', null);
         check(s.stamp(2, 2, 1) === 1, 'the eraser takes an object away' + tag);
@@ -336,7 +346,7 @@ function caseF() {
     for (const row of Palette.GROUND) check(row[0] >= 431 && row[0] <= 669, 'ground ' + row[1] + ' is a ground tile (ids 431 to 669)');
     for (const row of Palette.OBJECTS.concat(Palette.PLANTS)) check(row[0] < 431, 'object ' + row[1] + ' is an object tile');
     const ground = Palette.items('ground'), objects = Palette.items('objects');
-    check(ground.length === 5 && objects.length === 25 && Palette.items('plants').length === 14 && Palette.items('erase').length === 0 && Palette.items('move').length === 0, 'the palettes: 5 kinds of ground, 25 objects (with 14 plants), none for the eraser and Move');
+    check(ground.length === 5 && objects.length === 30 && Palette.items('plants').length === 14 && Palette.items('erase').length === 0 && Palette.items('move').length === 0, 'the palettes: 5 kinds of ground, 30 objects (with 14 plants, 4 bombs and fire wall), none for the eraser and Move');
     equal(ground.map((i) => [i.id, i.name, i.label, i.kind]), [[485, 'g01a', 'Gravel', 'gravel'], [487, 'd01a', 'Dirt', 'dirt'], [571, 's01a', 'Slate', 'slate'], [439, 'M01a', 'Mud', 'mud'], [476, 'w01a', 'Water', 'water']], 'the five kinds of ground and the plain tile of each: no grass, no sand');
     check(ground.every((i) => i.color === Tiles.css(i.id, Tiles.EMPTY2)) && objects.every((i) => i.color === Tiles.css(0, i.id)), 'every swatch is the color the canvas draws that tile in');
     const keys = Palette.TOOLS.map((t) => t.key);
@@ -365,7 +375,7 @@ function caseF() {
         check(set.points >= 10 && set.points <= 50 && set.units > 0, n + ' stages: a pile of ' + set.units + ' bites of ' + set.points + ' points');
     }
     check(Blocks.MIN_STAGES === 2 && Blocks.MAX_STAGES === 6 && Blocks.MIN_ANTS === 1 && Blocks.MAX_ANTS === 64, 'the ranges of the steppers');
-    check(new Set(Palette.GROUND.concat(Palette.OBJECTS, Palette.PLANTS).map((r) => r[2])).size === 30, 'every label is different');
+    check(new Set(Palette.GROUND.concat(Palette.OBJECTS, Palette.PLANTS).map((r) => r[2])).size === 35, 'every label is different');
 }
 
 // ---- G: the tools on a fake page ----
@@ -440,7 +450,7 @@ function caseG() {
     p.host.swatches.children[1].click();
     check(p.tools.state().ground === 487 && p.host.name.textContent === 'Dirt', 'a swatch chooses a tile and its name shows');
     p.button('objects').click();
-    check(p.host.swatches.children.length === 25 && p.host.title.textContent === 'Objects' && p.tools.state().tool === 'objects', 'Objects has its own palette of 25');
+    check(p.host.swatches.children.length === 30 && p.host.title.textContent === 'Objects' && p.tools.state().tool === 'objects', 'Objects has its own palette of 30');
     check(p.tools.state().ground === 487, 'and the ground that was chosen is kept');
     p.button('erase').click();
     check(p.host.box.hidden && p.host.tile.hidden && p.host.fill.disabled && p.brush(5).disabled === false, 'Erase has no palette (nor the phone\'s palette button) and no Fill, and keeps the brushes');
