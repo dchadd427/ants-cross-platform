@@ -136,6 +136,13 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .eb { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 34px; padding: 0 10px; font-size: 14px; font-weight: 500; line-height: 1; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 6px; box-shadow: var(--btn-shadow-sm); touch-action: manipulation; }
 .eb[disabled] { opacity: .45; cursor: default; }
 .eb[aria-pressed="true"], .eb[aria-checked="true"] { background: var(--pressed); color: var(--pressed-ink); box-shadow: var(--btn-shadow-chosen); transform: translate(1px, 2px); }
+.tog { gap: 6px; padding: 0 10px 0 8px; border-radius: 17px; }
+.tog .tk { position: relative; flex: none; width: 30px; height: 18px; border-radius: 9px; background: #06100c; border: 2px solid #000; }
+.tog .tk::after { content: ""; position: absolute; top: 1px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); }
+.tog[aria-checked="true"] { background: var(--pressed); color: var(--gold); border-color: var(--gold); }
+.tog[aria-checked="true"] .tk { background: #1d6b4a; }
+.tog[aria-checked="true"] .tk::after { left: 12px; background: var(--gold); }
+#auto-edges-mob[hidden] { display: none; }
 .cvbar .sp { flex: 1; }
 .zoom { display: inline-flex; align-items: center; gap: 6px; }
 .zoom button { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; font-weight: 500; font-size: 20px; line-height: 1; cursor: pointer; background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 6px; box-shadow: var(--btn-shadow-sm); }
@@ -163,6 +170,8 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .dlg-foot .btn.ghost { background: #0d1b16; box-shadow: none; border-color: var(--frame-hi); color: var(--cream); }
 .dlg-foot .btn[disabled] { opacity: .45; }
 .menulist { display: grid; gap: 10px; }
+.menuhead { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.menulist .tog { width: 100%; min-height: 44px; justify-content: flex-start; padding: 0 14px; font-size: 16px; border-radius: 8px; }
 .menuhint { font-size: 14.5px; line-height: 1.35; color: var(--muted); margin: -4px 2px 0; }
 .kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 14px; border: 0; min-width: 0; }
 .kind { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 14px 52px; background: #0d1b16; border: 2px solid var(--rule); border-radius: 6px; cursor: pointer; }
@@ -301,6 +310,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .toolbtns { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 4px; }
     .palette { display: none; }
     .tilebtn:not([hidden]) { display: flex; min-width: 150px; }
+    #auto-edges-mob:not([hidden]) { grid-column: 1 / -1; justify-content: flex-start; padding: 0 12px; border-radius: 22px; }
     .toolnote { font-size: 12px; padding: 0 4px; } .toolnote .dsk { display: none; } .toolnote .mob { display: inline; }
     .cvbar { padding: 6px 8px; } .cvbar .sp { display: none; } #where { flex: 1 1 0; } .editbar { width: 100%; flex-wrap: wrap; justify-content: space-between; gap: 4px 2px; } .undoredo, .drawopts { gap: 2px; } .brushes { margin-left: 0; gap: 2px; }
     .eb { min-width: 44px; height: 44px; padding: 0 2px; font-size: 13px; } .brange { min-width: 44px; height: 44px; }
@@ -341,6 +351,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .toolbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
     .palette { display: none; }
     .tilebtn:not([hidden]) { display: flex; }
+    #auto-edges-mob { display: none; }
     .toolnote { display: none; }
     .tool { justify-content: center; min-height: 32px; font-size: 12px; padding: 2px; text-align: center; } .tool:not([disabled]) { min-height: 44px; } .tool i { display: none; }
     .eb { min-width: 44px; height: 44px; padding: 0 8px; } #edges-btn { padding: 0 3px; } .brange { min-width: 44px; height: 44px; }

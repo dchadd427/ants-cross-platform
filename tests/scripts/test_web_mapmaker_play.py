@@ -109,7 +109,7 @@ class ThePageWiring(unittest.TestCase):
         self.assertRegex(read("web", "front", "mapmaker.css"), r"\.btn\.gold \{ background: var\(--gold\)")
 
     def test_the_menu_of_a_phone_has_it_last_in_gold_with_its_sentence(self):
-        entry = "{ text: '\\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }]); }"
+        entry = "{ text: '\\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }, { head: 'Settings for this browser' }"
         self.assertIn(entry, self.app)
         self.assertIn("'btn' + (it.cls ? ' ' + it.cls : '')", self.dialog)
         self.assertIn("if (it.hint) list.appendChild(el('p', 'menuhint', it.hint));", self.dialog)

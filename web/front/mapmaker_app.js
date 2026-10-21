@@ -417,7 +417,7 @@
         play: playMap,
         submit: function () { if (!dialogs.isOpen() && !canvas.isStroking()) submitOr(function () { sent.open(); }); }, subs: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show('sent'); },
         'new': function () { leave(newMap); }, open: function () { leave(openMap); }, download: download, check: showChecks, props: openProps, resize: openResize, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Resize...', onClick: ACTIONS.resize }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }, { text: '\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }]); }
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Resize...', onClick: ACTIONS.resize }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }, { text: '\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }, { head: 'Settings for this browser' }, { text: 'Auto edges: ' + (tools.state().autoEdges ? 'On' : 'Off'), cls: 'tog' + (tools.state().autoEdges ? ' on' : ''), role: 'switch', checked: tools.state().autoEdges, disabled: !win.MapEdges || !win.MapGround, keepOpen: true, hint: 'Painting ground also sets the edge pieces. Remembered in this browser.', onClick: function (b) { tools.setAutoEdges(!tools.state().autoEdges); var on = tools.state().autoEdges, lbl = 'Auto edges: ' + (on ? 'On' : 'Off'); if (b.children && b.children.length >= 2) b.children[1].textContent = lbl; else b.textContent = lbl; b.setAttribute('aria-checked', String(on)); b.classList.toggle('on', on); } }]); }
     };
 
     function start(module) {
@@ -439,7 +439,7 @@
             doc: doc, win: win, canvas: canvas,
             host: {
                 tools: doc.querySelectorAll('[data-tool]'), box: $('palette-box'), title: $('palette-title'), swatches: $('palette'), name: $('palette-name'), hint: $('tool-hint'),
-                tile: $('tile-btn'), map: $('map'), side: doc.querySelector('aside.side'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn'),
+                tile: $('tile-btn'), map: $('map'), side: doc.querySelector('aside.side'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), autoEdges: [$('auto-edges-btn'), $('auto-edges-mob')], undo: $('undo-btn'), redo: $('redo-btn'),
                 stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more')
             },
             loadAnts: loadAnts, about: antsAbout, props: function () { ACTIONS.props(); }, convert: function () { ACTIONS.convert(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
@@ -481,6 +481,7 @@
             if (!win.MapEdges || !win.MapGround) return;
             var b = $('edges-btn');
             b.disabled = false;
+            tools.useEdges(win.MapEdges);
             b.addEventListener('click', function () {
                 if (dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden) return;
                 win.MapEdges.open({

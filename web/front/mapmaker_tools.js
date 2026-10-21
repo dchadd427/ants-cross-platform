@@ -33,9 +33,9 @@
     //       dialogs (MapDialog.create: the palette of a phone is a sheet), say(title, text) -> a plain message}
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
-        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, antType: 0, stages: 4, dropper: 0, food: 0, units: 0, points: 0 };
+        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, autoEdges: (function () { try { return !!(env.win && env.win.localStorage && env.win.localStorage.getItem('ants_mapmaker_auto_edges') === '1'); } catch (e) { return false; } })(), team: 0, ants: 4, antType: 0, stages: 4, dropper: 0, food: 0, units: 0, points: 0 };
         var editor = null, current = null, moving = null, told = false, fits = '';      // `fits`: a note when fewer ants than asked for found room, until the next choice
-        var ground = null, sprites = null, ants = null, asked = false;                  // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js: the kinds' sheets and the game's pictures; mapmaker_ants.js: the Ants tool's box, asked for when the tool is first chosen)
+        var ground = null, sprites = null, edges = null, ants = null, asked = false;    // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js, mapmaker_edges.js; mapmaker_ants.js: the Ants tool's box, asked for when the tool is first chosen)
         var ICONS = { ground: [0, 485], objects: [1, 302], bigger: [1, 1323], hills: [1, 248], food: [1, 264] };           // the tool buttons' pictures: [layer 2?, tile]
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
@@ -100,6 +100,22 @@
                     b.tabIndex = n === state.brush ? 0 : -1;
                 }
             });
+            Array.prototype.forEach.call(host.autoEdges || [], function (b, i) {
+                if (!b) return;
+                b.disabled = !editor || !ground || !edges;
+                b.setAttribute('aria-checked', String(!!state.autoEdges));
+                if (b.classList) b.classList.toggle('on', !!state.autoEdges);
+                var lbl = 'Auto edges: ' + (state.autoEdges ? 'On' : 'Off');
+                if (b.children && b.children.length >= 2) b.children[1].textContent = lbl;
+                else b.textContent = lbl;
+                if (i === 1) b.hidden = state.tool !== 'ground';
+            });
+        }
+
+        function setAutoEdges(on) {
+            state.autoEdges = !!on;
+            try { if (env.win && env.win.localStorage) env.win.localStorage.setItem('ants_mapmaker_auto_edges', state.autoEdges ? '1' : '0'); } catch (e) {}
+            showButtons();
         }
 
         function showTools() {
@@ -405,6 +421,29 @@
             return editor.begin(kind, id);
         }
 
+        function canAuto() {
+            if (!editor || !ground || !edges || !state.autoEdges || state.tool !== 'ground') return false;
+            var item = itemOf('ground', state.ground);
+            return !!(item && !item.custom);
+        }
+        function applyAuto(rect) {
+            if (!current || !canAuto() || !rect) return 0;
+            var region = { r0: rect.r0 - 2, r1: rect.r1 + 2, c0: rect.c0 - 2, c1: rect.c1 + 2 };
+            var made = edges.strokePlan(env.file(), region, ground, state.ground, current.painted, current.beforeTile);
+            return made.count ? current.change({ names: [], cells: [], solid: [], splices: [], ground: made.cells }) : 0;
+        }
+        function finishAuto() {
+            var b = current && current.box && current.box();
+            if (!b || !canAuto()) return;
+            var f = env.file(), r0 = Math.max(0, b.r0 - 2), r1 = Math.min(f.rows - 1, b.r1 + 2), c0 = Math.max(0, b.c0 - 2), c1 = Math.min(f.columns - 1, b.c1 + 2), cells = [], r, c;
+            for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
+                var k = r * f.columns + c, now = f.tile1(r, c);
+                if (now !== current.beforeTile(k)) cells.push([k, now]);
+            }
+            var sp = cells.length ? edges.dictionary(f, { cells: cells }, ground) : null;
+            if (sp) current.change({ names: [], cells: [], solid: [], splices: [sp], ground: [] });
+        }
+
         // A whole hill, a team's ants, a food pile, a plant or a bigger object, put with one tap
         function place(cell) {
             var file = env.file(), change;
@@ -447,6 +486,7 @@
                 if (!current) return false;
                 if (state.fill && state.tool !== 'erase') {
                     current.fill(cell.row, cell.column);
+                    applyAuto(current.box && current.box());
                     canvas.markDirty(current.takeDirty());
                     painter.end();
                     state.fill = false;                                    // (Fill is for one click: the next press paints again)
@@ -454,6 +494,7 @@
                     return false;
                 }
                 var changed = current.stamp(cell.row, cell.column, state.brush);
+                changed += applyAuto(Edit.brushRect(env.file(), cell.row, cell.column, state.brush));
                 canvas.markDirty(current.takeDirty());
                 var why = current.refusal();
                 if (why) {
@@ -469,6 +510,8 @@
                 if (!current) return;
                 current.segment(from.row, from.column, to.row, to.column, state.brush);
                 canvas.markDirty(current.takeDirty());
+                var a = Edit.brushRect(env.file(), from.row, from.column, state.brush), b = Edit.brushRect(env.file(), to.row, to.column, state.brush);
+                if (applyAuto({ r0: Math.min(a.r0, b.r0), r1: Math.max(a.r1, b.r1), c0: Math.min(a.c0, b.c0), c1: Math.max(a.c1, b.c1) })) canvas.markDirty(current.takeDirty());
                 var why = current.refusal();
                 if (why && !told) { told = true; if (env.say) env.say('It cannot be put there', why); }
             },
@@ -484,6 +527,7 @@
                     return;
                 }
                 if (!current) return;
+                finishAuto();
                 var n = current.end();
                 current = null;
                 if (n) { canvas.refreshMini(); showButtons(); showInfo(); env.onEdit(); }
@@ -549,6 +593,7 @@
             });
         });
         host.fill.addEventListener('click', function () { state.fill = !state.fill; showButtons(); });
+        Array.prototype.forEach.call(host.autoEdges || [], function (b) { if (b) b.addEventListener('click', function () { setAutoEdges(!state.autoEdges); }); });
         host.tile.addEventListener('click', openPicker);
         host.stepLess.addEventListener('click', function () { stepBy(-1); });
         host.stepMore.addEventListener('click', function () { stepBy(1); });
@@ -564,19 +609,23 @@
             setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; moving = null; if (ants) ants.setMap(); showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
             // The lazily loaded parts came in (mapmaker_ground.js: the sheets of the kinds; mapmaker_sprites.js: the pictures, or null when the atlas failed): the palette and the tool buttons show them
-            use: function (g, s) {
+            use: function (g, s, e) {
                 if (g) ground = g;
+                if (e !== undefined) edges = e;
                 sprites = s || null;
                 Array.prototype.forEach.call(host.tools, function (b) { var icon = ICONS[b.getAttribute('data-tool')], i = b.querySelector('i'); if (icon && i) picture(i, !!icon[0], icon[1], 18); });
                 showPalette();
+                showButtons();
                 if (ants) ants.refresh();
             },
+            useEdges: function (e) { edges = e || null; showButtons(); },
+            setAutoEdges: setAutoEdges,
             act: act,
             isClean: function () { return !editor || editor.history.isClean(); },
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },
             markUnsaved: function () { if (editor) editor.history.markUnsaved(); },
-            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, team: state.team, ants: state.ants, stages: state.stages, dropper: state.dropper, food: state.food, units: foodUnits(), points: foodPoints(), big: state.big, history: editor ? editor.history.size() : null }; }
+            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, autoEdges: state.autoEdges, team: state.team, ants: state.ants, stages: state.stages, dropper: state.dropper, food: state.food, units: foodUnits(), points: foodPoints(), big: state.big, history: editor ? editor.history.size() : null }; }
         };
     }
 
