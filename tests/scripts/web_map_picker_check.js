@@ -33,7 +33,11 @@ const RAW = {
     same('an original is named by its word', [list[0].name, list[1].name, list[0].original, list[2].original], ['Tiny', 'Treasure', true, false]);
     same('a map of the players is named by its file name without the ending', list[4].name, 'Mango tree');
     same('displayName', [P.displayName('Mango tree.LVL', false), P.displayName('GAUNTLET.LVL', true)], ['Mango tree', 'Gauntlet']);
-    check('no list when it is not format 1, not an object or has no maps', P.parseList(null) === null && P.parseList({ format: 2, maps: [] }) === null && P.parseList({ format: 1 }) === null && P.parseList('x') === null);
+    check('no list when it is not format 1 or 2, not an object or has no maps', P.parseList(null) === null && P.parseList({ format: 3, maps: [] }) === null && P.parseList({ format: 1 }) === null && P.parseList('x') === null);
+    {
+        const ext = P.parseList({ format: 2, maps: [{ file: 'Big Desert.lvl', kind: 'extended', width: 256, height: 256, minutes: 20, players: 4, thumb: '/maps/previews/Big%20Desert.png' }] });
+        same('format 2 (/maps/all) keeps kind extended and its PNG preview', [ext[0].name, ext[0].kind, ext[0].thumb], ['Big Desert', 'extended', '/maps/previews/Big%20Desert.png']);
+    }
     const dirty = P.parseList({ format: 1, maps: [null, 5, { file: '../x.lvl' }, { file: 'a\\b.lvl' }, { file: 'a/b.lvl' }, { file: 'ok.lvl', width: -1, minutes: 'x', plays: 1.5, players: 4, thumb: 'https://evil.example/x.png', description: 'a\u0007b' },
         { file: 'ok2.lvl', thumb: '/maps/previews/../../etc.webp' }, { file: 'ok3.lvl', thumb: '/maps/previews/a b.webp' }, { file: 'ok4.lvl', thumb: '//evil.example/x.png' }, { file: 'ok5.lvl', thumb: '/front/preview_tiny.png' }, { file: 'dots..lvl', thumb: '/maps/previews/dots..webp' }, { file: 'no ending' }] });
     same('entries that are no map are left out', dirty.map((m) => m.file), ['ok.lvl', 'ok2.lvl', 'ok3.lvl', 'ok4.lvl', 'ok5.lvl', 'dots..lvl']);
@@ -179,7 +183,7 @@ function rig(options) {
         r.picker.open('Zebra.lvl');
         check('open shows the dialog', r.overlay.hidden === false && r.picker.isOpen());
         check('it says it is loading', /Loading the maps/.test(r.out().textContent));
-        same('the list is asked for once, from the site, with the cookies of the site', [r.log.fetches.length, r.log.fetches[0].url, r.log.fetches[0].init.credentials], [1, '/maps', 'same-origin']);
+        same('the list is asked for once, from the site, with the cookies of the site', [r.log.fetches.length, r.log.fetches[0].url, r.log.fetches[0].init.credentials], [1, '/maps/all', 'same-origin']);
         await settle();
         same('the page is told that the list is here', r.log.lists, 1);
         same('the default order is shown (originals first, then by plays)', r.names(), ['Tiny', 'Treasure', 'Mango tree', 'apple', 'Zebra', 'Alpha', 'Dune']);
@@ -200,6 +204,11 @@ function rig(options) {
         check('the Original badge is on the originals only', r.rows().map((n) => !!n.querySelector('.pk-badge')).join() === 'true,true,false,false,false,false,false');
         same('a row says the plays', r.rows()[2].querySelector('.pk-pl').textContent, '300plays');
         same('and its size, players and minutes', r.rows()[2].querySelectorAll('.pk-meta')[0].textContent, '4 players · 10 min · 100×90');
+        {
+            const rext = rig({ answer: () => Promise.resolve(response({ format: 2, maps: [M('Big.lvl', { kind: 'extended', width: 256, height: 256 })] })) });
+            rext.picker.open(''); await settle();
+            same('an Extended map has the Extended badge', [rext.rows()[0].querySelector('.pk-badge.pk-ext').textContent, rext.rows()[0].querySelectorAll('.pk-meta')[0].textContent], ['Extended', '4 players · 10 min · 256×256']);
+        }
     }
     // 2. the switch: Detail by default, remembered per browser, unaffected by a storage that throws
     {

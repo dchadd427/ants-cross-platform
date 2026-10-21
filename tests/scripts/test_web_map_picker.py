@@ -63,7 +63,7 @@ class ThePage(unittest.TestCase):
         self.assertTrue("if (isHost()) ensurePicker().open(model.mapFile);" in self.page)
 
     def test_the_list_is_fetched_once_and_a_failure_leaves_the_old_selector(self):
-        self.assertEqual(len(re.findall(r"opts\.fetch\('/maps'", self.script)), 1)
+        self.assertEqual(len(re.findall(r"opts\.fetch\('/maps/all'", self.script)), 1)
         self.assertTrue("The six original maps can still be chosen with the arrows beside the picture." in self.script)
 
     def test_the_view_is_remembered_in_local_storage_inside_try(self):
@@ -140,6 +140,7 @@ class ThePickersOwnCode(unittest.TestCase):
             "the server's list is not asked": ("        if (list) {\n            var low = null;", "        if (false) {\n            var low = null;"),
             "the first spelling in another case beats the exact one": ("if (list[i].file.replace(/\\.lvl$/i, '') === base) return list[i].original ? '' : list[i].thumb;", "if (false) return '';"),
             "a map without a picture on the server gets a guessed address": ("return list[i].original ? '' : list[i].thumb;", "return list[i].thumb || previewPath(map);"),
+            "an Extended map has no badge": ("else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));", ""),
         }
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():

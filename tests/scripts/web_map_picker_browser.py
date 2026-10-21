@@ -149,7 +149,7 @@ def main():
         site_port = int(site.split("//", 1)[1].split("/")[0].split(":")[1])
         front = Front(site_port, ws_port, door_port)
         web = "http://127.0.0.1:%d/" % front.port
-        listing = json.load(urllib.request.urlopen("http://127.0.0.1:%d/maps" % door_port, timeout=10))["maps"]
+        listing = json.load(urllib.request.urlopen("http://127.0.0.1:%d/maps/all" % door_port, timeout=10))["maps"]
         top = [m for m in listing if not m.get("original")]
         top.sort(key=lambda m: (-m["plays"], m["file"][:-4].lower(), m["file"]))
 

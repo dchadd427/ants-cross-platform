@@ -469,7 +469,7 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     }
     const std::vector<std::pair<uint8_t, net::FillLevel>> fill_seats = net::plan_fill_seats(net::FillPlan(asked_fill), lobby_.room(), spec_.players);
     const uint8_t roster = roster_with(fill_seats);
-    if (!level_.validate(roster).playable) return lobby_.end_start(net::kNoticeMapColors);
+    if (!level_.validate(roster, assets::LevelLimits::for_play_extended()).playable) return lobby_.end_start(net::kNoticeMapColors);
     if (!services_.match_place || !services_.match_place(now_ms)) return lobby_.end_start(net::kNoticeNoPlace);
     if (!start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, true, asked_teams))) lobby_.end_start(std::string());
 }
@@ -533,7 +533,7 @@ void Room::update(uint32_t now_ms) {
         const bool can = !fill_seats.empty() ? lobby_.can_start_filled() : lobby_.can_start();
         if (can && ((full && !holds) || early)) {
             const uint8_t roster = roster_with(fill_seats);           // the seats that play: a map is playable for some rosters and not for others (a start marker outside the grid)
-            const assets::LevelValidation check = level_.validate(roster);
+            const assets::LevelValidation check = level_.validate(roster, assets::LevelLimits::for_play_extended());
             if (!check.playable) {
                 if (full) return fail("the map cannot be played by these seats: " + check.reason(), now_ms);
                 // (an early start for seats that the map cannot be played by: nothing happens, the room waits for the others, it does not fail; the leader who asked for bots is told)

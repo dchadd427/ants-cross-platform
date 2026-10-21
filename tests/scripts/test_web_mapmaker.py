@@ -936,7 +936,7 @@ class ThePage(unittest.TestCase):
                 self.assertNotIn(word, text, "%s has %s" % (name, word))
         store = self.code["mapmaker_store.js"]
         self.assertEqual(store.count("fetch("), 2)
-        self.assertIn("env.fetch('/maps')", store, "the first request is a read of the site's list of maps")
+        self.assertIn("env.fetch('/maps/all')", store, "the first request is a read of the site's list of maps")
         self.assertIn("env.fetch(fileUrl(file))", store, "the second request downloads a chosen map file from /maps/files/")
         self.assertNotRegex(store, r"method|POST|PUT|body:", "the page sends nothing to the site")
         self.assertNotIn("s.put({ key", store, "a draft is added, never put (put would replace one)")

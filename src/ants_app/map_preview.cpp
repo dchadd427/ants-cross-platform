@@ -179,10 +179,10 @@ constexpr uint32_t kPreviewSeed = 1;
 /// The teams that a preview of the level can show: all four when the level is playable by four (a match with every start position), else the teams it can be played by one at a time (a start
 /// marker outside the grid is a crash in the original: the remake refuses such a map for a roster that has the team); 0 when none
 uint8_t preview_roster(const assets::LevelData& level) {
-    if (level.validate(0x0F).playable) return 0x0F;
+    if (level.validate(0x0F, assets::LevelLimits::for_play_extended()).playable) return 0x0F;
     uint8_t roster = 0;
     for (uint8_t t = 0; t < 4; ++t) {
-        if (level.validate(static_cast<uint8_t>(1u << t)).playable) roster = static_cast<uint8_t>(roster | (1u << t));
+        if (level.validate(static_cast<uint8_t>(1u << t), assets::LevelLimits::for_play_extended()).playable) roster = static_cast<uint8_t>(roster | (1u << t));
     }
     return roster;
 }

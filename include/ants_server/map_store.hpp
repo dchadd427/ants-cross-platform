@@ -76,15 +76,15 @@ public:
     std::string listed_name(const std::string& name) const;
     /// The body of GET /maps: {"format":1,"maps":[{file,width,height,minutes,players,description,plays,thumb[,original][,maker]}]}. `plays` is how many times each map was played (map_plays of the database, keyed
     /// by file name and hash); null when the server keeps none: every count is 0 then. With `with_extended` (GET /maps/all, for the newest version only) the body is format 2: every entry also has "kind",
-    /// and the approved Extended maps are in it, which no other list and no lobby choice ever holds (the game and the server do not load Extended maps yet).
+    /// and the approved Extended maps are in it, which GET /maps leaves out for older pages.
     std::string list_json(const std::vector<MapPlays>* plays, bool with_extended = false) const;
 
-    /// The approved maps of the submissions store (Classic ones join the list and can be chosen and found by name; Extended ones are only in list_json(.., true)). Replaces the set that was given before;
+    /// The approved maps of the submissions store (both Classic and Extended maps can be chosen and found by name; Classic ones join GET /maps, and Extended ones join GET /maps/all). Replaces the set that was given before;
     /// the list is rebuilt at once, the folders are not scanned again.
     void set_approved(std::vector<ApprovedMap> maps);
     /// Whether `key` (the lower-case name without ".lvl") is the name of a map of the library: one of the six originals or a file of the maps or the community folder. Approved maps do not count.
     bool library_has_name(const std::string& key) const;
-    /// The approved Classic map that has this file name (exactly), or nullptr. Used to serve its file and picture; a name that is not approved or is taken down is not found.
+    /// The approved map that has this file name (exactly), or nullptr. Used to serve its file and picture; a name that is not approved or is taken down is not found.
     const ApprovedMap* approved(const std::string& file_name) const;
 
 private:

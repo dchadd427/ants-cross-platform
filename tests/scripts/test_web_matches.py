@@ -101,7 +101,7 @@ class TheCommonFiles(unittest.TestCase):
                     continue
                 self.assertIn("credentials: 'omit'", call, name + ": " + call)
                 self.assertIn("cache: 'no-store'", call, name + ": " + call)
-        self.assertIn("fetch('/maps', { credentials: 'same-origin' })", read("web", "history_page.js").replace("fetcher(", "fetch("))      # (the list of the maps is the site's own and cached by it)
+        self.assertIn("fetch('/maps/all', { credentials: 'same-origin' })", read("web", "history_page.js").replace("fetcher(", "fetch("))      # (the list of the maps is the site's own and cached by it)
 
     def test_the_one_stylesheet_is_the_pages_and_the_colors_are_the_front_pages(self):
         css = read("web", "matches.css")

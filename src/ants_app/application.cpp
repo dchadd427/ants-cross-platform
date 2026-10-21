@@ -602,7 +602,7 @@ bool Application::init(const ApplicationConfig& config) {
     // A game that starts straight into its match (--map, no setup screen, no network) plays the seats that are taken (all four, or you and the bots, or you alone): the level must be
     // playable by them, as load_match demands of every match that starts from the setup screen (a start marker outside the grid has no behaviour in the original)
     if (!config_.start_in_map_select && config_.net_role == ApplicationConfig::NetRole::None) {
-        start_verdict = current_level_.validate(local_roster_);
+        start_verdict = current_level_.validate(local_roster_, ants::assets::LevelLimits::for_play_extended());
         if (!start_verdict.playable) {
             std::cerr << "[Application] The level cannot be played: " << config_.default_map_path << std::endl;
             std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
@@ -1165,7 +1165,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
         return false;
     }
     // Is the map playable by the teams of this match? (a start marker of a team that plays must lie inside the grid: the original has no behaviour for one outside)
-    verdict = current_level_.validate(roster);
+    verdict = current_level_.validate(roster, ants::assets::LevelLimits::for_play_extended());
     if (!verdict.playable) {
         std::cerr << "[Application] The level cannot be played: " << map_path << std::endl;
         std::cerr << "[Application]   " << verdict.reason() << std::endl;

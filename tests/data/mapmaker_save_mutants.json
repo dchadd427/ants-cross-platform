@@ -46,8 +46,8 @@
   {
    "id": "store_library_format_2",
    "file": "web/front/mapmaker_store.js",
-   "old": "data.format !== 1",
-   "new": "data.format !== 2",
+   "old": "(data.format !== 1 && data.format !== 2)",
+   "new": "data.format !== 3",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },
   {
@@ -123,7 +123,7 @@
   {
    "id": "store_library_other_address",
    "file": "web/front/mapmaker_store.js",
-   "old": "env.fetch('/maps')",
+   "old": "env.fetch('/maps/all')",
    "new": "env.fetch('/maps?all=1')",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },

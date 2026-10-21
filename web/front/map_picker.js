@@ -70,15 +70,16 @@
         return previewPath(map);
     }
 
-    // The list as the server sends it ({"format":1,"maps":[...]}) as entries the picker uses, in the server's order; an entry that is no map (a bad name, no number) is left out. null when it is no list.
+    // The list as the server sends it ({"format":1|2,"maps":[...]}) as entries the picker uses, in the server's order; an entry that is no map (a bad name, no number) is left out. null when it is no list.
     function parseList(data) {
-        if (!data || data.format !== 1 || !Array.isArray(data.maps)) return null;
+        if (!data || (data.format !== 1 && data.format !== 2) || !Array.isArray(data.maps)) return null;
         var out = [];
         data.maps.forEach(function (m, i) {
             if (!m || !validMapFile(m.file)) return;
             var original = m.original === true;
+            var kind = m.kind === 'extended' ? 'extended' : 'classic';
             out.push({
-                file: m.file, name: displayName(m.file, original), original: original, order: i,
+                file: m.file, name: displayName(m.file, original), original: original, kind: kind, order: i,
                 width: whole(m.width) ? m.width : 0, height: whole(m.height) ? m.height : 0, minutes: whole(m.minutes) ? m.minutes : 0, players: whole(m.players) ? m.players : 0,
                 description: text(m.description, 200), plays: whole(m.plays) ? m.plays : 0, thumb: ownPath(m.thumb)
             });
@@ -248,6 +249,7 @@
             var body = el('div', 'pk-body');
             var nm = el('div', 'pk-nm', m.name);
             if (m.original) nm.appendChild(el('span', 'pk-badge', 'Original'));
+            else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));
             body.appendChild(nm);
             if (!thumbs) {
                 body.appendChild(el('div', 'pk-meta', metaText(m)));
@@ -319,7 +321,7 @@
             if (Ctl) { ctl = new Ctl(); init.signal = ctl.signal; }
             timer = later(failed, 12000);
             var request;
-            try { request = opts.fetch('/maps', init); } catch (e) { failed(); return; }
+            try { request = opts.fetch('/maps/all', init); } catch (e) { failed(); return; }
             request.then(function (r) { if (!r.ok) throw new Error('status'); return r.json(); }).then(function (data) {
                 if (mine !== attempt) return;
                 var parsed = parseList(data);

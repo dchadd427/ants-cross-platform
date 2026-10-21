@@ -9,7 +9,7 @@ A player makes a map in the map maker ([`MAP_EDITOR.md`](MAP_EDITOR.md)) and may
 - **Names are protected**: the name of a library map, of an **approved** map and of a **taken-down** one (taking down keeps the name) can never be given to another map, whatever the letter case. A submission with a taken name may be sent (the maker is told that the owner may change it), but **approving never replaces a map**. Only the owner renames, only when he approves; the maker sees `Approved as X (renamed by the owner)` and the owner's short message.
 - **Limits against spam**: 3 submissions for each address and UTC day, 300 for all addresses together, 200 waiting at most; only maps that pass. A **withdrawn** submission frees its place in the queue (not its place in the day's count).
 - **No accounts.** The maker is a display name. The player finds their submissions again by a **token** that the server makes (256 random bits, one for each browser) and keeps only as a SHA-256 hash.
-- **Extended maps** are listed only for the newest version: `GET /maps` never has one, and no room can choose one (the game does not load Extended maps yet). The list for the newest version is `GET /maps/all`.
+- **Extended maps** are listed in `GET /maps/all` (`GET /maps` stays Classic-only for older cached clients); rooms, the lobby map picker, the match pages and the map maker load and play approved Extended maps up to 512 x 512 (4 MiB).
 
 ## The pieces
 
@@ -83,8 +83,8 @@ Everything a player sends is **data**. This covers the map's name, the maker's n
 
 ## The lists the lobby reads
 
-- `GET /maps` (public, as before): the six originals, the community maps and the **approved Classic maps**. An approved Classic map has `"maker"` and a `"thumb"` of `/maps/previews/<name>.png` (an Extended map has no `"thumb"` yet: the picture route serves Classic maps only); every other member is as it was ([`SERVER.md`](SERVER.md), "The list of maps"). A lobby may choose an approved Classic map like any map of the list; its file is `GET /maps/files/<name>.lvl` (nginx asks the game server when its own folder has no such file).
-- `GET /maps/all` (public, for the newest version): `{"format": 2, "maps": [...]}`, the same entries each with `"kind"` (`classic` or `extended`) and the approved **Extended** maps. A page that does not know Extended maps never asks it; `/maps` stays as it was, so an older page or program never sees an Extended map, whatever it caches. How the version is known: the server does not know a page's version (the list has no parameter), so the **address** is the version: the newer code asks `/maps/all`. The file of an Extended map is not served yet (nothing loads it); it comes with the change that loads Extended maps in a game.
+- `GET /maps` (public, as before): the six originals, the community maps and the **approved Classic maps**. An approved map has `"maker"` and a `"thumb"` of `/maps/previews/<name>.png`; every other member is as it was ([`SERVER.md`](SERVER.md), "The list of maps"). A lobby may choose an approved map like any map of the list; its file is `GET /maps/files/<name>.lvl` (nginx asks the game server when its own folder has no such file).
+- `GET /maps/all` (public, for the newest version): `{"format": 2, "maps": [...]}`, the same entries each with `"kind"` (`classic` or `extended`) and the approved **Extended** maps (each with its `"thumb"` of `/maps/previews/<name>.png` and its file at `GET /maps/files/<name>.lvl`). A page that does not know Extended maps never asks it; `/maps` stays as it was, so an older page or program never sees an Extended map, whatever it caches. How the version is known: the server does not know a page's version (the list has no parameter), so the **address** is the version: the lobby map picker, the match pages and the map maker ask `/maps/all`.
 - A **taken-down** map is in none of the lists and its file and picture are a 404 (a replay of a match on it cannot fetch the map any more until it is put back); its file is kept. The pictures are small PNGs (at most 128 pixels, the map maker's colors), made by the server.
 
 ## The owner's page
@@ -145,7 +145,6 @@ The address is the real client address: `X-Client-Address`, which the site's ngi
 - **A restart clears the budget** of password checks (it is in memory) but not the locks (they are in the database).
 - **Passwords are not normalized** (the bytes are compared as typed, after UTF-8 is checked), so a password typed with a different keyboard layout of the same letters may not match.
 - **Nginx's error log** names the request line (query included) when the game server's door is down, so that log can still hold a note. The paths that carry a player's text in their address (`/submissions`, `/submissions/<id>`, `/admin/api/`) are logged by the format `ants_noquery`: the method, the path, the status and the size, never the query, so a note is not copied into the log of the container.
-- **Extended maps**: no picture in the lists, no file download, and no room can choose one (the game does not load them yet).
 
 ## Deploying: what to set, and what is not live until then
 

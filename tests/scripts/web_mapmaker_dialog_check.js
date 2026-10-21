@@ -148,7 +148,7 @@ function openMapChecks() {
     const p = page();
     const entries = [
         { file: 'TINY.LVL', name: 'Tiny', original: true, order: 0, width: 31, height: 31, minutes: 5, players: 4, description: 'Small battle', plays: 12, thumb: '/front/preview_tiny.png' },
-        { file: 'Mosh Pit.lvl', name: 'Mosh Pit', original: false, order: 1, width: 40, height: 40, minutes: 10, players: 4, description: 'Brawl in the center', plays: 50, thumb: '' }
+        { file: 'Mosh Pit.lvl', name: 'Mosh Pit', original: false, kind: 'extended', order: 1, width: 256, height: 256, minutes: 10, players: 4, description: 'Brawl in the center', plays: 50, thumb: '' }
     ];
     let diskClicked = 0, chosen = [];
     const store = {
@@ -166,6 +166,7 @@ function openMapChecks() {
     const q = (s) => p.host.querySelector(s), all = (s) => p.host.querySelectorAll(s);
     equal(q('h2').textContent, 'Open a map', 'Open a map dialog title');
     equal(all('.open-row').length, 2, 'shows the two library maps');
+    equal(q('.open-ext').textContent, 'Extended', 'shows the Extended badge on an Extended library map');
     check(/Tiny 2/.test(q('.open-copy-note').textContent), 'shows the free numbered copy name for the selected map');
     // search filters the list
     q('.open-q').value = 'brawl'; q('.open-q').fire('input', {});

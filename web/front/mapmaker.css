@@ -439,6 +439,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .open-thumb, .open-nopic { display: block; width: 48px; height: 48px; border: 1px solid var(--frame); border-radius: 3px; background: #000; object-fit: cover; image-rendering: pixelated; }
 .open-nm { font-size: 16.5px; color: var(--cream); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .open-orig { font-size: 11.5px; padding: 1px 6px; border: 1px solid var(--gold); border-radius: 3px; color: var(--gold); background: #1f1a09; }
+.open-ext { font-size: 11.5px; padding: 1px 6px; border: 1px solid #3b976f; border-radius: 3px; color: #8fe6c8; background: #17382f; }
 .open-meta { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
 .open-copy-note { margin: 8px 0 2px; font-size: 14px; color: var(--muted); }
 .open-copy-note.bad { color: var(--bad); }

@@ -131,7 +131,7 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
         return nullptr;
     }
     assets::LevelData level;
-    if (!level.load_from_file(entry.path)) {
+    if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) {
         r.http_status = 422;
         r.error = "the map '" + spec.map + "' cannot be played by this engine";
         return nullptr;
@@ -356,7 +356,7 @@ LobbyServices RoomManager::lobby_services() {
         // a Plan message costs no disk read and no hashing; a name that is not in the list is refused. The file is read when the room loads its map (load_map).
         return store_.listed_name(name);
     };
-    s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) { return store_.find(file, entry) && level.load_from_file(entry.path); };
+    s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) { return store_.find(file, entry) && level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()); };
     s.match_place = [this](uint32_t now_ms) { return take_match_place(now_ms); };
     return s;
 }
@@ -804,8 +804,8 @@ std::string RoomManager::map_refusal(const RestartHead& head, MapEntry& entry, a
     std::string why;
     if (!store_.find(head.map, entry, &why)) return "ended by a restart of the server: the map " + head.map + " is not on this server (" + why + ")";
     if (entry.hash != head.map_hash) return "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
-    if (!level.load_from_file(entry.path)) return "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
-    if (!level.validate(head.start.roster).playable) return "ended by a restart of the server: the map cannot be played by the seats of the match";
+    if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
+    if (!level.validate(head.start.roster, assets::LevelLimits::for_play_extended()).playable) return "ended by a restart of the server: the map cannot be played by the seats of the match";
     return std::string();
 }
 
