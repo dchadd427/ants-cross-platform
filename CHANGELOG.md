@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.98 - 2026-10-21 - Serve and play approved Extended maps on the server, web lobby, and Map Maker
+
+**For players:**
+- **Approved Extended maps in the web lobby, match history, and Map Maker (`v1.4.2`).** Approved Extended maps (`version == 9`, up to `512 x 512` / `262,144` cells / 4 MiB) now appear with an **Extended** badge and preview thumbnail in the web lobby's **Choose a map** picker, the match history and live pages, and the Map Maker's **Open a map** library dialog (`GET /maps/all`, `format: 2`), while `GET /maps` (`format: 1`) remains Classic-only for older cached pages.
+- **Online rooms and downloads for approved Extended maps.** The dedicated game server (`ants_server`) serves `.lvl` files (`/maps/files/<name>.lvl`) and PNG preview pictures (`/maps/previews/<name>.png`) for approved Extended maps and loads and validates Extended maps when starting online rooms.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2336f325...a6f4a2d4)
+
 ## v0.12.97 - 2026-10-20 - Play Extended maps up to 512 x 512 and out-of-grid order-tile marker
 
 **For players:**
