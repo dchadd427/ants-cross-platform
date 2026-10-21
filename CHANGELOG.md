@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.98 - 2026-10-21 - Serve and play approved Extended maps on the server, web lobby, and Map Maker
+
+**For players:**
+- **Approved Extended maps in the web lobby, match history, and Map Maker (`v1.4.2`).** Approved Extended maps (`version == 9`, up to `512 x 512` / `262,144` cells / 4 MiB) now appear with an **Extended** badge and preview thumbnail in the web lobby's **Choose a map** picker, the match history and live pages, and the Map Maker's **Open a map** library dialog (`GET /maps/all`, `format: 2`), while `GET /maps` (`format: 1`) remains Classic-only for older cached pages.
+- **Online rooms and downloads for approved Extended maps.** The dedicated game server (`ants_server`) serves `.lvl` files (`/maps/files/<name>.lvl`) and PNG preview pictures (`/maps/previews/<name>.png`) for approved Extended maps and loads and validates Extended maps when starting online rooms.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2336f325...a6f4a2d4)
+
 ## v0.12.97 - 2026-10-20 - Play Extended maps up to 512 x 512 and out-of-grid order-tile marker
 
 **For players:**
@@ -620,36 +628,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/973fa3cb...d1b887f1)
 
-## v0.12.29 - 2026-10-12 - Food piles that the map file does not hold are drawn
+## Older versions (v0.12.29 and before)
 
-**For players:**
-- A food pile that the map's file does not hold in its picture layer is now drawn where it lies. Before, the view showed nothing there although the pile was in the game (bots and ants could see it and carry it, and the minimap showed it): the heap in the middle of `Bombz Away` and its relatives (the BombzAway maps, `WaTcHoUt BOMBZ!!!`, `Bombzzzzz away!!!`, `AGGRIVATION`), and the piles of more than 400 maps of the players whose file leaves the pile's cell empty (`Trouble`, `TowerPlaza`, `candyland` ...).
-- A pile that lies on a bomb of the map file replaces that bomb, as in the original; the view now shows the pile and no bomb there.
-
-**Rules / network:** none. Only the picture changed; the simulation, the replay rules and the network protocol are the same.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9a38ef1...cdd857a0)
-
-## v0.12.28 - 2026-10-12 - Back 30 seconds on the replay bar
-
-**For players:**
-- **Back 30 seconds:** a new button right of Play / Pause on the replay bar (a double triangle with a small 30) jumps the replay 30 seconds back, never before the start. A match that plays keeps playing, a paused one stays paused, and the speed stays. It works with a mouse, a finger, the keys (Enter and Space on the focused button) and the fullscreen bar under a locked mouse. On a phone 420 px wide or narrower (in fullscreen, up to 520 px) the Picture button moves to the camera's row so that the time stays whole. It is not on a match that is being played (live).
-
-**Rules / network:** none.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/353282ed...28d51043)
-
-## v0.12.27 - 2026-10-12 - Broken maps of the players taken out
-
-**For players:**
-- 11 maps of the players that could not be played are gone from the map list: `Home Bound`, `IsLaNd FiRe BoOm` and `Thief craker` (no ants for any color), `K-P`, `Pulse2`, `Pulse3`, `QuItErS`, `firewar`, `hellzone` and `WAR TIME` (a color with a hill and no ants), and `hell2` (a map of water: every ant drowns in the first three seconds). 547 maps of the players remain.
-- A kept replay of a match on one of these maps can no longer be watched.
-- A map of the players is only taken in when every color it claims has ants, and a test now fails if one is added that does not.
-
-**Rules / network:** none. The beta lists the new set after its next deploy.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e01e7f0...HEAD)
-
-## Older versions (v0.12.26 and before)
-
-Every release before v0.12.27, and the long notes of v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.30, and the long notes of v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
