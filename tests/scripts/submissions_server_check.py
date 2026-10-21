@@ -271,8 +271,9 @@ class TheWholeWay(unittest.TestCase):
         self.assertEqual(self.owner_call("POST", "/admin/api/maps/%s/approve" % ext_id, {})[0], 200)
         self.assertEqual(self.listed("/maps", "Run Extended.lvl"), [])
         both = self.listed("/maps/all", "Run Extended.lvl")
-        self.assertTrue(len(both) == 1 and both[0]["kind"] == "extended")
-        self.assertEqual(self.server.call("GET", "/maps/files/Run%20Extended.lvl", door="replay")[0], 404)
+        self.assertTrue(len(both) == 1 and both[0]["kind"] == "extended" and both[0]["thumb"] == "/maps/previews/Run%20Extended.png")
+        self.assertEqual(self.server.call("GET", "/maps/files/Run%20Extended.lvl", door="replay")[0], 200)
+        self.assertEqual(self.server.call("GET", "/maps/previews/Run%20Extended.png", door="replay")[0], 200)
         # what the server refuses
         self.assertEqual(self.send(b"not a map", "Bad One", address="203.0.113.9")[0], 400)
         self.assertEqual(self.send(self.extended, "Lie One", kind="classic", address="203.0.113.9")[0], 400)

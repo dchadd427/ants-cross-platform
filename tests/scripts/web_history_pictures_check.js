@@ -43,7 +43,7 @@ const attach = (r, tv) => { r.body.appendChild(tv); return tv; };
         same('an original keeps its own picture, no list is asked for', [img(a).src, img(a).loading, r.log.fetched], ['front/preview_medium.png', undefined, []]);
         const b = attach(r, r.api.pictureNode('Pop Water!!!.lvl', 'list'));
         same('a map of the players gets the address its name makes, lazily', [img(b).tag, img(b).src, img(b).loading, img(b).decoding, img(b).alt], ['img', '/maps/previews/Pop%20Water%21%21%21.webp', 'lazy', 'async', '']);
-        same('the list is asked for with the first such map, once', r.log.fetched, ['/maps']);
+        same('the list is asked for with the first such map, once', r.log.fetched, ['/maps/all']);
         r.api.pictureNode('POPcOrN.lvl', 'live');
         same('... and not again', r.log.fetched.length, 1);
         same('the squares of the maps of the players are kept (an original is not)', r.api.count(), 2);

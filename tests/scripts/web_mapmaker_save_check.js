@@ -64,7 +64,8 @@ function opened(idb, fetchFn) { const store = Store.create({ idb, fetch: fetchFn
 function caseA() {
     equal([Store.clean('  Sunny   Picnic '), Store.key('  Sunny   PICNIC ')], ['Sunny Picnic', 'sunny picnic'], 'blanks round a name and between words count once, capitals not at all');
     equal(Object.keys(Store.libraryNames({ format: 1, maps: [{ file: 'POPcOrN.lvl' }, { file: 'TINY.LVL' }, { file: 5 }, null, { file: '!!!Bridges v4!!!.lvl' }] })).sort(), ['!!!bridges v4!!!', 'popcorn', 'tiny'], 'the names of the site\'s maps are the file names without .lvl');
-    equal([Store.libraryNames(null), Store.libraryNames({ format: 2, maps: [] }), Store.libraryNames({ format: 1, maps: 5 })], [null, null, null], 'what is no list is none');
+    equal([Store.libraryNames(null), Store.libraryNames({ format: 3, maps: [] }), Store.libraryNames({ format: 1, maps: 5 })], [null, null, null], 'what is no list is none');
+    equal(Object.keys(Store.libraryNames({ format: 2, maps: [{ file: 'Big Desert.lvl', kind: 'extended' }] })), ['big desert'], 'format 2 (/maps/all) is accepted too');
     equal([Store.key('Caf\u0065\u0301'), Store.key('Caf\u00e9')].every((k) => k === 'caf\u00e9'), true, 'a letter written in two ways is one name (NFC)');
     equal([Store.key('Sunny\u200bPicnic'), Store.key('\ufeffSunny Picnic\u200d'), Store.key('Sunny\u00a0\u00a0Picnic')], ['sunnypicnic', 'sunny picnic', 'sunny picnic'], 'zero-width characters count for nothing and a no-break space is a blank');
     equal([Convert.numbered('Heaven 0105', () => false), Convert.numbered('Heaven 0009', () => false), Convert.numbered('Name 9', () => false), Convert.numbered('Name 099', () => false), Convert.numbered('Name', () => false), Convert.numbered('Big 12345678901234567890', () => false)],
@@ -139,7 +140,7 @@ async function caseC() {
     equal(store.libraryState(), 'pending', 'before the list comes the state is pending');
     store.loadLibrary(); store.loadLibrary();
     await later();
-    equal([asked, store.libraryState(), store.has('popcorn'), store.has('POPCORN'), store.has('Unknown')], [['/maps'], 'ready', true, true, false], 'the list is asked once, from the site itself, and its names are taken');
+    equal([asked, store.libraryState(), store.has('popcorn'), store.has('POPCORN'), store.has('Unknown')], [['/maps/all'], 'ready', true, true, false], 'the list is asked once, from the site itself, and its names are taken');
     equal(store.libraryList().map((m) => m.name), ['POPcOrN', 'Tiny'], 'libraryList exposes the parsed map entries');
     let fetched = null;
     store = await opened(fakeIdb(), (u) => Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new Uint8Array([8, 0, u.length]).buffer) }));

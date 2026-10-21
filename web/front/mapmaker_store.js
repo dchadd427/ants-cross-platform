@@ -7,7 +7,7 @@
 })(this, function () {
     'use strict';
 
-    var ORIGINALS = ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands'];     // the six maps of the game's data (the site's list holds them too)
+    var ORIGINALS = ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands'];
 
     // A name as people compare it: blanks round it and between words count once, capitals do not count
     // (a no-break space counts as a blank, zero-width characters count for nothing, and a letter written in two ways is one: NFC)
@@ -16,7 +16,7 @@
 
     // The names in the list that GET /maps sends ({"format":1,"maps":[{file}]}): the file names without .lvl, or null when it is no list
     function libraryNames(data) {
-        if (!data || data.format !== 1 || !Array.isArray(data.maps)) return null;
+        if (!data || (data.format !== 1 && data.format !== 2) || !Array.isArray(data.maps)) return null;
         var out = Object.create(null);
         data.maps.forEach(function (m) { if (m && typeof m.file === 'string') out[key(m.file.replace(/\.lvl$/i, ''))] = true; });
         return out;
@@ -36,7 +36,7 @@
     }
     function defaultEntries() {
         return ORIGINALS.map(function (n, idx) {
-            return { file: n.toUpperCase() + '.LVL', name: n.charAt(0).toUpperCase() + n.slice(1), original: true, order: idx, width: 0, height: 0, minutes: 0, players: 4, description: '', plays: 0, thumb: '/front/preview_' + n + '.png' };
+            return { file: n.toUpperCase() + '.LVL', name: n.charAt(0).toUpperCase() + n.slice(1), original: true, kind: 'classic', order: idx, width: 0, height: 0, minutes: 0, players: 4, description: '', plays: 0, thumb: '/front/preview_' + n + '.png' };
         });
     }
     function libraryEntries(data) {
@@ -48,7 +48,7 @@
             out.push({
                 file: m.file,
                 name: orig ? low.charAt(0).toUpperCase() + low.slice(1) : base,
-                original: orig,
+                original: orig, kind: m.kind === 'extended' ? 'extended' : 'classic',
                 order: idx,
                 width: typeof m.width === 'number' && isFinite(m.width) && m.width > 0 ? Math.floor(m.width) : 0,
                 height: typeof m.height === 'number' && isFinite(m.height) && m.height > 0 ? Math.floor(m.height) : 0,
@@ -64,7 +64,7 @@
 
     function guard(fn) { try { return fn(); } catch (e) { return undefined; } }
 
-    // One request on one store of a database (false for no database); done(error, result): '' when it worked, 'exists' for a key that was there already (add), else 'failed'
+    // One request on a database store.
     function request(db, name, mode, make, done) {
         var tx, req, result = null, answered = false;
         function end(error) { if (!answered) { answered = true; done(error, result); } }
@@ -106,7 +106,7 @@
         var db = null, status = 'pending', drafts = Object.create(null), library = Object.create(null), libraryState = env.fetch ? 'pending' : 'failed', asked = false, waiting = [], libraryItems = defaultEntries();
         ORIGINALS.forEach(function (n) { library[n] = true; });
 
-        // Opens the database and reads the names of the drafts (keys only); done(status) says 'ready' or 'unavailable'
+        // Opens the database and reads draft keys.
         function open(done) {
             var req = env.idb && guard(function () { return env.idb.open('ants-mapmaker', 1); }), listed, over = false;
             function end(ok) { if (!over) { over = true; status = ok ? 'ready' : 'unavailable'; done(status); } }
@@ -140,7 +140,7 @@
                 asked = true;
                 if (env.later) env.later(bad, 8000);                  // (a list that never answers is a list that did not come)
                 if (guard(function () {
-                    env.fetch('/maps').then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+                    env.fetch('/maps/all').then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
                         var names = libraryNames(data), items = libraryEntries(data);
                         if (!names) return bad();
                         for (var k in names) library[k] = true;

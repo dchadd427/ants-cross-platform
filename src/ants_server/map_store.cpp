@@ -107,8 +107,8 @@ bool MapStore::find(const std::string& name, MapEntry& out, std::string* why) co
     }
     if (!fs::is_regular_file(path, ec) || ec) {
         ec.clear();
-        const ApprovedMap* approved_map = approved(name);              // (the approved maps of the players: Classic ones only; the owner's take-down removes one from here)
-        if (approved_map == nullptr || approved_map->kind != "classic") return fail("no such map on this server");
+        const ApprovedMap* approved_map = approved(name);              // (the approved maps of the players: Classic and Extended; the owner's take-down removes one from here)
+        if (approved_map == nullptr || (approved_map->kind != "classic" && approved_map->kind != "extended")) return fail("no such map on this server");
         path = approved_map->path;
     }
     if (!fs::is_regular_file(path, ec) || ec) return fail("no such map on this server");
@@ -182,7 +182,7 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
         } else {
             if (community && known != described.end()) note("maps.json describes " + name + " with another hash than the file has: the file's own header is used");
             assets::LevelData level;
-            if (!level.load_from_file(entry.path)) return;             // (a file that does not load is not offered)
+            if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return;             // (a file that does not load is not offered)
             m.width = level.width;
             m.height = level.height;
             m.minutes = level.default_minutes;
@@ -243,7 +243,7 @@ void MapStore::add_approved_to_listing() {
         m.approved = true;
         m.maker = a.maker;
         m.kind = a.kind;
-        if (a.kind != "extended") m.thumb = std::string(kCommunityPreviewDir) + percent_encode(a.name.substr(0, a.name.size() - 4)) + ".png";          // (the picture route serves Classic maps only: an Extended map has none yet)
+        m.thumb = std::string(kCommunityPreviewDir) + percent_encode(a.name.substr(0, a.name.size() - 4)) + ".png";
         if (a.kind == "extended") {
             extended_listing_.push_back(std::move(m));
         } else if (seen.insert(lower(a.name)).second) {
@@ -282,7 +282,13 @@ std::string MapStore::listed_name(const std::string& name) const {
         if (m.file == name) return m.file;
     }
     const std::string folded = lower(name);
+    for (const MapListing& m : extended_listing_) {
+        if (m.file == name) return m.file;
+    }
     for (const MapListing& m : listing_) {
+        if (lower(m.file) == folded) return m.file;
+    }
+    for (const MapListing& m : extended_listing_) {
         if (lower(m.file) == folded) return m.file;
     }
     return std::string();

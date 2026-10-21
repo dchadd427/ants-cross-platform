@@ -537,7 +537,7 @@ int main() {
         ASSERT_EQ(why.code, std::string("bad_state"));
     } TEST_END();
 
-    TEST_CASE("SUB5.1 The lobby's list: an approved Classic map joins the list of GET /maps and can be found by name; an Extended one is only in the newest version's list and is never found; a taken-down one is neither") {
+    TEST_CASE("SUB5.1 The lobby's list: an approved Classic map joins the list of GET /maps and can be found by name; an Extended one is in GET /maps/all and can also be found by name and chosen; a taken-down one is neither") {
         Sub rig([](SubmissionConfig& c) { c.per_address_per_day = 100; });
         MapStore store(maps_dir(), std::string(ANTS_SOURCE_DIR) + "/Community-Maps");
         store.scan();
@@ -567,12 +567,14 @@ int main() {
             if (m.get("file").str() == "Fresh Classic.lvl") {
                 ASSERT_TRUE(m.get("maker").str() == "Mia" && m.get("kind").str() == "classic" && m.get("thumb").str() == "/maps/previews/Fresh%20Classic.png");
             }
-            if (m.get("file").str() == "Fresh Extended.lvl") ASSERT_TRUE(m.get("kind").str() == "extended" && !m.has("thumb"));        // (the picture route serves Classic maps only: no thumb that always 404s)
+            if (m.get("file").str() == "Fresh Extended.lvl") ASSERT_TRUE(m.get("kind").str() == "extended" && m.get("thumb").str() == "/maps/previews/Fresh%20Extended.png");
         }
         MapEntry entry;
         ASSERT_TRUE(store.find("Fresh Classic.lvl", entry));
-        ASSERT_FALSE(store.find("Fresh Extended.lvl", entry));                           // (no room can load it: the game does not load Extended maps)
+        ASSERT_TRUE(store.find("Fresh Extended.lvl", entry));
         ASSERT_EQ(store.listed_name("fresh classic.lvl"), std::string("Fresh Classic.lvl"));
+        ASSERT_EQ(store.listed_name("fresh extended.lvl"), std::string("Fresh Extended.lvl"));
+        ASSERT_EQ(store.listed_name("Fresh Extended.lvl"), std::string("Fresh Extended.lvl"));
         ASSERT_TRUE(store.approved("Fresh Classic.lvl") != nullptr && store.approved("Fresh Extended.lvl") != nullptr && store.approved("fresh classic.lvl") == nullptr);
         Submission s;
         Failure why;

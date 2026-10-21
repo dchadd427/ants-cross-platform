@@ -282,7 +282,7 @@
             if (asked) return asked;
             asked = new Promise(function (resolve) {
                 var request;
-                try { request = fetcher('/maps', { credentials: 'same-origin' }); } catch (e) { resolve(null); return; }
+                try { request = fetcher('/maps/all', { credentials: 'same-origin' }); } catch (e) { resolve(null); return; }
                 request.then(function (response) { return response.ok ? response.json() : null; }).then(function (data) {
                     var found = data && picker ? picker.parseList(data) : null;
                     if (!found) { resolve(null); return; }

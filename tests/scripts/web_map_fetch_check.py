@@ -84,7 +84,7 @@ class Front:
         path = first[1] if len(first) > 1 else b"/"
         bare = path.split(b"?")[0]
         upgrade = b"upgrade: websocket" in head.lower()
-        if self.maps_down and bare == b"/maps":
+        if self.maps_down and bare in (b"/maps", b"/maps/all"):
             writer.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             writer.close()
             return

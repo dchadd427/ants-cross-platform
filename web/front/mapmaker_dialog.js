@@ -425,7 +425,7 @@
                     row.appendChild(img);
                 } else row.appendChild(el('span', 'open-nopic'));
                 var mid = el('div', 'open-mid'), t1 = el('div', 'open-nm', m.name);
-                if (m.original) t1.appendChild(el('span', 'open-orig', 'Original'));
+                if (m.original) t1.appendChild(el('span', 'open-orig', 'Original')); else if (m.kind === 'extended') t1.appendChild(el('span', 'open-ext', 'Extended'));
                 mid.appendChild(t1);
                 mid.appendChild(el('div', 'open-meta', metaLine(m)));
                 row.appendChild(mid);

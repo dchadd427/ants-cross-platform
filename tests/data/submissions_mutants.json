@@ -252,10 +252,10 @@
    "new": "        if (false) {\n            extended_listing_.push_back(std::move(m));"
   },
   {
-   "id": "extended_found_by_a_room",
+   "id": "extended_not_found_by_a_room",
    "file": "src/ants_server/map_store.cpp",
-   "old": "if (approved_map == nullptr || approved_map->kind != \"classic\") return fail(\"no such map on this server\");",
-   "new": "if (approved_map == nullptr) return fail(\"no such map on this server\");"
+   "old": "if (approved_map == nullptr || (approved_map->kind != \"classic\" && approved_map->kind != \"extended\")) return fail(\"no such map on this server\");",
+   "new": "if (approved_map == nullptr || approved_map->kind != \"classic\") return fail(\"no such map on this server\");"
   },
   {
    "id": "extended_never_in_the_new_list",
@@ -576,10 +576,10 @@
    "new": "    if (cross_site(request)) return not_found();"
   },
   {
-   "id": "extended_thumb_that_404s",
+   "id": "extended_thumb_missing",
    "file": "src/ants_server/map_store.cpp",
-   "old": "        if (a.kind != \"extended\") m.thumb =",
-   "new": "        m.thumb ="
+   "old": "        m.thumb = std::string(kCommunityPreviewDir) + percent_encode(a.name",
+   "new": "        if (a.kind != \"extended\") m.thumb = std::string(kCommunityPreviewDir) + percent_encode(a.name"
   },
   {
    "id": "owned_files_are_orphans",

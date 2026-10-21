@@ -10,7 +10,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var MAX_BYTES = 1024 * 1024;               // the biggest community map is 230 kB; anything above a megabyte is no map
+    var MAX_BYTES = 4 * 1024 * 1024;           // Extended maps up to 512x512 can reach ~3.1 MiB; anything above 4 MiB is no map
     var TIMEOUT_MS = 25000;                    // one try (the server's load barrier gives a whole room 60 s)
     var TRIES = 2;                             // a connection error or a 5xx is tried once more
     var RETRY_MS = 600;
