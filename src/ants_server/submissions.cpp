@@ -873,6 +873,7 @@ TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t no
     while (test_maps_.size() >= kMaxTestMaps) {
         remove_quietly(test_maps_.front().map.path);
         test_maps_.erase(test_maps_.begin());
+        approved_changed_ = true;
     }
     uint8_t id_raw[4];
     if (!random_bytes(id_raw, sizeof id_raw)) return refuse(503, "storage_error", "The server could not save this just now. Please try again later.");

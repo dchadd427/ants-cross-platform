@@ -102,7 +102,7 @@ public:
     static size_t max_upload_bytes(const std::string& kind);
 
     SubmitOutcome submit(const SubmitInput& in, int64_t now);
-    /// Checks and rewrites a draft map for an unlisted online test room (POST /submissions?test=1): keeps at most kMaxTestMaps canonical files in dir/test for kTestMapTtlS seconds, touches no database table.
+    /// Checks a draft map for an unlisted online test room (POST /submissions?test=1): keeps at most kMaxTestMaps files in dir/test for kTestMapTtlS seconds, touches no database table.
     static constexpr size_t kMaxTestMaps = 64;
     static constexpr int64_t kTestMapTtlS = 6 * 3600;
     TestSubmitOutcome submit_test(const SubmitInput& in, int64_t now);

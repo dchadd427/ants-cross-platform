@@ -285,7 +285,7 @@
     // The strip at the top of the page: "Back from the match." The match's stats and replay are looked up in the public list (a moment after the match, twice more if they are not there yet: the list is cached
     // for five seconds). Also drives an unlisted test-map room opened from the map maker (?testroom=<id>). env: { doc, win, before (the element that the strip goes in front of), fetch (window.fetch or null), later(fn, ms) }.
     function frontStrip(env) {
-        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, handoffId = '', paintedKey = '';
+        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, testError = false, handoffId = '', paintedKey = '';
         function look(back, mine, tries) {
             if (!env.fetch || mine !== round) return;
             var done = function (id) {
@@ -308,6 +308,7 @@
             return tbar;
         }
         function paintTestBar(lead, main, right, withBack, warn) {
+            testError = !!warn;
             var key = [lead, main, right, withBack ? 1 : 0, warn ? 1 : 0].join('|');
             var b = ensureTestBar();
             b.hidden = false;
@@ -364,20 +365,26 @@
                 return { name: title, info: details, thumb: '/maps/previews/' + encodeURIComponent(file.replace(/\.(lvl|LVL)$/, '')) + '.png' };
             },
             sync: function (model, sendPlan, warmMap) {
-                if (pendingTest && model && !model.guest && !model.starting && model.mapFile !== pendingTest.file) {
-                    var kinds = [0, 0, 0, 0];
-                    if (Array.isArray(pendingTest.usable)) for (var s = 0; s < 4; s++) if (!pendingTest.usable[s]) kinds[s] = 4;
-                    if (sendPlan && sendPlan({ file: pendingTest.file, kinds: kinds })) {
+                if (pendingTest && !pendingTest.sent && model && !model.guest && !model.starting && model.mapFile !== pendingTest.file) {
+                    var kinds = [0, 0, 0, 0], moveTo = -1;
+                    if (Array.isArray(pendingTest.usable)) {
+                        for (var s = 0; s < 4; s++) if (!pendingTest.usable[s]) kinds[s] = 4;
+                        if (model.you >= 0 && model.you < 4 && !pendingTest.usable[model.you]) moveTo = pendingTest.usable.indexOf(true);
+                    }
+                    var change = { file: pendingTest.file, kinds: kinds };
+                    if (moveTo >= 0) change.moveTo = moveTo;
+                    if (sendPlan && sendPlan(change)) {
                         if (warmMap) warmMap(pendingTest.file);
-                        pendingTest = null;
+                        pendingTest.sent = true;
                     }
                 }
                 if (model && isTestFile(model.mapFile)) {
+                    pendingTest = null;
                     var m = known[model.mapFile], title = (m && m.name) || testTitle(model.mapFile);
                     var shape = m && m.width && m.height ? ' (' + m.height + ' x ' + m.width + ')' : '';
                     if (!model.guest) paintTestBar('Test room', title + shape + ' \u00b7 Unlisted map from Map Maker', 'Sent automatically to players who join', !!handoffId, false);
                     else paintTestBar('Custom map room', 'Host\u2019s map: ' + title + shape, '\u25cf Map downloaded & verified \u00b7 Ready', false, false);
-                } else if (!pendingTest && tbar) {
+                } else if (!pendingTest && !testError && tbar) {
                     tbar.hidden = true;
                 }
             },

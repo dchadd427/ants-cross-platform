@@ -520,13 +520,39 @@ async function main() {
             name: 'Popcorn Remix', info: 'Classic \u00b7 31 \u00d7 31 \u00b7 Unlisted test map from Map Maker', thumb: '/maps/previews/Popcorn%20Remix%20~test-a1b2c3d4.png'
         });
         let sentPlans = [], warmed = [];
-        tStrip.sync({ guest: false, starting: false, mapFile: 'TREASURE.LVL' }, (ch) => { sentPlans.push(ch); return true; }, (f) => warmed.push(f));
+        tStrip.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, (ch) => { sentPlans.push(ch); return true; }, (f) => warmed.push(f));
         same('sync sends the test map and sets unusable seats to Nobody (4)', [sentPlans, warmed], [[{ file: 'Popcorn Remix ~test-a1b2c3d4.lvl', kinds: [0, 0, 4, 0] }], ['Popcorn Remix ~test-a1b2c3d4.lvl']]);
-        tStrip.sync({ guest: false, starting: false, mapFile: 'Popcorn Remix ~test-a1b2c3d4.lvl' });
         const tBar = byClass(tBody, 'testbar');
+        check('the test-room strip stays visible while the server confirms the map change', tBar && !tBar.hidden);
+        tStrip.sync({ guest: false, starting: false, you: 0, mapFile: 'Popcorn Remix ~test-a1b2c3d4.lvl' });
         check('the test-room strip is shown above the screen with Back to editor', tBar && !tBar.hidden && /Popcorn Remix \(31 x 31\)/.test(tBar.textContent));
         byClass(tBar, 'testbar-back').fire('click');
         same('Back to editor notifies the opener and closes the tab', [backCalls, closedCalls], [['k7m2xq9abc12'], 1]);
+
+        // draft map where Green (Seat 0) is not usable moves the host to the first usable color, and error strip survives sync()
+        const tBody2 = node('body'), tScreen2 = node('div');
+        tBody2.appendChild(tScreen2);
+        const tStrip2 = R.frontStrip({
+            doc, win: { location: { search: '?testroom=redblue12345', pathname: '/lobby.html' }, history: { replaceState: () => {} }, opener: { closed: false, antsTestGameHandoff: () => ({ name: 'Red vs Blue', bytes: new Uint8Array([8, 0, 0, 0]) }) } },
+            before: tScreen2,
+            fetch: () => Promise.resolve({ status: 201, json: () => Promise.resolve({ test_map: { file: 'Red vs Blue ~test-11223344.lvl', name: 'Red vs Blue', kind: 'classic', width: 31, height: 31, usable: [false, true, false, true] } }) }),
+            later: (fn) => fn()
+        });
+        tStrip2.begin(() => {});
+        await flush(); await flush();
+        let rbPlans = [];
+        tStrip2.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, (ch) => { rbPlans.push(ch); return true; });
+        same('when Green is not usable, sync moves the host to the first usable seat (Red = 1)', rbPlans, [{ file: 'Red vs Blue ~test-11223344.lvl', kinds: [4, 0, 4, 0], moveTo: 1 }]);
+
+        const tBody3 = node('body'), tScreen3 = node('div');
+        tBody3.appendChild(tScreen3);
+        const tStrip3 = R.frontStrip({
+            doc, win: { location: { search: '?testroom=missing12345', pathname: '/lobby.html' }, history: { replaceState: () => {} }, opener: null },
+            before: tScreen3, fetch: null, later: () => {}
+        });
+        tStrip3.begin(() => { tStrip3.sync(null); tStrip3.sync({ guest: false, starting: false, mapFile: 'TREASURE.LVL' }); });
+        const tBar3 = byClass(tBody3, 'testbar');
+        check('error strip remains visible after onReady runs sync()', tBar3 && !tBar3.hidden && /warn/.test(tBar3.className));
     }
 
     for (const name of Object.keys(RAW)) if (typeof RAW[name] === 'function') check('the check called ' + name + '()', called[name] > 0);
