@@ -185,12 +185,13 @@
 
         function begin(kind, tileId) {
             if (!seen || seen.length !== 2 * self.file.cells) seen = new Uint8Array(2 * self.file.cells);
-            var f = self.file, keys = [], before = [], dirty = [], splices = [], closed = false, refused = '';
+            var f = self.file, keys = [], before = [], dirty = [], splices = [], painted = {}, firstTile = {}, box = null, closed = false, refused = '';
 
             function touch(layer, idx) {
                 var key = idx * 2 + layer - 1;
                 if (seen[key]) return;
                 seen[key] = 1; keys.push(key);
+                if (layer === 1) firstTile[idx] = tile(f, 1, idx);
                 before.push(tile(f, layer, idx), flags(f, layer, idx), third(f, layer, idx));
             }
             // The solid bit of a cell of layer 1 (the other flags stay); a cell that already is as asked is not touched. Row 0 never loses it (the original's rule).
@@ -221,6 +222,10 @@
                 return n + 1;
             }
             function putGround(idx) {
+                var r = (idx / f.columns) | 0, c = idx - r * f.columns;
+                painted[idx] = 1;
+                if (!box) box = { r0: r, r1: r, c0: c, c1: c };
+                else { if (r < box.r0) box.r0 = r; if (r > box.r1) box.r1 = r; if (c < box.c0) box.c0 = c; if (c > box.c1) box.c1 = c; }
                 if (tile(f, 1, idx) === tileId) return 0;
                 touch(1, idx); setCell(f, 1, idx, tileId, flags(f, 1, idx), third(f, 1, idx)); dirty.push(idx);
                 return 1;
@@ -251,6 +256,9 @@
 
             var stroke = {
                 kind: kind,
+                painted: painted,
+                box: function () { return box; },
+                beforeTile: function (idx) { return seen[idx * 2] ? firstTile[idx] : tile(f, 1, idx); },
                 change: change,
                 // the brush put on a cell; returns the number of cells that changed
                 stamp: function (row, column, size) {

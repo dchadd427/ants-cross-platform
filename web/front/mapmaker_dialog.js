@@ -93,10 +93,19 @@
                 build: function (body) {
                     var list = el('div', 'menulist');
                     items.forEach(function (it) {
+                        if (it.head) { list.appendChild(el('div', 'menuhead', it.head)); return; }
                         var b = el('button', 'btn' + (it.cls ? ' ' + it.cls : ''), it.text);
                         b.type = 'button';
+                        if (it.role === 'switch') {
+                            b.className = 'eb' + (it.cls ? ' ' + it.cls : '');
+                            b.textContent = '';
+                            var tk = el('span', 'tk'); tk.setAttribute('aria-hidden', 'true');
+                            b.appendChild(tk); b.appendChild(el('span', '', it.text));
+                        }
+                        if (it.role) b.setAttribute('role', it.role);
+                        if (it.checked !== undefined) b.setAttribute('aria-checked', String(!!it.checked));
                         if (it.disabled) b.disabled = true;
-                        b.addEventListener('click', function () { current.close(); it.onClick(); });
+                        b.addEventListener('click', function () { if (it.keepOpen) { it.onClick(b); return; } current.close(); it.onClick(); });
                         list.appendChild(b);
                         if (it.hint) list.appendChild(el('p', 'menuhint', it.hint));
                     });

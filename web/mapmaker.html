@@ -52,6 +52,7 @@
             <div class="pname" id="palette-name"></div>
         </div>
         <p class="toolnote" id="tool-hint"></p>
+        <button class="eb tog mob" type="button" id="auto-edges-mob" role="switch" aria-checked="false" disabled hidden><span class="tk" aria-hidden="true"></span><span>Auto edges: Off</span></button>
     </aside>
     <main class="panel canvaswrap">
         <div class="cv" id="cv">
@@ -68,6 +69,7 @@
             <span class="undoredo" role="group" aria-label="Undo and redo"><button class="eb" type="button" id="undo-btn" aria-keyshortcuts="Control+Z Meta+Z" disabled>Undo</button><button class="eb" type="button" id="redo-btn" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" disabled>Redo</button></span>
             <span class="drawopts" role="group" aria-label="Fill, Fix edges and brush size">
                 <button class="eb" type="button" id="fill-btn" aria-pressed="false" aria-keyshortcuts="B" disabled>Fill</button>
+                <button class="eb tog dsk" type="button" id="auto-edges-btn" role="switch" aria-checked="false" disabled><span class="tk" aria-hidden="true"></span><span>Auto edges: Off</span></button>
                 <button class="eb" type="button" id="edges-btn" disabled>Fix edges...</button>
                 <span class="brushes" id="brushes"><label class="bl dsk" for="brush-range">Brush</label><input class="brange" type="range" id="brush-range" data-brush="1" min="1" max="9" step="1" value="1" aria-label="Brush size in cells" disabled><output class="bval" id="brush-val" for="brush-range" aria-live="polite">1</output></span>
             </span>

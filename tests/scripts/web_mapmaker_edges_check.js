@@ -394,6 +394,30 @@ function dialogChecks() {
     check(cv.width <= 48 * 16 && cv.height <= 32 * 16 && cv.width >= 48 * 2, 'and the picture is bounded');
 }
 
+function strokePlanChecks() {
+    // N2d: painting a 3x3 gravel patch into dirt gives the same 8 edge and corner pieces as Fix edges
+    const before = grid(['ddddddd', 'ddddddd', 'ddddddd', 'ddddddd', 'ddddddd', 'ddddddd', 'ddddddd']);
+    const after = grid(['ddddddd', 'ddddddd', 'ddgggdd', 'ddgggdd', 'ddgggdd', 'ddddddd', 'ddddddd']);
+    const painted = {};
+    for (let r = 2; r <= 4; r++) for (let c = 2; c <= 4; c++) painted[r * 7 + c] = 1;
+    const sp = Edges.strokePlan(after, { r0: 0, r1: 6, c0: 0, c1: 6 }, Ground, 485, painted, (k) => before.tile1((k / 7) | 0, k % 7));
+    const fp = Edges.plan(after, null, Ground);
+    equal(sp.cells, fp.cells, 'strokePlan on a painted 3x3 gravel patch in dirt matches Fix edges');
+    // N2e: a hand-placed piece outside painted (at row 2, col 1: ds03a on dirt) is left alone while Auto edges paints gravel beside it
+    const ds03a = Ground.edges('dirt', 'slate')[1].id;
+    const bHand = grid(['ddddddd', 'ddddddd', 'ddddddd', 'ddddddd', 'ddddddd', 'ddddddd', 'ddddddd']);
+    bHand.cells[2][1] = ds03a;
+    const aHand = grid(['ddddddd', 'ddddddd', 'ddgggdd', 'ddgggdd', 'ddgggdd', 'ddddddd', 'ddddddd']);
+    aHand.cells[2][1] = ds03a;
+    const spHand = Edges.strokePlan(aHand, { r0: 0, r1: 6, c0: 0, c1: 6 }, Ground, 485, painted, (k) => bHand.tile1((k / 7) | 0, k % 7));
+    check(spHand.cells.every(([idx]) => idx !== 2 * 7 + 1), 'a hand-placed tile next to the stroke is not overwritten by strokePlan');
+    // Painting over the hand-placed cell and the column below it (3x4 patch) replaces it and sets its NW corner piece
+    aHand.cells[2][1] = 485; aHand.cells[3][1] = 485; aHand.cells[4][1] = 485;
+    painted[2 * 7 + 1] = 1; painted[3 * 7 + 1] = 1; painted[4 * 7 + 1] = 1;
+    const spOver = Edges.strokePlan(aHand, { r0: 0, r1: 6, c0: 0, c1: 6 }, Ground, 485, painted, (k) => bHand.tile1((k / 7) | 0, k % 7));
+    check(spOver.cells.some(([idx, t]) => idx === 2 * 7 + 1 && Ground.info(t).kind === 'gravel' && Ground.info(t).other === 'dirt'), 'painting over the hand-placed cell replaces it and sets its edge piece');
+}
+
 shapeChecks();
 ruleChecks();
 goldChecks();
@@ -402,5 +426,6 @@ randomChecks();
 speedChecks();
 bytesChecks();
 dialogChecks();
+strokePlanChecks();
 console.log(failures ? failures + ' of ' + checks + ' checks FAILED' : 'edges check: ' + checks + ' checks passed');
 process.exit(failures ? 1 : 0);

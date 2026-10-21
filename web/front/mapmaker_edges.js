@@ -72,6 +72,32 @@
         return { cells: cells, count: cells.length, region: { r0: r0, r1: r1, c0: c0, c1: c1 } };
     }
 
+    // Auto edges on the cells of a ground stroke (`painted` cells painted with `tileId`, and their border `region`): hand-placed tiles outside `painted` stay as they were
+    function strokePlan(file, region, G, tileId, painted, beforeTile) {
+        var rows = file.rows, columns = file.columns, r0 = Math.max(0, region.r0), r1 = Math.min(rows - 1, region.r1), c0 = Math.max(0, region.c0), c1 = Math.min(columns - 1, region.c1), cells = [], r, c;
+        var span = c1 - c0 + 1, ends = new Int32Array((r1 - r0 + 1) * span).fill(-1);
+        function oldAt(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? 0 : beforeTile(row * columns + col); }
+        function oldKind(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? null : G.kindOf(oldAt(row, col)); }
+        function baseAt(row, col) { if (row < 0 || col < 0 || row >= rows || col >= columns) return 0; var k = row * columns + col; return painted[k] ? tileId : beforeTile(k); }
+        function kindAt(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? null : G.kindOf(baseAt(row, col)); }
+        function endAt(row, col) {
+            if (row < 0 || col < 0 || row >= rows || col >= columns) return 0;
+            var bId = baseAt(row, col);
+            if (row < r0 || row > r1 || col < c0 || col > c1) return bId;
+            var idx = (row - r0) * span + (col - c0), k = row * columns + col;
+            if (ends[idx] >= 0) return ends[idx];
+            if (painted[k]) return (ends[idx] = wanted(kindAt, G, row, col, tileId, endAt));
+            var t = G.info(bId), plain = t ? G.kind(t.kind).plain : bId;
+            if (!t || (bId !== plain && (t.variant !== 'a' || wanted(oldKind, G, row, col, plain, oldAt) !== bId))) return (ends[idx] = bId);
+            return (ends[idx] = wanted(kindAt, G, row, col, plain, endAt));
+        }
+        for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
+            var k = r * columns + c, now = endAt(r, c);
+            if (now !== file.tile1(r, c)) cells.push([k, now]);
+        }
+        return { cells: cells, count: cells.length, region: { r0: r0, r1: r1, c0: c0, c1: c1 } };
+    }
+
     // The dictionary of the file with the names of the pieces that a plan puts (docs/MAP_FORMAT.md: a tile that the dictionary names "." is not drawn by the original, and a tile outside it is refused):
     // one splice of the whole dictionary, so that Undo takes the names back too and the bytes are exactly the ones before. Null when every piece is named already.
     function dictionary(file, made, G) {
@@ -187,5 +213,5 @@
         return ctl;
     }
 
-    return { plan: plan, change: change, dictionary: dictionary, open: open, shapeOf: shapeOf, wanted: wanted, RANK: RANK, WINDOW: WINDOW };
+    return { plan: plan, strokePlan: strokePlan, change: change, dictionary: dictionary, open: open, shapeOf: shapeOf, wanted: wanted, RANK: RANK, WINDOW: WINDOW };
 });

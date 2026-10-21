@@ -30,7 +30,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const argv = process.argv.slice(2);
 const FRONT = argv.includes('--front') ? path.resolve(argv[argv.indexOf('--front') + 1]) : path.join(ROOT, 'web', 'front');
 const load = (name) => require(path.join(FRONT, name));
-const File = load('mapmaker_file.js'), Canvas = load('mapmaker_canvas.js'), Tiles = load('mapmaker_tiles.js'), Edit = load('mapmaker_edit.js'), Palette = load('mapmaker_palette.js'), Tools = load('mapmaker_tools.js'), Blocks = load('mapmaker_blocks.js'), Ground = load('mapmaker_ground.js');
+const File = load('mapmaker_file.js'), Canvas = load('mapmaker_canvas.js'), Tiles = load('mapmaker_tiles.js'), Edit = load('mapmaker_edit.js'), Palette = load('mapmaker_palette.js'), Tools = load('mapmaker_tools.js'), Blocks = load('mapmaker_blocks.js'), Ground = load('mapmaker_ground.js'), Edges = load('mapmaker_edges.js');
 
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
@@ -412,7 +412,10 @@ function fakeDom() {
 function toolsPage(file, opts) {
     opts = opts || {};
     const doc = fakeDom(), el = (tag) => doc.createElement(tag), log = { dirty: [], edits: 0, minis: 0, refreshes: 0, rebased: 0 };
-    const host = { tools: [], box: el('div'), title: el('h3'), swatches: el('div'), name: el('div'), tile: el('button'), hint: el('p'), brushes: [], fill: el('button'), undo: el('button'), redo: el('button'),
+    const autoBtn = el('button'), autoMob = el('button');
+    autoBtn.appendChild(el('span')); autoBtn.appendChild(el('span'));
+    autoMob.appendChild(el('span')); autoMob.appendChild(el('span'));
+    const host = { tools: [], box: el('div'), title: el('h3'), swatches: el('div'), name: el('div'), tile: el('button'), hint: el('p'), brushes: [], fill: el('button'), autoEdges: [autoBtn, autoMob], undo: el('button'), redo: el('button'),
         stepper: el('div'), stepperLabel: el('span'), stepLess: el('button'), stepValue: el('output'), stepMore: el('button') };
     host.stepper.hidden = true;
     host.tile.appendChild(el('i')); host.tile.appendChild(el('span'));
@@ -426,7 +429,7 @@ function toolsPage(file, opts) {
         isStroking: () => stroking
     };
     const tools = Tools.create({
-        doc, win: {}, canvas, host, file: () => current, busy: () => busy,
+        doc, win: opts.storage ? { localStorage: opts.storage } : {}, canvas, host, file: () => current, busy: () => busy,
         dialogs: { open: (spec) => { const body = el('div'), ctl = { closed: false, close() { ctl.closed = true; } }; spec.build(body, ctl); sheets.push({ spec, body, ctl }); return ctl; } }, say: (title, text) => said.push(title + ': ' + text),
         rebase: (bytes) => { log.rebased++; current = File.parse(bytes); return current; }, onEdit: () => { log.edits++; }
     });
@@ -1295,6 +1298,38 @@ function caseN() {
     check(rs9.file().bytes[14] === 0 && rs9.tools.act(Blocks.resizeMap(rs9.file(), 95, 20, 0, 0)) === true && rs9.file().rows === 95 && rs9.file().bytes[14] === 1, 'resizing an Extended map past 90 rows upgrades rules to 1');
     rs9.doc.key('z', { ctrlKey: true });
     check(rs9.file().rows === 20 && rs9.file().bytes[14] === 0, 'Ctrl+Z undoes the Extended map resize and restores rules to 0');
+
+    // Auto edges: Off by default, remembered in localStorage, sets edge pieces in one Undo step, and preserves hand-placed custom tiles
+    const storeMem = {};
+    const st = { getItem: (k) => storeMem[k] || null, setItem: (k, v) => { storeMem[k] = String(v); } };
+    const ae = toolsPage(open(8, 12, 12), { storage: st }), aet = ae.painter();
+    check(ae.tools.state().autoEdges === false && ae.host.autoEdges[0].disabled === true && ae.host.autoEdges[0].textContent === 'Auto edges: Off', 'Auto edges starts Off and disabled until ground and edges load');
+    ae.tools.use(Ground, null);
+    ae.tools.useEdges(Edges);
+    check(ae.host.autoEdges[0].disabled === false && ae.host.autoEdges[1].hidden === false, 'loading Ground and Edges enables the Auto edges switch, visible on phone while Ground is chosen');
+    ae.button('objects').click();
+    check(ae.host.autoEdges[1].hidden === true, 'the phone Auto edges button hides when another tool is chosen');
+    ae.button('ground').click();
+    ae.host.autoEdges[0].click();
+    check(ae.tools.state().autoEdges === true && ae.host.autoEdges[0].textContent === 'Auto edges: On' && storeMem.ants_mapmaker_auto_edges === '1', 'clicking Auto edges turns it On and saves 1 in localStorage');
+    const ae2 = toolsPage(open(8, 12, 12), { storage: st });
+    check(ae2.tools.state().autoEdges === true, 'a new page instance reads Auto edges: On from localStorage');
+    // Paint a 3x3 dirt patch into gravel with Auto edges: On -> surrounding gravel cells get gd edge/corner pieces, and one Undo restores the exact bytes
+    const aeMap = open(8, 12, 12, 488);
+    Edit.ensureTile(aeMap, 487, 'd01a');
+    const ae3 = toolsPage(aeMap, { storage: st }), aet3 = ae3.painter();
+    ae3.tools.use(Ground, null);
+    ae3.tools.useEdges(Edges);
+    ae3.host.swatches.children[1].click(); // Dirt (487)
+    ae3.brush(3).click();
+    const beforeAutoBytes = digest(ae3.file().bytes);
+    aet3.begin({ row: 5, column: 5 }); aet3.end();
+    const gdNorth = Ground.edges('gravel', 'dirt')[6].id; // S of gravel = dirt -> shape 08 (index 6)
+    check(Edit.tile(ae3.file(), 1, 5 * 12 + 5) === 487 && Edit.tile(ae3.file(), 1, 3 * 12 + 5) === gdNorth, 'painting 3x3 dirt in gravel with Auto edges: On sets gravel-next-to-dirt edge pieces around the stroke');
+    const entryAt = (f, k) => Buffer.from(f.bytes.subarray(f.dictAt + 2 + 11 * k, f.dictAt + 13 + 11 * k)).toString('latin1').split('\0')[0];
+    check(entryAt(ae3.file(), gdNorth) === Ground.name(gdNorth), 'and names the auto-placed edge pieces in the dictionary');
+    ae3.doc.key('z', { ctrlKey: true });
+    check(digest(ae3.file().bytes) === beforeAutoBytes && ae3.host.undo.disabled === true, 'one Undo restores the stroke, the auto-placed edge pieces and the dictionary byte for byte');
 }
 
 const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN]];
