@@ -26,15 +26,15 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.104 - 2026-10-22 - Big maps keep their fingerprints; the limits of big maps are written down
 
 **For players:**
-- **Games on big maps in the original rules keep their old fingerprints.** Since v0.12.97, a map of the original rules with more than 90 rows and more than 120 columns gave a different game fingerprint while an ant was ordered to column 120, row 90, so an older and a newer game (or a recording from before) could disagree about that map. It checks out as before again. Library maps, Classic maps and every other play were never affected.
-- **What a big map can do is written down.** Maps up to 512 x 512 load and play, but an order longer than about 350 to 390 tiles is refused ("Can't go there"), and a group of 30 ants sent 200 tiles on a 512 x 512 map can take two and a half minutes before the last ant starts walking. Nothing about this changed; the map pages now say it.
+- **Games on big maps in the original rules keep their old fingerprints.** Since v0.12.97, a map of the original rules with more than 90 rows and more than 120 columns gave a different game fingerprint for as long as an ant held the order tile column 120, row 90, so an older and a newer game (or a recording from before) could disagree about that map. It checks out as before again. Library maps, Classic maps and every other play were never affected.
+- **What a big map can do is written down.** Maps up to 512 x 512 load and play, but on an open 512 x 512 map a diagonal order of 286 tiles or more, or a straight one of 400 tiles or more, is refused ("Can't go there"), and a group of 30 ants sent 200 tiles on a 512 x 512 map can take two and a half minutes before the last ant starts walking. Nothing about this changed; the map-format document now says it.
 
 **Rules / network:** none: network protocol 21 and the simulation rules number are unchanged. For the record, since v0.12.97 an order to exactly column 120, row 90 on a map of the extended rules (rules 1) is a real target where it used to read as "no order"; the number was not raised for it.
 
 **Fixes:**
 - Two wrong comments in the code about the order tile were corrected.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1aad1500...8efc195a)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1aad1500...2132ed99)
 
 ## v0.12.103 - 2026-10-22 - Big maps load, online size limit, old games named, test-room limits
 
