@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.104 - 2026-10-22 - Big maps keep their fingerprints; the limits of big maps are written down
+
+**For players:**
+- **Games on big maps in the original rules keep their old fingerprints.** Since v0.12.97, a map of the original rules with more than 90 rows and more than 120 columns gave a different game fingerprint while an ant was ordered to column 120, row 90, so an older and a newer game (or a recording from before) could disagree about that map. It checks out as before again. Library maps, Classic maps and every other play were never affected.
+- **What a big map can do is written down.** Maps up to 512 x 512 load and play, but an order longer than about 350 to 390 tiles is refused ("Can't go there"), and a group of 30 ants sent 200 tiles on a 512 x 512 map can take two and a half minutes before the last ant starts walking. Nothing about this changed; the map pages now say it.
+
+**Rules / network:** none: network protocol 21 and the simulation rules number are unchanged. For the record, since v0.12.97 an order to exactly column 120, row 90 on a map of the extended rules (rules 1) is a real target where it used to read as "no order"; the number was not raised for it.
+
+**Fixes:**
+- Two wrong comments in the code about the order tile were corrected.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1aad1500...8efc195a)
+
 ## v0.12.103 - 2026-10-22 - Big maps load, online size limit, old games named, test-room limits
 
 **For players:**
@@ -615,17 +628,7 @@ Work that is not released yet is written in the same template under a heading th
 **Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/8ab3344c...a4d4eecf)
-## v0.12.36 - 2026-10-13 - Names of the computer players in the server's rooms (protocol 20)
 
-**For players:**
-- Computer players now have names. In a room on the game server a bot is called, for example, `Pip (bot, Hard)` (a random short name, then `bot` and its level) instead of `Bot (Hard)`: in the waiting room, on the results, in the replay list and in the match history. The front page's room shows the name of a bot as soon as the host picks it for a color, before START, and the bot keeps that name in the match. The test bots are `Pip (bot, idle)` and `Pip (bot, worker)`. Matches kept before keep their old `Bot (Hard)`.
-- A name that looks like a computer player's is not for people: a name that ends with `(bot)` or `(bot, ...)` is refused like the names that start with `Bot (` (start menu, front page, game page, rooms).
-- A game on the local network and a game on your own computer still say `Bot (Level)`; the in-game label is unchanged for now.
+## Older versions (v0.12.36 and before)
 
-**Rules / network:** network protocol 20: a v0.12.35 game cannot join a v0.12.36 server or room, and the other way round. Nothing in the rules or the replay format changed.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b09bc246...26b4a5de)
-
-## Older versions (v0.12.35 and before)
-
-Every release before v0.12.36, and the long notes of v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.37, and the long notes of v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
