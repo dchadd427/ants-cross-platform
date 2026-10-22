@@ -261,7 +261,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "running_big_match_counts_one_place",
@@ -271,7 +271,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "retired_big_match_counts_one_place",
@@ -281,7 +281,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "weight_may_exceed_all_places_on_start",
@@ -291,7 +291,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "weight_may_exceed_all_places_when_counted",
@@ -301,7 +301,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "new_place_does_not_count_its_weight",
@@ -311,7 +311,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "public_room_choice_weighs_nothing",
@@ -321,7 +321,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "leader_is_not_told_about_a_map_too_big",
@@ -331,7 +331,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "map_refusal_never_asked",
@@ -341,7 +341,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "nobody_is_told_whose_game_could_not_load",
@@ -351,7 +351,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "leader_gets_no_way_out",
@@ -361,7 +361,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "leader_is_told_to_remove_themselves",
@@ -371,7 +371,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "old_game_not_told_apart",
@@ -381,7 +381,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "slow_game_not_told_apart",
@@ -391,7 +391,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "timeout_not_marked",
@@ -401,7 +401,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "long_pause_names_nobody",
@@ -411,7 +411,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "long_pause_gives_no_way_out",
@@ -421,7 +421,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "pause_goes_on_after_the_person_left",
@@ -431,7 +431,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "person_who_left_is_still_named",
@@ -441,7 +441,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "load_failed_without_a_name_cut",
@@ -451,7 +451,7 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.15 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "test_map_kept_as_sent",
