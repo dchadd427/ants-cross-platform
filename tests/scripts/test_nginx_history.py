@@ -39,6 +39,7 @@ CONF = strip_comments(read("docker", "nginx.conf"))
 HEAD = CONF[:CONF.index("server {")]                                                          # what is declared outside the server block: the zones and the cache
 LIST = block_of(CONF, "location = /history ")
 ITEM = block_of(CONF, "location ^~ /history/ ")
+DEATHS = block_of(CONF, "location = /history/deaths ")
 OFF = block_of(CONF, "location @replays_off ")
 REPLAYS_LIST = block_of(CONF, "location = /replays ")
 REPLAYS_FILES = block_of(CONF, "location ^~ /replays/ ")
@@ -80,7 +81,7 @@ def query_pattern():
 class TheLocations(unittest.TestCase):
     def test_the_two_addresses_have_their_two_locations_and_no_other_location_could_catch_them(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
-        self.assertEqual([l for l in locations if "history" in l], ["= /history", "^~ /history/"])     # (no regular-expression location could also catch /history/x)
+        self.assertEqual([l for l in locations if "history" in l], ["= /history", "= /history/deaths", "^~ /history/"])     # (no regular-expression location could also catch /history/x; the sum of a map's deaths is an exact one)
         self.assertEqual(len(re.findall(r"location\s+= /history\s*\{", CONF)), 1)
         self.assertEqual(len(re.findall(r"location\s+\^~ /history/\s*\{", CONF)), 1)
         self.assertEqual([l for l in locations if "replays" in l], ["= /replays", "^~ /replays/", "@replays_off"])     # (the recorded matches are as they were)
@@ -297,6 +298,66 @@ server {
 
 
 @unittest.skipUnless(shutil.which("docker"), "docker is not installed: the blocks of docker/nginx.conf for /history were NOT run (tests/scripts/test_nginx_history.py)")
+class TheMapOfDeathsLocation(unittest.TestCase):
+    """GET /history/deaths?map=NAME (docs/REPLAYS.md "The map of deaths"): the game server adds up the stored positions of a map's matches, so it has an exact location, a query of one key made of the characters of a
+    percent-encoded name, an allowance of its own and a short cache of its own; nothing of the visitor's request is passed on but Host and Connection."""
+
+    @staticmethod
+    def pattern():
+        match = re.search(r'if \(\$args !~ "([^"]+)"\) \{ return 400; \}', DEATHS)
+        return re.compile(match.group(1).replace("\\z", "\\Z")) if match else None
+
+    def test_it_is_an_exact_location_that_no_id_and_no_other_location_could_catch(self):
+        self.assertEqual(len(re.findall(r"location\s+= /history/deaths\s*\{", CONF)), 1)
+        self.assertIsNotNone(item_pattern())
+        self.assertIsNone(item_pattern().match("/history/deaths"))                                  # (an id begins with ants-: the prefix location would refuse the name as no match)
+        self.assertLess(CONF.index("location = /history/deaths "), CONF.index("location ^~ /history/ "))
+
+    def test_only_a_get_with_one_key_of_the_characters_of_a_name_goes_through_and_the_checks_come_first(self):
+        self.assertIn("if ($request_method != GET) { return 405; }", DEATHS)
+        for check in ("$request_method", "$args !~"):
+            self.assertLess(DEATHS.index(check), DEATHS.index("limit_req "))
+            self.assertLess(DEATHS.index(check), DEATHS.index("proxy_cache "))
+            self.assertLess(DEATHS.index(check), DEATHS.index("proxy_pass"))
+        pattern = self.pattern()
+        self.assertIsNotNone(pattern)
+        for good in ("map=TREASURE.LVL", "map=Pop%20Corn.LVL", "map=a", "map=Pop+Corn.lvl", "map=Po(p).lvl", "map=A_b-c~d.LVL", "map=" + "%41" * 120, "map=%2E%2E%2Fx"):
+            self.assertIsNotNone(pattern.match(good), good)
+        for bad in ("", "map=", "map", "x=TREASURE.LVL", "map=a&b=1", "map=a&map=b", "map=a b", "map=a/b", "map=../x", "map=a\\b", "map=a;b", "map=<x>", "map=a'b", 'map=a"b', "map=a*b", "map=a?b", "map=a#b", "map=a:b", "map=a,b",
+                    "map=\u00e9", "map=a\n", "Map=a", " map=a", "map=a" + "b" * 360, "map=" + "%41" * 121 + "A"):
+            self.assertIsNone(pattern.match(bad), repr(bad))
+        self.assertIn("{1,360}", DEATHS)
+
+    def test_it_has_an_allowance_of_its_own_two_a_second_with_a_burst_of_five_and_a_cache_of_thirty_seconds_in_the_historys_small_cache(self):
+        zone = re.search(r"limit_req_zone \$binary_remote_addr zone=ants_history_deaths:(\d+)m rate=(\d+)r/([sm]);", CONF)
+        self.assertIsNotNone(zone)
+        self.assertLess(CONF.index(zone.group(0)), CONF.index("server {"))
+        self.assertEqual((int(zone.group(1)), int(zone.group(2)), zone.group(3)), (1, 2, "s"))
+        self.assertIn("limit_req zone=ants_history_deaths burst=5 nodelay;", DEATHS)
+        self.assertIn("limit_req_status 503;", DEATHS)
+        self.assertNotRegex(DEATHS, r"zone=ants_(replays|replay_files|live|live_files|stats|busy|local|history|history_query|history_items)\b")
+        self.assertIn("proxy_cache ants_history_cache;", DEATHS)                                    # (not the numbers' cache: made-up names cannot push the front page's numbers out)
+        self.assertIn('proxy_cache_key "ants-history-deaths$args";', DEATHS)                        # (a key that no list's key can be: the list's is ants-history + the query)
+        self.assertIn("proxy_cache_valid 200 30s;", DEATHS)
+        self.assertIn("proxy_cache_use_stale updating error timeout http_503;", DEATHS)
+        self.assertIn("proxy_cache_lock on;", DEATHS)
+        for block in (LIST, ITEM, REPLAYS_LIST, REPLAYS_FILES, LIVE_LIST, LIVE_ITEM, STATS):
+            self.assertNotIn("zone=ants_history_deaths", block)
+
+    def test_it_goes_to_the_replay_port_with_nothing_of_the_visitor_but_host_and_connection_and_a_server_without_the_door_is_a_404_with_json(self):
+        self.assertIn("set $ants_replays ants-server:4020;", DEATHS)
+        self.assertIn("proxy_pass http://$ants_replays;", DEATHS)
+        for line in ("proxy_pass_request_headers off;", 'proxy_set_header Connection "close";', "proxy_set_header Host $host;", "proxy_pass_request_body off;", 'proxy_set_header Content-Length "";', "error_page 502 504 = @replays_off;"):
+            self.assertIn(line, DEATHS)
+        self.assertEqual(sorted(re.findall(r"proxy_set_header (\S+)", DEATHS)), ["Connection", "Content-Length", "Host"])
+        self.assertIn("proxy_read_timeout 10s;", DEATHS)
+
+    def test_the_comments_name_the_route_and_the_documents_say_so(self):
+        self.assertIn("/history/deaths?map=NAME", read("docker", "nginx.conf"))
+        for needle in ("/history/deaths", "map="):
+            self.assertIn(needle, read("docs", "SERVER.md"), needle)
+
+
 class TheBlocksRun(stats.Rig, unittest.TestCase):
     STUB = STUB
 

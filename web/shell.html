@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
-    <link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="front/rematch.css">
+    <link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css">
     <style>
         /* The look of the front page (web/lobby.html), which is the look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black
            inset boxes, the game's own font (Libre Franklin, SIL OFL) and the "ants!" logo, all from web/front/. The colors are the front page's, token for token (tests/scripts/test_web_game.py
@@ -1417,7 +1417,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="replay_page.js"></script><script src="history_page.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -3845,7 +3845,7 @@
 
         // ---- the stats of the match on show (docs/REPLAYS.md "The match pages"): the server's record of it as a panel (the Stats button on a wide screen, a row under the controls on a phone); web/history_page.js.
         // Only for a recording of the server's own store: a live match, a file from elsewhere and the frame of a match page have none. ----
-        if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE });
+        if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE, redraw: window.AntsDeathMap && window.AntsDeathMap.redraw, deathMap: window.AntsDeathMap && window.AntsDeathMap.create(document, function (name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }, { replay: window.AntsReplay, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })() }) });      // (the small map "Where ants died" in the panel: web/death_map.js)
     </script>
     <!-- END replay glue -->
     <script>

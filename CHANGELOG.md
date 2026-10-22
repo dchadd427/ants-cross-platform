@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.106 - 2026-10-22 - Where ants died: the map of deaths on the match page
+
+**For players:**
+- **A new card, "Where ants died", on the page of every match played after this update**, between "Over time" and "Activity": the match's own map with a soft glow where many ants died (dark red for one, gold and cream for many), or one mark on the tile of each ant. Pick one team's ants with its chip, hide the ants that drowned with one switch, mark the first blood and the last kill, zoom with + and - (or the mouse wheel, or two fingers) and tap a mark to see its tile, the time, the kind of ant and who killed it.
+- **"All matches on this map"** is a switch on the card: it adds up every match on that map that has a map of deaths, to show where ants really die there.
+- **The Stats panel of the replay page** has a smaller version of the card under its table.
+- On a very big map, or in a match with more deaths than fit one by one, the card shows colored squares with the number of ants that died in each.
+- A match played before this update has no map of deaths; its page says so in one line.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the server only watches while it replays a finished match). **Server owners:** the database moves from schema version 6 to 7 at its first start (copy `ants.db` first: an older program refuses version 7).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4f281d02...52079baf)
+
 ## v0.12.105 - 2026-10-22 - Map tools never touch the library, fixes after the review of 0.12.103
 
 **For players:**
@@ -606,25 +619,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2b102759...fb846d3a)
 
-## v0.12.40 - 2026-10-14 - Build date and time in the web footer
+## Older versions (v0.12.40 and before)
 
-**For players:**
-- The footer of the front page, the game page, the replay list and the changelog page now shows the Pacific date and time of the build in parentheses after the build id, for example `Version v0.12.40 - build b0f2a5c (2026-10-14 09:32 PT)`.
-
-**Rules / network:** none. Only the pages' footer text changed; network protocol 20 is as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b0f2a5c3...2b102759)
-
-## v0.12.39 - 2026-10-14 - Opportunistic water pushes, vicinity kills, smart threat counters and bomb-tunnel defusal
-
-**For players:**
-- Computer players now knock enemies standing near water into the water (one punch on the shore or four tiles out with a Combat Ant, or two to four blows in succession), finish a flanked 3-hit-point enemy with three workers, ignore harmless lone fire walls and stray bombs left in open ground after the enemy leaves, and defend their gate ring against a second enemy Fire Ant even while hunting a raider near the thief hole.
-- On maps with a food pile in a lake and no water channel between land islands, computer players now activate their island play to fetch a Swimmer, ferry food and dig bridges; when gate goals are switched on for a Hard computer player, it also defuses bomb-plugged tunnels with a Bomber and routes around map bombs on power-up trips.
-
-**Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/07ce107a...0b9a5071)
-
-## Older versions (v0.12.38 and before)
-
-Every release before v0.12.39, and the long notes of v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.41, and the long notes of v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

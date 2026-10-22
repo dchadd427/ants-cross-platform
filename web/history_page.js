@@ -319,7 +319,8 @@
     // ---- the stats of a match on the game page in replay mode (web/shell.html, web/replay_stats.css) ----
     // The server's record of the match on show (GET /history/<id>) as a panel: the "Stats" button of the header (a wide screen) opens it over the corner of the picture, a row under the controls (a phone)
     // opens it in the page. The numbers are the final ones of the match; they do not follow the picture. A recording with no record (or a server that does not answer) gets no button.
-    // env = { document, fetch, file }; the elements are the page's own: stats-btn, mstats (the panel), mstats-flow (the row) and the header.
+    // env = { document, fetch, file, deathMap, redraw }; the elements are the page's own: stats-btn, mstats (the panel), mstats-flow (the row) and the header. `deathMap` (web/death_map.js create(), optional) makes the small
+    // card "Where ants died" under the table (a match without positions gets none); `redraw` draws it again for its size when a closed panel is opened (a card in a hidden box has no size).
     function replayStats(env) {
         var doc = env.document, id = idOfFile(env.file);
         if (!id || typeof env.fetch !== 'function') return;
@@ -361,6 +362,9 @@
                 }
             });
             t.appendChild(tb); box.appendChild(t); box.appendChild(cards);
+            var dm = null;
+            try { dm = env.deathMap && typeof env.deathMap.card === 'function' ? env.deathMap.card(rec, { compact: true }) : null; } catch (e) { dm = null; }      // (the card is one more thing: whatever it does, the numbers stay)
+            if (dm) box.appendChild(dm);
             var mf = mk('div', 'mf'), a = mk('a', '', 'Open the match page \u203a'); mf.appendChild(mk('span', '', 'The final numbers of the match.')); a.href = '/match.html?id=' + encodeURIComponent(rec.id); mf.appendChild(a); box.appendChild(mf);
             return box;
         }
@@ -369,9 +373,10 @@
             if (!btn || !pop || !flow) return;
             var mh = mk('div', 'mh'), x = mk('button', 'x', '\u00d7');
             mh.appendChild(mk('h2', '', 'Match stats')); x.type = 'button'; x.setAttribute('aria-label', 'Close the stats'); mh.appendChild(x); pop.appendChild(mh); pop.appendChild(body(rec));
+            function redraw(node) { try { if (typeof env.redraw === 'function') env.redraw(node); } catch (e) { /* the card is drawn when it is next opened */ } }
             function setOpen(open) {
                 pop.hidden = !open; btn.setAttribute('aria-expanded', String(open));
-                if (open) pop.style.top = Math.round(doc.querySelector('header').getBoundingClientRect().bottom + 8) + 'px';
+                if (open) { pop.style.top = Math.round(doc.querySelector('header').getBoundingClientRect().bottom + 8) + 'px'; redraw(pop); }
             }
             btn.addEventListener('click', function () { setOpen(pop.hidden); });
             x.addEventListener('click', function () { setOpen(false); btn.focus(); });
@@ -381,7 +386,8 @@
             mt.type = 'button'; mt.setAttribute('aria-expanded', 'false'); l.appendChild(mk('b', '', 'Match stats'));
             mt.appendChild(l); mt.appendChild(mk('span', '', '\u25be'));      // (the closed row says nothing of the result: the panel is closed so that it does not tell who won)
             flow.appendChild(mt); flow.appendChild(body(rec)); flow.classList.add('closed');
-            mt.addEventListener('click', function () { var closed = flow.classList.toggle('closed'); mt.setAttribute('aria-expanded', String(!closed)); });
+            mt.addEventListener('click', function () { var closed = flow.classList.toggle('closed'); mt.setAttribute('aria-expanded', String(!closed)); if (!closed) redraw(flow); });
+            if (doc.defaultView && doc.defaultView.addEventListener) doc.defaultView.addEventListener('resize', function () { if (!pop.hidden) redraw(pop); if (!flow.classList.contains('closed')) redraw(flow); });
             flow.hidden = false;
         }
         var request;

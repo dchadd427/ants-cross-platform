@@ -283,7 +283,7 @@ class TheWholeWay(unittest.TestCase):
         out, err = self.server.stop()
         type(self).logs += err
         self.assertEqual(self.server.proc.returncode, 0)                                           # (a stop by SIGTERM is a clean exit)
-        self.assertIn("schema version 6", err)
+        self.assertIn("schema version 7", err)
         type(self).server = Server(self.results)
         self.owner.server = self.moderator.server = self.server
         self.assertEqual(self.me(self.owner.cookie)["name"], "Owner")                              # (the session and the accounts are in the database and the secret: a restart keeps them)

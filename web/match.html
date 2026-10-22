@@ -14,6 +14,7 @@
     </style>
     <link rel="stylesheet" href="matches.css">
     <link rel="stylesheet" href="match_stats.css">
+    <link rel="stylesheet" href="death_map.css">
 </head>
 <body>
 <div class="screen">
@@ -50,6 +51,7 @@
 <script src="front/map_picker.js"></script>
 <script src="history_page.js"></script>
 <script src="match_stats.js"></script>
+<script src="death_map.js"></script>
 <script>
 (function () {
     'use strict';
@@ -211,7 +213,21 @@
         if (!text) return null;
         var s = panel('more', 'more-h', 'More stats'), n = el('div', 'note'); n.appendChild(el('p', '', text)); s.appendChild(n); return s;
     }
-    var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, stats.activity, moreSection, aboutSection];
+    // "Where ants died" (web/death_map.js) comes right after "Over time": what a record keeps under `deaths` (a field of its own: where each ant died). A match that has none says so in one quiet line, unless the
+    // box "More stats" is there already (a match of an older version or without a recording: one box, not two). "All matches on this map" asks for the sum of the map's matches (GET /history/deaths?map=NAME).
+    var deathMap = window.AntsDeathMap.create(document, function (name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }, {
+        replay: R, picker: window.AntsMapPicker, maps: function () { return pics.maps(); },
+        storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(),
+        sum: function (map) {
+            var name = window.AntsMapPicker && window.AntsMapPicker.percentEncode ? window.AntsMapPicker.percentEncode(String(map)) : encodeURIComponent(String(map));
+            return fetch('/history/deaths?map=' + name, { cache: 'no-store', credentials: 'omit' }).then(function (response) { return response.ok ? response.json() : null; });
+        }
+    });
+    function deathsSection(rec) {      // (one more card: whatever it does, the rest of the page is built)
+        if (window.AntsMatchStats.noStatsNote(rec)) return null;
+        try { return deathMap.card(rec, {}); } catch (e) { return null; }
+    }
+    var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];
 
     // ---- the page ----
     function notice(bold, rest, buttons) {
@@ -231,6 +247,7 @@
         var ctx = { sides: H.sidesOf(rec) };
         put(SECTIONS.map(function (f) { return f(rec, ctx); }));
         window.AntsMatchStats.redraw(document);                          // (the charts are drawn for the width of their boxes)
+        window.AntsDeathMap.redraw(document);                            // (and so is the map of deaths)
         document.title = document.title.replace(/^Match/, function () { return R.mapTitle(rec.map) + ', ' + H.formatText(rec.format); });      // (a function: a map name with $& or $' in it is text, not a pattern of replace)
         var show = $('show'); if (show) show.addEventListener('click', function () { setReplay(!frame); });
         var full = $('rep-full');
@@ -254,7 +271,7 @@
     $('all-btn').addEventListener('click', function (ev) {
         try { if (document.referrer && new URL(document.referrer).origin === window.location.origin && new URL(document.referrer).pathname === '/matches.html' && window.history.length > 1) { ev.preventDefault(); window.history.back(); } } catch (e) { /* the link works */ }
     });
-    window.addEventListener('resize', function () { window.AntsMatchStats.redraw(document); });
+    window.addEventListener('resize', function () { window.AntsMatchStats.redraw(document); window.AntsDeathMap.redraw(document); });
     // the game page in the frame says so when its own Quit is pressed
     window.addEventListener('message', function (ev) { if (ev.origin === window.location.origin && ev.data && ev.data.ants === 'replay-leave' && frame && ev.source === frame.contentWindow) setReplay(false); });
     function lookLive() {

@@ -1,4 +1,4 @@
-// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics.
+// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics; version 7 the map of deaths of a match.
 #include "ants_server/db_schema.hpp"
 
 namespace ants::server {
@@ -196,6 +196,23 @@ const char* const kAccountsSql =
     "UPDATE map_submissions SET decided_by = COALESCE((SELECT r.actor_name FROM review_log r WHERE r.submission = map_submissions.id AND r.action IN ('approve', 'decline', 'take_down', 'put_back') ORDER BY r.id DESC LIMIT 1), '')"
     " WHERE state IN ('approved', 'declined', 'taken_down');";
 
+// Version 7. history_deaths: the map of deaths of a match (docs/REPLAYS.md "The map of deaths", ants_server/history_deaths.hpp), one row for each match whose replay pass found where its ants died; a match
+// that was counted before this version, a match in which nobody died and one that the pass could not count have no row (they are not counted again for it). `deaths` is the JSON text of the field (at most
+// 3,000 characters: the cap of this field, apart from the cap of `details`); `map` and `hash` (the map's file name and its FNV-1a 64 as 16 hex digits, as map_plays has them) are what the sum of a map's
+// matches groups by (another file under the same name is another map), `w` and `h` the map's size in tiles, `n` how many ants died, `ended` the match's end time. The row goes with its match.
+const char* const kDeathsSql =
+    "CREATE TABLE history_deaths ("
+    " id TEXT PRIMARY KEY NOT NULL REFERENCES history_matches (id) ON DELETE CASCADE,"
+    " map TEXT NOT NULL,"
+    " hash TEXT NOT NULL CHECK (length(hash) = 16),"
+    " ended INTEGER NOT NULL,"
+    " w INTEGER NOT NULL CHECK (w >= 1),"
+    " h INTEGER NOT NULL CHECK (h >= 1),"
+    " n INTEGER NOT NULL CHECK (n >= 1),"
+    " deaths TEXT NOT NULL CHECK (length(deaths) <= 3000)"
+    ") WITHOUT ROWID;"
+    "CREATE INDEX history_deaths_map ON history_deaths (map, hash, ended, id);";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -208,6 +225,7 @@ const std::vector<db::Migration>& db_migrations() {
         {4, "site_stats", kSiteStatsSql},
         {5, "map_submissions", kSubmissionsSql},
         {6, "admin_accounts", kAccountsSql},
+        {7, "history_deaths", kDeathsSql},
     };
     return list;
 }

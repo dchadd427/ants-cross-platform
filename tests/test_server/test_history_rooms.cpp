@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "../common/test_assert.hpp"
+#include "ants_server/history_deaths.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -188,6 +189,8 @@ int main() {
             HistoryRecord expected = make_history_record(id, kT0, played.rep, played.outcome);
             ASSERT_TRUE(!rec.details.empty() && expected.details.empty());           // (the details of the same play: test_history_details.cpp checks what is in them)
             expected.details = rec.details;
+            ASSERT_TRUE(rec.deaths.size() <= kDeathsMaxBytes);                       // (the map of deaths of the same play: test_history_deaths.cpp checks what is in it)
+            expected.deaths = rec.deaths;
             ASSERT_EQ(ctl::to_json(history_record_to_json(rec, true)), ctl::to_json(history_record_to_json(expected, true)));
             // both doors list it
             const ctl::HttpResponse owner = r.call("GET", "/history");

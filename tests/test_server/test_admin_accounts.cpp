@@ -667,8 +667,9 @@ int main() {
         TempDir dir;
         const std::string live = (dir.path / "live.db").string();
         const std::string copy = (dir.path / "copy.db").string();
-        const std::vector<db::Migration> all = db_migrations();
-        ASSERT_TRUE(all.size() >= 6 && all.back().version == 6 && all[4].version == 5);
+        const std::vector<db::Migration> every = db_migrations();
+        ASSERT_TRUE(every.size() >= 6 && every[5].version == 6 && every[4].version == 5);
+        const std::vector<db::Migration> all(every.begin(), every.begin() + 6);                    // (the first six: this case is about version 6; the later versions have their own, SV1.7 of test_db and test_history_deaths)
         const std::vector<db::Migration> v5(all.begin(), all.begin() + 5);
         {
             db::Database db5;

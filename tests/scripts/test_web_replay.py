@@ -511,7 +511,7 @@ class TheFiles(unittest.TestCase):
 
     def test_the_image_the_ci_and_the_local_web_build_carry_the_files_of_the_replay_pages(self):
         dockerfile, ci, build = read("Dockerfile"), read(".github", "workflows", "ci.yml"), read("build_web.sh")
-        for name in ("replay_page.js", "history_page.js", "match_stats.js", "matches.css", "match_stats.css", "replay_stats.css"):
+        for name in ("replay_page.js", "history_page.js", "match_stats.js", "death_map.js", "matches.css", "match_stats.css", "death_map.css", "replay_stats.css"):
             self.assertIn("COPY web/%s " % name, dockerfile, name)
             self.assertIn(name, build, name)
         for name in ("matches", "match", "live"):

@@ -8,7 +8,8 @@
 // (tests/test_server/test_history_details.cpp checks it). No clock, no disk, no database, no thread: pure, like make_history_record(). The server turns what it found into the `details` of a match's record
 // (ants_server/history_details.hpp), in the same pass that counts the totals.
 //
-// What this cannot tell (it needs an event sink in the engine, a later change): what caused each hit (a blow, a bomb, a fire wall) and the type of the ant that struck.
+// What this cannot tell (it needs an event sink in the engine, a later change): what caused each hit (a blow, a bomb, a fire wall) and the type of the ant that struck. The tile of every lost ant is read from the
+// same world snapshot (the tile of its last look: nothing is added to the engine for it).
 
 #include <array>
 #include <cstddef>
@@ -41,13 +42,15 @@ struct MatchStats {
         std::array<uint32_t, kSeats> killed{};
     };
     /// An ant that died. `killer` is the team of the last damage it took (kNoKiller: none, or its own: a team does not kill itself), `victim_type` the ant's own type (AntType as a number: a Worker until it takes a
-    /// power-up), `drowned` that it fell in the water.
+    /// power-up), `drowned` that it fell in the water, `tile_x` / `tile_y` the tile the ant stood on when the world last showed it (where it died: the map of deaths, ants_server/history_deaths.hpp).
     struct Kill {
         uint32_t turn{0};
         uint8_t killer{kNoKiller};
         uint8_t victim{0};
         uint8_t victim_type{0};
         bool drowned{false};
+        int32_t tile_x{0};
+        int32_t tile_y{0};
     };
     /// A Thief started to raid a hill; `points` is the loot that the raid took (the hill lost it, the thief carried it off: 0 for a hill with nothing)
     struct Raid {
@@ -61,6 +64,8 @@ struct MatchStats {
     std::string why;
     uint32_t turns{0};
     uint8_t roster{0};                                     // bit s: seat s plays
+    uint32_t map_width{0};                                 // the grid's size in tiles (0 until the first tick was looked at): the bounds of the tiles of `kills`
+    uint32_t map_height{0};
     std::vector<Sample> samples;
     std::vector<Kill> kills;                               // in the order they happened
     std::vector<Raid> raids;

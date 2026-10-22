@@ -1,0 +1,962 @@
+{
+ "note": "Mutants of the map of deaths for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the tile that the collector keeps (src/ants_replay/match_stats.cpp), the packed field and its cap (src/ants_server/history_deaths.cpp), the table, the feeder and the sum of a map (src/ants_server/history_store.cpp), the route (src/ants_server/control_history.cpp), and the card of the page (web/death_map.js, the small card in web/history_page.js) against test_history_deaths and tests/scripts/web_death_map_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/death_map_mutants.json --keep-going --jobs 1. The C++ mutants need a rebuild of ants_server_core and test_history_deaths each (about a minute); the page's need none.",
+ "defaults": {
+  "build": "test_history_deaths",
+  "test": "./build/tests/test_server/test_history_deaths"
+ },
+ "baseline": [
+  {
+   "build": "test_history_deaths",
+   "test": "./build/tests/test_server/test_history_deaths"
+  },
+  {
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "collector_tile_x_is_y",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "kill.tile_x = ant.tile_x;",
+   "new": "kill.tile_x = ant.tile_y;"
+  },
+  {
+   "id": "collector_tile_y_is_zero",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "kill.tile_y = ant.tile_y;",
+   "new": "kill.tile_y = 0;"
+  },
+  {
+   "id": "collector_width_is_height",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "stats_.map_width = engine.grid().width();",
+   "new": "stats_.map_width = engine.grid().height();"
+  },
+  {
+   "id": "collector_size_never_taken",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (stats_.map_width == 0) {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "collector_tile_not_followed",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "            ant.tile_x = snap.tile_x;\n            ant.tile_y = snap.tile_y;\n        }",
+   "new": "            ant.tile_y = snap.tile_y;\n        }"
+  },
+  {
+   "id": "pack_x_not_clamped",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "put(out, std::min(d.x, kMaxSide), 2);",
+   "new": "put(out, d.x, 2);"
+  },
+  {
+   "id": "pack_second_not_clamped",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "put(out, std::min(d.second, kMaxSecond), 3);",
+   "new": "put(out, d.second, 3);"
+  },
+  {
+   "id": "pack_drowned_bit_moved",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "(d.drowned ? 32u : 0u)",
+   "new": "(d.drowned ? 16u : 0u)"
+  },
+  {
+   "id": "pack_type_shift",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "(static_cast<uint32_t>(d.type & 7u) << 2)",
+   "new": "(static_cast<uint32_t>(d.type & 7u) << 3)"
+  },
+  {
+   "id": "pack_killer_shift",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "(static_cast<uint32_t>(d.killer & 7u) << 6)",
+   "new": "(static_cast<uint32_t>(d.killer & 7u) << 5)"
+  },
+  {
+   "id": "unpack_type_7_is_an_ant",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "if (d.type > 5 || (d.killer > 3 && d.killer != kDeathsNone)) return false;",
+   "new": "if (d.type > 7 || (d.killer > 3 && d.killer != kDeathsNone)) return false;"
+  },
+  {
+   "id": "unpack_killer_5_is_a_team",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "if (d.type > 5 || (d.killer > 3 && d.killer != kDeathsNone)) return false;",
+   "new": "if (d.type > 5) return false;"
+  },
+  {
+   "id": "squares_count_not_clamped",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "put(out, std::min(c.count, kMaxCount), 3);",
+   "new": "put(out, c.count, 3);"
+  },
+  {
+   "id": "squares_count_zero_is_a_square",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "if (f > 7 || n == 0) return false;",
+   "new": "if (f > 7) return false;"
+  },
+  {
+   "id": "squares_flag_8_is_a_square",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "if (f > 7 || n == 0) return false;",
+   "new": "if (n == 0) return false;"
+  },
+  {
+   "id": "field_second_is_half_seconds",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "d.second = std::min(k.turn / 20u, kMaxSecond);",
+   "new": "d.second = std::min(k.turn / 10u, kMaxSecond);"
+  },
+  {
+   "id": "field_tile_not_put_on_the_map",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "d.x = clamp_to(k.tile_x, st.map_width - 1);",
+   "new": "d.x = static_cast<uint32_t>(k.tile_x);"
+  },
+  {
+   "id": "field_exact_cap_too_big",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "std::string text = text_of(o);\n    if (text.size() <= kDeathsMaxBytes) return text;",
+   "new": "std::string text = text_of(o);\n    if (text.size() <= kDeathsMaxBytes + 200) return text;"
+  },
+  {
+   "id": "field_square_cap_too_big",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "text = text_of(b);\n        if (text.size() <= kDeathsMaxBytes) return text;",
+   "new": "text = text_of(b);\n        if (text.size() <= kDeathsMaxBytes + 200) return text;"
+  },
+  {
+   "id": "field_squares_not_the_smallest",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "for (uint32_t side = 2; side <= kMaxSide + 1; side *= 2) {\n        JsonValue b",
+   "new": "for (uint32_t side = 2; side <= kMaxSide + 1; side *= 4) {\n        JsonValue b"
+  },
+  {
+   "id": "field_first_kill_may_be_nobody",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "if (d.killer == kDeathsNone) continue;",
+   "new": ""
+  },
+  {
+   "id": "field_squares_lose_the_cause",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "counts[std::make_tuple(d.y / side, d.x / side, d.team, d.drowned)];",
+   "new": "counts[std::make_tuple(d.y / side, d.x / side, d.team, false)];"
+  },
+  {
+   "id": "field_big_map_is_named",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "st.map_width > kMaxSide + 1 || st.map_height > kMaxSide + 1) return std::string();",
+   "new": "st.map_width > kMaxSide + 100 || st.map_height > kMaxSide + 1) return std::string();"
+  },
+  {
+   "id": "parse_h_not_checked",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "if (w < 1 || h < 1 || w > kMaxSide + 1 || h > kMaxSide + 1 || n < 1 || n > kMaxTotal || !v.get(\"d\").is_string()) return false;",
+   "new": "if (w < 1 || w > kMaxSide + 1 || n < 1 || n > kMaxTotal || !v.get(\"d\").is_string()) return false;"
+  },
+  {
+   "id": "sum_ignores_the_size_of_a_field",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "if (!parse_history_deaths(text, v) || v.width != width || v.height != height) continue;",
+   "new": "if (!parse_history_deaths(text, v)) continue;"
+  },
+  {
+   "id": "sum_counts_one_per_square",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "counts[std::make_tuple(p.y / side, p.x / side, p.team, p.drowned)] += p.count;",
+   "new": "counts[std::make_tuple(p.y / side, p.x / side, p.team, p.drowned)] += 1;"
+  },
+  {
+   "id": "sum_keeps_the_smaller_side",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "side = std::max(side, v.side);",
+   "new": ""
+  },
+  {
+   "id": "sum_cap_too_big",
+   "file": "src/ants_server/history_deaths.cpp",
+   "old": "if (text.size() <= kDeathsSumMaxBytes || side > kMaxSide)",
+   "new": "if (text.size() <= kDeathsSumMaxBytes + 20000 || side > kMaxSide)"
+  },
+  {
+   "id": "store_keeps_a_field_over_its_cap",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "record.deaths.size() <= kDeathsMaxBytes && parse_history_deaths",
+   "new": "parse_history_deaths"
+  },
+  {
+   "id": "store_keeps_a_text_that_is_no_field",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "record.deaths.size() <= kDeathsMaxBytes && parse_history_deaths(record.deaths, deaths)",
+   "new": "record.deaths.size() <= kDeathsMaxBytes"
+  },
+  {
+   "id": "store_find_reads_another_row",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "SELECT deaths FROM history_deaths WHERE id = ?1",
+   "new": "SELECT deaths FROM history_deaths WHERE id != ?1"
+  },
+  {
+   "id": "store_put_does_not_renew_the_sums",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    if (!e.ok()) return refused(\"a record could not be committed\", e);\n    ++deaths_revision_;",
+   "new": "    if (!e.ok()) return refused(\"a record could not be committed\", e);"
+  },
+  {
+   "id": "store_remove_does_not_renew_the_sums",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    ++deaths_revision_;\n    e = refresh_counts();\n    if (!e.ok()) fail(\"the records could not be counted\", e);\n    return Removal::Done;",
+   "new": "    e = refresh_counts();\n    if (!e.ok()) fail(\"the records could not be counted\", e);\n    return Removal::Done;"
+  },
+  {
+   "id": "store_name_is_case_sensitive",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "if (lower(have) == want) {",
+   "new": "if (have == name) {"
+  },
+  {
+   "id": "store_answers_with_the_visitors_spelling",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "known = have;                                                                 // (two spellings",
+   "new": "known = name;                                                                 // (two spellings"
+  },
+  {
+   "id": "store_sums_the_oldest_file",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "SELECT hash, w, h FROM history_deaths WHERE map = ?1 ORDER BY ended DESC, id DESC LIMIT 1",
+   "new": "SELECT hash, w, h FROM history_deaths WHERE map = ?1 ORDER BY ended ASC, id ASC LIMIT 1"
+  },
+  {
+   "id": "store_sums_every_file_of_the_name",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "WHERE map = ?1 AND hash = ?2 AND w = ?3 AND h = ?4 ORDER BY",
+   "new": "WHERE map = ?1 AND ?2 = ?2 AND w = ?3 AND h = ?4 ORDER BY"
+  },
+  {
+   "id": "store_sums_the_oldest_matches",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "AND w = ?3 AND h = ?4 ORDER BY ended DESC, id DESC LIMIT ?5",
+   "new": "AND w = ?3 AND h = ?4 ORDER BY ended ASC, id ASC LIMIT ?5"
+  },
+  {
+   "id": "store_cache_never_cleared",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "if (deaths_cache_.size() >= kDeathsSumCache) deaths_cache_.clear();",
+   "new": ""
+  },
+  {
+   "id": "store_cache_never_used",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "if (cached != deaths_cache_.end()) {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "feeder_makes_no_map",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "record.deaths = deaths_maker_ ? deaths_maker_(played.stats) : std::string();",
+   "new": "record.deaths = std::string();"
+  },
+  {
+   "id": "feeder_map_throws_take_the_match",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    } catch (const std::exception& ex) {\n        record.deaths.clear();",
+   "new": "    } catch (const std::runtime_error& ex) {\n        record.deaths.clear();"
+  },
+  {
+   "id": "route_takes_more_than_one_key",
+   "file": "src/ants_server/control_history.cpp",
+   "old": "if (raw.compare(0, 4, \"map=\") != 0 || raw.find('&') != std::string::npos) return error_reply(400, \"the query is map=NAME\");",
+   "new": "if (raw.compare(0, 4, \"map=\") != 0) return error_reply(400, \"the query is map=NAME\");"
+  },
+  {
+   "id": "route_takes_any_length",
+   "file": "src/ants_server/control_history.cpp",
+   "old": "|| name.empty() || name.size() > kMaxMapName)",
+   "new": "|| name.empty())"
+  },
+  {
+   "id": "route_unknown_is_200",
+   "file": "src/ants_server/control_history.cpp",
+   "old": "case HistoryStore::DeathsSum::Unknown: return error_reply(404, \"no map of deaths for that map\");",
+   "new": "case HistoryStore::DeathsSum::Unknown: return error_reply(200, \"no map of deaths for that map\");"
+  },
+  {
+   "id": "route_repeats_the_request",
+   "file": "src/ants_server/control_history.cpp",
+   "old": "return error_reply(404, \"no map of deaths for that map\");",
+   "new": "return error_reply(404, \"no map of deaths for \" + name);"
+  },
+  {
+   "id": "route_any_method",
+   "file": "src/ants_server/control_history.cpp",
+   "old": "if (request.path == \"/history/deaths\") {                                            // (never an id: ids begin with \"ants-\")\n        if (request.method != \"GET\") return error_reply(owner ? 405 : 404, owner ? \"method not allowed\" : \"not found\");",
+   "new": "if (request.path == \"/history/deaths\") {                                            // (never an id: ids begin with \"ants-\")"
+  },
+  {
+   "id": "record_json_has_no_deaths",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "if (ctl::parse_json(r.deaths, deaths, nullptr, limits)) o.set(\"deaths\", std::move(deaths));",
+   "new": ""
+  },
+  {
+   "id": "page_a_letter_that_is_not_one_of_the_64_is_a_letter",
+   "file": "web/death_map.js",
+   "old": "if (k < 0 || text.charAt(at + i) === '') return -1;",
+   "new": "if (text.charAt(at + i) === '') return -1;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_type_of_6_is_an_ant",
+   "file": "web/death_map.js",
+   "old": "if (type > 5 || (killer > 3 && killer !== 7)) return null;",
+   "new": "if (killer > 3 && killer !== 7) return null;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_team_to_blame_of_5_is_one",
+   "file": "web/death_map.js",
+   "old": "if (type > 5 || (killer > 3 && killer !== 7)) return null;",
+   "new": "if (type > 5) return null;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_an_ant_is_not_put_on_the_map_in_x",
+   "file": "web/death_map.js",
+   "old": "return { x: Math.min(x, w - 1), y: Math.min(y, h - 1),",
+   "new": "return { x: x, y: Math.min(y, h - 1),",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_an_ant_is_not_put_on_the_map_in_y",
+   "file": "web/death_map.js",
+   "old": "return { x: Math.min(x, w - 1), y: Math.min(y, h - 1),",
+   "new": "return { x: Math.min(x, w - 1), y: y,",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_square_is_not_put_on_the_map",
+   "file": "web/death_map.js",
+   "old": "m.cells.push({ x: Math.min(x, cx), y: Math.min(y, cy),",
+   "new": "m.cells.push({ x: x, y: y,",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_another_version_is_read",
+   "file": "web/death_map.js",
+   "old": "if (d.v !== 1 || !whole(d.w, 1, MAX_SIDE)",
+   "new": "if (!whole(d.w, 1, MAX_SIDE)",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_map_of_any_size_is_read",
+   "file": "web/death_map.js",
+   "old": "!whole(d.w, 1, MAX_SIDE)",
+   "new": "!whole(d.w, 1, 1e9)",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_count_of_0_is_a_square",
+   "file": "web/death_map.js",
+   "old": "if (x < 0 || y < 0 || f < 0 || f > 7 || c < 1) return null;",
+   "new": "if (x < 0 || y < 0 || f < 0 || f > 7 || c < 0) return null;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_flag_above_7_is_a_square",
+   "file": "web/death_map.js",
+   "old": "if (x < 0 || y < 0 || f < 0 || f > 7 || c < 1) return null;",
+   "new": "if (x < 0 || y < 0 || f < 0 || c < 1) return null;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_any_number_of_ants_is_read",
+   "file": "web/death_map.js",
+   "old": "if (text.length % 9 !== 0 || text.length > 9 * MAX_ANTS) return null;",
+   "new": "if (text.length % 9 !== 0) return null;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_an_unknown_kind_is_read",
+   "file": "web/death_map.js",
+   "old": "} else return null;\n        if (m.total < 1) return null;",
+   "new": "} else m.total = 1;\n        if (m.total < 1) return null;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_squares_are_not_summed",
+   "file": "web/death_map.js",
+   "old": "m.total += c;",
+   "new": "m.total += 1;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_first_blood_is_the_first_ant_that_died",
+   "file": "web/death_map.js",
+   "old": "if (a.killer >= 0) { if (!m.first) m.first = a; m.last = a; }",
+   "new": "{ if (!m.first) m.first = a; m.last = a; }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_first_blood_of_squares_may_have_nobody_to_blame",
+   "file": "web/death_map.js",
+   "old": "if (m.first && m.first.killer < 0) m.first = null;",
+   "new": "",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_header_that_says_less_than_the_text_holds_is_believed",
+   "file": "web/death_map.js",
+   "old": "if (m.of < m.total) m.of = m.total;",
+   "new": "",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_name_of_a_map_is_not_cleaned",
+   "file": "web/death_map.js",
+   "old": "map: clean(d.map, 64) }",
+   "new": "map: String(d.map || '') }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_text_is_not_cut",
+   "file": "web/death_map.js",
+   "old": ".slice(0, max || 40) : ''; }",
+   "new": ": ''; }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_right_to_left_mark_is_kept",
+   "file": "web/death_map.js",
+   "old": "\\u2028-\\u202e",
+   "new": "\\u2028-\\u202d",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_zero_width_space_is_kept",
+   "file": "web/death_map.js",
+   "old": "\\u200b-\\u200f",
+   "new": "\\u200c-\\u200f",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_ants_that_drowned_are_counted_when_hidden",
+   "file": "web/death_map.js",
+   "old": "if (a.drowned && st.drowned === false) return; by[a.team]++;",
+   "new": "by[a.team]++; if (a.drowned && st.drowned === false) return;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_squares_that_drowned_are_shown_when_hidden",
+   "file": "web/death_map.js",
+   "old": "m.cells.forEach(function (c) { if (c.drowned && st.drowned === false) return;",
+   "new": "m.cells.forEach(function (c) { if (false) return;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_one_team_shows_every_ant",
+   "file": "web/death_map.js",
+   "old": "if (st.team < 0 || a.team === st.team) { ants.push(a); total++; }",
+   "new": "{ ants.push(a); total++; }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_one_team_shows_every_square",
+   "file": "web/death_map.js",
+   "old": "if (st.team < 0 || c.team === st.team) { cells.push(c); total += c.count; }",
+   "new": "{ cells.push(c); total += c.count; }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_square_weighs_one_ant",
+   "file": "web/death_map.js",
+   "old": "return sel.cells.map(function (c) { return [c.x * m.side + (m.side - 1) / 2, c.y * m.side + (m.side - 1) / 2, c.count]; });",
+   "new": "return sel.cells.map(function (c) { return [c.x * m.side + (m.side - 1) / 2, c.y * m.side + (m.side - 1) / 2, 1]; });",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_busiest_place_looks_at_one_bucket",
+   "file": "web/death_map.js",
+   "old": "for (var dx = -1; dx <= 1; dx++)",
+   "new": "for (var dx = 0; dx <= 0; dx++)",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_busiest_place_counts_places_not_ants",
+   "file": "web/death_map.js",
+   "old": "n += q[2];",
+   "new": "n += 1;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_busiest_place_has_no_radius",
+   "file": "web/death_map.js",
+   "old": "return Math.max(2, Math.round(m.w / 30), m.squares ? m.side : 0);",
+   "new": "return 2;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_huge_map_is_not_huge",
+   "file": "web/death_map.js",
+   "old": "Math.max(m.w, m.h) > HUGE",
+   "new": "Math.max(m.w, m.h) > 1e9",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_huge_match_starts_as_heat",
+   "file": "web/death_map.js",
+   "old": "return isHuge(m) ? 'dots' : saved === 'dots' ? 'dots' : 'heat';",
+   "new": "return saved === 'dots' ? 'dots' : 'heat';",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_every_match_starts_as_dots",
+   "file": "web/death_map.js",
+   "old": "return isHuge(m) ? 'dots' : saved === 'dots' ? 'dots' : 'heat';",
+   "new": "return 'dots';",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_glow_falls_off_too_slowly",
+   "file": "web/death_map.js",
+   "old": "kern[i] = Math.exp(-(i * i) / (2 * s * s));",
+   "new": "kern[i] = Math.exp(-(i * i) / (4 * s * s));",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_count_weighs_one_ant_in_the_glow",
+   "file": "web/death_map.js",
+   "old": "var ky = p[2] * kern[Math.abs(y - py)]",
+   "new": "var ky = kern[Math.abs(y - py)]",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_glow_canvas_has_no_limit",
+   "file": "web/death_map.js",
+   "old": "Math.min(2400, Math.round(w * ppt))",
+   "new": "Math.round(w * ppt)",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_glow_is_everywhere",
+   "file": "web/death_map.js",
+   "old": "a = Math.max(0, Math.min(1, (v - 0.035) / 0.22)) * 0.92",
+   "new": "a = 0.92",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_glow_starts_bright",
+   "file": "web/death_map.js",
+   "old": "[0, [157, 13, 23]]",
+   "new": "[0, [257, 13, 23]]",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_one_team_has_the_glow_of_all",
+   "file": "web/death_map.js",
+   "old": "var c = rgb[team] || FALLBACK[team];",
+   "new": "var c = FALLBACK[team];",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_rulers_step_by_two",
+   "file": "web/death_map.js",
+   "old": "span <= 34 ? 5",
+   "new": "span <= 34 ? 2",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_original_has_no_picture_of_its_own",
+   "file": "web/death_map.js",
+   "old": "return 'front/preview_' + key + '.png';",
+   "new": "return '';",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_card_of_a_match_with_no_map_is_a_card_of_nothing",
+   "file": "web/death_map.js",
+   "old": "if (!model) return compact ? null : quiet(false);",
+   "new": "if (!model) return null;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_small_card_of_a_match_with_no_map_is_an_empty_box",
+   "file": "web/death_map.js",
+   "old": "if (!model) return compact ? null : quiet(false);",
+   "new": "if (!model) return quiet(compact);",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_quiet_line_says_something_else",
+   "file": "web/death_map.js",
+   "old": "p.appendChild(doc.createTextNode('No map of deaths for this match.'));",
+   "new": "p.appendChild(doc.createTextNode('Nothing to show.'));",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_choice_of_a_mode_is_not_kept",
+   "file": "web/death_map.js",
+   "old": "b.addEventListener('click', function () { st.mode = x[0]; keep(x[0]); st.pick = null; render(); });",
+   "new": "b.addEventListener('click', function () { st.mode = x[0]; st.pick = null; render(); });",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_storage_that_throws_is_not_caught",
+   "file": "web/death_map.js",
+   "old": "function saved() { try { return env.storage ? env.storage.getItem(MODE_KEY) : null; } catch (e) { return null; } }",
+   "new": "function saved() { return env.storage ? env.storage.getItem(MODE_KEY) : null; }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_storage_that_throws_on_write_is_not_caught",
+   "file": "web/death_map.js",
+   "old": "try { if (env.storage) env.storage.setItem(MODE_KEY, mode); } catch (e) { /* the choice is not remembered */ }",
+   "new": "if (env.storage) env.storage.setItem(MODE_KEY, mode);",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_switch_of_the_drowned_only_draws_again",
+   "file": "web/death_map.js",
+   "old": "d.addEventListener('click', function () { st.drowned = !st.drowned; st.pick = null; render(); });",
+   "new": "d.addEventListener('click', function () { st.drowned = !st.drowned; st.pick = null; draw(); });",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_one_team_in_the_sum_is_not_named_in_the_title",
+   "file": "web/death_map.js",
+   "old": "(st.team < 0 ? plural(sel.total, 'ant', 'ants') + ' died' : n0(sel.total) + ' of ' + chipName(st.team) + '\\u2019s ants died') + ' in '",
+   "new": "plural(sel.total, 'ant', 'ants') + ' died in '",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_chip_changes_nothing",
+   "file": "web/death_map.js",
+   "old": "b.addEventListener('click', function () { st.team = team; st.pick = null; render(); }); chips.appendChild(b);",
+   "new": "b.addEventListener('click', function () { st.pick = null; render(); }); chips.appendChild(b);",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_ring_is_shown_for_a_team_that_is_not_shown",
+   "file": "web/death_map.js",
+   "old": "var visible = function (a) { return a && (st.team < 0 || a.team === st.team) && !(a.drowned && st.drowned === false); };",
+   "new": "var visible = function (a) { return a && !(a.drowned && st.drowned === false); };",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_ring_is_shown_for_an_ant_that_drowned_and_is_hidden",
+   "file": "web/death_map.js",
+   "old": "var visible = function (a) { return a && (st.team < 0 || a.team === st.team) && !(a.drowned && st.drowned === false); };",
+   "new": "var visible = function (a) { return a && (st.team < 0 || a.team === st.team); };",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_small_card_has_marks",
+   "file": "web/death_map.js",
+   "old": "var showMarks = !compact && !isAll && (m.first || m.last);",
+   "new": "var showMarks = !isAll && (m.first || m.last);",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_sum_has_marks",
+   "file": "web/death_map.js",
+   "old": "var showMarks = !compact && !isAll && (m.first || m.last);",
+   "new": "var showMarks = !compact && (m.first || m.last);",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_squares_have_a_number_at_any_size",
+   "file": "web/death_map.js",
+   "old": "if (e.n > 1 && sd * ppx > 17)",
+   "new": "if (e.n > 1 && sd * ppx > 0)",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_mark_can_be_smaller_than_four_pixels",
+   "file": "web/death_map.js",
+   "old": "if (ppx < 2.2) {",
+   "new": "if (false) {",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_grid_of_tiles_never_shows",
+   "file": "web/death_map.js",
+   "old": "if (ppx >= 20 && m.side === 1) {\n                        var grid",
+   "new": "if (ppx >= 2000 && m.side === 1) {\n                        var grid",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_zoom_has_no_end",
+   "file": "web/death_map.js",
+   "old": "return Math.max(8, Math.ceil(26 / g.ppt));",
+   "new": "return 1e9;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_fit_keeps_the_zoom",
+   "file": "web/death_map.js",
+   "old": "st.zoom = null; st.pick = null; draw(); }]].forEach",
+   "new": "st.pick = null; draw(); }]].forEach",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_wheel_zooms_the_other_way",
+   "file": "web/death_map.js",
+   "old": "zoomAt(ev.deltaY < 0 ? 1.25 : 0.8, ev.clientX, ev.clientY);",
+   "new": "zoomAt(ev.deltaY < 0 ? 0.8 : 1.25, ev.clientX, ev.clientY);",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_drag_moves_the_map_the_other_way",
+   "file": "web/death_map.js",
+   "old": "cx: g.vx + g.vw / 2 - dx / (g.ppt * g.s), cy: g.vy + g.vh / 2 - dy / (g.ppt * g.s)",
+   "new": "cx: g.vx + g.vw / 2 + dx / (g.ppt * g.s), cy: g.vy + g.vh / 2 + dy / (g.ppt * g.s)",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_drag_is_a_tap",
+   "file": "web/death_map.js",
+   "old": "if (!was || dragged || ev.type === 'pointercancel') {",
+   "new": "if (!was || ev.type === 'pointercancel') {",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_tap_finds_a_mark_however_far",
+   "file": "web/death_map.js",
+   "old": "return best && bd < 22 ? { kind: 'ant', ant: best } : null;",
+   "new": "return best ? { kind: 'ant', ant: best } : null;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_tooltip_counts_the_ant_itself",
+   "file": "web/death_map.js",
+   "old": "var p = st.pick.ant, same = (tiles[p.x + ',' + p.y] || [p]).length - 1;",
+   "new": "var p = st.pick.ant, same = (tiles[p.x + ',' + p.y] || [p]).length;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_drowned_ant_does_not_say_who_hit_it",
+   "file": "web/death_map.js",
+   "old": "'Drowned' + (p.killer >= 0 ? '; last hit by ' + shortName(seatName(ctx, p.killer)) : '')",
+   "new": "'Drowned'",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_an_ant_that_nobody_killed_has_a_killer",
+   "file": "web/death_map.js",
+   "old": "(p.killer >= 0 ? shortName(seatName(ctx, p.killer)) : 'not known')",
+   "new": "(p.killer >= 0 ? shortName(seatName(ctx, p.killer)) : shortName(seatName(ctx, p.team)))",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_tooltip_is_over_the_map_on_a_phone",
+   "file": "web/death_map.js",
+   "old": "<= 720 && !compact;",
+   "new": "<= 0 && !compact;",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_sum_of_another_map_size_is_shown",
+   "file": "web/death_map.js",
+   "old": "if (!sum || sum.w !== model.w || sum.h !== model.h) {",
+   "new": "if (!sum) {",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_sum_is_asked_for_every_time",
+   "file": "web/death_map.js",
+   "old": "if (st.sum) { st.scope = 'all'; st.sumState = ''; render(); sec.dmDraw(); return; }",
+   "new": "",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_back_to_this_match_keeps_the_sum",
+   "file": "web/death_map.js",
+   "old": "if (scope === 'match') { st.scope = 'match'; st.sumState = ''; render(); if (sec.dmDraw) sec.dmDraw(); return; }",
+   "new": "if (scope === 'match') { st.sumState = ''; render(); if (sec.dmDraw) sec.dmDraw(); return; }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_map_name_of_the_sum_is_not_cleaned",
+   "file": "web/death_map.js",
+   "old": "map = typeof obj(rec).map === 'string' ? clean(rec.map, 64) : '';",
+   "new": "map = typeof obj(rec).map === 'string' ? rec.map : '';",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_name_is_not_cleaned",
+   "file": "web/death_map.js",
+   "old": "return clean(ctx.by[seat] ? H.seatLabel(ctx.by[seat]) : SEATS[seat], 40) || SEATS[seat];",
+   "new": "return (ctx.by[seat] ? H.seatLabel(ctx.by[seat]) : SEATS[seat]) || SEATS[seat];",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_chip_is_markup",
+   "file": "web/death_map.js",
+   "old": "b.appendChild(doc.createTextNode(label + ' ')); b.appendChild(el('b', '', n0(n)));",
+   "new": "b.innerHTML = label + ' '; b.appendChild(el('b', '', n0(n)));",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_card_with_no_size_is_drawn",
+   "file": "web/death_map.js",
+   "old": "if (!(sw > 0) || !(sh > 0)) return null;",
+   "new": "",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_a_page_is_drawn_again_without_its_cards",
+   "file": "web/death_map.js",
+   "old": "for (var i = 0; i < boxes.length; i++) if (boxes[i].dmDraw) boxes[i].dmDraw();",
+   "new": "",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "page_the_card_has_no_id",
+   "file": "web/death_map.js",
+   "old": "if (!compact) { sec.id = 'deaths'; sec.setAttribute('aria-labelledby', 'deaths-h'); }\n            var draw",
+   "new": "var draw",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "panel_the_card_is_not_added_to_the_panel",
+   "file": "web/history_page.js",
+   "old": "if (dm) box.appendChild(dm);",
+   "new": "",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "panel_the_card_is_not_asked_to_be_small",
+   "file": "web/history_page.js",
+   "old": "env.deathMap.card(rec, { compact: true })",
+   "new": "env.deathMap.card(rec, {})",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "panel_opening_the_panel_does_not_draw_the_card",
+   "file": "web/history_page.js",
+   "old": "redraw(pop); }\n            }",
+   "new": "}\n            }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "panel_opening_the_row_does_not_draw_the_card",
+   "file": "web/history_page.js",
+   "old": "if (!closed) redraw(flow); });",
+   "new": "});",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "panel_a_card_that_throws_takes_the_panel_with_it",
+   "file": "web/history_page.js",
+   "old": "catch (e) { dm = null; }",
+   "new": "catch (e) { throw e; }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "panel_a_redraw_that_throws_is_heard",
+   "file": "web/history_page.js",
+   "old": "catch (e) { /* the card is drawn when it is next opened */ }",
+   "new": "catch (e) { throw e; }",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "panel_a_window_that_changes_size_draws_a_closed_panel",
+   "file": "web/history_page.js",
+   "old": "if (!pop.hidden) redraw(pop); if (!flow.classList.contains('closed')) redraw(flow);",
+   "new": "redraw(pop); redraw(flow);",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  },
+  {
+   "id": "panel_a_window_that_changes_size_draws_nothing",
+   "file": "web/history_page.js",
+   "old": "if (!pop.hidden) redraw(pop); if (!flow.classList.contains('closed')) redraw(flow);",
+   "new": "",
+   "build": [],
+   "test": "node tests/scripts/web_death_map_check.js web/death_map.js web/history_page.js"
+  }
+ ]
+}

@@ -246,6 +246,14 @@ JsonValue history_record_to_json(const HistoryRecord& r, bool full) {
         limits.max_depth = 16;
         if (ctl::parse_json(r.details, details, nullptr, limits)) o.set("details", std::move(details));
     }
+    if (full && !r.deaths.empty()) {                         // (the map of deaths: its own key, its own cap; a damaged text is left out, never passed on as it is)
+        JsonValue deaths;
+        ctl::JsonLimits limits;
+        limits.max_bytes = 64u * 1024u;
+        limits.max_elements = 16;
+        limits.max_depth = 3;
+        if (ctl::parse_json(r.deaths, deaths, nullptr, limits)) o.set("deaths", std::move(deaths));
+    }
     return o;
 }
 

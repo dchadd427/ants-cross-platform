@@ -1,4 +1,5 @@
-// The routes of the match history (docs/REPLAYS.md "The match history", control.hpp): GET /history and GET /history/<id> on both doors, DELETE /history/<id> on the control door only.
+// The routes of the match history (docs/REPLAYS.md "The match history", control.hpp): GET /history, GET /history/<id> and GET /history/deaths?map=NAME (the sum of the maps of deaths of a map's matches) on both
+// doors, DELETE /history/<id> on the control door only.
 #include <algorithm>
 #include <cctype>
 #include <set>
@@ -15,6 +16,7 @@ namespace {
 
 constexpr size_t kMaxHistoryOffset = 1000000;
 constexpr size_t kMaxHistoryText = 40;               // the search text, decoded
+constexpr size_t kMaxMapName = 120;                  // the map's name of GET /history/deaths, decoded
 
 ctl::HttpResponse reply(int status, const JsonValue& value) {
     ctl::HttpResponse r;
@@ -213,7 +215,27 @@ ctl::HttpResponse history_item_response(const HistoryStore& history, const Repla
     return reply(200, o);
 }
 
-// GET /history[?query] and GET /history/<id>, on both doors (`owner`: the control door, which also says 405 where the public one says 404)
+// GET /history/deaths?map=NAME: the query is that one key and nothing else (a name is printable ASCII, at most kMaxMapName characters, written as a browser writes it); the name is looked up among the names of the
+// maps that have a map of deaths (HistoryStore::map_deaths: never a path), and nothing of what the visitor sent is in the answer except the stored spelling of the name it found
+ctl::HttpResponse history_deaths_response(const HistoryStore& history, const ctl::HttpRequest& request, bool owner) {
+    const std::string& raw = request.query;
+    if (raw.compare(0, 4, "map=") != 0 || raw.find('&') != std::string::npos) return error_reply(400, "the query is map=NAME");
+    std::string name;
+    if (!decode_query_value(raw.substr(4), name) || name.empty() || name.size() > kMaxMapName) return error_reply(400, "the map name is not one that a map has");
+    std::string json;
+    switch (history.map_deaths(name, json)) {
+        case HistoryStore::DeathsSum::Ok: break;
+        case HistoryStore::DeathsSum::Unknown: return error_reply(404, "no map of deaths for that map");
+        case HistoryStore::DeathsSum::Unavailable: return unavailable(history, owner);
+    }
+    ctl::HttpResponse r;
+    r.status = 200;
+    r.content_type = "application/json";
+    r.body = std::move(json);
+    return r;
+}
+
+// GET /history[?query], GET /history/<id> and GET /history/deaths?map=NAME, on both doors (`owner`: the control door, which also says 405 where the public one says 404)
 ctl::HttpResponse history_read(const RoomManager& rooms, const ctl::HttpRequest& request, bool owner) {
     const HistoryStore* history = rooms.history_store();
     const ReplayStore* replays = rooms.replay_store();
@@ -225,6 +247,11 @@ ctl::HttpResponse history_read(const RoomManager& rooms, const ctl::HttpRequest&
     }
     static const std::string kPrefix = "/history/";
     if (request.path.compare(0, kPrefix.size(), kPrefix) != 0) return error_reply(404, "not found");
+    if (request.path == "/history/deaths") {                                            // (never an id: ids begin with "ants-")
+        if (request.method != "GET") return error_reply(owner ? 405 : 404, owner ? "method not allowed" : "not found");
+        if (!history->available()) return unavailable(*history, owner);
+        return history_deaths_response(*history, request, owner);
+    }
     const std::string id = request.path.substr(kPrefix.size());
     if (!request.query.empty() || !valid_history_id(id)) return error_reply(404, "no such match");     // (a name that cannot be an id is 404 before anything is looked up)
     if (request.method == "GET") {

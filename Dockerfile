@@ -132,7 +132,7 @@ COPY Community-Maps/previews/ /srv/community-maps/previews/
 COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
 
 # The match history and the replays (docs/REPLAYS.md "The match pages", "Watching a replay"): the list of every match (matches.html), one match (match.html) and the matches that run now (live.html), linked from
-# the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css) and the helpers
+# the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css), the map of deaths (death_map.js and death_map.css, also on the game page in replay mode) and the helpers
 # that they share with the game page (replay_page.js, history_page.js, and replay_stats.css for the stats and the frame mode of the game page). The game page plays a recording as play.html?replay=<file> (and in the frame of match.html as play.html?replay=<file>&embed=1).
 COPY --from=builder /src/matches.html /usr/share/nginx/html/matches.html
 COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
@@ -142,6 +142,8 @@ COPY web/match_stats.css /usr/share/nginx/html/match_stats.css
 COPY web/replay_page.js /usr/share/nginx/html/replay_page.js
 COPY web/history_page.js /usr/share/nginx/html/history_page.js
 COPY web/match_stats.js /usr/share/nginx/html/match_stats.js
+COPY web/death_map.css /usr/share/nginx/html/death_map.css
+COPY web/death_map.js /usr/share/nginx/html/death_map.js
 COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 
 # The players' maps (docs/PLAY_IN_BROWSER.md "Players' maps in the browser"): the game page fetches the map of a room or a recording from /maps/files/ (map_files.js)

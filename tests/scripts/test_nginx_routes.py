@@ -108,7 +108,7 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(os.path.join(html, "front"))
         os.makedirs(os.path.join(html, "asset_catalog"))
         for name, text in (("lobby.html", LOBBY_PAGE), ("matches.html", MATCHES_PAGE), ("match.html", MATCH_PAGE), ("live.html", LIVE_PAGE), ("matches.css", ":root { --won: #f6d058; }\n"), ("replay_stats.css", "body.embed { padding-top: 10px; }\n"), ("replay_page.js", "window.AntsReplay = {};\n"),
-                           ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE),
+                           ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("death_map.js", "window.AntsDeathMap = {};\n"), ("death_map.css", ".dm-stage { position: relative; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE),
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)
