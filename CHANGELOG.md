@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.102 - 2026-10-22 - Map maker: a friends room that cannot silently become Treasure
+
+**For players:**
+- **"Play this map" with other players no longer turns into a Treasure room.** If the map cannot be sent to the server (sending maps is switched off on that server, too many test maps were sent just now, or the editor tab was closed), no room is made at all. The strip at the top of the page says why in plain words and tells you to go back to the editor, instead of quietly showing an ordinary room with the Treasure map.
+- **A room made again keeps your map.** When the page has to make your room again (the room was closed, the server restarted, or the connection was lost for a long time), the test map is sent to the new room again, so it does not fall back to Treasure.
+- **The line at the foot of the page is true in a test room.** In a room that plays a test map from the Map Maker, it now says that the match is not recorded and that no result or name is kept.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a780efc...8de56d9f)
+
 ## v0.12.101 - 2026-10-21 - Auto edges switch in Map Maker
 
 **For players:**

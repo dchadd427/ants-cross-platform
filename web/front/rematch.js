@@ -281,11 +281,24 @@
         return s.slice(0, 45) || 'Test Map';
     }
 
+    // Why a test map did not go up, in words for the host (the editor's tab is still open: the host goes back to it and presses Play this map again). status 0: no answer that could be read. The server's own
+    // sentence is shown for a reason that has no words of its own here; it is text only, cut short.
+    var GO_BACK = ' Go back to the editor.';
+    var TAB_CLOSED = 'The editor tab was closed. Go back to the editor and press Play this map again.';
+    var TEST_NOTICE = 'This room plays a test map from the Map Maker. The match is not recorded, and no result or name is kept.';
+    function failWords(status, body) {
+        var code = body && typeof body.error === 'string' ? body.error : '';
+        if (code === 'submissions_off') return 'Sending maps is not switched on on this server right now.' + GO_BACK;
+        if (status === 429 || code === 'busy' || (status === 503 && !body)) return 'Too many test maps just now. Wait a minute and press Play this map again in the editor.';       // (an answer that is no JSON: the site's own limit on how fast maps may come)
+        var said = body && typeof body.message === 'string' ? body.message.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+        return (said || 'The server could not prepare this test map' + (status > 0 ? ' (answer ' + status + ').' : '.')) + GO_BACK;
+    }
+
     // ---- the front page ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // The strip at the top of the page: "Back from the match." The match's stats and replay are looked up in the public list (a moment after the match, twice more if they are not there yet: the list is cached
     // for five seconds). Also drives an unlisted test-map room opened from the map maker (?testroom=<id>). env: { doc, win, before (the element that the strip goes in front of), fetch (window.fetch or null), later(fn, ms) }.
     function frontStrip(env) {
-        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, testError = false, handoffId = '', paintedKey = '';
+        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, lastTest = null, testError = false, handoffId = '', paintedKey = '';
         function look(back, mine, tries) {
             if (!env.fetch || mine !== round) return;
             var done = function (id) {
@@ -296,6 +309,16 @@
             try {
                 env.fetch('/replays', { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (list) { done(findReplay(list, back)); }, function () { done(''); });
             } catch (e) { /* no list: the link goes to the list of matches */ }
+        }
+        // The line at the foot of the page says that online matches are recorded; a match on a test map from the map maker is not (no replay, no result, no name), so in such a room the line says that
+        var notice = null, noticeWas = '';
+        function footNotice(isTest) {
+            if (!notice) {
+                try { notice = env.doc.getElementById ? env.doc.getElementById('footer-notice') : null; } catch (e) { notice = null; }
+                if (!notice) return;
+                noticeWas = notice.textContent;
+            }
+            notice.textContent = isTest ? TEST_NOTICE : noticeWas;
         }
         function ensureTestBar() {
             if (!tbar) {
@@ -378,8 +401,9 @@
                         pendingTest.sent = true;
                     }
                 }
+                footNotice(!!(model && isTestFile(model.mapFile)));
                 if (model && isTestFile(model.mapFile)) {
-                    pendingTest = null;
+                    if (pendingTest && pendingTest.sent && pendingTest.file === model.mapFile) pendingTest = null;          // (confirmed: the room has the map; one that was not sent yet waits for the room that it is meant for, a made-again room's first look can still be the old one's)
                     var m = known[model.mapFile], title = (m && m.name) || testTitle(model.mapFile);
                     var shape = m && m.width && m.height ? ' (' + m.height + ' x ' + m.width + ')' : '';
                     if (!model.guest) paintTestBar('Test room', title + shape + ' \u00b7 Unlisted map from Map Maker', 'Sent automatically to players who join', !!handoffId, false);
@@ -388,6 +412,8 @@
                     tbar.hidden = true;
                 }
             },
+            // The page made its room again (the first one was closed, the server restarted, the link was lost for long): the new room has the default map, so the test map is sent to it again
+            remade: function () { if (lastTest) { pendingTest = lastTest; pendingTest.sent = false; } },
             begin: function (onReady) {
                 var win = env.win;
                 if (!win || !win.location) return false;
@@ -397,37 +423,34 @@
                 if (!id || !/^[a-z0-9]{6,32}$/.test(id)) return false;
                 handoffId = id;
                 try { win.history.replaceState(null, '', win.location.pathname.replace(/^\/+/, '/')); } catch (e) {}
+                function refuse(message) { paintTestBar('Test room', message, '', true, true); }
                 var rec = null;
                 try { if (win.opener && !win.opener.closed && typeof win.opener.antsTestGameHandoff === 'function') rec = win.opener.antsTestGameHandoff(id); } catch (e) { rec = null; }
-                if (!rec || !rec.bytes || !(rec.bytes.length > 0) || !env.fetch) {
-                    paintTestBar('Test room', 'The map from the Map Maker could not be read. Go back to the editor and press Play this map again.', '', true, true);
-                    if (onReady) onReady();
-                    return true;
-                }
+                // Whatever goes wrong, no room is made: a room made without the map would be an ordinary Treasure room, which a host who asked for HIS map takes for the map being ignored. The strip says why and
+                // sends the host back to the editor (the page then shows no room: the colors of "no room yet").
+                var tabGone = true;
+                try { tabGone = !win.opener || win.opener.closed || typeof win.opener.antsTestGameHandoff !== 'function'; } catch (e) { tabGone = true; }
+                if (tabGone) { refuse(TAB_CLOSED); return true; }
+                if (!rec || !rec.bytes || !(rec.bytes.length > 0)) { refuse('The map from the Map Maker could not be read.' + GO_BACK); return true; }
+                if (!env.fetch) { refuse('This browser cannot send the test map.' + GO_BACK); return true; }
                 var bytes = new Uint8Array(rec.bytes), title = cleanTitle(rec.name), kind = bytes[0] === 9 ? 'extended' : 'classic';
                 paintTestBar('Test room', title + ' \u00b7 Preparing unlisted room\u2026', '', true, false);
                 try {
                     env.fetch('/submissions?kind=' + kind + '&test=1&name=' + encodeURIComponent(title), {
                         method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: bytes, cache: 'no-store', credentials: 'same-origin'
-                    }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); }).then(function (res) {
+                    }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }, function () { return { status: r.status, body: null }; }); }).then(function (res) {
                         var tm = res && res.status === 201 && res.body && res.body.test_map;
                         if (tm && typeof tm.file === 'string') {
                             known[tm.file] = tm;
                             pendingTest = tm;
+                            lastTest = tm;
                             paintTestBar('Test room', (tm.name || title) + ' (' + tm.height + ' x ' + tm.width + ') \u00b7 Unlisted map from Map Maker', 'Sent automatically to players who join', true, false);
+                            if (onReady) onReady();
                         } else {
-                            var msg = (res && res.body && res.body.message) || 'The server could not prepare this test map.';
-                            paintTestBar('Test room', msg, '', true, true);
+                            refuse(failWords(res ? res.status : 0, res ? res.body : null));
                         }
-                        if (onReady) onReady();
-                    }, function () {
-                        paintTestBar('Test room', 'Could not reach the server to upload the test map.', '', true, true);
-                        if (onReady) onReady();
-                    });
-                } catch (e) {
-                    paintTestBar('Test room', 'Could not upload the test map.', '', true, true);
-                    if (onReady) onReady();
-                }
+                    }, function () { refuse('Could not reach the server to send the test map.' + GO_BACK); });
+                } catch (e) { refuse('Could not send the test map.' + GO_BACK); }
                 return true;
             }
         };
@@ -437,6 +460,6 @@
         BACK_KEY: BACK_KEY, LOBBY_KEY: LOBBY_KEY, ASK_AFTER_MS: ASK_AFTER_MS, COLORS: COLORS, DOTS: DOTS,
         parseOver: parseOver, winnerWords: winnerWords, seatKey: seatKey, handOver: handOver, readBack: readBack, forgetBack: forgetBack,
         chipsOf: chipsOf, chipText: chipText, backLine: backLine, findReplay: findReplay, statsHref: statsHref, platformOf: platformOf,
-        gamePage: gamePage, frontStrip: frontStrip
+        gamePage: gamePage, frontStrip: frontStrip, failWords: failWords, TEST_NOTICE: TEST_NOTICE
     };
 });

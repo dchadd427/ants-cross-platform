@@ -868,7 +868,7 @@
                 if (bannerKind === 'lost' || bannerKind === 'unreachable' || bannerKind === 'busy') hideBanner();
                 if (wasLost) say('You are back in the room.');
             }
-            pendingMode = -1; if (e.created) newRoom = true;      // (a room that this page made starts with the leader's last game type: onRoom; a pick that no Room has confirmed is dropped with the link)
+            pendingMode = -1; if (e.created) { newRoom = true; backBar.remade(); }      // (a room that this page made starts with the leader's last game type: onRoom; a pick that no Room has confirmed is dropped with the link)
             if (e.created && !ownRoom) showBanner('old', { sameMap: false });
             saveSession();
             render();

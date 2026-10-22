@@ -59,7 +59,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("try { storage = window.localStorage; } catch (e)", self.page)       # (the page works without the storage)
 
     def test_a_new_room_starts_with_the_leaders_last_choice_and_a_rematch_or_a_joined_room_does_not(self):
-        self.assertIn("pendingMode = -1; if (e.created) newRoom = true;", self.page)
+        self.assertIn("pendingMode = -1; if (e.created) { newRoom = true; backBar.remade(); }", self.page)       # (the strip is told, so that a test map is sent to the room that this page made again: rematch.js)
         self.assertIn("if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(room, model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }", self.page)
         self.assertEqual(self.page.count("newRoom = true"), 1, "only the room that this page made (the Welcome that says created) is new")
 

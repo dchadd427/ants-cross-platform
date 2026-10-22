@@ -667,6 +667,153 @@
    "new": "    if (!any_reserved() || match_here || (others_here && false) || (!others_here && false)) {",
    "build": "test_lobby",
    "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "test_room_refused_upload_still_makes_a_room",
+   "file": "web/front/rematch.js",
+   "old": "refuse(failWords(res ? res.status : 0, res ? res.body : null));",
+   "new": "refuse(failWords(res ? res.status : 0, res ? res.body : null)); if (onReady) onReady();",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_network_error_still_makes_a_room",
+   "file": "web/front/rematch.js",
+   "old": "function () { refuse('Could not reach the server to send the test map.' + GO_BACK); }",
+   "new": "function () { refuse('Could not reach the server to send the test map.' + GO_BACK); if (onReady) onReady(); }",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_lost_editor_tab_still_makes_a_room",
+   "file": "web/front/rematch.js",
+   "old": "if (tabGone) { refuse(TAB_CLOSED); return true; }",
+   "new": "if (tabGone) { refuse(TAB_CLOSED); if (onReady) onReady(); return true; }",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_unreadable_map_still_makes_a_room",
+   "file": "web/front/rematch.js",
+   "old": "{ refuse('The map from the Map Maker could not be read.' + GO_BACK); return true; }",
+   "new": "{ refuse('The map from the Map Maker could not be read.' + GO_BACK); if (onReady) onReady(); return true; }",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_a_closed_opener_is_trusted",
+   "file": "web/front/rematch.js",
+   "old": "!win.opener || win.opener.closed || typeof",
+   "new": "!win.opener || typeof",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_made_again_sends_nothing",
+   "file": "web/front/rematch.js",
+   "old": "remade: function () { if (lastTest) { pendingTest = lastTest; pendingTest.sent = false; } },",
+   "new": "remade: function () { },",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_made_again_keeps_the_sent_flag",
+   "file": "web/front/rematch.js",
+   "old": "pendingTest = lastTest; pendingTest.sent = false; }",
+   "new": "pendingTest = lastTest; }",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_old_look_uses_up_the_new_send",
+   "file": "web/front/rematch.js",
+   "old": "if (pendingTest && pendingTest.sent && pendingTest.file === model.mapFile) pendingTest = null;",
+   "new": "pendingTest = null;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_page_does_not_tell_the_strip_about_a_made_again_room",
+   "file": "web/lobby.html",
+   "old": "if (e.created) { newRoom = true; backBar.remade(); }",
+   "new": "if (e.created) { newRoom = true; }",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_door_off",
+   "file": "web/front/rematch.js",
+   "old": "if (code === 'submissions_off') return",
+   "new": "if (code === 'submissions_off_') return",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_door_off_text",
+   "file": "web/front/rematch.js",
+   "old": "'Sending maps is not switched on on this server right now.'",
+   "new": "'Sending maps is not switched on right now.'",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_429_is_not_too_many",
+   "file": "web/front/rematch.js",
+   "old": "if (status === 429 || code === 'busy'",
+   "new": "if (code === 'busy'",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_busy_is_not_too_many",
+   "file": "web/front/rematch.js",
+   "old": "if (status === 429 || code === 'busy' ||",
+   "new": "if (status === 429 ||",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_non_json_503_is_not_too_many",
+   "file": "web/front/rematch.js",
+   "old": "|| (status === 503 && !body)) return",
+   "new": "|| (false)) return",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_too_many_text",
+   "file": "web/front/rematch.js",
+   "old": "'Too many test maps just now. Wait a minute and press Play this map again in the editor.'",
+   "new": "'Too many test maps just now.'",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_tab_closed_text",
+   "file": "web/front/rematch.js",
+   "old": "'The editor tab was closed. Go back to the editor and press Play this map again.'",
+   "new": "'The editor tab was closed.'",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_other_drops_the_servers_sentence",
+   "file": "web/front/rematch.js",
+   "old": "return (said || 'The server could not",
+   "new": "return ('' || 'The server could not",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_other_has_no_way_back",
+   "file": "web/front/rematch.js",
+   "old": "(status > 0 ? ' (answer ' + status + ').' : '.')) + GO_BACK;",
+   "new": "(status > 0 ? ' (answer ' + status + ').' : '.'));",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_servers_sentence_is_not_cut",
+   "file": "web/front/rematch.js",
+   "old": ".trim().slice(0, 200)",
+   "new": ".trim()",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_notice_stays_for_a_test_room",
+   "file": "web/front/rematch.js",
+   "old": "notice.textContent = isTest ? TEST_NOTICE : noticeWas;",
+   "new": "notice.textContent = noticeWas;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_notice_stays_after_a_test_room",
+   "file": "web/front/rematch.js",
+   "old": "notice.textContent = isTest ? TEST_NOTICE : noticeWas;",
+   "new": "notice.textContent = TEST_NOTICE;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   }
  ]
 }
