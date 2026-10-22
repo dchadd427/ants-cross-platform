@@ -100,6 +100,16 @@ void run_online_limit_tests() {
         w.run(300);
         ASSERT_EQ(w.status("big00001").map, std::string("SMALL.LVL"));
         ASSERT_EQ(said(pia.room_chat).size(), size_t{2});
+        {   // a page whose link names a test map: a draft that a room plays is the room's map, one that is over the limit is not (the room keeps the server's own map)
+            ApprovedMap draft_big = approved_map(dir, "Big Draft ~test-0badf00d.lvl", 300, 300);
+            ApprovedMap draft_fits = approved_map(dir, "Small Draft ~test-0badf00e.lvl", 100, 100);
+            w.mgr.mutable_store().set_test_maps({draft_big, draft_fits});
+            w.connect_page("Ann", "big00002", lobby_block_of("Big Draft ~test-0badf00d.lvl"));
+            w.connect_page("Cat", "big00003", lobby_block_of("Small Draft ~test-0badf00e.lvl"));
+            w.run(300);
+            ASSERT_EQ(w.status("big00002").map, std::string("TINY.LVL"));
+            ASSERT_EQ(w.status("big00003").map, std::string("Small Draft ~test-0badf00e.lvl"));
+        }
         // the control interface
         const CreateResult refused = w.mgr.create_room(spec_of("ctl-big", 2, "Wide 410.lvl"), w.now);
         ASSERT_TRUE(!refused.ok && refused.http_status == 422 && refused.error.find("too big") != std::string::npos);
@@ -137,6 +147,22 @@ void run_online_limit_tests() {
             big.public_room = true;
             ASSERT_TRUE(w.mgr.create_room(big, w.now).ok);
             Client& ann = w.connect_creating("Ann", "pub00201", block_of("TINY.LVL", 2));
+            ASSERT_EQ(door_answer(w, ann), net::RejectReason::NoSuchRoom);
+        }
+        {   // a lobby's START on the big map on a server of three places: the weight is cut to 3, so an empty server runs it (a map is never refused for being heavier than the whole server)
+            World w(limits_with(3));
+            w.mgr.mutable_store().set_approved({approved_map(dir, "Edge 65536.lvl", 128, 512, true)});
+            Client& pia = w.connect_page("Pia", "lobb0002", lobby_block_of());
+            const net::SeatKey key = pia.lobby->key();
+            ASSERT_TRUE(pia.lobby->request_plan(plan_for("Edge 65536.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(200);
+            Client& game = w.connect_game("Pia", "lobb0002", key, false, dir.string());
+            w.run(4000);
+            ASSERT_TRUE(said(game.room_chat).empty());
+            ASSERT_TRUE(w.status("lobb0002").state == RoomState::Running);
+            Client& ann = w.connect_creating("Ann", "pub00301", block_of("TINY.LVL", 2));        // (and then the three places are taken)
             ASSERT_EQ(door_answer(w, ann), net::RejectReason::NoSuchRoom);
         }
         {   // a lobby's START on the big map with a shipped match running on seven places: 1 + 7 > 7, no place; the other lobby on a shipped map has one (1 + 1)
@@ -211,6 +237,23 @@ void run_online_limit_tests() {
         w.run(4000);
         ASSERT_TRUE(w.status("stal0001").state == RoomState::Running);
         fs::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("S3.214 A Game That Does Not Answer At All Within The Load Time Is Named As A Slow One (\"did not load the map in time\"), not as one that cannot read the map") {
+        World w(limits_with(8));
+        Client& pia = w.connect_page("Pia", "stal0003", lobby_block_of());
+        Client& bob = w.connect_page("Bob", "stal0003", lobby_block_of());
+        const net::SeatKey pia_key = pia.lobby->key();
+        const net::SeatKey bob_key = bob.lobby->key();
+        Client& pia_game = w.connect_game("Pia", "stal0003", pia_key);
+        Client& bob_game = w.connect_game("Bob", "stal0003", bob_key);
+        bob_game.asleep = true;                                                                       // Bob's machine says nothing: it neither loads nor fails
+        ASSERT_TRUE(pia_game.lobby->request_start());
+        w.run(2000);
+        ASSERT_TRUE(w.status("stal0003").state == RoomState::Loading && said(pia_game.room_chat).empty());
+        w.run(61000);                                                                                 // the 60 s of the load are over
+        ASSERT_TRUE(w.status("stal0003").state == RoomState::Waiting);
+        ASSERT_EQ(said(pia_game.room_chat), (std::vector<std::string>{"255||Bob's game did not load the map in time.", "255||To start without Bob, press Remove on their color."}));
     } TEST_END();
 
     TEST_CASE("S3.213 A Game Of A Classic Map That Cannot Load It Is Named Too (\"could not load this map\"), the person who is the leader gets no instruction to remove themselves, and the notice is the room's, one line for each cancelled START") {

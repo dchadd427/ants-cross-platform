@@ -8,8 +8,8 @@
   {
    "id": "kind_claim_believed",
    "file": "src/ants_server/submissions.cpp",
-   "old": "    if (real_kind != in.kind) return refuse(400, \"kind_mismatch\", \"The file is not the kind of map that the request says.\");\n",
-   "new": ""
+   "old": "    if (real_kind != claimed) {\n",
+   "new": "    if (false) {\n"
   },
   {
    "id": "works_not_required",
@@ -26,14 +26,14 @@
   {
    "id": "upload_kept_as_sent",
    "file": "src/ants_server/submissions.cpp",
-   "old": "const std::string& canonical = rewritten.payload;",
-   "new": "const std::string& canonical = in.bytes;"
+   "old": "    const std::string& canonical = rewritten.payload;\n    const core::Result again",
+   "new": "    const std::string& canonical = in.bytes;\n    const core::Result again"
   },
   {
    "id": "version_word_not_checked",
    "file": "src/ants_server/submissions.cpp",
-   "old": "    if (version != 8 && version != 9) return refuse(400, \"not_a_map\", \"This file is not an Ants map.\");\n",
-   "new": ""
+   "old": "    if (version != 8 && version != 9) {\n        why = make_failure(400, \"not_a_map\"",
+   "new": "    if (false) {\n        why = make_failure(400, \"not_a_map\""
   },
   {
    "id": "extended_judged_as_classic",
@@ -44,8 +44,8 @@
   {
    "id": "size_not_capped",
    "file": "src/ants_server/submissions.cpp",
-   "old": "    if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, \"too_large\", \"This map file is bigger than a map of this kind may be.\");\n",
-   "new": ""
+   "old": "    if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, \"too_large\", \"This map file is bigger than a map of this kind may be.\");\n\n    const names::Cleaned name",
+   "new": "\n    const names::Cleaned name"
   },
   {
    "id": "canonical_not_rechecked",
@@ -98,8 +98,8 @@
   {
    "id": "free_space_not_asked",
    "file": "src/ants_server/submissions.cpp",
-   "old": "if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return",
-   "new": "if (ec || space.available < 1) return"
+   "old": "    if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return refuse(503, \"storage_full\", \"The server has no room for more maps right now. Please try again later.\");\n\n    // the cheap refusals",
+   "new": "    if (ec || space.available < 1) return refuse(503, \"storage_full\", \"The server has no room for more maps right now. Please try again later.\");\n\n    // the cheap refusals"
   },
   {
    "id": "withdrawn_still_waiting_in_queue",
@@ -110,14 +110,14 @@
   {
    "id": "failed_try_uses_the_day",
    "file": "src/ants_server/submissions.cpp",
-   "old": "    if (in.bytes.empty()) return refuse(400, \"not_a_map\", \"No map file came with the request.\");\n",
-   "new": "    if (in.bytes.empty()) return refuse(400, \"not_a_map\", \"No map file came with the request.\");\n    scalar(\"INSERT INTO submission_limits (addr_key, day, submitted) VALUES ('x', 1, 1) ON CONFLICT (addr_key, day) DO UPDATE SET submitted = submitted + 1\", {});\n"
+   "old": "    if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, \"too_large\", \"This map file is bigger than a map of this kind may be.\");\n\n    const names::Cleaned name",
+   "new": "    if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, \"too_large\", \"This map file is bigger than a map of this kind may be.\");\n    scalar(\"INSERT INTO submission_limits (addr_key, day, submitted) VALUES ('x', 1, 1) ON CONFLICT (addr_key, day) DO UPDATE SET submitted = submitted + 1\", {});\n\n    const names::Cleaned name"
   },
   {
    "id": "check_window_ignored",
    "file": "src/ants_server/submissions.cpp",
-   "old": "    if (in.allow_check && !in.allow_check()) return",
-   "new": "    if (false) return"
+   "old": "    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n\n    // the check: the real one",
+   "new": "    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;\n\n    // the check: the real one"
   },
   {
    "id": "token_kept_plain",
@@ -446,14 +446,14 @@
   {
    "id": "window_budget_ignored",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "if (window_count_ >= config_.checks_per_window || window_spent_ms_ >= config_.check_budget_ms) return false;",
-   "new": "if (window_count_ >= config_.checks_per_window) return false;"
+   "old": "if (window.count >= per_window || window.spent_ms >= budget_ms) return false;",
+   "new": "if (window.count >= per_window) return false;"
   },
   {
    "id": "window_count_ignored",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "if (window_count_ >= config_.checks_per_window || window_spent_ms_ >= config_.check_budget_ms) return false;",
-   "new": "if (window_spent_ms_ >= config_.check_budget_ms) return false;"
+   "old": "if (window.count >= per_window || window.spent_ms >= budget_ms) return false;",
+   "new": "if (window.spent_ms >= budget_ms) return false;"
   },
   {
    "id": "picture_for_anybody",
@@ -524,8 +524,8 @@
   {
    "id": "door_response_cap_of_the_control_door",
    "file": "src/ants_ctl/http.cpp",
-   "old": "(mode == Mode::Door ? door.max_response_bytes : HttpServer::kMaxResponseBytes)",
-   "new": "HttpServer::kMaxResponseBytes"
+   "old": "    size_t cap = mode == Mode::Door ? door.max_response_bytes : HttpServer::kMaxResponseBytes;",
+   "new": "    size_t cap = HttpServer::kMaxResponseBytes;"
   },
   {
    "id": "door_ceiling_not_applied_to_head",
@@ -542,14 +542,14 @@
   {
    "id": "cheap_refusals_after_the_window",
    "file": "src/ants_server/submissions.cpp",
-   "old": "    const uint32_t version = version_word(in.bytes);\n    if (version != 8 && version != 9) return refuse(400, \"not_a_map\", \"This file is not an Ants map.\");\n    const std::string real_kind = version == 9 ? \"extended\" : \"classic\";\n    if (real_kind != in.kind) return refuse(400, \"kind_mismatch\", \"The file is not the kind of map that the request says.\");\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n",
-   "new": "    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n    const uint32_t version = version_word(in.bytes);\n    if (version != 8 && version != 9) return refuse(400, \"not_a_map\", \"This file is not an Ants map.\");\n    const std::string real_kind = version == 9 ? \"extended\" : \"classic\";\n    if (real_kind != in.kind) return refuse(400, \"kind_mismatch\", \"The file is not the kind of map that the request says.\");\n"
+   "old": "    std::string real_kind;\n    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n\n    // the check: the real one",
+   "new": "    std::string real_kind;\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;\n\n    // the check: the real one"
   },
   {
    "id": "one_address_uses_the_whole_window",
    "file": "src/ants_server/submissions_http.cpp",
-   "old": "    if (used != window_by_address_.end() && used->second >= config_.checks_per_address_window) return false;",
-   "new": "    if (false && used != window_by_address_.end() && used->second >= config_.checks_per_address_window) return false;"
+   "old": "    if (used != window.by_address.end() && used->second >= per_address) return false;",
+   "new": "    if (false && used != window.by_address.end() && used->second >= per_address) return false;"
   },
   {
    "id": "decline_keeps_the_file",

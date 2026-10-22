@@ -250,6 +250,81 @@ int main() {
         ASSERT_TRUE(again.map_plays(all) && all.size() == 1 && all[0].plays == 3);
     } TEST_END();
 
+    TEST_CASE("MP2.2 A match on an approved map of the players is counted: the feeder reads the map's file (a name of the submissions folder) by the name in the recording, checks its hash, and the plays are the map's under its own name; a name the server does not know, or a file that is not the match's map, leaves the match out") {
+        MatchSpec spec;
+        spec.seed = 31;
+        spec.turns = 1000;
+        spec.roster = 0x03;
+        spec.names = {"Ann", "Bob", "", ""};
+        const std::vector<uint8_t> played = record_match(spec);
+        ASSERT_TRUE(!played.empty());
+        replay::Replay rep;
+        std::string why;
+        ASSERT_TRUE(replay::decode(played.data(), played.size(), rep, why));
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "/TINY.LVL", hash));
+        ASSERT_EQ(rep.head.map_hash, hash);
+        rep.head.map_name = "Approved One.lvl";                                                      // (TINY's bytes under the name of an approved map: its file is in no maps folder)
+        std::string error;
+        const std::vector<uint8_t> renamed = replay::encode(rep, error);
+        ASSERT_TRUE(!renamed.empty());
+        TempDir nowhere;                                                                             // (a maps folder with no map in it)
+        {   // the server does not know the name: the match is left out, as ever
+            Rig rig(nowhere.path.string());
+            ASSERT_TRUE(rig.open());
+            ASSERT_TRUE(!rig.keep(renamed).empty());
+            rig.drain(8);
+            ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.left_out() == 1);
+        }
+        {   // a name that is known: the match is counted, and the plays are the approved map's (name and hash)
+            Rig rig(nowhere.path.string());
+            rig.feeder.set_approved_map_path([](const std::string& name) { return name == "Approved One.lvl" ? maps_dir() + "/TINY.LVL" : std::string(); });
+            ASSERT_TRUE(rig.open());
+            ASSERT_TRUE(!rig.keep(renamed).empty());
+            rig.drain(8);
+            ASSERT_TRUE(rig.history.count() == 1 && rig.feeder.counted() == 1 && rig.feeder.left_out() == 0);
+            std::vector<MapPlays> all;
+            ASSERT_TRUE(rig.history.map_plays(all));
+            ASSERT_TRUE(all.size() == 1 && all[0].map == "Approved One.lvl" && all[0].hash == map_hash_text(hash) && all[0].plays == 1);
+        }
+        {   // the server's own wiring: the history of a RoomManager counts a match on a map that its store has as approved, and not one on a map that was taken down
+            Server srv(nowhere.path.string());
+            ASSERT_TRUE(srv.open());
+            ApprovedMap one;
+            one.name = "Approved One.lvl";
+            one.path = maps_dir() + "/TINY.LVL";
+            one.hash = hash;
+            one.size = 1;
+            one.width = one.height = 31;
+            one.kind = "classic";
+            srv.mgr.mutable_store().set_approved({one});
+            ASSERT_TRUE(!srv.keep(renamed).empty());
+            srv.run_updates(40);
+            ASSERT_EQ(srv.mgr.history_store()->count(), size_t{1});
+            ApprovedMap big = one;                                                                   // (the same file, listed as a map that is over the online limit: a recording on it is not played here in one piece)
+            big.width = big.height = 300;
+            srv.mgr.mutable_store().set_approved({big});
+            rep.head.seed = 33;
+            ASSERT_TRUE(!srv.keep(replay::encode(rep, error)).empty());
+            srv.run_updates(40);
+            ASSERT_EQ(srv.mgr.history_store()->count(), size_t{1});
+            srv.mgr.mutable_store().set_approved({});                                                // (taken down: the map is nowhere)
+            rep.head.seed = 32;
+            const std::vector<uint8_t> again = replay::encode(rep, error);
+            ASSERT_TRUE(!srv.keep(again).empty());
+            srv.run_updates(40);
+            ASSERT_EQ(srv.mgr.history_store()->count(), size_t{1});
+        }
+        {   // the name is known but its file is another map than the match's: left out (the hash is the match's)
+            Rig rig(nowhere.path.string());
+            rig.feeder.set_approved_map_path([](const std::string&) { return maps_dir() + "/SMALL.LVL"; });
+            ASSERT_TRUE(rig.open());
+            ASSERT_TRUE(!rig.keep(renamed).empty());
+            rig.drain(8);
+            ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.left_out() == 1);
+        }
+    } TEST_END();
+
     TEST_CASE("MP3.1 A server with no database or no history keeps no count and nothing fails: the match path and the routes are as before") {
         Server none;
         ASSERT_TRUE(none.open(false));                                                               // (a replay store, no history)

@@ -1,6 +1,7 @@
 // Tests of the routes of the map submissions (SubmissionApi, docs/MAP_SUBMISSIONS.md): what a player's browser may do and how it is limited by address, and what only a signed-in account may do: the session cookie that
 // the server signs at the sign-in (every way to forge, change, age or misuse one), the CSRF token, the answer that a visitor gets for everything of the owner's (the answer of a path that does not exist, byte for byte),
 // the decisions through the API, and the page's text (nothing is HTML). The accounts themselves, the roles and the guessing limits are test_admin_accounts. Requests are made by hand: no sockets.
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <functional>
@@ -823,6 +824,21 @@ int main() {
         step();
         ASSERT_EQ(t.call(t.req("POST", "/submissions", "kind=classic&test=1", {{"content-type", "application/octet-stream"}}, tiny())).status, 201);        // (no address header: the connection's counts, 172.18.0.4)
         ASSERT_EQ(t.store->test_maps(t.now).size(), size_t{1});                       // (only the last one, the file without an address header, was a good map)
+        {   // a disk with no room left: the upload is refused whole, nothing is kept (the same test as for a real submission)
+            SubmissionConfig full = t.config;
+            full.min_free_bytes = ~uint64_t{0} >> 1;
+            SubmissionStore starved(t.database, full, [](const std::string&) { return false; });
+            std::string why;
+            ASSERT_TRUE(starved.open(t.now, why));
+            SubmitInput in;
+            in.kind = "classic";
+            in.name = "Popcorn";
+            in.bytes = tiny();
+            in.address = "203.0.113.77";
+            const TestSubmitOutcome o = starved.submit_test(in, t.now);
+            ASSERT_TRUE(!o.ok && o.fail.status == 503 && o.fail.code == "storage_full");
+            ASSERT_EQ(starved.test_maps(t.now).size(), size_t{0});
+        }
         // two teams are enough
         Api two;
         ASSERT_EQ(two.test_upload(tiny_with_teams(0x03)).status, 201);
@@ -862,7 +878,7 @@ int main() {
     } TEST_END();
 
     TEST_CASE("API2.12 A map over the size limit of a room (65,536 cells) is refused as a test map with one plain sentence, whatever its kind allows; 256 x 256 is the most; the numbers are OnlineLimits'") {
-        static_assert(OnlineLimits::kMaxCells == 65536u && OnlineLimits::allows(65536u) && !OnlineLimits::allows(65537u), "the limit of a room");
+        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::allows(65536u) && !OnlineLimits::allows(65537u));          // the limit of a room
         Api t([](SubmissionApiConfig& c) { c.test_checks_per_address_window = 100; c.test_checks_per_window = 100; });
         const auto step = [&]() { t.now_ms += 20000; };
         const std::string fits = grown_tiny(256, 256);
@@ -925,6 +941,17 @@ int main() {
             const TestSubmitOutcome other = t.keep_test("198.51.100.2", 1);              // (another address is not in the way of the first)
             ASSERT_TRUE(other.ok);
             ASSERT_EQ(t.store->test_maps(t.now).size(), SubmissionStore::kMaxTestPerAddress + 1);
+        }
+        {   // an address that holds its share drops ITS OWN oldest map, never an older map of another address
+            Api t;
+            const TestSubmitOutcome older = t.keep_test("198.51.100.9", 0);              // (the oldest map of all is another address's)
+            ASSERT_TRUE(older.ok);
+            std::vector<std::string> mine;
+            for (int i = 0; i < 5; ++i) mine.push_back(t.keep_test("198.51.100.1", 180).map.name);
+            MapStore ms("", "");
+            ms.set_test_maps(t.store->test_maps(t.now));
+            ASSERT_TRUE(ms.test_map(older.map.name) != nullptr);
+            ASSERT_TRUE(ms.test_map(mine[0]) == nullptr && ms.test_map(mine[1]) != nullptr && ms.test_map(mine[4]) != nullptr);
         }
         {   // five in a minute from one address: the fifth is refused (the other four are new), and the four stay
             Api t;
@@ -994,6 +1021,12 @@ int main() {
         uint64_t again = 0;
         ASSERT_TRUE(net::hash_file(path, again));
         ASSERT_TRUE(a.size() == 1 && a[0].hash == again && again != hash);              // (a file with another size is hashed again)
+        { std::ofstream out(path, std::ios::binary | std::ios::trunc); out << original << "MORE"; }       // (the size of the file that was hashed last, other bytes ...)
+        fs::last_write_time(path, when + std::chrono::hours(1));                      // (... and another time)
+        a = t.store->approved_maps();
+        uint64_t third = 0;
+        ASSERT_TRUE(net::hash_file(path, third));
+        ASSERT_TRUE(a.size() == 1 && a[0].hash == third && third != hash && third != again);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

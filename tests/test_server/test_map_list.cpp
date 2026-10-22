@@ -516,8 +516,26 @@ int main() {
         ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, false)), "Fits 256.lvl") == nullptr && store.list_json(nullptr, false).find("online") == std::string::npos);
         ASSERT_TRUE(store.list_json(nullptr, true).find("0badf00d") == std::string::npos);     // (a test map is on no list)
         // the constant and its sentence
-        static_assert(OnlineLimits::weight(1) == 1 && OnlineLimits::weight(10000) == 1 && OnlineLimits::weight(10001) == 2 && OnlineLimits::weight(65536) == 7 && OnlineLimits::weight(262144) == 27, "the places a match takes");
-        static_assert(OnlineLimits::weight(0) == 1, "never less than a place");
+        ASSERT_TRUE(OnlineLimits::weight(1) == 1 && OnlineLimits::weight(10000) == 1 && OnlineLimits::weight(10001) == 2 && OnlineLimits::weight(65536) == 7 && OnlineLimits::weight(262144) == 27);        // the places a match takes
+        ASSERT_EQ(OnlineLimits::weight(0), 1u);                                                      // (never less than a place)
+        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::kCellsPerPlace == 10000u && OnlineLimits::allows(65536) && !OnlineLimits::allows(65537));
+        // the public door sends a big map's file whole (HttpResponse::file) and a picture or an error as every other answer
+        {
+            ctl::HttpRequest request;
+            request.method = "GET";
+            request.path = "/maps/files/Wide%20410.lvl";
+            ctl::HttpResponse r = handle_public_replays(mgr, request);
+            ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == approved[1].size && r.content_type == "application/octet-stream");
+            request.path = "/maps/previews/Wide%20410.png";
+            r = handle_public_replays(mgr, request);
+            ASSERT_TRUE(r.status == 200 && !r.file && r.body.compare(0, 4, "\x89PNG") == 0);
+            request.path = "/maps/files/Draft%20Big%20~test-0badf00d.lvl";                          // (a test map's file too: unlisted, not unreachable)
+            r = handle_public_replays(mgr, request);
+            ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == tests[0].size);
+            request.path = "/maps/files/Nobody.lvl";
+            r = handle_public_replays(mgr, request);
+            ASSERT_TRUE(r.status == 404 && !r.file);
+        }
         ASSERT_TRUE(std::string(net::kNoticeMapTooBig).find("65,536 cells") != std::string::npos && std::string(net::kNoticeMapTooBig).size() <= net::kMaxChatChars);
     } TEST_END();
 
