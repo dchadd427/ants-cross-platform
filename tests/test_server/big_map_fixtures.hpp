@@ -50,6 +50,18 @@ namespace {
     return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 
+// TINY grown to `rows` x `columns` as a CLASSIC map (version 8: the game's own limits, at most 90 rows because of the wall at row 90 and 256 columns), so that even the older machines of the tests load it. "" when it cannot be made.
+[[maybe_unused]] std::string grown_classic(uint32_t rows, uint32_t columns) {
+    using namespace ants::assets;
+    const std::string extended = grown_tiny(rows, columns);
+    LevelData level;
+    if (extended.empty() || !LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(extended.data()), extended.size(), level, nullptr, LevelLimits::for_extended_maps())) return std::string();
+    const LevelConversion c = convert_to_classic(level);
+    if (!c.ok) return std::string();
+    const LevelWriteResult w = write_level(c.level, LevelLimits{});
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+}
+
 // TINY (a Classic map) with only the start markers of the teams in `mask` (bit 0 green ... bit 3 black): a map that fewer teams can play
 [[maybe_unused]] std::string tiny_with_teams(uint8_t mask) {
     using namespace ants::assets;

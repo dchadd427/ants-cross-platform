@@ -5,7 +5,8 @@ usage: community_maps.py repair SRC_DIR SWEEP_REPORT REPAIRED_DIR   write into R
        community_maps.py build SRC_DIR SWEEP_REPORT DEST_DIR [REPAIRED_DIR REPAIRED_SWEEP_REPORT]   copy the maps that pass (and the repaired ones that pass) into DEST_DIR and write DEST_DIR/maps.json
        community_maps.py discards SRC_DIR SWEEP_REPORT [REPAIRED_DIR REPAIRED_SWEEP_REPORT]   the maps that are not taken in, one line each with the reason (an original map says so), then the counts
        community_maps.py verify DIR SWEEP_REPORT               DIR holds only maps that pass in a sweep of DIR itself, and maps.json lists exactly them
-exit status: 0 all is well; 1 verify found problems (one line each) or a file could not be read; 2 usage.
+exit status: 0 all is well; 1 verify found problems (one line each) or a file could not be read; 2 usage, or a folder that is written is refused: `repair` and `build` never write into
+Original-Ants/ or Community-Maps/ (the library is never changed, re-saved or repaired by a tool: tools/library_guard.py) nor into a folder they read.
 
 SWEEP_REPORT is the --out file of `map_sweep FOLDER --out REPORT` (tools/map_sweep.cpp) over the same folder: it says for every file whether the engine loads it, what its name
 is worth in the network protocol, what was played on it (the roster of all four teams and, when the map has a start marker or a hill for both the first and the last team, those
@@ -29,6 +30,7 @@ import os
 import re
 import sys
 
+import library_guard
 import repair_maps
 
 ORIGINAL_NAMES = ("TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS")
@@ -151,8 +153,8 @@ def sentence(notes):
 def repair(src, report, dest, originals=None):
     """Writes into `dest` the repaired file of every map of the report that is not an original, does not pass as it is and has a repair; writes dest/repairs.json; returns the count."""
     originals = load_originals() if originals is None else originals
-    os.makedirs(dest, exist_ok=True)
-    done = {}
+    library_guard.require_writable(dest, [src])         # (the owner's rule: never into the map library, never over the folder it reads)
+    fixes = []
     for entry in report:
         data = read(src, entry["name"])
         if original_of(entry["name"], data, originals) is not None or reason(entry, data) is None:
@@ -160,9 +162,15 @@ def repair(src, report, dest, originals=None):
         fixed, notes = repair_maps.repair(data)
         if fixed is None:
             continue
-        with open(os.path.join(dest, entry["name"]), "wb") as f:
+        fixes.append((entry["name"], fixed, sentence(notes)))
+    for name in [f[0] for f in fixes] + [REPAIRS_FILE]:          # (every file that is written, not only the folder: a file in it may be a second name of a library map, or a link to one; all are asked before one is written)
+        library_guard.require_writable(os.path.join(dest, name), [src])
+    os.makedirs(dest, exist_ok=True)
+    done = {}
+    for name, fixed, said in fixes:
+        with open(os.path.join(dest, name), "wb") as f:
             f.write(fixed)
-        done[entry["name"]] = sentence(notes)
+        done[name] = said
     with open(os.path.join(dest, REPAIRS_FILE), "w", encoding="utf-8", newline="\n") as f:
         json.dump({"format": 1, "repairs": dict(sorted(done.items(), key=lambda kv: kv[0].encode("latin-1")))}, f, indent=1, ensure_ascii=True)
         f.write("\n")
@@ -212,7 +220,10 @@ def taken(src, report, originals, repaired=None):
 def build(src, report, dest, originals=None, repaired=None):
     """Copies the maps that are taken in into `dest` and writes dest/maps.json; returns their number. `repaired` is (folder of repaired files, report of their sweep) or None."""
     originals = load_originals() if originals is None else originals
+    library_guard.require_writable(dest, [src] + ([repaired[0]] if repaired else []))      # (the owner's rule: never into the map library, never over a folder it reads)
     kept = taken(src, report, originals, repaired)
+    for name in [entry["name"] for entry, _data, _note in kept] + ["maps.json"]:        # (every file that is written, not only the folder: a file in it may be a second name of a library map, or a link to one; all are asked before one is written)
+        library_guard.require_writable(os.path.join(dest, name), [src])
     os.makedirs(dest, exist_ok=True)
     rows = []
     for entry, data, note in kept:
@@ -341,6 +352,9 @@ def main(argv):
             for why in REASONS + ((REPAIRED,) if repaired else ()) + (ORIGINAL,):
                 print("%d\t%s" % (counts[why], why), file=sys.stderr)
             return 0
+    except library_guard.LibraryRefused as err:
+        print("%s: %s; nothing written" % (command, err), file=sys.stderr)
+        return 2
     except (OSError, ValueError, KeyError, TypeError) as err:
         print("%s: %s: %s" % (command, err.__class__.__name__, err), file=sys.stderr)
         return 1

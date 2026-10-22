@@ -53,6 +53,7 @@ services:
         # optional: which build this is (page footer, --version); without it the image takes the commit from the clone's .git files, else the build time
         ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
     container_name: ants-beta
+    # Behind a reverse proxy, mount a file over /etc/nginx/ants-trusted-proxies/proxies.conf of this container (the proxy's address, docker/trusted-proxies.conf, docs/MAP_SUBMISSIONS.md "Deploying"): without it every visitor has the proxy's address and every limit per address (map sends, sign-in tries, map files) becomes one limit for the whole site.
     restart: unless-stopped
     ports:
       - "${ANTS_PORT:-19980}:80"

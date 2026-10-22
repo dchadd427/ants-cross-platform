@@ -29,6 +29,8 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import library_guard                                                       # noqa: E402  (the owner's rule: nothing is written into the map library)
 from PIL import Image                                                      # noqa: E402
 
 from artlib import CLAY, ROOT, TEAMS, chd_sprite, dirty_clay, remove_cursor, save_png, sprite, team_ant   # noqa: E402
@@ -114,6 +116,11 @@ def main():
     parser.add_argument("--out", default=str(ROOT / "web" / "front"), help="where the files go (default: web/front)")
     parser.add_argument("--ants", help="the game program (for example build/src/ants_app/ants): makes the map previews too")
     args = parser.parse_args()
+    try:
+        library_guard.require_writable(args.out)
+    except library_guard.LibraryRefused as err:
+        print("make_art: --out: %s; nothing written" % err, file=sys.stderr)
+        sys.exit(2)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     pictures = sprite_pictures()

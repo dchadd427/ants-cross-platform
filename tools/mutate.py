@@ -40,6 +40,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import library_guard  # noqa: E402  (the owner's rule: a mutant never changes a map of the library)
+
 BACKUP_SUFFIX = ".mutbak"
 OUTPUT_TAIL = 6000                      # characters of output kept in the report
 INVALID = ("error", "build-error", "timeout")
@@ -408,7 +411,16 @@ def main(argv):
     if not os.path.isdir(args.root):
         print("mutate: the root %s is not a folder" % args.root, file=sys.stderr)
         return 2
+    for m in mutants:                                               # the owner's rule (tools/library_guard.py): not one file of the map library is ever changed, not even for a moment
+        why = library_guard.write_refusal(os.path.join(args.root, m["file"]))
+        if why:
+            print("mutate: %s: %s; nothing changed" % (m["id"], why), file=sys.stderr)
+            return 2
     report_path = args.report or (re.sub(r"\.json$", "", args.spec) + ".report.json")
+    why = library_guard.write_refusal(report_path, [args.spec])
+    if why:
+        print("mutate: the report: %s; nothing written" % why, file=sys.stderr)
+        return 2
     commands = baseline_commands(mutants, declared)
 
     for sig in SIGNALS:

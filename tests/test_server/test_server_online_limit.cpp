@@ -320,4 +320,226 @@ void run_online_limit_tests() {
         const std::vector<std::string> lines = said(pia_game.room_chat);
         ASSERT_TRUE(before == 4 && lines.size() == 5 && lines[4] == "255||Pia's game could not load this map.");
     } TEST_END();
+
+    TEST_CASE("S3.216 A START That Cannot Be Seated Ends Nobody's Match (All Or Nothing): On Three Places, One Live Match And Two Abandoned Ones Cannot Make The Three That A Big Map Takes, So Both Abandoned Matches Stay; When All Three Are Abandoned They All Go And The START Runs") {
+        const fs::path dir = fresh_dir("s216");
+        World w(limits_with(3));
+        w.mgr.mutable_store().set_approved({approved_map(dir, "Edge 65536.lvl", 128, 512, true)});
+        std::vector<Client*> pairs[3];
+        const char* codes[3] = {"aban0001", "aban0002", "live0001"};
+        for (int i = 0; i < 3; ++i) {
+            pairs[i].push_back(&w.connect_creating("A" + std::to_string(i), codes[i], block_of("TINY.LVL", 2)));
+            pairs[i].push_back(&w.connect("B" + std::to_string(i), codes[i]));
+        }
+        w.run(3000);
+        for (const char* code : codes) ASSERT_MSG(w.status(code).state == RoomState::Running, code);
+        for (Client* c : pairs[0]) c->end->close();                                                   // the people of the first two matches close their tabs: a minute on, nobody has come back
+        for (Client* c : pairs[1]) c->end->close();
+        w.run(62000);
+        Client& pia = w.connect_page("Pia", "lobb0003", lobby_block_of());
+        const net::SeatKey key = pia.lobby->key();
+        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Edge 65536.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->request_start());
+        w.run(200);
+        Client& game = w.connect_game("Pia", "lobb0003", key, false, dir.string());
+        w.run(500);
+        // the big map takes all three places (the weight is cut to the server's three): 1 live + 2 abandoned = 3 taken, and ending both abandoned ones would still leave the live one's place
+        ASSERT_TRUE(w.status("lobb0003").state == RoomState::Waiting && !w.status("lobb0003").starting);
+        ASSERT_EQ(said(game.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeNoPlace}));
+        ASSERT_TRUE(w.status("aban0001").state == RoomState::Running && w.status("aban0002").state == RoomState::Running && w.status("live0001").state == RoomState::Running);       // (nobody's match was ended for nothing)
+        ASSERT_TRUE(w.mgr.take_ended(w.now).empty());                                                 // (and no end was reported)
+        ASSERT_TRUE(game.lobby->request_start());                                                     // pressed again: the same answer, the same matches
+        w.run(500);
+        ASSERT_TRUE(w.status("aban0001").state == RoomState::Running && w.status("aban0002").state == RoomState::Running && w.status("live0001").state == RoomState::Running);
+        // the last match is abandoned too: the three are free once all three are ended, and the START runs
+        for (Client* c : pairs[2]) c->end->close();
+        w.run(62000);
+        ASSERT_TRUE(game.lobby->request_start());
+        w.run(4000);
+        ASSERT_TRUE(w.status("lobb0003").state == RoomState::Running);
+        ASSERT_TRUE(w.status("aban0001").code.empty() && w.status("aban0002").code.empty() && w.status("live0001").code.empty());
+        ASSERT_EQ(w.mgr.take_ended(w.now).size(), size_t{3});
+        fs::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("S3.219 A START Ends An Abandoned Big Match When That Is What Seats It: The Places Of Every Abandoned Match Are Counted At Their Weight (A 256 x 256 Match Is Seven), Not As One Each") {
+        const fs::path dir = fresh_dir("s219");
+        World w(limits_with(8));
+        w.mgr.mutable_store().set_approved({approved_map(dir, "Edge 65536.lvl", 128, 512, true)});
+        Client& first = w.connect_page("Pia", "bigo0001", lobby_block_of());
+        const net::SeatKey first_key = first.lobby->key();
+        ASSERT_TRUE(first.lobby->request_plan(plan_for("Edge 65536.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));
+        w.run(300);
+        ASSERT_TRUE(first.lobby->request_start());
+        w.run(200);
+        Client& first_game = w.connect_game("Pia", "bigo0001", first_key, false, dir.string());
+        w.run(4000);
+        ASSERT_TRUE(w.status("bigo0001").state == RoomState::Running);                                // (seven of the eight places)
+        first_game.end->close();                                                                      // Pia closes her tab: a minute on, nobody has come back
+        w.run(62000);
+        Client& second = w.connect_page("Bea", "bigo0002", lobby_block_of());
+        const net::SeatKey second_key = second.lobby->key();
+        ASSERT_TRUE(second.lobby->request_plan(plan_for("Edge 65536.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));
+        w.run(300);
+        ASSERT_TRUE(second.lobby->request_start());
+        w.run(200);
+        Client& second_game = w.connect_game("Bea", "bigo0002", second_key, false, dir.string());
+        w.run(4000);
+        ASSERT_TRUE(said(second_game.room_chat).empty());                                             // (7 + 7 > 8, and ending the abandoned match frees seven: it is seated)
+        ASSERT_TRUE(w.status("bigo0002").state == RoomState::Running && w.status("bigo0001").code.empty());
+        fs::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("S3.217 A Test Map Is In Use While A Room Has It As Its Map Or Only In Its Plan, And A Person Whose Game Failed Is Named Only While The Seat Is Still Theirs (After A Rename The Pause Says Only That The Match Could Not Start), And The Pause Ends When That Person Goes And Not When Somebody Else Does") {
+        const fs::path dir = fresh_dir("s217");
+        {   // map_in_use: the room's map, and the map that its plan names (a lobby keeps the test map that a leader has picked)
+            World w(limits_with(8));
+            ApprovedMap draft = approved_map(dir, "Plan Draft ~test-0badf00d.lvl", 100, 100);
+            w.mgr.mutable_store().set_test_maps({draft});
+            Client& pia = w.connect_page("Pia", "plan0001", lobby_block_of());
+            w.run(300);
+            ASSERT_TRUE(w.mgr.map_in_use("TINY.LVL") && !w.mgr.map_in_use(draft.name) && !w.mgr.map_in_use("Elsewhere.lvl"));
+            ASSERT_TRUE(pia.lobby->request_plan(plan_for(draft.name)));
+            w.run(300);
+            ASSERT_EQ(w.status("plan0001").map, draft.name);
+            ASSERT_TRUE(w.mgr.map_in_use(draft.name) && w.mgr.map_in_use("TINY.LVL"));              // (the plan has the draft, the room itself still the shipped map)
+            ASSERT_TRUE(pia.lobby->request_plan(plan_for("TINY.LVL")));
+            w.run(300);
+            ASSERT_TRUE(!w.mgr.map_in_use(draft.name));                                              // (picked another map: the draft is free to go)
+        }
+        {   // the person who is named: a rename (the seat is still there, the person under that name is not) ends the naming
+            World w(limits_with(8));
+            w.mgr.mutable_store().set_approved({approved_map(dir, "Small Ext.lvl", 100, 100, true)});
+            Client& pia = w.connect_page("Pia", "stal0005", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "stal0005", lobby_block_of());
+            const net::SeatKey pia_key = pia.lobby->key();
+            const net::SeatKey bob_key = bob.lobby->key();
+            ASSERT_TRUE(pia.lobby->request_plan(plan_for("Small Ext.lvl")));
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(100);
+            Client& pia_game = w.connect_game("Pia", "stal0005", pia_key, false, dir.string());
+            Client& bob_game = w.connect_game("Bob", "stal0005", bob_key);
+            w.run(500);
+            ASSERT_EQ(said(pia_game.room_chat).size(), size_t{2});                                    // (Bob's game is too old, and how to start without him)
+            for (int round = 0; round < 3; ++round) {                                                // three more cancels: the next START meets the pause of a minute
+                ASSERT_TRUE(pia_game.lobby->request_start());
+                w.run(2500);
+            }
+            ASSERT_TRUE(bob_game.lobby->request_name("Robert"));
+            w.run(300);
+            const size_t told = said(pia_game.room_chat).size();
+            ASSERT_TRUE(pia_game.lobby->request_start());
+            w.run(300);
+            const std::vector<std::string> lines = said(pia_game.room_chat);
+            ASSERT_TRUE(lines.size() == told + 1);
+            ASSERT_EQ(lines.back(), std::string("255||") + net::kNoticeStartsFailed);                 // (not "Bob's game is too old": nobody of that name is in that seat any more)
+        }
+        {   // the pause ends when the person who is named goes, and only then: another person who leaves leaves it as it was
+            World w(limits_with(8));
+            w.mgr.mutable_store().set_approved({approved_map(dir, "Small Ext.lvl", 100, 100, true)});
+            Client& pia = w.connect_page("Pia", "stal0006", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "stal0006", lobby_block_of());
+            Client& cat = w.connect_page("Cat", "stal0006", lobby_block_of());
+            const net::SeatKey pia_key = pia.lobby->key();
+            const net::SeatKey bob_key = bob.lobby->key();
+            const net::SeatKey cat_key = cat.lobby->key();
+            ASSERT_TRUE(pia.lobby->request_plan(plan_for("Small Ext.lvl", {K::Open, K::Open, K::Open, K::Nobody})));
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(100);
+            Client& pia_game = w.connect_game("Pia", "stal0006", pia_key, false, dir.string());
+            Client& bob_game = w.connect_game("Bob", "stal0006", bob_key);                           // (Bob's game is an old one)
+            Client& cat_game = w.connect_game("Cat", "stal0006", cat_key, false, dir.string());
+            w.run(500);
+            for (int round = 0; round < 3; ++round) {
+                ASSERT_TRUE(pia_game.lobby->request_start());
+                w.run(2500);
+            }
+            cat_game.lobby->leave();                                                                  // Cat goes: Bob's game is still the reason of the pause
+            w.run(300);
+            const size_t told = said(pia_game.room_chat).size();
+            const size_t bob_told = said(bob_game.room_chat).size();
+            ASSERT_TRUE(pia_game.lobby->request_start());
+            w.run(300);
+            const std::vector<std::string> lines = said(pia_game.room_chat);
+            ASSERT_TRUE(lines.size() == told + 2);
+            ASSERT_EQ(said(bob_game.room_chat).size(), bob_told);                                      // (Bob's game was not asked to load again: only the leader is told, the room is not)
+            ASSERT_EQ(lines[told], std::string("255||Bob's game is too old for this map: refresh the page or update the game."));
+            ASSERT_TRUE(w.status("stal0006").state == RoomState::Waiting && !w.status("stal0006").starting);       // (the START is held back by the pause, not tried again)
+        }
+        fs::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("S3.218 A Restart Record Of A Match On A Map Over The Online Limit Is Not Restored (The Room Is A Failed Room With The Reason), One At The Limit Is Not Refused For Its Size; A Record That Waits For Its Replay Holds The Places Of Its Map And Its Map Is In Use") {
+        const fs::path maps = fs::path(temp_dir_for("online-218")) / "Maps";
+        fs::create_directories(maps);
+        fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
+        const std::string big = grown_tiny(300, 300);                                                // (90,000 cells)
+        const std::string edge = grown_tiny(128, 512);                                               // (65,536 cells: the limit itself)
+        ASSERT_TRUE(!big.empty() && !edge.empty());
+        { std::ofstream out(maps / "BIG.LVL", std::ios::binary); out << big; }
+        { std::ofstream out(maps / "EDGE.LVL", std::ios::binary); out << edge; }
+        uint64_t big_hash = 0;
+        uint64_t edge_hash = 0;
+        ASSERT_TRUE(net::hash_file((maps / "BIG.LVL").string(), big_hash) && net::hash_file((maps / "EDGE.LVL").string(), edge_hash));
+        {   // a record that names the big map (a match from before the limit): refused for its size, before any replay
+            PWorld w("online-218a", ServerLimits(), maps.string());
+            w.start_server(500);
+            crash_with_record_of(w, "BG-1", 8000);
+            rewrite_head(w, "BG-1", [&](RestartHead& h) { h.map = "BIG.LVL"; h.map_hash = big_hash; h.start.map_name = "BIG.LVL"; h.start.map_hash = big_hash; });
+            w.start_server(500);
+            ASSERT_MSG(w.report.items.size() == 1 && w.report.items[0].outcome == RestoreItem::Outcome::Ended, std::to_string(w.report.items.size()) + (w.report.items.empty() ? std::string() : ": " + w.report.items[0].note));
+            ASSERT_MSG(w.report.items[0].note.find("too big to play online") != std::string::npos && w.report.items[0].note.find("BIG.LVL") != std::string::npos, w.report.items[0].note);
+            const RoomStatus s = w.status("BG-1");
+            ASSERT_TRUE(s.state == RoomState::Failed && s.reason == w.report.items[0].note && !s.restored);
+            ASSERT_TRUE(w.record_files().empty());
+        }
+        {   // a record that names a map of exactly 65,536 cells is not refused for its size (this record's turns are TINY's, so its replay says no for its own reasons)
+            PWorld w("online-218b", ServerLimits(), maps.string());
+            w.start_server(500);
+            crash_with_record_of(w, "ED-1", 8000);
+            rewrite_head(w, "ED-1", [&](RestartHead& h) { h.map = "EDGE.LVL"; h.map_hash = edge_hash; h.start.map_name = "EDGE.LVL"; h.start.map_hash = edge_hash; });
+            w.start_server(500);
+            ASSERT_TRUE(w.report.items.size() == 1);
+            ASSERT_MSG(w.report.items[0].note.find("too big") == std::string::npos, w.report.items[0].note);
+        }
+        {   // a record that waits for its replay: its map is in use, and it holds the places of its map (public_places counts it): a Classic map of 90 x 256 = 23,040 cells takes three, so on four places one small
+            // public room fits beside it and a second does not (counted as one place it would have let the second in)
+            ServerLimits l;
+            l.demo_rooms = 4;
+            l.demo_map = "TINY.LVL";
+            l.demo_maps = {"TINY.LVL"};
+            const std::string wide = grown_classic(90, 256);
+            ASSERT_TRUE(!wide.empty());
+            { std::ofstream out(maps / "WIDE.LVL", std::ios::binary); out << wide; }
+            PWorld w("online-218c", l, maps.string());
+            w.restart.restore_slice_ms = 0;                                                          // (a piece of work a pass: a long record takes seconds of the world's time)
+            w.start_server(500);
+            RoomSpec spec = held_spec("EW-1", 2, "WIDE.LVL");
+            spec.public_room = true;
+            std::vector<RClient*> m = play_room(w, spec, 8000);
+            for (RClient* p : m) p->reconnects = false;
+            w.stop_server(false);
+            const RestartLoaded original = w.read_record("EW-1");
+            ASSERT_TRUE(original.ok() && original.head.public_room);
+            lengthen_record(w, "EW-1", 5200 - original.turn_count);
+            w.start_server(500, false);
+            ASSERT_EQ(w.mgr->restoring_count(), size_t{1});
+            ASSERT_TRUE(w.mgr->map_in_use("WIDE.LVL") && !w.mgr->map_in_use("TINY.LVL") && !w.mgr->map_in_use("BIG.LVL"));       // (the queue's record has the map)
+            RClient& ann = w.connect_creating("Ann", "pub00001", block_of("TINY.LVL", 2));
+            RClient& bob = w.connect_creating("Bob", "pub00002", block_of("TINY.LVL", 2));
+            w.run(300);
+            ASSERT_TRUE(w.mgr->restoring_count() == 1 && w.status("pub00001").joined == 1 && !ann.was_rejected);            // (3 + 1 = 4: a place)
+            ASSERT_TRUE(bob.was_rejected && bob.rejected == net::RejectReason::NoSuchRoom);                                  // (3 + 1 + 1 = 5: none)
+            ASSERT_TRUE(w.until([&]() { return w.mgr->restoring_count() == 0; }, 30000));
+            ASSERT_TRUE(w.status("EW-1").restored && w.mgr->map_in_use("WIDE.LVL"));                                         // (the room that came back has the map, and still holds three places)
+            RClient& cat = w.connect_creating("Cat", "pub00003", block_of("TINY.LVL", 2));
+            w.run(300);
+            ASSERT_TRUE(cat.was_rejected && cat.rejected == net::RejectReason::NoSuchRoom);
+        }
+        std::error_code ignore;
+        fs::remove_all(maps.parent_path(), ignore);
+    } TEST_END();
 }

@@ -249,17 +249,27 @@ bool RoomManager::map_in_use(const std::string& file_name) const {
     return false;
 }
 
+// What a room in rooms_ holds of the public places (a lobby that waits holds none: its START asks for one)
+static size_t held_places(const Room& room) {
+    return room.public_room() && !room.lobby_waiting() ? static_cast<size_t>(OnlineLimits::weight(room.map_cells())) : 0u;
+}
+
 size_t RoomManager::public_places() const {
     const auto weigh = [](uint64_t cells) { return static_cast<size_t>(OnlineLimits::weight(cells)); };       // (a match heavier than all the places only makes the server full: no cap is needed to count it)
     size_t places = 0;
-    for (const auto& kv : rooms_) places += kv.second->public_room() && !kv.second->lobby_waiting() ? weigh(kv.second->map_cells()) : 0u;      // (a lobby that waits holds no place: its START asks for one)
+    for (const auto& kv : rooms_) places += held_places(*kv.second);
     for (const auto& r : retired_) places += r->public_room() ? weigh(r->map_cells()) : 0u;                                                      // (a match that gave its code to its rematch keeps its place until it is forgotten, as before)
     for (const Restoring& r : restoring_) places += r.head.public_room ? weigh(r.room != nullptr ? r.room->map_cells() : store_.cells_of(r.head.map)) : 0u;
     return places;
 }
 
+// All or nothing: the abandoned matches are ended only when ending all of them would make the room that the START needs (a weight of seven can need three), so that a START that cannot be seated
+// costs nobody their match (their players may be holding seats for a reconnect), however often it is pressed
 bool RoomManager::take_match_place(uint32_t now_ms, uint64_t cells) {
     const size_t want = std::min<size_t>(OnlineLimits::weight(cells), std::max<size_t>(limits_.demo_rooms, 1));
+    size_t evictable = 0;
+    for (const auto& kv : rooms_) evictable += kv.second->public_room() && kv.second->abandoned_ms(now_ms) >= kDemoAbandonedMs ? held_places(*kv.second) : 0u;
+    if (public_places() + want > limits_.demo_rooms + evictable) return false;
     while (public_places() + want > limits_.demo_rooms) {
         if (!evict_abandoned_public(now_ms)) return false;
     }
@@ -830,12 +840,13 @@ const char* read_status_name(RestartLoaded::Status status) {
 
 }  // namespace
 
-// "" when the match's map is on this server, is the file that the match was played on, loads, and can be played by the seats of the match; else the refusal
+// "" when the match's map is on this server, is the file that the match was played on, loads, is within the online size limit and can be played by the seats of the match; else the refusal
 std::string RoomManager::map_refusal(const RestartHead& head, MapEntry& entry, assets::LevelData& level) const {
     std::string why;
     if (!store_.find(head.map, entry, &why)) return "ended by a restart of the server: the map " + head.map + " is not on this server (" + why + ")";
     if (entry.hash != head.map_hash) return "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
     if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
+    if (!OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height())) return "ended by a restart of the server: the map " + head.map + " is too big to play online now (" + net::kNoticeMapTooBig + ")";      // (a record of a match from before the limit: a room is online, whatever its record says; judge_record and the replay both come here)
     if (!level.validate(head.start.roster, assets::LevelLimits::for_play_extended()).playable) return "ended by a restart of the server: the map cannot be played by the seats of the match";
     return std::string();
 }

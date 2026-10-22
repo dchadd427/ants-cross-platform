@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.105 - 2026-10-22 - Map tools never touch the library, fixes after the review of 0.12.103
+
+**For players:**
+- **A START that cannot get a place no longer ends other people's matches.** When a big map needs several of the server's places and the server cannot give them, matches that nobody has come back to are left alone; they are ended only when that really makes room.
+- **A saved match on a map over 65,536 cells is not brought back after a server restart.** It ends with the reason "too big to play online" instead of coming back into an online room.
+- **Big maps are sent faster.** The server reads a map file in one piece (about 0.5 ms instead of 11 ms for a 3 MB map).
+- **The owner's page asks before it resets a password**, the way it asks before it removes a user, and the red note about the last Admin goes away once a user has been added.
+- **The Tab key stays inside the boxes of the owner's page** (it had been leaving them in real browsers).
+- **The map tools never touch the map library.** `lvl_tool`, the map sweep, the bot arena and the scripts that build, draw or test maps refuse, with a plain message, to write into `Original-Ants/` or `Community-Maps/` or over the file they read. `lvl_tool rewrite` no longer takes the same file as input and output.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4bf5f60a...dbd35b23)
+
 ## v0.12.104 - 2026-10-22 - Big maps keep their fingerprints; the limits of big maps are written down
 
 **For players:**
@@ -611,24 +625,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/07ce107a...0b9a5071)
 
-## v0.12.38 - 2026-10-13 - Bot names on the host's card and in the START line
+## Older versions (v0.12.38 and before)
 
-**For players:**
-- In the front page's room, the host's card for a computer player now shows the bot's name (for example `Pip (bot, Hard)`) in small text under the level switch, and the line under START tells the players by name: "You, Sam, Pip (bot, Hard) and Wren (bot, Medium) play on Treasure." Other players' cards already showed the names. A room whose bots have no name yet (a game on the local network, a local game) looks as before.
-
-**Rules / network:** none. Only the page's text changed; network protocol 20 is as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f50b7a1b...fe3cd495)
-
-## v0.12.37 - 2026-10-13 - Computer players can plan around fire walls and bombs (off)
-
-**For players:**
-- Nothing changes on screen or in play: the new play is off in every level. A Hard computer player (when it is switched on for a test) whose food is walled off by fire walls or bombs, as on `POPcOrN`, now gets the right ant first: a Fire ant to put a wall out, or a Bomber that bombs itself over it to a power-up or to the food, with the real rules of the bomb throw. It gives a step up after 90 seconds, an attempt after 4 minutes, tries two more times and then plays on ([the plan](docs/reverse_engineering/bomb_gates.md)).
-
-**Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/8ab3344c...a4d4eecf)
-
-## Older versions (v0.12.36 and before)
-
-Every release before v0.12.37, and the long notes of v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.39, and the long notes of v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -11,8 +11,8 @@
 //   lvl_tool info FILE                                       what the file holds: grid, dictionary, start markers, hills, food, waypoints, eggs, whether it works in the
 //                                                            original game, and what a rewrite changes; of an Extended map (version 9) also its kind, format flags, rules and
 //                                                            whether it fits a Classic map (and why not)
-//   lvl_tool rewrite IN OUT [--roster MASK] [--new-map]      reads IN, checks it, writes its canonical bytes to OUT and says what differs from IN (OUT may be IN: the
-//                                                            bytes go to a new file beside OUT, which takes OUT's place once it is whole)
+//   lvl_tool rewrite IN OUT [--roster MASK] [--new-map]      reads IN, checks it, writes its canonical bytes to OUT and says what differs from IN (OUT must be another file than IN;
+//                                                            the bytes go to a new file beside OUT, which takes OUT's place once it is whole)
 //   lvl_tool blank OUT --rows R --columns C [--chd FILE] [--new-map]
 //                                                            a new map of plain ground, R x C (1 to 256 each), its dictionary by the rule of the original maps (names from ants.chd)
 //   lvl_tool blank OUT --extended --rows R --columns C [--chd FILE]
@@ -29,7 +29,11 @@
 //
 // A file is read up to 64 MiB (512 KB with --new-map): one that holds more is not read to its end, and it does not load. Exit status: 0 the file plays (check), is
 // described (info), is written (rewrite, blank); 1 the file does not load, does not play for the roster or cannot be written within the limits (nothing is written
-// then); 2 the command line is wrong, a file cannot be read or written, or there is no memory left.
+// then); 2 the command line is wrong, a file cannot be read or written, an OUT is refused (below), or there is no memory left.
+//
+// The owner's rule (library_guard.hpp, docs/WORKFLOW.md "Tools never touch the map library"): rewrite, convert and blank never write over the file they read and never write
+// into or over a file of Original-Ants/ or Community-Maps/ (by any spelling: another case, `..`, a relative path, a link); they say so in words and exit 2, before they read
+// anything. Reading the library is fine.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -52,6 +56,7 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_test_paths.hpp"
+#include "library_guard.hpp"
 
 using namespace ants::assets;
 
@@ -73,7 +78,7 @@ void usage(std::ostream& out) {
            "           (with --original: whether the map works in the original game, every finding with its code;\n"
            "           with --extended: the checker per kind, which also takes an Extended map and answers for its kind)\n"
            "  info     what the file holds, whether it works in the original game, and what a rewrite would change\n"
-           "  rewrite  reads IN, checks it and writes its canonical bytes to OUT (OUT may be IN); says what differs\n"
+           "  rewrite  reads IN, checks it and writes its canonical bytes to OUT (another file than IN); says what differs\n"
            "  blank    writes a new map of plain ground, R rows x C columns (1 to 256 each), its dictionary by the rule of the original maps\n"
            "  convert  writes a copy of the map as an Extended map (version 9, always) or a Classic map (version 8, when it fits: else the reasons are listed); FILE is kept\n"
            "           (with --rows and --columns the Extended copy is grown to that size by plain ground at the right and below, to make a big map that works)\n"
@@ -82,6 +87,7 @@ void usage(std::ostream& out) {
            "  --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15; default 15)\n"
            "  --new-map      the limits of a new Classic map: at most 90 rows, 130 columns and 10,000 cells; a file of at most 512 KB is read, 144 KB written\n"
            "  --chd FILE     the archive with the tile names (default: Original-Ants/ants.chd of this checkout)\n"
+           "  A command never writes over the file it reads and never writes into or over a file of Original-Ants/ or Community-Maps/ (exit 2, nothing written).\n"
            "  --selftest     check the tool itself\n";
 }
 
@@ -124,7 +130,7 @@ std::string too_large(uint64_t size, size_t limit) {
 }
 
 // Writes `bytes` to `path` through a new file beside it, which takes the place of `path` once it is complete: a file that cannot be written whole leaves `path` as
-// it was (`rewrite IN IN` never cuts IN short), and the new file is removed
+// it was (a file that cannot be written whole never cuts anything short), and the new file is removed
 bool write_file(const std::string& path, const std::vector<uint8_t>& bytes) {
     const fs::path target(path);
     std::random_device random;
@@ -168,6 +174,14 @@ void print_findings(const LevelValidation& v, std::ostream& out) {
 }
 
 std::string file_name(const std::string& path) { return fs::path(path).filename().string(); }
+
+// The owner's rule: exit 2 with the reason when `out` may not be written (it is the file that is read, or it is in the map library); 0 when it may
+int refuse_output(const std::string& out, const std::vector<std::string>& inputs, std::ostream& err) {
+    const std::string why = library_guard::write_refusal(out, inputs);
+    if (why.empty()) return 0;
+    err << "lvl_tool: " << why << "; nothing written\n";
+    return 2;
+}
 
 struct Options {
     std::vector<std::string> files;
@@ -477,6 +491,7 @@ int rewrite(const Options& o, std::ostream& out, std::ostream& err) {
     const std::string& in_path = o.files[0];
     const std::string& out_path = o.files[1];
     const LevelLimits limits = o.new_map ? LevelLimits::for_new_maps() : LevelLimits{};
+    if (const int status = refuse_output(out_path, {in_path}, err)) return status;
     std::vector<uint8_t> bytes;
     if (const int status = read_map_file(in_path, limits, bytes, out, err, "; nothing written")) return status;
     const std::string name = file_name(in_path);
@@ -517,11 +532,7 @@ int convert(const Options& o, std::ostream& out, std::ostream& err) {
         return 2;
     }
     const std::string& in_path = o.files[0];
-    std::error_code same;
-    if (fs::exists(o.output, same) && fs::equivalent(in_path, o.output, same)) {
-        err << "lvl_tool: OUT must be another file than FILE: a conversion makes a copy and keeps the map it was made from\n";
-        return 2;
-    }
+    if (const int status = refuse_output(o.output, {in_path}, err)) return status;     // (a conversion makes a copy and keeps the map it was made from)
     std::vector<uint8_t> bytes;
     if (const int status = read_map_file(in_path, ceiling_limits(), bytes, out, err, "; nothing written")) return status;
     const std::string name = file_name(in_path);
@@ -592,6 +603,7 @@ int blank(const Options& o, std::ostream& out, std::ostream& err) {
         return 2;
     }
     const std::string chd = o.chd.empty() ? std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd" : o.chd;
+    if (const int status = refuse_output(o.files[0], {chd}, err)) return status;
     std::vector<uint8_t> archive;
     uint64_t size = 0;
     if (read_file(chd, kMostBytesRead, archive, size) != Reading::Read) {
@@ -939,7 +951,9 @@ int selftest() {
         std::vector<uint8_t> second;
         t.check(again.status == 0 && has(again.out, "the file was canonical already: the same bytes") && read_whole(out2, second) && second == written,
                 "rewrite of a canonical file: the same bytes");
-        t.check(run_words({"rewrite", out2, out2}).status == 0 && read_whole(out2, second) && second == written, "rewrite: OUT may be IN");
+        const Run self = run_words({"rewrite", out2, out2});
+        t.check(self.status == 2 && has(self.err, "never writes over its own input") && has(self.err, "nothing written") && read_whole(out2, second) && second == written,
+                "rewrite: OUT = IN is refused in words, exit 2, and the file stays as it was: " + self.err);
         std::vector<uint8_t> filler = tiny;
         filler.insert(filler.end(), 206, 0x55);
         const Run f = run_words({"rewrite", file_of("filler.lvl", filler), dir.file("filler_out.lvl")});
@@ -1072,6 +1086,128 @@ int selftest() {
         t.check(run_words({"blank", dir.file("a.lvl"), "--extended", "--rows", "2049", "--columns", "1"}).status == 2 &&
                     run_words({"blank", dir.file("a.lvl"), "--extended", "--new-map", "--rows", "5", "--columns", "5"}).status == 2,
                 "blank --extended: more than 2,048 a side, or with --new-map, is exit 2");
+    }
+
+    std::cout << "  the map library is never written (library_guard.hpp)\n";
+    {
+        // a copy of the layout of the checkout in the scratch folder: the real library is never given to a writing mode
+        const fs::path layout = dir.path / "layout";
+        std::error_code ec;
+        fs::create_directories(layout / "Original-Ants" / "Maps", ec);
+        fs::create_directories(layout / "Community-Maps", ec);
+        fs::create_directories(layout / "work", ec);
+        const std::string original = (layout / "Original-Ants" / "Maps" / "TINY.LVL").string();
+        const std::string community = (layout / "Community-Maps" / "a map.lvl").string();
+        const std::string list = (layout / "Community-Maps" / "maps.json").string();
+        t.check(write_file(original, tiny) && write_file(community, tiny) && write_file(list, std::vector<uint8_t>{'{', '}'}), "the copy of the layout is made");
+        const std::vector<std::string> library_files{original, community, list};
+        std::vector<std::vector<uint8_t>> before(library_files.size());
+        for (size_t i = 0; i < library_files.size(); ++i) read_whole(library_files[i], before[i]);
+        auto untouched = [&]() {
+            for (size_t i = 0; i < library_files.size(); ++i) {
+                std::vector<uint8_t> now;
+                if (!read_whole(library_files[i], now) || now != before[i]) return false;
+            }
+            size_t files = 0;
+            for (const fs::directory_entry& e : fs::recursive_directory_iterator(layout, ec)) files += e.is_regular_file(ec) ? 1u : 0u;
+            return files == library_files.size();      // (nothing new beside them either: no temporary file is left)
+        };
+        // every writing mode, every way to name the library: refused in words, exit 2, nothing written, nothing changed
+        const std::string folder_other_case = (layout / "COMMUNITY-MAPS" / "a map.lvl").string();
+        const std::string original_other_case = (layout / "original-ants" / "Maps" / "TINY.LVL").string();
+        const std::string with_dots = (layout / "work" / ".." / "Community-Maps" / "a map.lvl").string();
+        const std::string new_in_library = (layout / "Community-Maps" / "new map.lvl").string();
+        const std::string new_in_originals = (layout / "Original-Ants" / "Maps" / "NEW.LVL").string();
+        const std::string deep_in_library = (layout / "Community-Maps" / "no such folder" / "x.lvl").string();
+        for (const std::string& target : {community, original, list, folder_other_case, original_other_case, with_dots, new_in_library, new_in_originals, deep_in_library}) {
+            const std::vector<std::vector<std::string>> modes{{"rewrite", tiny_path, target},
+                                                              {"rewrite", tiny_path, target, "--new-map"},
+                                                              {"convert", tiny_path, "--to", "extended", "-o", target},
+                                                              {"convert", tiny_path, "--to", "extended", "-o", target, "--rows", "40", "--columns", "40"},
+                                                              {"blank", target, "--rows", "5", "--columns", "5"},
+                                                              {"blank", target, "--extended", "--rows", "5", "--columns", "5"}};
+            for (const std::vector<std::string>& words : modes) {
+                const Run r = run_words(words);
+                t.check(r.status == 2 && r.out.empty() && has(r.err, "map library") && has(r.err, "nothing written") && untouched(),
+                        "the library is refused (" + words[0] + " into " + file_name(target) + "): " + r.err);
+            }
+        }
+        // the library as the INPUT of a rewrite whose OUT is the same file, and as the input of a conversion whose OUT is the same file
+        t.check(run_words({"rewrite", community, community}).status == 2 && run_words({"convert", community, "--to", "extended", "-o", community}).status == 2 && untouched(),
+                "the library as input and output of one command is refused and stays as it was");
+        // reading it is fine
+        t.check(run_words({"check", community}).status == 0 && run_words({"info", original}).status == 0 && untouched(), "check and info read the library and change nothing");
+        t.check(run_words({"rewrite", community, dir.file("from_library.lvl")}).status == 0 && fs::exists(dir.file("from_library.lvl")) && untouched(),
+                "rewrite reads a library map and writes a copy outside the library");
+        // a relative path, from a folder beside the library, and the ways up out of it
+        const fs::path was = fs::current_path(ec);
+        fs::current_path(layout / "work", ec);
+        const bool moved = !ec;
+        t.check(moved, "the scratch folder can be the current folder");
+        if (moved) {
+            const Run up = run_words({"rewrite", tiny_path, "../Community-Maps/a map.lvl"});
+            const Run up_new = run_words({"convert", tiny_path, "--to", "extended", "-o", "./../Community-Maps/./up.lvl"});
+            const Run near = run_words({"blank", "../Original-Ants/Maps/TINY.LVL", "--rows", "5", "--columns", "5"});
+            const Run self_relative = run_words({"rewrite", "../../tiny_out.lvl", "../../tiny_out.lvl"});
+            fs::current_path(was, ec);
+            t.check(up.status == 2 && up_new.status == 2 && near.status == 2 && has(up.err, "map library") && untouched(), "the library by a relative path with .. is refused: " + up.err + up_new.err + near.err);
+            t.check(self_relative.status == 2 && has(self_relative.err, "never writes over its own input"), "the same file by a relative path is its own input: " + self_relative.err);
+        }
+        // symbolic links to the folder and to a file of it, and a hard link to a file of it (the other name of a library map)
+        std::error_code link_error;
+        fs::create_directory_symlink(layout / "Community-Maps", dir.path / "link_to_folder", link_error);
+        const bool folder_linked = !link_error;
+        fs::create_symlink(community, dir.path / "link_to_file.lvl", link_error);
+        const bool file_linked = !link_error;
+        if (folder_linked) {
+            const Run r = run_words({"convert", tiny_path, "--to", "extended", "-o", (dir.path / "link_to_folder" / "a map.lvl").string()});
+            const Run n = run_words({"blank", (dir.path / "link_to_folder" / "fresh.lvl").string(), "--rows", "5", "--columns", "5"});
+            t.check(r.status == 2 && n.status == 2 && has(r.err, "map library") && untouched(), "a link to the library folder is followed: " + r.err + n.err);
+        } else {
+            std::cout << "    (symbolic links to folders are not allowed here: that part is skipped)\n";
+        }
+        if (file_linked) {
+            const Run r = run_words({"rewrite", tiny_path, (dir.path / "link_to_file.lvl").string()});
+            t.check(r.status == 2 && has(r.err, "map library") && untouched(), "a link to a library map is followed: " + r.err);
+        } else {
+            std::cout << "    (symbolic links to files are not allowed here: that part is skipped)\n";
+        }
+        fs::create_symlink(layout / "Community-Maps" / "not there yet.lvl", dir.path / "dangling.lvl", link_error);      // (a link to a library file that does not exist yet: a plain write would create it through the link)
+        if (!link_error) {
+            const Run r = run_words({"blank", (dir.path / "dangling.lvl").string(), "--rows", "5", "--columns", "5"});
+            const Run c = run_words({"convert", tiny_path, "--to", "extended", "-o", (dir.path / "dangling.lvl").string()});
+            t.check(r.status == 2 && c.status == 2 && has(r.err, "map library") && !fs::exists(layout / "Community-Maps" / "not there yet.lvl") && untouched(), "a link to a library file that is not there yet is followed: " + r.err + c.err);
+            fs::remove(dir.path / "dangling.lvl", link_error);
+        }
+        fs::create_hard_link(community, dir.path / "hard_name.lvl", link_error);
+        if (!link_error) {
+            const Run r = run_words({"rewrite", tiny_path, (dir.path / "hard_name.lvl").string()});
+            const Run c = run_words({"convert", tiny_path, "--to", "extended", "-o", (dir.path / "hard_name.lvl").string()});
+            t.check(r.status == 2 && c.status == 2 && has(r.err, "more than one name") && untouched(), "a second name of a library map is refused: " + r.err);
+            fs::remove(dir.path / "hard_name.lvl", link_error);
+        } else {
+            std::cout << "    (hard links are not allowed here: that part is skipped)\n";
+        }
+        // the folder is found by what it is, not by its name: a library under another name, an input under another spelling
+        const fs::path moved_library = dir.path / "stash";
+        fs::create_directories(moved_library / "deeper", ec);
+        const std::string stash_error = library_guard::write_refusal((moved_library / "deeper" / "x.lvl").string(), {}, {moved_library});
+        t.check(!stash_error.empty() && has(stash_error, "map library"), "a folder that is the library by identity (whatever its name) is refused: " + stash_error);
+        t.check(library_guard::write_refusal((dir.path / "elsewhere.lvl").string(), {}, {moved_library}).empty(), "a path outside it is not");
+        t.check(library_guard::write_refusal((dir.path / "Community-Maps-old" / "x.lvl").string()).empty() && library_guard::write_refusal((dir.path / "My Original-Ants copy" / "x.lvl").string()).empty(),
+                "a folder whose name only contains the words is not the library");
+        // the real checkout is only ASKED, never written to: its two library folders are known, and a path in them is refused
+        const std::vector<fs::path> real = library_guard::checkout_library();
+        t.check(real.size() == 2u && fs::is_directory(real[0], ec) && fs::is_directory(real[1], ec) && fs::exists(real[0] / "Maps" / "TINY.LVL", ec) && fs::exists(real[1] / "maps.json", ec),
+                "the checkout's library folders are found (Original-Ants, Community-Maps)");
+        t.check(!library_guard::write_refusal((real[0] / "Maps" / "NEVER.LVL").string()).empty() && !library_guard::write_refusal((real[1] / "never.lvl").string()).empty() &&
+                    !library_guard::write_refusal((real[1] / "previews" / "never.webp").string()).empty(),
+                "a new file in the checkout's own library is refused (asked, not tried)");
+        // what stays allowed: a file in an ordinary folder, even over another file that is not the input
+        const std::string plain = dir.file("plain.lvl");
+        t.check(run_words({"blank", plain, "--rows", "5", "--columns", "5"}).status == 0 && run_words({"convert", tiny_path, "--to", "extended", "-o", plain}).status == 0,
+                "an ordinary file is written, and over another file that is not the input");
+        t.check(untouched(), "the copy of the library is as it was at the end");
     }
 
     std::cout << "lvl_tool selftest: " << t.checks << " checks, " << t.failures << " failures\n";

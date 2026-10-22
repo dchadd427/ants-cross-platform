@@ -66,6 +66,7 @@
 #include "ants_sim/movement_tables.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
+#include "library_guard.hpp"
 #include "scripted_players.hpp"
 
 #ifdef _WIN32
@@ -1983,6 +1984,15 @@ int run_sweep(const Options& o, const std::string& exe) {
         std::fprintf(stderr, "map_sweep: no .lvl files%s in that folder\n", o.only.empty() ? "" : " with that text in the name");
         return 2;
     }
+    if (!o.out.empty()) {                  // the owner's rule (tools/library_guard.hpp): the report is never written into the map library nor over a map that is swept
+        std::vector<std::string> swept;
+        for (const fs::path& f : files) swept.push_back(f.string());
+        const std::string why = library_guard::write_refusal(o.out, swept);
+        if (!why.empty()) {
+            std::fprintf(stderr, "map_sweep: --out: %s; nothing written\n", why.c_str());
+            return 2;
+        }
+    }
     const Clock::time_point started = Clock::now();
     const std::vector<MapReport> maps = sweep_files(o, exe, files, true);
     const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
@@ -2445,6 +2455,20 @@ int selftest(const std::string& exe) {
         bool no_runs = true;
         for (const MapReport& m : loaded) no_runs = no_runs && m.runs.empty();
         t.check(no_runs && summarize(loaded).loads == 1, "--skip-run loads and plays nothing");
+        // the owner's rule: the report never goes into the map library (any spelling of its name) nor over a map of the folder
+        fs::create_directories(dir / "Community-Maps", ec);
+        std::vector<uint8_t> swept_before;
+        read_file(dir / "good.lvl", swept_before);
+        Options guarded = skip;
+        guarded.maps_dir = dir.string();
+        for (const fs::path& target : {dir / "Community-Maps" / "report.json", dir / "COMMUNITY-MAPS" / "report.json", dir / "Original-Ants" / "r.json", dir / "good.lvl", dir / "Community-Maps" / ".." / "good.lvl"}) {
+            guarded.out = target.string();
+            std::vector<uint8_t> after;
+            t.check(run_sweep(guarded, exe) == 2 && !fs::exists(dir / "Community-Maps" / "report.json") && !fs::exists(dir / "Original-Ants") && read_file(dir / "good.lvl", after) && after == swept_before,
+                    "--out " + target.filename().string() + " in the library or over a swept map is refused (exit 2), nothing written");
+        }
+        guarded.out = (dir / "report.json").string();
+        t.check(run_sweep(guarded, exe) != 2 && fs::exists(dir / "report.json"), "--out in an ordinary folder is written (the folder has broken files, so the sweep itself says 1)");
         fs::remove_all(dir, ec);
     }
 

@@ -68,8 +68,25 @@ function world(overrides) {
     };
     return w;
 }
+// A real browser's NodeList has length, item, forEach and iteration, and NO filter, map or some: the page may use only those (a fake that answered with an array let `.filter` through, and the Tab key of every box was lost)
+class StrictNodeList {
+    constructor(items) { items.forEach((n, i) => { this[i] = n; }); this.length = items.length; }
+    item(i) { return this[i] || null; }
+    forEach(f, self) { for (let i = 0; i < this.length; i++) f.call(self, this[i], i, this); }
+    [Symbol.iterator]() { return Array.prototype.slice.call(this)[Symbol.iterator](); }
+}
+function strictDom(doc) {
+    const make = doc.createElement.bind(doc);
+    doc.createElement = (tag) => {
+        const n = make(tag);
+        const q = n.querySelectorAll.bind(n);
+        n.querySelectorAll = (selector) => new StrictNodeList(q(selector));
+        return n;
+    };
+    return doc;
+}
 async function open(w) {
-    const doc = makeDocument();
+    const doc = strictDom(makeDocument());
     const app = doc.createElement('div');
     app.id = 'app';
     doc.body.appendChild(app);
@@ -80,7 +97,7 @@ async function open(w) {
     await settle();
     return { doc, app, page, timers };
 }
-const all = (app, sel) => app.querySelectorAll(sel);
+const all = (app, sel) => Array.from(app.querySelectorAll(sel));
 const texts = (app, sel) => all(app, sel).map((n) => n.textContent);
 const button = (app, label) => all(app, 'button').filter((b) => b.textContent === label);
 async function press(app, label, which) {
@@ -255,7 +272,7 @@ function noMarkup(label, app) {
         const rows = all(app, '.arow');
         same('owner: two rows, names and tags', [rows.length, texts(app, '.t1')], [2, ['TreasureClassic mapPlayer text', 'Big LakeExtended mapNew version onlyPlayer text']]);
         same('owner: the meta lines (Pacific time)', texts(app, '.am'), ['By Mia Player text · 34 x 34 · Sent today, 09:41', 'By Sam Player text · 300 x 400 · Sent yesterday']);
-        same('owner: three buttons for each', rows.map((r) => r.querySelectorAll('button').map((b) => b.textContent)), [['Approve', 'Rename and approve', 'Decline'], ['Approve', 'Rename and approve', 'Decline']]);
+        same('owner: three buttons for each', rows.map((r) => Array.from(r.querySelectorAll('button')).map((b) => b.textContent)), [['Approve', 'Rename and approve', 'Decline'], ['Approve', 'Rename and approve', 'Decline']]);
         same('owner: the picture is the owner-only route of the map', all(app, '.arow img')[0].src, '/admin/api/maps/' + 'a'.repeat(32) + '/picture');
         same('owner: the maker\'s note is a quote', texts(app, '.quote'), ['my first map']);
         same('owner: the tabs are a tablist with the chosen one marked', [all(app, '.chips')[0].getAttribute('role'), all(app, '.chip').map((c) => c.getAttribute('aria-selected'))], ['tablist', ['true', 'false', 'false', 'false']]);
@@ -658,10 +675,10 @@ function noMarkup(label, app) {
         same('users: the column heads', texts(app, '.uhd span'), ['Username', 'Role', 'Last sign-in', 'State', '']);
         const rows = all(app, '.urow');
         same('users: four rows with the names, "You" and the sentence for a person who has not chosen yet', [rows.length, rows.map((r) => r.querySelector('.un').textContent), texts(app, '.unsub')], [4, ['DaveYou', 'mia', 'sam', 'lee'], ['Has not chosen a password yet']]);
-        same('users: roles and states as tags', [rows.map((r) => r.querySelectorAll('.tg').map((t) => t.textContent).filter((t) => t !== 'You').join('/'))], [['Admin/Active', 'Moderator/Active', 'Moderator/Active', 'Moderator/Disabled']]);
+        same('users: roles and states as tags', [rows.map((r) => Array.from(r.querySelectorAll('.tg')).map((t) => t.textContent).filter((t) => t !== 'You').join('/'))], [['Admin/Active', 'Moderator/Active', 'Moderator/Active', 'Moderator/Disabled']]);
         same('users: the tags have the colors of their words', [all(app, '.tg').filter((t) => t.textContent === 'Admin')[0].className, all(app, '.tg').filter((t) => t.textContent === 'Moderator')[0].className], ['tg admin', 'tg moderator']);
         same('users: last sign-in in Pacific time, and Never', rows.map((r) => r.querySelector('.ul').textContent), ['Last sign-in: today, 09:12', 'Last sign-in: yesterday', 'Last sign-in: Never', 'Last sign-in: 3 Oct']);
-        same('users: three buttons for each, Enable for the disabled one', rows.map((r) => r.querySelectorAll('button').map((b) => b.textContent)), [['Reset password', 'Disable', 'Remove'], ['Reset password', 'Disable', 'Remove'], ['Reset password', 'Disable', 'Remove'], ['Reset password', 'Enable', 'Remove']]);
+        same('users: three buttons for each, Enable for the disabled one', rows.map((r) => Array.from(r.querySelectorAll('button')).map((b) => b.textContent)), [['Reset password', 'Disable', 'Remove'], ['Reset password', 'Disable', 'Remove'], ['Reset password', 'Disable', 'Remove'], ['Reset password', 'Enable', 'Remove']]);
         check('users: the disabled row is dimmed', rows[3].className.indexOf('off') >= 0 && rows[0].className.indexOf('off') < 0);
         same('users: every name is marked as typed text', all(app, '.un [data-untrusted]').map((n) => n.getAttribute('data-untrusted')), ['typed-text', 'typed-text', 'typed-text', 'typed-text']);
         check('users: no password, hash or token anywhere in the page', !/pbkdf2|password"/.test(app.textContent) && all(app, 'code').length === 0);
@@ -673,7 +690,7 @@ function noMarkup(label, app) {
     {
         const w = world();
         const copied = [];
-        const doc0 = makeDocument();
+        const doc0 = strictDom(makeDocument());
         const app0 = doc0.createElement('div');
         app0.id = 'app';
         doc0.body.appendChild(app0);
@@ -725,12 +742,23 @@ function noMarkup(label, app) {
     // ---- Reset password: the box, the sentence, the password once
     {
         const w = world();
-        const { app } = await open(w);
+        const { app, doc } = await open(w);
         await press(app, 'DDaveAdmin▾');
         await press(app, 'UsersAdmin only');
         w.replies['POST /admin/api/users/2/reset'] = { status: 200, json: { ok: true, password: 'Zr5HcJ9aNt7PvE2sQh4M', user: user(2, 'mia', 'moderator') } };
         w.calls.length = 0;
         await press(app, 'Reset password', 1);
+        same('reset: asks first, like Remove, and sends nothing', [texts(app, '.dlg h2'), texts(app, '.dlg .srcrow .nm'), texts(app, '.dlg .srcrow .sm'), texts(app, '.dlg .lead'), texts(app, '.dlg-foot button'), w.calls.length],
+            [['Reset this password?'], ['mia Moderator'], ['Last sign-in: yesterday'], ['A new password is made and you see it once. The old one stops working at once, and if they are signed in now, they are signed out.'], ['Cancel', 'Reset password'], 0]);
+        check('reset: the focus is on Cancel (the safe button)', doc.activeElement === button(app, 'Cancel')[0]);
+        await press(app, 'Cancel');
+        same('reset: Cancel sends nothing', [all(app, '.dlg').length, w.calls.length], [0, 0]);
+        await press(app, 'Reset password', 1);
+        doc.key('Escape');
+        await settle();
+        same('reset: Escape sends nothing', [all(app, '.dlg').length, w.calls.length], [0, 0]);
+        await press(app, 'Reset password', 1);
+        await press(app, 'Reset password', 4);
         same('reset: a POST to the user\'s route with the token', [w.calls[0].method, w.calls[0].url, w.calls[0].headers['X-Ants-Csrf']], ['POST', '/admin/api/users/2/reset', 'csrf-token-1']);
         same('reset: the box: heading, label, password, the sentence about signing out', [texts(app, '.dlg h2'), texts(app, '.once .ol'), texts(app, '.once code'), texts(app, '.dlg .ptnote')], [['New password for mia'], ['New password for mia'], ['Zr5HcJ9aNt7PvE2sQh4M'], ['The old password no longer works. If mia is signed in now, they are signed out.']]);
         await press(app, 'Done');
@@ -739,6 +767,7 @@ function noMarkup(label, app) {
         w.replies['POST /admin/api/users/1/reset'] = { status: 200, json: { ok: true, password: 'Qq5HcJ9aNt7PvE2sQh4M', user: user(1, 'Dave', 'admin') } };
         w.calls.length = 0;
         await press(app, 'Reset password', 0);
+        await press(app, 'Reset password', 4);
         same('reset of oneself: the box stays, the list is not asked for again', [texts(app, '.once code'), w.calls.map((c) => c.url)], [['Qq5HcJ9aNt7PvE2sQh4M'], ['/admin/api/users/1/reset']]);
         w.me = { status: 200, json: { signed_in: false } };
         await press(app, 'Done');
@@ -761,6 +790,17 @@ function noMarkup(label, app) {
         same('remove: asks first, and sends nothing', [texts(app, '.dlg h2'), texts(app, '.dlg .srcrow .nm'), texts(app, '.dlg .srcrow .sm'), texts(app, '.dlg .lead'), texts(app, '.dlg-foot button'), w.calls.length],
             [['Remove this user?'], ['mia Moderator'], ['Last sign-in: yesterday'], ['They can no longer sign in. This cannot be undone. Maps they approved stay approved.'], ['Cancel', 'Remove'], 0]);
         check('remove: the focus is on Cancel (the safe button)', doc.activeElement === button(app, 'Cancel')[0]);
+        {   // the Tab key stays in the box (the page asks the box for its buttons: a NodeList has no filter, so a strict list is the real thing)
+            const buttons = all(app, '.dlg-foot button');
+            const tabAt = (node, shift) => { node.focus(); return doc.key('Tab', { shiftKey: !!shift }); };
+            const fromLast = tabAt(buttons[1]);
+            check('remove: Tab from the last button goes to the first and is held', fromLast.prevented && doc.activeElement === buttons[0]);
+            const fromFirst = tabAt(buttons[0], true);
+            check('remove: Shift+Tab from the first button goes to the last and is held', fromFirst.prevented && doc.activeElement === buttons[1]);
+            doc.body.focus();
+            const fromBody = doc.key('Tab');
+            check('remove: Tab with the focus outside the box brings it in', fromBody.prevented && doc.activeElement === buttons[0]);
+        }
         await press(app, 'Cancel');
         same('remove: Cancel sends nothing', [all(app, '.dlg').length, w.calls.length], [0, 0]);
         await press(app, 'Remove', 1);
@@ -785,6 +825,23 @@ function noMarkup(label, app) {
         await press(app, 'Remove', 0);
         await press(app, 'Remove', 4);
         same('removing oneself: the session is over: the sign-in box', texts(app, 'h1'), ['Sign in']);
+    }
+    {   // the red note about a refused removal of the last Admin is old news once a user has been added
+        const w = world();
+        const { app } = await open(w);
+        await press(app, 'DDaveAdmin▾');
+        await press(app, 'UsersAdmin only');
+        w.replies['POST /admin/api/users/1/remove'] = { status: 409, json: { error: 'last_admin', message: 'x' } };
+        await press(app, 'Remove', 0);
+        await press(app, 'Remove', 4);
+        same('stale note: the refusal says it', texts(app, '.lastmsg').length, 1);
+        w.users.push(user(9, 'tom', 'admin'));
+        w.replies['POST /admin/api/users'] = { status: 201, json: { user: user(9, 'tom', 'admin', { has_not_chosen_password: true }), password: 'Wd4Tn8GpYe3XrC6bKm2F' } };
+        await press(app, 'Add user');
+        await type(app, '#add-user', 'tom');
+        await press(app, 'Create');
+        await press(app, 'Done');
+        same('stale note: a user was added: the note is gone, the new row is there', [texts(app, '.lastmsg').length, all(app, '.urow').length], [0, 5]);
     }
     {
         // the only user: the empty state of the picture
