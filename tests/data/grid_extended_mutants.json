@@ -56,8 +56,74 @@
   {
    "id": "hash_order_tile_at_classic_marker_collides_with_no_order",
    "file": "src/ants_sim/state_hash.cpp",
-   "old": "if (a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX && a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);",
+   "old": "if (rules != 0 && a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX && a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);",
    "new": ""
+  },
+  {
+   "id": "hash_order_tile_extra_byte_at_rules_0",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "if (rules != 0 && a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX",
+   "new": "(void)rules; if (a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX"
+  },
+  {
+   "id": "hash_order_tile_extra_byte_at_rules_1_only",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "if (rules != 0 && a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX",
+   "new": "if (rules == 1 && a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX"
+  },
+  {
+   "id": "hash_order_tile_extra_byte_not_at_rules_1",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "if (rules != 0 && a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX",
+   "new": "if (rules > 1 && a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX"
+  },
+  {
+   "id": "hash_order_tile_extra_byte_on_column_alone",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "kClassicNoOrderTileX && a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);",
+   "new": "kClassicNoOrderTileX) h.boolean(true);"
+  },
+  {
+   "id": "hash_order_tile_extra_byte_on_row_alone",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "if (rules != 0 && a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX && a.orig_order_tile.y",
+   "new": "if (rules != 0 && a.orig_order_tile.y"
+  },
+  {
+   "id": "hash_order_tile_extra_byte_on_column_or_row",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "kClassicNoOrderTileX && a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);",
+   "new": "kClassicNoOrderTileX || a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);"
+  },
+  {
+   "id": "hash_no_order_on_column_alone",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "const bool no_order = a.orig_order_tile.x == AntUnit::kNoOrderTileX && a.orig_order_tile.y == AntUnit::kNoOrderTileY;",
+   "new": "const bool no_order = a.orig_order_tile.x == AntUnit::kNoOrderTileX;"
+  },
+  {
+   "id": "hash_no_order_on_row_alone",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "const bool no_order = a.orig_order_tile.x == AntUnit::kNoOrderTileX && a.orig_order_tile.y == AntUnit::kNoOrderTileY;",
+   "new": "const bool no_order = a.orig_order_tile.y == AntUnit::kNoOrderTileY;"
+  },
+  {
+   "id": "hash_no_order_on_column_or_row",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "const bool no_order = a.orig_order_tile.x == AntUnit::kNoOrderTileX && a.orig_order_tile.y == AntUnit::kNoOrderTileY;",
+   "new": "const bool no_order = a.orig_order_tile.x == AntUnit::kNoOrderTileX || a.orig_order_tile.y == AntUnit::kNoOrderTileY;"
+  },
+  {
+   "id": "hash_marker_is_hashed_raw",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "h.tile(no_order ? TileCoord{AntUnit::kClassicNoOrderTileX, AntUnit::kClassicNoOrderTileY} : a.orig_order_tile);",
+   "new": "h.tile(a.orig_order_tile);"
+  },
+  {
+   "id": "hash_ant_reads_rules_0",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "hash_ant(h, *up, e.grid_.rules());",
+   "new": "hash_ant(h, *up, 0);"
   },
   {
    "id": "play_limits_allow_1025_rows",

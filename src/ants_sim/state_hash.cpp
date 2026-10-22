@@ -83,7 +83,7 @@ void hash_cell(Fnv& h, const TileCell& c) {
     h.boolean(c.static_solid);
 }
 
-void hash_ant(Fnv& h, const AntUnit& a) {
+void hash_ant(Fnv& h, const AntUnit& a, uint16_t rules) {
     h.u32(a.id);
     h.u8(a.player_id);
     h.u8(static_cast<uint8_t>(a.team));
@@ -151,11 +151,13 @@ void hash_ant(Fnv& h, const AntUnit& a) {
     h.u8(a.pause_saved_action);
     h.u8(a.pause_saved_dir);
     h.u8(a.orig_order);
-    // The "no order tile" marker is (-1, -1), outside every grid; it hashes as the original's (0x78, 0x5a) so that every map's hash stays what it always was,
-    // and an ant actually ordered to (0x78, 0x5a) on a wide and tall map mixes a byte in so the two states cannot collide.
+    // The "no order tile" marker is (-1, -1), outside every grid; it hashes as the original's (0x78, 0x5a), so a state with no order tile hashes as it always did.
+    // At rules 0 that is all: the tile (0x78, 0x5a) has always read as "no order" there (AntUnit::has_order_tile) and has always hashed as itself, so a rules-0 map of
+    // 91 or more rows and 121 or more columns whose ant holds that tile keeps the hash that it had before the marker moved. Only at rules 1, where (0x78, 0x5a) is a real
+    // target that differs from "none", does an ant that holds it mix one more byte in, so that the two states cannot collide.
     const bool no_order = a.orig_order_tile.x == AntUnit::kNoOrderTileX && a.orig_order_tile.y == AntUnit::kNoOrderTileY;
     h.tile(no_order ? TileCoord{AntUnit::kClassicNoOrderTileX, AntUnit::kClassicNoOrderTileY} : a.orig_order_tile);
-    if (a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX && a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);
+    if (rules != 0 && a.orig_order_tile.x == AntUnit::kClassicNoOrderTileX && a.orig_order_tile.y == AntUnit::kClassicNoOrderTileY) h.boolean(true);
     h.u8(a.home_state);
     h.u8(a.home_priority);
     h.u32(a.home_time_ms);
@@ -290,7 +292,7 @@ StateHash SimulationEngine::state_hash() const {
                 continue;
             }
             h.u8(1);
-            hash_ant(h, *up);
+            hash_ant(h, *up, e.grid_.rules());
         }
         h.size(e.occ_.size());
         for (const auto& c : e.occ_) {
