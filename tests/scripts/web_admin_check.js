@@ -725,12 +725,23 @@ function noMarkup(label, app) {
     // ---- Reset password: the box, the sentence, the password once
     {
         const w = world();
-        const { app } = await open(w);
+        const { app, doc } = await open(w);
         await press(app, 'DDaveAdmin▾');
         await press(app, 'UsersAdmin only');
         w.replies['POST /admin/api/users/2/reset'] = { status: 200, json: { ok: true, password: 'Zr5HcJ9aNt7PvE2sQh4M', user: user(2, 'mia', 'moderator') } };
         w.calls.length = 0;
         await press(app, 'Reset password', 1);
+        same('reset: asks first, like Remove, and sends nothing', [texts(app, '.dlg h2'), texts(app, '.dlg .srcrow .nm'), texts(app, '.dlg .srcrow .sm'), texts(app, '.dlg .lead'), texts(app, '.dlg-foot button'), w.calls.length],
+            [['Reset this password?'], ['mia Moderator'], ['Last sign-in: yesterday'], ['A new password is made and you see it once. The old one stops working at once, and if they are signed in now, they are signed out.'], ['Cancel', 'Reset password'], 0]);
+        check('reset: the focus is on Cancel (the safe button)', doc.activeElement === button(app, 'Cancel')[0]);
+        await press(app, 'Cancel');
+        same('reset: Cancel sends nothing', [all(app, '.dlg').length, w.calls.length], [0, 0]);
+        await press(app, 'Reset password', 1);
+        doc.key('Escape');
+        await settle();
+        same('reset: Escape sends nothing', [all(app, '.dlg').length, w.calls.length], [0, 0]);
+        await press(app, 'Reset password', 1);
+        await press(app, 'Reset password', 4);
         same('reset: a POST to the user\'s route with the token', [w.calls[0].method, w.calls[0].url, w.calls[0].headers['X-Ants-Csrf']], ['POST', '/admin/api/users/2/reset', 'csrf-token-1']);
         same('reset: the box: heading, label, password, the sentence about signing out', [texts(app, '.dlg h2'), texts(app, '.once .ol'), texts(app, '.once code'), texts(app, '.dlg .ptnote')], [['New password for mia'], ['New password for mia'], ['Zr5HcJ9aNt7PvE2sQh4M'], ['The old password no longer works. If mia is signed in now, they are signed out.']]);
         await press(app, 'Done');
@@ -739,6 +750,7 @@ function noMarkup(label, app) {
         w.replies['POST /admin/api/users/1/reset'] = { status: 200, json: { ok: true, password: 'Qq5HcJ9aNt7PvE2sQh4M', user: user(1, 'Dave', 'admin') } };
         w.calls.length = 0;
         await press(app, 'Reset password', 0);
+        await press(app, 'Reset password', 4);
         same('reset of oneself: the box stays, the list is not asked for again', [texts(app, '.once code'), w.calls.map((c) => c.url)], [['Qq5HcJ9aNt7PvE2sQh4M'], ['/admin/api/users/1/reset']]);
         w.me = { status: 200, json: { signed_in: false } };
         await press(app, 'Done');
@@ -785,6 +797,23 @@ function noMarkup(label, app) {
         await press(app, 'Remove', 0);
         await press(app, 'Remove', 4);
         same('removing oneself: the session is over: the sign-in box', texts(app, 'h1'), ['Sign in']);
+    }
+    {   // the red note about a refused removal of the last Admin is old news once a user has been added
+        const w = world();
+        const { app } = await open(w);
+        await press(app, 'DDaveAdmin▾');
+        await press(app, 'UsersAdmin only');
+        w.replies['POST /admin/api/users/1/remove'] = { status: 409, json: { error: 'last_admin', message: 'x' } };
+        await press(app, 'Remove', 0);
+        await press(app, 'Remove', 4);
+        same('stale note: the refusal says it', texts(app, '.lastmsg').length, 1);
+        w.users.push(user(9, 'tom', 'admin'));
+        w.replies['POST /admin/api/users'] = { status: 201, json: { user: user(9, 'tom', 'admin', { has_not_chosen_password: true }), password: 'Wd4Tn8GpYe3XrC6bKm2F' } };
+        await press(app, 'Add user');
+        await type(app, '#add-user', 'tom');
+        await press(app, 'Create');
+        await press(app, 'Done');
+        same('stale note: a user was added: the note is gone, the new row is there', [texts(app, '.lastmsg').length, all(app, '.urow').length], [0, 5]);
     }
     {
         // the only user: the empty state of the picture

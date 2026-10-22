@@ -807,14 +807,30 @@
                 }, function () { release(); toast('The server did not answer. Try again.'); });
             }
 
-            function askRemove(u) {
+            function userCard(u) {
                 var src = el('div', 'srcrow');
                 var info = el('div');
                 add(info, add(el('div', 'nm'), typed('span', null, u.name), doc.createTextNode(' '), el('span', 'tg ' + u.role, roleName(u.role))), el('div', 'sm', 'Last sign-in: ' + (u.last_login_at ? when(u.last_login_at, env.now()) : 'Never')));
                 add(src, info);
+                return src;
+            }
+
+            function askRemove(u) {
                 var cancel = button('Cancel', 'ghost', closeModal);
                 var go = button('Remove', 'bad big', function () { closeModal(); act(u, 'remove'); });
-                openModal('Remove this user?', [src, el('div', 'lead', 'They can no longer sign in. This cannot be undone. Maps they approved stay approved.')], [cancel, go], cancel);
+                openModal('Remove this user?', [userCard(u), el('div', 'lead', 'They can no longer sign in. This cannot be undone. Maps they approved stay approved.')], [cancel, go], cancel);
+            }
+
+            // (a reset ends the person's sessions and gives them a new password: asked first, like Remove, so that one click by mistake changes nothing)
+            function askReset(u) {
+                var cancel = button('Cancel', 'ghost', closeModal);
+                var go = button('Reset password', 'bad big', function () {
+                    closeModal();
+                    act(u, 'reset', function (j) {
+                        showPassword('New password for ' + u.name, null, 'New password for ', u.name, j.password, add(el('div', 'ptnote'), doc.createTextNode('The old password no longer works. If '), typed('b', null, u.name), doc.createTextNode(' is signed in now, they are signed out.')), u.you ? start : null);
+                    });
+                });
+                openModal('Reset this password?', [userCard(u), el('div', 'lead', 'A new password is made and you see it once. The old one stops working at once, and if they are signed in now, they are signed out.')], [cancel, go], cancel);
             }
 
             function askAdd() {
@@ -851,6 +867,7 @@
                         if (r.status === 201) {
                             var made = r.json.user;
                             var password = r.json.password;
+                            st.notice = null;                                   // (the note about a refused removal of the last Admin is old news once a user is added)
                             closeModal();
                             load();
                             showPassword('User created', add(el('div', 'okline'), doc.createTextNode('✓ The ' + roleName(made.role) + ' account '), typed('b', null, made.name), doc.createTextNode(' was created.')), 'Starting password for ', made.name, password, null);
@@ -876,11 +893,7 @@
                 var ul = el('div', 'ul');
                 add(ul, el('span', 'k', 'Last sign-in: '), doc.createTextNode(u.last_login_at ? when(u.last_login_at, env.now()) : 'Never'));
                 var ua = el('div', 'ua');
-                add(ua, button('Reset password', 'sm', function () {
-                    act(u, 'reset', function (j) {
-                        showPassword('New password for ' + u.name, null, 'New password for ', u.name, j.password, add(el('div', 'ptnote'), doc.createTextNode('The old password no longer works. If '), typed('b', null, u.name), doc.createTextNode(' is signed in now, they are signed out.')), u.you ? start : null);
-                    });
-                }));
+                add(ua, button('Reset password', 'sm', function () { askReset(u); }));
                 add(ua, button(u.disabled ? 'Enable' : 'Disable', 'sm', function () { act(u, u.disabled ? 'enable' : 'disable'); }));
                 add(ua, button('Remove', 'sm bad', function () { askRemove(u); }));
                 add(r, left, add(el('div'), el('span', 'tg ' + u.role, roleName(u.role))), ul, add(el('div'), el('span', 'tg ' + (u.disabled ? 'disabled' : 'active'), u.disabled ? 'Disabled' : 'Active')), ua);
