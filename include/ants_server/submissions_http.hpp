@@ -29,6 +29,13 @@ struct SubmissionApiConfig {
     size_t checks_per_address_window{2};     // ... of which one address may use this many (an address that has used them is told busy and costs the others nothing)
     uint32_t check_window_ms{10000};
     uint32_t check_budget_ms{1500};          // the time that checking maps may take in one window: the server's one thread also runs the matches, so a window that has used it up answers 503 busy
+    // The test maps of the Map Maker (POST /submissions?test=1) have limits of their own, so that nobody can use up the real submissions' allowance with them, and they cannot flush the store of test maps or fill the
+    // server's thread: an address may send this many in an hour, all addresses together this many, and their checks have a window (the same length) and a time budget of their own, smaller than the real one.
+    size_t test_attempts_per_hour{30};
+    size_t test_total_per_hour{120};
+    size_t test_checks_per_window{2};
+    size_t test_checks_per_address_window{1};
+    uint32_t test_check_budget_ms{600};
 };
 
 class SubmissionApi {
@@ -40,6 +47,8 @@ public:
 
     /// Called after the set of approved maps changed (an approval, a take-down, a put-back), so that the lobby's list follows
     void set_on_approved_changed(std::function<void()> fn) { on_approved_changed_ = std::move(fn); }
+    /// Called after the set of test maps changed (a test map came in, or one was dropped to make room): the lobby's test maps follow, and the approved maps are not read again
+    void set_on_test_changed(std::function<void()> fn) { on_test_changed_ = std::move(fn); }
 
     /// The limit on the body of a request, asked on its head: 512 KB for a Classic map, 4 MiB for an Extended one, a few KB for anything else (DoorOptions::body_limit)
     static size_t body_limit(const ctl::HttpRequest& head);
@@ -68,19 +77,29 @@ private:
     std::string clear_cookie() const;
     std::string csrf_for(const std::string& nonce, const User& user) const;
     Actor actor_of(const Session& who, const ctl::HttpRequest& request) const;
+    /// The checking window of one kind of upload: how many maps and how much time the checks of the window may take, for all addresses and for one
+    struct CheckWindow {
+        bool started{false};
+        uint32_t start_ms{0};
+        size_t count{0};
+        uint32_t spent_ms{0};
+        std::map<std::string, size_t> by_address;               // address identity -> the checks it used in this window (at most `per_window` entries)
+    };
     bool address_allowed(const std::string& identity, int64_t now_s);
-    bool check_window_open(uint32_t now_ms, const std::string& identity);
+    bool test_allowed(const std::string& identity, int64_t now_s);
+    bool check_window_open(CheckWindow& window, uint32_t now_ms, const std::string& identity, size_t per_window, size_t per_address, uint32_t budget_ms);
+    ctl::HttpResponse submit_test(const ctl::HttpRequest& request, const std::string& identity, int64_t now_s, uint32_t now_ms);
 
     SubmissionStore& store_;
     AdminAccounts& accounts_;
     SubmissionApiConfig config_;
     std::function<void()> on_approved_changed_;
+    std::function<void()> on_test_changed_;
     std::map<std::string, std::vector<int64_t>> attempts_;      // address identity -> the seconds of its recent POSTs
-    uint32_t window_start_ms_{0};
-    size_t window_count_{0};
-    std::map<std::string, size_t> window_by_address_;           // address identity -> the checks it used in this window (at most checks_per_window entries)
-    uint32_t window_spent_ms_{0};
-    bool window_started_{false};
+    CheckWindow window_;                                        // the checks of real submissions
+    CheckWindow test_window_;                                   // the checks of test maps
+    std::map<std::string, std::vector<int64_t>> test_attempts_;      // address identity -> the seconds of its recent test uploads
+    std::vector<int64_t> test_all_;                             // ... and of all addresses together
 };
 
 /// The address that a request counts under: the proxy's header when trusted and well formed, else the connection's. An IPv4-mapped IPv6 address is its IPv4 address; any other IPv6 address

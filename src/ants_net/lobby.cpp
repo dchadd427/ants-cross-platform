@@ -777,7 +777,9 @@ void HostLobby::update(uint32_t now_ms) {
                 break;
             }
         }
-        events_.push_back(Event{Event::Type::LoadFailed, slow});
+        Event late{Event::Type::LoadFailed, slow};
+        late.timed_out = true;
+        events_.push_back(late);
         cancel_with(CancelMsg::Reason::LoadFailed, slow);
     }
     if (cfg_.lobby_room && phase_ == Phase::Room) expire_orphans(now_ms);

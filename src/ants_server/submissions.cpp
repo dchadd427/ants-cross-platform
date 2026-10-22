@@ -16,6 +16,7 @@
 #include "ants_server/map_names.hpp"
 #include "ants_server/map_preview.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/online_limits.hpp"
 #include "ants_server/secret.hpp"
 
 namespace fs = std::filesystem;
@@ -61,6 +62,21 @@ uint32_t version_word(const std::string& bytes) {
     if (bytes.size() < 4) return 0;
     const auto b = [&](size_t i) { return static_cast<uint32_t>(static_cast<unsigned char>(bytes[i])); };
     return b(0) | (b(1) << 8) | (b(2) << 16) | (b(3) << 24);
+}
+
+// The cheap refusals that a real submission and a test map share: the file is a map of version 8 (Classic) or 9 (Extended), and it is the kind that the request says
+bool kind_of_file(const std::string& claimed, const std::string& bytes, std::string& real_kind, Failure& why) {
+    const uint32_t version = version_word(bytes);
+    if (version != 8 && version != 9) {
+        why = make_failure(400, "not_a_map", "This file is not an Ants map.");
+        return false;
+    }
+    real_kind = version == 9 ? "extended" : "classic";
+    if (real_kind != claimed) {
+        why = make_failure(400, "kind_mismatch", "The file is not the kind of map that the request says.");
+        return false;
+    }
+    return true;
 }
 
 Submission read_row(db::Statement& st) {
@@ -151,6 +167,8 @@ bool SubmissionStore::open(int64_t now, std::string& why) {
     }
     ec.clear();
     fs::create_directories(fs::path(config_.dir) / "test", ec);
+    fs::permissions(fs::path(config_.dir) / "test", fs::perms::owner_all, fs::perm_options::replace, ec);          // (0700: the test maps are for the server's user only; a folder that was made by an earlier version is tightened too)
+    ec.clear();
     for (fs::directory_iterator it(fs::path(config_.dir) / "test", ec), end; !ec && it != end; it.increment(ec)) remove_quietly(it->path().string());
     test_maps_.clear();
     db::Statement st;
@@ -299,10 +317,8 @@ SubmitOutcome SubmissionStore::submit(const SubmitInput& in, int64_t now) {
     if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return refuse(503, "storage_full", "The server has no room for more maps right now. Please try again later.");
 
     // the cheap refusals first (they cost no checking, so they use none of the checking window that every other sender shares): the kind comes from the version word of the file
-    const uint32_t version = version_word(in.bytes);
-    if (version != 8 && version != 9) return refuse(400, "not_a_map", "This file is not an Ants map.");
-    const std::string real_kind = version == 9 ? "extended" : "classic";
-    if (real_kind != in.kind) return refuse(400, "kind_mismatch", "The file is not the kind of map that the request says.");
+    std::string real_kind;
+    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;
     if (in.allow_check && !in.allow_check()) return refuse(503, "busy", "The server is busy checking other maps. Please try again in a minute.");
 
     // the check: the real one, whatever the sender says
@@ -667,7 +683,17 @@ std::vector<ApprovedMap> SubmissionStore::approved_maps() {
         a.description = s.description;
         a.maker = s.maker;
         a.kind = s.kind;
-        if (!net::hash_file(a.path, a.hash)) {
+        // The hash of a file is made once: an approved file never changes, and this list is made at every approval and take-down, and at the start, on the one thread that also runs the matches. A file that has
+        // another size or time than when it was hashed is hashed again.
+        std::error_code ec;
+        const uint64_t size_now = fs::file_size(a.path, ec);
+        const int64_t time_now = ec ? 0 : static_cast<int64_t>(fs::last_write_time(a.path, ec).time_since_epoch().count());
+        const auto cached = hash_cache_.find(a.path);
+        if (!ec && cached != hash_cache_.end() && cached->second.size == size_now && cached->second.mtime == time_now) {
+            a.hash = cached->second.hash;
+        } else if (net::hash_file(a.path, a.hash)) {
+            if (!ec) hash_cache_[a.path] = CachedHash{size_now, time_now, a.hash};
+        } else {
             notices_.push_back("submissions: the file of an approved map cannot be read, so it is not listed");
             continue;
         }
@@ -766,7 +792,7 @@ void SubmissionStore::prune_test_maps(int64_t now) {
         if (now - it->created_at >= kTestMapTtlS) {
             remove_quietly(it->map.path);
             it = test_maps_.erase(it);
-            approved_changed_ = true;
+            test_changed_ = true;
         } else {
             ++it;
         }
@@ -779,6 +805,26 @@ std::vector<ApprovedMap> SubmissionStore::test_maps(int64_t now) {
     out.reserve(test_maps_.size());
     for (const KeptTestMap& m : test_maps_) out.push_back(m.map);
     return out;
+}
+
+bool SubmissionStore::take_test_changed() {
+    const bool changed = test_changed_;
+    test_changed_ = false;
+    return changed;
+}
+
+// Drops the oldest test map that may go: one that has been kept for kTestMinKeepS and that no room uses (of `only_owner` when that is not empty). False when there is none.
+bool SubmissionStore::drop_oldest_test_map(int64_t now, const std::string& only_owner) {
+    for (auto it = test_maps_.begin(); it != test_maps_.end(); ++it) {
+        if (!only_owner.empty() && it->owner != only_owner) continue;
+        if (now - it->created_at < kTestMinKeepS) continue;
+        if (test_in_use_ && test_in_use_(it->map.name)) continue;
+        remove_quietly(it->map.path);
+        test_maps_.erase(it);
+        test_changed_ = true;
+        return true;
+    }
+    return false;
 }
 
 TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t now) {
@@ -795,15 +841,28 @@ TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t no
     const fs::space_info space = fs::space(fs::path(config_.dir), ec);
     if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return refuse(503, "storage_full", "The server has no room for more maps right now. Please try again later.");
 
-    const uint32_t version = version_word(in.bytes);
-    if (version != 8 && version != 9) return refuse(400, "not_a_map", "This file is not an Ants map.");
-    const std::string real_kind = version == 9 ? "extended" : "classic";
-    if (real_kind != in.kind) return refuse(400, "kind_mismatch", "The file is not the kind of map that the request says.");
+    std::string real_kind;
+    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;
     if (in.allow_check && !in.allow_check()) return refuse(503, "busy", "The server is busy checking other maps. Please try again in a minute.");
 
+    // What is kept is the CANONICAL file, as for a real submission: the core's rewrite of the map, checked again, never the bytes that came (trailing bytes, unknown blocks, anything the rewrite drops, are gone)
     const auto* data = reinterpret_cast<const uint8_t*>(in.bytes.data());
-    const core::Result checked = core::check_map(data, in.bytes.size(), core::Profile::Extended);
-    const core::Result info = core::read_report(data, in.bytes.size(), core::Profile::Extended);
+    const auto size_fits = [&](int64_t rows, int64_t columns) {
+        return real_kind == "extended" ? (rows >= 1 && columns >= 1 && rows <= 1024 && columns <= 1024 && rows * columns <= 262144) : (rows >= 1 && columns >= 1 && rows <= 90 && columns <= 256);
+    };
+    const core::Result rewritten = core::rewrite(data, in.bytes.size(), core::Profile::Extended);
+    if (rewritten.status != 0 || rewritten.payload.empty()) {          // (the core writes no map that is bigger than its kind: say so, as the check does, when that is the reason)
+        const core::Result first = core::read_report(data, in.bytes.size(), core::Profile::Extended);
+        JsonValue first_meta;
+        if (first.status == 0 && parse_big_json(first.payload, first_meta) && first_meta.get("loaded").as_bool_or(false) && !size_fits(first_meta.get("rows").as_int_or(0), first_meta.get("columns").as_int_or(0))) {
+            return refuse(422, "map_too_big", "This map is bigger than a map of this kind may be.");
+        }
+        return refuse(400, "not_a_map", "This file could not be read as an Ants map.");
+    }
+    const std::string& canonical = rewritten.payload;
+    const auto* kept = reinterpret_cast<const uint8_t*>(canonical.data());
+    const core::Result checked = core::check_map(kept, canonical.size(), core::Profile::Extended);
+    const core::Result info = core::read_report(kept, canonical.size(), core::Profile::Extended);
     JsonValue report;
     JsonValue meta;
     if (checked.status != 0 || info.status != 0 || !parse_big_json(checked.payload, report) || !parse_big_json(info.payload, meta) ||
@@ -812,13 +871,14 @@ TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t no
     }
     const int64_t rows = meta.get("rows").as_int_or(0);
     const int64_t columns = meta.get("columns").as_int_or(0);
-    const bool size_ok = real_kind == "extended" ? (rows >= 1 && columns >= 1 && rows <= 1024 && columns <= 1024 && rows * columns <= 262144)
-                                                 : (rows >= 1 && columns >= 1 && rows <= 90 && columns <= 256);
-    if (!size_ok) {
+    if (!size_fits(rows, columns)) {
         out.fail = make_failure(422, "map_too_big", "This map is bigger than a map of this kind may be.");
         out.fail.extra = JsonValue::make_object();
         out.fail.extra.set("findings", kept_findings(report));
         return out;
+    }
+    if (!OnlineLimits::allows(static_cast<uint64_t>(rows * columns))) {          // (it is a good map: it can be played here against bots, not by a room)
+        return refuse(422, "map_too_big_online", "This map is too big to play online yet (65,536 cells at most, like 256 x 256). You can still play it against bots on this computer.");
     }
     const JsonValue& findings = report.get("findings");
     bool team_bad[4] = {false, false, false, false};
@@ -869,21 +929,28 @@ TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t no
     const names::Cleaned cleaned = names::clean_map_name(filtered);
     const std::string stem = cleaned.ok && cleaned.text.size() <= kMaxTestStemChars ? cleaned.text : std::string("Test Map");
 
+    // Room for it: the maps that are too old go; then an address that holds its share drops its own oldest, and a full store drops the oldest of all. A map that a room uses, or that is new, never goes: when nothing can,
+    // the upload is refused (so a burst of uploads cannot push out the map of a room that has not pressed START yet).
     prune_test_maps(now);
+    size_t mine = 0;
+    for (const KeptTestMap& m : test_maps_) mine += m.owner == in.address ? 1u : 0u;
+    while (!in.address.empty() && mine >= kMaxTestPerAddress) {
+        if (!drop_oldest_test_map(now, in.address)) return refuse(429, "test_limit", "You have as many test maps open as you may. Please try again in a few minutes.");
+        --mine;
+    }
     while (test_maps_.size() >= kMaxTestMaps) {
-        remove_quietly(test_maps_.front().map.path);
-        test_maps_.erase(test_maps_.begin());
-        approved_changed_ = true;
+        if (!drop_oldest_test_map(now, std::string())) return refuse(503, "test_full", "The server holds as many test maps as it can right now. Please try again in a few minutes.");
     }
     uint8_t id_raw[4];
     if (!random_bytes(id_raw, sizeof id_raw)) return refuse(503, "storage_error", "The server could not save this just now. Please try again later.");
     const std::string id8 = hex_encode(std::string(reinterpret_cast<const char*>(id_raw), sizeof id_raw));
     const fs::path test_dir = fs::path(config_.dir) / "test";
     fs::create_directories(test_dir, ec);
+    fs::permissions(test_dir, fs::perms::owner_all, fs::perm_options::replace, ec);
     const std::string path = (test_dir / ("test-" + id8 + ".lvl")).string();
     {
         std::ofstream file(path, std::ios::binary | std::ios::trunc);
-        file.write(in.bytes.data(), static_cast<std::streamsize>(in.bytes.size()));
+        file.write(canonical.data(), static_cast<std::streamsize>(canonical.size()));
         file.flush();
         if (!file) {
             file.close();
@@ -891,6 +958,7 @@ TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t no
             return refuse(503, "storage_full", "The server has no room for more maps right now. Please try again later.");
         }
     }
+    fs::permissions(path, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, ec);          // (0600)
     uint64_t hash = 0;
     if (!net::hash_file(path, hash)) {
         remove_quietly(path);
@@ -900,15 +968,15 @@ TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t no
     m.name = stem + " ~test-" + id8 + ".lvl";
     m.path = path;
     m.hash = hash;
-    m.size = in.bytes.size();
+    m.size = canonical.size();
     m.width = static_cast<uint32_t>(columns);
     m.height = static_cast<uint32_t>(rows);
     m.minutes = static_cast<uint32_t>(meta.get("minutes").as_int_or(0));
     m.players = static_cast<uint32_t>(players);
     m.description = names::clean_description(meta.get("description").str());
     m.kind = real_kind;
-    test_maps_.push_back(KeptTestMap{m, now});
-    approved_changed_ = true;
+    test_maps_.push_back(KeptTestMap{m, now, in.address});
+    test_changed_ = true;
     out.ok = true;
     out.map = std::move(m);
     out.clean_name = stem;

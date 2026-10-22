@@ -33,6 +33,16 @@ net::RejectReason answer_of(World& w, Client& c) {
     return c.lobby->phase() == net::ClientLobby::Phase::Rejected ? c.lobby->reject_reason() : static_cast<net::RejectReason>(0);
 }
 
+// What the room says to its leader for each START that one game cannot load the map of (a Classic map here): whose game it is, and how to start without them - `times` times over
+std::vector<std::string> stale_lines(const std::string& who, size_t times) {
+    std::vector<std::string> lines;
+    for (size_t i = 0; i < times; ++i) {
+        lines.push_back("255||" + who + "'s game could not load this map.");
+        lines.push_back("255||To start without " + who + ", press Remove on their color.");
+    }
+    return lines;
+}
+
 // How many lobby rooms wait on the server
 size_t waiting_lobbies(World& w) {
     size_t n = 0;
@@ -857,21 +867,21 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(pia_game.lobby->request_start());
         w.run(2500);                                                                      // the third (the last that costs two seconds)
         ASSERT_MSG(waits_open(), "after the third cancel");
-        ASSERT_TRUE(said(pia_game.room_chat).empty());                                    // (a cancel is no notice of the room's: the players see the Cancel message)
+        ASSERT_EQ(said(pia_game.room_chat), stale_lines("Bob", 3));                       // (each cancel names the game that could not load the map, and how to start without it: the players also see the Cancel message)
         ASSERT_TRUE(pia_game.lobby->request_start());
         w.run(2500);                                                                      // the fourth: the pause is a minute now
         ASSERT_MSG(waits_open(), "after the fourth cancel");
-        ASSERT_TRUE(said(pia_game.room_chat).empty());
+        ASSERT_EQ(said(pia_game.room_chat), stale_lines("Bob", 4));
         ASSERT_TRUE(pia_game.lobby->request_start());                                     // asked for in the long pause: the leader is told at once and the request does not stand
         w.run(300);
         ASSERT_MSG(waits_open(), "a START in the long pause");
         ASSERT_TRUE(!pia_game.lobby->room().starting());
-        ASSERT_EQ(said(pia_game.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeStartsFailed}));
+        ASSERT_EQ(said(pia_game.room_chat), stale_lines("Bob", 5));                       // (whose game it is, not only that the match could not start a few times in a row: nobody is blocked without a word)
         w.run(30000);
         ASSERT_TRUE(pia_game.lobby->request_start());                                     // 30 s into the pause: still told, still not standing
         w.run(300);
         ASSERT_MSG(waits_open(), "a START 30 s into the long pause");
-        ASSERT_EQ(said(pia_game.room_chat).size(), size_t{2});
+        ASSERT_EQ(said(pia_game.room_chat), stale_lines("Bob", 6));
         w.run(31000);                                                                     // the minute is over
         bob_game.fail_load = false;                                                       // the game can load now
         ASSERT_TRUE(pia_game.lobby->request_start());
@@ -893,7 +903,7 @@ void run_lobby_room_tests() {
             }
             ASSERT_TRUE(ann_game.lobby->request_start());
             f.run(300);
-            ASSERT_EQ(said(ann_game.room_chat).size(), size_t{1});                         // (the minute is on: it was answered)
+            ASSERT_EQ(said(ann_game.room_chat), stale_lines("Cat", 5));                    // (the minute is on: it was answered, with the name)
             f.run((forgets ? 15u : 14u) * 60u * 1000u);                                   // fifteen minutes without a cancel (or fourteen)
             ASSERT_TRUE(ann_game.lobby->request_start());
             f.run(400);                                                                   // the start is tried and cancelled: the first of a new count when forgotten (the pause is two seconds), else one more of the count
@@ -901,10 +911,10 @@ void run_lobby_room_tests() {
             f.run(300);
             if (forgets) {
                 ASSERT_TRUE(f.status("retr0002").starting && ann_game.lobby->room().starting());      // it stands: the pause is short
-                ASSERT_EQ(said(ann_game.room_chat).size(), size_t{1});                     // (no new notice)
+                ASSERT_EQ(said(ann_game.room_chat), stale_lines("Cat", 6));                // (the cancel of the new count said whose game it was: nothing else new)
             } else {
                 ASSERT_TRUE(!f.status("retr0002").starting && !ann_game.lobby->room().starting());     // the pause is a minute: told at once, and it does not stand
-                ASSERT_EQ(said(ann_game.room_chat).size(), size_t{2});
+                ASSERT_EQ(said(ann_game.room_chat), stale_lines("Cat", 7));
             }
         }
     } TEST_END();
@@ -1069,7 +1079,7 @@ void run_lobby_room_tests() {
                 }
                 ASSERT_TRUE(pia_game.lobby->request_start());
                 w.run(300);
-                ASSERT_MSG(said(pia_game.room_chat) == (std::vector<std::string>{std::string("255||") + net::kNoticeStartsFailed}), "the notice of the long pause" + at);
+                ASSERT_MSG(said(pia_game.room_chat) == stale_lines("Bob", 5), "the notice of the long pause" + at);
                 w.run(62000);
                 bob_game.fail_load = false;
                 ASSERT_TRUE(pia_game.lobby->request_start());

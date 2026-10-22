@@ -207,6 +207,7 @@ struct Client {
     sim::SimulationEngine sim;
     std::unique_ptr<net::ClientSession> session;
     bool fail_load{false};
+    std::string map_folder;                  // a machine of the newest version: it reads the maps of this folder instead of the shipped ones, and Extended maps too (the default machine is an older one: it loads Classic maps only)
     bool asleep{false};                      // the machine is asleep: its link is open and it says nothing (nothing of it runs)
     bool record_hashes{false};               // the state hash after every tick that the session runs, by tick (compared with the referee's at the end)
     std::map<uint64_t, uint64_t> hash_at;
@@ -249,7 +250,8 @@ struct Client {
                 const net::StartMsg& s = lobby->start_info();
                 assets::LevelData level;
                 uint64_t hash = 0;
-                const bool ok = !fail_load && level.load_from_file(maps + "/" + s.map_name) && net::hash_file(maps + "/" + s.map_name, hash) && hash == s.map_hash;
+                const std::string& folder = map_folder.empty() ? maps : map_folder;
+                const bool ok = !fail_load && level.load_from_file(folder + "/" + s.map_name, nullptr, map_folder.empty() ? assets::LevelLimits{} : assets::LevelLimits::for_play_extended()) && net::hash_file(folder + "/" + s.map_name, hash) && hash == s.map_hash;
                 if (ok) {
                     sim.set_fog_of_war_enabled(s.fog);
                     sim.set_game_mode(s.game_mode());                         // (the mode of the Start, before the first init: what the application does)
@@ -314,6 +316,7 @@ struct World {
     uint8_t next_kind{net::kClientGame};                                    // the client kind of the next connect()'s Hello (protocol 16), and the key it shows: connect_page and connect_game set them for one call
     net::SeatKey next_key{};
     bool next_fail_load{false};                                             // the next connect()'s machine cannot load the map (connect_game sets it for one call)
+    std::string next_map_folder;                                            // the next connect()'s machine is one of the newest version with this folder of maps (see Client::map_folder)
 
     Client& connect(const std::string& name, const std::string& room, uint8_t seat = 255, net::LoopbackNetwork::Link link = {20, 10}, Throttled** throttle = nullptr) {
         auto ends = net.connect(link);
@@ -328,6 +331,7 @@ struct World {
         c.kind = next_kind;
         c.key = next_key;
         c.fail_load = next_fail_load;
+        c.map_folder = next_map_folder;
         c.server_end = ends.first;
         net::Connection* end = ends.second;
         if (throttle != nullptr) {
@@ -358,12 +362,14 @@ struct World {
         return c;
     }
     // A game that takes the seat of a page over (or of a game whose link was lost) with the seat's key, as the page's own game does
-    Client& connect_game(const std::string& name, const std::string& room, const net::SeatKey& key, bool cannot_load = false) {
+    Client& connect_game(const std::string& name, const std::string& room, const net::SeatKey& key, bool cannot_load = false, const std::string& map_folder = std::string()) {
         next_key = key;
+        next_map_folder = map_folder;
         next_fail_load = cannot_load;                                        // (a machine that cannot load the map: it must say so to the very first Start, which the 100 ms below can bring)
         Client& c = connect(name, room);
         next_key = net::SeatKey{};
         next_fail_load = false;
+        next_map_folder.clear();
         run(100);
         return c;
     }
@@ -1426,6 +1432,7 @@ void run_secret_tests();
 void run_reconnect_tests();
 void run_bot_tests();
 void run_countdown_tests();
+void run_online_limit_tests();
 void run_persist_tests();
 void run_persist_server_tests();
 void run_persist_server_tests_2();

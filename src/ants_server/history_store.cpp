@@ -714,6 +714,15 @@ HistoryFeeder::HistoryFeeder(HistoryStore& history, const ReplayStore& replays, 
     }
 }
 
+// The map of a recording: an approved map of the players (a file of the submissions folder under a name of its own), else the maps folder and the community folder
+bool HistoryFeeder::load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const {
+    if (approved_path_) {
+        const std::string path = approved_path_(head.map_name);
+        if (!path.empty()) return replay::load_map_file(head, path, level, why);
+    }
+    return replay::load_map(head, map_dirs_, level, why);
+}
+
 void HistoryFeeder::skip(const std::string& id, const std::string& why) {
     skipped_.insert(id);
     if (++skip_lines_ <= kMaxSkipLines) history_.report("history: " + id + " is not counted: " + why);
@@ -761,7 +770,7 @@ bool HistoryFeeder::work(const std::string& file) {
         skip(id, replay::rules_refusal(rep.head));
         return true;
     }
-    if (!replay::load_map(rep.head, map_dirs_, level, why)) {
+    if (!load_level(rep.head, level, why)) {
         skip(id, why);
         return true;
     }
@@ -829,7 +838,7 @@ bool HistoryFeeder::backfill(const std::string& file) {
         for_now = true;
     } else if (!replay::decode(bytes.data(), bytes.size(), rep, why)) why = "the recording cannot be read: " + why;
     else if (!replay::plays_here(rep.head)) why = replay::rules_refusal(rep.head);
-    else if (!replay::load_map(rep.head, map_dirs_, level, why)) for_now = true;
+    else if (!load_level(rep.head, level, why)) for_now = true;
     else {
         try {
             const replay::StatsPlay played = replay::play_with_stats(rep, level);

@@ -61,6 +61,11 @@ bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::
         error = "the map " + head.map_name + " is not in " + where + " (the replay needs it; --maps-dir says where the maps are)";
         return false;
     }
+    return load_map_file(head, path, level, error);
+}
+
+bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error) {
+    error.clear();
     uint64_t hash = 0;
     if (!net::hash_file(path, hash)) {
         error = "the map file " + path + " cannot be read";

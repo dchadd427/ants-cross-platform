@@ -12,6 +12,7 @@
 #include "ants_net/netgame.hpp"      // hash_file
 #include "ants_net/protocol.hpp"     // valid_map_name
 #include "ants_server/history_store.hpp"
+#include "ants_server/online_limits.hpp"
 
 namespace fs = std::filesystem;
 
@@ -300,27 +301,55 @@ const ApprovedMap* MapStore::test_map(const std::string& file_name) const {
     return nullptr;
 }
 
+namespace {
+uint64_t cells_in(uint32_t width, uint32_t height) { return static_cast<uint64_t>(width) * height; }
+}  // namespace
+
 std::string MapStore::listed_name(const std::string& name) const {
     for (const MapListing& m : listing_) {
         if (m.file == name) return m.file;
     }
     const std::string folded = lower(name);
     for (const MapListing& m : extended_listing_) {
-        if (m.file == name) return m.file;
+        if (m.file == name && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (t.name == name) return t.name;
+        if (t.name == name && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;
     }
     for (const MapListing& m : listing_) {
         if (lower(m.file) == folded) return m.file;
     }
     for (const MapListing& m : extended_listing_) {
-        if (lower(m.file) == folded) return m.file;
+        if (lower(m.file) == folded && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (lower(t.name) == folded) return t.name;
+        if (lower(t.name) == folded && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;
     }
     return std::string();
+}
+
+bool MapStore::too_big_online(const std::string& name) const {
+    const std::string folded = lower(name);
+    for (const MapListing& m : extended_listing_) {
+        if (lower(m.file) == folded && !OnlineLimits::allows(cells_in(m.width, m.height))) return true;
+    }
+    for (const ApprovedMap& t : test_maps_) {
+        if (lower(t.name) == folded && !OnlineLimits::allows(cells_in(t.width, t.height))) return true;
+    }
+    return false;
+}
+
+uint64_t MapStore::cells_of(const std::string& name) const {
+    for (const MapListing& m : listing_) {
+        if (m.file == name) return cells_in(m.width, m.height);
+    }
+    for (const MapListing& m : extended_listing_) {
+        if (m.file == name) return cells_in(m.width, m.height);
+    }
+    for (const ApprovedMap& t : test_maps_) {
+        if (t.name == name) return cells_in(t.width, t.height);
+    }
+    return 0;
 }
 
 std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_extended) const {
@@ -349,6 +378,7 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_ex
         if (m.original) o.set("original", ctl::JsonValue::make_bool(true));
         if (m.approved) o.set("maker", ctl::JsonValue::make_string(m.maker));
         if (with_extended) o.set("kind", ctl::JsonValue::make_string(m.kind));
+        if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height))) o.set("online", ctl::JsonValue::make_bool(false));       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)
         maps.push_back(std::move(o));
     }
     ctl::JsonValue root = ctl::JsonValue::make_object();

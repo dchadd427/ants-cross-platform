@@ -17,8 +17,10 @@
 //                                                            a new map of plain ground, R x C (1 to 256 each), its dictionary by the rule of the original maps (names from ants.chd)
 //   lvl_tool blank OUT --extended --rows R --columns C [--chd FILE]
 //                                                            a new Extended map (version 9) of plain ground: at most 1,024 a side and 262,144 cells (LevelLimits::for_extended_maps)
-//   lvl_tool convert FILE --to extended|classic -o OUT       a COPY of the map as an Extended map (always) or a Classic map (when it fits; else the reasons are listed and nothing is
-//                                                            written); FILE is kept, OUT must be another file
+//   lvl_tool convert FILE --to extended|classic -o OUT [--rows R --columns C]
+//                                                            a COPY of the map as an Extended map (always) or a Classic map (when it fits; else the reasons are listed and nothing is
+//                                                            written); FILE is kept, OUT must be another file. With --rows and --columns (Extended only) the copy is grown to
+//                                                            that size by plain ground at the right and below: a big map that works, for the tests of the server and the site
 //       --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15)
 //       --new-map      hold the file to the limits of a new Classic map (LevelLimits::for_new_maps): at most 90 rows, 130 columns and 10,000 cells, a file of at most 512 KB is read and
 //                      a canonical file of at most 144 KB written
@@ -46,6 +48,7 @@
 #include <vector>
 
 #include "ants_assets/lvl_checker.hpp"
+#include "ants_assets/lvl_core.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_test_paths.hpp"
@@ -64,7 +67,7 @@ void usage(std::ostream& out) {
            "       lvl_tool rewrite IN OUT [--roster MASK] [--new-map]\n"
            "       lvl_tool blank OUT --rows R --columns C [--chd FILE] [--new-map]\n"
            "       lvl_tool blank OUT --extended --rows R --columns C [--chd FILE]\n"
-           "       lvl_tool convert FILE --to extended|classic -o OUT\n"
+           "       lvl_tool convert FILE --to extended|classic -o OUT [--rows R --columns C]\n"
            "       lvl_tool --selftest\n"
            "  check    whether the file loads and plays for the teams of the roster, and every finding\n"
            "           (with --original: whether the map works in the original game, every finding with its code;\n"
@@ -73,6 +76,7 @@ void usage(std::ostream& out) {
            "  rewrite  reads IN, checks it and writes its canonical bytes to OUT (OUT may be IN); says what differs\n"
            "  blank    writes a new map of plain ground, R rows x C columns (1 to 256 each), its dictionary by the rule of the original maps\n"
            "  convert  writes a copy of the map as an Extended map (version 9, always) or a Classic map (version 8, when it fits: else the reasons are listed); FILE is kept\n"
+           "           (with --rows and --columns the Extended copy is grown to that size by plain ground at the right and below, to make a big map that works)\n"
            "  --extended     blank: a new Extended map, at most 1,024 a side and 262,144 cells (rows and columns 1 to 2,048 are read, the limits refuse more)\n"
            "                 check: the checker per kind, for a Classic or an Extended map (the limits of an Extended map)\n"
            "  --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15; default 15)\n"
@@ -201,7 +205,7 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
         } else if (a == "--original") {
             o.original = true;
         } else if (a == "--rows" || a == "--columns") {
-            const uint32_t most = o.extended ? LVL_FORMAT_CEILING_SIDE : LVL_MAX_GRID_SIDE;
+            const uint32_t most = o.extended || args[0] == "convert" ? LVL_FORMAT_CEILING_SIDE : LVL_MAX_GRID_SIDE;
             if (!has_value || !number(args[++i], 1, most, v)) { why = a + " takes a number from 1 to " + std::to_string(most); return false; }
             (a == "--rows" ? o.rows : o.columns) = v;
         } else if (a == "--chd") {
@@ -536,7 +540,37 @@ int convert(const Options& o, std::ostream& out, std::ostream& err) {
         out << "nothing written\n";
         return 1;
     }
-    const LevelWriteResult w = write_level(c.level, to_extended ? ceiling_limits() : LevelLimits{});
+    LevelData result = c.level;
+    if (o.rows != 0 || o.columns != 0) {                 // --rows and --columns: the Extended copy is grown to that size with plain ground at the right and below (for a test that needs a big map that works)
+        if (!to_extended || o.rows == 0 || o.columns == 0) {
+            err << "lvl_tool: --rows and --columns go together and with --to extended only (the copy is grown to that size)\n";
+            return 2;
+        }
+        if (o.rows < c.level.height() || o.columns < c.level.width()) {
+            out << name << ": is " << c.level.height() << " rows x " << c.level.width() << " columns, more than " << o.rows << " x " << o.columns << "; nothing written\n";
+            return 1;
+        }
+        LevelData grown = blank_extended_level(o.rows, o.columns, lvl_core::tile_names(), ceiling_limits());
+        grown.tile_dictionary = c.level.tile_dictionary;
+        grown.tile_type_count = c.level.tile_type_count;
+        grown.description = c.level.description;
+        grown.default_minutes = c.level.default_minutes;
+        grown.game_mode = c.level.game_mode;
+        for (uint32_t y = 0; y < c.level.height(); ++y) {
+            for (uint32_t x = 0; x < c.level.width(); ++x) {
+                grown.layer1_terrain[static_cast<size_t>(y) * o.columns + x] = c.level.layer1_terrain[static_cast<size_t>(y) * c.level.width() + x];
+                grown.layer2_interactive[static_cast<size_t>(y) * o.columns + x] = c.level.layer2_interactive[static_cast<size_t>(y) * c.level.width() + x];
+            }
+        }
+        grown.anthill_spawns = c.level.anthill_spawns;
+        grown.food_schedules = c.level.food_schedules;
+        grown.waypoints = c.level.waypoints;
+        grown.ambient_flag = c.level.ambient_flag;
+        grown.ambient_tile_or_sound = c.level.ambient_tile_or_sound;
+        grown.boundary_param = c.level.boundary_param;
+        result = std::move(grown);
+    }
+    const LevelWriteResult w = write_level(result, to_extended ? ceiling_limits() : LevelLimits{});
     if (!w.ok) {
         out << name << ": cannot be written: " << w.error << "; nothing written\n";
         return 1;
@@ -993,6 +1027,18 @@ int selftest() {
                     run_words({"convert", ext, "--to", "classic"}).status == 2 && run_words({"convert", ext, "--to", "huge", "-o", back}).status == 2 &&
                     run_words({"check", ext, "--to", "classic"}).status == 2 && run_words({"info", tiny_path, "--extended"}).status == 2,
                 "convert: no --to, no -o, OUT = FILE, another kind, or the words on another command are exit 2");
+        const std::string grown_path = dir.file("tiny_grown.lvl");
+        const Run grown = run_words({"convert", tiny_path, "--to", "extended", "-o", grown_path, "--rows", "300", "--columns", "310"});
+        LevelData grown_level;
+        std::vector<uint8_t> grown_bytes;
+        t.check(grown.status == 0 && read_whole(grown_path, grown_bytes) && grown_level.load_from_memory(grown_bytes.data(), grown_bytes.size(), nullptr, LevelLimits::for_extended_maps()) &&
+                    grown_level.height() == 300u && grown_level.width() == 310u && grown_level.anthill_spawns.size() == ext_level.anthill_spawns.size() &&
+                    grown_level.validate(0x0F, LevelLimits::for_extended_maps()).playable,
+                "convert --rows --columns: the copy is grown to 300 x 310, keeps its start markers and still plays: " + grown.out);
+        t.check(run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("small.lvl"), "--rows", "10", "--columns", "10"}).status == 1 &&
+                    run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("half.lvl"), "--rows", "300"}).status == 2 &&
+                    run_words({"convert", tiny_path, "--to", "classic", "-o", dir.file("cl.lvl"), "--rows", "300", "--columns", "300"}).status == 2,
+                "convert --rows --columns: a size smaller than the map is exit 1, one side alone or a Classic copy is exit 2");
         const std::string wide = dir.file("wide_ext.lvl");
         const Run big = run_words({"blank", wide, "--extended", "--rows", "300", "--columns", "400"});
         t.check(big.status == 0 && has(big.out, "wide_ext.lvl: a blank Extended map of 300 rows x 400 columns, ") && fs::exists(wide), "blank --extended: 300 x 400 is an Extended map: " + big.out);

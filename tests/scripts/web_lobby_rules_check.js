@@ -780,6 +780,10 @@ R.MAPS.forEach((m) => {
     same('planWith keeps the room\'s map for a file that is no map name', ['../x.lvl', 'x.txt', '.lvl', '', null, 7].map((f) => R.planWith(r2, model(r2), { file: f }).map), ['', '', '', '', '', '']);
     same('validMapFile is the game\'s name rule', ['Bomb Island.lvl', 'A.LVL', 'abcd.lvl', 'x'.repeat(61) + '.lvl', '.hid.lvl', 'a/b.lvl', 'a\\b.lvl', 'a:b.lvl', 'a|b.lvl', 'abcde.Lvl', 'abc\u00e9de.lvl'].map(R.validMapFile), [true, true, true, false, false, false, false, false, false, false, false]);
     same('communityName cuts the ending in any case', [R.communityName('Bomb Island.lvl'), R.communityName('X Y.LVL')], ['Bomb Island', 'X Y']);
+    same('communityName cuts the server\'s test-map suffix too (an unlisted test map from the Map Maker is shown by its name), in any letter case, and only that exact shape', [
+        R.communityName('Popcorn Remix ~test-a1b2c3d4.lvl'), R.communityName('Popcorn Remix ~test-A1B2C3D4.LVL'), R.communityName('Popcorn Remix ~test-a1b2c3d.lvl'), R.communityName('Popcorn Remix ~test-a1b2c3d4e.lvl'),
+        R.communityName('Popcorn Remix~test-a1b2c3d4.lvl'), R.communityName('!!!!!!~Water Maze~.lvl'), R.communityName('Popcorn ~test-a1b2c3d4 ~test-0badf00d.lvl')],
+        ['Popcorn Remix', 'Popcorn Remix', 'Popcorn Remix ~test-a1b2c3d', 'Popcorn Remix ~test-a1b2c3d4e', 'Popcorn Remix~test-a1b2c3d4', '!!!!!!~Water Maze~', 'Popcorn ~test-a1b2c3d4']);
 }
 same('the map\'s side asked directly is the same as inside viewOf', R.sideView(model(S2), ctx(), R.playing(model(S2))), view(S2).side);
 same('START waits for the host: "Waiting for" and the name of the host', [view(S4).side.startLabel, view(mk([P('Zed'), P('Sam'), O, O], { you: 1 })).side.startLabel], ['Waiting for Juniper', 'Waiting for Zed']);

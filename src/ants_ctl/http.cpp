@@ -591,7 +591,9 @@ void HttpServer::Impl::dispatch(Conn& c, uint32_t now, const Handler& handler) {
     } catch (...) {
         ok = false;
     }
-    if (!ok || response.status < 200 || response.status > 599 || response.body.size() > (mode == Mode::Door ? door.max_response_bytes : HttpServer::kMaxResponseBytes)) {
+    size_t cap = mode == Mode::Door ? door.max_response_bytes : HttpServer::kMaxResponseBytes;
+    if (ok && response.file) cap = std::max(cap, HttpServer::kMaxFileResponseBytes);        // (a map file: the one answer that may be bigger than the door's limit, which stays the limit of everything else, the replays among them)
+    if (!ok || response.status < 200 || response.status > 599 || response.body.size() > cap) {
         return respond_error(c, now, 500, "internal error");
     }
     const std::string_view type = safe_header_value(response.content_type) ? std::string_view(response.content_type) : std::string_view("application/json");

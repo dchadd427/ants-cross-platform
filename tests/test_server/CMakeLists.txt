@@ -9,6 +9,7 @@ add_executable(test_server
     test_server_lobby.cpp
     test_server_rematch.cpp
     test_server_countdown.cpp
+    test_server_online_limit.cpp
 )
 
 target_link_libraries(test_server PRIVATE

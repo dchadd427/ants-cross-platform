@@ -770,13 +770,17 @@ int main(int argc, char** argv) {
         ac.cookie_secure = !(plain_http != nullptr && std::string(plain_http) == "1");
         ac.trust_client_header = !o.submit_ignore_client_header;
         submit_api = std::make_unique<ants::server::SubmissionApi>(*submissions, *accounts, ac);
-        auto refresh = [&rooms, &submissions]() {
+        submissions->set_test_map_in_use([&rooms](const std::string& file) { return rooms.map_in_use(file); });          // (a test map that a room has is not dropped to make room for another)
+        auto refresh_tests = [&rooms, &submissions]() { rooms.mutable_store().set_test_maps(submissions->test_maps(static_cast<int64_t>(std::time(nullptr)))); };
+        auto refresh = [&rooms, &submissions, refresh_tests]() {
             rooms.mutable_store().set_approved(submissions->approved_maps());
-            rooms.mutable_store().set_test_maps(submissions->test_maps(static_cast<int64_t>(std::time(nullptr))));
+            refresh_tests();
         };
         refresh();
         submissions->take_approved_changed();
+        submissions->take_test_changed();
         submit_api->set_on_approved_changed(refresh);
+        submit_api->set_on_test_changed(refresh_tests);                 // (a test upload does not read every approved map again)
         log("map submissions on: files in " + sc.dir + ", at most " + std::to_string(sc.max_waiting) + " waiting and " + std::to_string(sc.per_address_per_day) + " a day from one address; " +
             (submit_api->owner_api_on() ? "the owner's review page is on" + std::string(ac.cookie_secure ? "" : " (ANTS_ADMIN_ALLOW_HTTP: the cookie is not marked Secure)") : "the owner's review page is OFF (ANTS_ADMIN_SESSION_SECRET, 32 characters or more, is needed)") +
             "; " + std::to_string(submissions->approved_maps().size()) + " approved maps in the lobby's list");
@@ -839,10 +843,8 @@ int main(int argc, char** argv) {
             if (static_cast<uint32_t>(now - last_submission_upkeep_ms) >= 3600u * 1000u) {                 // (once an hour: the files of declined maps, old rows and counters)
                 last_submission_upkeep_ms = now;
                 submissions->maintenance(static_cast<int64_t>(std::time(nullptr)));
-                if (submissions->take_approved_changed()) {
-                    rooms.mutable_store().set_approved(submissions->approved_maps());
-                    rooms.mutable_store().set_test_maps(submissions->test_maps(static_cast<int64_t>(std::time(nullptr))));
-                }
+                if (submissions->take_approved_changed()) rooms.mutable_store().set_approved(submissions->approved_maps());
+                if (submissions->take_test_changed()) rooms.mutable_store().set_test_maps(submissions->test_maps(static_cast<int64_t>(std::time(nullptr))));
                 if (accounts) {
                     accounts->maintenance(static_cast<int64_t>(std::time(nullptr)));
                     for (const std::string& line : accounts->take_notices()) log(line);          // (a refused write of the accounts: never a password, a name or an address)

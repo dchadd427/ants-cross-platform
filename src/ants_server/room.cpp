@@ -7,10 +7,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <chrono>
 #include <filesystem>
 #include <functional>
 #include <limits>
+#include <string>
 
 namespace ants::server {
 
@@ -144,7 +146,11 @@ bool Room::expired(uint32_t now_ms) const noexcept {
 void Room::set_lobby_services(LobbyServices services) {
     services_ = std::move(services);
     if (!spec_.lobby) return;
-    lobby_.set_map_choice([this](const std::string& name) { return services_.choose_map ? services_.choose_map(name) : std::string(); });       // (a server that offers no maps takes none of a plan)
+    lobby_.set_map_choice([this](const std::string& name) {                                  // (a server that offers no maps takes none of a plan)
+        std::string file = services_.choose_map ? services_.choose_map(name) : std::string();
+        if (file.empty() && services_.map_refusal) map_notice_ = services_.map_refusal(name);       // (a map that the server has and does not play online: the leader is told in this pass, the room keeps its map)
+        return file;
+    });
 }
 
 // The owner forgets a lobby room at once (nobody was in it for a while, or its place is needed): its clients are dropped, and the room goes without a word in the log or a result file (it did not end: no
@@ -303,6 +309,38 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
 }
 
+namespace {
+
+// "<name><after>" as a line of chat: the name is cut when the line would be longer than kMaxChatChars
+std::string name_line(std::string name, const std::string& before, const char* after) {
+    const size_t fixed = before.size() + std::strlen(after);
+    if (fixed < net::kMaxChatChars && name.size() > net::kMaxChatChars - fixed) name.resize(net::kMaxChatChars - fixed);
+    return before + name + after;
+}
+
+std::string remove_line(const std::string& name) { return name_line(name, net::kNoticeRemoveBefore, net::kNoticeRemoveAfter); }
+
+}  // namespace
+
+// A lobby room's START was cancelled because a person's game said it could not load the map (or did not answer in time): the whole room is told whose game it is and why (an Extended map needs a game
+// that is new enough: "refresh the page"), and the leader is told how to start without them, with the Remove that the lobby has. The person is remembered, so that the START that is held back by the pause
+// after several cancels names them again instead of saying only that the match could not start.
+void Room::say_load_failed(uint8_t seat, bool timed_out) {
+    load_failed_seat_ = 255;
+    if (seat >= sim::MAX_PLAYERS || lobby_.room().slots[seat].state != net::SlotState::Client) return;
+    load_failed_seat_ = seat;
+    load_failed_name_ = lobby_.room().slots[seat].name;
+    load_failed_old_ = level_.version == 9;
+    load_failed_slow_ = timed_out;
+    notify_people(load_failed_notice());
+    if (lobby_.leader() < sim::MAX_PLAYERS && lobby_.leader() != seat) lobby_.notify(lobby_.leader(), remove_line(load_failed_name_));
+}
+
+std::string Room::load_failed_notice() const {
+    if (load_failed_seat_ >= sim::MAX_PLAYERS || lobby_.room().slots[load_failed_seat_].state != net::SlotState::Client || lobby_.room().slots[load_failed_seat_].name != load_failed_name_) return std::string();
+    return name_line(load_failed_name_, std::string(), load_failed_slow_ ? net::kNoticeGameSlow : load_failed_old_ ? net::kNoticeGameTooOld : net::kNoticeGameCannotLoad);
+}
+
 // The room speaks to every person who is in it (a notice from the room itself: the teams that could not be made)
 void Room::notify_people(const std::string& text) {
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
@@ -457,7 +495,15 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     }
     if (asked_by == net::kNoLeader || lobby_.leader() != asked_by) return;
     if (!retry_open(now_ms)) {
-        if (static_cast<int32_t>(retry_at_ms_ - now_ms) > static_cast<int32_t>(kStandMs)) lobby_.end_start(net::kNoticeStartsFailed);       // (a long pause: the request does not stand through it)
+        if (static_cast<int32_t>(retry_at_ms_ - now_ms) > static_cast<int32_t>(kStandMs)) {       // (a long pause: the request does not stand through it)
+            const std::string who = load_failed_notice();
+            if (who.empty()) {
+                lobby_.end_start(net::kNoticeStartsFailed);
+            } else {                                              // (one person's game keeps cancelling the START: the leader is told whose it is, and how to start without them)
+                lobby_.notify(lobby_.leader(), who);
+                lobby_.end_start(remove_line(load_failed_name_));
+            }
+        }
         return;
     }
     if (lobby_.map_name() != map_.name) {                    // the plan's map (the room's map, as the lobby shows it): the server's own copy is loaded for the match
@@ -470,7 +516,7 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     const std::vector<std::pair<uint8_t, net::FillLevel>> fill_seats = net::plan_fill_seats(net::FillPlan(asked_fill), lobby_.room(), spec_.players);
     const uint8_t roster = roster_with(fill_seats);
     if (!level_.validate(roster, assets::LevelLimits::for_play_extended()).playable) return lobby_.end_start(net::kNoticeMapColors);
-    if (!services_.match_place || !services_.match_place(now_ms)) return lobby_.end_start(net::kNoticeNoPlace);
+    if (!services_.match_place || !services_.match_place(now_ms, map_cells())) return lobby_.end_start(net::kNoticeNoPlace);
     if (!start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, true, asked_teams))) lobby_.end_start(std::string());
 }
 
@@ -490,10 +536,20 @@ void Room::update(uint32_t now_ms) {
     }
 
     lobby_.update(now_ms);
+    if (!map_notice_.empty()) {                                      // (the plan asked for a map that is too big to play online: the leader says so once)
+        if (lobby_.leader() < sim::MAX_PLAYERS) lobby_.notify(lobby_.leader(), map_notice_);
+        map_notice_.clear();
+    }
     uint8_t asked_by = net::kNoLeader;                               // the leader who asked to start now, in this pass
     std::array<net::FillLevel, sim::MAX_PLAYERS> asked_fill{};       // ... the bot that it asked for in each seat when that seat is empty (protocol 11: one level; 13: a level for each seat)
     sim::StartTeams asked_teams;                                     // ... and the teams that it chose (protocol 13)
     for (const net::HostLobby::Event& ev : lobby_.take_events()) {
+        if (spec_.lobby && ev.type == net::HostLobby::Event::Type::LoadFailed && state_ == RoomState::Loading) say_load_failed(ev.seat, ev.timed_out);
+        if (spec_.lobby && ev.type == net::HostLobby::Event::Type::Left && ev.seat == load_failed_seat_) {      // (the person whose game could not load the map has gone, or was removed: the pause that they caused is over)
+            load_failed_seat_ = 255;
+            cancels_ = 0;
+            retry_pending_ = false;
+        }
         if (ev.type == net::HostLobby::Event::Type::Cancelled || ev.type == net::HostLobby::Event::Type::LoadFailed) {
             if (state_ == RoomState::Loading && !spec_.lobby && ++cancels_ >= kMaxFailedStarts) return fail("the start failed too many times (a player could not load the map or left)", now_ms);
             if (state_ == RoomState::Loading) {

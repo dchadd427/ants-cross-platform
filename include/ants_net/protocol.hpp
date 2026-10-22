@@ -352,7 +352,18 @@ inline constexpr const char* kNoticeGameLate = "'s game did not come in time.";
 inline constexpr const char* kNoticeGamesLate = "These games did not come in time: ";
 inline constexpr const char* kNoticeMapLost = "This map could not be loaded: choose another map.";
 inline constexpr const char* kNoticeMapColors = "This map cannot be played with these colours.";
+/// A map that is too big for a room (ants::server::OnlineLimits::kMaxCells = 65,536 cells): the leader who chose it is told, and the room keeps its map
+inline constexpr const char* kNoticeMapTooBig = "This map is too big to play online (65,536 cells at most, like 256 x 256): choose another map.";
 inline constexpr const char* kNoticeNoPlace = "The server has no place for another match right now: try again in a minute.";
+/// A START that was cancelled because one person's game could not load the map (to the whole room and then, as the second line, to the leader): "<name>'s game is too old for this map: refresh the page or update
+/// the game." for an Extended map (a game of before the Extended maps cannot read one), "<name>'s game could not load this map." for another, "<name>'s game did not load the map in time." when it was only slow.
+/// The leader is told, as a second line, what the room can do: "To start without Priya, press Remove on their color." (the Remove that the lobby has for a person who is not back from a match, kNoticeNotBack). Each line is at
+/// most kMaxChatChars (a name is cut to fit).
+inline constexpr const char* kNoticeGameTooOld = "'s game is too old for this map: refresh the page or update the game.";
+inline constexpr const char* kNoticeGameCannotLoad = "'s game could not load this map.";
+inline constexpr const char* kNoticeGameSlow = "'s game did not load the map in time.";
+inline constexpr const char* kNoticeRemoveBefore = "To start without ";
+inline constexpr const char* kNoticeRemoveAfter = ", press Remove on their color.";
 inline constexpr const char* kNoticeStartsFailed = "The match could not start a few times in a row: try again in a minute.";
 /// The rematch (docs/SERVER.md "Lobby rooms"): the leader's START of a lobby room that the server opened again after its match is not taken while a person of the match is not back ("Juniper is not back from
 /// the match yet.", for several "These players are not back from the match yet: Juniper and Pip.")

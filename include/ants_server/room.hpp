@@ -288,8 +288,10 @@ struct LobbyServices {
     std::function<std::string(const std::string& name)> choose_map;
     /// Loads that file for a match (false: it is gone or cannot be played by this engine)
     std::function<bool(const std::string& file, MapEntry& entry, assets::LevelData& level)> load_map;
-    /// Whether the server has a place for one more match now (and makes one when an abandoned match can give its place up)
-    std::function<bool(uint32_t now_ms)> match_place;
+    /// Whether the server has a place for a match on a map of `cells` cells now (and makes one when an abandoned match can give its place up): a big map takes several places (OnlineLimits::weight)
+    std::function<bool(uint32_t now_ms, uint64_t cells)> match_place;
+    /// The sentence for the leader who chose a map that the server has but does not play online (too big: OnlineLimits), else "" (the name is unknown: the room's map just stays)
+    std::function<std::string(const std::string& name)> map_refusal;
 };
 
 class Room {
@@ -358,6 +360,10 @@ public:
     std::string bot_name_of(const ai::BotSpec& bot) const;
     /// Made by a visitor's create block (protocol 15): one of the server's public rooms
     bool public_room() const noexcept { return spec_.public_room; }
+    /// The cells (rows times columns) of the map that the room has loaded: what a match on it takes of the server's places (OnlineLimits::weight)
+    uint64_t map_cells() const noexcept { return static_cast<uint64_t>(level_.width()) * level_.height(); }
+    /// Whether the room has this map (file name) as its map or as its plan's map: a test map that a room has is not dropped to make room for another
+    bool uses_map(const std::string& file_name) const { return map_.name == file_name || lobby_.map_name() == file_name; }
     /// The server's own match of computer players alone (RoomSpec::bots_only)
     bool bots_only() const noexcept { return spec_.bots_only; }
     /// A lobby room (protocol 16) ...
@@ -443,6 +449,8 @@ private:
     void lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::array<net::FillLevel, sim::MAX_PLAYERS>& asked_fill, const sim::StartTeams& asked_teams);
     bool retry_open(uint32_t now_ms) noexcept;               // the pause after a cancelled start is over (or there was none)
     uint32_t lobby_pause_ms(uint32_t now_ms) noexcept;       // a lobby room's start was cancelled now: how long the room waits before it tries again (kFreeCancels, kLongPauseMs)
+    void say_load_failed(uint8_t seat, bool timed_out);      // a lobby room's START was cancelled because this person's game could not load the map: everybody is told whose, the leader how to start without them
+    std::string load_failed_notice() const;                  // ... the sentence for that person ("" when it is not known or the person has left)
 
     RoomSpec spec_;
     MapEntry map_;
@@ -458,6 +466,11 @@ private:
     uint32_t retry_at_ms_{0};                // after a cancelled start the room waits a moment before it tries again (a client that cannot load the map does not make a tight loop): until here, while retry_pending_
     bool retry_pending_{false};              // (a flag and not an old time: a lobby room waits for ever, and a time that is older than 24.8 days reads as a time to come in a signed comparison)
     uint32_t last_cancel_ms_{0};             // a lobby room: when its start was last cancelled (cancels_ counts those in a row)
+    uint8_t load_failed_seat_{255};          // a lobby room: the person whose game could not load the map at the last START that was cancelled for it (255: none), and the name they had then
+    std::string load_failed_name_;
+    bool load_failed_old_{false};            // ... and whether the map was an Extended one (a game of before the Extended maps cannot read it)
+    bool load_failed_slow_{false};           // ... or the game only did not answer in time
+    std::string map_notice_;                 // a lobby room: what the leader is to be told at the next pass (a map that the plan asked for is not played online)
 
     net::HostLobby lobby_;
     LobbyServices services_;                 // protocol 16: what a lobby room asks of its server
