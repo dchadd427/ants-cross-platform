@@ -864,7 +864,8 @@ int main() {
         ASSERT_TRUE(server.open());
         const std::string id = server.keep(match_file(4));
         server.keep(match_file(5));
-        server.run_updates(60);
+        for (int round = 0; round < 60 && server.mgr.history_store()->count() < 2; ++round) server.run_updates(10);       // (the feeder's pace follows the real time that a play takes: a slow build needs more passes)
+        ASSERT_EQ(server.mgr.history_store()->count(), size_t{2});
         ctl::HttpResponse r = server.door("GET", "/history/deaths", "map=TREASURE.LVL");
         ASSERT_TRUE(r.status == 200 && r.content_type == "application/json");
         JsonValue j = parse_text(r.body);
