@@ -12,6 +12,7 @@
 //      Grid is equal to the Grid of its source cell by cell (every field, the anchors included, the hills, the plants, the food, the default ant type), and it PLAYS as its
 //      source does, with the hashes of the source at the start and after every game second;
 //   7. the rules word (the Grid carries it, the state hash mixes it when it is not 0): see the_rules_word_is_in_the_hash.
+//   8. the order-tile marker (-1, -1) hashes as the original's (0x78, 0x5A) and the tile (120, 90) itself keeps the hash it had at rules 0: see the_order_tile_hashes.
 // The counts of the library (and of the dictionaries by the rule of the original maps) are those of docs/MAP_FORMAT.md. `test_map_roundtrip --ticks N` plays N ticks
 // instead (the time of a CI run is the reason for the default), `--only TEXT` only the maps whose names hold TEXT (and checks no count).
 #include "ants_assets/lvl_parser.hpp"
@@ -212,6 +213,105 @@ void the_rules_word_is_in_the_hash(uint32_t ticks) {
     const uint64_t h_no_order = eo.state_hash().ants;
     eo.get_unit(uid).orig_order_tile = ants::sim::TileCoord{ants::sim::AntUnit::kClassicNoOrderTileX, ants::sim::AntUnit::kClassicNoOrderTileY};
     check(eo.state_hash().ants != h_no_order, "an ant ordered to (120, 90) hashes otherwise than an ant with no order tile");
+}
+
+// The "no order tile" marker of the simulation is (-1, -1) and hashes as the original's slot, (0x78, 0x5A) = (column 120, row 90). The tile (120, 90) itself exists on a map of 91 or more
+// rows and 121 or more columns. At rules 0 it has always read as "no order" (AntUnit::has_order_tile) and has always hashed as itself, so an ant that holds it must keep the hash that it
+// had before the marker moved (v0.12.93 and earlier); at rules 1 it is a real target that differs from "none", so one more byte tells the two apart. Every other tile hashes as itself at
+// both. `ants_hash` is the hash of the ants of a 130 x 100 test world (91+ rows, 121+ columns) with one ant that holds `tile` as its order tile.
+uint64_t ants_hash_with_order_tile(uint16_t rules, ants::sim::TileCoord tile) {
+    ants::sim::SimulationEngine e;
+    e.init_test_world(130, 100, 7, 600000, rules);
+    const uint32_t id = e.spawn_unit(0, ants::sim::AntType::Worker, ants::sim::TileCoord{5, 5});
+    e.get_unit(id).orig_order_tile = tile;
+    return e.state_hash().ants;
+}
+
+// The play of the hash goldens below, on a 130 x 100 world (24 ants of four teams, a new random order for each every 40 ticks); with `to_marker_tile` every third ant is ordered to exactly
+// (120, 90) at tick 40. The total state hash every 20 ticks (20 values); `holders` counts the checkpoints at which an ant holds the order tile (120, 90).
+std::vector<uint64_t> big_world_play(uint16_t rules, bool to_marker_tile, int& holders) {
+    ants::sim::SimulationEngine sim;
+    sim.init_test_world(130, 100, 7, 6000000, rules);
+    std::vector<uint32_t> ids;
+    uint32_t s = 99;
+    const auto rnd = [&s](int n) {
+        s = s * 1664525u + 1013904223u;
+        return static_cast<int>((s >> 8) % static_cast<uint32_t>(n));
+    };
+    for (int i = 0; i < 24; ++i) {
+        const int x = 100 + rnd(25);                         // (a statement of its own: the order of evaluation of arguments differs between compilers)
+        const int y = 80 + rnd(15);
+        ids.push_back(sim.spawn_unit(static_cast<uint8_t>(i & 3), ants::sim::AntType::Worker, ants::sim::TileCoord{x, y}));
+    }
+    sim.tick();
+    std::vector<uint64_t> out;
+    holders = 0;
+    for (int t = 0; t < 400; ++t) {
+        if (t % 40 == 0) {
+            for (size_t i = 0; i < ids.size(); ++i) {
+                const int x = rnd(130);
+                const int y = rnd(100);
+                ants::sim::TileCoord d{x, y};
+                if (to_marker_tile && (i % 3) == 0 && t == 40) d = ants::sim::TileCoord{120, 90};
+                sim.issue_move_order(ids[i], d);
+            }
+        }
+        sim.tick();
+        if ((t + 1) % 20 == 0) {
+            out.push_back(sim.state_hash().total);
+            bool held = false;
+            for (const uint32_t id : ids) held = held || (sim.get_unit(id).orig_order_tile.x == 120 && sim.get_unit(id).orig_order_tile.y == 90);
+            holders += held ? 1 : 0;
+        }
+    }
+    return out;
+}
+
+void the_order_tile_hashes() {
+    using ants::sim::TileCoord;
+    const TileCoord none{ants::sim::AntUnit::kNoOrderTileX, ants::sim::AntUnit::kNoOrderTileY};
+    const TileCoord classic{ants::sim::AntUnit::kClassicNoOrderTileX, ants::sim::AntUnit::kClassicNoOrderTileY};
+    check(classic.x == 120 && classic.y == 90 && none.x == -1 && none.y == -1, "the marker is (-1, -1) and the original's slot is (column 120, row 90)");
+    // at rules 0 the tile (120, 90) is "no order": it hashes as the marker does, and as it did before the marker moved (a byte more would move the hash of every rules-0 map of 91+ rows)
+    check(ants_hash_with_order_tile(0, classic) == ants_hash_with_order_tile(0, none), "rules 0: an ant that holds (120, 90) hashes as an ant with no order tile");
+    // at rules 1 (and any other word) it is a real target and hashes otherwise than "none"
+    for (const uint16_t rules : {uint16_t{1}, uint16_t{2}}) {
+        check(ants_hash_with_order_tile(rules, classic) != ants_hash_with_order_tile(rules, none), "rules " + std::to_string(rules) + ": an ant that holds (120, 90) hashes otherwise than an ant with no order tile");
+    }
+    // the bytes themselves: the ants hash of one worker at (5, 5) on this world with the order tile (120, 90) is a pinned number. At rules 0 it is the hash of "no order" and of v0.12.93;
+    // at rules 1 and 2 it is the hash that v0.12.97 to v0.12.103 gave (the extra byte is a true, after the tile and before home_state), so a byte that moves, changes its value or
+    // changes its width desyncs those builds and fails here
+    check(ants_hash_with_order_tile(0, classic) == 0xc98854793b4e680bULL, "rules 0: the ants hash with the order tile (120, 90) is the one of v0.12.93");
+    check(ants_hash_with_order_tile(1, classic) == 0x0c964efa48598d42ULL && ants_hash_with_order_tile(2, classic) == 0x0c964efa48598d42ULL,
+          "rules 1 and 2: the ants hash with the order tile (120, 90) is the one of v0.12.97 to v0.12.103 (the extra byte is a true after the tile)");
+    // every other tile hashes as itself, and the same at every rules word (the one extra byte is for (120, 90) alone), and never as "none": a tile that shares only one coordinate with
+    // the marker (-1, -1) or with the slot (120, 90) is a tile like any other
+    const TileCoord others[] = {{120, 5}, {5, 90}, {121, 90}, {120, 91}, {119, 90}, {120, 89}, {-1, 5}, {5, -1}, {0, 0}, {5, 5}, {129, 99}, {0x78, 0x5B}, {0x79, 0x5A}};
+    for (const TileCoord& t : others) {
+        const std::string name = "(" + std::to_string(t.x) + ", " + std::to_string(t.y) + ")";
+        const uint64_t at0 = ants_hash_with_order_tile(0, t);
+        check(at0 == ants_hash_with_order_tile(1, t) && at0 == ants_hash_with_order_tile(2, t), "an ant that holds " + name + " has the same ants hash at every rules word");
+        check(at0 != ants_hash_with_order_tile(0, none) && at0 != ants_hash_with_order_tile(0, classic), "an ant that holds " + name + " hashes otherwise than one with no order tile or one at (120, 90)");
+        check(ants_hash_with_order_tile(1, t) != ants_hash_with_order_tile(1, classic), "an ant that holds " + name + " hashes otherwise than one at (120, 90) at rules 1");
+    }
+    // a play of a rules-0 map of 100 rows and 130 columns in which ants hold (120, 90) has the hashes that v0.12.93 gave (measured on that build: one checkpoint, tick 60, is inside the window
+    // in which an ant holds the tile, and it is the one that a byte more at rules 0 moved)
+    static const uint64_t kOld[20] = {
+        0x2f90db97836f6c67ULL, 0xdb4a9fc385fecb26ULL, 0x342c5d6b37d0c05eULL, 0x2b68fb69d9b36c80ULL,
+        0x3ddaed74c2d031a9ULL, 0xce4f072c8fe76ff3ULL, 0x33b892b8bda72edeULL, 0x7549f1a6e70bfc13ULL,
+        0x614589778c803ec0ULL, 0x6a2d064a72693d29ULL, 0x05e89ff8d368528cULL, 0x94533d920a24ec0eULL,
+        0x33fa59dffa14cc26ULL, 0x790cfe95b4d12d74ULL, 0xa639f6b3f36e9341ULL, 0x80c609bf99abe064ULL,
+        0x33f2864ba4afdbc3ULL, 0x76edba5a165484c0ULL, 0x861c3bdb22ac965bULL, 0x72bfdba50badc09cULL,
+    };
+    int holders = 0;
+    const std::vector<uint64_t> played = big_world_play(0, true, holders);
+    check(played.size() == 20 && holders > 0, "the play of the 130 x 100 world at rules 0 has checkpoints at which an ant holds (120, 90) (" + std::to_string(holders) + ")");
+    bool same = played.size() == 20;
+    for (size_t i = 0; same && i < 20; ++i) same = played[i] == kOld[i];
+    check(same, "the play of a rules-0 world of 100 rows x 130 columns with orders to (120, 90) has the hashes that it had in v0.12.93");
+    int holders1 = 0;
+    const std::vector<uint64_t> played1 = big_world_play(1, true, holders1);
+    check(played1.size() == 20 && holders1 > 0 && played1 != played, "the same play at rules 1 is another play (the rules word is state)");
 }
 
 // The anchors of a version 9 map are relative to the cell and, in a map of more than 256 rows or columns, the plain sum (which a byte of version 8 cannot hold); the Grid takes
@@ -440,6 +540,7 @@ int main(int argc, char* argv[]) {
     if (only.empty()) the_fingerprint_sees_a_changed_map(ticks);
     if (only.empty()) the_fingerprint_sees_a_misplaced_anchor(ticks);
     if (only.empty()) the_rules_word_is_in_the_hash(ticks);
+    if (only.empty()) the_order_tile_hashes();
     if (only.empty()) the_grid_reads_relative_anchors();
     if (only.empty()) the_play_limits();
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();

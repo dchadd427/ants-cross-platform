@@ -30,6 +30,7 @@
 #include <string>
 #include <vector>
 #include "../common/test_assert.hpp"
+#include "../test_server/big_map_fixtures.hpp"
 
 #if defined(_WIN32)
 #include <process.h>
@@ -299,6 +300,26 @@ std::vector<Command> orders_at(const sim::SimulationEngine& engine, uint32_t tur
     return out;
 }
 
+/// The orders of a match on a map of more than 256 a side: at turn 5 and 105 each seat sends three ants 100 to 200 tiles away from the corner that TINY holds, one of the orders to exactly
+/// column 120, row 90 (the tile that the Classic map's "no order" slot has, a real target on a map of rules 1)
+std::vector<Command> big_orders_at(const sim::SimulationEngine& engine, uint32_t turn) {
+    std::vector<Command> out;
+    if (turn != 5 && turn != 105) return out;
+    static const int16_t kFirst[4][2] = {{120, 90}, {200, 60}, {60, 200}, {180, 180}};
+    static const int16_t kSecond[4][2] = {{150, 150}, {121, 91}, {91, 121}, {300, 100}};
+    const sim::WorldState& world = engine.get_world_state();
+    for (uint8_t seat = 0; seat < 4; ++seat) {
+        std::vector<uint32_t> ids;
+        for (const sim::AntSnapshot& a : world.ants) {
+            if (a.player_id == seat && a.hp > 0 && ids.size() < 3) ids.push_back(a.id);
+        }
+        if (ids.empty()) continue;
+        const int16_t* goal = turn == 5 ? kFirst[seat] : kSecond[seat];
+        out.push_back(make_command(CommandType::GroupMove, seat, goal[0], goal[1], ids));
+    }
+    return out;
+}
+
 /// Asks the recorder for a snapshot after every `every` turns (and notes the engine's state hash then): what the server does for a match that still runs
 struct SnapshotTap {
     uint32_t every{0};
@@ -307,7 +328,10 @@ struct SnapshotTap {
     std::vector<uint64_t> hashes;
 };
 
-Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster = 0x0F, const sim::StartTeams& teams = sim::StartTeams{}, bool fog = false, SnapshotTap* tap = nullptr, uint8_t mode = 0) {
+using OrdersFn = std::vector<Command> (*)(const sim::SimulationEngine&, uint32_t);
+
+Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster = 0x0F, const sim::StartTeams& teams = sim::StartTeams{}, bool fog = false, SnapshotTap* tap = nullptr, uint8_t mode = 0,
+                     OrdersFn orders = nullptr) {
     Played p;
     sim::SimulationEngine engine;
     engine.set_fog_of_war_enabled(fog);
@@ -320,7 +344,7 @@ Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster
     head.set_mode(mode);
     Recorder rec(head);
     for (uint32_t turn = 0; turn < turns; ++turn) {
-        std::vector<Command> commands = orders_at(engine, turn);
+        std::vector<Command> commands = orders != nullptr ? orders(engine, turn) : orders_at(engine, turn);
         sim::canonical_order(commands);                                      // (a turn of a lock-step match is in canonical order: the same file whichever way it is fed)
         for (const Command& c : commands) {
             engine.apply_command(c);
@@ -1089,6 +1113,49 @@ int main(int argc, char* argv[]) {
         const Played q = play_scripted(tiny, 31, 450, 0x07);
         o = play(q.replay, tiny.level);
         ASSERT_TRUE(o.ok && o.result.standing == sim::PLAYER_NEUTRAL && o.result.ants_left[0] == 0 && o.result.ants_left[2] == 0);
+    } TEST_END();
+
+    TEST_CASE("RP2.13 A Map Of More Than 256 A Side Plays And Replays: TINY Grown To 400 x 400 And 512 x 512 (Rules 1), Orders Of 100 To 200 Tiles, Also To Column 120 Row 90, 300 Ticks Twice To The Same Hash, The Replay Verifies, A Copy Of The Engine Has The Hash") {
+        for (const uint32_t side : {400u, 512u}) {
+            const std::string bytes = grown_tiny(side, side);
+            ASSERT_FALSE(bytes.empty());
+            Map big;
+            ASSERT_TRUE(assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), big.level, nullptr, assets::LevelLimits::for_play_extended()));
+            ASSERT_TRUE(big.level.version == 9u && big.level.width() == side && big.level.height() == side && big.level.rules == assets::LVL_RULES_EXTENDED);
+            const Played first = play_scripted(big, 31, 300, 0x0F, sim::StartTeams{}, false, nullptr, 0, big_orders_at);
+            const Played second = play_scripted(big, 31, 300, 0x0F, sim::StartTeams{}, false, nullptr, 0, big_orders_at);
+            ASSERT_FALSE(first.file.empty());
+            ASSERT_TRUE(first.replay.complete && first.replay.total_turns == 300u && first.replay.commands.size() == 8u);
+            ASSERT_TRUE(first.hash == second.hash && first.file == second.file);                                // the same match twice is the same match
+            // the replay plays it out on a fresh engine to the same state; a hook looks for the longest path that an ant holds and for the farthest tile that any ant reaches
+            size_t longest_path = 0;
+            int32_t farthest = 0;
+            bool order_to_120_90 = false;
+            Hooks hooks;
+            hooks.before_command = [&](uint32_t, const Command& c, sim::SimulationEngine&) { order_to_120_90 = order_to_120_90 || (c.tile_x == 120 && c.tile_y == 90); };
+            hooks.after_tick = [&](uint32_t, sim::SimulationEngine& engine) {
+                for (const sim::AntSnapshot& a : engine.get_world_state().ants) {
+                    longest_path = std::max(longest_path, engine.get_unit(a.id).waypoints.size());
+                    farthest = std::max(farthest, std::max(a.tile_x, a.tile_y));
+                }
+            };
+            const Outcome o = play(first.replay, big.level, hooks);
+            ASSERT_TRUE(o.ran && o.ok && o.complete && o.turns == 300u && o.hash == first.hash && o.hashes_checked == 3u);
+            ASSERT_TRUE(order_to_120_90);
+            ASSERT_TRUE(longest_path >= 100);                                                                    // (a path of 100 and more tiles was found on the big map)
+            ASSERT_TRUE(farthest > static_cast<int32_t>(tiny.level.width()) && farthest > static_cast<int32_t>(tiny.level.height()));   // (and the ants left the corner that TINY fills)
+            // a copy of the engine hashes as the engine does (the prediction and the seek make copies)
+            sim::SimulationEngine engine;
+            engine.init(big.level, 31, 0x0F);
+            for (uint32_t turn = 0; turn < 40; ++turn) {
+                for (const Command& c : big_orders_at(engine, turn)) engine.apply_command(c);
+                engine.tick();
+                engine.clear_news_events();
+                engine.clear_audio_events();
+            }
+            const sim::SimulationEngine copy(engine);
+            ASSERT_TRUE(copy.state_hash().total == engine.state_hash().total);
+        }
     } TEST_END();
 
     TEST_CASE("RP3.1 Four Computer Players Make A Real Match (Hundreds Of Commands Of Every Kind): Their Log, Recorded, Plays Out To The Arena's Own State Hash") {
