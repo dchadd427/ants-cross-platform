@@ -45,6 +45,8 @@ class Node {
     querySelectorAll(sel) { return new List(sel.startsWith('.') ? this.byClass(sel.slice(1)) : []); }
     querySelector(sel) { return sel.startsWith('.') ? (this.byClass(sel.slice(1))[0] || null) : null; }
     getContext() { return this.context || null; }
+    get classList() { const n = this; return { add(c) { if (!n.className.split(' ').includes(c)) n.className = (n.className + ' ' + c).trim(); }, remove(c) { n.className = n.className.split(' ').filter((x) => x !== c).join(' '); }, contains(c) { return n.className.split(' ').includes(c); }, toggle(c) { if (this.contains(c)) { this.remove(c); return false; } this.add(c); return true; } }; }
+    focus() {}
 }
 const document = { createElement: (t) => new Node(t), createElementNS: (ns, t) => new Node(t), createTextNode: (t) => new Node('#text', t), defaultView: { innerWidth: 1280 } };
 const STYLE = { '--c-green': '#79bf93', '--c-red': '#d4707f', '--c-blue': '#8f8fd6', '--c-black': '#b3afb9' };
@@ -324,6 +326,9 @@ function phoneChecks() {
             ['17 ants died in 43 matches', ['All teams 17', 'Green 12', 'Red 0', 'Blue 4', 'Black 1'], ['Ants that drowned'], ['Busiest place']]);
         same('... the busiest place says "in all those matches"', text(card.byClass('dm-facts')[0].byTag('dd')[0]), '16 ants in all those matches died within 2 tiles of tile 29, 37.');
         same('... and the hint says that every match is on top of the other', text(card.byClass('dm-hint')[0]), 'Every match on this map, one on top of the other. Switch to Dots to see single places.');
+        press(card.byClass('dm-chip')[1]);
+        same('one team in the sum: its ants of all the matches, in the title', [text(card.byClass('count')[0]), card.byClass('dm-chip').map((c) => c.attrs['aria-pressed']).join()], ['12 of Green’s ants died in 43 matches', 'false,true,false,false,false']);
+        press(card.byClass('dm-chip')[0]);
         sized(card, 560); press(button(card, 'Dots')); sized(card, 560);
         check('Dots in the sum are squares of one tile, a count in each that holds more than one ant once a tile is big enough', svgOf(card).byClass('sq').length === 3 && svgOf(card).byTag('text').length === 0 && (press(button(card, '+')), press(button(card, '+')), svgOf(card).byTag('text').map(text).join() === '12,4'), svgOf(card).byTag('text').map(text).join());
         press(button(card, 'Fit'));
@@ -354,8 +359,58 @@ function nameChecks() {
     check('the map name is cleaned before it is asked for', (() => { let asked = ''; const c = make({ sum: (m) => { asked = m; return Promise.resolve(null); } }).card(record(field(60, 60, ANTS), { map: 'Po‮nd\u0001.lvl' }), {}); host(c); press(button(c, 'All matches')); return asked === 'Pond.lvl'; })());
     // redraw on a node that holds no card, and on a card whose stage has no size, throws nothing
     check('drawing again a page that has no card, or a card that is hidden (no size), does nothing', throwsNothing());
-    console.log(failures ? failures + ' of ' + checks + ' checks FAILED' : 'ok: ' + checks + ' checks');
-    process.exit(failures ? 1 : 0);
+    return replayPanelChecks().then(() => {
+        console.log(failures ? failures + ' of ' + checks + ' checks FAILED' : 'ok: ' + checks + ' checks');
+        process.exit(failures ? 1 : 0);
+    });
+}
+// ---- the Stats panel of the replay page (AntsHistory.replayStats) gets the small card, and draws it when the closed panel is opened ----
+function replayPanelChecks() {
+    const file = 'ants-MEDIUM-20261020-055605Z.antsrep';
+    function page(rec, env) {
+        const els = {};
+        ['stats-btn', 'mstats', 'mstats-flow'].forEach((id) => { els[id] = new Node(id === 'stats-btn' ? 'button' : 'aside'); els[id].hidden = true; });
+        els['mstats-flow'].className = '';
+        const header = new Node('header'); header.getBoundingClientRect = () => ({ bottom: 60 });
+        const listeners = {}, win = { listeners: {}, addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); } };
+        const doc = Object.assign(Object.create(document), { getElementById: (id) => els[id] || null, querySelector: (q) => (q === 'header' ? header : null), addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); }, defaultView: win });
+        replayEnv = Object.assign({ document: doc, fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(rec) }), file }, env);
+        H.replayStats(replayEnv);
+        return { els, win, listeners, ready: new Promise((r) => setTimeout(r, 20)) };
+    }
+    let replayEnv;
+    const rec = record(field(60, 60, ANTS));
+    const drawn = [];
+    const D = make();
+    const withCard = page(rec, { deathMap: D, redraw: (node) => drawn.push(node) });
+    return withCard.ready.then(() => {
+        const pop = withCard.els.mstats, flow = withCard.els['mstats-flow'];
+        same('the Stats panel holds the small card under its table, above the link to the match page, in the panel and in the phone\'s row', [pop.byClass('dm').length, flow.byClass('dm').length, pop.byClass('dm')[0].className.includes('compact'), pop.byClass('mbody')[0].children.map((c) => c.className).slice(-2)], [1, 1, true, ['dm compact heat', 'mf']]);
+        check('the two cards are two (each has its own state)', pop.byClass('dm')[0] !== flow.byClass('dm')[0]);
+        check('nothing is drawn until the panel is opened: the redraw is not asked for', drawn.length === 0);
+        withCard.els['stats-btn'].fire('click', {});
+        check('opening the panel asks for the card to be drawn, for the panel', drawn.length === 1 && drawn[0] === pop && !pop.hidden);
+        withCard.els['stats-btn'].fire('click', {});
+        check('closing it does not', drawn.length === 1 && pop.hidden);
+        flow.byClass('mt')[0].fire('click', {});
+        check('opening the phone\'s row asks for the card of the row to be drawn', drawn.length === 2 && drawn[1] === flow && !flow.classList.contains('closed'));
+        flow.byClass('mt')[0].fire('click', {});
+        check('closing the row does not', drawn.length === 2);
+        const resize = withCard.win.listeners.resize || [];
+        check('a window that changes size draws what is open again, and only that', resize.length === 1 && (resize[0](), drawn.length === 2) && (withCard.els['stats-btn'].fire('click', {}), resize[0](), drawn.length === 4 && drawn[3] === pop));
+        const plain = page(rec, {});
+        return plain.ready.then(() => {
+            check('a page with no card maker has the panel as it was: no card, the numbers, the link', plain.els.mstats.byClass('dm').length === 0 && plain.els.mstats.byClass('mf').length === 1 && plain.els.mstats.byTag('table').length === 1);
+            const none = page(record(undefined), { deathMap: D, redraw: () => {} });
+            return none.ready.then(() => {
+                check('a match with no map of deaths gets nothing added', none.els.mstats.byClass('dm').length === 0 && none.els.mstats.byClass('mf').length === 1);
+                const broken = page(rec, { deathMap: { card() { throw new Error('the card broke'); } }, redraw: () => { throw new Error('the redraw broke'); } });
+                return broken.ready.then(() => {
+                    check('a card that throws costs the panel nothing: the numbers are there, the button works, a redraw that throws is not heard', broken.els.mstats.byClass('dm').length === 0 && broken.els.mstats.byTag('table').length === 1 && throws(() => broken.els['stats-btn'].fire('click', {})) === null && !broken.els.mstats.hidden);
+                });
+            });
+        });
+    });
 }
 function throwsNothing() {
     STAGE = 0;

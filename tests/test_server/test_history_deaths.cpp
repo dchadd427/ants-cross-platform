@@ -10,12 +10,18 @@
 //   - the sum of a map: the matches of the newest file of that name, a name looked up among the known ones (case folded, never used as anything else), cached until the history changes, bounded (DD5.x);
 //   - the route: the query is one key, every wrong query is a 400 with fixed words, an unknown map 404 without a word of the request in the answer, only a GET (DD6.x).
 // The recordings are real matches of the standard computer players on the shipped TINY map (history_fixtures.hpp).
+#include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <stdexcept>
+#include <string>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 #include "../common/test_assert.hpp"
 #include "ants_replay/match_stats.hpp"

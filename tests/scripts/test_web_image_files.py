@@ -45,7 +45,7 @@ class ThePagesAndTheImage(unittest.TestCase):
 
     def test_the_pages_load_something(self):
         refs = loaded_files()
-        for name in ("history_page.js", "match_stats.js", "match_stats.css", "matches.css", "replay_page.js", "lvl_core.js", "lvl_core_api.js", "front/mapmaker_app.js"):
+        for name in ("history_page.js", "match_stats.js", "match_stats.css", "death_map.js", "death_map.css", "matches.css", "replay_page.js", "lvl_core.js", "lvl_core_api.js", "front/mapmaker_app.js"):
             self.assertIn(name, refs, name + " is loaded by no page: did the scan stop reading the pages?")
 
     def test_every_file_a_page_loads_is_a_file_of_web_and_is_copied_into_the_image(self):
@@ -70,7 +70,7 @@ class ThePagesAndTheImage(unittest.TestCase):
 
     def test_the_stub_root_of_the_routes_test_has_every_script_and_stylesheet_that_the_routes_check_asks_for(self):
         asked = set(re.findall(r"""\(\s*["']/([A-Za-z0-9_.-]+\.(?:js|css))["']\s*,""", read("tests", "scripts", "web_routes_check.py")))
-        self.assertTrue({"history_page.js", "match_stats.js", "match_stats.css"} <= asked, "the scan of web_routes_check.py found %s" % sorted(asked))
+        self.assertTrue({"history_page.js", "match_stats.js", "match_stats.css", "death_map.js", "death_map.css"} <= asked, "the scan of web_routes_check.py found %s" % sorted(asked))
         stub = read("tests", "scripts", "test_nginx_routes.py")
         for name in sorted(asked):
             self.assertRegex(stub, r"""\(\s*["']%s["']\s*,""" % re.escape(name), "web_routes_check.py asks for /%s, which the stub root of test_nginx_routes.py does not have" % name)

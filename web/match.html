@@ -223,7 +223,10 @@
             return fetch('/history/deaths?map=' + name, { cache: 'no-store', credentials: 'omit' }).then(function (response) { return response.ok ? response.json() : null; });
         }
     });
-    function deathsSection(rec) { return window.AntsMatchStats.noStatsNote(rec) ? null : deathMap.card(rec, {}); }
+    function deathsSection(rec) {      // (one more card: whatever it does, the rest of the page is built)
+        if (window.AntsMatchStats.noStatsNote(rec)) return null;
+        try { return deathMap.card(rec, {}); } catch (e) { return null; }
+    }
     var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];
 
     // ---- the page ----

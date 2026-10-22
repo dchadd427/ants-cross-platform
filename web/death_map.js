@@ -203,7 +203,7 @@
                 var m = active(), isAll = m !== model, sel = select(m, st);
                 // the head: the title and how many died
                 var count;
-                if (isAll) count = plural(sel.total, 'ant', 'ants') + ' died in ' + plural(m.matches || 1, 'match', 'matches');
+                if (isAll) count = (st.team < 0 ? plural(sel.total, 'ant', 'ants') + ' died' : n0(sel.total) + ' of ' + chipName(st.team) + '\u2019s ants died') + ' in ' + plural(m.matches || 1, 'match', 'matches');
                 else if (st.team < 0) count = plural(sel.total, 'ant', 'ants') + ' died';
                 else count = n0(sel.total) + ' of ' + chipName(st.team) + '\u2019s ants died (of ' + n0(sel.all) + ')';
                 if (st.drowned === false) count += ', not counting the ants that drowned';

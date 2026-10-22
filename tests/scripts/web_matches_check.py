@@ -34,6 +34,8 @@ ID_REMOVED = "ants-TINY-20260915-110334Z"
 ID_187 = "ants-ISLANDS-20261014-103932Z"
 ID_COMMUNITY = "ants-Pond-20261015-040000Z"
 ID_UNCOUNTED = "ants-SMALL-20261015-111111Z"
+ID_BIG = "ants-Huge-20261016-090000Z"                    # (a match on a 512 x 512 map whose deaths are kept in squares)
+ID_NODEATHS = "ants-TINY-20261015-070000Z"               # (counted by this version, nobody died: details, no map of deaths)
 ID_LEFT = "ants-SMALL-20261014-120000Z"
 ID_DOLLAR = "ants-Dollar-20261013-120000Z"
 READY = live.READY
@@ -64,6 +66,65 @@ def details_of_people():
             "combat": {"kills": [[0, 4, 3, 0], [2, 0, 0, 5], [2, 0, 0, 1], [0, 1, 1, 0]], "dealt": [96, 115, 18, 50], "taken": [67, 87, 57, 68]}}
 
 
+LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+
+def put(value, letters):
+    return "".join(LETTERS[(value >> (6 * i)) & 63] for i in range(letters))
+
+
+def pack_ant(x, y, second, team, killer, kind=0, drowned=False):
+    """One ant of nine letters, as ants_server/history_deaths.hpp writes it (docs/REPLAYS.md "The map of deaths")"""
+    return put(x, 2) + put(y, 2) + put(second, 3) + put((team & 3) | (kind << 2) | (32 if drowned else 0) | ((7 if killer < 0 else killer) << 6), 2)
+
+
+def pack_square(x, y, team, drowned, count):
+    return put(x, 2) + put(y, 2) + put((team & 3) | (4 if drowned else 0), 1) + put(count, 3)
+
+
+def fight_ants(n=34, w=60, h=60, seed=5):
+    """n deaths around the four hills and the water of a map of w x h tiles, the same list every time: [x, y, second, team, killer (-1 none), kind, drowned]"""
+    state = [seed * 2654435761 % (1 << 32) or 1]
+
+    def rnd():
+        state[0] ^= (state[0] << 13) & 0xFFFFFFFF
+        state[0] ^= state[0] >> 17
+        state[0] ^= (state[0] << 5) & 0xFFFFFFFF
+        return state[0]
+    spots = [(int(w * .5), int(h * .25)), (int(w * .22), int(h * .5)), (int(w * .78), int(h * .5)), (int(w * .5), int(h * .75)), (int(w * .5), int(h * .5))]
+    out = []
+    for i in range(n):
+        cx, cy = spots[rnd() % len(spots)]
+        x, y = min(w - 1, max(0, cx + rnd() % 7 - 3)), min(h - 1, max(0, cy + rnd() % 7 - 3))
+        team = rnd() % 4
+        killer = -1 if rnd() % 5 == 0 else (team + 1 + rnd() % 3) % 4
+        out.append([x, y, 2 + i * 17 + rnd() % 15, team, killer, rnd() % 6 if rnd() % 3 == 0 else 0, rnd() % 5 < 2])
+    return out
+
+
+def deaths_field(w, h, ants):
+    return {"v": 1, "w": w, "h": h, "n": len(ants), "k": "x", "d": "".join(pack_ant(*a) for a in ants)}
+
+
+def deaths_squares(w, h, side, cells, **extra):
+    """cells: [x, y, team, drowned, count] in squares"""
+    field = {"v": 1, "w": w, "h": h, "n": sum(c[4] for c in cells), "k": "b", "s": side, "d": "".join(pack_square(*c) for c in cells)}
+    field.update(extra)
+    return field
+
+
+def deaths_sum(map_name):
+    """what GET /history/deaths?map=TREASURE.LVL says: forty matches added up, one tile a square"""
+    cells = {}
+    for k in range(40):
+        for a in fight_ants(14, seed=100 + k):
+            key = (a[0], a[1], a[3], bool(a[6]))
+            cells[key] = cells.get(key, 0) + 1
+    ordered = sorted(cells.items(), key=lambda kv: (kv[0][1], kv[0][0], kv[0][2], kv[0][3]))
+    body = deaths_squares(60, 60, 1, [[k[0], k[1], k[2], k[3], n] for k, n in ordered], map=map_name, matches=40)
+    return body
+
+
 def make_records():
     people = record(ID_PEOPLE, NOW - 100, "TREASURE.LVL", "2v2",
                     [seat(0, "Green", HOSTILE, "", score=140, killed=7, lost=4, bombs_planted=2, fires_lit=16), seat(1, "Red", "Bea", "", score=1010, killed=7, lost=5),
@@ -71,6 +132,7 @@ def make_records():
                     [{"seats": [2], "score": 2040, "killed": 3, "lost": 4, "hatched": 0, "winner": True}, {"seats": [1], "score": 1010, "killed": 7, "lost": 5, "hatched": 0, "winner": False},
                      {"seats": [0, 3], "score": 210, "killed": 9, "lost": 10, "hatched": 1, "winner": False}])
     people["details"] = details_of_people()
+    people["deaths"] = deaths_field(60, 60, fight_ants(34))
     community = record(ID_COMMUNITY, NOW - 900, "Pond.lvl", "1v1", [seat(0, "Green", "Ann", "", score=900, killed=2, lost=1, winner=True), seat(2, "Blue", "Cy", "Easy", score=300, killed=1, lost=2)],
                        [{"seats": [0], "score": 900, "killed": 2, "lost": 1, "hatched": 0, "winner": True}, {"seats": [2], "score": 300, "killed": 1, "lost": 2, "hatched": 0, "winner": False}])
     old = record(ID_OLD, NOW - 5 * 86400, "TREASURE.LVL", "1v1", [seat(0, "Green", "Ann", "", score=2945, killed=6, lost=1, winner=True), seat(3, "Black", "", "Hard", score=720, killed=1, lost=6, hatched=1)],
@@ -86,7 +148,15 @@ def make_records():
                                                                     seat(2, "Blue", "Cy", "Hard", score=300), seat(3, "Black", "Di", "Hard", score=200)],
                   [{"seats": [0], "score": 500, "killed": 2, "lost": 1, "hatched": 0, "winner": True}, {"seats": [2], "score": 300, "killed": 0, "lost": 0, "hatched": 0, "winner": False},
                    {"seats": [3], "score": 200, "killed": 0, "lost": 0, "hatched": 0, "winner": False}], result="cut", finished=False, seconds=200, details={"v": 1, "n": 1})
-    out = [people, community, left]
+    big_cells = [[28 + (i % 9) * 2, 28 + (i // 9) * 2, i % 4, i % 7 == 0, 1 + (i * 5) % 9] for i in range(54)]
+    big = record(ID_BIG, NOW - 800, "Huge.lvl", "ffa4", [seat(k, ("Green", "Red", "Blue", "Black")[k], "Bot%d" % k, "Hard", score=1000 + k, killed=k, lost=5) for k in range(4)],
+                 [{"seats": [k], "score": 1000 + k, "killed": k, "lost": 5, "hatched": 0, "winner": k == 3} for k in (3, 2, 1, 0)])
+    big["details"] = details_of_people()
+    big["deaths"] = deaths_squares(512, 512, 8, big_cells, f=pack_ant(236, 232, 40, 1, 2), l=pack_ant(300, 280, 9000, 0, 3))
+    nodeaths = record(ID_NODEATHS, NOW - 700, "TINY.LVL", "1v1", [seat(0, "Green", "Ann", "", score=900, winner=True), seat(1, "Red", "Cy", "Easy", score=300)],
+                      [{"seats": [0], "score": 900, "killed": 0, "lost": 0, "hatched": 0, "winner": True}, {"seats": [1], "score": 300, "killed": 0, "lost": 0, "hatched": 0, "winner": False}])
+    nodeaths["details"] = details_of_people()
+    out = [people, community, left, big, nodeaths]
     for i in range(54):                                   # computer matches, newest first after the first two, the other fixtures among them
         m = MAPS[i % 6]
         ident = "ants-%s-%s-%06dZ" % (m[:-4], time.strftime("%Y%m%d", time.gmtime(NOW - 3600 * (i + 2))), 100000 + i)
@@ -164,6 +234,7 @@ class MatchesDoor(live.Door):
     def __init__(self):
         super().__init__()
         self.history = "ok"                              # ok | busy (503) | off (404 as a server with no history answers) | down (500)
+        self.deaths = "ok"                               # ok | none (no map of deaths for any map: 404)
         self.seat_keys = "both"                          # both (this server) | old (an earlier server: only "colour") | new (only "color"): the keys of each seat
 
     @staticmethod
@@ -203,6 +274,11 @@ class MatchesDoor(live.Door):
                                     + [{"file": "Pond.lvl", "width": 40, "height": 40, "minutes": 20, "players": 4, "description": "", "plays": 3, "thumb": "/maps/previews/Pond.webp"}]})
         if path == "/maps/previews/Pond.webp":
             return self.send(h, 200, PNG, "image/png")
+        if path == "/history/deaths":
+            name = urllib.parse.parse_qs(query).get("map", [""])[0]
+            if self.deaths == "none" or name.lower() != "treasure.lvl":
+                return self.js(h, 404, {"error": "no map of deaths for that map"})
+            return self.js(h, 200, deaths_sum("TREASURE.LVL"))
         if path == "/history" or path.startswith("/history/"):
             if self.history == "busy":
                 return self.js(h, 503, {"error": "the match history is busy: try again in a moment"})
@@ -226,10 +302,10 @@ class MatchesDoor(live.Door):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: list, match, frame or stats (default: all)")
+    ap.add_argument("--only", default="", help="one part: list, match, deaths, frame or stats (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("list", "match", "frame", "stats")
+    parts = ("list", "match", "deaths", "frame", "stats")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -435,8 +511,8 @@ def main():
             tab = new_tab()
             open_page(tab, "/match.html?id=" + ID_PEOPLE)
             check(until(tab, "!!document.getElementById('board')") is True, "the match page has its sections")
-            check(tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })") == ["result", "replay", "summary", "board", "overtime", "activity", "about"],
-                  "the sections, in order: result, replay, the band of highlights, scoreboard, over time, activity, about (%s)" % tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })"))
+            check(tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })") == ["result", "replay", "summary", "board", "overtime", "deaths", "activity", "about"],
+                  "the sections, in order: result, replay, the band of highlights, scoreboard, over time, where ants died, activity, about (%s)" % tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })"))
             check(tab.ev("document.getElementById('replay').hidden") is True and tab.ev("document.getElementById('show').textContent").strip().endswith("Show replay"), "the replay is closed, its button says Show replay")
             check(tab.ev("document.querySelector('#result .verdict').textContent") == "Pip (bot, Hard) won2,040  –  1,010  –  210", "who won, and the sides' scores: %r" % tab.ev("document.querySelector('#result .verdict').textContent"))
             rows = tab.ev("[].map.call(document.querySelectorAll('#board .tbl tbody tr'), function (r) { return [].map.call(r.children, function (c) { return c.textContent; }).join('|'); })")
@@ -457,7 +533,7 @@ def main():
             heat = tab.ev("[].map.call(document.querySelectorAll('#activity .heat .hrow'), function (r) { return r.querySelectorAll('.hc').length; })")
             check(heat == [0, 12, 12, 12, 12] and tab.ev("document.querySelectorAll('#activity .heat .hc.top').length") == 4 and tab.ev("document.querySelector('#activity .heat .hc').style.background") != "", "activity: a strip of 12 minutes for each seat, the busiest minute of each ringed, the cells painted (%s)" % heat)
             check(tab.ev("[].map.call(document.querySelectorAll('#activity .tbl thead th'), function (c) { return c.textContent; })") == ["Player", "Orders", "Moves", "Attacks", "Bombs", "Fires", "Bridges", "Raids"], "orders by kind: its columns")
-            check(tab.ev("!window.__pwn && !document.getElementById('more') && document.querySelectorAll('#sections img').length === 1"), "no note of missing stats (and nothing became markup: the map's picture is the one image)")
+            check(tab.ev("!window.__pwn && !document.getElementById('more') && document.querySelectorAll('#sections img').length === 2"), "no note of missing stats (and nothing became markup: the map's picture and the card's are the only images)")
             shot(tab, "match")
             tab.close()
             tab = new_tab()
@@ -533,7 +609,7 @@ def main():
             open_page(tab, "/match.html?id=" + ID_PEOPLE)
             until(tab, "!!document.getElementById('board')")
             time.sleep(1.0)
-            asked = [h for h in door.hits if not h.startswith(("/history", "/live", "/maps", "/front/", "/matches.css", "/match_stats.css", "/history_page.js", "/match_stats.js", "/replay_page.js", "/match.html", "/favicon"))]
+            asked = [h for h in door.hits if not h.startswith(("/history", "/live", "/maps", "/front/", "/matches.css", "/match_stats.css", "/death_map.css", "/history_page.js", "/match_stats.js", "/death_map.js", "/replay_page.js", "/match.html", "/favicon"))]
             check(asked == [], "before the button: nothing of the game and no recording is asked for (%s)" % asked)
             check(tab.ev("document.querySelectorAll('iframe').length") == 0, "... and there is no frame")
             tab.ev("document.getElementById('show').click()")
@@ -612,6 +688,196 @@ def main():
             until(tab, "!!window.__stub && window.__stub.total > 0 && !!window.antsReplayLeave", 20)
             tab.ev("window.antsReplayLeave()")
             check(until(tab, "location.pathname === '/matches.html'", 10) is True, "the game page of the frame, opened on its own: its Quit goes to the list of matches (%s)" % tab.ev("location.pathname"))
+            tab.close()
+
+        if args.only in ("", "deaths"):
+            print("[web matches] part deaths: the card Where ants died, on the match page and in the Stats panel")
+            card = "document.getElementById('deaths')"
+            stage = card + ".querySelector('.dm-stage')"
+            fresh()
+            tab = new_tab(1280, 900)
+            open_page(tab, "/match.html?id=" + ID_PEOPLE)
+            check(until(tab, "!!document.getElementById('deaths') && document.querySelectorAll('#deaths svg').length === 1") is True, "the match page has the card Where ants died")
+            ids = tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })")
+            check(ids.index("deaths") == ids.index("overtime") + 1 and ids.index("activity") == ids.index("deaths") + 1, "the card is right after Over time and before Activity (%s)" % ids)
+            check(tab.ev(card + ".querySelector('h2').textContent") == "Where ants died" and tab.ev(card + ".querySelector('.count').textContent") == "34 ants died", "its title and how many ants died: %r" % tab.ev(card + ".querySelector('.count').textContent"))
+            chips = tab.ev("[].map.call(document.querySelectorAll('#deaths .dm-chip'), function (c) { return c.textContent; })")
+            check(chips[0] == "All teams 34" and len(chips) == 5 and chips[1].endswith(" %d" % sum(1 for a in fight_ants(34) if a[3] == 0)) and "<img src=x onerror=window.__pwn=1> " in chips[1], "the chips: all teams and a seat each, with its number, a name that is markup as text (%s)" % chips)
+            check(tab.ev("document.querySelector('#deaths .seg[aria-label=\"Show as\"] button[aria-pressed=true]').textContent") == "Heat" and tab.ev(card + ".className").split()[-1] == "heat", "Heat is the first view")
+            lit = "(function () { var c = " + stage + ".querySelector('canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, n = 0; for (var i = 3; i < d.length; i += 4) if (d[i] > 20) n++; return [c.width, c.height, n]; })()"
+            got = tab.ev(lit)
+            check(got[0] == got[1] and 600 <= got[0] <= 1200 and got[2] > 2000 and got[2] < got[0] * got[1] / 3, "the glow is painted on a canvas of the map's shape, on part of it only (%s)" % got)
+            check(tab.ev(stage + ".querySelector('img').naturalWidth") > 0 and tab.ev(stage + ".querySelector('img').getAttribute('src')") == "front/preview_treasure.png", "the map's own picture is under the glow")
+            geo = tab.ev("(function () { var s = " + stage + ".getBoundingClientRect(); return [s.width, s.height, document.documentElement.scrollWidth, innerWidth]; })()")
+            check(geo[0] > 400 and abs(geo[0] - geo[1]) < 3 and geo[2] <= geo[3], "the stage is square like the map and the page does not scroll sideways (%s)" % geo)
+            check(tab.ev("[].map.call(document.querySelectorAll('#deaths .dm-ruler-top span'), function (s) { return s.textContent; }).join()").startswith("0,10,20"), "the rulers say the tile numbers")
+            tab.ev(card + ".scrollIntoView({block: 'start'})")
+            time.sleep(0.4)
+            shot(tab, "deaths-heat-wide")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .seg button'), function (b) { return b.textContent === 'Dots'; })[0].click()")
+            check(until(tab, "document.querySelectorAll('#deaths svg .mkp').length === 34") is True, "Dots: one mark for each of the 34 ants")
+            check(tab.ev("document.querySelectorAll('#deaths svg .ring-first').length") == 1 and tab.ev("document.querySelectorAll('#deaths svg .ring-last').length") == 1 and tab.ev("document.querySelectorAll('#deaths .dm-tag').length") == 2, "the rings of the first blood and the last kill, with their tags")
+            tab.ev(card + ".scrollIntoView({block: 'start'})")
+            time.sleep(0.3)
+            shot(tab, "deaths-dots-wide")
+            pt = tab.ev("(function () { var m = document.querySelector('#deaths svg .mkp'), r = m.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+            tab.click(pt[0], pt[1])
+            check(until(tab, "!!document.querySelector('#deaths .dm-tt')") is True and tab.ev("document.querySelector('#deaths .dm-tt .r').textContent").startswith("Tile"), "a click on a mark opens the tooltip: tile, time, ant, who killed it (%r)" % tab.ev("document.querySelector('#deaths .dm-tt') && document.querySelector('#deaths .dm-tt').textContent"))
+            check(tab.ev("(function () { var t = document.querySelector('#deaths .dm-tt').getBoundingClientRect(), s = " + stage + ".getBoundingClientRect(); return t.left >= s.left - 1 && t.right <= s.right + 1 && t.top >= s.top - 1 && t.bottom <= s.bottom + 1; })()"), "... inside the map")
+            shot(tab, "deaths-tooltip-wide")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .dm-tog'), function (b) { return b.textContent === 'Ants that drowned'; })[0].click()")
+            dry = sum(1 for a in fight_ants(34) if not a[6])
+            check(until(tab, "document.querySelectorAll('#deaths svg .mkp').length === %d" % dry) is True and "%d ants died" % dry in tab.ev(card + ".querySelector('.count').textContent"), "the switch of the ants that drowned hides them, and the title says so (%d are left)" % dry)
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .dm-tog'), function (b) { return b.textContent === 'Ants that drowned'; })[0].click()")
+            tab.ev("document.querySelectorAll('#deaths .dm-chip')[2].click()")
+            red = sum(1 for a in fight_ants(34) if a[3] == 1)
+            check(until(tab, "document.querySelectorAll('#deaths svg .mkp').length === %d" % red) is True and tab.ev("[].every.call(document.querySelectorAll('#deaths svg .mkp'), function (m) { return m.getAttribute('data-c') === 'Red'; })"), "a team's chip shows only that team's ants (%d)" % red)
+            tab.ev("document.querySelectorAll('#deaths .dm-chip')[0].click()")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .dm-zoom button'), function (b) { return b.textContent === '+'; })[0].click()")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .dm-zoom button'), function (b) { return b.textContent === '+'; })[0].click()")
+            check(tab.ev(stage + ".className").find("zoomed") != -1 and tab.ev(card + ".querySelector('.zl').textContent") == "256%" and tab.ev("!!" + card + ".querySelector('.dm-mini')"), "+ zooms in: the scale, the little map")
+            for _ in range(6):
+                tab.ev("[].filter.call(document.querySelectorAll('#deaths .dm-zoom button'), function (b) { return b.textContent === '+'; })[0].click()")
+            check(tab.ev("document.querySelectorAll('#deaths svg g line').length") > 10, "zoomed in far enough the grid of tiles shows (%s lines)" % tab.ev("document.querySelectorAll('#deaths svg g line').length"))
+            tab.ev(card + ".scrollIntoView({block: 'start'})")
+            time.sleep(0.3)
+            shot(tab, "deaths-zoomed-wide")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .dm-zoom button'), function (b) { return b.textContent === 'Fit'; })[0].click()")
+            check(tab.ev(stage + ".className").find("zoomed") == -1, "Fit shows the whole map again")
+            check(tab.ev("!window.__pwn && document.querySelectorAll('#deaths img[src=x]').length === 0"), "a name that is markup stays text in the card")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .seg button'), function (b) { return b.textContent === 'Heat'; })[0].click()")
+            tab.close()
+            # the choice of Dots is kept on the device: a new page of the same browser starts with it
+            tab = new_tab(1280, 900)
+            open_page(tab, "/match.html?id=" + ID_PEOPLE)
+            until(tab, "!!document.getElementById('deaths') && document.querySelectorAll('#deaths svg').length === 1")
+            check(tab.ev("document.querySelector('#deaths .seg[aria-label=\"Show as\"] button[aria-pressed=true]').textContent") == "Heat", "the choice of Heat is kept: the next page starts with Heat")
+            tab.close()
+            # the sum of all the matches on the map
+            fresh()
+            tab = new_tab(1280, 900)
+            open_page(tab, "/match.html?id=" + ID_PEOPLE)
+            until(tab, "!!document.getElementById('deaths') && document.querySelectorAll('#deaths svg').length === 1")
+            check(not hits("/history/deaths"), "the sum is not asked for before it is wanted")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .seg button'), function (b) { return b.textContent.indexOf('All matches') === 0; })[0].click()")
+            check(until(tab, "document.querySelector('#deaths .count').textContent.indexOf('in 40 matches') !== -1") is True and hits("/history/deaths") == ["/history/deaths?map=TREASURE.LVL"], "All matches on this map: asked once, for this map, the title counts the matches (%r %s)" % (tab.ev("document.querySelector('#deaths .count').textContent"), hits("/history/deaths")))
+            check(tab.ev("[].map.call(document.querySelectorAll('#deaths .dm-chip'), function (c) { return c.textContent.replace(/[0-9 ]+$/, ''); }).join()") == "All teams,Green,Red,Blue,Black", "the chips are the seat colors")
+            tab.ev(card + ".scrollIntoView({block: 'start'})")
+            time.sleep(0.5)
+            got = tab.ev(lit)
+            check(got[2] > 3000, "the glow of forty matches (%s)" % got)
+            shot(tab, "deaths-all-matches-wide")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .seg button'), function (b) { return b.textContent === 'This match'; })[0].click()")
+            check(until(tab, "document.querySelector('#deaths .count').textContent === '34 ants died'") is True, "This match: back to its own")
+            tab.close()
+            fresh(deaths="none")
+            tab = new_tab(1280, 900)
+            open_page(tab, "/match.html?id=" + ID_PEOPLE)
+            until(tab, "!!document.getElementById('deaths') && document.querySelectorAll('#deaths svg').length === 1")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .seg button'), function (b) { return b.textContent.indexOf('All matches') === 0; })[0].click()")
+            check(until(tab, "/No other matches on this map/.test(document.getElementById('deaths').textContent)") is True and tab.ev("document.querySelector('#deaths .count').textContent") == "34 ants died", "a map with no sum says so in one line and the card stays as it was")
+            tab.close()
+            fresh()
+            # a phone
+            tab = new_tab(390, 844, 2, True)
+            open_page(tab, "/match.html?id=" + ID_PEOPLE)
+            until(tab, "!!document.getElementById('deaths') && document.querySelectorAll('#deaths svg').length === 1")
+            geo = tab.ev("(function () { var s = " + stage + ".getBoundingClientRect(), c = document.getElementById('deaths').getBoundingClientRect(); return [Math.round(s.width), Math.round(s.height), Math.round(c.left), Math.round(c.right), document.documentElement.scrollWidth, innerWidth]; })()")
+            check(geo[4] <= geo[5] and geo[2] >= 0 and geo[3] <= geo[5] and geo[0] > 280 and abs(geo[0] - geo[1]) < 3, "a phone: the card lies inside the screen and the map is square (%s)" % geo)
+            check(tab.ev("[].map.call(document.querySelectorAll('#deaths .dm-body > div'), function (d) { return d.className; }).join()") == "dm-mapcol,dm-side" and tab.ev("document.querySelector('#deaths .dm-side').getBoundingClientRect().top > document.querySelector('#deaths .dm-mapcol').getBoundingClientRect().bottom - 2"), "... the map first, the controls under it")
+            tab.ev(card + ".scrollIntoView({block: 'start'})")
+            time.sleep(0.4)
+            shot(tab, "deaths-heat-phone")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .seg button'), function (b) { return b.textContent === 'Dots'; })[0].click()")
+            until(tab, "document.querySelectorAll('#deaths svg .mkp').length === 34")
+            pt = tab.ev("(function () { var m = document.querySelector('#deaths svg .mkp'), r = m.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+            tab.tap(pt[0], pt[1])
+            check(until(tab, "!!document.querySelector('#deaths .dm-tt.below')") is True, "a tap on a mark opens the tooltip under the map")
+            tab.ev("document.querySelector('#deaths .dm-tt').scrollIntoView({block: 'center'})")
+            time.sleep(0.3)
+            shot(tab, "deaths-tooltip-phone")
+            check(tab.ev("document.documentElement.scrollWidth <= innerWidth"), "... and the page still does not scroll sideways")
+            tab.close()
+            # a match kept in squares on a 512 x 512 map
+            tab = new_tab(1280, 900)
+            open_page(tab, "/match.html?id=" + ID_BIG)
+            check(until(tab, "!!document.getElementById('deaths') && document.querySelectorAll('#deaths svg').length === 1") is True, "a match on a very big map has the card")
+            check(tab.ev("document.querySelector('#deaths .seg[aria-label=\"Show as\"] button[aria-pressed=true]').textContent") == "Dots" and tab.ev("document.querySelectorAll('#deaths svg .sq').length") == 54 and "Big match." in tab.ev("document.querySelector('#deaths .dm-note').textContent"), "it starts as colored squares (54), with the note that says why")
+            tab.ev(card + ".scrollIntoView({block: 'start'})")
+            time.sleep(0.3)
+            shot(tab, "deaths-huge-squares-wide")
+            for _ in range(4):
+                tab.ev("[].filter.call(document.querySelectorAll('#deaths .dm-zoom button'), function (b) { return b.textContent === '+'; })[0].click()")
+            check(tab.ev("document.querySelectorAll('#deaths svg text').length") > 5, "zoomed in the squares carry their numbers")
+            shot(tab, "deaths-huge-zoomed-wide")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .dm-zoom button'), function (b) { return b.textContent === 'Fit'; })[0].click()")
+            tab.ev("[].filter.call(document.querySelectorAll('#deaths .seg button'), function (b) { return b.textContent === 'Heat'; })[0].click()")
+            time.sleep(0.5)
+            got = tab.ev(lit)
+            check(got[2] > 500 and "Many in one square" in tab.ev("document.querySelector('#deaths .ends').textContent"), "Heat is there for a big map too (%s)" % got)
+            shot(tab, "deaths-huge-heat-wide")
+            tab.close()
+            # no map of deaths: one quiet line; and none where the box More stats is already
+            for ident, want, what in ((ID_NODEATHS, "quiet", "a match counted by this version with nobody lost"), (ID_LEFT, "none", "a match whose details are the marker (the box More stats says why)"), (ID_OLD, "none", "an older recording")):
+                tab = new_tab(1280, 900)
+                open_page(tab, "/match.html?id=" + ident)
+                until(tab, "!!document.getElementById('board')")
+                if want == "quiet":
+                    check(tab.ev("document.getElementById('deaths') && document.getElementById('deaths').querySelector('.note').textContent") == "No map of deaths for this match." and tab.ev("document.querySelectorAll('#deaths svg').length") == 0 and tab.ev("!document.getElementById('more')"), "%s: one quiet line, no box More stats" % what)
+                    tab.ev("document.getElementById('deaths').scrollIntoView({block: 'center'})")
+                    time.sleep(0.3)
+                    shot(tab, "deaths-none-wide")
+                else:
+                    check(tab.ev("document.getElementById('deaths')") is None and tab.ev("!!document.getElementById('more')"), "%s: one box (More stats), no second one" % what)
+                tab.close()
+            tab = new_tab(390, 844, 2, True)
+            open_page(tab, "/match.html?id=" + ID_NODEATHS)
+            until(tab, "!!document.getElementById('deaths')")
+            tab.ev("document.getElementById('deaths').scrollIntoView({block: 'center'})")
+            time.sleep(0.3)
+            shot(tab, "deaths-none-phone")
+            tab.close()
+            # the Stats panel of the replay page
+            fresh()
+            tab = new_tab(1280, 800)
+            open_page(tab, "/play.html?replay=" + ID_PEOPLE + ".antsrep")
+            until(tab, READY)
+            until(tab, "!document.getElementById('stats-btn').hidden")
+            tab.ev("document.getElementById('stats-btn').click()")
+            check(until(tab, "(" + live.SHOWN + ")('mstats') && document.querySelectorAll('#mstats .dm svg').length === 1") is True, "the Stats panel has the small card under the table")
+            check(tab.ev("document.querySelector('#mstats .dm h3').textContent") == "Where ants died34 ants died" and tab.ev("document.querySelectorAll('#mstats .dm .dm-tog').length") == 0, "its title, and no marks in the small card")
+            got = tab.ev("(function () { var s = document.querySelector('#mstats .dm .dm-stage').getBoundingClientRect(), p = document.getElementById('mstats').getBoundingClientRect(); return [Math.round(s.width), Math.round(s.height), s.right <= p.right + 1]; })()")
+            check(200 <= got[0] <= 260 and abs(got[0] - got[1]) < 3 and got[2], "the small map is about 236 pixels wide and inside the panel (%s)" % got)
+            got = tab.ev("(function () { var c = document.querySelector('#mstats .dm canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, n = 0; for (var i = 3; i < d.length; i += 4) if (d[i] > 20) n++; return [c.width, n]; })()")
+            check(got[1] > 1000, "its glow is painted (%s)" % got)
+            check(tab.ev("[].map.call(document.querySelectorAll('#mstats .dm .dm-chip'), function (c) { return c.textContent; })[0]") == "All teams 34" and tab.ev("document.querySelector('#mstats a').textContent").startswith("Open the match page"), "the chips, and the link to the match page below")
+            shot(tab, "deaths-stats-wide")
+            tab.ev("[].filter.call(document.querySelectorAll('#mstats .dm .seg button'), function (b) { return b.textContent === 'Dots'; })[0].click()")
+            check(until(tab, "document.querySelectorAll('#mstats .dm svg .mkp').length === 34") is True, "Dots in the small card: one mark for each ant")
+            shot(tab, "deaths-stats-dots-wide")
+            tab.close()
+            tab = new_tab(390, 844, 2, True)
+            open_page(tab, "/play.html?replay=" + ID_PEOPLE + ".antsrep")
+            until(tab, READY)
+            until(tab, "!document.getElementById('mstats-flow').hidden")
+            check(tab.ev("document.querySelectorAll('#mstats-flow .dm').length") == 1 and tab.ev("document.querySelector('#mstats-flow .dm .dm-stage').clientWidth") == 0, "a phone: the small card is in the row, which is closed: it has no size yet")
+            tab.ev("document.querySelector('#mstats-flow .mt').click()")
+            check(until(tab, "document.querySelectorAll('#mstats-flow .dm svg').length === 1 && document.querySelector('#mstats-flow .dm .dm-stage').clientWidth > 200 && document.querySelector('#mstats-flow .dm svg').getAttribute('viewBox') === '0 0 60 60' && document.querySelector('#mstats-flow .dm canvas').width > 0") is True, "... opened, the card is drawn for its size")
+            check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth"), "... inside the window")
+            tab.ev("document.querySelector('#mstats-flow .dm').scrollIntoView({block: 'center'})")
+            time.sleep(0.4)
+            shot(tab, "deaths-stats-phone")
+            tab.ev("[].filter.call(document.querySelectorAll('#mstats-flow .dm .seg button'), function (b) { return b.textContent === 'Dots'; })[0].click()")
+            time.sleep(0.4)
+            shot(tab, "deaths-stats-dots-phone")
+            tab.close()
+            # a match of the replay page that has no map of deaths: nothing is added to the panel
+            tab = new_tab(1280, 800)
+            open_page(tab, "/play.html?replay=" + ID_NODEATHS + ".antsrep")
+            until(tab, READY)
+            until(tab, "!document.getElementById('stats-btn').hidden")
+            tab.ev("document.getElementById('stats-btn').click()")
+            check(until(tab, "(" + live.SHOWN + ")('mstats')") is True and tab.ev("document.querySelectorAll('#mstats .dm').length") == 0, "a match with no map of deaths: the panel as it was, nothing added")
             tab.close()
 
         if args.only in ("", "stats"):

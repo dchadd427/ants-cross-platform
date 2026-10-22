@@ -26,8 +26,8 @@ def read(*parts):
         return f.read()
 
 
-def run_check(map_path):
-    return subprocess.run([NODE, CHECK_JS, map_path, os.path.join(REPO, "web", "history_page.js")], capture_output=True, text=True, timeout=120)
+def run_check(map_path, history_path=None):
+    return subprocess.run([NODE, CHECK_JS, map_path, history_path or os.path.join(REPO, "web", "history_page.js")], capture_output=True, text=True, timeout=120)
 
 
 @unittest.skipUnless(NODE, "node is not installed: the map of deaths was NOT run (tests/scripts/web_death_map_check.js)")
@@ -88,6 +88,7 @@ class TheCards(unittest.TestCase):
         "a storage that throws is not caught": ("function saved() { try { return env.storage ? env.storage.getItem(MODE_KEY) : null; } catch (e) { return null; } }", "function saved() { return env.storage ? env.storage.getItem(MODE_KEY) : null; }"),
         "a storage that throws on write is not caught": ("try { if (env.storage) env.storage.setItem(MODE_KEY, mode); } catch (e) { /* the choice is not remembered */ }", "if (env.storage) env.storage.setItem(MODE_KEY, mode);"),
         "the switch of the drowned only draws again": ("d.addEventListener('click', function () { st.drowned = !st.drowned; st.pick = null; render(); });", "d.addEventListener('click', function () { st.drowned = !st.drowned; st.pick = null; draw(); });"),
+        "one team in the sum is not named in the title": ("(st.team < 0 ? plural(sel.total, 'ant', 'ants') + ' died' : n0(sel.total) + ' of ' + chipName(st.team) + '\\u2019s ants died') + ' in '", "plural(sel.total, 'ant', 'ants') + ' died in '"),
         "a chip changes nothing": ("b.addEventListener('click', function () { st.team = team; st.pick = null; render(); }); chips.appendChild(b);", "b.addEventListener('click', function () { st.pick = null; render(); }); chips.appendChild(b);"),
         "a ring is shown for a team that is not shown": ("var visible = function (a) { return a && (st.team < 0 || a.team === st.team) && !(a.drowned && st.drowned === false); };", "var visible = function (a) { return a && !(a.drowned && st.drowned === false); };"),
         "a ring is shown for an ant that drowned and is hidden": ("var visible = function (a) { return a && (st.team < 0 || a.team === st.team) && !(a.drowned && st.drowned === false); };", "var visible = function (a) { return a && (st.team < 0 || a.team === st.team); };"),
@@ -131,6 +132,33 @@ class TheCards(unittest.TestCase):
                 self.assertNotEqual(done.returncode, 0, "the check accepted a script where " + why + "\n" + done.stdout[-400:])
 
 
+@unittest.skipUnless(NODE, "node is not installed: the Stats panel was NOT run (tests/scripts/web_death_map_check.js)")
+class TheStatsPanel(unittest.TestCase):
+    """AntsHistory.replayStats (web/history_page.js) puts the small card in the panel and asks for it to be drawn when the panel is opened"""
+    MUTANTS = {
+        "the card is not added to the panel": ("if (dm) box.appendChild(dm);", ""),
+        "the card is not asked to be small": ("env.deathMap.card(rec, { compact: true })", "env.deathMap.card(rec, {})"),
+        "opening the panel does not draw the card": ("redraw(pop); }\n            }", "}\n            }"),
+        "opening the row does not draw the card": ("if (!closed) redraw(flow); });", "});"),
+        "a card that throws takes the panel with it": ("catch (e) { dm = null; }", "catch (e) { throw e; }"),
+        "a redraw that throws is heard": ("catch (e) { /* the card is drawn when it is next opened */ }", "catch (e) { throw e; }"),
+        "a window that changes size draws a closed panel": ("if (!pop.hidden) redraw(pop); if (!flow.classList.contains('closed')) redraw(flow);", "redraw(pop); redraw(flow);"),
+        "a window that changes size draws nothing": ("if (!pop.hidden) redraw(pop); if (!flow.classList.contains('closed')) redraw(flow);", ""),
+    }
+
+    def test_the_check_can_fail(self):
+        text = read("web", "history_page.js")
+        with tempfile.TemporaryDirectory() as folder:
+            for why, (old, new) in self.MUTANTS.items():
+                self.assertEqual(text.count(old), 1, why)
+                path = os.path.join(folder, "history_page.js")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text.replace(old, new))
+                done = run_check(os.path.join(REPO, "web", "death_map.js"), path)
+                self.assertNotIn("Cannot find module", done.stdout + done.stderr, why)
+                self.assertNotEqual(done.returncode, 0, "the check accepted a page script where " + why + "\n" + done.stdout[-400:])
+
+
 class TheFiles(unittest.TestCase):
     page = read("web", "match.html")
     script = read("web", "death_map.js")
@@ -154,7 +182,7 @@ class TheFiles(unittest.TestCase):
 
     def test_the_card_is_the_entry_right_after_over_time_and_a_match_with_no_stats_gets_one_box_not_two(self):
         self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
-        self.assertIn("function deathsSection(rec) { return window.AntsMatchStats.noStatsNote(rec) ? null : deathMap.card(rec, {}); }", self.page)
+        self.assertIn("if (window.AntsMatchStats.noStatsNote(rec)) return null;\n        try { return deathMap.card(rec, {}); } catch (e) { return null; }", self.page)      # (a card that throws costs the page nothing)
         self.assertIn("window.AntsDeathMap.redraw(document)", self.page)
         self.assertEqual(self.page.count("window.AntsDeathMap.redraw(document)"), 2)               # (after the page is built, and when the window changes size)
         self.assertEqual(self.page.count("addEventListener('resize'"), 1)
