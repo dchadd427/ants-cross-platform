@@ -103,6 +103,8 @@ struct TempDir {
 
 struct MatchSpec {
     std::string map{"TINY"};                            // the shipped map's name without ".LVL"
+    std::string dir;                                    // the folder of the map ("" = the shipped maps' folder: maps_dir())
+    std::string file;                                   // the map's file name when it is not the shipped map's `map` + ".LVL" (a community map: "Easy jungle.lvl")
     uint32_t seed{7};
     uint32_t turns{1200};
     uint8_t roster{0x0F};
@@ -115,7 +117,8 @@ struct MatchSpec {
 // A match on a shipped map (TINY unless the spec says another): the standard computer players gather food (the scores move), and on top of what they do every seat hatches an ant every 100 ticks and, from tick 1000, sends all its ants
 // against an ant of the next seat every 200 ticks (so that ants are hatched, killed and lost), recorded as the server's rooms record one. Empty when the map is not there.
 [[maybe_unused]] std::vector<uint8_t> record_match(const MatchSpec& spec) {
-    const std::string path = maps_dir() + "/" + spec.map + ".LVL";
+    const std::string file = spec.file.empty() ? spec.map + ".LVL" : spec.file;
+    const std::string path = (spec.dir.empty() ? maps_dir() : spec.dir) + "/" + file;
     assets::LevelData level;
     uint64_t hash = 0;
     if (!level.load_from_file(path) || !net::hash_file(path, hash)) return std::vector<uint8_t>();
@@ -133,7 +136,7 @@ struct MatchSpec {
     shell.head.game_version = "v0.12.0-test";
     shell.head.build_id = "test";
     shell.head.venue = "game server";
-    shell.head.map_name = spec.map + ".LVL";
+    shell.head.map_name = file;
     shell.head.map_hash = hash;
     shell.head.seed = spec.seed;
     shell.head.roster = spec.roster;

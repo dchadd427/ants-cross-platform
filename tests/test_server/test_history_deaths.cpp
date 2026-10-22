@@ -270,6 +270,11 @@ int main() {
         ASSERT_EQ(make_history_deaths(stats_of(0, 60, {kill_at(100, 1, 1, 0, 1)})), std::string());
         ASSERT_EQ(make_history_deaths(stats_of(60, 0, {kill_at(100, 1, 1, 0, 1)})), std::string());
         ASSERT_EQ(make_history_deaths(stats_of(5000, 60, {kill_at(100, 1, 1, 0, 1)})), std::string());          // (a tile of that map has no name in 12 bits: no field, never a wrong one)
+        ASSERT_EQ(make_history_deaths(stats_of(4097, 60, {kill_at(100, 1, 1, 0, 1)})), std::string());          // (4,096 tiles is the most that x can name: 0 to 4,095)
+        ASSERT_EQ(make_history_deaths(stats_of(60, 4097, {kill_at(100, 1, 1, 0, 1)})), std::string());
+        ASSERT_TRUE(view_of(make_history_deaths(stats_of(4096, 4096, {kill_at(100, 4095, 4095, 0, 1)}))).ants.size() == 1);
+        const DeathsView wide = view_of(make_history_deaths(stats_of(100, 81, {kill_at(100, 99, 80, 1, 2)})));      // (a map that is not square: the width is the width)
+        ASSERT_TRUE(wide.width == 100 && wide.height == 81 && wide.ants.size() == 1 && wide.ants[0].x == 99 && wide.ants[0].y == 80);
         const std::string text = make_history_deaths(stats_of(60, 40, {kill_at(1999, 7, 9, 2, 3, 4, true)}));
         const JsonValue j = parse_text(text);
         ASSERT_TRUE(j.get("v").as_int_or(0) == kDeathsVersion && j.get("w").as_int_or(0) == 60 && j.get("h").as_int_or(0) == 40 && j.get("n").as_int_or(0) == 1 && j.get("k").str() == "x");
@@ -365,6 +370,40 @@ int main() {
         ASSERT_TRUE(unpack_deaths(j.get("f").str(), f) && unpack_deaths(j.get("l").str(), l) && f.size() == 1 && l.size() == 1);
         ASSERT_TRUE(f[0].x == static_cast<uint32_t>(first->tile_x) && f[0].second == first->turn / 20 && l[0].x == static_cast<uint32_t>(last->tile_x) && l[0].second == last->turn / 20 && f[0].killer < 4 && l[0].killer < 4);
         ASSERT_EQ(make_history_deaths(st), text);                                           // (the same text every time)
+    } TEST_END();
+
+    TEST_CASE("DD2.4b Squares are the smallest that fit, in every case: over many matches and maps the text is never over the cap, and squares of half the side would have been (with the shortest header there is); the first and last kill are the first and last that a team is to blame for, whoever died before") {
+        size_t checked = 0, halved = 0;
+        for (const uint32_t side : {64u, 128u, 256u, 512u, 1024u}) {
+            for (size_t n = 330; n <= 1900; n += 61) {
+                const MatchStats st = stats_of(side, side, spread(n, side, side, static_cast<uint32_t>(n) + side));
+                const std::string text = make_history_deaths(st);
+                ASSERT_TRUE(!text.empty() && text.size() <= kDeathsMaxBytes);
+                const DeathsView v = view_of(text);
+                ASSERT_TRUE(v.squares && v.total == n);
+                ++checked;
+                if (v.side > 2) {
+                    std::map<std::tuple<uint32_t, uint32_t, uint8_t, bool>, int> cells;
+                    for (const MatchStats::Kill& k : st.kills) ++cells[std::make_tuple(static_cast<uint32_t>(k.tile_y) / (v.side / 2), static_cast<uint32_t>(k.tile_x) / (v.side / 2), k.victim, k.drowned)];
+                    ASSERT_GT(cells.size() * 8 + 90, kDeathsMaxBytes);                   // (the packed text of squares of half the side is over the cap even with the shortest header)
+                    ++halved;
+                }
+            }
+        }
+        ASSERT_TRUE(checked > 50 && halved > 10);
+        // the first and last kill that a team is to blame for: the ants that died before the first one, and after the last one, had nobody to blame
+        std::vector<MatchStats::Kill> kills = spread(600, 512, 512, 21);
+        for (MatchStats::Kill& k : kills) k.killer = 255;
+        kills[3].killer = 2;
+        kills[500].killer = 1;
+        const std::string text = make_history_deaths(stats_of(512, 512, kills));
+        const JsonValue j = parse_text(text);
+        std::vector<Death> f, l;
+        ASSERT_TRUE(j.get("k").str() == "b" && unpack_deaths(j.get("f").str(), f) && unpack_deaths(j.get("l").str(), l) && f.size() == 1 && l.size() == 1);
+        ASSERT_TRUE(f[0].second == kills[3].turn / 20 && f[0].killer == 2 && l[0].second == kills[500].turn / 20 && l[0].killer == 1);
+        for (MatchStats::Kill& k : kills) k.killer = 255;                                  // (nobody to blame for any: no first and no last)
+        const JsonValue none = parse_text(make_history_deaths(stats_of(512, 512, kills)));
+        ASSERT_TRUE(none.get("k").str() == "b" && !none.has("f") && !none.has("l"));
     } TEST_END();
 
     TEST_CASE("DD2.5 The cap holds for the worst case: any number of ants, on any map up to 2,048 a side, spread over every tile, all four teams, drowned or not; the text is a field that parses and counts every ant") {
@@ -508,6 +547,32 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("DD3.3 A map that is not square: the collector gives the width as the width and the height as the height (a recording on a community map of 100 x 81 tiles), and the field of its deaths names both") {
+        const std::string community = std::string(ANTS_SOURCE_DIR) + "/Community-Maps";
+        MatchSpec spec;
+        spec.file = "Easy jungle.lvl";
+        spec.dir = community;
+        spec.seed = 3;
+        spec.turns = 700;
+        spec.names = {"Bot (Hard)", "Bot (Hard)", "Bot (Hard)", "Bot (Hard)"};
+        const std::vector<uint8_t> bytes = record_match(spec);
+        if (bytes.empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        replay::Replay rep;
+        assets::LevelData level;
+        std::string why;
+        ASSERT_TRUE(replay::decode(bytes.data(), bytes.size(), rep, why) && replay::load_map(rep.head, std::vector<std::string>{maps_dir(), community}, level, why));
+        const replay::StatsPlay p = replay::play_with_stats(rep, level);
+        ASSERT_TRUE(p.outcome.ok && p.stats.ok);
+        ASSERT_TRUE(p.stats.map_width == 100 && p.stats.map_height == 81);
+        MatchStats st = p.stats;
+        st.kills.push_back(kill_at(700, 99, 80, 1, 2));                                    // (a death in the far corner, to see both numbers in the field)
+        const DeathsView v = view_of(make_history_deaths(st));
+        ASSERT_TRUE(v.width == 100 && v.height == 81 && !v.ants.empty() && v.ants.back().x == 99 && v.ants.back().y == 80);
+    } TEST_END();
+
     // ---- the store ----------------------------------------------------------------------------------------------------------------------------
 
     TEST_CASE("DD4.1 A match that the feeder counts has its map of deaths next to its details, from the same play: in its own table, in the record's JSON under \"deaths\", and the details are what they were") {
@@ -562,7 +627,7 @@ int main() {
         }
         Rig rig;
         ASSERT_TRUE(rig.open());
-        rig.feeder.set_deaths_maker([](const replay::MatchStats&) -> std::string { throw std::runtime_error("the map broke"); });
+        rig.feeder.set_deaths_maker([](const replay::MatchStats&) -> std::string { throw std::out_of_range("the map broke"); });       // (not a runtime_error: the feeder holds back any exception)
         const std::string id = counted(rig, 1);
         HistoryRecord rec;
         ASSERT_TRUE(rig.history.find(id, rec) && rec.deaths.empty() && !rec.details.empty() && rec.details != history_details_marker() && rec.seats.size() == 2 && rig.feeder.counted() == 1 && rig.feeder.left_out() == 0);
@@ -728,6 +793,64 @@ int main() {
         uint64_t total = 0;
         for (const DeathSquare& c : m.cells) total += c.count;
         ASSERT_TRUE(total == 950 && m.side >= view_of(mixed[0]).side);
+    } TEST_END();
+
+    TEST_CASE("DD5.5b The sum is the smallest that fits, in every case: from 10 to 90 matches of one big map the text is never over its cap and squares of half the side would have been") {
+        size_t halved = 0;
+        for (uint32_t count = 10; count <= 90; count += 8) {
+            std::vector<std::string> fields;
+            std::vector<MatchStats> stats;
+            for (uint32_t i = 0; i < count; ++i) {
+                stats.push_back(stats_of(256, 256, spread(300, 256, 256, 500 + i)));
+                fields.push_back(make_history_deaths(stats.back()));
+            }
+            const std::string text = add_up_deaths("BIG.LVL", 256, 256, fields);
+            ASSERT_TRUE(!text.empty() && text.size() <= kDeathsSumMaxBytes);
+            const DeathsView v = view_of(text);
+            uint64_t sum = 0;
+            for (const DeathSquare& c : v.cells) sum += c.count;
+            ASSERT_EQ(sum, uint64_t{count} * 300);
+            if (v.side > 1) {
+                std::map<std::tuple<uint32_t, uint32_t, uint8_t, bool>, int> cells;
+                for (const MatchStats& st : stats) {
+                    for (const MatchStats::Kill& k : st.kills) ++cells[std::make_tuple(static_cast<uint32_t>(k.tile_y) / (v.side / 2), static_cast<uint32_t>(k.tile_x) / (v.side / 2), k.victim, k.drowned)];
+                }
+                ASSERT_GT(cells.size() * 8 + 100, kDeathsSumMaxBytes);                       // (squares of half the side do not fit, even with the shortest header)
+                ++halved;
+            }
+        }
+        ASSERT_GT(halved, size_t{3});
+    } TEST_END();
+
+    TEST_CASE("DD5.6 The sum counts the newest matches only (kDeathsSumMatches of them), and it is kept: a change that the store was not told of is not seen until the store is told by a match that is kept or taken out") {
+        TempDir dir;
+        db::Database database;
+        ASSERT_TRUE(open_server_db(database, ""));
+        HistoryStore store(database);
+        std::string why, json;
+        ASSERT_TRUE(store.prepare(why));
+        const std::string old_field = field_at(60, 60, {{59, 59}}), new_field = field_at(60, 60, {{1, 1}});
+        for (size_t i = 0; i < HistoryStore::kDeathsSumMatches + 5; ++i) {
+            const int64_t at = kT0 + static_cast<int64_t>(i);
+            ASSERT_TRUE(store.put(synthetic(id_at(at, "BIG"), "BIG.LVL", 1, at, i < 5 ? old_field : new_field), why));
+        }
+        ASSERT_TRUE(store.map_deaths("BIG.LVL", json) == HistoryStore::DeathsSum::Ok);
+        const JsonValue j = parse_text(json);
+        ASSERT_TRUE(j.get("matches").as_int_or(0) == static_cast<int64_t>(HistoryStore::kDeathsSumMatches) && j.get("n").as_int_or(0) == static_cast<int64_t>(HistoryStore::kDeathsSumMatches));
+        const DeathsView v = view_of(json);
+        ASSERT_TRUE(v.cells.size() == 1 && v.cells[0].x == 1 && v.cells[0].y == 1 && v.cells[0].count == HistoryStore::kDeathsSumMatches);       // (the five oldest, on the other tile, are not in it)
+        // a row that the store was not told of: not seen while the sum is kept
+        const int64_t late = kT0 + 100000;
+        ASSERT_TRUE(database.exec(("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at) VALUES ('" + id_at(late, "BIG") + "', " + std::to_string(late) + ", 'BIG.LVL', 'v1', 10, 1, NULL, 'highest-score', '1v1', 'decided', 1, 0, 0, 0, 'big', '[]', 1)").c_str()).ok());
+        ASSERT_TRUE(database.exec(("INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES ('" + id_at(late, "BIG") + "', 'BIG.LVL', '0000000000000001', " + std::to_string(late) + ", 60, 60, 1, '" + field_at(60, 60, {{30, 30}}) + "')").c_str()).ok());
+        std::string again;
+        ASSERT_TRUE(store.map_deaths("big.lvl", again) == HistoryStore::DeathsSum::Ok && again == json);
+        ASSERT_TRUE(store.put(synthetic(id_at(late + 1, "BIG"), "BIG.LVL", 1, late + 1, new_field), why));         // (the store is told: the sum is made again, and holds the two new rows)
+        ASSERT_TRUE(store.map_deaths("BIG.LVL", again) == HistoryStore::DeathsSum::Ok && again != json);
+        const DeathsView w = view_of(again);
+        bool middle = false;
+        for (const DeathSquare& c : w.cells) middle = middle || (c.x == 30 && c.y == 30);
+        ASSERT_TRUE(middle);
     } TEST_END();
 
     // ---- the route ----------------------------------------------------------------------------------------------------------------------------
