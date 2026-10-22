@@ -47,6 +47,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kExpedition, kRankPowerUps);                 // (the crew that is flown to the Swimmers and the Bombers that fly it)
     ledger_.set_rank(kGateGoals, kRankGates);                     // (the Fire ant and the Bomber of a gate goal)
     ledger_.set_rank(kField, kRankGates);                         // (the ant of the field breach)
+    ledger_.set_rank(kOpportunity, kRankFight);                   // (the kill that one blow gives: an ant is taken from the chores and the economy, never from a pick-up, a raid or a fight)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -161,6 +162,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (tactics_.gate_map && !fallback) gate_goals_.step(context);                          // (Medium and Hard on a walled map: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
     if (tactics_.field_map && !fallback) field_.step(context);                              // (a pile behind a field: one ant opens it)
     tactics_.gate_goals_live = tactics_.gate_map && !fallback && (!gate_goals_.exhausted() || (tactics_.field_map && field_.live()));    // (the counters spare the map's own bombs only while the goals are there to deal with them)
+    opportunity_.step(context);                                                              // (before the fights and every chore: an enemy that one blow kills is struck at once; nothing when the plan has none)
     fight_.step(context);
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
@@ -340,6 +342,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     gate_goals_.on_command(command, fate, tick);
     field_.on_command(command, fate, tick);
     brawl_.on_command(command, fate, tick);
+    opportunity_.on_command(command, fate, tick);
     gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);

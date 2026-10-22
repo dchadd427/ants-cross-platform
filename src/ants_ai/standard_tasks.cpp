@@ -423,7 +423,7 @@ void FightTask::start_offence(TaskContext& c) {
     const auto form = [&](const AntView& e, int32_t reach, size_t force, bool assault = false) {
         std::vector<const AntView*> near;
         for (const AntView* a : pool) {
-            if (a->tile.chebyshev_dist(e.tile) > reach || (assault && !assault_ant(*a, pull))) continue;
+            if (a->tile.chebyshev_dist(e.tile) > reach || (assault && !assault_ant(*a, pull)) || (plan.reach_fights && !walk_reaches(c.map, c.seat, a->tile, e.tile))) continue;       // (reach_fights: no walk, no blow)
             near.push_back(a);
         }
         std::stable_sort(near.begin(), near.end(), [&](const AntView* x, const AntView* y) {
@@ -719,7 +719,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         for (const AntView& a : v.mine()) {
             // (the stand batch) a Fire Ant of the own side strikes the Fire Ant that fires the gate in; with the draft every ant that can strike does
             const bool fire_striker = f.fire && plan.fire_duel && a.type == sim::AntType::Fire && a.id != duel_spare && draft_ant(v, a, shut);
-            if (f.defenders.count(a.id) != 0 || !(can_fight(v, a) || fire_striker || (draft && draft_ant(v, a, shut)))) continue;
+            if (f.defenders.count(a.id) != 0 || !(can_fight(v, a) || fire_striker || (draft && draft_ant(v, a, shut))) || (plan.reach_fights && !fire_striker && !walk_reaches(c.map, c.seat, a.tile, target->tile))) continue;
             if (f.ally && a.tile.chebyshev_dist(target->tile) > plan.ally_help_radius) continue;
             if (f.offence && a.tile.chebyshev_dist(target->tile) > (f.hunt ? plan.hunt_reach : f.assault ? plan.assault_reach : plan.skirmish_reach)) continue;
             if (f.fire && a.tile.chebyshev_dist(target->tile) > (draft && a.type == sim::AntType::Combat ? plan.fire_draft_far : kFireHuntReach)) continue;

@@ -215,6 +215,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.water_hunt = true;
             p.vicinity_hunt = true;
             p.smart_counters = true;
+            p.opportunity = true;                    // the kill batch (docs/BOT_FIGHT.md): Hard strikes the kill that one blow gives, and starts no fight that no walk reaches
+            p.reach_fights = true;
             break;
     }
     return p;
@@ -228,6 +230,11 @@ void without_stand_batch(LevelPlan& p) noexcept {
     p.mine_per_pile = std::min<uint32_t>(p.mine_per_pile, 3);                  // (the field of mines at the piles is the batch's: three were all there was)
     p.mine_apart = 2;
     p.mine_home_apart = 3;
+}
+
+void without_kill_batch(LevelPlan& p) noexcept {
+    p.opportunity = false;
+    p.reach_fights = false;
 }
 
 void without_war_batch(LevelPlan& p) noexcept {

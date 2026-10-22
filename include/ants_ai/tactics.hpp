@@ -331,6 +331,12 @@ struct LevelPlan {
     bool water_hunt{false};              // a non-Swimmer enemy near unbridged water (1..4 knockback blows from drowning) is hunted at any hit points, and non-Combat ants finish the chain
     bool vicinity_hunt{false};           // (Medium, Hard) a low-health enemy (1..3 hit points) anywhere within hunt_reach on the same walker component is hunted and chained in succession
     bool smart_counters{false};          // a lone harmless fire wall or a stray off-route bomb in open grass is ignored by the counters, while active thief-hole raiders are defended aggressively
+    // the kill batch (docs/BOT_FIGHT.md). Off in a plan made by hand; `--tune kill=0` switches all of it off again (the bot as it was)
+    bool opportunity{false};             // an enemy ant that ONE blow kills (thrown into water, onto a bomb or a fire wall, or finished) is struck from the right tile by the nearest free ant, before any chore (OpportunityTask)
+    int32_t opportunity_reach{8};        // ... the striker walks at most this many tiles (Chebyshev) to the tile it strikes from
+    uint32_t opportunity_jobs{2};        // ... kills in hand at a time
+    uint32_t opportunity_ticks{240};     // ... a job is given up this long after it began (12 s)
+    bool reach_fights{false};            // a fight is not started at an enemy that no walk of the attacker reaches, and no ant is called to it (an order the engine refuses is no blow)
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
@@ -350,6 +356,8 @@ Style draw_style(Level level, BotRng& rng) noexcept;
 /// The plan without the stand batch (docs/BOTS.md, "The stand batch"): no fire duel or draft, no ramp unjam, the mines of the war batch as they were, no mines at home, no rush. For `bot_arena --tune stand=0` and for the tests whose
 /// subject is an older rule (without_war_batch calls it).
 void without_stand_batch(LevelPlan& plan) noexcept;
+/// The plan without the kill batch (docs/BOT_FIGHT.md): no opportunistic kills, fights at enemies that no walk reaches as before. For `bot_arena --tune kill=0` and the tests whose subject is an older rule.
+void without_kill_batch(LevelPlan& plan) noexcept;
 /// The plan without the war batch (docs/BOTS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
 /// the plan is what it was before (the fire-in stays where the Hard aggressive style has always had it, and is safe). For `bot_arena --tune war=0` and for the tests whose subject is an older rule.
 void without_war_batch(LevelPlan& plan) noexcept;
