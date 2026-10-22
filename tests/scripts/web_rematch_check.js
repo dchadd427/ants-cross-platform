@@ -133,10 +133,11 @@ const room = (seats, o) => { const m = N.decode(roomBytes(seats, o)); if (m === 
 
 async function main() {
     // ---- 0. what the library offers ---------------------------------------------------------------------------------------------------------------------------------------------------------------
-    same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['ASK_AFTER_MS', 'BACK_KEY', 'COLORS', 'DOTS', 'LOBBY_KEY', 'backLine', 'chipText', 'chipsOf', 'findReplay', 'forgetBack',
+    same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['ASK_AFTER_MS', 'BACK_KEY', 'COLORS', 'DOTS', 'LOBBY_KEY', 'TEST_NOTICE', 'backLine', 'chipText', 'chipsOf', 'failWords', 'findReplay', 'forgetBack',
         'frontStrip', 'gamePage', 'handOver', 'parseOver', 'platformOf', 'readBack', 'seatKey', 'statsHref', 'winnerWords']);
     same('the two keys of this tab\'s session storage', [R.BACK_KEY, R.LOBBY_KEY], ['ants.back', 'ants.lobby']);
     same('the results screen asks for its seat two seconds after the game said that the match is over (the server ends the match in a pass of its own)', R.ASK_AFTER_MS, 2000);
+    check('the front page tells the strip when it made its room again (a room that the page made again has the default map: web/lobby.html onWelcome)', /if \(e\.created\) \{ newRoom = true; backBar\.remade\(\); \}/.test(fs.readFileSync(lobbyPath, 'utf8')));
     check('the front page keeps its room under the same key (web/lobby.html LOBBY_KEY): the hand-over is the front page\'s own entry', fs.readFileSync(lobbyPath, 'utf8').indexOf("var LOBBY_KEY = 'ants.lobby';") !== -1);
     same('the colors of the seats and the dots of the strips (picture R1: green, red, blue, black)', [R.COLORS, R.DOTS], [['Green', 'Red', 'Blue', 'Black'], ['#2e8f56', '#b43a4c', '#5a56c8', '#4a4a50']]);
 
@@ -544,15 +545,106 @@ async function main() {
         tStrip2.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, (ch) => { rbPlans.push(ch); return true; });
         same('when Green is not usable, sync moves the host to the first usable seat (Red = 1)', rbPlans, [{ file: 'Red vs Blue ~test-11223344.lvl', kinds: [4, 0, 4, 0], moveTo: 1 }]);
 
-        const tBody3 = node('body'), tScreen3 = node('div');
-        tBody3.appendChild(tScreen3);
-        const tStrip3 = R.frontStrip({
-            doc, win: { location: { search: '?testroom=missing12345', pathname: '/lobby.html' }, history: { replaceState: () => {} }, opener: null },
-            before: tScreen3, fetch: null, later: () => {}
-        });
-        tStrip3.begin(() => { tStrip3.sync(null); tStrip3.sync({ guest: false, starting: false, mapFile: 'TREASURE.LVL' }); });
-        const tBar3 = byClass(tBody3, 'testbar');
-        check('error strip remains visible after onReady runs sync()', tBar3 && !tBar3.hidden && /warn/.test(tBar3.className));
+        // A test room whose map did not reach the server must never turn into an ordinary room (Treasure) by itself, and the strip says why in words, with the way back to the editor. No new buttons: only the strip's own Back to editor.
+        const SEND_OFF = 'Sending maps is not switched on on this server right now. Go back to the editor.';
+        const TOO_MANY = 'Too many test maps just now. Wait a minute and press Play this map again in the editor.';
+        const TAB_GONE = 'The editor tab was closed. Go back to the editor and press Play this map again.';
+        const handoff = (name) => ({ closed: false, antsTestGameHandoff: () => ({ name, bytes: new Uint8Array([8, 0, 0, 0, 1, 2]) }), antsTestGameBack: () => {} });
+        const okReply = { status: 201, json: () => Promise.resolve({ test_map: { file: 'Again Map ~test-5566aabb.lvl', name: 'Again Map', kind: 'classic', width: 31, height: 31, usable: [true, true, true, true] } }) };
+        const noteDoc = Object.assign({}, doc);
+        const footer = node('p'); footer.textContent = 'Online matches are recorded. Recordings are kept for 30 days.';
+        noteDoc.getElementById = (id) => (id === 'footer-notice' ? footer : null);
+        function testStrip(win, replies, theDoc) {
+            const body = node('body'), screen = node('div');
+            body.appendChild(screen);
+            const calls = [];
+            const s = R.frontStrip({ doc: theDoc || doc, win, before: screen, fetch: (u, i) => { calls.push(u); const r = replies.length > 1 ? replies.shift() : replies[0]; return typeof r === 'function' ? r() : Promise.resolve(r); }, later: (fn) => fn() });
+            return { body, s, calls };
+        }
+        const mkWin = (id, opener) => ({ location: { search: '?testroom=' + id, pathname: '/lobby.html' }, history: { replaceState: () => {} }, opener, closed: false, close: () => {} });
+        const buttonsOf = (body) => all(body, (x) => x.tag === 'button').map((b) => b.textContent);
+        // (1) each way the upload can fail: no room is made, the strip is a warning with exactly these words, and the only button is the strip's Back to editor
+        const refusals = [
+            ['the submissions door is off (503 submissions_off)', { status: 503, json: () => Promise.resolve({ error: 'submissions_off', message: 'Sending maps is not switched on right now.' }) }, SEND_OFF],
+            ['the server is busy (503 busy)', { status: 503, json: () => Promise.resolve({ error: 'busy', message: 'The server is busy checking other maps. Please try again in a minute.' }) }, TOO_MANY],
+            ['too many tries from this address (429)', { status: 429, json: () => Promise.resolve({ error: 'address_limit', message: 'This address has sent as many maps as it may today.' }) }, TOO_MANY],
+            ['the site\'s own page for a limit (503, not JSON)', { status: 503, json: () => Promise.reject(new Error('not json')) }, TOO_MANY],
+            ['the check refuses the map (422, the server\'s own sentence)', { status: 422, json: () => Promise.resolve({ error: 'map_refused', message: 'This map has no hill.' }) }, 'This map has no hill. Go back to the editor.'],
+            ['an error with no sentence (500)', { status: 500, json: () => Promise.resolve({ error: 'internal error' }) }, 'The server could not prepare this test map (answer 500). Go back to the editor.'],
+            ['a reply that is not a test map (201 with no test_map)', { status: 201, json: () => Promise.resolve({}) }, 'The server could not prepare this test map (answer 201). Go back to the editor.'],
+            ['no answer at all (network error)', () => Promise.reject(new Error('offline')), 'Could not reach the server to send the test map. Go back to the editor.']
+        ];
+        for (const [label, reply, words] of refusals) {
+            let n = 0;
+            const x = testStrip(mkWin('refused12345', handoff('Again Map')), [reply]);
+            check('begin takes the address (' + label + ')', x.s.begin(() => { n++; }) === true);
+            await flush(); await flush();
+            const xb = byClass(x.body, 'testbar');
+            check(label + ': no room is made', n === 0, 'onReady ran ' + n + ' time(s)');
+            check(label + ': the strip is a warning', !!xb && !xb.hidden && /warn/.test(xb.className), xb && xb.className);
+            same(label + ': the strip says why, in these words', xb && byClass(xb, 'testbar-text').textContent, 'Test room ' + words);
+            same(label + ': the only button is Back to editor', buttonsOf(x.body), ['◀ Back to editor']);
+            x.s.sync(null); x.s.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, () => { throw new Error('nothing is sent to a room that was not made'); });
+            check(label + ': the warning survives sync()', !byClass(x.body, 'testbar').hidden && /warn/.test(byClass(x.body, 'testbar').className));
+        }
+        same('failWords gives the words for each reason', [R.failWords(503, { error: 'submissions_off' }), R.failWords(429, { error: 'day_limit' }), R.failWords(503, { error: 'busy' }), R.failWords(503, null), R.failWords(0, null), R.failWords(404, { message: '  Not\n here ' })],
+            [SEND_OFF, TOO_MANY, TOO_MANY, TOO_MANY, 'The server could not prepare this test map. Go back to the editor.', 'Not here Go back to the editor.']);
+        check('a very long sentence from the server is cut', R.failWords(422, { message: 'x'.repeat(900) }).length < 260);
+        // (2) the editor's tab: gone (closed, no opener, a page without the hand-over) is its own sentence and nothing is sent; an opener that has no map for this id is another
+        for (const [label, opener] of [['no opener', null], ['a closed opener', { closed: true, antsTestGameHandoff: () => ({ name: 'X', bytes: new Uint8Array([8]) }) }], ['an opener without the hand-over', { closed: false }]]) {
+            let n = 0;
+            const x = testStrip(mkWin('missing12345', opener), [okReply]);
+            x.s.begin(() => { n++; });
+            await flush(); await flush();
+            const xb = byClass(x.body, 'testbar');
+            check(label + ': no room, nothing uploaded', n === 0 && x.calls.length === 0, n + ' room(s), ' + x.calls.length + ' upload(s)');
+            same(label + ': the strip says that the editor tab was closed', xb && byClass(xb, 'testbar-text').textContent, 'Test room ' + TAB_GONE);
+            check(label + ': it is a warning with the way back', /warn/.test(xb.className) && buttonsOf(x.body).length === 1);
+        }
+        let n2 = 0;
+        const unread = testStrip(mkWin('missing12346', { closed: false, antsTestGameHandoff: () => null }), [okReply]);
+        unread.s.begin(() => { n2++; });
+        await flush(); await flush();
+        same('an opener that has no map for the id: no room, the map could not be read', [n2, unread.calls.length, byClass(byClass(unread.body, 'testbar'), 'testbar-text').textContent], [0, 0, 'Test room The map from the Map Maker could not be read. Go back to the editor.']);
+        // (3) the happy path still makes the room, once, and the warning is not there
+        let n3 = 0;
+        const fine = testStrip(mkWin('fine1234567', handoff('Again Map')), [okReply]);
+        fine.s.begin(() => { n3++; });
+        await flush(); await flush();
+        check('a taken upload makes the room once, with no warning', n3 === 1 && !/warn/.test(byClass(fine.body, 'testbar').className));
+        // (4) the room was lost and made again by the page (the server closed it, a restart, a long loss of the link): the new room has the default map, so the test map is sent again
+        const kept7 = testStrip(mkWin('remade1234567', handoff('Remade')), [okReply]);
+        kept7.s.begin(() => {});
+        await flush(); await flush();
+        const plans7 = [];
+        const send7 = (ch) => { plans7.push(ch.file); return true; };
+        kept7.s.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, send7);
+        kept7.s.sync({ guest: false, starting: false, you: 0, mapFile: 'Again Map ~test-5566aabb.lvl' }, send7);
+        kept7.s.sync({ guest: false, starting: false, you: 0, mapFile: 'Again Map ~test-5566aabb.lvl' }, send7);
+        same('one plan while the room has the map', plans7, ['Again Map ~test-5566aabb.lvl']);
+        kept7.s.remade();
+        kept7.s.sync({ guest: false, starting: false, you: 0, mapFile: 'Again Map ~test-5566aabb.lvl' }, send7);          // (the first look after the new Welcome can still be the old room's)
+        same('the old room\'s look does not use up the new send', plans7.length, 1);
+        kept7.s.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, send7);
+        same('a room that the page made again is told the test map again', plans7, ['Again Map ~test-5566aabb.lvl', 'Again Map ~test-5566aabb.lvl']);
+        kept7.s.sync({ guest: false, starting: false, you: 0, mapFile: 'SMALL.LVL' }, send7);
+        same('a host who then picks another map by hand is not overruled', plans7.length, 2);
+        const none = testStrip(mkWin('remade1234568', null), [okReply]);
+        none.s.begin(() => {});
+        none.s.remade();
+        check('remade() with no test map to send does nothing', true);
+        // (5) the line at the foot of the page: a test room does not record, so it says so; any other room has the page's own line back
+        const noteStrip = testStrip(mkWin('notice1234567', handoff('Again Map')), [okReply], noteDoc);
+        noteStrip.s.begin(() => {});
+        await flush(); await flush();
+        const OWN = 'Online matches are recorded. Recordings are kept for 30 days.';
+        noteStrip.s.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, () => true);
+        same('before the room has the test map the page\'s own line stays', footer.textContent, OWN);
+        noteStrip.s.sync({ guest: true, starting: false, you: 1, mapFile: 'Again Map ~test-5566aabb.lvl' });
+        same('a room on a test map says that its match is not recorded', footer.textContent, R.TEST_NOTICE);
+        check('... in words that say nothing is kept', /not recorded/.test(footer.textContent) && /no result or name is kept/.test(footer.textContent) && !/Recordings are kept/.test(footer.textContent));
+        noteStrip.s.sync({ guest: true, starting: false, you: 1, mapFile: 'TREASURE.LVL' });
+        same('another room has the page\'s own line again', footer.textContent, OWN);
     }
 
     for (const name of Object.keys(RAW)) if (typeof RAW[name] === 'function') check('the check called ' + name + '()', called[name] > 0);
