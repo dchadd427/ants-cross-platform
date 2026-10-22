@@ -9,7 +9,7 @@
    "id": "kind_claim_believed",
    "file": "src/ants_server/submissions.cpp",
    "old": "    if (real_kind != claimed) {\n",
-   "new": "    if (false) {\n"
+   "new": "    if (false && real_kind != claimed) {\n"
   },
   {
    "id": "works_not_required",
@@ -447,13 +447,13 @@
    "id": "window_budget_ignored",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "if (window.count >= per_window || window.spent_ms >= budget_ms) return false;",
-   "new": "if (window.count >= per_window) return false;"
+   "new": "if (window.count >= per_window || (false && window.spent_ms >= budget_ms)) return false;"
   },
   {
    "id": "window_count_ignored",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "if (window.count >= per_window || window.spent_ms >= budget_ms) return false;",
-   "new": "if (window.spent_ms >= budget_ms) return false;"
+   "new": "if ((false && window.count >= per_window) || window.spent_ms >= budget_ms) return false;"
   },
   {
    "id": "picture_for_anybody",
