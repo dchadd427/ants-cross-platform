@@ -87,7 +87,8 @@ def stub(name):
 
 
 class Rig:
-    def __init__(self, trusted="", relaxed=True, log=False):
+    def __init__(self, trusted="", relaxed=True, log=False, real_ports=None):
+        """`real_ports` = (submission door, replay door) of a running ants_server: the doors are then not the stand-ins of the rig but the real program (test_nginx_big_maps.py)."""
         self.work = tempfile.mkdtemp(prefix="ants_nginx_submit_")
         for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp", "html", "trusted"):
             os.makedirs(os.path.join(self.work, sub), exist_ok=True)
@@ -103,8 +104,12 @@ class Rig:
         with open(os.path.join(self.work, "trusted", "proxies.conf"), "w") as f:
             f.write(trusted)
         self.port = maps.free_port()
-        self.door, self.door_server, self.door_port = stub("door")
-        self.replay, self.replay_server, self.replay_port = stub("replay")
+        if real_ports is None:
+            self.door, self.door_server, self.door_port = stub("door")
+            self.replay, self.replay_server, self.replay_port = stub("replay")
+        else:
+            self.door = self.replay = self.door_server = self.replay_server = None
+            self.door_port, self.replay_port = real_ports
         text = RAW
         text = text.replace("/usr/share/nginx/html", self.work + "/html")
         text = text.replace("/etc/nginx/ants-trusted-proxies/", self.work + "/trusted/")
@@ -139,8 +144,9 @@ class Rig:
         self.proc.terminate()
         self.proc.wait(timeout=10)
         for server in (self.door_server, self.replay_server):
-            server.shutdown()
-            server.server_close()
+            if server is not None:
+                server.shutdown()
+                server.server_close()
         shutil.rmtree(self.work, ignore_errors=True)
 
     def ask(self, method, target, headers=None, body=None):

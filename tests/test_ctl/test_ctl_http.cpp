@@ -1369,6 +1369,35 @@ void run_http_tests() {
         plain.handler = rig.handler;
         ASSERT_EQ(plain.exchange("GET /f HTTP/1.1\r\n\r\n").status, 500);                                       // (the public door keeps its 1 MiB)
     } TEST_END();
+    TEST_CASE("CTL2.27b HTTP door: a map file (HttpResponse::file) may be up to kMaxFileResponseBytes on the public door and the control interface too - 3.1 MB of a 512 x 512 map, 4 MiB exactly - and one byte more is a 500; the same body of a replay, which is no file, keeps the door's limit") {
+        static_assert(HttpServer::kMaxFileResponseBytes >= 4u * 1024u * 1024u && HttpServer::kMaxFileResponseBytes > HttpServer::kMaxResponseBytes, "a map file is the one answer that may be big");
+        for (const bool public_door : {true, false}) {
+            Rig rig(public_door);
+            ASSERT_TRUE(rig.ok());
+            rig.handler = [](const HttpRequest& request) {
+                HttpResponse resp;
+                resp.content_type = "application/octet-stream";
+                size_t n = 3151138;                                                                           // (a 512 x 512 Extended map)
+                if (request.path == "/exact") n = HttpServer::kMaxFileResponseBytes;
+                if (request.path == "/over") n = HttpServer::kMaxFileResponseBytes + 1;
+                if (request.path == "/small") n = 1024 * 1024 + 1;
+                resp.body.assign(n, 'm');
+                resp.file = request.path != "/replay";
+                return resp;
+            };
+            Reply r = rig.exchange("GET /map HTTP/1.1\r\n" + (public_door ? std::string() : "authorization: bearer " + std::string(Rig::kSecret) + "\r\n") + "\r\n");
+            ASSERT_TRUE(r.status == 200 && r.body.size() == 3151138);
+            r = rig.exchange("GET /small HTTP/1.1\r\n" + (public_door ? std::string() : "authorization: bearer " + std::string(Rig::kSecret) + "\r\n") + "\r\n");
+            ASSERT_TRUE(r.status == 200 && r.body.size() == 1024 * 1024 + 1);                                // (one byte over the door's 1 MiB)
+            r = rig.exchange("GET /exact HTTP/1.1\r\n" + (public_door ? std::string() : "authorization: bearer " + std::string(Rig::kSecret) + "\r\n") + "\r\n");
+            ASSERT_TRUE(r.status == 200 && r.body.size() == HttpServer::kMaxFileResponseBytes);
+            r = rig.exchange("GET /over HTTP/1.1\r\n" + (public_door ? std::string() : "authorization: bearer " + std::string(Rig::kSecret) + "\r\n") + "\r\n");
+            ASSERT_EQ(r.status, 500);
+            ASSERT_EQ(r.body, "{\"error\":\"internal error\"}");
+            r = rig.exchange("GET /replay HTTP/1.1\r\n" + (public_door ? std::string() : "authorization: bearer " + std::string(Rig::kSecret) + "\r\n") + "\r\n");
+            ASSERT_EQ(r.status, 500);                                                                          // (the same 3.1 MB that is no map file: the door's 1 MiB)
+        }
+    } TEST_END();
     TEST_CASE("CTL2.28 HTTP door: a handler's cookies become Set-Cookie lines, one each; a value with a line end, a control character or a non-ASCII byte, or one that is empty or too long, is dropped, so a request cannot split the answer") {
         Rig rig(true);
         DoorOptions options;

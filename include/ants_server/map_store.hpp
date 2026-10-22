@@ -72,11 +72,16 @@ public:
     size_t scan(std::vector<std::string>* notes = nullptr);
     const std::vector<MapListing>& listing() const noexcept { return listing_; }
     bool scanned() const noexcept { return scanned_; }
-    /// The name under which the scanned list knows `name` (the same name, or the one that differs in letter case only); "" when it does not
+    /// The name under which the scanned list knows `name` (the same name, or the one that differs in letter case only); "" when it does not. A map that is too big for a room (OnlineLimits::kMaxCells) is
+    /// not found here: the lobby may not choose it (it is still on the lists, and its file and picture are still served).
     std::string listed_name(const std::string& name) const;
+    /// Whether `name` (exactly, or in another letter case) is an approved or test map that is too big to be played online (online_limits.hpp): the leader who chose it is told so
+    bool too_big_online(const std::string& name) const;
+    /// The cells (rows times columns) of the list's or the approved or test map `name` (exact name), 0 when it is not known: what a match on it costs (OnlineLimits::weight)
+    uint64_t cells_of(const std::string& name) const;
     /// The body of GET /maps: {"format":1,"maps":[{file,width,height,minutes,players,description,plays,thumb[,original][,maker]}]}. `plays` is how many times each map was played (map_plays of the database, keyed
     /// by file name and hash); null when the server keeps none: every count is 0 then. With `with_extended` (GET /maps/all, for the newest version only) the body is format 2: every entry also has "kind",
-    /// and the approved Extended maps are in it, which GET /maps leaves out for older pages.
+    /// and the approved Extended maps are in it, which GET /maps leaves out for older pages; a map that is too big for a room carries "online": false (online_limits.hpp).
     std::string list_json(const std::vector<MapPlays>* plays, bool with_extended = false) const;
 
     /// The approved maps of the submissions store (both Classic and Extended maps can be chosen and found by name; Classic ones join GET /maps, and Extended ones join GET /maps/all). Replaces the set that was given before;

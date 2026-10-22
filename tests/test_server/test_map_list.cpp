@@ -8,7 +8,10 @@
 #include <iostream>
 
 #include "../common/test_assert.hpp"
+#include "ants_net/protocol.hpp"
+#include "ants_server/online_limits.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -431,6 +434,109 @@ int main() {
         ASSERT_TRUE(fs::path(entry.path).lexically_normal() == (fs::path(community_dir()) / "!!!BLOCKADES!!!.lvl").lexically_normal());      // (paths, not strings: the separators differ on Windows)
         ASSERT_TRUE(level.width > 0 && level.height > 0);
         ASSERT_FALSE(s.load_map("../x.lvl", entry, level));
+    } TEST_END();
+
+    TEST_CASE("ML4.4 The online size limit (OnlineLimits::kMaxCells = 65,536 cells): the lobby may not choose a bigger approved or test map, a room does not load one, the list still shows it (\"online\": false) and find() still reaches its file; 256 x 256 is the largest map a room plays") {
+        TempDir dir;
+        const auto keep = [&](const std::string& name, uint32_t rows, uint32_t columns) {
+            const std::string bytes = grown_tiny(rows, columns);
+            const fs::path path = dir.path / (name + ".bin");
+            { std::ofstream out(path, std::ios::binary); out << bytes; }
+            ApprovedMap a;
+            a.name = name;
+            a.path = path.string();
+            a.size = bytes.size();
+            a.width = columns;
+            a.height = rows;
+            a.minutes = 10;
+            a.players = 4;
+            a.maker = "Mia";
+            a.kind = "extended";
+            net::hash_file(a.path, a.hash);
+            return a;
+        };
+        ServerLimits limits;
+        limits.demo_map = "TREASURE.LVL";
+        RoomManager mgr{MapStore(maps_dir(), community_dir()), limits};
+        mgr.mutable_store().scan();
+        std::vector<ApprovedMap> approved;
+        approved.push_back(keep("Fits 256.lvl", 256, 256));
+        approved.push_back(keep("Wide 410.lvl", 160, 410));            // 65,600 cells
+        approved.push_back(keep("Edge 65536.lvl", 128, 512));          // exactly 65,536 cells
+        ASSERT_TRUE(approved[0].size > 700000 && approved[1].size > 700000);
+        mgr.mutable_store().set_approved(approved);
+        std::vector<ApprovedMap> tests;
+        tests.push_back(keep("Draft Big ~test-0badf00d.lvl", 300, 300));
+        tests.push_back(keep("Draft Fits ~test-0badf00e.lvl", 100, 100));
+        mgr.mutable_store().set_test_maps(tests);
+        const MapStore& store = mgr.store();
+        const LobbyServices s = mgr.lobby_services();
+        ASSERT_EQ(s.choose_map("Fits 256.lvl"), std::string("Fits 256.lvl"));
+        ASSERT_EQ(s.choose_map("fits 256.LVL"), std::string("Fits 256.lvl"));
+        ASSERT_EQ(s.choose_map("Edge 65536.lvl"), std::string("Edge 65536.lvl"));       // (exactly the limit is in)
+        ASSERT_EQ(s.choose_map("Wide 410.lvl"), std::string());                        // (64 cells over is out, in any letter case)
+        ASSERT_EQ(s.choose_map("WIDE 410.lvl"), std::string());
+        ASSERT_EQ(s.choose_map("Draft Big ~test-0badf00d.lvl"), std::string());
+        ASSERT_EQ(s.choose_map("Draft Fits ~test-0badf00e.lvl"), std::string("Draft Fits ~test-0badf00e.lvl"));
+        ASSERT_EQ(s.map_refusal("Wide 410.lvl"), std::string(net::kNoticeMapTooBig));
+        ASSERT_EQ(s.map_refusal("wide 410.lvl"), std::string(net::kNoticeMapTooBig));
+        ASSERT_EQ(s.map_refusal("Draft Big ~test-0badf00d.lvl"), std::string(net::kNoticeMapTooBig));
+        for (const char* fine : {"Fits 256.lvl", "Edge 65536.lvl", "TINY.LVL", "NOT-HERE.LVL", "", "Draft Fits ~test-0badf00e.lvl"}) ASSERT_EQ(s.map_refusal(fine), std::string());
+        ASSERT_TRUE(store.too_big_online("Wide 410.lvl") && store.too_big_online("WIDE 410.LVL") && store.too_big_online("Draft Big ~test-0badf00d.lvl"));
+        ASSERT_FALSE(store.too_big_online("Fits 256.lvl") || store.too_big_online("Edge 65536.lvl") || store.too_big_online("TINY.LVL") || store.too_big_online("NOT-HERE.LVL"));
+        // a room does not load one (the START finds "map lost" in the lobby; a room of the control interface is a 422), the file is still found
+        MapEntry entry;
+        assets::LevelData level;
+        ASSERT_TRUE(s.load_map("Fits 256.lvl", entry, level));
+        ASSERT_TRUE(s.load_map("Edge 65536.lvl", entry, level));
+        ASSERT_TRUE(store.find("Wide 410.lvl", entry));
+        ASSERT_FALSE(s.load_map("Wide 410.lvl", entry, level));
+        ASSERT_FALSE(s.load_map("Draft Big ~test-0badf00d.lvl", entry, level));
+        RoomSpec spec;
+        spec.code = "BIGROOM-1";
+        spec.map = "Wide 410.lvl";
+        spec.players = 2;
+        CreateResult made = mgr.create_room(spec, 1000);
+        ASSERT_TRUE(!made.ok && made.http_status == 422 && made.error.find("too big") != std::string::npos);
+        spec.map = "Fits 256.lvl";
+        ASSERT_TRUE(mgr.create_room(spec, 1000).ok);
+        // the cells that a match on each costs
+        ASSERT_EQ(store.cells_of("Fits 256.lvl"), uint64_t{65536});
+        ASSERT_EQ(store.cells_of("Wide 410.lvl"), uint64_t{65600});
+        ASSERT_EQ(store.cells_of("Draft Big ~test-0badf00d.lvl"), uint64_t{90000});
+        ASSERT_EQ(store.cells_of("TINY.LVL"), uint64_t{961});
+        ASSERT_EQ(store.cells_of("NOT-HERE.LVL"), uint64_t{0});
+        // the list: the old page's list never has an Extended map; the newest one has them all, and says which ones a room does not play
+        const ctl::JsonValue newest = parse_text(store.list_json(nullptr, true));
+        const ctl::JsonValue* fits = entry_of(newest, "Fits 256.lvl");
+        const ctl::JsonValue* wide = entry_of(newest, "Wide 410.lvl");
+        ASSERT_TRUE(fits != nullptr && wide != nullptr);
+        ASSERT_TRUE(fits->get("online").is_null() && wide->get("online").as_bool_or(true) == false);
+        ASSERT_TRUE(entry_of(newest, "TINY.LVL") != nullptr && entry_of(newest, "TINY.LVL")->get("online").is_null());
+        ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, false)), "Fits 256.lvl") == nullptr && store.list_json(nullptr, false).find("online") == std::string::npos);
+        ASSERT_TRUE(store.list_json(nullptr, true).find("0badf00d") == std::string::npos);     // (a test map is on no list)
+        // the constant and its sentence
+        ASSERT_TRUE(OnlineLimits::weight(1) == 1 && OnlineLimits::weight(10000) == 1 && OnlineLimits::weight(10001) == 2 && OnlineLimits::weight(65536) == 7 && OnlineLimits::weight(262144) == 27);        // the places a match takes
+        ASSERT_EQ(OnlineLimits::weight(0), 1u);                                                      // (never less than a place)
+        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::kCellsPerPlace == 10000u && OnlineLimits::allows(65536) && !OnlineLimits::allows(65537));
+        // the public door sends a big map's file whole (HttpResponse::file) and a picture or an error as every other answer
+        {
+            ctl::HttpRequest request;
+            request.method = "GET";
+            request.path = "/maps/files/Wide%20410.lvl";
+            ctl::HttpResponse r = handle_public_replays(mgr, request);
+            ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == approved[1].size && r.content_type == "application/octet-stream");
+            request.path = "/maps/previews/Wide%20410.png";
+            r = handle_public_replays(mgr, request);
+            ASSERT_TRUE(r.status == 200 && !r.file && r.body.compare(0, 4, "\x89PNG") == 0);
+            request.path = "/maps/files/Draft%20Big%20~test-0badf00d.lvl";                          // (a test map's file too: unlisted, not unreachable)
+            r = handle_public_replays(mgr, request);
+            ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == tests[0].size);
+            request.path = "/maps/files/Nobody.lvl";
+            r = handle_public_replays(mgr, request);
+            ASSERT_TRUE(r.status == 404 && !r.file);
+        }
+        ASSERT_TRUE(std::string(net::kNoticeMapTooBig).find("65,536 cells") != std::string::npos && std::string(net::kNoticeMapTooBig).size() <= net::kMaxChatChars);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

@@ -186,6 +186,7 @@ public:
         enum class Type : uint8_t { Joined, Left, Rejected, LoadFailed, Cancelled, Begun, LeaderStart, Chat };
         Type type{Type::Joined};
         uint8_t seat{255};
+        bool timed_out{false};                              // LoadFailed: the game did not answer in load_timeout_ms (it did not say that it could not load the map)
         std::array<FillLevel, sim::MAX_PLAYERS> fill{};     // LeaderStart: the bot that the leader asked for in each seat when it is empty (protocol 11: one level for all; 13: a level for each seat)
         sim::StartTeams teams{};                            // LeaderStart: the teams that the leader asked for (protocol 13; free for all when it chose none)
     };

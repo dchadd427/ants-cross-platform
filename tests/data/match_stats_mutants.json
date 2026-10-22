@@ -525,8 +525,8 @@
   {
    "id": "a_missing_map_leaves_a_marker",
    "file": "src/ants_server/history_store.cpp",
-   "old": "else if (!replay::load_map(rep.head, map_dirs_, level, why)) for_now = true;",
-   "new": "else if (!replay::load_map(rep.head, map_dirs_, level, why)) for_now = false;",
+   "old": "else if (!load_level(rep.head, level, why)) for_now = true;",
+   "new": "else if (!load_level(rep.head, level, why)) for_now = false;",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },

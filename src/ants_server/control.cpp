@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iterator>
+#include <string>
+#include <utility>
 
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_net/protocol.hpp"
@@ -465,14 +468,16 @@ static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::Htt
     const ApprovedMap* map = net::valid_map_name(name) ? store.approved(name) : nullptr;
     if (map == nullptr && net::valid_map_name(name)) map = store.test_map(name);
     if (map == nullptr || (map->kind != "classic" && map->kind != "extended") || map->size > MapStore::kMaxMapBytes) return error_response(404, "not found");
+    static_assert(MapStore::kMaxMapBytes <= ctl::HttpServer::kMaxFileResponseBytes, "the door must be able to send the largest map that the store keeps");
     std::ifstream in(map->path, std::ios::binary);
-    const std::string bytes = in ? std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()) : std::string();
+    std::string bytes = in ? std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()) : std::string();
     if (bytes.empty()) return error_response(404, "not found");
     ctl::HttpResponse r;
     r.status = 200;
     if (!picture) {
         r.content_type = "application/octet-stream";
-        r.body = bytes;
+        r.body = std::move(bytes);                  // (an Extended map is up to 4 MiB, more than the door's 1 MiB for everything else: HttpResponse::file)
+        r.file = true;
         return r;
     }
     assets::LevelData level;

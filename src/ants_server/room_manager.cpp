@@ -9,6 +9,7 @@
 
 #include "ants_net/clock.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_server/online_limits.hpp"
 
 namespace fs = std::filesystem;
 
@@ -136,6 +137,11 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
         r.error = "the map '" + spec.map + "' cannot be played by this engine";
         return nullptr;
     }
+    if (!OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height())) {      // (a room is online: the size limit of OnlineLimits holds for the control interface's rooms too)
+        r.http_status = 422;
+        r.error = std::string("the map '") + spec.map + "' is too big for a room: " + net::kNoticeMapTooBig;
+        return nullptr;
+    }
     uint32_t seed = spec.seed;
     if (!spec.has_seed) {
         std::random_device rd;
@@ -192,11 +198,11 @@ bool RoomManager::make_public_room(const std::string& code, const net::CreateBlo
     // them with a capital (draw_room_code), and an operator who chooses one by hand gives it one. Without this a Hello with a block could take any code that is free, "ROOM-1" before a lobby's
     // POST /rooms, and the players who come for that room with no block would be seated in the visitor's (v0.10.0 kept the two apart with its lower-case "demo-" prefix).
     if (limits_.demo_rooms == 0 || limits_.demo_map.empty() || !net::public_room_code(code) || !net::valid_create_block(block)) return false;
-    if (!take_match_place(now_ms)) return false;                    // (no place is free: a match that nobody has come back to for a while gives its place up, never a room with a person at it)
+    const PublicChoice choice = public_choice_of(block, limits_);
+    if (!take_match_place(now_ms, store_.cells_of(choice.map))) return false;       // (no place is free: a match that nobody has come back to for a while gives its place up, never a room with a person at it)
     RoomSpec spec = default_spec();                                 // (public rooms follow the server's reconnect setting and its limits)
     spec.code = code;
     spec.max_pause_ms = std::min(spec.max_pause_ms, kDemoMaxPauseMs);      // (the cap of a match that is abandoned: a public place is not held for half an hour)
-    const PublicChoice choice = public_choice_of(block, limits_);
     spec.map = choice.map;
     spec.players = choice.players;
     spec.teams = block.teams();                                     // (the room starts with them every time: the first Hello's choice)
@@ -231,19 +237,31 @@ bool RoomManager::evict_abandoned_public(uint32_t now_ms) {
     return true;
 }
 
+// The places that the public matches take: one for a match on a map of up to OnlineLimits::kCellsPerPlace cells (every shipped map), more for a bigger map (OnlineLimits::weight: what a big map costs the
+// server's one thread). A weight is never more than the server's places, so that one match can always be had on a server that has none (a small --demo-rooms).
+bool RoomManager::map_in_use(const std::string& file_name) const {
+    for (const auto& kv : rooms_) {
+        if (kv.second->uses_map(file_name)) return true;
+    }
+    for (const Restoring& r : restoring_) {
+        if (r.head.map == file_name) return true;
+    }
+    return false;
+}
+
 size_t RoomManager::public_places() const {
+    const auto weigh = [](uint64_t cells) { return static_cast<size_t>(OnlineLimits::weight(cells)); };       // (a match heavier than all the places only makes the server full: no cap is needed to count it)
     size_t places = 0;
-    for (const auto& kv : rooms_) places += kv.second->public_room() && !kv.second->lobby_waiting() ? 1u : 0u;      // (a lobby that waits holds no place: its START asks for one)
-    for (const auto& r : retired_) places += r->public_room() ? 1u : 0u;                                            // (a match that gave its code to its rematch keeps its place until it is forgotten, as before)
-    for (const Restoring& r : restoring_) places += r.head.public_room ? 1u : 0u;
+    for (const auto& kv : rooms_) places += kv.second->public_room() && !kv.second->lobby_waiting() ? weigh(kv.second->map_cells()) : 0u;      // (a lobby that waits holds no place: its START asks for one)
+    for (const auto& r : retired_) places += r->public_room() ? weigh(r->map_cells()) : 0u;                                                      // (a match that gave its code to its rematch keeps its place until it is forgotten, as before)
+    for (const Restoring& r : restoring_) places += r.head.public_room ? weigh(r.room != nullptr ? r.room->map_cells() : store_.cells_of(r.head.map)) : 0u;
     return places;
 }
 
-bool RoomManager::take_match_place(uint32_t now_ms) {
-    size_t places = public_places();
-    while (places >= limits_.demo_rooms) {
+bool RoomManager::take_match_place(uint32_t now_ms, uint64_t cells) {
+    const size_t want = std::min<size_t>(OnlineLimits::weight(cells), std::max<size_t>(limits_.demo_rooms, 1));
+    while (public_places() + want > limits_.demo_rooms) {
         if (!evict_abandoned_public(now_ms)) return false;
-        --places;
     }
     return true;
 }
@@ -254,7 +272,7 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     if (!net::public_room_code(code) || !net::valid_create_block(block) || !block.lobby()) return false;
     if (!lobby_place(now_ms)) return false;
     std::string map = public_choice_of(block, limits_).map;
-    if (!block.map_name.empty() && store_.test_map(block.map_name) != nullptr) map = store_.test_map(block.map_name)->name;
+    if (!block.map_name.empty() && store_.test_map(block.map_name) != nullptr && OnlineLimits::allows(store_.cells_of(block.map_name))) map = store_.test_map(block.map_name)->name;
     return create_room(lobby_spec(code, map), now_ms).ok;      // (the map of the block when the server offers it; the plan changes it)
 }
 
@@ -360,8 +378,11 @@ LobbyServices RoomManager::lobby_services() {
         // a Plan message costs no disk read and no hashing; a name that is not in the list is refused. The file is read when the room loads its map (load_map).
         return store_.listed_name(name);
     };
-    s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) { return store_.find(file, entry) && level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()); };
-    s.match_place = [this](uint32_t now_ms) { return take_match_place(now_ms); };
+    s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) {
+        return store_.find(file, entry) && level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()) && OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height());
+    };
+    s.match_place = [this](uint32_t now_ms, uint64_t cells) { return take_match_place(now_ms, cells); };
+    s.map_refusal = [this](const std::string& name) { return store_.too_big_online(name) ? std::string(net::kNoticeMapTooBig) : std::string(); };
     return s;
 }
 
@@ -675,7 +696,13 @@ bool RoomManager::enable_history(db::Database& database, std::string& why, Histo
     auto store = std::make_unique<HistoryStore>(database, std::move(config));
     if (!store->prepare(why)) return false;
     history_ = std::move(store);
-    if (replays_ != nullptr) history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory(), std::function<uint64_t()>(), store_.community_directory());
+    if (replays_ != nullptr) {
+        history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory(), std::function<uint64_t()>(), store_.community_directory());
+        history_feeder_->set_approved_map_path([this](const std::string& name) {          // (the matches on an approved map of the players are counted too; one that a room could not play online is not: its recording would hold the one thread for seconds)
+            const ApprovedMap* map = store_.approved(name);
+            return map != nullptr && OnlineLimits::allows(static_cast<uint64_t>(map->width) * map->height) ? map->path : std::string();
+        });
+    }
     return true;
 }
 

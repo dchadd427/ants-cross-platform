@@ -23,6 +23,22 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.103 - 2026-10-22 - Big maps load, online size limit, old games named, test-room limits
+
+**For players:**
+- **Big approved maps load again.** The site could not send a map file bigger than 1 MB, so approved Extended maps over about 290 x 290 (such as 400 x 400 and 512 x 512) were in the lists but never loaded in the Map Maker, a replay or a room. They load now.
+- **Online rooms play maps up to 65,536 cells (256 x 256) for now.** A bigger approved map, or a bigger draft in the Map Maker's **With other players**, stays in the lists, opens in the Map Maker and plays on your own computer or against bots in the test game, but an online room says "This map is too big to play online" and keeps its map. Big maps also take more of the server's room (a 256 x 256 match counts as seven ordinary ones) until the load is measured.
+- **A game that is too old for a map is named.** When a start is cancelled because one player's game cannot load the map, the room says whose game it is ("Bob's game is too old for this map: refresh the page or update the game.") and tells the leader to press **Remove** on that color to start without them. Before, it only said that the match could not start.
+- **Test rooms from the Map Maker have limits of their own.** A test map is kept in the standard form, no longer uses up the 20-an-hour budget of real submissions, and a flood of test maps cannot push out the map of a room that has not started.
+- **Matches on approved maps count** in the map's plays and stats.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
+
+**Fixes:**
+- The bot arena plays Extended maps.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e7d33a22...6dd7e251)
+
 ## v0.12.102 - 2026-10-22 - Map maker: a friends room that cannot silently become Treasure
 
 **For players:**
@@ -610,24 +626,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b09bc246...26b4a5de)
 
-## v0.12.35 - 2026-10-13 - Computer players can read the fire-wall and bomb gates of a map (analysis only)
+## Older versions (v0.12.35 and before)
 
-**For players:**
-- Nothing changes on screen or in play. The computer players' map analysis now also finds what stands between a hill and its food and power-ups when fire walls or bombs are in the way (`POPcOrN`, `Bombz Away`), and which ants get past: a Fire ant, a Bomber that defuses, or a Bomber that bombs itself over a wall. No computer player uses it yet ([the tables](docs/reverse_engineering/bomb_gates.md)).
-
-**Rules / network:** none. No rule, no hash and no protocol number changed.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e9d659d...6a085827)
-
-## v0.12.33 - 2026-10-13 - Tests for the bomb throw, knockback, fire walls and defuse
-
-**For players:**
-- Nothing changes on screen or in play. New tests pin down exactly how bombs, hits, fire walls, defuse and power-up pick-up behave, including every hop over the fire wall on `POPcOrN` ([the table](docs/reverse_engineering/bomb_gates.md)), so that the computer players can later use them.
-
-**Rules / network:** none. No rule, no hash and no protocol number changed.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3c104ac8...1123e8e3)
-
-## Older versions (v0.12.32 and before)
-
-Every release before v0.12.33, and the long notes of v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.36, and the long notes of v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

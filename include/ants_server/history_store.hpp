@@ -196,6 +196,11 @@ public:
     /// the feeder. `clock_us` is a steady clock in microseconds that times the work of a pass (empty: std::chrono::steady_clock; the tests inject one).
     HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir, std::function<uint64_t()> clock_us = std::function<uint64_t()>(), std::string community_dir = std::string());
 
+    /// The file of an approved map of the players that a recording was played on, by the name in its head: "" when the name is none of them (the maps folders are asked then). A match on an approved map is counted
+    /// (its plays, its stats) like any other; the server gives only the maps that a room plays (OnlineLimits), because the recording is played in one piece on the one thread. Unset: no approved map is known.
+    using ApprovedMapPath = std::function<std::string(const std::string& map_name)>;
+    void set_approved_map_path(ApprovedMapPath fn) { approved_path_ = std::move(fn); }
+
     /// Makes the `details` of a counted match (make_history_details by default); a test hands a maker that throws, to see that the counters of a match are written whatever the pass does
     using DetailsMaker = std::function<std::string(const replay::MatchStats&, const HistoryRecord&)>;
     void set_details_maker(DetailsMaker maker) { details_maker_ = std::move(maker); }
@@ -215,7 +220,9 @@ private:
     void build_backfill();
     bool backfill(const std::string& file);
     void skip(const std::string& id, const std::string& why);
+    bool load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const;
 
+    ApprovedMapPath approved_path_;
     HistoryStore& history_;
     const ReplayStore& replays_;
     std::vector<std::string> map_dirs_;               // the folders of the maps, asked in order

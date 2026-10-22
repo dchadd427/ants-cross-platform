@@ -207,6 +207,8 @@ public:
 
     const MapStore& store() const noexcept { return store_; }
     MapStore& mutable_store() noexcept { return store_; }      // (the main loop gives it the approved maps of the players when they change: docs/MAP_SUBMISSIONS.md)
+    /// Whether a room has the map of this file name as its map or as its plan's map (a test map that a room has is kept: SubmissionStore::set_test_map_in_use)
+    bool map_in_use(const std::string& file_name) const;
     /// What a lobby room asks of this server (room.hpp: LobbyServices): choosing a map by name (every map of the store: the maps folder and the community folder; the --demo-maps and --demo-map keep their
     /// spelling), loading a map, a place for a match. Public for the tests (tests/test_server/test_map_list.cpp).
     LobbyServices lobby_services();
@@ -306,10 +308,10 @@ private:
     std::unique_ptr<Room> build_room(RoomSpec spec, uint32_t now_ms, CreateResult& r);
     /// The rooms that exist: those of a code, the retired ones and the records that wait for their replay (--max-rooms counts them)
     size_t room_total() const noexcept { return rooms_.size() + retired_.size() + restoring_.size(); }
-    /// The places of the public rooms that are taken: public rooms that are not a lobby that waits, and the records that wait for their replay
+    /// The places of the public rooms that are taken: public rooms that are not a lobby that waits, and the records that wait for their replay; a match on a big map takes several (OnlineLimits::weight)
     size_t public_places() const;
-    /// A place for one more public match, for the START of a lobby room: free, or made free by ending the public match that has been abandoned the longest (evict_abandoned_public)
-    bool take_match_place(uint32_t now_ms);
+    /// A place for one more public match on a map of `cells` cells, for the START of a lobby room: free, or made free by ending the public matches that have been abandoned the longest (evict_abandoned_public)
+    bool take_match_place(uint32_t now_ms, uint64_t cells);
     /// Ends the public room that has been abandoned the longest (at least kDemoAbandonedMs: every seat of a person held absent, nobody back): its clients are dropped, its record is deleted, its log is
     /// freed, its end is reported, and it is forgotten at once so that its place can be taken. False when no public room qualifies (a room with a person present never does).
     bool evict_abandoned_public(uint32_t now_ms);

@@ -114,7 +114,7 @@ std::string refusal(const ArenaSpec& spec) {
     if (!why.empty()) return why;
     // Is the map playable by the teams that sit? (a start marker of a team that plays must lie inside the grid: the engine places no ant for one outside and the team would start
     // short of an ant.) The server and the application ask the same question before they start a match.
-    const assets::LevelValidation verdict = spec.level->validate(info.roster);
+    const assets::LevelValidation verdict = spec.level->validate(info.roster, assets::LevelLimits::for_play_extended());        // (the play limits: an Extended map is played here as it is in a room)
     if (!verdict.playable) return "the map cannot be played by these seats: " + verdict.reason();
     return "";
 }

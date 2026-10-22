@@ -202,19 +202,40 @@ bool SubmissionApi::address_allowed(const std::string& identity, int64_t now_s) 
     return true;
 }
 
-bool SubmissionApi::check_window_open(uint32_t now_ms, const std::string& identity) {
-    if (!window_started_ || static_cast<uint32_t>(now_ms - window_start_ms_) >= config_.check_window_ms) {
-        window_started_ = true;
-        window_start_ms_ = now_ms;
-        window_count_ = 0;
-        window_spent_ms_ = 0;
-        window_by_address_.clear();
+// The test maps of the Map Maker (docs/MAP_SUBMISSIONS.md, "Test maps"): an address may send config_.test_attempts_per_hour an hour and all addresses together config_.test_total_per_hour, whatever came of them
+bool SubmissionApi::test_allowed(const std::string& identity, int64_t now_s) {
+    const auto old = [&](int64_t t) { return t <= now_s - kAttemptWindowS; };
+    test_all_.erase(std::remove_if(test_all_.begin(), test_all_.end(), old), test_all_.end());
+    if (test_all_.size() >= config_.test_total_per_hour) return false;
+    if (test_attempts_.size() >= kMaxAddressesKept) {
+        for (auto it = test_attempts_.begin(); it != test_attempts_.end();) {
+            auto& times = it->second;
+            times.erase(std::remove_if(times.begin(), times.end(), old), times.end());
+            it = times.empty() ? test_attempts_.erase(it) : std::next(it);
+        }
+        if (test_attempts_.size() >= kMaxAddressesKept) return false;
     }
-    const auto used = window_by_address_.find(identity);
-    if (used != window_by_address_.end() && used->second >= config_.checks_per_address_window) return false;          // (this address has had its share: it cannot use up the window of the others)
-    if (window_count_ >= config_.checks_per_window || window_spent_ms_ >= config_.check_budget_ms) return false;
-    ++window_count_;
-    ++window_by_address_[identity];
+    std::vector<int64_t>& times = test_attempts_[identity];
+    times.erase(std::remove_if(times.begin(), times.end(), old), times.end());
+    if (times.size() >= config_.test_attempts_per_hour) return false;
+    times.push_back(now_s);
+    test_all_.push_back(now_s);
+    return true;
+}
+
+bool SubmissionApi::check_window_open(CheckWindow& window, uint32_t now_ms, const std::string& identity, size_t per_window, size_t per_address, uint32_t budget_ms) {
+    if (!window.started || static_cast<uint32_t>(now_ms - window.start_ms) >= config_.check_window_ms) {
+        window.started = true;
+        window.start_ms = now_ms;
+        window.count = 0;
+        window.spent_ms = 0;
+        window.by_address.clear();
+    }
+    const auto used = window.by_address.find(identity);
+    if (used != window.by_address.end() && used->second >= per_address) return false;          // (this address has had its share: it cannot use up the window of the others)
+    if (window.count >= per_window || window.spent_ms >= budget_ms) return false;
+    ++window.count;
+    ++window.by_address[identity];
     return true;
 }
 
@@ -233,8 +254,10 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
     if (!content_type_is(request, "application/octet-stream")) return error_reply(415, "bad_content_type", "Send the map file with the content type application/octet-stream.");
     const std::string identity = client_identity(request, config_.trust_client_header);
     if (identity.empty()) return error_reply(400, "no_address", "The server cannot tell where this request came from.");
-    if (!address_allowed(identity, now_s)) return error_reply(429, "too_many_requests", "Too many tries from this address. Please try again in an hour.");
     if (request.query.size() > 4096) return error_reply(414, "query_too_long", "The request is too long.");          // (before anything is decoded)
+    std::string test_flag;
+    if (query_value(request.query, "test", test_flag) && test_flag == "1") return submit_test(request, identity, now_s, now_ms);       // (its own limits: a test map never uses the allowance of the real submissions)
+    if (!address_allowed(identity, now_s)) return error_reply(429, "too_many_requests", "Too many tries from this address. Please try again in an hour.");
     SubmitInput in;
     if (!query_value(request.query, "kind", in.kind)) in.kind.clear();
     if (!query_value(request.query, "name", in.name)) in.name.clear();
@@ -243,40 +266,48 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
     in.bytes = request.body;
     in.address = identity;
     in.token = bearer_of(request);
-    in.allow_check = [this, now_ms, identity]() { return check_window_open(now_ms, identity); };            // (asked only when a map is really going to be checked, after every refusal that costs nothing: those use none of the window)
-    std::string test_flag;
-    if (query_value(request.query, "test", test_flag) && test_flag == "1") {
-        const auto began = std::chrono::steady_clock::now();
-        const TestSubmitOutcome test_out = store_.submit_test(in, now_s);
-        window_spent_ms_ += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
-        if (!test_out.ok) return failure_reply(test_out.fail);
-        if (store_.take_approved_changed() && on_approved_changed_) on_approved_changed_();
-        JsonValue tm = JsonValue::make_object();
-        tm.set("file", JsonValue::make_string(test_out.map.name));
-        tm.set("name", JsonValue::make_string(test_out.clean_name));
-        tm.set("kind", JsonValue::make_string(test_out.map.kind));
-        tm.set("width", JsonValue::make_int(test_out.map.width));
-        tm.set("height", JsonValue::make_int(test_out.map.height));
-        tm.set("minutes", JsonValue::make_int(test_out.map.minutes));
-        tm.set("players", JsonValue::make_int(test_out.map.players));
-        tm.set("size", JsonValue::make_int(static_cast<int64_t>(test_out.map.size)));
-        tm.set("hash", JsonValue::make_string(test_out.hash_text));
-        JsonValue usable = JsonValue::make_array();
-        for (size_t s = 0; s < 4; ++s) usable.push_back(JsonValue::make_bool(test_out.usable[s]));
-        tm.set("usable", std::move(usable));
-        JsonValue o = JsonValue::make_object();
-        o.set("test_map", std::move(tm));
-        return json_reply(201, o);
-    }
+    in.allow_check = [this, now_ms, identity]() { return check_window_open(window_, now_ms, identity, config_.checks_per_window, config_.checks_per_address_window, config_.check_budget_ms); };            // (asked only when a map is really going to be checked, after every refusal that costs nothing: those use none of the window)
     const auto began = std::chrono::steady_clock::now();
     const SubmitOutcome out = store_.submit(in, now_s);
-    window_spent_ms_ += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
+    window_.spent_ms += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
     if (!out.ok) return failure_reply(out.fail);
     JsonValue o = JsonValue::make_object();
     o.set("submission", maker_view(out.submission));
     o.set("name_taken", JsonValue::make_bool(out.name_taken));
     o.set("token_is_new", JsonValue::make_bool(out.token_is_new));
     if (out.token_is_new) o.set("token", JsonValue::make_string(out.token));
+    return json_reply(201, o);
+}
+
+// POST /submissions?test=1: a draft map for an unlisted test room of the Map Maker. Nothing is queued, nothing reaches the owner, no database row is made; the limits are its own (SubmissionApiConfig::test_*)
+HttpResponse SubmissionApi::submit_test(const HttpRequest& request, const std::string& identity, int64_t now_s, uint32_t now_ms) {
+    if (!test_allowed(identity, now_s)) return error_reply(429, "too_many_tests", "Too many test maps came in from this address or from everybody in the last hour. Please try again later.");
+    SubmitInput in;
+    if (!query_value(request.query, "kind", in.kind)) in.kind.clear();
+    if (!query_value(request.query, "name", in.name)) in.name.clear();
+    in.bytes = request.body;
+    in.address = identity;
+    in.allow_check = [this, now_ms, identity]() { return check_window_open(test_window_, now_ms, identity, config_.test_checks_per_window, config_.test_checks_per_address_window, config_.test_check_budget_ms); };
+    const auto began = std::chrono::steady_clock::now();
+    const TestSubmitOutcome test_out = store_.submit_test(in, now_s);
+    test_window_.spent_ms += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
+    if (!test_out.ok) return failure_reply(test_out.fail);
+    if (store_.take_test_changed() && on_test_changed_) on_test_changed_();          // (only the test maps changed: the approved ones are not read again)
+    JsonValue tm = JsonValue::make_object();
+    tm.set("file", JsonValue::make_string(test_out.map.name));
+    tm.set("name", JsonValue::make_string(test_out.clean_name));
+    tm.set("kind", JsonValue::make_string(test_out.map.kind));
+    tm.set("width", JsonValue::make_int(test_out.map.width));
+    tm.set("height", JsonValue::make_int(test_out.map.height));
+    tm.set("minutes", JsonValue::make_int(test_out.map.minutes));
+    tm.set("players", JsonValue::make_int(test_out.map.players));
+    tm.set("size", JsonValue::make_int(static_cast<int64_t>(test_out.map.size)));
+    tm.set("hash", JsonValue::make_string(test_out.hash_text));
+    JsonValue usable = JsonValue::make_array();
+    for (size_t s = 0; s < 4; ++s) usable.push_back(JsonValue::make_bool(test_out.usable[s]));
+    tm.set("usable", std::move(usable));
+    JsonValue o = JsonValue::make_object();
+    o.set("test_map", std::move(tm));
     return json_reply(201, o);
 }
 

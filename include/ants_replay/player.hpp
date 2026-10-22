@@ -26,6 +26,9 @@ bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData
 /// The same with several folders, asked in order (the server's maps folder, then its community folder): the first that holds the name is the map's, as in the server's own list of maps.
 bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error);
 
+/// The same for a map whose file is known: `path` is the file (a map the server keeps under a name of its own), it must be the file that the head's hash names, and it is loaded.
+bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error);
+
 /// Why this build does not play `head`'s match (its rules number and the game that made it): "recorded by v0.10.0 with simulation rules 0 ...". Only for a head that plays_here() says no to.
 std::string rules_refusal(const Header& head);
 

@@ -7,6 +7,7 @@
 
 #include "ants_ai/arena.hpp"
 #include "ants_ai/rng.hpp"
+#include "../test_server/big_map_fixtures.hpp"
 
 using namespace ai_test;
 using namespace ants;
@@ -277,6 +278,23 @@ void run_arena_tests() {
         ASSERT_TRUE(fine.error.empty() && fine.ticks == 10);
         // seats 1 and 2 only: seats 0 and 3 have no hill and no ants
         ASSERT_EQ(fine.seats.size(), 2u);
+    } TEST_END();
+    TEST_CASE("AI4.5 The Arena Plays An Extended Map As A Room Does (LevelLimits::for_play_extended): A 300 x 300 Extended Map With Bots Is Played, Not Refused As \"header version 9 is an Extended map\"; A Replay Of It Plays Back To The Same Hash") {
+        const std::string bytes = grown_tiny(300, 300);
+        ASSERT_TRUE(!bytes.empty());
+        assets::LevelData big;
+        ASSERT_TRUE(assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), big, nullptr, assets::LevelLimits::for_play_extended()));
+        ASSERT_TRUE(big.version == 9u && big.width() == 300u && big.height() == 300u);
+        ArenaSpec s;
+        s.level = &big;
+        s.bots = {seat_spec(0, "idle", Level::Medium), seat_spec(1, "idle", Level::Medium)};
+        s.max_ticks = 40;
+        const ArenaResult r = play_match(s);
+        ASSERT_TRUE(r.error.empty());
+        ASSERT_EQ(r.ticks, 40u);
+        // the same match twice is the same match
+        const ArenaResult again = play_match(s);
+        ASSERT_TRUE(again.error.empty() && again.hash == r.hash);
     } TEST_END();
     TEST_CASE("AI4.14 The Arena Opens A Match Like The Product Does: ArenaSpec's Default Start Hold And A Bare BotController's Are The Product's (kStartHoldTicks = 1: The First Look On Tick 1 + Seat, A Bucket Of ONE Token); A Hard Bot's Six Orders Of One Look Leave Within A Few Ticks One By One (At Most Three On The First Tick), With The Opening Of v0.1.0 (Hold 0, A Full Bucket) All Six On One Tick, With A Long Hold Nothing Before Tick 100; The Default Is The Number Spelled Out") {
         ASSERT_EQ(kStartHoldTicks, 1u);
