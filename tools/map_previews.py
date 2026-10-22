@@ -11,6 +11,8 @@ FOLDER/previews.json says what is done: {"<map file>": {"hash": "<FNV-1a 64 of t
 "encoding": "<ENCODING: size and quality>"}}. A map whose hash, picture and encoding
 are as listed is skipped, so a run is resumable and a repaired or changed map is drawn again; a picture of a map that is gone is removed. --force draws everything again.
 The pictures are the same every time (the game is deterministic, the encoder has no randomness).
+The owner's rule (tools/library_guard.py): the pictures and previews.json are never written into Original-Ants/ or Community-Maps/, so for the library itself this tool refuses (exit
+non-zero, nothing drawn, written or removed); it serves a copy of a folder of maps, and the library's own previews are not re-rendered.
 """
 import argparse
 import json
@@ -25,6 +27,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "front_page_art"))
 from community_maps import fnv1a64                                         # noqa: E402  (the hash of maps.json and of the network protocol)
+import library_guard                                                       # noqa: E402  (the owner's rule: nothing is drawn, written or removed in the map library)
 
 SIZE = 300                                                                 # the picture's side: the game's preview as it is (make_art.PREVIEW_BOX); smaller or fewer colors wiped out the small sprites
 QUALITY = 85                                                               # lossy WebP: the sprites and the hill art stay clear; the 534 pictures are about 9 MB (q80: 7.4 MB, a PNG of Iceworld alone is 164 KB)
@@ -117,11 +120,18 @@ def game_renderer(ants):
     return render
 
 
+def guard(folder, out):
+    """The owner's rule: the pictures and their index (folder/previews.json) are never written into Original-Ants/ or Community-Maps/, nor over a map; raises library_guard.LibraryRefused."""
+    library_guard.require_writable(out)
+    library_guard.require_writable(os.path.join(str(folder), INDEX))
+
+
 def update(folder, out, render, jobs=1, force=False, log=None):
     """Draws the pictures that are missing or out of date; returns (drawn, skipped, removed) as lists of map files. The index is saved after every picture, so an interrupted run goes on."""
     folder, out = str(folder), str(out)
-    os.makedirs(out, exist_ok=True)
     index_path = os.path.join(folder, INDEX)
+    guard(folder, out)
+    os.makedirs(out, exist_ok=True)
     old = read_index(index_path)
     index = {} if force else old
     files = level_files(folder)
@@ -165,7 +175,10 @@ def main(argv=None):
     if not os.path.isfile(args.ants):
         sys.exit("the game program %s does not exist (build it: cmake --build build --target ants)" % args.ants)
     out = args.out or os.path.join(args.folder, "previews")
-    drawn, skipped, removed = update(args.folder, out, game_renderer(args.ants), args.jobs, args.force, log=lambda line: print(line, flush=True))
+    try:
+        drawn, skipped, removed = update(args.folder, out, game_renderer(args.ants), args.jobs, args.force, log=lambda line: print(line, flush=True))
+    except library_guard.LibraryRefused as err:
+        sys.exit("map_previews: %s; nothing written" % err)
     print("%d drawn, %d up to date, %d removed" % (len(drawn), len(skipped), len(removed)))
 
 

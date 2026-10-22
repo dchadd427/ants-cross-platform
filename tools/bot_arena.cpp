@@ -19,18 +19,15 @@
 //   --ticks full|N    play until the match is over (the map's own length, default) or at most N ticks (50 ms each)
 //   --latency-ticks N the sink latency: 0 applies a command the moment a bot releases it; N > 0 plays like a lock-step room (applied at the first 100 ms turn
 //                     boundary at least N ticks later, in canonical order); default 3
-//   --rotate          play every distinct arrangement of the given bots over the given seats (up to 24 for four different bots): seats are not symmetric on a map,
-//                     so a comparison of bots must rotate them
+//   --rotate          play every distinct arrangement of the given bots over the given seats (up to 24 for four different bots): seats are not symmetric on a map, so a comparison of bots must rotate them
 //   --repeat N        play every match N times and require identical results (finds any nondeterminism)
 //   --game-mode M     the rules of every match: highest-score (the original's game, the default) or 187 (no food, the kills are the score, docs/GAMEPLAY.md); the report names the mode only when it is 187
 //   --replay-check    re-feed the commands that were applied into a FRESH engine with no bot at all and require the same state hash at every 20th tick and at the end
-//   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did
-//                     (counts of attack orders, raids, walls, ...) to stderr when a match is over.
-//   --ally-standard   the first two standard bots of a match team up (the lower seat invites at its first look, the other accepts by its accept rule); --ally-pairs: every two seats
-//                     with the same standard spec team up (2 + 2 for [A, A, B, B]). Test-only: no bot of the game invites.
+//   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did (counts of attack orders, raids, walls, ...) to stderr when a match is over.
+//   --ally-standard   the first two standard bots of a match team up (the lower seat invites at its first look, the other accepts by its accept rule); --ally-pairs: every two seats with the same standard spec team up (2 + 2 for [A, A, B, B]). Test-only: no bot of the game invites.
 //   --threads N       matches played at the same time (default 1; every match is independent, the report is sorted by map, seed and arrangement)
 //   --out FILE        write the JSON report (fixed key order; the maps' NAMES only, no paths). The file is opened BEFORE the first match (an unwritable path costs nothing) and
-//                     checked after the last: a report that could not be written completely is exit code 2, never a silent success
+//                     checked after the last: a report that could not be written completely is exit code 2, never a silent success. Like --save-replays it is never written into Original-Ants/ or Community-Maps/ nor over a map that is played (tools/library_guard.hpp): exit code 2
 //   --no-wall-time    leave the wall clock time of each match out of the report, so that the file is bit-reproducible
 //   --maps-dir DIR    where map names are looked for (default: the shipped maps)
 //   --selftest        check the tool itself (determinism, replay check, report, threads, the tool end to end on a temporary folder)
@@ -82,6 +79,7 @@
 #include "ants_server/replay_store.hpp"
 #include "bench_aggressor.hpp"
 #include "bot_arena_tune.hpp"
+#include "library_guard.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
 
@@ -1330,6 +1328,7 @@ void print_match(const std::vector<LoadedMap>& maps, const MatchReport& r) {
 int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>& factory = nullptr) {
     // The report file is opened BEFORE the first match: a path that cannot be written is found in a moment, not after a run of hours
     std::ofstream report;
+    if (library_guard::refused("bot_arena", "--out", o.out, o.maps, g_err)) return 2;       // (the owner's rule: nothing into the map library, nor over a map that is played)
     if (!o.out.empty()) {
         report.open(o.out, std::ios::binary | std::ios::trunc);
         if (!report) {
@@ -1345,6 +1344,7 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         return 2;
     }
     ReplaySink sink;
+    if (library_guard::refused("bot_arena", "--save-replays", o.save_replays, o.maps, g_err)) return 2;
     if (!o.save_replays.empty()) {                    // (opened before the first match, like the report file: a folder that cannot be used is found in a moment)
         server::ReplayConfig rc;
         rc.dir = o.save_replays;
