@@ -369,6 +369,7 @@ jobs:
           node tests/scripts/lvl_core_check.js --module lvl_core_from_image --require
           node tests/scripts/web_mapmaker_core_check.js --module lvl_core_from_image --require
           node tests/scripts/web_mapmaker_play_check.js --module lvl_core_from_image --require
+          node tests/scripts/web_mapmaker_pickup_check.js --module lvl_core_from_image --require
 
       # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has
       # the revalidation headers (tests/scripts/web_routes_check.py). The game server is not needed: nginx starts without it.

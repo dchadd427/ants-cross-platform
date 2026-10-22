@@ -56,7 +56,7 @@
             var rec = lay.records[i];
             if (rec.row >= file.rows || rec.column >= file.columns) continue;
             cell = rec.row * file.columns + rec.column;
-            if (Blocks.teamOfMarker(rec.tile) >= 0) add(ix.ants, cell, i); else if (Blocks.PLANT_NAMES[rec.tile]) add(ix.plants, cell, i);
+            if (Blocks.teamOfMarker(rec.tile) >= 0) add(ix.ants, cell, i); else if (Blocks.PLANT_NAMES[rec.tile] && lay.ok4) add(ix.plants, cell, i);          // (a plant whose list of droppers does not read is left alone)
         }
         for (i = 0; i < lay.piles.length; i++) if (lay.piles[i].row < file.rows && lay.piles[i].column < file.columns) add(ix.piles, lay.piles[i].row * file.columns + lay.piles[i].column, i);
         for (i = 0; i < lay.waypoints.length; i++) if (lay.waypoints[i].row < file.rows && lay.waypoints[i].column < file.columns) add(ix.wps, lay.waypoints[i].row * file.columns + lay.waypoints[i].column, i);
@@ -129,7 +129,7 @@
         for (i = 0; i < lay.records.length; i++) {
             var rec = lay.records[i];
             if (rec.row < box.r0 || rec.row > box.r1 || rec.column < box.c0 || rec.column > box.c1 || rec.row >= file.rows || rec.column >= cols) continue;
-            if (Blocks.teamOfMarker(rec.tile) >= 0) out.push(antItem(file, ix, i)); else if (Blocks.PLANT_NAMES[rec.tile]) out.push(plantItem(file, ix, i));
+            if (Blocks.teamOfMarker(rec.tile) >= 0) out.push(antItem(file, ix, i)); else if (Blocks.PLANT_NAMES[rec.tile] && lay.ok4) out.push(plantItem(file, ix, i));
         }
         for (i = 0; i < lay.piles.length; i++) {
             if (lay.piles[i].row >= file.rows || lay.piles[i].column >= cols) continue;

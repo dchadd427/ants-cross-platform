@@ -200,7 +200,7 @@ function caseA() {
         equal(Pick.describe(f, pile, 'one', 0), { name: 'Food pile', rest: ' \u00b7 Pretzel \u00b7 30 bites of 25 points' }, 'a food pile says what it is, its bites and points' + tag);
         const plant = items(f, 20, 20);
         check(plant.length === 1 && plant[0].k === 'plant' && plant[0].w === 0, 'a plant is picked with its waypoint' + tag);
-        equal(Pick.describe(f, plant, 'one', 0), { name: 'Clover 1'.replace(' 1', ''), rest: ' \u00b7 drops a power-up every 45 seconds' }, 'a dropper says how often it drops' + tag);
+        equal(Pick.describe(f, plant, 'one', 0), { name: 'Clover', rest: ' \u00b7 drops a power-up every 45 seconds' }, 'a dropper says how often it drops' + tag);
         const stack = items(f, 5, 5);
         check(stack.length === 2 && stack.every((x) => x.k === 'ant' && x.team === 2) && stack[0].i === 1 && stack[1].i === 0, 'a stack of two ants gives both, the one on top (the later record) first' + tag);
         const typed = items(f, 8, 8)[0];
@@ -414,7 +414,6 @@ function caseD() {
         ed = editor(f);
         for (const [c, want] of [[5, [BOMB, 1, 0x0101]], [7, [130, 1, 0x0001]], [11, [WALL, 1, 0x0101]]]) {
             const idx = 5 * 20 + c;
-            check(Edit.anchorIndex(f, idx) !== idx || c === 11 || true, 'setup' + tag);
             res = doIt(ed, items(ed.file, 5, c), 4, 0, 'move');
             equal(wordsOf(ed.file, 9 * 20 + c), want, 'the bomb or wall at column ' + c + ' keeps its words after a move' + tag);
             check(wordsOf(ed.file, idx)[0] === EMPTY2, 'and its old cell is empty' + tag);
@@ -581,6 +580,9 @@ function caseF() {
     const bytes = mapWith(8, 10, 10, [[153, 2, 2]], [], []), cut = bytes.slice(0, File.parse(bytes).blocksAt + 3);
     const h = File.parse(cut);
     check(h.ok && items(h, 2, 2).length === 0 && Pick.areaItems(h, { r0: 0, c0: 0, r1: 9, c1: 9 }).length === 0, 'a file whose list is cut short has nothing to pick from it');
+    // a file whose block 4 (the plants' droppers) is cut short: its ants can be picked, its plants are left alone
+    const half = mapWith(9, 10, 10, [[153, 2, 2], [404, 4, 4]], [], [{ row: 4, column: 4, flag: 1, interval: 45 }]), hf2 = File.parse(half.slice(0, File.parse(half).blocksAt + 2 + 12 + 2 + 4 + 2 + 20));
+    check(hf2.ok && !lay(hf2).ok4 && items(hf2, 2, 2).length === 1 && items(hf2, 4, 4).length === 0 && Pick.areaItems(hf2, { r0: 0, c0: 0, r1: 9, c1: 9 }).length === 1, 'a file whose droppers do not read: the ant can be picked, the plant is left alone (moving it would leave its dropper behind)');
 }
 
 // ================= G =================
@@ -657,7 +659,6 @@ function caseG() {
         g3.ghosts = [];
         g3.tap(3, 3);
         const ctx = g3.over.ctx || g3.over.getContext('2d');
-        check(ctx.log.texts.indexOf('door') >= 0 && ctx.log.fills.indexOf('rgba(242,194,48,.22)') < 0 || true, 'the ring draws the hill\'s door' + tag);
         check(ctx.log.texts.indexOf('door') >= 0 && ctx.log.strokes.indexOf('#f2c230') >= 0, 'the ring is gold, with the door marked' + tag);
         g3.press('move'); g3.tap(30, 20);
         check(g3.over.ctx.log.fills.indexOf('rgba(120,230,170,.30)') >= 0 && g3.over.ctx.log.texts.indexOf('from') >= 0, 'a free place: the ghost is green, and "from" marks the old place' + tag);
@@ -671,7 +672,7 @@ function caseG() {
     // what can be picked up: the card of the picture, from the note under the tools
     const hp = page(File.parse(sceneBytes(9))), hint = hp.env.host.hint;
     const link = hint.querySelector('.pk-help');
-    check(!!link && link.textContent === 'What can be picked up?' && link.getAttribute('type') === null || !!link, 'the note under the tools has a link: What can be picked up?');
+    check(!!link && link.textContent === 'What can be picked up?', 'the note under the tools has a link: What can be picked up?');
     link.click();
     check(hp.log.dialogs.length === 1 && hp.log.dialogs[0].spec.title === 'What can be picked up', 'it opens a sheet');
     const cards = hp.log.dialogs[0].body.querySelectorAll('.pk-card'), said = [];
@@ -825,7 +826,7 @@ function caseH() {
     const seq = [];
     for (let i = 0; i < 5; i++) { s.tap(4, 4); seq.push(s.state().items[0].k); }
     equal(seq, ['ant', 'plant', 'pile', 'obj', 'ant'], 'tapping the same cell again picks the next thing on it, and goes round');
-    check(/Tap again|picked/.test(s.env.host.cv.parentNode.querySelector('.sr').textContent) || true, 'told');
+    check(/Tap again to pick the next thing/.test(s.env.host.cv.parentNode.querySelector('.sr').textContent), 'told');
     s.tap(4, 5); s.tap(4, 4);
     equal(s.state().items[0].k, 'ant', 'a tap elsewhere starts the round again');
 }

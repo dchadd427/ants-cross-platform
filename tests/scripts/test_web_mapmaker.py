@@ -1255,6 +1255,7 @@ class TheImageCarriesThePage(unittest.TestCase):
         self.assertIn('web/mapmaker.html', read("build_web.sh"))
         ci = read(".github", "workflows", "ci.yml")
         self.assertIn("node tests/scripts/web_mapmaker_core_check.js --module lvl_core_from_image --require", ci)
+        self.assertIn("node tests/scripts/web_mapmaker_pickup_check.js --module lvl_core_from_image --require", ci)
 
     def test_the_map_maker_has_its_own_version_file_and_prints_it_in_the_bottom_footer(self):
         ver = read("web", "MAPMAKER_VERSION").strip()
