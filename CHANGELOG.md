@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.101 - 2026-10-21 - Auto edges switch in Map Maker
+
+**For players:**
+- **Auto edges: On / Off switch in the Map Maker (`v1.4.5`).** A new **Auto edges: Off / On** switch sits next to **Fix edges...** (on a phone held upright, under the tool buttons while **Ground** is the chosen tool, and in the phone's **Menu** under **Settings for this browser**). It starts **Off** for a new visitor and is remembered in the browser; when **On**, painting plain ground automatically sets the edge and corner pieces around the stroke as part of the same stroke (one **Undo** step), while leaving hand-placed custom tiles next to the stroke alone until painted over directly or until **Fix edges...** is run.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c5930395...02374c29)
+
 ## v0.12.100 - 2026-10-21 - Play draft maps with other players from the Map Maker
 
 **For players:**
@@ -612,36 +619,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3c104ac8...1123e8e3)
 
-## v0.12.32 - 2026-10-12 - Map pictures show the food piles
+## Older versions (v0.12.32 and before)
 
-**For players:**
-- The map pictures in the map picker and the lobby now show the food piles. The 534 pictures of the players' maps were drawn before the game's world picture showed every food pile of a map file (v0.12.29), so they still looked like the old, pile-less map; all of them are drawn again by the game itself.
-- Nothing else in a picture changes: same size and quality, and a map without piles has exactly the same picture as before.
-
-**Rules / network:** none.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/714d5a35...HEAD)
-
-## v0.12.31 - 2026-10-12 - Names of the computer players: the list, the picker and the label (code only)
-
-**For players:**
-- Nothing you can see changes. The game now holds the code for the computer players' coming names (a list of 252 short names, a picker that gives a room different ones, and the label `Pip (bot, Hard)`), but no screen or message uses it yet: bots are still called `Bot (Level)` everywhere.
-
-**Rules / network:** none. Names are display only: the rules, the replay format and network protocol 19 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d1b887f1...HEAD)
-
-## v0.12.30 - 2026-10-12 - Maps without the full four-seat setup taken out
-
-**For players:**
-- 13 more maps of the players are gone from the map list, because every map now has to have a hill and starting ants for all four colors: the nine 1 v 1 maps (`!aLkAtRaZ1v1bOmBeR`, `!aLkAtRaZ1v1tHiEf!`, `!aLkAtRaZ_1v1!`, `ANTS SOCCER`, `ANTSSOCCER`, `GRiM-FAiT`, `ShowDown`, `aLkAtRaZ1v1cOmBaNt`, `aLkAtRaZ1v1cOmBaNtn`), `Fighter Dream 2` and `junk yard` (ants for all four colors, but a hill missing for some) and the two arenas without any hill, `DEATH WAR!!!!!!!!!!!!ARENA 3` and `HELLRASIER ARENA`. 534 maps of the players remain; the lobby's list and the map picker are shorter by the same 13.
-- A kept replay (30 days) of a match played on one of these maps can no longer be watched.
-- A map of the players is only taken in when all four colors have a hill and starting ants, and the check and the test of the map list now fail if one is added that does not.
-
-**Rules / network:** none. The beta lists the smaller set after its next deploy (the images copy the maps; nothing of them persists).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/973fa3cb...d1b887f1)
-
-## Older versions (v0.12.29 and before)
-
-Every release before v0.12.30, and the long notes of v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.33, and the long notes of v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
