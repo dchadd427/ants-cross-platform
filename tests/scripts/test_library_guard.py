@@ -239,6 +239,14 @@ class ThePythonTools(Layout):
         with self.assertRaises(library_guard.LibraryRefused):
             map_previews.update(self.community, os.path.join(self.work, "pictures"), never_called)
         self.assertFalse(os.path.exists(os.path.join(self.work, "pictures")))
+        # the maps in an ordinary folder, the pictures into the library (its previews folder, or a folder of its own)
+        elsewhere = os.path.join(self.work, "maps")
+        os.makedirs(elsewhere)
+        shutil.copyfile(TINY, os.path.join(elsewhere, "a.lvl"))
+        self.before = snapshot(self.layout)
+        for out in (os.path.join(self.community, "previews"), os.path.join(self.community, "mine"), os.path.join(self.originals, "pictures")):
+            with self.assertRaises(library_guard.LibraryRefused, msg=out):
+                map_previews.update(elsewhere, out, never_called)
         # and the command: the default folder is the library itself
         done = subprocess.run([sys.executable, os.path.join(REPO, "tools", "map_previews.py"), self.community, "--ants", sys.executable], capture_output=True, text=True, timeout=120)
         if "Pillow" not in done.stderr and "PIL" not in done.stderr:

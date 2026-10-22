@@ -269,9 +269,9 @@ def main():
     parser.add_argument("--sprites", default=os.path.join(REPO, "asset_catalog", "sprites"))
     parser.add_argument("--catalog", default=os.path.join(REPO, "asset_catalog", "catalog_data.js"))
     args = parser.parse_args()
-    # the owner's rule (tools/library_guard.py has the whole rule; the image build carries this file alone, so the names are checked here): nothing is written into the map library
+    # the owner's rule (tools/library_guard.py has the whole rule; the image build carries this file alone, so the two folder names are checked here, in lower case): nothing is written into the map library
     if any(part.lower() in ("original-ants", "community-maps") for part in re.split(r"[\\/]", os.path.abspath(args.out) + "/" + os.path.realpath(args.out))):
-        sys.exit("map_atlas: %s is in the map library (Original-Ants or Community-Maps): no tool writes there; nothing written" % args.out)
+        sys.exit("map_atlas: %s is in the map library (the originals' folder or the players' maps): no tool writes there; nothing written" % args.out)
     index, sizes = build(args.sprites, args.catalog, args.out)
     print("map atlas: " + ", ".join("%s %d bytes" % (k, v) for k, v in sorted(sizes.items())) + "; %d ground tiles, %d pictures in the sheet, %d fetched one by one" % (index["ground"]["count"], len(index["objects"]["items"]), len(index["far"])))
     return 0

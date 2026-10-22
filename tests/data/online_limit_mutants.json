@@ -919,6 +919,16 @@
     "test_map_list"
    ],
    "test": "./build/tests/test_server/test_map_list"
+  },
+  {
+   "id": "any_leaver_ends_the_pause",
+   "file": "src/ants_server/room.cpp",
+   "old": "ev.type == net::HostLobby::Event::Type::Left && ev.seat == load_failed_seat_)",
+   "new": "ev.type == net::HostLobby::Event::Type::Left)",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   }
  ]
 }

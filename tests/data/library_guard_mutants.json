@@ -1,0 +1,265 @@
+{
+ "note": "Mutants of the owner's rule for the tools (tools/library_guard.hpp and .py, docs/WORKFLOW.md 'Tools never touch the map library'): each lets one tool write into the map library, over its own input, or through a spelling of the library's name (case, links, a second name, a folder known by what it is). For tools/mutate.py: python3 tools/mutate.py tests/data/library_guard_mutants.json --keep-going --jobs 1 --timeout 900, from a checkout with a configured build folder that has lvl_tool, map_sweep and bot_arena. Every mutant must be caught by lvl_tool --selftest, map_sweep --selftest or tests/scripts/test_library_guard.py (all of them run on a temporary copy of the layout, never on the real library).",
+ "mutants": [
+  {
+   "id": "lvl_tool_rewrite_writes_over_its_input_and_the_library",
+   "file": "tools/lvl_tool.cpp",
+   "old": "    if (const int status = refuse_output(out_path, {in_path}, err)) return status;\n",
+   "new": "",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "lvl_tool_convert_writes_into_the_library",
+   "file": "tools/lvl_tool.cpp",
+   "old": "    if (const int status = refuse_output(o.output, {in_path}, err)) return status;     // (a conversion makes a copy and keeps the map it was made from)\n",
+   "new": "",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "lvl_tool_blank_writes_into_the_library",
+   "file": "tools/lvl_tool.cpp",
+   "old": "    if (const int status = refuse_output(o.files[0], {chd}, err)) return status;\n",
+   "new": "",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "lvl_tool_refusal_is_not_an_error",
+   "file": "tools/lvl_tool.cpp",
+   "old": "    err << \"lvl_tool: \" << why << \"; nothing written\\n\";\n    return 2;",
+   "new": "    err << \"lvl_tool: \" << why << \"; nothing written\\n\";\n    return 0;",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "guard_does_not_fold_case",
+   "file": "tools/library_guard.hpp",
+   "old": "    const std::string f = folded(part);\n",
+   "new": "    const std::string f = part;\n",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "guard_ignores_where_links_lead",
+   "file": "tools/library_guard.hpp",
+   "old": "names_library(absolute) || names_library(real) ||",
+   "new": "names_library(absolute) ||",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "guard_does_not_know_the_folder_by_identity",
+   "file": "tools/library_guard.hpp",
+   "old": " || inside_folders(real, library)) {",
+   "new": " || (false && inside_folders(real, library))) {",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "guard_lets_a_second_name_of_a_library_map_through",
+   "file": "tools/library_guard.hpp",
+   "old": "fs::hard_link_count(real, ec) > 1",
+   "new": "fs::hard_link_count(real, ec) > 100",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "guard_lets_the_input_be_written",
+   "file": "tools/library_guard.hpp",
+   "old": "fs::equivalent(input, real, ec) && !ec",
+   "new": "false && !ec",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "guard_refuses_a_folder_that_only_has_the_name_in_it",
+   "file": "tools/library_guard.hpp",
+   "old": "f == \"community-maps\";",
+   "new": "f.rfind(\"community-maps\", 0) == 0;",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "guard_refuses_only_the_first_library_folder",
+   "file": "tools/library_guard.hpp",
+   "old": "f == \"original-ants\" || f == \"community-maps\";",
+   "new": "f == \"original-ants\";",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "map_sweep_report_goes_into_the_library",
+   "file": "tools/map_sweep.cpp",
+   "old": "        const std::string why = library_guard::write_refusal(o.out, swept);\n",
+   "new": "        const std::string why;\n",
+   "build": [
+    "map_sweep"
+   ],
+   "test": "./build/map_sweep --selftest"
+  },
+  {
+   "id": "bot_arena_report_goes_into_the_library",
+   "file": "tools/bot_arena.cpp",
+   "old": "    if (library_guard::refused(\"bot_arena\", \"--out\", o.out, o.maps, g_err)) return 2;",
+   "new": "",
+   "build": [
+    "bot_arena"
+   ],
+   "test": "python3 -m unittest tests.scripts.test_library_guard"
+  },
+  {
+   "id": "bot_arena_replays_go_into_the_library",
+   "file": "tools/bot_arena.cpp",
+   "old": "    if (library_guard::refused(\"bot_arena\", \"--save-replays\", o.save_replays, o.maps, g_err)) return 2;",
+   "new": "",
+   "build": [
+    "bot_arena"
+   ],
+   "test": "python3 -m unittest tests.scripts.test_library_guard"
+  },
+  {
+   "id": "community_build_writes_into_the_library",
+   "file": "tools/community_maps.py",
+   "old": "    library_guard.require_writable(dest, [src] + ([repaired[0]] if repaired else []))      # (the owner's rule: never into the map library, never over a folder it reads)\n",
+   "new": "",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "community_build_writes_over_the_folder_it_reads",
+   "file": "tools/community_maps.py",
+   "old": "library_guard.require_writable(dest, [src] + ([repaired[0]] if repaired else []))",
+   "new": "library_guard.require_writable(dest)",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "community_repair_writes_into_the_library",
+   "file": "tools/community_maps.py",
+   "old": "    library_guard.require_writable(dest, [src])         # (the owner's rule: never into the map library, never over the folder it reads)\n",
+   "new": "",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "community_refusal_exits_with_a_crash",
+   "file": "tools/community_maps.py",
+   "old": "    except library_guard.LibraryRefused as err:\n        print(\"%s: %s; nothing written\" % (command, err), file=sys.stderr)\n        return 2\n",
+   "new": "",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "previews_are_drawn_into_the_library",
+   "file": "tools/map_previews.py",
+   "old": "    library_guard.require_writable(out)\n",
+   "new": "",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "previews_index_is_written_into_the_library",
+   "file": "tools/map_previews.py",
+   "old": "    library_guard.require_writable(os.path.join(str(folder), INDEX))\n",
+   "new": "",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "atlas_is_written_into_the_library",
+   "file": "tools/map_atlas.py",
+   "old": "    if any(part.lower() in (\"original-ants\", \"community-maps\")",
+   "new": "    if False and any(part.lower() in (\"original-ants\", \"community-maps\")",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "make_art_writes_into_the_library",
+   "file": "tools/front_page_art/make_art.py",
+   "old": "        library_guard.require_writable(args.out)\n",
+   "new": "        pass\n",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "mutate_changes_a_library_file",
+   "file": "tools/mutate.py",
+   "old": "        why = library_guard.write_refusal(os.path.join(args.root, m[\"file\"]))\n",
+   "new": "        why = \"\"\n",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "mutate_writes_its_report_into_the_library",
+   "file": "tools/mutate.py",
+   "old": "    why = library_guard.write_refusal(report_path, [args.spec])\n",
+   "new": "    why = \"\"\n",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "python_guard_does_not_fold_case",
+   "file": "tools/library_guard.py",
+   "old": "return any(p.lower() in LIBRARY_NAMES for p in _parts(path))",
+   "new": "return any(p in LIBRARY_NAMES for p in _parts(path))",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "python_guard_ignores_where_links_lead",
+   "file": "tools/library_guard.py",
+   "old": "if names_library(absolute) or names_library(real) or inside_folders(real, library):",
+   "new": "if names_library(absolute) or inside_folders(real, library):",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "python_guard_does_not_know_the_folder_by_identity",
+   "file": "tools/library_guard.py",
+   "old": "or inside_folders(real, library):",
+   "new": "or (False and inside_folders(real, library)):",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "python_guard_lets_a_second_name_through",
+   "file": "tools/library_guard.py",
+   "old": "os.stat(real).st_nlink > 1",
+   "new": "os.stat(real).st_nlink > 100",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "python_guard_lets_the_input_be_written",
+   "file": "tools/library_guard.py",
+   "old": "and _same(source, real):",
+   "new": "and False:",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  }
+ ]
+}

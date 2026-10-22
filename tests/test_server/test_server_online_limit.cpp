@@ -363,7 +363,7 @@ void run_online_limit_tests() {
         fs::remove_all(dir);
     } TEST_END();
 
-    TEST_CASE("S3.217 A Test Map Is In Use While A Room Has It As Its Map Or Only In Its Plan, And A Person Whose Game Failed Is Named Only While The Seat Is Still Theirs (After A Rename The Pause Says Only That The Match Could Not Start)") {
+    TEST_CASE("S3.217 A Test Map Is In Use While A Room Has It As Its Map Or Only In Its Plan, And A Person Whose Game Failed Is Named Only While The Seat Is Still Theirs (After A Rename The Pause Says Only That The Match Could Not Start), And The Pause Ends When That Person Goes And Not When Somebody Else Does") {
         const fs::path dir = fresh_dir("s217");
         {   // map_in_use: the room's map, and the map that its plan names (a lobby keeps the test map that a leader has picked)
             World w(limits_with(8));
@@ -407,6 +407,39 @@ void run_online_limit_tests() {
             const std::vector<std::string> lines = said(pia_game.room_chat);
             ASSERT_TRUE(lines.size() == told + 1);
             ASSERT_EQ(lines.back(), std::string("255||") + net::kNoticeStartsFailed);                 // (not "Bob's game is too old": nobody of that name is in that seat any more)
+        }
+        {   // the pause ends when the person who is named goes, and only then: another person who leaves leaves it as it was
+            World w(limits_with(8));
+            w.mgr.mutable_store().set_approved({approved_map(dir, "Small Ext.lvl", 100, 100, true)});
+            Client& pia = w.connect_page("Pia", "stal0006", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "stal0006", lobby_block_of());
+            Client& cat = w.connect_page("Cat", "stal0006", lobby_block_of());
+            const net::SeatKey pia_key = pia.lobby->key();
+            const net::SeatKey bob_key = bob.lobby->key();
+            const net::SeatKey cat_key = cat.lobby->key();
+            ASSERT_TRUE(pia.lobby->request_plan(plan_for("Small Ext.lvl", {K::Open, K::Open, K::Open, K::Nobody})));
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(100);
+            Client& pia_game = w.connect_game("Pia", "stal0006", pia_key, false, dir.string());
+            Client& bob_game = w.connect_game("Bob", "stal0006", bob_key);                           // (Bob's game is an old one)
+            Client& cat_game = w.connect_game("Cat", "stal0006", cat_key, false, dir.string());
+            w.run(500);
+            for (int round = 0; round < 3; ++round) {
+                ASSERT_TRUE(pia_game.lobby->request_start());
+                w.run(2500);
+            }
+            cat_game.lobby->leave();                                                                  // Cat goes: Bob's game is still the reason of the pause
+            w.run(300);
+            const size_t told = said(pia_game.room_chat).size();
+            const size_t bob_told = said(bob_game.room_chat).size();
+            ASSERT_TRUE(pia_game.lobby->request_start());
+            w.run(300);
+            const std::vector<std::string> lines = said(pia_game.room_chat);
+            ASSERT_TRUE(lines.size() == told + 2);
+            ASSERT_EQ(said(bob_game.room_chat).size(), bob_told);                                      // (Bob's game was not asked to load again: only the leader is told, the room is not)
+            ASSERT_EQ(lines[told], std::string("255||Bob's game is too old for this map: refresh the page or update the game."));
+            ASSERT_TRUE(w.status("stal0006").state == RoomState::Waiting && !w.status("stal0006").starting);       // (the START is held back by the pause, not tried again)
         }
         fs::remove_all(dir);
     } TEST_END();
