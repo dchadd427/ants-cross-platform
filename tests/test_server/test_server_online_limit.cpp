@@ -363,6 +363,34 @@ void run_online_limit_tests() {
         fs::remove_all(dir);
     } TEST_END();
 
+    TEST_CASE("S3.219 A START Ends An Abandoned Big Match When That Is What Seats It: The Places Of Every Abandoned Match Are Counted At Their Weight (A 256 x 256 Match Is Seven), Not As One Each") {
+        const fs::path dir = fresh_dir("s219");
+        World w(limits_with(8));
+        w.mgr.mutable_store().set_approved({approved_map(dir, "Edge 65536.lvl", 128, 512, true)});
+        Client& first = w.connect_page("Pia", "bigo0001", lobby_block_of());
+        const net::SeatKey first_key = first.lobby->key();
+        ASSERT_TRUE(first.lobby->request_plan(plan_for("Edge 65536.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));
+        w.run(300);
+        ASSERT_TRUE(first.lobby->request_start());
+        w.run(200);
+        Client& first_game = w.connect_game("Pia", "bigo0001", first_key, false, dir.string());
+        w.run(4000);
+        ASSERT_TRUE(w.status("bigo0001").state == RoomState::Running);                                // (seven of the eight places)
+        first_game.end->close();                                                                      // Pia closes her tab: a minute on, nobody has come back
+        w.run(62000);
+        Client& second = w.connect_page("Bea", "bigo0002", lobby_block_of());
+        const net::SeatKey second_key = second.lobby->key();
+        ASSERT_TRUE(second.lobby->request_plan(plan_for("Edge 65536.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));
+        w.run(300);
+        ASSERT_TRUE(second.lobby->request_start());
+        w.run(200);
+        Client& second_game = w.connect_game("Bea", "bigo0002", second_key, false, dir.string());
+        w.run(4000);
+        ASSERT_TRUE(said(second_game.room_chat).empty());                                             // (7 + 7 > 8, and ending the abandoned match frees seven: it is seated)
+        ASSERT_TRUE(w.status("bigo0002").state == RoomState::Running && w.status("bigo0001").code.empty());
+        fs::remove_all(dir);
+    } TEST_END();
+
     TEST_CASE("S3.217 A Test Map Is In Use While A Room Has It As Its Map Or Only In Its Plan, And A Person Whose Game Failed Is Named Only While The Seat Is Still Theirs (After A Rename The Pause Says Only That The Match Could Not Start), And The Pause Ends When That Person Goes And Not When Somebody Else Does") {
         const fs::path dir = fresh_dir("s217");
         {   // map_in_use: the room's map, and the map that its plan names (a lobby keeps the test map that a leader has picked)

@@ -124,7 +124,7 @@
   {
    "id": "bot_arena_report_goes_into_the_library",
    "file": "tools/bot_arena.cpp",
-   "old": "    if (library_guard::refused(\"bot_arena\", \"--out\", o.out, o.maps, g_err)) return 2;",
+   "old": "library_guard::refused(\"bot_arena\", \"--out\", o.out, played, g_err) || ",
    "new": "",
    "build": [
     "bot_arena"
@@ -134,8 +134,8 @@
   {
    "id": "bot_arena_replays_go_into_the_library",
    "file": "tools/bot_arena.cpp",
-   "old": "    if (library_guard::refused(\"bot_arena\", \"--save-replays\", o.save_replays, o.maps, g_err)) return 2;",
-   "new": "",
+   "old": " || library_guard::refused(\"bot_arena\", \"--save-replays\", o.save_replays, played, g_err)) return 2;",
+   "new": ") return 2;",
    "build": [
     "bot_arena"
    ],
@@ -258,6 +258,103 @@
    "file": "tools/library_guard.py",
    "old": "and _same(source, real):",
    "new": "and False:",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "community_build_asks_only_for_the_folder",
+   "file": "tools/community_maps.py",
+   "old": "for entry, _data, _note in kept] + [\"maps.json\"]:",
+   "new": "for entry, _data, _note in kept][:0]:",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "community_build_forgets_the_list",
+   "file": "tools/community_maps.py",
+   "old": "for entry, _data, _note in kept] + [\"maps.json\"]:",
+   "new": "for entry, _data, _note in kept]:",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "community_repair_asks_only_for_the_folder",
+   "file": "tools/community_maps.py",
+   "old": "for name in [f[0] for f in fixes] + [REPAIRS_FILE]:",
+   "new": "for name in []:",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "community_repair_forgets_the_list",
+   "file": "tools/community_maps.py",
+   "old": "for name in [f[0] for f in fixes] + [REPAIRS_FILE]:",
+   "new": "for name in [f[0] for f in fixes]:",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "guard_does_not_follow_a_link_to_nothing",
+   "file": "tools/library_guard.hpp",
+   "old": "if (!fs::is_symlink(fs::symlink_status(real, link_ec)) || link_ec) break;",
+   "new": "if (true) break;",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "bot_arena_name_of_a_map_is_no_path",
+   "file": "tools/bot_arena.cpp",
+   "old": "if (resolve_map(what, o.maps_dir, p)) played.push_back(p.string());",
+   "new": "if (false && resolve_map(what, o.maps_dir, p)) played.push_back(p.string());",
+   "build": [
+    "bot_arena"
+   ],
+   "test": "python3 -m unittest tests.scripts.test_library_guard"
+  },
+  {
+   "id": "bot_arena_report_through_a_link_to_nothing",
+   "file": "tools/library_guard.hpp",
+   "old": "if (!fs::is_symlink(fs::symlink_status(real, link_ec)) || link_ec) break;",
+   "new": "if (true) break;",
+   "build": [
+    "bot_arena",
+    "map_sweep"
+   ],
+   "test": "python3 -m unittest tests.scripts.test_library_guard"
+  },
+  {
+   "id": "bot_arena_replays_are_asked_after_the_report_is_cut",
+   "file": "tools/bot_arena.cpp",
+   "old": " || library_guard::refused(\"bot_arena\", \"--save-replays\", o.save_replays, played, g_err)) return 2;",
+   "new": ") return 2;\n    if (!o.out.empty()) { std::ofstream cut(o.out, std::ios::binary | std::ios::trunc); }\n    if (library_guard::refused(\"bot_arena\", \"--save-replays\", o.save_replays, played, g_err)) return 2;",
+   "build": [
+    "bot_arena"
+   ],
+   "test": "python3 -m unittest tests.scripts.test_library_guard"
+  },
+  {
+   "id": "atlas_exits_with_one",
+   "file": "tools/map_atlas.py",
+   "old": "        sys.exit(2)",
+   "new": "        sys.exit(1)",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "previews_exit_with_one",
+   "file": "tools/map_previews.py",
+   "old": "        sys.exit(2)",
+   "new": "        sys.exit(1)",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "make_art_exits_with_one",
+   "file": "tools/front_page_art/make_art.py",
+   "old": "        sys.exit(2)",
+   "new": "        sys.exit(1)",
    "build": [],
    "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
   }

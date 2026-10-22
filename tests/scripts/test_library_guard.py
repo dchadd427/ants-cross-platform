@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "tools"))
@@ -34,6 +35,9 @@ def snapshot(folder):
     for root, dirs, files in os.walk(folder):
         for name in files:
             path = os.path.join(root, name)
+            if os.path.islink(path):                   # (a link is itself: where it leads may not be there)
+                out[os.path.relpath(path, folder)] = ("link", os.readlink(path))
+                continue
             with open(path, "rb") as f:
                 out[os.path.relpath(path, folder)] = f.read()
         if not dirs and not files:
@@ -115,6 +119,9 @@ class TheGuard(Layout):
             self.skipTest("this system does not allow symbolic links to this user")
         for path in (os.path.join(link_dir, "a map.lvl"), os.path.join(link_dir, "fresh.lvl"), link_file):
             self.assertIn("map library", library_guard.write_refusal(path), path)
+        dangling = os.path.join(self.base, "dangling.json")          # (a link to a library file that is not there yet: written through, the file would be made in the library)
+        os.symlink(os.path.join(self.community, "not there yet.json"), dangling)
+        self.assertIn("map library", library_guard.write_refusal(dangling))
         # a link to a folder that is no library is no library (and is written through)
         elsewhere = os.path.join(self.base, "elsewhere")
         os.makedirs(elsewhere)
@@ -229,6 +236,93 @@ class ThePythonTools(Layout):
             self.assertTrue(os.path.isfile(os.path.join(dest, name)), command)
         self.assertUntouched()
 
+    # ---- a folder whose FILES are second names of library maps (cp -al Community-Maps work/copy), or links to them: the folder is no library, the files in it are
+    GOOD_BYTES = b"\0\1\2\3" * 100 + b"Tiny map with no PowerUps\0"
+
+    def sweep_entry(self, name):
+        run = lambda roster: {"roster": roster, "status": "ok", "deterministic": True}      # noqa: E731
+        return {"name": name, "name_ok": True, "loads": True, "playable": True, "problems": [], "width": 31, "height": 31, "start_markers": [4, 4, 4, 4],
+                "hill_cells": [16, 16, 16, 16], "runs": [run(15), run(9)]}
+
+    def folder_of_second_names(self):
+        """work/hardcopy: every file of the library's Community-Maps folder as a second name, as `cp -al` makes it; and work/src with the one map that is built or repaired."""
+        copy = os.path.join(self.work, "hardcopy")
+        os.makedirs(copy)
+        try:
+            for name in ("a map.lvl", "maps.json"):
+                os.link(os.path.join(self.community, name), os.path.join(copy, name))
+            os.link(os.path.join(self.community, "maps.json"), os.path.join(copy, "repairs.json"))
+        except (OSError, NotImplementedError):
+            self.skipTest("this system does not allow hard links here")
+        source = os.path.join(self.work, "src")
+        os.makedirs(source)
+        with open(os.path.join(source, "a map.lvl"), "wb") as f:
+            f.write(self.GOOD_BYTES + b"BROKEN")
+        self.before = snapshot(self.layout)
+        return copy, source
+
+    def test_build_never_writes_through_a_second_name_of_a_library_file(self):
+        copy, source = self.folder_of_second_names()
+        with self.assertRaises(library_guard.LibraryRefused) as raised:
+            community_maps.build(source, [self.sweep_entry("a map.lvl")], copy, originals={})
+        self.assertIn("more than one name", str(raised.exception))
+        self.assertUntouched("build into a folder of second names")
+        # even when the map it writes is another one, the list it writes is the library's list
+        os.remove(os.path.join(copy, "a map.lvl"))
+        self.before = snapshot(self.layout)
+        with open(os.path.join(source, "other.lvl"), "wb") as f:
+            f.write(self.GOOD_BYTES)
+        with self.assertRaises(library_guard.LibraryRefused):
+            community_maps.build(source, [self.sweep_entry("other.lvl")], copy, originals={})
+        self.assertFalse(os.path.exists(os.path.join(copy, "other.lvl")), "nothing is written when one file is refused")
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            report = self.report()
+            self.assertEqual(community_maps.main(["community_maps.py", "build", source, report, copy]), 2)
+        self.assertIn("nothing written", err.getvalue())
+
+    def test_repair_never_writes_through_a_second_name_of_a_library_file(self):
+        copy, source = self.folder_of_second_names()
+        entry = self.sweep_entry("a map.lvl")
+        entry["loads"] = False
+        with mock.patch.object(community_maps.repair_maps, "repair", lambda data: (b"repaired" * 10, ["a thing was done"])):
+            with self.assertRaises(library_guard.LibraryRefused) as raised:
+                community_maps.repair(source, [entry], copy, originals={})
+            self.assertIn("more than one name", str(raised.exception))
+            self.assertUntouched("repair into a folder of second names")
+            os.remove(os.path.join(copy, "a map.lvl"))                      # (the repaired map is new, but repairs.json is the library's list)
+            self.before = snapshot(self.layout)
+            with self.assertRaises(library_guard.LibraryRefused):
+                community_maps.repair(source, [entry], copy, originals={})
+            self.assertFalse(os.path.exists(os.path.join(copy, "a map.lvl")), "nothing is written when one file is refused")
+        self.assertUntouched("repair into a folder of second names, the list")
+
+    def test_build_never_writes_through_a_link_to_a_library_file(self):
+        copy = os.path.join(self.work, "linked")
+        os.makedirs(copy)
+        try:
+            os.symlink(os.path.join(self.community, "a map.lvl"), os.path.join(copy, "a map.lvl"))
+        except (OSError, NotImplementedError):
+            self.skipTest("this system does not allow symbolic links to this user")
+        source = os.path.join(self.work, "src")
+        os.makedirs(source)
+        with open(os.path.join(source, "a map.lvl"), "wb") as f:
+            f.write(self.GOOD_BYTES)
+        self.before = snapshot(self.layout)
+        with self.assertRaises(library_guard.LibraryRefused):
+            community_maps.build(source, [self.sweep_entry("a map.lvl")], copy, originals={})
+        self.assertUntouched("build into a folder with a link to a library map")
+
+    def test_a_folder_of_ordinary_files_is_still_written(self):
+        source = os.path.join(self.work, "src")
+        os.makedirs(source)
+        with open(os.path.join(source, "a map.lvl"), "wb") as f:
+            f.write(self.GOOD_BYTES)
+        dest = os.path.join(self.work, "fresh")
+        self.assertEqual(community_maps.build(source, [self.sweep_entry("a map.lvl")], dest, originals={}), 1)
+        self.assertEqual(community_maps.build(source, [self.sweep_entry("a map.lvl")], dest, originals={}), 1)      # (again, over its own files)
+        self.assertEqual(sorted(os.listdir(dest)), ["a map.lvl", "maps.json"])
+
     def test_map_previews_refuse_the_library(self):
         def never_called(path):
             raise AssertionError("a picture was drawn")
@@ -250,14 +344,14 @@ class ThePythonTools(Layout):
         # and the command: the default folder is the library itself
         done = subprocess.run([sys.executable, os.path.join(REPO, "tools", "map_previews.py"), self.community, "--ants", sys.executable], capture_output=True, text=True, timeout=120)
         if "Pillow" not in done.stderr and "PIL" not in done.stderr:
-            self.assertNotEqual(done.returncode, 0)
+            self.assertEqual(done.returncode, 2)
             self.assertIn("map library", done.stderr)
         self.assertUntouched()
 
     def test_map_atlas_refuses_the_library(self):
         for what, path in self.spellings()[:12]:
             done = subprocess.run([sys.executable, os.path.join(REPO, "tools", "map_atlas.py"), path], capture_output=True, text=True, timeout=120)
-            self.assertNotEqual(done.returncode, 0, what)
+            self.assertEqual(done.returncode, 2, what)
             self.assertIn("map library", done.stderr, what)
             self.assertIn("nothing written", done.stderr, what)
         self.assertUntouched()
@@ -269,7 +363,7 @@ class ThePythonTools(Layout):
             self.skipTest("Pillow is not installed (the pictures tool needs it)")
         for what, path in self.spellings():
             done = subprocess.run([sys.executable, os.path.join(REPO, "tools", "front_page_art", "make_art.py"), "--out", path], capture_output=True, text=True, timeout=120)
-            self.assertNotEqual(done.returncode, 0, what)
+            self.assertEqual(done.returncode, 2, what)
             self.assertIn("map library", done.stderr, what)
         self.assertUntouched()
 
@@ -331,6 +425,41 @@ class TheCppTools(Layout):
             self.assertIn("nothing written", done.stderr)
             self.assertNotIn("match(es)", done.stdout)
         self.assertEqual(snapshot(self.layout), before)
+        # nothing is written when the SECOND option is the one that is refused: a report that was there is not cut short
+        earlier = os.path.join(self.work, "earlier.json")
+        with open(earlier, "w", encoding="utf-8") as f:
+            f.write("a report to keep")
+        before = snapshot(self.layout)
+        done = subprocess.run(base + ["--out", earlier, "--save-replays", os.path.join(self.community, "replays")], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 2)
+        with open(earlier, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "a report to keep")
+        self.assertEqual(snapshot(self.layout), before)
+        # the map that is played may be given by NAME (looked up in --maps-dir): the report is not written over it either
+        folder = os.path.join(self.work, "mine")
+        os.makedirs(folder)
+        shutil.copyfile(TINY, os.path.join(folder, "TINY.LVL"))
+        before = snapshot(self.layout)
+        done = subprocess.run([arena, "--map", "TINY", "--maps-dir", folder, "--ticks", "100", "--quiet", "--out", os.path.join(folder, "TINY.LVL")], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("own input", done.stderr)
+        self.assertEqual(snapshot(self.layout), before)
+        # a link to a library file that is not there yet is followed (the file would be created through it)
+        link = os.path.join(self.work, "dangling.json")
+        try:
+            os.symlink(os.path.join(self.community, "not there yet.json"), link)
+        except (OSError, NotImplementedError):
+            link = None
+        if link:
+            before = snapshot(self.layout)
+            done = subprocess.run(base + ["--out", link], capture_output=True, text=True, timeout=120)
+            self.assertEqual(done.returncode, 2)
+            self.assertIn("map library", done.stderr)
+            sweep = self.program("map_sweep")
+            done = subprocess.run([sweep, folder, "--skip-run", "--out", link], capture_output=True, text=True, timeout=120)
+            self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+            self.assertIn("map library", done.stderr)
+            self.assertEqual(snapshot(self.layout), before)
         ok = subprocess.run(base + ["--out", os.path.join(self.work, "report.json")], capture_output=True, text=True, timeout=300)
         self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
         self.assertTrue(os.path.isfile(os.path.join(self.work, "report.json")))

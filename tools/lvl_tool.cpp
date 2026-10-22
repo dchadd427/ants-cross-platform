@@ -1172,6 +1172,13 @@ int selftest() {
         } else {
             std::cout << "    (symbolic links to files are not allowed here: that part is skipped)\n";
         }
+        fs::create_symlink(layout / "Community-Maps" / "not there yet.lvl", dir.path / "dangling.lvl", link_error);      // (a link to a library file that does not exist yet: a plain write would create it through the link)
+        if (!link_error) {
+            const Run r = run_words({"blank", (dir.path / "dangling.lvl").string(), "--rows", "5", "--columns", "5"});
+            const Run c = run_words({"convert", tiny_path, "--to", "extended", "-o", (dir.path / "dangling.lvl").string()});
+            t.check(r.status == 2 && c.status == 2 && has(r.err, "map library") && !fs::exists(layout / "Community-Maps" / "not there yet.lvl") && untouched(), "a link to a library file that is not there yet is followed: " + r.err + c.err);
+            fs::remove(dir.path / "dangling.lvl", link_error);
+        }
         fs::create_hard_link(community, dir.path / "hard_name.lvl", link_error);
         if (!link_error) {
             const Run r = run_words({"rewrite", tiny_path, (dir.path / "hard_name.lvl").string()});

@@ -154,8 +154,7 @@ def repair(src, report, dest, originals=None):
     """Writes into `dest` the repaired file of every map of the report that is not an original, does not pass as it is and has a repair; writes dest/repairs.json; returns the count."""
     originals = load_originals() if originals is None else originals
     library_guard.require_writable(dest, [src])         # (the owner's rule: never into the map library, never over the folder it reads)
-    os.makedirs(dest, exist_ok=True)
-    done = {}
+    fixes = []
     for entry in report:
         data = read(src, entry["name"])
         if original_of(entry["name"], data, originals) is not None or reason(entry, data) is None:
@@ -163,9 +162,15 @@ def repair(src, report, dest, originals=None):
         fixed, notes = repair_maps.repair(data)
         if fixed is None:
             continue
-        with open(os.path.join(dest, entry["name"]), "wb") as f:
+        fixes.append((entry["name"], fixed, sentence(notes)))
+    for name in [f[0] for f in fixes] + [REPAIRS_FILE]:          # (every file that is written, not only the folder: a file in it may be a second name of a library map, or a link to one; all are asked before one is written)
+        library_guard.require_writable(os.path.join(dest, name), [src])
+    os.makedirs(dest, exist_ok=True)
+    done = {}
+    for name, fixed, said in fixes:
+        with open(os.path.join(dest, name), "wb") as f:
             f.write(fixed)
-        done[entry["name"]] = sentence(notes)
+        done[name] = said
     with open(os.path.join(dest, REPAIRS_FILE), "w", encoding="utf-8", newline="\n") as f:
         json.dump({"format": 1, "repairs": dict(sorted(done.items(), key=lambda kv: kv[0].encode("latin-1")))}, f, indent=1, ensure_ascii=True)
         f.write("\n")
@@ -217,6 +222,8 @@ def build(src, report, dest, originals=None, repaired=None):
     originals = load_originals() if originals is None else originals
     library_guard.require_writable(dest, [src] + ([repaired[0]] if repaired else []))      # (the owner's rule: never into the map library, never over a folder it reads)
     kept = taken(src, report, originals, repaired)
+    for name in [entry["name"] for entry, _data, _note in kept] + ["maps.json"]:        # (every file that is written, not only the folder: a file in it may be a second name of a library map, or a link to one; all are asked before one is written)
+        library_guard.require_writable(os.path.join(dest, name), [src])
     os.makedirs(dest, exist_ok=True)
     rows = []
     for entry, data, note in kept:

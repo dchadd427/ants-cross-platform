@@ -929,6 +929,26 @@
     "test_server"
    ],
    "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "start_pre_check_counts_an_abandoned_big_match_as_one",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "kDemoAbandonedMs ? held_places(*kv.second) : 0u;",
+   "new": "kDemoAbandonedMs ? 1u : 0u;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "served_map_file_is_not_clamped",
+   "file": "src/ants_server/control.cpp",
+   "old": "if (size > 0 && static_cast<uint64_t>(size) <= MapStore::kMaxMapBytes) {",
+   "new": "if (size > 0) {",
+   "build": [
+    "test_map_list"
+   ],
+   "test": "./build/tests/test_server/test_map_list"
   }
  ]
 }

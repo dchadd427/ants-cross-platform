@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -80,6 +81,15 @@ inline std::string write_refusal(const std::string& path, const std::vector<std:
     const fs::path absolute = fs::absolute(fs::path(path), ec).lexically_normal();
     fs::path real = fs::weakly_canonical(absolute, ec);
     if (ec) real = absolute;
+    for (int hops = 0; hops < 40; ++hops) {       // a last name that is a symbolic link to a file that is not there (yet) is written THROUGH by an ofstream: follow it, as the python guard's realpath does
+        std::error_code link_ec;
+        if (!fs::is_symlink(fs::symlink_status(real, link_ec)) || link_ec) break;
+        const fs::path target = fs::read_symlink(real, link_ec);
+        if (link_ec) break;
+        const fs::path next = fs::weakly_canonical(target.is_absolute() ? target : real.parent_path() / target, link_ec);
+        if (link_ec) break;
+        real = next;
+    }
     if (names_library(absolute) || names_library(real) || inside_folders(real, library)) {
         return path + " is in the map library (Original-Ants or Community-Maps): no tool writes there, the library maps are never changed, re-saved, repaired, re-rendered or deleted; write to a copy somewhere else";
     }

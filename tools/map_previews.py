@@ -178,7 +178,8 @@ def main(argv=None):
     try:
         drawn, skipped, removed = update(args.folder, out, game_renderer(args.ants), args.jobs, args.force, log=lambda line: print(line, flush=True))
     except library_guard.LibraryRefused as err:
-        sys.exit("map_previews: %s; nothing written" % err)
+        print("map_previews: %s; nothing written" % err, file=sys.stderr)
+        sys.exit(2)
     print("%d drawn, %d up to date, %d removed" % (len(drawn), len(skipped), len(removed)))
 
 

@@ -14,8 +14,7 @@
 //                     saboteur, aggr1 .. aggr9 (an aggressor with that many attackers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
 //                     bot's style: Hard plays aggressive or raider only; none: it draws its own per match). KIND may be `standard+K=V,K=V`, a standard bot with its own tuning of
 //                     the keys of apply_tune (the tournaments' ablations).
-//                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants.
-//                     idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
+//                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants. idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
 //   --ticks full|N    play until the match is over (the map's own length, default) or at most N ticks (50 ms each)
 //   --latency-ticks N the sink latency: 0 applies a command the moment a bot releases it; N > 0 plays like a lock-step room (applied at the first 100 ms turn
 //                     boundary at least N ticks later, in canonical order); default 3
@@ -1327,8 +1326,10 @@ void print_match(const std::vector<LoadedMap>& maps, const MatchReport& r) {
 // `factory` (null: the registry's bots) lets the self-test seat bots that the registry does not have
 int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>& factory = nullptr) {
     // The report file is opened BEFORE the first match: a path that cannot be written is found in a moment, not after a run of hours
+    std::vector<std::string> played = o.maps;       // (the owner's rule: nothing into the map library, nor over a map that is played, whether it was given as a path or as a name that is looked up; both options are asked before one file is opened)
+    for (const std::string& what : o.maps) { fs::path p; if (resolve_map(what, o.maps_dir, p)) played.push_back(p.string()); }
+    if (library_guard::refused("bot_arena", "--out", o.out, played, g_err) || library_guard::refused("bot_arena", "--save-replays", o.save_replays, played, g_err)) return 2;
     std::ofstream report;
-    if (library_guard::refused("bot_arena", "--out", o.out, o.maps, g_err)) return 2;       // (the owner's rule: nothing into the map library, nor over a map that is played)
     if (!o.out.empty()) {
         report.open(o.out, std::ios::binary | std::ios::trunc);
         if (!report) {
@@ -1344,7 +1345,6 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         return 2;
     }
     ReplaySink sink;
-    if (library_guard::refused("bot_arena", "--save-replays", o.save_replays, o.maps, g_err)) return 2;
     if (!o.save_replays.empty()) {                    // (opened before the first match, like the report file: a folder that cannot be used is found in a moment)
         server::ReplayConfig rc;
         rc.dir = o.save_replays;

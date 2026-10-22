@@ -376,7 +376,7 @@
             var back = doc.activeElement;
             Array.prototype.slice.call(app.children).forEach(function (n) { n.setAttribute('inert', ''); });
             add(app, scrim);
-            function focusable() { return dlg.querySelectorAll('button, input').filter(function (n) { return !n.disabled; }); }
+            function focusable() { return Array.prototype.slice.call(dlg.querySelectorAll('button, input')).filter(function (n) { return !n.disabled; }); }          // (a NodeList has no filter)
             function onKey(e) {
                 if (e.key === 'Escape') { closeModal(); return; }
                 if (e.key !== 'Tab') return;

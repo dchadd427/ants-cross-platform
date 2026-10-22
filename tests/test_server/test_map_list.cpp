@@ -535,6 +535,29 @@ int main() {
             request.path = "/maps/files/Nobody.lvl";
             r = handle_public_replays(mgr, request);
             ASSERT_TRUE(r.status == 404 && !r.file);
+            {   // a file that grew after the store looked at it (the list says 100 bytes, the disk has one byte over what the store keeps) is not read whole on the game thread: a 404
+                const fs::path grown = dir.path / "grown.bin";
+                { std::ofstream out(grown, std::ios::binary); out << std::string(static_cast<size_t>(MapStore::kMaxMapBytes) + 1u, 'x'); }
+                ApprovedMap g = approved[0];
+                g.name = "Grew 256.lvl";
+                g.path = grown.string();
+                g.size = 100;
+                std::vector<ApprovedMap> more = approved;
+                more.push_back(g);
+                mgr.mutable_store().set_approved(more);
+                request.path = "/maps/files/Grew%20256.lvl";
+                r = handle_public_replays(mgr, request);
+                ASSERT_TRUE(r.status == 404 && !r.file);
+                // (and a file of exactly the largest size the store keeps is sent whole)
+                { std::ofstream out(grown, std::ios::binary | std::ios::trunc); out << std::string(static_cast<size_t>(MapStore::kMaxMapBytes), 'x'); }
+                g.size = MapStore::kMaxMapBytes;
+                more.back() = g;
+                mgr.mutable_store().set_approved(more);
+                request.path = "/maps/files/Grew%20256.lvl";
+                r = handle_public_replays(mgr, request);
+                ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == MapStore::kMaxMapBytes);
+                mgr.mutable_store().set_approved(approved);
+            }
         }
         ASSERT_TRUE(std::string(net::kNoticeMapTooBig).find("65,536 cells") != std::string::npos && std::string(net::kNoticeMapTooBig).size() <= net::kMaxChatChars);
     } TEST_END();

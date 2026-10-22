@@ -119,7 +119,8 @@ def main():
     try:
         library_guard.require_writable(args.out)
     except library_guard.LibraryRefused as err:
-        sys.exit("make_art: --out: %s; nothing written" % err)
+        print("make_art: --out: %s; nothing written" % err, file=sys.stderr)
+        sys.exit(2)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     pictures = sprite_pictures()
