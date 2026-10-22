@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the server only watches while it replays a finished match). **Server owners:** the database moves from schema version 6 to 7 at its first start (copy `ants.db` first: an older program refuses version 7).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4f281d02...LASTCODE)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4f281d02...cef15313)
 
 ## v0.12.105 - 2026-10-22 - Map tools never touch the library, fixes after the review of 0.12.103
 
