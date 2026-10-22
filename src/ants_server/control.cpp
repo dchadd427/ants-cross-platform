@@ -473,7 +473,7 @@ static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::Htt
     std::ifstream in(map->path, std::ios::binary | std::ios::ate);
     if (in) {
         const std::streamoff size = in.tellg();
-        if (size > 0) {
+        if (size > 0 && static_cast<uint64_t>(size) <= MapStore::kMaxMapBytes) {       // (not more than the store keeps: a file that grew since the store looked at it is not read whole on the game thread)
             bytes.resize(static_cast<size_t>(size));
             in.seekg(0);
             if (!in.read(&bytes[0], size)) bytes.clear();
