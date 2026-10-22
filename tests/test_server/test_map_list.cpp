@@ -546,7 +546,11 @@ int main() {
                 more.push_back(g);
                 mgr.mutable_store().set_approved(more);
                 request.path = "/maps/files/Grew%20256.lvl";
+                std::error_code size_error;
+                const unsigned long long on_disk = static_cast<unsigned long long>(fs::file_size(grown, size_error));
                 r = handle_public_replays(mgr, request);
+                if (on_disk != MapStore::kMaxMapBytes + 1u || r.status != 404 || r.file) std::cout << "\n      [grew] on the disk " << on_disk << " bytes, status " << r.status << ", file " << r.file << ", body " << r.body.size() << " bytes: " << r.body.substr(0, 80) << "\n";
+                ASSERT_TRUE(on_disk == MapStore::kMaxMapBytes + 1u);
                 ASSERT_TRUE(r.status == 404 && !r.file);
                 // (and a file of exactly the largest size the store keeps is sent whole)
                 { std::ofstream out(grown, std::ios::binary | std::ios::trunc); out << std::string(static_cast<size_t>(MapStore::kMaxMapBytes), 'x'); }
