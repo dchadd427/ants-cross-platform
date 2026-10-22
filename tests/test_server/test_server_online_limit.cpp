@@ -269,5 +269,14 @@ void run_online_limit_tests() {
         ASSERT_EQ(said(pia_game.room_chat), (std::vector<std::string>{"255||Pia's game could not load this map."}));      // (no "press Remove" for the leader: it is their own game)
         ASSERT_EQ(said(bob_game.room_chat), (std::vector<std::string>{"255||Pia's game could not load this map."}));
         ASSERT_TRUE(w.status("stal0002").state == RoomState::Waiting && w.status("stal0002").joined == 2);
+        for (int round = 0; round < 3; ++round) {                                                    // three more cancels, and the START in the minute's pause: the leader's own game is named, with no instruction to remove it
+            ASSERT_TRUE(pia_game.lobby->request_start());
+            w.run(2500);
+        }
+        const size_t before = said(pia_game.room_chat).size();
+        ASSERT_TRUE(pia_game.lobby->request_start());
+        w.run(300);
+        const std::vector<std::string> lines = said(pia_game.room_chat);
+        ASSERT_TRUE(before == 4 && lines.size() == 5 && lines[4] == "255||Pia's game could not load this map.");
     } TEST_END();
 }

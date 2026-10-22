@@ -499,6 +499,8 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
             const std::string who = load_failed_notice();
             if (who.empty()) {
                 lobby_.end_start(net::kNoticeStartsFailed);
+            } else if (lobby_.leader() == load_failed_seat_) {      // (it is the leader's own game: there is nobody to remove)
+                lobby_.end_start(who);
             } else {                                              // (one person's game keeps cancelling the START: the leader is told whose it is, and how to start without them)
                 lobby_.notify(lobby_.leader(), who);
                 lobby_.end_start(remove_line(load_failed_name_));
@@ -543,8 +545,14 @@ void Room::update(uint32_t now_ms) {
     uint8_t asked_by = net::kNoLeader;                               // the leader who asked to start now, in this pass
     std::array<net::FillLevel, sim::MAX_PLAYERS> asked_fill{};       // ... the bot that it asked for in each seat when that seat is empty (protocol 11: one level; 13: a level for each seat)
     sim::StartTeams asked_teams;                                     // ... and the teams that it chose (protocol 13)
+    bool load_failed_now = false;                                    // (a game's failure to load reports a LoadFailed and then a Cancelled; a Cancelled alone is another reason, and the game that failed before is no longer the reason)
     for (const net::HostLobby::Event& ev : lobby_.take_events()) {
-        if (spec_.lobby && ev.type == net::HostLobby::Event::Type::LoadFailed && state_ == RoomState::Loading) say_load_failed(ev.seat, ev.timed_out);
+        if (spec_.lobby && ev.type == net::HostLobby::Event::Type::LoadFailed && state_ == RoomState::Loading) {
+            say_load_failed(ev.seat, ev.timed_out);
+            load_failed_now = true;
+        }
+        if (spec_.lobby && ev.type == net::HostLobby::Event::Type::Cancelled && !load_failed_now) load_failed_seat_ = 255;
+        if (spec_.lobby && ev.type == net::HostLobby::Event::Type::Begun) load_failed_seat_ = 255;
         if (spec_.lobby && ev.type == net::HostLobby::Event::Type::Left && ev.seat == load_failed_seat_) {      // (the person whose game could not load the map has gone, or was removed: the pause that they caused is over)
             load_failed_seat_ = 255;
             cancels_ = 0;

@@ -277,6 +277,7 @@ cmake --build build --target lvl_tool
 ./build/lvl_tool blank out.lvl --rows 31 --columns 31 [--new-map]    # a blank map of 1 to 256 rows and columns (the tile names from Original-Ants/ants.chd, or --chd FILE)
 ./build/lvl_tool blank out.lvl --extended --rows 300 --columns 400   # a blank Extended map (version 9): at most 1,024 a side and 262,144 cells
 ./build/lvl_tool convert in.lvl --to extended|classic -o out.lvl     # a copy as the other kind (to classic: only when it fits, else the reasons are listed); in.lvl is kept
+./build/lvl_tool convert in.lvl --to extended -o out.lvl --rows 512 --columns 512     # the Extended copy grown to that size by plain ground at the right and below (a big map that works, for tests)
 ./build/lvl_tool --selftest
 ```
 
