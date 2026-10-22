@@ -3,6 +3,7 @@
 //   AI31.1  the model of a blow (knock_flight, kill_shot) against the engine: 240 random grounds of water, rocks, bombs and fire walls round a victim, a worker's blow or a Combat Ant's punch from a
 //           random tile next to it: the engine kills the victim exactly when the model says so (water, a bomb, a fire wall, the blow itself) and otherwise lets it land where the model says
 //   AI31.2  the scripted scenes: an enemy next to water and an own idle ant on the wrong side (a plain ant, a Combat Ant four tiles from the water): it walks to the right tile and the enemy drowns; the old hunts do not
+//   AI31.2c a walk that takes longer than half the clock of a job is not begun
 //   AI31.3  priority: an ant that holds a chore (a rank 4 task) is taken, one that holds a pick-up (rank 3) is not; an ant that carries food never strikes; nothing happens with the plan off
 //   AI31.4  reach: an enemy across a channel that no walk crosses gets no attack order (the assault of the free ants sent them before: "Can't go there."), one on the same shore does
 //   AI31.5  the plans: Hard has the batch, Medium and Easy do not, the switch takes it out, a plan made by hand has none
@@ -125,6 +126,21 @@ void run_kill_tests() {
             ASSERT_TRUE(kill_shot(sim.grid(), TileCoord{30, 30}, 10, sim::AntType::Worker, TileCoord{30, 29}, sim::AntType::Worker).kind == KillKind::Water);
             ASSERT_FALSE(kill_shot(sim.grid(), TileCoord{30, 30}, 10, sim::AntType::Swimmer, TileCoord{30, 29}, sim::AntType::Worker).kills());
         }
+        {   // the edges of the model: the blow itself kills exactly what it takes (a worker 1 hit point, a Combat Ant 2), a fire wall under the landing what is left with 1, a bomb what is left with 2
+            sim::SimulationEngine sim;
+            field(sim, 400);
+            const TileCoord victim{30, 40};
+            const TileCoord stand{30, 39};
+            const auto shot = [&](uint8_t hp, sim::AntType striker) { return kill_shot(sim.grid(), victim, hp, sim::AntType::Worker, stand, striker); };
+            ASSERT_TRUE(shot(1, sim::AntType::Worker).kind == KillKind::Blow);
+            ASSERT_FALSE(shot(2, sim::AntType::Worker).kills());
+            ASSERT_TRUE(shot(2, sim::AntType::Combat).kind == KillKind::Blow);
+            ASSERT_FALSE(shot(3, sim::AntType::Combat).kills());
+            sim.grid_mut().place_firewall(30, 41, 2);                            // (where a worker's blow lands the victim)
+            ASSERT_TRUE(shot(2, sim::AntType::Worker).kind == KillKind::Fire);
+            ASSERT_FALSE(shot(3, sim::AntType::Worker).kills());
+            ASSERT_FALSE(kill_shot(sim.grid(), victim, 2, sim::AntType::Fire, stand, sim::AntType::Worker).kills());     // (a Fire Ant walks through fire)
+        }
     } TEST_END();
 
     TEST_CASE("AI31.2 An Enemy Next To Water And An Own Idle Ant On The Wrong Side: The Ant Walks To The Tile Away From The Water And Strikes From There, The Enemy Drowns (A Plain Ant One Tile From The Water, A Combat Ant Four Tiles); The Hunts Of Before Do Not")
@@ -185,6 +201,28 @@ void run_kill_tests() {
         ASSERT_EQ(rig.as<StandardBot>().opportunity().started(), 0u);
         ASSERT_TRUE(alive(sim, enemy));
         (void)striker;
+    } TEST_END();
+
+    TEST_CASE("AI31.2c A Walk That Is Too Long Is Not Begun: The Striker Stands Within Reach Of The Tile But On The Other Side Of A Long Channel (A Detour Of Many Seconds), So No Job Starts; With A Long Enough Clock It Does")
+    {
+        for (const uint32_t ticks : {240u, 6000u}) {
+            sim::SimulationEngine sim;
+            field(sim, 406);
+            for (int x = 3; x <= 56; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);          // a channel with a gap far to the west
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 18});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30, 40});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{31, 40});
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});          // (drowns when struck from the north)
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.assault = false;
+            plan.water_hunt = false;
+            plan.opportunity_ticks = ticks;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(120);
+            if (ticks < 1000u) ASSERT_EQ(rig.as<StandardBot>().opportunity().started(), 0u);
+            else ASSERT_TRUE(rig.as<StandardBot>().opportunity().started() >= 1u);
+            ASSERT_TRUE(alive(sim, enemy) || ticks >= 1000u);
+        }
     } TEST_END();
 
     TEST_CASE("AI31.3 Priority: An Ant That Holds A Chore (Rank 4) Is Taken For The Kill, One That Holds A Pick-Up (Rank 3) Is Not, An Ant With Food Never Strikes, A Fire Ant Keeps Its Walls; An Enemy That Walks Is Struck Only By An Ant That Stands On The Right Tile")
@@ -291,7 +329,10 @@ void run_kill_tests() {
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(700);
                 const size_t attacks = rig.proposed_count(CommandType::GroupAttack);
-                if (across && reach) ASSERT_EQ(attacks, 0u);
+                if (across && reach) {
+                    ASSERT_EQ(attacks, 0u);
+                    ASSERT_EQ(rig.as<StandardBot>().fight().fights_started(), 0u);        // (no fight is formed of ants that no walk takes to the enemy: they would be held for nothing)
+                }
                 else ASSERT_TRUE(attacks >= 1u);                            // (the bug that is fixed: an order the engine refuses, as often as the fights run; and the enemy that can be reached)
             }
         }

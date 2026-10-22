@@ -23,7 +23,7 @@
    "id": "knock_punch_takes_one",
    "file": "src/ants_ai/knock.cpp",
    "old": "return striker == sim::AntType::Combat ? 2u : 1u;",
-   "new": "return 1u;",
+   "new": "return striker == sim::AntType::Combat ? 1u : 1u;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.1"
   },
@@ -103,7 +103,7 @@
    "id": "opp_strikes_walkers",
    "file": "src/ants_ai/opportunity_task.cpp",
    "old": "if (walking && !(at_stand && a->idle())) continue;",
-   "new": "if (false) continue;",
+   "new": "if (walking && !(at_stand && a->idle()) && false) continue;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.3 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.3"
   },
@@ -111,9 +111,9 @@
    "id": "opp_dynamic_walk_ignored",
    "file": "src/ants_ai/opportunity_task.cpp",
    "old": "if (at < it->second.size() && it->second[at] >= 0 && MapInfo::walking_ticks(it->second[at]) <= static_cast<int32_t>(plan.opportunity_ticks / 2)) pick = &k;",
-   "new": "pick = &k;",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2b ' ./build/tests/test_ai/test_ai",
-   "expect": "AI31.2b"
+   "new": "if (at < it->second.size() && it->second[at] >= 0 && MapInfo::walking_ticks(it->second[at]) <= 1000000) pick = &k;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2c ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.2c"
   },
   {
    "id": "opp_no_move_to_stand",
@@ -175,7 +175,7 @@
    "id": "idle_hunt_eggs_ignored",
    "file": "include/ants_ai/tactics.hpp",
    "old": ": plan.fight_reserve + (view.eggs() == 0 ? 1u : 0u); }",
-   "new": ": plan.fight_reserve; }",
+   "new": ": plan.fight_reserve + (view.eggs() == 0 ? 0u : 0u); }",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.6"
   },
@@ -199,7 +199,7 @@
    "id": "worth_unreachable_pile_counts",
    "file": "src/ants_ai/chore_worth.cpp",
    "old": "if (info == nullptr || info->approach[victim].reachable()) return true;",
-   "new": "return true;",
+   "new": "if (info == nullptr || true) return true;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.7"
   },
@@ -215,7 +215,7 @@
    "id": "worth_no_carriers",
    "file": "src/ants_ai/chore_worth.cpp",
    "old": "if (a.team == victim && a.holding) return true;",
-   "new": "if (false) return true;",
+   "new": "if (a.team == victim && a.holding && false) return true;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.7"
   },
