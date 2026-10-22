@@ -278,6 +278,12 @@ void the_order_tile_hashes() {
     for (const uint16_t rules : {uint16_t{1}, uint16_t{2}}) {
         check(ants_hash_with_order_tile(rules, classic) != ants_hash_with_order_tile(rules, none), "rules " + std::to_string(rules) + ": an ant that holds (120, 90) hashes otherwise than an ant with no order tile");
     }
+    // the bytes themselves: the ants hash of one worker at (5, 5) on this world with the order tile (120, 90) is a pinned number. At rules 0 it is the hash of "no order" and of v0.12.93;
+    // at rules 1 and 2 it is the hash that v0.12.97 to v0.12.103 gave (the extra byte is a true, after the tile and before home_state), so a byte that moves, changes its value or
+    // changes its width desyncs those builds and fails here
+    check(ants_hash_with_order_tile(0, classic) == 0xc98854793b4e680bULL, "rules 0: the ants hash with the order tile (120, 90) is the one of v0.12.93");
+    check(ants_hash_with_order_tile(1, classic) == 0x0c964efa48598d42ULL && ants_hash_with_order_tile(2, classic) == 0x0c964efa48598d42ULL,
+          "rules 1 and 2: the ants hash with the order tile (120, 90) is the one of v0.12.97 to v0.12.103 (the extra byte is a true after the tile)");
     // every other tile hashes as itself, and the same at every rules word (the one extra byte is for (120, 90) alone), and never as "none": a tile that shares only one coordinate with
     // the marker (-1, -1) or with the slot (120, 90) is a tile like any other
     const TileCoord others[] = {{120, 5}, {5, 90}, {121, 90}, {120, 91}, {119, 90}, {120, 89}, {-1, 5}, {5, -1}, {0, 0}, {5, 5}, {129, 99}, {0x78, 0x5B}, {0x79, 0x5A}};
