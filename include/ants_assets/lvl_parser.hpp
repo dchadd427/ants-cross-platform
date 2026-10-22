@@ -91,7 +91,9 @@ struct LevelLimits {
     }
 
     /// An Extended map (version 9) that the simulation is to PLAY on this computer: the Extended policy, up to 1,024 a side and 262,144 cells (512 x 512, any shape),
-    /// a file of at most 4 MiB read, a canonical file of 3.5 MiB.
+    /// a file of at most 4 MiB read, a canonical file of 3.5 MiB. It is the Extended map's limits today and keeps a name of its own for the places that play (every caller says what it
+    /// is for); `the_play_limits` in test_map_roundtrip pins the numbers, so a raise of for_extended_maps() fails that test until the play code (path finder, state hash, copies of the
+    /// world: MAP_FORMAT.md, "Orders on a big map") has been looked at and the numbers of that test are raised on purpose.
     static constexpr LevelLimits for_play_extended() noexcept {
         return for_extended_maps();
     }
