@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the online size limit, the weight of a big map, the words for a game that cannot load a map, the canonical test maps with their limits, the public door's map files, the history of approved maps and the arena's play limits, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_limit_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'The leader's START') or docs/MAP_SUBMISSIONS.md ('Test maps'). Not listed on purpose: the weight of a record that waits for its replay and of a retired match (no test has a big map there), the wiring of main.cpp (the program is run by the script suites), and three second locks: the name of the person who left (the room looks at the seat as well), the hash check of load_map_file (the replay's own checkpoints refuse another map) and the cap of the weight when places are counted (a match heavier than all the places only makes the server full).",
+ "note": "Mutants of the online size limit, the weight of a big map, the words for a game that cannot load a map, the canonical test maps with their limits, the public door's map files, the history of approved maps and the arena's play limits, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_limit_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'The leader's START') or docs/MAP_SUBMISSIONS.md ('Test maps'). Not listed on purpose: the weight of a retired match (no test has a rematch on a big map), the wiring of main.cpp (the program is run by the script suites), and three second locks: the name of the person who left (the room looks at the seat as well), the hash check of load_map_file (the replay's own checkpoints refuse another map) and the cap of the weight when places are counted (a match heavier than all the places only makes the server full).",
  "mutants": [
   {
    "id": "door_file_flag_ignored",
@@ -266,7 +266,7 @@
   {
    "id": "running_big_match_counts_one_place",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "? weigh(kv.second->map_cells()) : 0u;",
+   "old": "? static_cast<size_t>(OnlineLimits::weight(room.map_cells())) : 0u;",
    "new": "? 1u : 0u;",
    "build": [
     "test_server"
@@ -838,6 +838,87 @@
     "lvl_tool"
    ],
    "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "restart_record_ignores_the_online_limit",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    if (!OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height())) return \"ended by a restart of the server: the map \"",
+   "new": "    if (false) return \"ended by a restart of the server: the map \"",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "start_ends_abandoned_matches_though_it_cannot_be_seated",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    if (public_places() + want > limits_.demo_rooms + evictable) return false;\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "evictable_counts_live_matches",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "kv.second->public_room() && kv.second->abandoned_ms(now_ms) >= kDemoAbandonedMs ? held_places",
+   "new": "kv.second->public_room() ? held_places",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "map_in_use_forgets_the_plan",
+   "file": "include/ants_server/room.hpp",
+   "old": "return map_.name == file_name || lobby_.map_name() == file_name;",
+   "new": "return map_.name == file_name;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "map_in_use_forgets_the_records_that_wait",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        if (r.head.map == file_name) return true;\n",
+   "new": "        if (false && r.head.map == file_name) return true;\n",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "record_that_waits_weighs_one_place",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "weigh(r.room != nullptr ? r.room->map_cells() : store_.cells_of(r.head.map)) : 0u;",
+   "new": "1u : 0u;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "load_failed_notice_ignores_a_rename",
+   "file": "src/ants_server/room.cpp",
+   "old": " || lobby_.room().slots[load_failed_seat_].name != load_failed_name_) return std::string();",
+   "new": "  ) return std::string();",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "served_map_file_cut_short",
+   "file": "src/ants_server/control.cpp",
+   "old": "            bytes.resize(static_cast<size_t>(size));\n",
+   "new": "            bytes.resize(static_cast<size_t>(size) - 1);\n",
+   "build": [
+    "test_server",
+    "test_map_list"
+   ],
+   "test": "./build/tests/test_server/test_map_list"
   }
  ]
 }
