@@ -351,7 +351,7 @@ check "with a database the server keeps the match history, and the log says wher
 check "--no-history keeps no history, and the log says so (the database is still made)" "$([ "$(db_start "$WORK/hist_off.log" --results-dir "$WORK/hist_off" --no-history)" = "0" ] && grep -q 'the match history is off (--no-history)' "$WORK/hist_off.log" && ! grep -q 'match history kept for good' "$WORK/hist_off.log" && [ -s "$WORK/hist_off/ants.db" ]; echo $?)"
 check "--no-db leaves the history nothing to live in, and the log says so" "$([ "$(db_start "$WORK/hist_nodb.log" --results-dir "$WORK/hist_nodb" --no-db)" = "0" ] && grep -q 'the match history is off: the server has no database' "$WORK/hist_nodb.log"; echo $?)"
 if python3 -c 'import sqlite3' 2> /dev/null; then
-    check "... and the database of the history has its three tables" "$([ "$(python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(",".join(r[0] for r in c.execute("select name from sqlite_master where type = ? and name like ? order by name", ("table", "history_%"))))' "$WORK/hist_on/ants.db")" = "history_markers,history_matches,history_seats" ]; echo $?)"
+    check "... and the database of the history has its four tables (the match, its seats, the markers, the map of deaths)" "$([ "$(python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(",".join(r[0] for r in c.execute("select name from sqlite_master where type = ? and name like ? order by name", ("table", "history_%"))))' "$WORK/hist_on/ants.db")" = "history_deaths,history_markers,history_matches,history_seats" ]; echo $?)"
 fi
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
