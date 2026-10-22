@@ -228,7 +228,7 @@ void run_migration_tests() {
 
     DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics; version 5 the map submissions; version 6 the accounts of the owner's page") {
         const auto& list = ants::server::db_migrations();
-        DB_CHECK(list.size() == 6 && list.front().version == 1 && list.back().version == 6);
+        DB_CHECK(list.size() == 7 && list.front().version == 1 && list.back().version == 7);
         DB_CHECK(ants::server::db_schema_version() == list.back().version);
         Database db;
         DB_CHECK(db.open(":memory:").ok());
@@ -241,7 +241,7 @@ void run_migration_tests() {
         const std::string created = st.column_text(0);
         DB_CHECK(created.size() == 20 && created.substr(0, 2) == "20" && created.back() == 'Z');
         DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version') ORDER BY name)").ok());
-        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,admin_known_addr,admin_locks,admin_revoked,admin_users,history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,submission_limits");
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,admin_known_addr,admin_locks,admin_revoked,admin_users,history_deaths,history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,submission_limits");
         DB_CHECK(migrate(db, list).ok());
         DB_CHECK(rows_in(db, "meta") == 1);
     } DB_END;
@@ -344,7 +344,7 @@ void run_migration_tests() {
         int v = 0;
         DB_CHECK(migrate(db, list.data(), 5, &v).ok() && v == 5 && !has_table(db, "admin_users"));
         DB_CHECK(db.exec("INSERT INTO site_stats VALUES ('online', 5)").ok());
-        DB_CHECK(migrate(db, list, &v).ok() && v == 6 && has_table(db, "admin_users") && has_table(db, "admin_locks") && has_table(db, "admin_known_addr") && has_table(db, "admin_audit"));
+        DB_CHECK(migrate(db, list.data(), 6, &v).ok() && v == 6 && has_table(db, "admin_users") && has_table(db, "admin_locks") && has_table(db, "admin_known_addr") && has_table(db, "admin_audit") && !has_table(db, "history_deaths"));
         DB_CHECK(rows_in(db, "site_stats") == 1 && rows_in(db, "schema_version") == 6 && rows_in(db, "admin_users") == 0);
         const auto user = [&](const std::string& name, const std::string& key, const std::string& role) {
             return "INSERT INTO admin_users (name, name_key, role, pw_hash, created_at) VALUES ('" + name + "', '" + key + "', '" + role + "', 'x', 1)";
@@ -362,5 +362,31 @@ void run_migration_tests() {
         DB_CHECK(db.exec("INSERT INTO admin_audit (at, actor, action) VALUES (1, 'x', 'y')").ok() && rows_in(db, "admin_audit") == 1);
         DB_CHECK(db.exec("INSERT INTO map_submissions (id, token_hash, state, kind, name, name_key, maker, note, width, height, minutes, players, description, size, hash, findings, file, created_at) VALUES ('" + std::string(32, 'a') + "', '" + std::string(64, 'b') + "', 'waiting', 'classic', 'N', 'n', 'M', '', 1, 1, 1, 4, '', 1, '0123456789abcdef', '[]', 'f.lvl', 1)").ok());
         DB_CHECK(db.prepare(st, "SELECT decided_by FROM map_submissions").ok() && st.step() == Statement::Step::Row && st.column_text(0).empty());
+    } DB_END;
+    DB_CASE("SV1.7 Version 7 (the map of deaths): a database of version 6 is brought to it with its records kept; one row for each match, with the cap of the field, the size and the count, the map's file hash of 16 digits; the row goes with its match") {
+        const auto& list = ants::server::db_migrations();
+        Database db;
+        DB_CHECK(db.open(":memory:").ok());
+        int v = 0;
+        DB_CHECK(migrate(db, list.data(), 6, &v).ok() && v == 6 && !has_table(db, "history_deaths"));
+        DB_CHECK(db.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at) VALUES "
+                         "('ants-TINY-20261008-143209Z', 1, 'TINY.LVL', 'v0.12.0', 100, 1, NULL, 'highest-score', '1v1', 'decided', 1, 0, 0, 0, 'tiny', '[]', 1)").ok());
+        DB_CHECK(migrate(db, list, &v).ok() && v == 7 && has_table(db, "history_deaths") && rows_in(db, "history_matches") == 1 && rows_in(db, "schema_version") == 7);
+        const std::string ok_row = "INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES ('ants-TINY-20261008-143209Z', 'TINY.LVL', '0123456789abcdef', 1, 31, 31, 3, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA')";
+        DB_CHECK(db.exec(ok_row).ok() && rows_in(db, "history_deaths") == 1);
+        DB_CHECK(!db.exec(ok_row).ok());                                                                       // (one row for each match)
+        DB_CHECK(!db.exec("INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES ('ants-NONE-20261008-143209Z', 'TINY.LVL', '0123456789abcdef', 1, 31, 31, 3, 'A')").ok());      // (a match that is not there)
+        DB_CHECK(db.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at) VALUES "
+                         "('ants-TINY-20261008-143210Z', 2, 'TINY.LVL', 'v0.12.0', 100, 1, NULL, 'highest-score', '1v1', 'decided', 1, 0, 0, 0, 'tiny', '[]', 1)").ok());
+        for (const char* bad : {"'short'", "'0123456789abcdefg'"}) {                                                // (the hash of a map file is 16 digits)
+            DB_CHECK(!db.exec(std::string("INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES ('ants-TINY-20261008-143210Z', 'TINY.LVL', ") + bad + ", 2, 31, 31, 3, 'A')").ok());
+        }
+        const auto row = [](const std::string& w, const std::string& n, const std::string& deaths) {
+            return "INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES ('ants-TINY-20261008-143210Z', 'TINY.LVL', '0123456789abcdef', 2, " + w + ", 31, " + n + ", '" + deaths + "')";
+        };
+        DB_CHECK(!db.exec(row("0", "3", "A")).ok() && !db.exec(row("31", "0", "A")).ok());                                // (a size and a count of at least 1)
+        DB_CHECK(!db.exec(row("31", "3", std::string(3001, 'A'))).ok());                                                  // (the cap of the field: 3,000)
+        DB_CHECK(db.exec(row("31", "3", std::string(3000, 'A'))).ok() && rows_in(db, "history_deaths") == 2);
+        DB_CHECK(db.exec("DELETE FROM history_matches WHERE id = 'ants-TINY-20261008-143209Z'").ok() && rows_in(db, "history_deaths") == 1);   // (the row goes with its match)
     } DB_END;
 }

@@ -105,7 +105,7 @@ class TheFiles(unittest.TestCase):
 
     def test_the_stylesheet_and_the_script_come_after_the_shared_ones_and_load_nothing_from_elsewhere(self):
         self.assertIn('<link rel="stylesheet" href="matches.css">\n    <link rel="stylesheet" href="match_stats.css">', self.page)
-        self.assertIn('<script src="history_page.js"></script>\n<script src="match_stats.js"></script>\n<script>', self.page)       # (the shared helpers, then the sections, then the page's own script)
+        self.assertIn('<script src="history_page.js"></script>\n<script src="match_stats.js"></script>\n<script src="death_map.js"></script>\n<script>', self.page)       # (the shared helpers, then the sections, then the page's own script)
         self.assertNotRegex(self.css, r"url\((?:https?:)?//")
         self.assertNotIn("@import", self.css)
         self.assertEqual(set(re.findall(r"https?://[^'\" ]+", self.script)) - {"http://www.w3.org/2000/svg"}, set())          # (the SVG namespace is a name, not an address that is asked)
@@ -116,7 +116,7 @@ class TheFiles(unittest.TestCase):
         self.assertNotIn("setAttribute('style'", self.script)
 
     def test_the_sections_are_entries_of_the_pages_list_and_a_match_without_stats_says_why(self):
-        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, stats.activity, moreSection, aboutSection];", self.page)
+        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
         self.assertIn("window.AntsMatchStats.noStatsNote(rec)", self.page)
         self.assertIn("window.AntsMatchStats.redraw(document)", self.page)
         self.assertEqual(self.page.count("addEventListener('resize'"), 1)                                       # (the charts are drawn again for a new width)

@@ -38,7 +38,7 @@ browser --> site's nginx (docker/nginx.conf) --+--> ants_server submission door 
                                                +--> static files: /admin (the owner's page), /maps/files, /maps/previews
 ```
 
-The state is in the server's database (`ants.db`, schema version 6: `map_submissions`, `submission_limits`, `review_log`, and for the accounts `admin_users`, `admin_locks`, `admin_known_addr`, `admin_audit`) and in the folder `submissions/files/<id>.lvl` of the results volume. The door has **no secret**: it is meant to be reached through the site's nginx only (nothing publishes it on the host), and it believes the headers that nginx sets.
+The state is in the server's database (`ants.db`, schema version 7; versions 5 and 6 made `map_submissions`, `submission_limits`, `review_log`, and for the accounts `admin_users`, `admin_locks`, `admin_known_addr`, `admin_audit`) and in the folder `submissions/files/<id>.lvl` of the results volume. The door has **no secret**: it is meant to be reached through the site's nginx only (nothing publishes it on the host), and it believes the headers that nginx sets.
 
 ## For the player's half (S2): the API
 

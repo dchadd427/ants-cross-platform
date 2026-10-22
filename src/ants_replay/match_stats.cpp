@@ -151,6 +151,11 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             if (cue.sound_id == sim::SoundID::BombDetonate && !cue.stop) bomb_cue = true;
         }
 
+        if (stats_.map_width == 0) {                                     // (the grid never changes size while a match plays: looked at once)
+            stats_.map_width = engine.grid().width();
+            stats_.map_height = engine.grid().height();
+        }
+
         // 3. the ants: hit points that fell, a type that changed, food picked up, a raid that began; and the ants that are gone
         const sim::WorldState& world = engine.get_world_state();
         std::array<uint32_t, kSeats> alive{};
@@ -215,6 +220,8 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             kill.turn = turns;
             kill.victim = ant.player;
             kill.victim_type = ant.own_type;
+            kill.tile_x = ant.tile_x;
+            kill.tile_y = ant.tile_y;
             try {
                 const sim::AntUnit& unit = engine.get_unit(static_cast<uint32_t>(id));
                 kill.drowned = unit.death_status == sim::DeathStatus::Drowned;

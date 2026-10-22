@@ -19,8 +19,9 @@
 #include <cstdint>
 #include <functional>
 #include <set>
-#include <unordered_set>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ants_db/database.hpp"
@@ -131,6 +132,16 @@ public:
     /// The play count of every map that was played, ordered by file name and hash (for the list of maps). False, with `out` empty, when the database does not answer (the store is unavailable then).
     bool map_plays(std::vector<MapPlays>& out) const;
 
+    /// The sum of the maps of deaths of the matches on one map (GET /history/deaths?map=NAME, docs/REPLAYS.md "The map of deaths"): `name` is looked up among the names of the maps that have a map of deaths here
+    /// (compared without regard to the case of an ASCII letter, so a name a browser or a file system folded finds the same map), never used as a path or a pattern; the matches are those of the newest map file
+    /// of that name (its hash and size), at most the newest kDeathsSumMatches of them. `json` is the answer (history_deaths.hpp add_up_deaths); it is made once for each state of the history (cached, until a match
+    /// is kept or taken out) and for at most kDeathsSumCache maps. Unknown: no map of that name has a map of deaths. Unavailable: the database does not answer.
+    enum class DeathsSum : uint8_t { Ok, Unknown, Unavailable };
+    static constexpr size_t kDeathsSumMatches = 2000;
+    static constexpr size_t kDeathsSumCache = 48;
+    DeathsSum map_deaths(const std::string& name, std::string& json) const;
+    size_t deaths_cached() const noexcept { return deaths_cache_.size(); }          // (the sums that are kept now: for a test, never more than kDeathsSumCache)
+
     size_t count() const noexcept { return count_; }
     size_t marker_count() const noexcept { return markers_; }
     /// One record by its id (with its seats and details); false when there is none (or the database does not answer)
@@ -177,6 +188,10 @@ private:
     mutable bool budget_armed_{false};
     mutable int64_t budget_us_{0};                   // the public door's budget (microseconds of query time left)
     mutable uint64_t budget_at_us_{0};
+    mutable uint64_t deaths_revision_{0};            // goes up whenever a match is kept or taken out: the sums of the maps below are made again then
+    mutable uint64_t deaths_cached_at_{~uint64_t{0}};
+    mutable std::vector<std::string> deaths_names_;  // the maps that have a map of deaths, sorted
+    mutable std::unordered_map<std::string, std::string> deaths_cache_;
 };
 
 /// Counts the matches that the replay store keeps and the history does not know yet, one at a time. A file is played again with no screen (0.4 - 0.5 s for a match of 10 - 12 minutes, more for a longer one) and its numbers go to the
@@ -205,6 +220,11 @@ public:
     using DetailsMaker = std::function<std::string(const replay::MatchStats&, const HistoryRecord&)>;
     void set_details_maker(DetailsMaker maker) { details_maker_ = std::move(maker); }
 
+    /// Makes the map of deaths of a counted match (make_history_deaths by default; only for a match counted here, never for an older record: those have none, by decision). A test hands a maker that throws, to see
+    /// that the counters and the details of a match are written whatever it does.
+    using DeathsMaker = std::function<std::string(const replay::MatchStats&)>;
+    void set_deaths_maker(DeathsMaker maker) { deaths_maker_ = std::move(maker); }
+
     /// One piece of work: at most one file. `idle` is asked only when a file is due (a quiet server: no room runs a match). True when a file was played (counted or left out).
     bool step(const std::function<bool()>& idle, uint32_t now_ms);
 
@@ -227,6 +247,7 @@ private:
     const ReplayStore& replays_;
     std::vector<std::string> map_dirs_;               // the folders of the maps, asked in order
     DetailsMaker details_maker_;
+    DeathsMaker deaths_maker_;
     std::function<uint64_t()> clock_us_;
     uint64_t seen_revision_{~uint64_t{0}};
     std::vector<std::string> queue_;                  // file names, the next one at the back (the newest are counted first)

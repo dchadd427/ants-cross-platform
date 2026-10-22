@@ -13,6 +13,7 @@
 #include "ants_net/clock.hpp"
 #include "ants_replay/match_stats.hpp"
 #include "ants_replay/player.hpp"
+#include "ants_server/history_deaths.hpp"
 #include "ants_server/history_details.hpp"
 #include "ants_sim/start_teams.hpp"
 
@@ -353,6 +354,7 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
     int64_t known = 0;
     db::Error e = scalar(db_, "SELECT (SELECT count(*) FROM history_matches WHERE id = ?1) + (SELECT count(*) FROM history_markers WHERE id = ?1)", {text_arg(record.id)}, known);
     if (e.ok()) e = run(db_, "DELETE FROM history_seats WHERE match_id = ?1", {text_arg(record.id)});
+    if (e.ok()) e = run(db_, "DELETE FROM history_deaths WHERE id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_matches WHERE id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_markers WHERE id = ?1", {text_arg(record.id)});
     if (!e.ok()) return refused("a record could not be replaced", e);
@@ -372,6 +374,14 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
                  int_arg(s.bombs_defused), int_arg(s.fires_lit), int_arg(s.left ? 1 : 0), int_arg(s.winner ? 1 : 0)});
         if (!e.ok()) return refused("a seat could not be kept", e);
     }
+    DeathsView deaths;
+    if (!record.deaths.empty() && record.deaths.size() <= kDeathsMaxBytes && parse_history_deaths(record.deaths, deaths)) {      // (a text that is not a map of deaths, or is over its cap, is not kept: the match is)
+        e = run(db_,
+                "INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                {text_arg(record.id), text_arg(record.map), text_arg(map_hash_text(record.map_hash)), int_arg(record.ended_s), int_arg(deaths.width), int_arg(deaths.height), int_arg(deaths.total),
+                 text_arg(record.deaths)});
+        if (!e.ok()) return refused("a map of deaths could not be kept", e);
+    }
     if (known == 0 && record.counts_as_map_play()) {
         e = run(db_,
                 "INSERT INTO map_plays (map, hash, plays, last_played) VALUES (?1, ?2, 1, ?3)"
@@ -381,6 +391,7 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
     }
     e = tx.commit();
     if (!e.ok()) return refused("a record could not be committed", e);
+    ++deaths_revision_;
     e = refresh_counts();
     if (!e.ok()) fail("the records could not be counted", e);                              // (the record is kept; the list will say that the history is down)
     return true;
@@ -399,6 +410,7 @@ HistoryStore::Removal HistoryStore::remove(const std::string& id, bool keep_mark
     db::Error e = scalar(db_, "SELECT count(*) FROM history_matches WHERE id = ?1", {text_arg(id)}, present);
     if (e.ok() && present == 0) return Removal::Missing;                                   // (the transaction rolls back: nothing was written)
     if (e.ok()) e = run(db_, "DELETE FROM history_seats WHERE match_id = ?1", {text_arg(id)});
+    if (e.ok()) e = run(db_, "DELETE FROM history_deaths WHERE id = ?1", {text_arg(id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_matches WHERE id = ?1", {text_arg(id)});
     if (e.ok() && keep_marker) e = run(db_, "INSERT OR REPLACE INTO history_markers (id, deleted_at) VALUES (?1, ?2)", {text_arg(id), int_arg(now_s())});
     if (e.ok()) e = tx.commit();
@@ -407,6 +419,7 @@ HistoryStore::Removal HistoryStore::remove(const std::string& id, bool keep_mark
         fail("a record could not be taken out", e);
         return Removal::Failed;
     }
+    ++deaths_revision_;
     e = refresh_counts();
     if (!e.ok()) fail("the records could not be counted", e);
     return Removal::Done;
@@ -474,10 +487,97 @@ bool HistoryStore::map_plays(std::vector<MapPlays>& out) const {
     return true;
 }
 
+HistoryStore::DeathsSum HistoryStore::map_deaths(const std::string& name, std::string& json) const {
+    json.clear();
+    if (!up_) return DeathsSum::Unavailable;
+    if (deaths_cached_at_ != deaths_revision_) {                                          // (the history changed since the last look: the names and the sums are read again)
+        deaths_cache_.clear();
+        deaths_names_.clear();
+        db::Statement st;
+        db::Error e = db_.prepare(st, "SELECT DISTINCT map FROM history_deaths ORDER BY map");
+        while (e.ok()) {
+            const db::Statement::Step step = st.step();
+            if (step == db::Statement::Step::Failed) e = st.error();
+            if (step != db::Statement::Step::Row) break;
+            deaths_names_.push_back(st.column_text(0));
+        }
+        if (!e.ok()) {
+            deaths_names_.clear();
+            fail("the maps of deaths could not be looked up", e);
+            return DeathsSum::Unavailable;
+        }
+        deaths_cached_at_ = deaths_revision_;
+    }
+    // the name must be one of the names that have a map of deaths here (the stored spelling is the one that is used; never the visitor's text)
+    std::string known;
+    const std::string want = lower(name);
+    for (const std::string& have : deaths_names_) {
+        if (lower(have) == want) {
+            known = have;                                                                 // (two spellings that differ in case only: the first of the sorted names, always the same one)
+            break;
+        }
+    }
+    if (known.empty()) return DeathsSum::Unknown;
+    const auto cached = deaths_cache_.find(known);
+    if (cached != deaths_cache_.end()) {
+        json = cached->second;
+        return DeathsSum::Ok;
+    }
+    std::string hash;
+    int64_t w = 0, h = 0;
+    std::vector<std::string> fields;
+    db::Statement st;
+    db::Error e = db_.prepare(st, "SELECT hash, w, h FROM history_deaths WHERE map = ?1 ORDER BY ended DESC, id DESC LIMIT 1");
+    if (e.ok()) e = st.bind_text(1, known);
+    if (e.ok()) {
+        const db::Statement::Step step = st.step();
+        if (step == db::Statement::Step::Failed) e = st.error();
+        else if (step == db::Statement::Step::Row) {
+            hash = st.column_text(0);
+            w = st.column_int64(1);
+            h = st.column_int64(2);
+        }
+    }
+    if (e.ok()) {
+        db::Statement rows;
+        e = db_.prepare(rows, "SELECT deaths FROM history_deaths WHERE map = ?1 AND hash = ?2 AND w = ?3 AND h = ?4 ORDER BY ended DESC, id DESC LIMIT ?5");
+        if (e.ok()) e = rows.bind_text(1, known);
+        if (e.ok()) e = rows.bind_text(2, hash);
+        if (e.ok()) e = rows.bind_int64(3, w);
+        if (e.ok()) e = rows.bind_int64(4, h);
+        if (e.ok()) e = rows.bind_int64(5, static_cast<int64_t>(kDeathsSumMatches));
+        while (e.ok()) {
+            const db::Statement::Step step = rows.step();
+            if (step == db::Statement::Step::Failed) e = rows.error();
+            if (step != db::Statement::Step::Row) break;
+            fields.push_back(rows.column_text(0));
+        }
+    }
+    if (!e.ok()) {
+        fail("the maps of deaths could not be read", e);
+        return DeathsSum::Unavailable;
+    }
+    json = add_up_deaths(known, static_cast<uint32_t>(w), static_cast<uint32_t>(h), fields);
+    if (json.empty()) return DeathsSum::Unknown;
+    if (deaths_cache_.size() >= kDeathsSumCache) deaths_cache_.clear();
+    deaths_cache_[known] = json;
+    return DeathsSum::Ok;
+}
+
 bool HistoryStore::find(const std::string& id, HistoryRecord& out) const {
     if (!up_ || !valid_history_id(id)) return false;
     bool found = false;
-    const db::Error e = load_one(db_, id, out, found);
+    db::Error e = load_one(db_, id, out, found);
+    if (e.ok() && found) {                                                                 // (the map of deaths has a table of its own: one more statement, for one record only)
+        db::Statement st;
+        e = db_.prepare(st, "SELECT deaths FROM history_deaths WHERE id = ?1");
+        if (e.ok()) e = st.bind_text(1, id);
+        if (e.ok()) {
+            const db::Statement::Step step = st.step();
+            if (step == db::Statement::Step::Failed) e = st.error();
+            else if (step == db::Statement::Step::Row) out.deaths = st.column_text(0);
+        }
+    }
     if (!e.ok()) {
         fail("a record could not be read", e);
         return false;
@@ -707,7 +807,7 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 HistoryFeeder::HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir, std::function<uint64_t()> clock_us, std::string community_dir)
-    : history_(history), replays_(replays), map_dirs_{std::move(maps_dir)}, details_maker_(make_history_details), clock_us_(std::move(clock_us)) {
+    : history_(history), replays_(replays), map_dirs_{std::move(maps_dir)}, details_maker_(make_history_details), deaths_maker_(make_history_deaths), clock_us_(std::move(clock_us)) {
     if (!community_dir.empty()) map_dirs_.push_back(std::move(community_dir));
     if (!clock_us_) {
         clock_us_ = []() { return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); };
@@ -796,6 +896,12 @@ bool HistoryFeeder::work(const std::string& file) {
         no_stats = std::string("the details could not be made: ") + ex.what();
     }
     if (record.details.empty()) record.details = history_details_marker();
+    try {                                                                                // (the map of deaths has a try of its own too; only a match counted here has one: an older record is not played again for it)
+        record.deaths = deaths_maker_ ? deaths_maker_(played.stats) : std::string();
+    } catch (const std::exception& ex) {
+        record.deaths.clear();
+        if (++skip_lines_ <= kMaxSkipLines) history_.report("history: " + id + " has no map of deaths: " + ex.what());
+    }
     if (!no_stats.empty() && ++skip_lines_ <= kMaxSkipLines) history_.report("history: " + id + " has no stats: " + no_stats);
     if (!history_.put(record, why)) {
         if (history_.available()) skipped_.insert(id);                                    // (the database refused this record: put() has told the log, it is not tried again)

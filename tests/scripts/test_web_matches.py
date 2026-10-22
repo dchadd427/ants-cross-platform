@@ -62,10 +62,10 @@ def lazy_problems(page):
         problems.append("closing does not take the frame away")
     if sorted(re.findall(r"setReplay\(([^)]*)\)", script)) != ["!frame", "false", "open"]:          # (the definition, the press that toggles, the game's own Quit that closes: nothing opens it by itself)
         problems.append("setReplay is called by something else than the press and the game's Quit")
-    # the only requests of the page: the match, the list of live matches (a button), the maps (history_page.js); a recording is a link, never a request
+    # the only requests of the page: the match, the list of live matches (a button), the sum of the map's deaths (only when "All matches on this map" is pressed), the maps (history_page.js); a recording is a link, never a request
     asked = re.findall(r"fetch\('([^']*)'", script)
-    if sorted(asked) != ["/history/", "/live"]:
-        problems.append("the page asks for something else than the match and the live list: %s" % asked)
+    if sorted(asked) != ["/history/", "/history/deaths?map=", "/live"]:
+        problems.append("the page asks for something else than the match, the sum of the map's deaths and the live list: %s" % asked)
     if "dl.href = '/replays/' + encodeURIComponent(st.file);" not in script:
         problems.append("the recording is not a download link")
     return problems
@@ -153,7 +153,7 @@ class TheMatchPage(unittest.TestCase):
     page = read("web", "match.html")
 
     def test_the_sections_are_a_list_so_that_a_later_one_is_one_more_entry(self):
-        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, stats.activity, moreSection, aboutSection];", self.page)
+        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
         self.assertIn("put(SECTIONS.map(function (f) { return f(rec, ctx); }));", self.page)
         self.assertIn("function put(nodes) { var box = $('sections'); box.textContent = ''; nodes.forEach(function (n) { if (n) box.appendChild(n); }); }", self.page)    # (a section that has nothing to say is null)
         self.assertIn("H.detailsOf", self.page)                                                              # (the comment that says how the stats sections read what a replay pass keeps: web/match_stats.js, tests/scripts/test_web_match_stats.py)
@@ -221,7 +221,7 @@ class TheGamePagesStats(unittest.TestCase):
     page = read("web", "shell.html")
 
     def test_the_stats_are_asked_for_only_for_a_replay_of_the_servers_own_store(self):
-        self.assertIn("if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE });", self.page)
+        self.assertIn("if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE, redraw: window.AntsDeathMap && window.AntsDeathMap.redraw, deathMap: window.AntsDeathMap && window.AntsDeathMap.create(", self.page)
         helpers = read("web", "history_page.js")
         self.assertIn("id = idOfFile(env.file);", helpers)
         self.assertIn("env.fetch('/history/' + id, { cache: 'no-store', credentials: 'omit' })", helpers)
