@@ -37,7 +37,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - The bot arena plays Extended maps.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e7d33a22...d1a7cc3d)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e7d33a22...6dd7e251)
 
 ## v0.12.102 - 2026-10-22 - Map maker: a friends room that cannot silently become Treasure
 
