@@ -289,7 +289,7 @@
     function failWords(status, body) {
         var code = body && typeof body.error === 'string' ? body.error : '';
         if (code === 'submissions_off') return 'Sending maps is not switched on on this server right now.' + GO_BACK;
-        if (status === 429 || code === 'busy' || (status === 503 && !body)) return 'Too many test maps just now. Wait a minute and press Play this map again in the editor.';       // (an answer that is no JSON: the site's own limit on how fast maps may come)
+        if ((status === 429 && code !== 'too_many_tests' && code !== 'test_limit') || code === 'busy' || (status === 503 && !body)) return 'Too many test maps just now. Wait a minute and press Play this map again in the editor.';       // (an answer that is no JSON: the site's own limit on how fast maps may come; the game server's limits of an hour or of held maps say their own words below)
         var said = body && typeof body.message === 'string' ? body.message.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
         return (said || 'The server could not prepare this test map' + (status > 0 ? ' (answer ' + status + ').' : '.')) + GO_BACK;
     }

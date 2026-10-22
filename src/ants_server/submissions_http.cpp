@@ -281,7 +281,7 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
 
 // POST /submissions?test=1: a draft map for an unlisted test room of the Map Maker. Nothing is queued, nothing reaches the owner, no database row is made; the limits are its own (SubmissionApiConfig::test_*)
 HttpResponse SubmissionApi::submit_test(const HttpRequest& request, const std::string& identity, int64_t now_s, uint32_t now_ms) {
-    if (!test_allowed(identity, now_s)) return error_reply(429, "too_many_tests", "Too many test maps from this address or from everybody just now. Please try again in a few minutes.");
+    if (!test_allowed(identity, now_s)) return error_reply(429, "too_many_tests", "Too many test maps came in from this address or from everybody in the last hour. Please try again later.");
     SubmitInput in;
     if (!query_value(request.query, "kind", in.kind)) in.kind.clear();
     if (!query_value(request.query, "name", in.name)) in.name.clear();

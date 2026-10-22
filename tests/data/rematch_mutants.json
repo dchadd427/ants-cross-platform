@@ -748,15 +748,15 @@
   {
    "id": "test_room_words_429_is_not_too_many",
    "file": "web/front/rematch.js",
-   "old": "if (status === 429 || code === 'busy'",
+   "old": "if ((status === 429 && code !== 'too_many_tests' && code !== 'test_limit') || code === 'busy'",
    "new": "if (code === 'busy'",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   },
   {
    "id": "test_room_words_busy_is_not_too_many",
    "file": "web/front/rematch.js",
-   "old": "if (status === 429 || code === 'busy' ||",
-   "new": "if (status === 429 ||",
+   "old": "if ((status === 429 && code !== 'too_many_tests' && code !== 'test_limit') || code === 'busy' ||",
+   "new": "if ((status === 429 && code !== 'too_many_tests' && code !== 'test_limit') ||",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   },
   {
@@ -771,6 +771,13 @@
    "file": "web/front/rematch.js",
    "old": "'Too many test maps just now. Wait a minute and press Play this map again in the editor.'",
    "new": "'Too many test maps just now.'",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_hour_limit_says_wait_a_minute",
+   "file": "web/front/rematch.js",
+   "old": "(status === 429 && code !== 'too_many_tests' && code !== 'test_limit')",
+   "new": "(status === 429)",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   },
   {

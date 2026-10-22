@@ -589,6 +589,8 @@ async function main() {
         }
         same('failWords gives the words for each reason', [R.failWords(503, { error: 'submissions_off' }), R.failWords(429, { error: 'day_limit' }), R.failWords(503, { error: 'busy' }), R.failWords(503, null), R.failWords(0, null), R.failWords(404, { message: '  Not\n here ' })],
             [SEND_OFF, TOO_MANY, TOO_MANY, TOO_MANY, 'The server could not prepare this test map. Go back to the editor.', 'Not here Go back to the editor.']);
+        same('the game server\'s limits of an hour and of held maps say their own words (not "wait a minute")', [R.failWords(429, { error: 'too_many_tests', message: 'Too many test maps came in the last hour. Please try again later.' }), R.failWords(429, { error: 'test_limit', message: 'You have as many test maps open as you may. Please try again in a few minutes.' })],
+            ['Too many test maps came in the last hour. Please try again later. Go back to the editor.', 'You have as many test maps open as you may. Please try again in a few minutes. Go back to the editor.']);
         check('a very long sentence from the server is cut', R.failWords(422, { message: 'x'.repeat(900) }).length < 260);
         // (2) the editor's tab: gone (closed, no opener, a page without the hand-over) is its own sentence and nothing is sent; an opener that has no map for this id is another
         for (const [label, opener] of [['no opener', null], ['a closed opener', { closed: true, antsTestGameHandoff: () => ({ name: 'X', bytes: new Uint8Array([8]) }) }], ['an opener without the hand-over', { closed: false }]]) {
