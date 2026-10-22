@@ -1,0 +1,33 @@
+/* The Pick up tool of the map maker (web/front/mapmaker_pickup.js, docs/MAP_EDITOR.md): the bar under the map with what is picked up and its buttons, the nudge arrows, and the canvas that lies over
+   the map (the ring and the ghost). Loaded with the script, the first time the tool is chosen; the tokens are mapmaker.css's and classic.css's. Every button is 44 pixels high or more. */
+.cv canvas.pk-over { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.pk-bar { flex: none; padding: 8px 12px 10px; color: var(--cream); background: #08130f; border-top: 2px solid var(--gold); }
+.pk-bar[hidden] { display: none; }
+.pk-line { margin: 0 0 8px; font-size: 14.5px; line-height: 1.35; }
+.pk-name { color: var(--gold); }
+.pk-rest { color: var(--cream); }
+.pk-said { margin: 0 0 8px; font-size: 13px; line-height: 1.35; color: var(--muted); }
+.pk-warn { margin: 0 0 8px; padding: 8px 10px; font-size: 14.5px; line-height: 1.35; color: #ffe4de; background: #3b0d10; border: 2px solid #e8776f; border-radius: 6px; }
+.pk-row { display: grid; gap: 8px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.pk-row + .pk-row { margin-top: 8px; }
+.pk-row > .pk-b { grid-column: span 2; }
+.pk-row.two > .pk-b { grid-column: span 3; }
+.pk-row.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pk-row.four > .pk-b { grid-column: auto; }
+.pk-b { min-height: 44px; padding: 4px 8px; font-size: 15px; line-height: 1.15; text-align: center; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; touch-action: manipulation; }
+.pk-b[disabled] { opacity: .45; cursor: default; }
+.pk-b:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.pk-padwrap { display: flex; align-items: flex-start; gap: 14px; }
+.pk-pad { flex: none; display: grid; grid-template-columns: 48px 48px 48px; grid-template-rows: 48px 48px 48px; gap: 6px; }
+.pk-arrow { min-height: 48px; min-width: 48px; padding: 0; font-size: 22px; }
+.pk-arrow.up { grid-column: 2; grid-row: 1; } .pk-arrow.left { grid-column: 1; grid-row: 2; } .pk-arrow.right { grid-column: 3; grid-row: 2; } .pk-arrow.down { grid-column: 2; grid-row: 3; }
+.pk-one { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); background: #0d1b16; border: 2px solid var(--rule); border-radius: 8px; }
+.pk-side { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.pk-side .pk-line, .pk-side .pk-warn, .pk-side .pk-said { margin: 0; }
+.pk-side .pk-b { width: 100%; }
+@media (max-width: 600px) {
+    .pk-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
+    .pk-line, .pk-warn { font-size: 17px; }
+    .pk-b { min-height: 52px; font-size: 18px; }
+    body.pk-on { padding-bottom: 240px; }
+}

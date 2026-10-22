@@ -411,6 +411,15 @@
         s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
         doc.head.appendChild(c); doc.head.appendChild(s);
     }
+    // The Pick up tool (mapmaker_pickup.js and its style), loaded the first time the tool is chosen: done(the part), or done(null) when it did not load
+    function loadPick(done) {
+        if (win.MapPickup) return done(win.MapPickup);
+        var left = 2, bad = false, s = el('script'), c = el('link');
+        function end(ok) { bad = bad || !ok; if (--left) return; done(bad || !win.MapPickup ? null : win.MapPickup); }
+        s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_pickup.css';
+        s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
+        doc.head.appendChild(c); doc.head.appendChild(s);
+    }
     function antsAbout() { showSummary(); var p = summed && summed.props; return p && !p.error ? { ant: win.MapProps.summary(p).ant, eggs: p.eggs } : null; }
 
     var ACTIONS = {
@@ -442,7 +451,7 @@
                 tile: $('tile-btn'), map: $('map'), side: doc.querySelector('aside.side'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), autoEdges: [$('auto-edges-btn'), $('auto-edges-mob')], undo: $('undo-btn'), redo: $('redo-btn'),
                 stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more')
             },
-            loadAnts: loadAnts, about: antsAbout, props: function () { ACTIONS.props(); }, convert: function () { ACTIONS.convert(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
+            loadAnts: loadAnts, loadPick: loadPick, about: antsAbout, props: function () { ACTIONS.props(); }, convert: function () { ACTIONS.convert(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
         // The page asks before it is closed only when the work is not safe in the browser (the browser keeps nothing, or the last change has not been written yet)
         win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending)) { e.preventDefault(); e.returnValue = ''; } });

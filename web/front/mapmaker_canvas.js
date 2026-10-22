@@ -1,7 +1,7 @@
 // The map maker's canvas in the page (docs/MAP_EDITOR.md): it keeps the view of one map (web/front/mapmaker_view.js does the arithmetic and the drawing) and answers the person's hands: a mouse
 // drags and its wheel zooms, one finger drags and two fingers pinch, the keyboard moves a marked square (arrows), zooms (plus, minus) and shows the whole map (zero). The small map of the
 // whole map (shown while only a part is on the screen) is a way to look somewhere else. With a painter (web/front/mapmaker_tools.js) a mouse or one finger paints instead: a press, a drag of
-// cells in a line, a lift; two fingers still pan and zoom, and the middle button, the space key held down, or the Move tool pan. After a stroke only the cells that it changed (and the ones
+// cells in a line, a lift; two fingers still pan and zoom, and the middle button, the space key held down, or the Pan tool pan; the Pick up tool does too, except on a thing it can drag. After a stroke only the cells that it changed (and the ones
 // the marked square left and came to) are painted again, never the whole frame. A browser script (it needs a document).
 (function (root, factory) {
     'use strict';
@@ -50,7 +50,7 @@
         }
 
         function brushNow() { return painter ? painter.size() : 0; }
-        function tapOnly() { return !!painter && !!painter.tapOnly && painter.tapOnly(); }
+        function tapOnly(cell) { return !!painter && !!painter.tapOnly && painter.tapOnly(cell); }
         function doorNow() { return !!painter && !!painter.door && painter.door(); }
         function ghostNow(cell) { var id = painter && painter.ghost ? painter.ghost() : 0; return id && cell ? { id: id, row: cell.row, column: cell.column } : null; }          // (a bigger object's own picture under the pointer)
         function shapeNow() { return painter && painter.shape ? painter.shape() : null; }          // (a bigger object marks its own box: {r0, r1, c0, c1} from the cell)
@@ -146,7 +146,7 @@
             var ids = Object.keys(pointers);
             if (ids.length === 1) {
                 var cell = cellOf(p), mouse = e.pointerType === 'mouse', panning = mouse && (e.button === 1 || spaceHeld);
-                var tapTool = !panning && !!cell && tapOnly();                          // (a tool that puts a whole thing with a tap: a drag looks around instead)
+                var tapTool = !panning && !!cell && tapOnly(cell);                          // (a tool that puts a whole thing with a tap: a drag looks around instead)
                 var brush = !panning && !tapTool && (brushNow() > 0 || (!!painter && !!painter.canMove && painter.canMove(cell))) && !!cell;
                 drag = { x: p.x, y: p.y, moved: false, pan: !brush, place: tapTool };
                 if (e.button === 1) e.preventDefault();
@@ -251,6 +251,7 @@
         function key(e) {
             if (!file || e.ctrlKey || e.metaKey || e.altKey) return;
             var handled = true;
+            if (painter && painter.key && painter.key(e)) { e.preventDefault(); hover = null; redraw(); return; }          // (a tool that has keys of its own: Pick up)
             if (e.key === ' ' && painter) { spaceHeld = true; cursorStyle(); e.preventDefault(); return; }          // (held down: a drag looks around instead of painting)
             if (e.key === 'Enter' && brushNow() > 0) {                                                                // (the keyboard paints or puts at the marked square)
                 e.preventDefault();
@@ -316,6 +317,7 @@
             // The tool, the brush or the marked square changed: paint it again, and the pointer shows what the tool does
             refresh: function () { cursorStyle(); redraw(); },
             cancelStroke: function () { cancelStroke(); },
+            focus: function () { canvas.focus({ preventScroll: true }); },
             isStroking: function () { return !!stroke; },
             // Look at a cell (the checks card's "Show me"): the marked square goes there and it is brought to the middle, at least 22 pixels a tile
             showCell: function (row, column) {
