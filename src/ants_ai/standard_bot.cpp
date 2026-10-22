@@ -105,6 +105,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         const PileInfo* info = map->pile(p.index);
         if (info == nullptr || info->approach[seat_].reachable()) any_reachable_pile = true;
     }
+    tactics_.no_work = !any_reachable_pile;
     const bool gate_breaching = tactics_.gate_map && !tactics_.gate_beside && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
     tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;

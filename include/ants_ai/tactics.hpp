@@ -337,6 +337,8 @@ struct LevelPlan {
     uint32_t opportunity_jobs{2};        // ... kills in hand at a time
     uint32_t opportunity_ticks{240};     // ... a job is given up this long after it began (12 s)
     bool reach_fights{false};            // a fight is not started at an enemy that no walk of the attacker reaches, and no ant is called to it (an order the engine refuses is no blow)
+    bool chore_worth{false};             // a fire wall chore is done only when it is worth it: the ring round an enemy gate only while that team has food to bank (chore_worth.hpp)
+    bool idle_hunt{false};               // with no food that the hill can walk to (nothing to bank, nothing to lose) the last ants do not stay home either: one ant stays (the reserve of a fight is 1, not 2 or 3)
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
@@ -556,6 +558,10 @@ struct Tactics {
     /// Workers that stood idle with empty hands at the last look and that the economy could send nowhere (HarvestTask::unplaced: no pile left that they can reach in time): they
     /// cost nothing to use otherwise
     size_t surplus{0};
+    /// No pile that the own hill can walk to lies on the map (set at every look by StandardBot): the economy has nothing to do and no points are at risk in a fight (LevelPlan::idle_hunt)
+    bool no_work{false};
+    /// The ants that no fight takes: the last ones (a wipe-out forces a hatch of 200 points, or ends the team); with LevelPlan::idle_hunt and no work (nothing to bank, nothing to lose) only the last one
+    size_t reserve_of(const BotView& view) const noexcept { return plan.idle_hunt && no_work ? 1u : plan.fight_reserve + (view.eggs() == 0 ? 1u : 0u); }
     Standing standing;                   // where the bot stands at this look
     bool guard_stance{false};            // (contest batch, the endgame) the bot leads in the last minute (Standing::guard): no offence (hunt, skirmish, harassment, sabotage, strike) and one defender more answers a blow
     bool strike_active{false};           // the strike force is out (set by the StrikeTask at its last step)

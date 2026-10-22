@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <map>
 
 #include "ants_ai/island_info.hpp"
 
@@ -186,14 +187,13 @@ void OpportunityTask::seek(TaskContext& c) {
     const LevelPlan& plan = tactics_.plan;
     const uint64_t now = v.tick();
     const sim::Grid& grid = v.grid();
-    const bool reserve = v.mine().size() <= plan.fight_reserve + (v.eggs() == 0 ? 1u : 0u);       // the last ants stay out of a fight that can be lost (a drowning costs nothing)
+    const bool reserve = v.mine().size() <= tactics_.reserve_of(v);                                    // the last ants stay out of a fight that can be lost (a drowning costs nothing)
     std::vector<const AntView*> strikers;
     for (const AntView& a : v.mine()) {
         if (may_strike(v, c.ledger, id(), a) && c.ledger.owner(a.id) != id()) strikers.push_back(&a);
     }
     if (strikers.empty()) return;
-    Candidate best;
-    bool have = false;
+    std::vector<Candidate> cands;
     for (const AntView& e : v.others()) {
         if (is_ally(v, e.team) || e.hp == 0 || shunned(e.id, now) || !attackable(v, e) || striker_of(e.id) != 0) continue;
         const bool walking = e.state == sim::UnitState::Walking;
@@ -223,22 +223,42 @@ void OpportunityTask::seek(TaskContext& c) {
                     if (!shot.kills()) continue;
                     if (reserve && shot.kind != KillKind::Water) continue;
                     if (!at_stand && !walk_reaches(c.map, c.seat, a->tile, stand)) continue;
-                    const int32_t score = worth(shot.kind, e) - 25 * d;
-                    if (!have || score > best.score || (score == best.score && (e.id < best.target || (e.id == best.target && a->id < best.striker)))) {
-                        best.score = score;
-                        best.target = e.id;
-                        best.striker = a->id;
-                        best.target_tile = e.tile;
-                        best.stand = stand;
-                        best.kind = shot.kind;
-                        best.at_stand = at_stand;
-                        have = true;
-                    }
+                    Candidate cand;
+                    cand.score = worth(shot.kind, e) - 25 * d;
+                    cand.target = e.id;
+                    cand.striker = a->id;
+                    cand.target_tile = e.tile;
+                    cand.stand = stand;
+                    cand.kind = shot.kind;
+                    cand.at_stand = at_stand;
+                    cands.push_back(cand);
                 }
             }
         }
     }
-    if (!have || !c.ledger.take(best.striker, id())) return;
+    if (cands.empty()) return;
+    std::sort(cands.begin(), cands.end(), [](const Candidate& x, const Candidate& y) {
+        if (x.score != y.score) return x.score > y.score;
+        return x.target != y.target ? x.target < y.target : x.striker < y.striker;
+    });
+    // the best that the map as it is NOW lets the striker walk to (a fire wall or a bomb may have cut the way that the start analysis found): one search from the tile to strike from
+    const Candidate* pick = nullptr;
+    std::map<int64_t, std::vector<int32_t>> fields;
+    const size_t width = grid.width();
+    for (size_t i = 0; i < cands.size() && i < 6 && pick == nullptr; ++i) {
+        const Candidate& k = cands[i];
+        if (k.at_stand) {
+            pick = &k;
+            break;
+        }
+        auto it = fields.find(key_of(k.stand));
+        if (it == fields.end()) it = fields.emplace(key_of(k.stand), MapInfo::cost_field(grid, c.seat, k.stand, v.walk_context())).first;
+        const AntView* a = find_ant(v.mine(), k.striker);
+        const size_t at = static_cast<size_t>(a->tile.y) * width + static_cast<size_t>(a->tile.x);
+        if (at < it->second.size() && it->second[at] >= 0 && MapInfo::walking_ticks(it->second[at]) <= static_cast<int32_t>(plan.opportunity_ticks / 2)) pick = &k;
+    }
+    if (pick == nullptr || !c.ledger.take(pick->striker, id())) return;
+    const Candidate best = *pick;
     Job j;
     j.target = best.target;
     j.striker = best.striker;

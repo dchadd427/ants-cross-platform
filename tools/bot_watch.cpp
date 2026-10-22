@@ -188,6 +188,13 @@ struct Ep {
     bool owner_idle{false};
 };
 
+struct TraceSpec {          // --trace SEAT:FROM:TO: a line for every ant of the seat every 20 ticks from tick FROM to TO (standard output; for looking at one match)
+    int seat{-1};
+    uint64_t from{0};
+    uint64_t to{0};
+};
+TraceSpec g_trace;
+
 struct Event {
     std::string text;
     uint64_t score{0};
@@ -497,6 +504,13 @@ void Observer::tick(const sim::SimulationEngine& engine) {
                     break;
                 }
             }
+        }
+    }
+    if (g_trace.seat >= 0 && now >= g_trace.from && now <= g_trace.to && now % 20 == 0) {
+        for (const Unit& un : units) {
+            if (un.s->player_id != g_trace.seat) continue;
+            std::printf("T%llu ant %u type %d (%d,%d) hp %u state %d order %d task %s%s hold %d\n", static_cast<unsigned long long>(now), un.s->id, int(un.s->type), un.s->tile_x, un.s->tile_y, un.s->hp, int(un.s->state),
+                        int(un.u->orig_order), kTaskNames[un.owner], un.idle ? " IDLE" : "", un.s->is_holding ? 1 : 0);
         }
     }
     if (now % kSamplePeriod == 0) sample_chances(engine, now, units);
@@ -815,6 +829,12 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
             o.maps = split(*v, ',');
             o.mapinfo = k == "--mapinfo";
             o.ascii = k == "--ascii";
+        } else if (k == "--trace") {
+            const std::string* v = value();
+            const std::vector<std::string> p = v != nullptr ? split(*v, ':') : std::vector<std::string>{};
+            uint64_t seat = 0, from = 0, to = 0;
+            if (p.size() != 3 || !parse_uint(p[0], seat) || !parse_uint(p[1], from) || !parse_uint(p[2], to) || seat > 3) { err = "--trace SEAT:FROM:TO"; return false; }
+            g_trace = TraceSpec{static_cast<int>(seat), from, to};
         } else if (k == "--replay") {
             while (i + 1 < a.size() && a[i + 1].rfind("--", 0) != 0) o.replays.push_back(a[++i]);
             if (o.replays.empty()) { err = "--replay needs files"; return false; }

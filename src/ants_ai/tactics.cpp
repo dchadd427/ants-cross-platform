@@ -217,6 +217,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.smart_counters = true;
             p.opportunity = true;                    // the kill batch (docs/BOT_FIGHT.md): Hard strikes the kill that one blow gives, and starts no fight that no walk reaches
             p.reach_fights = true;
+            p.idle_hunt = true;
+            p.chore_worth = true;
             break;
     }
     return p;
@@ -235,6 +237,8 @@ void without_stand_batch(LevelPlan& p) noexcept {
 void without_kill_batch(LevelPlan& p) noexcept {
     p.opportunity = false;
     p.reach_fights = false;
+    p.idle_hunt = false;
+    p.chore_worth = false;
 }
 
 void without_war_batch(LevelPlan& p) noexcept {

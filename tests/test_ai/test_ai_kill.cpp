@@ -6,12 +6,15 @@
 //   AI31.3  priority: an ant that holds a chore (a rank 4 task) is taken, one that holds a pick-up (rank 3) is not; an ant that carries food never strikes; nothing happens with the plan off
 //   AI31.4  reach: an enemy across a channel that no walk crosses gets no attack order (the assault of the free ants sent them before: "Can't go there."), one on the same shore does
 //   AI31.5  the plans: Hard has the batch, Medium and Easy do not, the switch takes it out, a plan made by hand has none
+//   AI31.7  chores: a ring of fire walls round an enemy gate is lit only while that team has food to bank (a pile its hill reaches, a carrier); the three walls of the own thief hole are not touched by the rule
+//   AI31.6  idle hunt: three ants with no food to reach and no egg (the reserve of a fight kept them home for ever on the arena maps) go for an enemy; with food to reach, or with the rule off, they stay
 #include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
 #include "ai_test.hpp"
+#include "ants_ai/chore_worth.hpp"
 #include "ants_ai/knock.hpp"
 #include "ants_ai/standard_bot.hpp"
 #include "b41_helpers.hpp"
@@ -115,6 +118,13 @@ void run_kill_tests() {
         ASSERT_TRUE(kinds[static_cast<size_t>(KillKind::None)] >= 40u);
         ASSERT_TRUE(landed_plain >= 30u);
         ASSERT_TRUE(cornered >= 2u);
+        {   // a Swimmer that lands in water only splashes: no kill (and a worker in the same place drowns)
+            sim::SimulationEngine sim;
+            field(sim, 399);
+            for (int x = 28; x <= 32; ++x) sim.set_terrain(x, 31, sim::TERRAIN_WATER);
+            ASSERT_TRUE(kill_shot(sim.grid(), TileCoord{30, 30}, 10, sim::AntType::Worker, TileCoord{30, 29}, sim::AntType::Worker).kind == KillKind::Water);
+            ASSERT_FALSE(kill_shot(sim.grid(), TileCoord{30, 30}, 10, sim::AntType::Swimmer, TileCoord{30, 29}, sim::AntType::Worker).kills());
+        }
     } TEST_END();
 
     TEST_CASE("AI31.2 An Enemy Next To Water And An Own Idle Ant On The Wrong Side: The Ant Walks To The Tile Away From The Water And Strikes From There, The Enemy Drowns (A Plain Ant One Tile From The Water, A Combat Ant Four Tiles); The Hunts Of Before Do Not")
@@ -151,6 +161,30 @@ void run_kill_tests() {
                 }
             }
         }
+    } TEST_END();
+
+    TEST_CASE("AI31.2b The Walk Is Asked Of The Map As It Is Now: A Striker That Fire Walls (Lit After The Start) Have Shut In Is Not Sent To The Tile It Would Strike From (No Order That The Engine Refuses)")
+    {
+        sim::SimulationEngine sim;
+        field(sim, 405);
+        for (int x = 14; x <= 26; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+        const uint32_t striker = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 8});
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 8});
+        const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});
+        LevelPlan plan = plan_for(Level::Hard);
+        plan.assault = false;
+        plan.water_hunt = false;
+        Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);        // (the analysis of the start is made here: the way is open)
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (dx != 0 || dy != 0) sim.grid_mut().place_firewall(static_cast<uint32_t>(12 + dx), static_cast<uint32_t>(12 + dy), 3);     // a ring of fire round the striker
+            }
+        }
+        rig.run(200);
+        ASSERT_EQ(rig.as<StandardBot>().opportunity().started(), 0u);
+        ASSERT_TRUE(alive(sim, enemy));
+        (void)striker;
     } TEST_END();
 
     TEST_CASE("AI31.3 Priority: An Ant That Holds A Chore (Rank 4) Is Taken For The Kill, One That Holds A Pick-Up (Rank 3) Is Not, An Ant With Food Never Strikes, A Fire Ant Keeps Its Walls; An Enemy That Walks Is Struck Only By An Ant That Stands On The Right Tile")
@@ -263,10 +297,46 @@ void run_kill_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("AI31.4b Reach: The Ants That Answer A Blow Are Taken From The Shore Of The Fight, Not From Across A Channel (They Would Be Ordered Into \"Can't Go There.\")")
+    {
+        for (const bool reach : {true, false}) {
+            sim::SimulationEngine sim;
+            field(sim, 422);
+            sim.set_player_eggs(0, 5);
+            for (int y = 0; y < 60; ++y) {
+                for (int x = 25; x <= 27; ++x) sim.set_terrain(x, y, sim::TERRAIN_WATER);
+            }
+            const uint32_t hit = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 30});
+            const uint32_t near_a = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 32});
+            std::vector<uint32_t> across;
+            for (int i = 0; i < 3; ++i) across.push_back(sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30 + i, 30}));        // on the other shore, nearer to the enemy than the ants of this one
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21, 30});
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.opportunity = false;
+            plan.assault = false;
+            plan.reach_fights = reach;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(3);
+            for (int t = 0; t < 200; ++t) {
+                keep_attacking(sim, 1, enemy, hit);
+                rig.tick();
+            }
+            size_t from_across = 0;
+            for (const auto& e : rig.proposed) {
+                if (e.second.type != CommandType::GroupAttack) continue;
+                for (const uint32_t a : e.second.ants) from_across += (a == across[0] || a == across[1] || a == across[2]) ? 1u : 0u;
+            }
+            ASSERT_TRUE(rig.proposed_count(CommandType::GroupAttack) >= 1u);                 // (the ants of this shore answer)
+            if (reach) ASSERT_EQ(from_across, 0u);
+            else ASSERT_TRUE(from_across >= 1u);
+            (void)near_a;
+        }
+    } TEST_END();
+
     TEST_CASE("AI31.5 The Plans: Hard Has The Kill Batch, Medium And Easy Do Not, The Switch Takes It Out, A Plan Made By Hand Has None")
     {
         const LevelPlan hard = plan_for(Level::Hard);
-        ASSERT_TRUE(hard.opportunity && hard.reach_fights);
+        ASSERT_TRUE(hard.opportunity && hard.reach_fights && hard.idle_hunt);
         ASSERT_TRUE(hard.opportunity_reach >= 4 && hard.opportunity_jobs >= 1u && hard.opportunity_ticks >= 60u);
         for (const Level level : {Level::Easy, Level::Medium}) {
             const LevelPlan p = plan_for(level);
@@ -274,8 +344,91 @@ void run_kill_tests() {
         }
         LevelPlan off = hard;
         without_kill_batch(off);
-        ASSERT_FALSE(off.opportunity || off.reach_fights);
+        ASSERT_FALSE(off.opportunity || off.reach_fights || off.idle_hunt);
         const LevelPlan by_hand;
-        ASSERT_FALSE(by_hand.opportunity || by_hand.reach_fights);
+        ASSERT_FALSE(by_hand.opportunity || by_hand.reach_fights || by_hand.idle_hunt);
+    } TEST_END();
+
+    TEST_CASE("AI31.6 Idle Hunt: Three Ants With No Food To Reach And No Egg Go For An Enemy That A Walk Reaches (The Reserve Of A Fight Kept Them Home For Ever); With Food To Reach Or With The Rule Off They Stay")
+    {
+        for (const bool idle_hunt : {true, false}) {
+            for (const bool food : {false, true}) {
+                sim::SimulationEngine sim;
+                field(sim, 431);
+                sim.set_player_eggs(0, 0);                                    // (no egg to fall back on: the reserve of a fight is three ants)
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{13, 12});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14, 12});
+                sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 30});
+                if (food) place_pile(sim, 20, 12, 400, 25, {{400, 369}, {300, 370}, {200, 371}, {100, 372}, {0, kPileGone}});      // (a pile that the hill reaches and the ants do not empty in this time: the economy has work, so the three ants are the economy's)
+                LevelPlan plan = plan_for(Level::Hard);
+                plan.opportunity = false;
+                plan.idle_hunt = idle_hunt;
+                plan.assault_after = 200;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(1400);
+                const size_t attacks = rig.proposed_count(CommandType::GroupAttack);
+                if (idle_hunt && !food) ASSERT_TRUE(attacks >= 1u);
+                else ASSERT_EQ(attacks, 0u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI31.7 Chores: A Ring Of Fire Walls Round An Enemy Gate Is Lit Only While That Team Has Food To Bank (A Pile Its Hill Reaches, An Ant That Carries); Without The Rule The Lone Fire Ant Lights It For Nothing")
+    {
+        sim::SimulationEngine probe;
+        field(probe, 90);
+        const MapInfo pmap(probe);
+        const std::array<TileCoord, 8> ring = SabotageTask::ring_of(pmap.hill(1));
+        struct Case {
+            bool worth_rule;
+            bool carrier;
+            bool expect_lit;
+        };
+        const Case cases[] = {
+            {false, false, true},            // (the bot as it was: the ring is lit whether or not it costs the enemy anything)
+            {true, false, false},            // nothing to bank: nothing to lose
+            {true, true, true},              // an ant that carries food
+        };
+        for (const Case& cs : cases) {
+            sim::SimulationEngine sim;
+            field(sim, 90);
+            sim.set_player_score(1, 400);                                       // (team 1 leads and has points to lose)
+            sim.spawn_unit(0, sim::AntType::Fire, TileCoord{30, 30});
+            const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{46, 40});
+            if (cs.carrier) sim.get_unit(foe).pick_up_food(1, 25);
+            LevelPlan plan = plan_for(Level::Hard);
+            without_war_batch(plan);
+            plan.sabotage = true;
+            plan.sabotage_safe = true;
+            plan.sabotage_after = 20;
+            plan.sabotage_spare_keeper = false;
+            plan.opportunity = false;
+            plan.chore_worth = cs.worth_rule;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(1200);
+            size_t lit = 0;
+            for (const TileCoord& t : ring) lit += sim.grid().has_fire_at(t) ? 1u : 0u;
+            if (cs.expect_lit) ASSERT_TRUE(lit >= 4u);
+            else ASSERT_EQ(lit, 0u);
+        }
+        {   // the rule itself, on a view: no pile and no carrier, then an ant that carries
+            sim::SimulationEngine sim;
+            field(sim, 91);
+            const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{46, 40});
+            const MapInfo map(sim);
+            ASSERT_FALSE(fire_in_worth_it(BotView::build(sim, 0, &map), map, 1));
+            sim.get_unit(foe).pick_up_food(1, 25);
+            tick_all(sim, 1);                                                           // (the view reads the world state that a tick makes)
+            ASSERT_TRUE(fire_in_worth_it(BotView::build(sim, 0, &map), map, 1));
+            ASSERT_FALSE(fire_in_worth_it(BotView::build(sim, 0, &map), map, 3));       // (a team with no ant and no pile of its own side)
+        }
+        {   // a pile with units left that the hill of the team walks to
+            sim::SimulationEngine sim;
+            field(sim, 92);
+            place_pile(sim, 50, 20, 400, 25, {{400, 369}, {300, 370}, {200, 371}, {100, 372}, {0, kPileGone}});
+            const MapInfo map(sim);
+            ASSERT_TRUE(fire_in_worth_it(BotView::build(sim, 0, &map), map, 1));
+        }
     } TEST_END();
 }

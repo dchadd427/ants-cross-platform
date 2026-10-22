@@ -218,7 +218,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
     if (key == "kill") {                                                              // the kill batch of docs/BOT_FIGHT.md (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_kill_batch(p);
-        else p.opportunity = p.reach_fights = true;
+        else p.opportunity = p.reach_fights = p.idle_hunt = p.chore_worth = true;
         return true;
     }
     if (key == "opp") return flag(p.opportunity);
@@ -226,6 +226,8 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "oppjobs") { p.opportunity_jobs = static_cast<uint32_t>(v); return true; }
     if (key == "oppticks") { p.opportunity_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "reach") return flag(p.reach_fights);
+    if (key == "idlehunt") return flag(p.idle_hunt);
+    if (key == "worth") return flag(p.chore_worth);
     if (key == "stand") {                                                             // the stand batch of docs/BOTS.md, "The stand batch" (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_stand_batch(p);
         return true;
