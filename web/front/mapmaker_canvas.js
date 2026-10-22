@@ -37,6 +37,7 @@
             if (!file) return;
             canvas.setAttribute('data-scale', view.scale.toFixed(2));          // (what a test reads: the size of a tile in pixels, and the map point in the middle)
             canvas.setAttribute('data-center', Math.round(view.cy) + ',' + Math.round(view.cx));
+            canvas.setAttribute('data-view', view.cy.toFixed(3) + ',' + view.cx.toFixed(3) + ',' + view.scale.toFixed(4));          // (what a test reads, exactly: the map point in the middle and the size of a tile)
             env.zoomIn.disabled = view.scale >= View.MAX_SCALE - 0.001;
             env.zoomOut.disabled = view.scale <= View.minScale(file, w, h) + 0.001;
             var partial = !View.isWhole(view, file, w, h);

@@ -18,6 +18,11 @@
     // The plain word for a bigger object, by the game's own name of its tile (the names are the palette's, never the file's): the first pattern that fits
     var WORDS = [[/^grass/, 'grass'], [/rock/, 'rock'], [/^mush/, 'mushroom'], [/^leaf/, 'leaf'], [/^ivy/, 'ivy'], [/^plant/, 'plant'], [/^bobber/, 'fishing bobber'], [/^slinky/, 'slinky'], [/^bear/, 'teddy bear'],
         [/^glasses/, 'glasses'], [/^can/, 'can'], [/^sling/, 'slingshot'], [/^ducky/, 'rubber duck'], [/^pin/, 'pin'], [/cray/, 'crayon']];
+    // What can be picked up and moved: the words of the picture ("What can be moved")
+    var HELP = [['Small objects', 'Rocks, power-ups, bombs: one cell. Move: yes.'], ['Bigger objects', 'The whole object with all its cells, grass and toys too. Move: yes.'],
+        ['Hills', '4 x 4 with its door; it keeps its team color and cannot land on another hill. Move: yes.'], ['Ants', 'One ant, or its group (same team, next to each other). Keeps its team. Move: yes.'],
+        ['Food piles', 'The whole pile with its stages. Move: yes.'], ['Ground', 'Not moved. Paint it, or use Fill and Fix edges. Move: no.'],
+        ['One Undo per move', 'Move, nudge steps, Copy here, Delete and Move them are each one Undo step. The picked item moves with everything it covers; ants keep their team; nothing changes the ground under it or how it walks.']];
     var TYPES = { 1: 'bomber ant', 2: 'fire ant', 3: 'thief ant', 4: 'combat ant', 5: 'swimmer ant' };      // (the per-ant types of an Extended map)
 
     function num(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
@@ -91,7 +96,7 @@
         list = ix.plants[idx] || []; for (i = list.length - 1; i >= 0; i--) out.push(plantItem(file, ix, list[i]));
         t = Edit.tile(file, 2, idx);
         p = t !== EMPTY2 ? pileOf(file, ix, idx, t) : -1;
-        list = (ix.piles[idx] || []).slice(); if (p >= 0 && list.indexOf(p) < 0) list.push(p);
+        list = (ix.piles[idx] || []).slice(); if (p >= 0) list.push(p);
         for (i = 0; i < list.length; i++) if (!seen[list[i]]) { seen[list[i]] = 1; out.push(pileItem(file, ix, list[i])); }
         if (t !== EMPTY2 && p < 0) out.push(objItem(file, idx));
         return out;
@@ -170,24 +175,24 @@
             var counts = {}, order = [], parts;
             items.forEach(function (x) { var w = counted(x); if (!counts[w[0]]) { counts[w[0]] = { n: 0, w: w }; order.push(w[0]); } counts[w[0]].n++; });
             parts = order.slice(0, 4).map(function (key) { return counts[key].n + ' ' + counts[key].w[counts[key].n === 1 ? 0 : 1]; });
-            return { name: 'Area: ' + plural(items.length, 'item', 'items'), rest: parts.length ? ' · ' + parts.join(', ') + (order.length > 4 ? ' and more' : '') : '' };
+            return { name: 'Area: ' + plural(items.length, 'item', 'items'), rest: parts.length ? ' \u00b7 ' + parts.join(', ') + (order.length > 4 ? ' and more' : '') : '' };
         }
         if (items.length > 1) return { name: plural(items.length, label(it.team) + ' ant', label(it.team) + ' ants'), rest: ' next to each other' };
         if (it.k === 'ant') {
             var total = Blocks.facts(file, false).ants[it.team], who = cap(oneName(file, it));
-            return { name: who, rest: ' · one of ' + num(total) + (group > 1 ? ' · its group: ' + plural(group, label(it.team) + ' ant', label(it.team) + ' ants') + ' next to each other' : ' · no other ant of its team touches it') };
+            return { name: who, rest: ' \u00b7 one of ' + num(total) + (group > 1 ? ' \u00b7 its group: ' + plural(group, label(it.team) + ' ant', label(it.team) + ' ants') + ' next to each other' : ' \u00b7 no other ant of its team touches it') };
         }
         if (it.k === 'plant') {
             var w = it.w >= 0 ? lay.waypoints[it.w] : null;
-            return { name: cap(nameOf(it.tile)), rest: ' · ' + (w && w.flag ? 'drops a power-up every ' + plural(w.interval, 'second', 'seconds') : 'ants walk under it') };
+            return { name: cap(nameOf(it.tile)), rest: ' \u00b7 ' + (w && w.flag ? 'drops a power-up every ' + plural(w.interval, 'second', 'seconds') : 'ants walk under it') };
         }
         if (it.k === 'pile') {
             p = lay.piles[it.p]; foodItem = '';
             for (i = 0; i < Blocks.FOOD_ITEMS.length; i++) if (Blocks.FOOD_ITEMS[i][4].indexOf(p.stages[0][1]) >= 0) foodItem = Blocks.FOOD_ITEMS[i][1];
-            return { name: 'Food pile', rest: (foodItem ? ' · ' + foodItem : '') + ' · ' + plural(p.units, 'bite', 'bites') + ' of ' + plural(p.points, 'point', 'points') };
+            return { name: 'Food pile', rest: (foodItem ? ' \u00b7 ' + foodItem : '') + ' \u00b7 ' + plural(p.units, 'bite', 'bites') + ' of ' + plural(p.points, 'point', 'points') };
         }
-        if (it.hill >= 0) return { name: label(it.hill) + ' hill', rest: ' · 4 x 4 cells, with its door' };
-        return { name: cap(nameOf(it.tile)), rest: ' · ' + plural(it.fp.length, 'cell', 'cells') };
+        if (it.hill >= 0) return { name: label(it.hill) + ' hill', rest: ' \u00b7 4 x 4 cells, with its door' };
+        return { name: cap(nameOf(it.tile)), rest: ' \u00b7 ' + plural(it.fp.length, 'cell', 'cells') };
     }
 
     // ---- can it go there ----
@@ -368,7 +373,7 @@
     function create(env) {
         var doc = env.doc, win = env.win, host = env.host;
         var st = { mode: 'idle', items: [], kind: 'one', group: [], copy: false, dr: 0, dc: 0, pad: false, box: null, drag: null, cycle: null, note: '', verdict: { ok: true }, target: [] };
-        var shown = false, over = null, bar = null, wrap = host.cv ? host.cv.parentNode : null, loop = 0, last = '', mine = false;
+        var shown = false, over = null, bar = null, live = null, wrap = host.cv ? host.cv.parentNode : null, loop = 0, last = '';
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function file() { return env.file(); }
@@ -381,15 +386,17 @@
         function evaluate() {
             var f = file(), i;
             st.verdict = st.items.length && f ? check(f, st.items, st.dr, st.dc, how(), st.kind) : { ok: true };
-            if (st.mode === 'moving' && st.copy && st.dr === 0 && st.dc === 0) st.verdict = { ok: false, text: 'Tap where the copy should go.', cells: [], plain: true };
+            if (st.mode === 'moving' && st.copy && st.dr === 0 && st.dc === 0) st.verdict = { ok: false, text: 'Tap where the copy goes.', cells: [], plain: true };
             st.target = [];
             for (i = 0; f && i < st.items.length; i++) { var g = shifted(f, st.items[i], st.dr, st.dc); st.target.push(g.edge ? [] : g); }
             return st.verdict;
         }
         function paint() { render(); drawOver(); watch(); }
+        // what a screen reader is told (the bar may be hidden when the thing is let go)
+        function tell(text) { if (live) live.textContent = text; }
         function clear(note) {
             st.mode = 'idle'; st.items = []; st.group = []; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.box = null; st.drag = null; st.cycle = null; st.note = note || ''; st.verdict = { ok: true }; st.target = [];
-            paint();
+            paint(); tell(st.note);
         }
         function pick(items, kind, group, cycle, box) {
             st.items = items; st.kind = kind; st.group = group || []; st.cycle = cycle || null; st.mode = items.length ? 'picked' : 'idle'; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.note = ''; st.box = box || null; st.target = [];
@@ -401,6 +408,8 @@
             if (again) at = (st.cycle.at + 1) % list.length;
             var it = list[at];
             pick([it], 'one', it.k === 'ant' ? antGroup(f, it) : [], { row: cell.row, column: cell.column, at: at });
+            var d = describe(f, [it], 'one', st.group.length);
+            tell(d.name + d.rest + (list.length > 1 ? '. Tap again to pick the next thing on this cell.' : ''));
         }
         function startMove(items, kind, copy) {
             st.items = items; st.kind = kind; st.mode = 'moving'; st.copy = !!copy; st.dr = 0; st.dc = 0; st.note = ''; st.drag = null;
@@ -422,27 +431,26 @@
             setDelta(st.dr + dr, st.dc + dc);
             if (!st.dr && !st.dc) { evaluate(); render(); drawOver(); }
         }
-        function act(change) { mine = true; var ok = env.act(change); mine = false; return ok; }
         function done() {
             var f = file();
             if (st.mode !== 'moving' || !st.items.length) return;
             if (!st.copy && !st.dr && !st.dc) return pick(st.items, st.kind, st.group, st.cycle, st.box);
             if (!evaluate().ok) return render();
             var change = build(f, st.items, st.dr, st.dc, how()), kind = st.kind, copy = st.copy, dr = st.dr, dc = st.dc, n = st.items.length, box = st.box;
-            if (!act(change)) return clear('Nothing changed.');
+            if (!env.act(change)) return clear('Nothing changed.');
             var items = resolve(file(), change.landed), word = copy ? 'Copied' : 'Moved', moved = [];
             if (dc) moved.push(plural(Math.abs(dc), dc < 0 ? 'column left' : 'column right', dc < 0 ? 'columns left' : 'columns right'));
             if (dr) moved.push(plural(Math.abs(dr), dr < 0 ? 'row up' : 'row down', dr < 0 ? 'rows up' : 'rows down'));
             if (!items.length) return clear(word + '.');
-            pick(items, kind === 'area' ? 'area' : 'one', items.length === 1 && items[0].k === 'ant' ? antGroup(file(), items[0]) : [], null, kind === 'area' && box ? { r0: box.r0 + (copy ? dr : dr), c0: box.c0 + dc, r1: box.r1 + dr, c1: box.c1 + dc } : null);
+            pick(items, kind === 'area' ? 'area' : 'one', items.length === 1 && items[0].k === 'ant' ? antGroup(file(), items[0]) : [], null, kind === 'area' && box ? { r0: box.r0 + dr, c0: box.c0 + dc, r1: box.r1 + dr, c1: box.c1 + dc } : null);
             st.kind = kind === 'group' ? 'group' : st.kind;
             st.note = word + ' ' + (n === 1 ? 'it' : plural(n, 'thing', 'things')) + (copy ? '' : ': ' + moved.join(', ')) + '. One Undo takes it back.';
-            render();
+            render(); tell(st.note);
         }
         function deleteNow() {
             var f = file(), n = st.items.length;
             if (!n || st.mode !== 'picked') return;
-            clear(act(build(f, st.items, 0, 0, 'delete')) ? 'Took away ' + (n === 1 ? 'it' : plural(n, 'thing', 'things')) + '. One Undo brings it back.' : 'Nothing changed.');
+            clear(env.act(build(f, st.items, 0, 0, 'delete')) ? 'Took away ' + (n === 1 ? 'it' : plural(n, 'thing', 'things')) + '. One Undo brings it back.' : 'Nothing changed.');
         }
         function startBox() { st.mode = 'boxing'; st.items = []; st.group = []; st.kind = 'area'; st.box = null; st.note = ''; st.pad = false; paint(); }
         function finishBox() {
@@ -456,7 +464,7 @@
         function button(key, text, cls, on) {
             var b = el('button', 'pk-b' + (cls ? ' ' + cls : ''), text);
             b.type = 'button'; b.setAttribute('data-k', key);
-            b.addEventListener('click', function () { on(); });
+            b.addEventListener('click', function () { on(); if (env.focus) env.focus(); });          // (the button may be gone: the keys of the map are heard)
             return b;
         }
         function row(cls) { return el('div', 'pk-row' + (cls ? ' ' + cls : '')); }
@@ -476,7 +484,7 @@
             line.setAttribute('role', 'status');
             if (st.mode === 'boxing') {
                 line.appendChild(el('span', 'pk-name', 'Select an area'));
-                line.appendChild(el('span', 'pk-rest', ' · ' + (st.box ? plural(st.box.r1 - st.box.r0 + 1, 'row', 'rows') + ' x ' + plural(st.box.c1 - st.box.c0 + 1, 'column', 'columns') + '.' : (st.note || 'drag a box on the map to pick everything inside it.'))));
+                line.appendChild(el('span', 'pk-rest', ' \u00b7 ' + (st.box ? plural(st.box.r1 - st.box.r0 + 1, 'row', 'rows') + ' x ' + plural(st.box.c1 - st.box.c0 + 1, 'column', 'columns') + '.' : (st.note || 'drag a box on the map to pick everything inside it.'))));
                 bar.appendChild(line);
                 a.appendChild(button('cancel', 'Cancel', '', clear));
                 bar.appendChild(a);
@@ -513,18 +521,18 @@
             go.disabled = !ok || (!st.copy && !st.dr && !st.dc);
             if (st.pad) {
                 var pad = el('div', 'pk-pad'), side = el('div', 'pk-side'), padwrap = el('div', 'pk-padwrap');
-                [['up', '↑', -1, 0], ['left', '←', 0, -1], ['right', '→', 0, 1], ['down', '↓', 1, 0]].forEach(function (arrow) {
+                [['up', '\u2191', -1, 0], ['left', '\u2190', 0, -1], ['right', '\u2192', 0, 1], ['down', '\u2193', 1, 0]].forEach(function (arrow) {
                     var key = button(arrow[0], arrow[1], 'pk-arrow ' + arrow[0], function () { nudge(arrow[2], arrow[3]); });
                     key.setAttribute('aria-label', 'Nudge ' + arrow[0] + ' one cell');
                     pad.appendChild(key);
                 });
                 pad.appendChild(el('span', 'pk-one', '1 cell'));
-                line.appendChild(el('span', 'pk-name', cap(name)));
-                if (ok || v.plain) line.appendChild(el('span', 'pk-rest', ' ' + (st.dr || st.dc ? (st.copy ? 'Copy ' : 'Moved ') + shiftText(st.dr, st.dc) + '. ' : '') + 'Lands on row ' + land.row + ', column ' + land.column + '.'));
+                line.appendChild(el('span', 'pk-name', cap(name.replace(/^the /, ''))));
+                line.appendChild(el('span', 'pk-rest', ' ' + (ok || v.plain ? (st.dr || st.dc ? (st.copy ? 'Copy ' : 'Moved ') + shiftText(st.dr, st.dc) + '. ' : '') + 'Lands on row ' + land.row + ', column ' + land.column + '.' : 'cannot go here.')));
                 side.appendChild(line);
-                if (!ok && !v.plain) side.appendChild(el('p', 'pk-warn', v.text));
                 if (st.note) side.appendChild(el('p', 'pk-said', st.note));
                 side.appendChild(go); side.appendChild(button('cancel', 'Cancel', '', letGo));
+                if (!ok && !v.plain) bar.appendChild(el('p', 'pk-warn', v.text));
                 padwrap.appendChild(pad); padwrap.appendChild(side); bar.appendChild(padwrap);
                 return;
             }
@@ -641,9 +649,20 @@
             over = doc.createElement('canvas'); over.className = 'pk-over'; over.setAttribute('aria-hidden', 'true');
             host.cv.appendChild(over);
         }
+        var help = el('button', 'pk-help', 'What can be picked up?');
+        help.type = 'button';
+        help.addEventListener('click', function () {
+            if (!env.dialogs || (env.busy && env.busy())) return;
+            env.dialogs.open({
+                title: 'What can be picked up', cls: 'narrow',
+                build: function (body) { HELP.forEach(function (row) { var card = el('div', 'pk-card'); card.appendChild(el('h3', 'pk-ch', row[0])); card.appendChild(el('p', 'pk-cp', row[1])); body.appendChild(card); }); },
+                buttons: [{ text: 'Close', ghost: true }]
+            });
+        });
         if (wrap) {
+            live = el('div', 'sr'); live.setAttribute('role', 'status'); wrap.appendChild(live);
             bar = el('div', 'pk-bar'); bar.hidden = true; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Pick up');
-            wrap.insertBefore(bar, host.cv.nextSibling);
+            host.cv.appendChild(bar);          // (over the foot of the map, so that the map never changes its size when the bar comes and goes)
         }
 
         // ---- the painter the Pick up tool hands the canvas to (mapmaker_tools.js) ----
@@ -728,18 +747,18 @@
         return {
             painter: painter,
             // the tool is chosen (true) or another is (false)
-            show: function (on) { shown = !!on; if (!on) clear(); else render(); },
+            show: function (on) { shown = !!on; if (!on) clear(); else { render(); if (host.hint && help.parentNode !== host.hint) host.hint.appendChild(help); } },
             // the map changed (an Undo, another tool, the properties box...): what is picked is let go when it is not as it was
             refresh: function () {
-                if (mine || st.mode === 'idle' || !st.items.length) return;
+                if (st.mode === 'idle' || !st.items.length) return;
                 var f = file(), i;
                 for (i = 0; i < st.items.length; i++) if (!f || !same(f, st.items[i])) return clear();
             },
             setMap: function () { st.mode = 'idle'; st.items = []; st.group = []; st.box = null; st.drag = null; st.note = ''; st.target = []; render(); },
             state: function () { return { mode: st.mode, kind: st.kind, copy: st.copy, dr: st.dr, dc: st.dc, items: st.items.slice(), group: st.group.slice(), box: st.box, verdict: st.verdict, note: st.note, pad: st.pad }; },
-            bar: bar, over: over
+            bar: bar, over: over, help: help
         };
     }
 
-    return { create: create, itemsAt: itemsAt, areaItems: areaItems, antGroup: antGroup, check: check, build: build, resolve: resolve, describe: describe, nameOf: nameOf, same: same, index: index, shifted: shifted };
+    return { create: create, HELP: HELP, itemsAt: itemsAt, areaItems: areaItems, antGroup: antGroup, check: check, build: build, resolve: resolve, describe: describe, nameOf: nameOf, same: same, index: index, shifted: shifted };
 });

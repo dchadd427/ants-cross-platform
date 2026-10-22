@@ -1,7 +1,8 @@
 /* The Pick up tool of the map maker (web/front/mapmaker_pickup.js, docs/MAP_EDITOR.md): the bar under the map with what is picked up and its buttons, the nudge arrows, and the canvas that lies over
    the map (the ring and the ghost). Loaded with the script, the first time the tool is chosen; the tokens are mapmaker.css's and classic.css's. Every button is 44 pixels high or more. */
 .cv canvas.pk-over { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
-.pk-bar { flex: none; padding: 8px 12px 10px; color: var(--cream); background: #08130f; border-top: 2px solid var(--gold); }
+.cv .minimap, .cv .atlasnote { z-index: 2; }
+.pk-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 8px 12px 10px; color: var(--cream); background: rgba(8, 19, 15, .95); border-top: 2px solid var(--gold); box-shadow: 0 -16px 14px -8px rgba(8, 19, 15, .85); }
 .pk-bar[hidden] { display: none; }
 .pk-line { margin: 0 0 8px; font-size: 14.5px; line-height: 1.35; }
 .pk-name { color: var(--gold); }
@@ -24,10 +25,18 @@
 .pk-one { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); background: #0d1b16; border: 2px solid var(--rule); border-radius: 8px; }
 .pk-side { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .pk-side .pk-line, .pk-side .pk-warn, .pk-side .pk-said { margin: 0; }
+.pk-side .pk-name { display: block; }
 .pk-side .pk-b { width: 100%; }
 @media (max-width: 600px) {
-    .pk-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
+    .pk-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); background: #08130f; box-shadow: none; }
     .pk-line, .pk-warn { font-size: 17px; }
-    .pk-b { min-height: 52px; font-size: 18px; }
+    .pk-b { min-height: 52px; font-size: 16px; padding: 4px 3px; }
     body.pk-on { padding-bottom: 240px; }
 }
+
+.pk-help { display: block; margin-top: 6px; padding: 0 2px; min-height: 36px; font: inherit; text-align: left; color: var(--gold); background: none; border: 0; text-decoration: underline; cursor: pointer; }
+.pk-help:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.pk-card { margin-bottom: 8px; padding: 8px 10px; background: #0d1b16; border: 2px solid var(--rule); border-radius: 6px; }
+.pk-ch { margin: 0 0 2px; font-size: 16px; font-weight: 500; color: var(--gold); }
+.pk-cp { margin: 0; font-size: 14.5px; line-height: 1.4; color: var(--cream); }
+@media (pointer: coarse), (max-width: 600px) { .pk-help { min-height: 44px; } }

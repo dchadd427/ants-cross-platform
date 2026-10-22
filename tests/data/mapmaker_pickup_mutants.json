@@ -1,0 +1,782 @@
+{
+  "note": "Mutants of the map maker's Pick up tool for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/front/mapmaker_pickup.js and its hooks in mapmaker_tools.js, mapmaker_canvas.js, mapmaker_palette.js, mapmaker_sprites.js and mapmaker_app.js against tests/scripts/web_mapmaker_pickup_check.js (--quick looks at 40 maps of the library instead of all; the web job of CI runs the whole check with the real core). Run from the checkout: tools/mutate.py tests/data/mapmaker_pickup_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+  "mutants": [
+    {
+      "id": "ants_bottom_first",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "list = ix.ants[idx] || []; for (i = list.length - 1; i >= 0; i--) out.push(antItem(file, ix, list[i]));",
+      "new": "list = ix.ants[idx] || []; for (i = 0; i < list.length; i++) out.push(antItem(file, ix, list[i]));",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "plants_after_piles",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "list = ix.plants[idx] || []; for (i = list.length - 1; i >= 0; i--) out.push(plantItem(file, ix, list[i]));\n        t = Edit.tile(file, 2, idx);",
+      "new": "t = Edit.tile(file, 2, idx);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "pile_stage_not_matched",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (ix.lay.piles[list[i]].stages[k][1] === t) return list[i];",
+      "new": "if (ix.lay.piles[list[i]].stages[k][1] !== -1) return list[i];",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hill_needs_15_cells",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "hill: team >= 0 && cells.length === 16 ? team : -1",
+      "new": "hill: team >= 0 && cells.length === 15 ? team : -1",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "object_cell_only",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "var cells = Edit.objectCells(file, idx), tile = Edit.tile(file, 2, idx), team = Blocks.teamOfHill(tile), entrance = -1, i;",
+      "new": "var cells = [idx], tile = Edit.tile(file, 2, idx), team = Blocks.teamOfHill(tile), entrance = -1, i;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "plant_waypoint_not_found",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return { k: 'plant', i: i, w: w ? w[0] : -1, tile: rec.tile, fp: [idx] };",
+      "new": "return { k: 'plant', i: i, w: -1, tile: rec.tile, fp: [idx] };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "pile_object_not_with_pile",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (t !== EMPTY2 && pileOf(file, ix, idx, t) === p) objs = Edit.objectCells(file, idx);",
+      "new": "if (false) objs = Edit.objectCells(file, idx);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "object_under_pile_listed",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (t !== EMPTY2 && p < 0) out.push(objItem(file, idx));\n        return out;",
+      "new": "if (t !== EMPTY2) out.push(objItem(file, idx));\n        return out;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "group_four_neighbors",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "for (dr = -1; dr <= 1; dr++) for (dc = -1; dc <= 1; dc++) {\n                var r = p.r + dr",
+      "new": "for (dr = -1; dr <= 1; dr++) for (dc = -1; dc <= 1; dc++) {\n                if (dr && dc) continue;\n                var r = p.r + dr",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "group_any_team",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (taken[list[i]] || Blocks.teamOfMarker(lay.records[list[i]].tile) !== team) continue;",
+      "new": "if (taken[list[i]]) continue;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "area_object_if_touched",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (pileOf(file, ix, idx, t) < 0 && o.fp.every(inside)) out.push(o);",
+      "new": "if (pileOf(file, ix, idx, t) < 0 && o.fp.some(inside)) out.push(o);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "area_pile_skipped",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (pit.fp.every(inside)) out.push(pit);",
+      "new": "if (false) out.push(pit);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "area_ants_outside_taken",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (rec.row < box.r0 || rec.row > box.r1 || rec.column < box.c0 || rec.column > box.c1 || rec.row >= file.rows || rec.column >= cols) continue;",
+      "new": "if (rec.row < box.r0 || rec.row > box.r1 + 1 || rec.column < box.c0 || rec.column > box.c1 || rec.row >= file.rows || rec.column >= cols) continue;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "mushroom_word",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "[/^mush/, 'mushroom']",
+      "new": "[/^mush/, 'mush']",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "area_words_counts",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "parts = order.slice(0, 4).map(function (key) { return counts[key].n + ' ' + counts[key].w[counts[key].n === 1 ? 0 : 1]; });",
+      "new": "parts = order.slice(0, 4).map(function (key) { return counts[key].n + ' ' + counts[key].w[1]; });",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "group_words",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return { name: plural(items.length, label(it.team) + ' ant', label(it.team) + ' ants'), rest: ' next to each other' };",
+      "new": "return { name: plural(items.length, label(it.team) + ' ant', label(it.team) + ' ants'), rest: '' };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hill_words",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "rest: ' \\u00b7 4 x 4 cells, with its door' };",
+      "new": "rest: ' \\u00b7 4 x 4 cells' };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ant_type_word",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "var type = file.version === 9 ? TYPES[Blocks.typeOfMarker(it.tile)] : '';",
+      "new": "var type = '';",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "plant_dropper_words",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "'drops a power-up every ' + plural(w.interval, 'second', 'seconds')",
+      "new": "'drops a power-up'",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "edge_off_by_one",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (r < 0 || c < 0 || r >= file.rows || c >= file.columns) return { edge: 'map' };",
+      "new": "if (r < 0 || c < 0 || r > file.rows || c >= file.columns) return { edge: 'map' };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "classic_limit_256",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (hold && (r > 255 || c > 255)) return { edge: 'limit' };",
+      "new": "if (hold && (r > 256 || c > 256)) return { edge: 'limit' };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "own_cells_block_themselves",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (t2 !== EMPTY2 && !mv.cells[idx]) {",
+      "new": "if (t2 !== EMPTY2) {",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hill_not_a_blocker",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (h >= 0) return { why: 'hill', team: h };",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_not_a_blocker",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "Tiles.kindOf(Edit.tile(file, 1, idx)) === 'water'",
+      "new": "Tiles.kindOf(Edit.tile(file, 1, idx)) === 'mud'",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "solid_ground_not_a_blocker",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (kind === 'ant' && (Edit.flags(file, 1, idx) & 1) &&",
+      "new": "if (kind === 'ant' && (Edit.flags(file, 1, idx) & 2) &&",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ants_in_the_way_of_nothing",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!mv.ants[list[i]]) return { why: kind === 'ant' ? 'ant' : 'ants' };",
+      "new": "if (false) return { why: kind === 'ant' ? 'ant' : 'ants' };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "plant_not_a_blocker",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (kind !== 'ant' && kind !== 'pile') { list = ix.plants[idx];",
+      "new": "if (false) { list = ix.plants[idx];",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "pile_not_a_blocker",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "list = ix.piles[idx]; for (i = 0; list && i < list.length; i++) if (!mv.piles[list[i]]) return { why: 'pile' };",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "object_in_the_way_not_named",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return pileOf(file, ix, idx, t2) >= 0 ? { why: 'pile' } : { why: 'obj', tile: t2 };",
+      "new": "return { why: 'pile' };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hill_square_words",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "(kindIt === 'hill' ? 'It needs a free 4 x 4 square, and ' + name : cap(name))",
+      "new": "(kindIt === 'hill' ? 'It needs room, and ' + name : cap(name))",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "cells_not_counted",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "' is in the way (' + plural(n, 'cell', 'cells') + ').'",
+      "new": "' is in the way.'",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "move_first_hint_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "' Move it a little' + (named ? ', or move ' + name + ' first.' : '.')",
+      "new": "' Move it a little.'",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hill_copy_allowed",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (items.some(function (x) { return x.k === 'obj' && x.hill >= 0; })) return",
+      "new": "if (false) return",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "copy_limit_off_by_one",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "var MAX_LIST = 65535;",
+      "new": "var MAX_LIST = 65536;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "copy_piles_unlimited",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (lay.piles.length + items.filter(function (x) { return x.k === 'pile'; }).length > MAX_LIST)",
+      "new": "if (false)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "area_subject_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (kind === 'area' && mode !== 'copy') who = 'These ' + who;",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_words_hill",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "text = kindIt === 'hill' ? 'Part of its 4 x 4 square is water.' : 'That ground is water.';",
+      "new": "text = 'That ground is water.';",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bomb_word_rewritten",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "keep = !whole && Edit.anchorIndex(file, idx) !== idx && t2 >= 129 && t2 <= 134;",
+      "new": "keep = false;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "wall_word_rewritten",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "Edit.anchorIndex(file, idx) !== idx && t2 >= 129 && t2 <= 134;",
+      "new": "Edit.anchorIndex(file, idx) !== idx && t2 >= 129 && t2 <= 133;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "v9_offset_ignores_move",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "(((ap.r + dr - r) & 255) | (((ap.c + dc - c) & 255) << 8))",
+      "new": "(((ap.r - r) & 255) | (((ap.c - c) & 255) << 8))",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "v8_anchor_wrong_byte",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "(((ap.r + dr) & 255) | (((ap.c + dc) & 255) << 8))",
+      "new": "(((ap.r + dr) & 127) | (((ap.c + dc) & 255) << 8))",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "anchor_is_own_cell",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "var whole = cells.length > 1 && a >= 0 &&",
+      "new": "var whole = false && a >= 0 &&",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "solid_bit_not_set",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (Solid.sets(words[k].t)) solid.push([words[k].to, true]); }",
+      "new": "}",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "move_leaves_the_old_cells",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (mode !== 'copy') for (k = 0; k < words.length; k++) put(words[k].from, EMPTY2, 0, 0);",
+      "new": "if (mode === 'delete') for (k = 0; k < words.length; k++) put(words[k].from, EMPTY2, 0, 0);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "copy_takes_the_old_cells",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (mode !== 'copy') for (k = 0; k < words.length; k++) put(words[k].from, EMPTY2, 0, 0);",
+      "new": "for (k = 0; k < words.length; k++) put(words[k].from, EMPTY2, 0, 0);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "delete_puts_cells_back",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (mode !== 'delete') for (k = 0; k < words.length; k++) { put(",
+      "new": "for (k = 0; k < words.length; k++) { put(",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "pile_bites_reset",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "movePile[i] ? { row: movePile[i][0], column: movePile[i][1], units: q.units, points: q.points, stages: q.stages }",
+      "new": "movePile[i] ? { row: movePile[i][0], column: movePile[i][1], units: q.units, points: 1, stages: q.stages }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "plant_waypoint_stays",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (w) moveWp[it.w] = [w.row + dr, w.column + dc]; }",
+      "new": "}",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "plant_waypoint_survives_delete",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (mode === 'delete') { dropRec[it.i] = true; if (w) dropWp[it.w] = true; }",
+      "new": "if (mode === 'delete') { dropRec[it.i] = true; }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "copy_of_plant_has_no_waypoint",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (w) newWps.push({ keep: true, rel: w.rel, length: w.length, row: w.row + dr, column: w.column + dc }); }",
+      "new": "}",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ant_type_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "recs.push(moveRec[i] ? { tile: lay.records[i].tile, row: moveRec[i][0], column: moveRec[i][1] } : lay.records[i]);",
+      "new": "recs.push(moveRec[i] ? { tile: lay.records[i].tile & 4095, row: moveRec[i][0], column: moveRec[i][1] } : lay.records[i]);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "copy_of_ant_type_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "newRecs.push({ tile: rec.tile, row: rec.row + dr, column: rec.column + dc });",
+      "new": "newRecs.push({ tile: rec.tile & 4095, row: rec.row + dr, column: rec.column + dc });",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "splices_in_file_order",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "splices.sort(function (a, b) { return b.rel - a.rel; });",
+      "new": "splices.sort(function (a, b) { return a.rel - b.rel; });",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "records_dropped_by_index",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "for (i = 0; i < lay.records.length; i++) if (!dropRec[i]) recs.push(",
+      "new": "for (i = 0; i < lay.records.length; i++) if (!dropRec[i] || true) recs.push(",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "one_ant_moves_whole_team",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "else if (mode === 'move') { moveRec[it.i] = [rec.row + dr, rec.column + dc];",
+      "new": "else if (mode === 'move') { moveRec[it.i] = [rec.row + dr, rec.column + dc]; lay.records.forEach(function (o, n) { if (Blocks.teamOfMarker(o.tile) === it.team && o.row < 200) moveRec[n] = [o.row + dr, o.column + dc]; });",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "resolve_reuses_a_record",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!used[list[i]] && ix.lay.records[list[i]].tile === d.tile)",
+      "new": "if (ix.lay.records[list[i]].tile === d.tile)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "same_ignores_changes",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "for (i = 0; i < it.fp.length; i++) if (it.fp[i] >= file.cells || Edit.tile(file, 2, it.fp[i]) !== it.tile) return false;\n        return true;",
+      "new": "return true;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "copy_at_zero_allowed",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (st.mode === 'moving' && st.copy && st.dr === 0 && st.dc === 0) st.verdict = {",
+      "new": "if (false) st.verdict = {",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "done_at_zero_acts",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!st.copy && !st.dr && !st.dc) return pick(st.items, st.kind, st.group, st.cycle, st.box);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "nudge_edge_off_by_one",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (b.r0 + st.dr + dr < 0 || b.c0 + st.dc + dc < 0 ||",
+      "new": "if (b.r0 + st.dr + dr < -1 || b.c0 + st.dc + dc < 0 ||",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "nudge_edge_words",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "st.note = 'It is at the edge of the map.'; return render();",
+      "new": "st.note = 'Edge.'; return render();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "shift_does_not_jump",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "step = e.shiftKey ? 8 : 1",
+      "new": "step = 1",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "centre_rounds_up",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "setDelta(cell.row - Math.floor((b.r0 + b.r1) / 2), cell.column - Math.floor((b.c0 + b.c1) / 2));",
+      "new": "setDelta(cell.row - Math.ceil((b.r0 + b.r1) / 2), cell.column - Math.ceil((b.c0 + b.c1) / 2));",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tap_again_stays",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (again) at = (st.cycle.at + 1) % list.length;",
+      "new": "if (again) at = st.cycle.at;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "refresh_keeps_a_changed_pick",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "for (i = 0; i < st.items.length; i++) if (!f || !same(f, st.items[i])) return clear();",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hide_keeps_the_pick",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "show: function (on) { shown = !!on; if (!on) clear(); else {",
+      "new": "show: function (on) { shown = !!on; if (!on) render(); else {",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "escape_in_move_clears",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "function letGo() { if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }",
+      "new": "function letGo() { clear(); }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "delete_in_move",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if ((k === 'Delete' || k === 'Backspace') && st.mode === 'picked') { deleteNow(); return true; }",
+      "new": "if ((k === 'Delete') && st.mode === 'picked') { deleteNow(); return true; }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "keys_while_dialog_open",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!shown || !file() || (env.busy && env.busy())) return false;\n                var k = e.key",
+      "new": "if (!shown || !file()) return false;\n                var k = e.key",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "escape_on_a_bar_button",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (e.defaultPrevented || !shown || st.mode === 'idle' || e.key !== 'Escape' || (env.busy && env.busy())) return;",
+      "new": "if (true) return;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "escape_while_typing",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (tag2 === 'input' || tag2 === 'textarea' || tag2 === 'select') return;\n            e.preventDefault(); letGo();",
+      "new": "e.preventDefault(); letGo();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "painter_has_a_brush",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "size: function () { return 0; },",
+      "new": "size: function () { return 1; },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ghost_drag_anywhere",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return st.mode === 'moving' ? inTarget(cell) : hasThing(cell);",
+      "new": "return st.mode === 'moving' ? true : hasThing(cell);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "empty_ground_is_a_drag",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return st.mode === 'moving' ? inTarget(cell) : hasThing(cell);",
+      "new": "return st.mode === 'moving' ? inTarget(cell) : true;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "taps_are_never_the_tools",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "tapOnly: function (cell) { return shown && !painter.canMove(cell); },",
+      "new": "tapOnly: function (cell) { return false; },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ghost_drag_wrong_way",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "else if (d.kind === 'ghost') setDelta(d.dr + to.row - d.from.row, d.dc + to.column - d.from.column);",
+      "new": "else if (d.kind === 'ghost') setDelta(d.dr - to.row + d.from.row, d.dc + to.column - d.from.column);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "cancelled_drag_keeps_ghost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "else if (d.kind === 'ghost') setDelta(d.dr, d.dc); else if (d.moved) letGo();",
+      "new": "else if (d.moved) letGo();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "box_wrong_corner",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "st.box = { r0: Math.min(d.from.row, to.row), c0: Math.min(d.from.column, to.column),",
+      "new": "st.box = { r0: d.from.row, c0: Math.min(d.from.column, to.column),",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "empty_box_message",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "st.note = 'Nothing is inside that box. Drag a bigger box, or Cancel.';",
+      "new": "st.note = 'Nothing.';",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "help_text_changed",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "'Rocks, power-ups, bombs: one cell. Move: yes.'",
+      "new": "'Rocks and power-ups: one cell. Move: yes.'",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "help_not_offered",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (host.hint && help.parentNode !== host.hint) host.hint.appendChild(help);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "screen_reader_not_told",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "function tell(text) { if (live) live.textContent = text; }",
+      "new": "function tell(text) { }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_never_hides",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "bar.hidden = !on;",
+      "new": "bar.hidden = false;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "copy_button_on_for_a_hill",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (hill) { copy.disabled = true;",
+      "new": "if (hill) { ",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "group_button_missing",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "a.appendChild(button('group', 'Move its group (' + st.group.length + ')', '', function () { startMove(st.group, 'group', false); }));",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "focus_not_given_back",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (env.focus) env.focus();\n        }\n        function setDelta",
+      "new": "}\n        function setDelta",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "arrow_aria_label_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "key.setAttribute('aria-label', 'Nudge ' + arrow[0] + ' one cell');",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ghost_green_changed",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "'rgba(120,230,170,.30)'",
+      "new": "'rgba(120,230,170,.05)'",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ghost_red_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "good ? 'rgba(120,230,170,.30)' : 'rgba(239,83,80,.34)'",
+      "new": "'rgba(120,230,170,.30)'",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "from_label_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "tag(c, 'from', a.x, a.y - 20);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "door_label_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "tag(c, 'door', a.x + c.s / 2 - 16, a.y - 20);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ring_not_gold",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "var GOLD = '#f2c230';",
+      "new": "var GOLD = '#ffffff';",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "overlay_not_hidden_from_readers",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "over.setAttribute('aria-hidden', 'true');",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "map_painted_for_the_ring",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "function paint() { render(); drawOver(); watch(); }",
+      "new": "function paint() { render(); drawOver(); watch(); if (env.refresh) env.refresh(); }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "part_never_asked",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (id === 'pickup') askPick();",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "painter_size_fixed",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "mine() ? mine().size() :",
+      "new": "mine() ? 1 :",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "can_move_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "canMove: function (cell) { return !!editor && !!cell && !!mine() && !!mine().canMove && mine().canMove(cell); },",
+      "new": "canMove: function (cell) { return false; },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tap_only_cell_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "(mine() ? mine().tapOnly(cell) : places())",
+      "new": "(mine() ? mine().tapOnly() : places())",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "keys_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "key: function (e) { return !!editor && !!mine() && !!mine().key && mine().key(e); },",
+      "new": "key: function (e) { return false; },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "show_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (pick) pick.show(state.tool === 'pickup');",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "refresh_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (ants) ants.refresh(); if (pick) pick.refresh(); }",
+      "new": "if (ants) ants.refresh(); }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "set_map_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "current = null; if (ants) ants.setMap(); if (pick) pick.setMap();",
+      "new": "current = null; if (ants) ants.setMap();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "load_failure_silent",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (env.say) env.say('This part did not load', 'The part of the page that picks things up did not load. Check your connection and choose Pick up again.'); if (state.tool === 'pickup') chooseTool('pan'); return; }",
+      "new": "return; }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "load_failure_stays_on_the_tool",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (state.tool === 'pickup') chooseTool('pan'); return; }",
+      "new": "return; }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "part_asked_every_time",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (askedPick || !env.loadPick) return;\n            askedPick = true;",
+      "new": "if (!env.loadPick) return;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "act_not_handed_over",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "hint: host.hint }, file: env.file, act: act, say: env.say, dialogs: env.dialogs,",
+      "new": "hint: host.hint }, file: env.file, act: function () { return false; }, say: env.say, dialogs: env.dialogs,",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "palette_pick_up_cannot_be_chosen",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "(t.draws || t.places || t.picks || t.pans)",
+      "new": "(t.draws || t.places || t.pans)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "pick_up_letter",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "{ id: 'pickup', label: 'Pick up', key: 'p', picks: true },",
+      "new": "{ id: 'pickup', label: 'Pick up', key: 'u', picks: true },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "pan_letter",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "{ id: 'pan', label: 'Pan', key: 'm', pans: true }",
+      "new": "{ id: 'pan', label: 'Pan', key: 'n', pans: true }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "browser_loader_asks_the_wrong_file",
+      "file": "web/front/mapmaker_app.js",
+      "old": "s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_pickup.css';",
+      "new": "s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_ants.css';",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "browser_loader_done_early",
+      "file": "web/front/mapmaker_app.js",
+      "old": "function end(ok) { bad = bad || !ok; if (--left) return; done(bad || !win.MapPickup ? null : win.MapPickup); }",
+      "new": "function end(ok) { done(win.MapPickup || null); }",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    }
+  ]
+}

@@ -50,9 +50,11 @@ LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.cs
 MAPMAKER_LAZY = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js")      # the three scripts that the map maker loads after its page is up (mapmaker_app.js, loadParts): the sheets of the kinds of ground, the game's pictures and Fix edges; measured apart (LAZY_BUDGET), not part of the editor's own budget
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
-BUDGET = 1360 * 1000        # bytes: the whole folder (about 0.98 MB: some 427 KB of pictures, the font, the lobby's scripts and the map maker's); a picture that grows past this is a decision, not an accident
+BUDGET = 1430 * 1000        # bytes: the whole folder (about 1.41 MB: some 427 KB of pictures, the font, the lobby's scripts and the map maker's); a picture that grows past this is a decision, not an accident (raised from 1,360,000 on purpose for the Pick up tool: the folder was at 1,347,000 and its script and style are about 61,000)
 ANTS_LAZY = ("mapmaker_ants.js", "mapmaker_ants.css")        # the map maker's Ants tool box (docs/MAP_EDITOR.md, "Ants: one at a time, group, mix"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadAnts)
 ANTS_BUDGET, ANTS_GZIP_BUDGET = 44 * 1000, 13 * 1000        # bytes, raw and gzipped, both files together: their own limits, because the editor's eagerly loaded scripts are at 93,320 of their 94,000 gzipped, so all of this new code (about 39,600 bytes, 12,100 gzipped) is lazy; a player who never uses the Ants tool downloads none of it
+PICKUP_LAZY = ("mapmaker_pickup.js", "mapmaker_pickup.css")        # the map maker's Pick up tool (docs/MAP_EDITOR.md, "Pick up"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadPick)
+PICKUP_BUDGET, PICKUP_GZIP_BUDGET = 66 * 1000, 18500        # bytes, raw and gzipped, both files together (about 61,200 and 17,000): their own limits, because the editor's eagerly loaded scripts are near their caps (about 389,500 of 400,000 and 108,700 of 111,000 gzipped), so all of this new code is lazy; a player who never uses the tool downloads none of it
 PLAY_LAZY = ("mapmaker_play.js", "mapmaker_play.css")        # the map maker's Play this map (docs/MAP_EDITOR.md): its script and its style are loaded together the first time the button is pressed (web/front/mapmaker_app.js, playMap)
 PLAY_BUDGET, PLAY_GZIP_BUDGET = 30 * 1000, 9 * 1000        # bytes, raw and gzipped, both files together (about 27,500 and 7,700): their own limits, because the editor's eagerly loaded scripts are at 92,400 of their 94,000 gzipped and every other new part had to be loaded on demand; a player who never tests a map downloads none of it
 GAME_SCRIPTS = ("test_game.js",)        # the game page's side of Play this map (web/shell.html loads it with the other scripts of this folder): not the lobby's, not the editor's
@@ -232,7 +234,7 @@ class Sheet:
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_exactly_the_files_that_the_tool_makes_the_shared_stylesheet_the_lobbys_stylesheets_and_the_scripts(self):
-        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS) + list(MAPMAKER_FILES) + list(MAPMAKER_LAZY) + list(SUBMIT_LAZY) + list(PLAY_LAZY) + list(ANTS_LAZY) + list(GAME_SCRIPTS)))
+        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS) + list(MAPMAKER_FILES) + list(MAPMAKER_LAZY) + list(SUBMIT_LAZY) + list(PLAY_LAZY) + list(ANTS_LAZY) + list(PICKUP_LAZY) + list(GAME_SCRIPTS)))
 
     def test_every_picture_is_a_png_of_the_size_that_the_page_gives_it(self):
         for name, size in PICTURES.items():
@@ -281,6 +283,18 @@ class TheFolder(unittest.TestCase):
             self.assertNotIn(name, read("web", "mapmaker.html"), "a lazily loaded file has no tag in the page")
         self.assertLess(raw, ANTS_BUDGET, "the Ants box's script and style are %d bytes" % raw)
         self.assertLess(zipped, ANTS_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
+
+    def test_the_pick_up_tool_is_loaded_on_demand_and_has_budgets_of_its_own(self):
+        import gzip
+        raw = zipped = 0
+        for name in PICKUP_LAZY:
+            data = read_bytes("web", "front", name)
+            raw += len(data)
+            zipped += len(gzip.compress(data, 9))
+            self.assertNotIn(name, read("web", "mapmaker.html"), "a lazily loaded file has no tag in the page")
+        self.assertLess(raw, PICKUP_BUDGET, "the Pick up tool's script and style are %d bytes" % raw)
+        self.assertLess(zipped, PICKUP_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
+        self.assertIn("s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_pickup.css';", read("web", "front", "mapmaker_app.js"), "the page loads both itself, when the tool is chosen")
 
     def test_play_this_map_is_loaded_on_demand_and_has_budgets_of_its_own(self):
         import gzip
@@ -690,7 +704,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY) - set(SUBMIT_LAZY) - set(PLAY_LAZY) - set(ANTS_LAZY) - set(GAME_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY) - set(SUBMIT_LAZY) - set(PLAY_LAZY) - set(ANTS_LAZY) - set(PICKUP_LAZY) - set(GAME_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)

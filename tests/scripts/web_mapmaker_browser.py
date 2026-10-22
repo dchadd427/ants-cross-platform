@@ -14,7 +14,7 @@ Parts:
              frame, base and plug-in rules, the page starts (WebAssembly core, pictures, IndexedDB, downloads) with nothing refused, and the check really sees a refusal (an inline script that the
              page is made to add is blocked and counted); in every other part nothing may be refused either;
   * draw     1280 x 800, the tools: a click and a drag of the mouse paint ground and objects (the canvas is read pixel by pixel), only the cells that changed are painted again, a brush of 3, Fill, Erase,
-             undo and redo (the buttons and the keys), the Move tool, the space key held down and the middle button pan instead of painting, the check of an opened map is run again after the eraser takes
+             undo and redo (the buttons and the keys), the Pan tool, the space key held down and the middle button pan instead of painting, the check of an opened map is run again after the eraser takes
              a hill away and again after undo, a map that was drawn on is handed over as the core writes it, the page asks before a map that was drawn on is left, and on a 512 x 512 map with the
              processor slowed down six times every frame of a stroke is only a few cells (its time is measured);
   * blocks   1280 x 800, Hills, Ants and Food: a click puts a whole hill for the team that is chosen (the canvas is read pixel by pixel), moving it leaves one, the check says "Blue has no hill" until
@@ -70,6 +70,9 @@ Parts:
   * play     1280 x 800 and a touch screen (390 x 844), Play this map (tests/scripts/web_mapmaker_play_browser.py, which says what it covers): a game is started from the map maker against bots in a tab of its own,
              really played (the roster, the ants, the clock on the screen), with the open file's own bytes; the way back asks once and closes the tab; the map comes back as it was, history included;
              the refusals are plain words
+  * pickup   1280 x 800 and a touch screen (390 x 844), the Pick up tool (tests/scripts/web_mapmaker_browser_pickup.py, which says what it covers): its part loads on first use, a tap picks a hill, an ant (and its group),
+             a pile or a box of things, the gold ring and the green or red ghost are read from the overlay canvas, Move, the nudge arrows and the keys put a thing down in ONE step (the bytes that Download hands over are
+             read with struct; one Undo gives the file back), the bar is at the foot of a phone's screen with 44 pixel buttons and 48 pixel arrows, Pan only looks around, and the pictures M1 to M7 are saved with --shots
   * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -90,8 +93,8 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants")
-WITH_ATLAS = ("panel", "sprites", "layer", "edges", "play", "ants")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
+PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants", "pickup")
+WITH_ATLAS = ("panel", "sprites", "layer", "edges", "play", "ants", "pickup")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 VIOLATIONS = []                   # what the browser refused for the page's content security policy (the console's "Refused to ..." lines and the audit issues), kept for the part that is running
 
@@ -672,8 +675,8 @@ def run_part(part, tab, args, check, tiny, junk):
         s = page.state()
         check(s["tags"] == ["Extended map", "New version only"] and s["mini"], "with the two tags and its small map: %s" % s)
         # the canvas
-        page.tool("move")
-        check(page.ev("document.querySelector('[data-tool=move]').getAttribute('aria-pressed')") == "true", "the Move tool is chosen: a drag looks around")
+        page.tool("pan")
+        check(page.ev("document.querySelector('[data-tool=pan]').getAttribute('aria-pressed')") == "true", "the Pan tool is chosen: a drag looks around")
         box = page.box("#map")
         cx, cy = box["x"] + box["w"] / 2 + 7, box["y"] + box["h"] / 2 + 7           # (not on the edge between two tiles)
         page.tab.mouse("mouseMoved", cx, cy, button="none")
@@ -733,8 +736,8 @@ def run_part(part, tab, args, check, tiny, junk):
         page = Page(tab, args.web)
         check(page.open() and page.ready(), "the page starts with its map core")
         tools = json.loads(page.ev("JSON.stringify([].map.call(document.querySelectorAll('[data-tool]'), function (b) { return [b.getAttribute('data-tool'), b.disabled, b.getAttribute('aria-pressed')]; }))"))
-        check(tools == [["ground", False, "true"], ["objects", False, "false"], ["bigger", False, "false"], ["hills", False, "false"], ["ants", False, "false"], ["food", False, "false"], ["erase", False, "false"], ["move", False, "false"]],
-              "Ground is chosen, the other seven tools are on: %s" % tools)
+        check(tools == [["ground", False, "true"], ["objects", False, "false"], ["bigger", False, "false"], ["hills", False, "false"], ["ants", False, "false"], ["food", False, "false"], ["erase", False, "false"], ["pickup", False, "false"], ["pan", False, "false"]],
+              "Ground is chosen, the other eight tools are on: %s" % tools)
         check(page.button_off("#undo-btn") and page.button_off("#redo-btn"), "Undo and Redo are off with nothing drawn")
         gravel, dirt, water, rock, slate = page.color_of(485), page.color_of(487), page.color_of(476), page.color_of(0, 302), page.color_of(571)
         page.tile(487)
@@ -810,10 +813,10 @@ def run_part(part, tab, args, check, tiny, junk):
         time.sleep(0.4)
         before_center = page.state()["center"]
         strokes = page.ev("document.getElementById('undo-btn').disabled")
-        page.tool("move")
+        page.tool("pan")
         page.drag(mx, my, mx - 150, my - 90)
         time.sleep(0.2)
-        check(page.state()["center"] != before_center and page.ev("document.getElementById('undo-btn').disabled") == strokes, "the Move tool pans and paints nothing (%s to %s)" % (before_center, page.state()["center"]))
+        check(page.state()["center"] != before_center and page.ev("document.getElementById('undo-btn').disabled") == strokes, "the Pan tool pans and paints nothing (%s to %s)" % (before_center, page.state()["center"]))
         page.tool("ground")
         center = page.state()["center"]
         page.ev("document.getElementById('map').focus()")
@@ -2090,6 +2093,13 @@ def run_part(part, tab, args, check, tiny, junk):
         ants_part.run_ants(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
         tab.emulate(390, 844, 2, mobile=True)
         ants_part.run_ants_phone(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
+    elif part == "pickup":
+        import web_mapmaker_browser_pickup as pickup_part                  # (the Pick up tool: its own file, this one is at the limit of lines)
+        env = {"wait_for": wait_for, "REPO": REPO}
+        tab.emulate(1280, 800, 1)
+        pickup_part.run_pickup(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
+        tab.emulate(390, 844, 2, mobile=True)
+        pickup_part.run_pickup_phone(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
     elif part == "play":
         import web_mapmaker_play_browser as play                      # (Play this map: its own file, this one is at the limit of lines)
         tab.emulate(1280, 800, 1)
@@ -2113,7 +2123,7 @@ def run_part(part, tab, args, check, tiny, junk):
             page = Page(tab, args.web)
             check(page.open() and page.ready(), "the page starts")
             page.ev("(function () { var s = document.createElement('style'); s.textContent = '*::-webkit-scrollbar { width: 15px; height: 15px; }'; document.head.appendChild(s); })()")
-            for tool in ("ground", "objects", "bigger", "hills", "ants", "food", "erase", "move"):
+            for tool in ("ground", "objects", "bigger", "hills", "ants", "food", "erase", "pickup", "pan"):
                 page.tool(tool)
                 time.sleep(0.1)
                 found = json.loads(page.ev("""JSON.stringify((function () {
@@ -2158,7 +2168,7 @@ def run_part(part, tab, args, check, tiny, junk):
             tab.emulate(w, h, 2, mobile=True)
             page = Page(tab, args.web)
             check(page.open() and page.ready(), "the page starts")
-            for tool in ("ground", "objects", "bigger", "hills", "ants", "food", "erase", "move"):
+            for tool in ("ground", "objects", "bigger", "hills", "ants", "food", "erase", "pickup", "pan"):
                 page.tool(tool)
                 time.sleep(0.2)
                 found = json.loads(page.ev("""JSON.stringify((function () {
@@ -2282,7 +2292,7 @@ def run_part(part, tab, args, check, tiny, junk):
             touch("touchEnd", {})
             time.sleep(0.3)
             check(page.state()["scale"] > scale * 1.5, "two fingers moving apart zoom in (%s to %s)" % (scale, page.state()["scale"]))
-            page.tool("move")
+            page.tool("pan")
             center = page.state()["center"]
             touch("touchStart", {1: (cx, cy)})
             for i in range(1, 9):
@@ -2294,7 +2304,7 @@ def run_part(part, tab, args, check, tiny, junk):
             touch("touchEnd", {})
             time.sleep(0.3)
             check(page.state()["where"].startswith("Row"), "a tap marks a cell (%s)" % page.state()["where"])
-            check(page.button_off("#undo-btn"), "two fingers, and one finger with the Move tool, painted nothing")
+            check(page.button_off("#undo-btn"), "two fingers, and one finger with the Pan tool, painted nothing")
             # one finger paints with a tool, and a tap paints a cell
             page.tool("ground")
             page.tile(487)
