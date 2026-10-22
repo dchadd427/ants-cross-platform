@@ -430,5 +430,21 @@ void run_kill_tests() {
             const MapInfo map(sim);
             ASSERT_TRUE(fire_in_worth_it(BotView::build(sim, 0, &map), map, 1));
         }
+        {   // a pile that the hill does not walk to (an island in a lake), and a carrier of ANOTHER team: neither is a stake of team 1
+            sim::SimulationEngine sim;
+            field(sim, 93);
+            for (int y = 18; y <= 24; ++y) {
+                for (int x = 44; x <= 56; ++x) sim.set_terrain(x, y, sim::TERRAIN_WATER);
+            }
+            for (int y = 20; y <= 22; ++y) {
+                for (int x = 49; x <= 51; ++x) sim.set_terrain(x, y, sim::TERRAIN_WALKABLE);
+            }
+            place_pile(sim, 50, 21, 400, 25, {{400, 369}, {300, 370}, {200, 371}, {100, 372}, {0, kPileGone}});
+            const uint32_t other = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{10, 40});
+            sim.get_unit(other).pick_up_food(1, 25);
+            tick_all(sim, 1);
+            const MapInfo map(sim);
+            ASSERT_FALSE(fire_in_worth_it(BotView::build(sim, 0, &map), map, 1));
+        }
     } TEST_END();
 }
