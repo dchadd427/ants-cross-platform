@@ -304,14 +304,21 @@ int main() {
             ApprovedMap big = one;                                                                   // (the same file, listed as a map that is over the online limit: a recording on it is not played here in one piece)
             big.width = big.height = 300;
             srv.mgr.mutable_store().set_approved({big});
-            rep.head.seed = 33;
-            ASSERT_TRUE(!srv.keep(replay::encode(rep, error)).empty());
+            spec.seed = 33;
+            replay::Replay second;
+            const std::vector<uint8_t> played_again = record_match(spec);
+            ASSERT_TRUE(replay::decode(played_again.data(), played_again.size(), second, why));
+            second.head.map_name = "Approved One.lvl";
+            ASSERT_TRUE(!srv.keep(replay::encode(second, error)).empty());
             srv.run_updates(40);
             ASSERT_EQ(srv.mgr.history_store()->count(), size_t{1});
             srv.mgr.mutable_store().set_approved({});                                                // (taken down: the map is nowhere)
-            rep.head.seed = 32;
-            const std::vector<uint8_t> again = replay::encode(rep, error);
-            ASSERT_TRUE(!srv.keep(again).empty());
+            spec.seed = 34;
+            replay::Replay third;
+            const std::vector<uint8_t> played_third = record_match(spec);
+            ASSERT_TRUE(replay::decode(played_third.data(), played_third.size(), third, why));
+            third.head.map_name = "Approved One.lvl";
+            ASSERT_TRUE(!srv.keep(replay::encode(third, error)).empty());
             srv.run_updates(40);
             ASSERT_EQ(srv.mgr.history_store()->count(), size_t{1});
         }

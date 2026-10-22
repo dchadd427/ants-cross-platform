@@ -131,6 +131,24 @@ void run_online_limit_tests() {
             ASSERT_EQ(door_answer(w, bob), net::RejectReason::NoSuchRoom);                           // (7 + 1 + 1 = 9)
             ASSERT_EQ(w.mgr.room_count(), size_t{2});
         }
+        {   // a public room that a visitor's block makes on a big map the operator offers (--demo-maps) takes seven too
+            ServerLimits l = limits_with(8);
+            l.demo_maps = {"TINY.LVL", "Edge 65536.lvl"};
+            World w(l);
+            w.mgr.mutable_store().set_approved({approved_map(dir, "Edge 65536.lvl", 128, 512)});
+            Client& big = w.connect_creating("Big", "pub00401", block_of("Edge 65536.lvl", 2));
+            ASSERT_EQ(door_answer(w, big), static_cast<net::RejectReason>(0));
+            ASSERT_EQ(w.status("pub00401").map, std::string("Edge 65536.lvl"));
+            Client& ann = w.connect_creating("Ann", "pub00402", block_of("TINY.LVL", 2));
+            ASSERT_EQ(door_answer(w, ann), static_cast<net::RejectReason>(0));                       // (7 + 1 = 8)
+            Client& bob = w.connect_creating("Bob", "pub00403", block_of("TINY.LVL", 2));
+            ASSERT_EQ(door_answer(w, bob), net::RejectReason::NoSuchRoom);
+            World crowded(l);                                                                         // two small rooms first: the big one asks for seven more of eight and is refused
+            crowded.mgr.mutable_store().set_approved({approved_map(dir, "Edge 65536.lvl", 128, 512)});
+            ASSERT_EQ(door_answer(crowded, crowded.connect_creating("A1", "pub00411", block_of("TINY.LVL", 2))), static_cast<net::RejectReason>(0));
+            ASSERT_EQ(door_answer(crowded, crowded.connect_creating("A2", "pub00412", block_of("TINY.LVL", 2))), static_cast<net::RejectReason>(0));
+            ASSERT_EQ(door_answer(crowded, crowded.connect_creating("Big", "pub00413", block_of("Edge 65536.lvl", 2))), net::RejectReason::NoSuchRoom);
+        }
         {   // no big room: eight small rooms fit, a ninth does not
             World w(limits_with(8));
             for (int i = 1; i <= 8; ++i) {
@@ -254,6 +272,29 @@ void run_online_limit_tests() {
         w.run(61000);                                                                                 // the 60 s of the load are over
         ASSERT_TRUE(w.status("stal0003").state == RoomState::Waiting);
         ASSERT_EQ(said(pia_game.room_chat), (std::vector<std::string>{"255||Bob's game did not load the map in time.", "255||To start without Bob, press Remove on their color."}));
+    } TEST_END();
+
+    TEST_CASE("S3.215 A Name Of 32 Characters With The Sentence Of An Old Game Is 101 Characters: The Name Is Cut so that the line is whole (100)") {
+        const fs::path dir = fresh_dir("s215");
+        World w(limits_with(8));
+        w.mgr.mutable_store().set_approved({approved_map(dir, "Small Ext.lvl", 100, 100, true)});
+        const std::string longest(32, 'B');
+        Client& pia = w.connect_page("Pia", "stal0004", lobby_block_of());
+        Client& bob = w.connect_page(longest, "stal0004", lobby_block_of());
+        const net::SeatKey pia_key = pia.lobby->key();
+        const net::SeatKey bob_key = bob.lobby->key();
+        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Small Ext.lvl")));
+        w.run(300);
+        Client& pia_game = w.connect_game("Pia", "stal0004", pia_key, false, dir.string());
+        w.connect_game(longest, "stal0004", bob_key);
+        ASSERT_TRUE(pia_game.lobby->request_start());
+        w.run(600);
+        const std::vector<std::string> lines = said(pia_game.room_chat);
+        ASSERT_TRUE(lines.size() == 2);
+        ASSERT_EQ(lines[0], "255||" + std::string(31, 'B') + "'s game is too old for this map: refresh the page or update the game.");
+        ASSERT_EQ(lines[1], "255||To start without " + longest + ", press Remove on their color.");
+        ASSERT_TRUE(lines[0].size() - 5 == net::kMaxChatChars);
+        fs::remove_all(dir);
     } TEST_END();
 
     TEST_CASE("S3.213 A Game Of A Classic Map That Cannot Load It Is Named Too (\"could not load this map\"), the person who is the leader gets no instruction to remove themselves, and the notice is the room's, one line for each cancelled START") {

@@ -250,7 +250,7 @@ bool RoomManager::map_in_use(const std::string& file_name) const {
 }
 
 size_t RoomManager::public_places() const {
-    const auto weigh = [this](uint64_t cells) { return std::min<size_t>(OnlineLimits::weight(cells), std::max<size_t>(limits_.demo_rooms, 1)); };
+    const auto weigh = [](uint64_t cells) { return static_cast<size_t>(OnlineLimits::weight(cells)); };       // (a match heavier than all the places only makes the server full: no cap is needed to count it)
     size_t places = 0;
     for (const auto& kv : rooms_) places += kv.second->public_room() && !kv.second->lobby_waiting() ? weigh(kv.second->map_cells()) : 0u;      // (a lobby that waits holds no place: its START asks for one)
     for (const auto& r : retired_) places += r->public_room() ? weigh(r->map_cells()) : 0u;                                                      // (a match that gave its code to its rematch keeps its place until it is forgotten, as before)

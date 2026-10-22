@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -311,9 +310,9 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
 
 namespace {
 
-// "<name><after>" as a line of chat: the name is cut when the line would be longer than kMaxChatChars
+// "<before><name><after>" as a line of chat: the name is cut when the line would be longer than kMaxChatChars (a name of 32 characters with the sentence of an old game is 101)
 std::string name_line(std::string name, const std::string& before, const char* after) {
-    const size_t fixed = before.size() + std::strlen(after);
+    const size_t fixed = before.size() + std::char_traits<char>::length(after);
     if (fixed < net::kMaxChatChars && name.size() > net::kMaxChatChars - fixed) name.resize(net::kMaxChatChars - fixed);
     return before + name + after;
 }

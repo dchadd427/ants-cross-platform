@@ -743,6 +743,16 @@ int main() {
 #ifndef _WIN32
         ASSERT_EQ(static_cast<int>(fs::status(fs::path(t.config.dir) / "test").permissions() & fs::perms::all), static_cast<int>(fs::perms::owner_all));
         ASSERT_EQ(static_cast<int>(fs::status(kept->path).permissions() & fs::perms::all), static_cast<int>(fs::perms::owner_read | fs::perms::owner_write));
+        {   // the folder is made 0700 when the store opens (a folder of an earlier version too), and an upload makes it 0700 again if it was opened up meanwhile
+            fs::permissions(fs::path(t.config.dir) / "test", fs::perms::all, fs::perm_options::replace);
+            std::string why;
+            ASSERT_TRUE(t.store->open(t.now, why));
+            ASSERT_EQ(static_cast<int>(fs::status(fs::path(t.config.dir) / "test").permissions() & fs::perms::all), static_cast<int>(fs::perms::owner_all));
+            fs::permissions(fs::path(t.config.dir) / "test", fs::perms::all, fs::perm_options::replace);
+            t.now_ms += 20000;
+            ASSERT_EQ(t.test_upload(tiny(), "Popcorn", "203.0.113.21").status, 201);
+            ASSERT_EQ(static_cast<int>(fs::status(fs::path(t.config.dir) / "test").permissions() & fs::perms::all), static_cast<int>(fs::perms::owner_all));
+        }
 #endif
         // a Classic map stays a Classic map (version 8) in the test folder
         ASSERT_EQ(static_cast<unsigned>(static_cast<unsigned char>(stored[0])), 8u);
@@ -793,6 +803,21 @@ int main() {
             ASSERT_EQ(t.test_upload(tiny(), "Popcorn", "203.0.113.31").status, 201);       // (another address has the second check of the window)
             ASSERT_EQ(t.test_upload(tiny(), "Popcorn", "203.0.113.32").status, 503);      // (two in all: test_checks_per_window)
         }
+    } TEST_END();
+
+    TEST_CASE("API2.9b The checking time of test maps has a budget of its own: a map that takes longer than the budget closes the window for the next one (503 busy), and the next window is clean") {
+        Api t([](SubmissionApiConfig& c) {
+            c.test_check_budget_ms = 1;
+            c.test_checks_per_window = 100;
+            c.test_checks_per_address_window = 100;
+        });
+        const std::string slow = grown_tiny(256, 256);                                 // (a check of a big map takes tens of milliseconds)
+        ASSERT_TRUE(!slow.empty());
+        ASSERT_EQ(t.test_upload(slow, "Slow", "203.0.113.60", "extended").status, 201);
+        const HttpResponse busy = t.test_upload(tiny(), "Quick", "203.0.113.61");
+        ASSERT_MSG(busy.status == 503 && parse_text(busy.body).get("error").str() == "busy", std::to_string(busy.status) + " " + busy.body.substr(0, 100));
+        t.now_ms += 10001;
+        ASSERT_EQ(t.test_upload(tiny(), "Quick", "203.0.113.61").status, 201);
     } TEST_END();
 
     TEST_CASE("API2.10 Refusals of a test map: a file that is no map, a kind that the file is not, an unknown kind, an empty body, a cross-site request, the wrong content type, a map of one team, a map that is bigger than the kind allows; nothing is kept for any of them") {
@@ -861,6 +886,7 @@ int main() {
         ASSERT_EQ(file.find('~'), file.size() - 19 + 1);                              // (the one tilde is the suffix's)
         ASSERT_EQ(file.find("~test-"), file.size() - 18);                              // (the only "~test-" is the server's own, at the end)
         ASSERT_EQ(j.get("name").str().find('~'), std::string::npos);
+        ASSERT_EQ(j.get("name").str(), std::string("Evil test-deadbeef Map"));                       // (the tilde became a blank: the words stay)
         j = stem_of("A%3Cb%3Eb%0D%0Ax%E2%80%AEy..%2F..%2Fz", address());               // < > CR LF, U+202E, ../..
         ASSERT_TRUE(j.get("name").str().size() > 0);
         for (const char bad : std::string("<>/\\\r\n~")) ASSERT_TRUE(j.get("name").str().find(bad) == std::string::npos);
@@ -1017,6 +1043,7 @@ int main() {
         ASSERT_EQ(a.size(), size_t{1});
         ASSERT_EQ(a[0].hash, hash);                                                    // (the same size and time: the hash that was made is used)
         { std::ofstream out(path, std::ios::binary | std::ios::trunc); out << original << "more"; }
+        fs::last_write_time(path, when);                                              // (the old time again: only the size tells)
         a = t.store->approved_maps();
         uint64_t again = 0;
         ASSERT_TRUE(net::hash_file(path, again));
