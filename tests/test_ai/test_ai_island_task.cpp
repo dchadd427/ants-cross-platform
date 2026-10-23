@@ -326,6 +326,7 @@ void run_island_task_tests() {
             p.gate_leaver_ticks = 0;                                                                                          // (the gate's wait for the ant that leaves is off and the food is eaten in the plain order,
             p.denial_order = false;                                                                                          // not the denial order: the match on which the premise below was counted)
             without_war_batch(p);
+            without_kill_batch(p);                                                                                           // (the match of the premise: before the kill batch)
         });
         m.run(7200);
         std::map<uint32_t, uint64_t> last;

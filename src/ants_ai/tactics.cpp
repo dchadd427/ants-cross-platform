@@ -215,6 +215,13 @@ LevelPlan plan_for(Level level) noexcept {
             p.water_hunt = true;
             p.vicinity_hunt = true;
             p.smart_counters = true;
+            p.opportunity = true;                    // the kill batch (docs/BOT_FIGHT.md): Hard strikes the kill that one blow gives, and starts no fight that no walk reaches
+            p.opportunity_still = 20;                // ... only at an enemy that has stood on its tile for a second: the ones that stop for a moment are gone when the striker comes (7 in 10 jobs)
+            p.opportunity_skip_guard = true;         // ... and not at a Combat Ant at rest (its reflex meets the striker on the way)
+            p.opportunity_harvest_d = 2;             // ... and an ant of the economy goes only for a kill that is two tiles away
+            p.reach_fights = true;
+            p.idle_hunt = true;
+            p.chore_worth = true;
             break;
     }
     return p;
@@ -228,6 +235,13 @@ void without_stand_batch(LevelPlan& p) noexcept {
     p.mine_per_pile = std::min<uint32_t>(p.mine_per_pile, 3);                  // (the field of mines at the piles is the batch's: three were all there was)
     p.mine_apart = 2;
     p.mine_home_apart = 3;
+}
+
+void without_kill_batch(LevelPlan& p) noexcept {
+    p.opportunity = false;
+    p.reach_fights = false;
+    p.idle_hunt = false;
+    p.chore_worth = false;
 }
 
 void without_war_batch(LevelPlan& p) noexcept {

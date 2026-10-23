@@ -17,6 +17,9 @@ add_library(ants_ai STATIC
     tasks.cpp
     tactics.cpp
     standard_tasks.cpp
+    knock.cpp
+    chore_worth.cpp
+    opportunity_task.cpp
     standard_bot.cpp
     brawl_task.cpp
     team_up.cpp
