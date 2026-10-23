@@ -5,6 +5,7 @@
 //   AI31.2  the scripted scenes: an enemy next to water and an own idle ant on the wrong side (a plain ant, a Combat Ant four tiles from the water): it walks to the right tile and the enemy drowns; the old hunts do not
 //   AI31.2c a walk that takes longer than half the clock of a job is not begun
 //   AI31.8  what is worth a trip: the enemy has stood a second, is no Combat Ant at rest, the economy's ants go only a short way
+//   AI31.8b the clock of an enemy starts again when it has moved
 //   AI31.3  priority: an ant that holds a chore (a rank 4 task) is taken, one that holds a pick-up (rank 3) is not; an ant that carries food never strikes; nothing happens with the plan off
 //   AI31.4  reach: an enemy across a channel that no walk crosses gets no attack order (the assault of the free ants sent them before: "Can't go there."), one on the same shore does
 //   AI31.5  the plans: Hard has the batch, Medium and Easy do not, the switch takes it out, a plan made by hand has none
@@ -290,6 +291,7 @@ void run_kill_tests() {
             LevelPlan plan = plan_for(Level::Hard);
             plan.assault = false;
             plan.water_hunt = false;
+            plan.opportunity_still = 0;                                      // (the rule of the clock off: it is the walking that keeps the striker away)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(30);                                                     // (it walks along the shore: no ant is sent to a tile it will have left)
             ASSERT_EQ(rig.as<StandardBot>().opportunity().started(), 0u);
@@ -378,6 +380,43 @@ void run_kill_tests() {
             }
             ASSERT_EQ(task.started(), cs.expect_job ? 1u : 0u);
         }
+    } TEST_END();
+
+    TEST_CASE("AI31.8b The Clock Of An Enemy Starts Again When It Has Moved: One That Stood Long Elsewhere, Walked To A New Tile And Stopped There Is Not Gone For Until It Has Stood A Second On The New Tile")
+    {
+        sim::SimulationEngine sim;
+        field(sim, 415);
+        for (int x = 14; x <= 26; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{15, 14});             // (out of reach of the first place, in reach of the second)
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 8});
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 8});
+        const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{26, 15});
+        tick_all(sim, 2);
+        Tactics tactics;
+        tactics.plan = plan_for(Level::Hard);
+        tactics.plan.opportunity_still = 20;
+        AntLedger ledger;
+        ledger.set_rank(StandardBot::kOpportunity, 5);
+        const Profile profile = profile_for(Level::Hard);
+        OpportunityTask task(StandardBot::kOpportunity, tactics);
+        const auto look = [&]() {
+            const MapInfo map(sim);
+            const BotView view = BotView::build(sim, 0, &map);
+            Orders orders;
+            TaskContext context{view, orders, ledger, profile, map, 0};
+            task.step(context);
+        };
+        look();
+        tick_all(sim, 40);
+        look();                                                                  // (it has stood 40 ticks, but where no ant of ours can come)
+        ASSERT_EQ(task.started(), 0u);
+        sim.apply_command(command_of(CommandType::GroupMove, 1, {enemy}, 20, 15));
+        tick_all(sim, 90);                                                       // (it walked 6 tiles and stopped: the look finds it on a new tile)
+        look();
+        ASSERT_EQ(task.started(), 0u);                                           // (the clock starts again here)
+        tick_all(sim, 24);
+        look();
+        ASSERT_EQ(task.started(), 1u);                                           // (a second on the new tile)
     } TEST_END();
 
     TEST_CASE("AI31.4 Reach: The Free Ants Send No Attack Order At An Enemy That No Walk Reaches (Across A Channel), Where They Sent Many Before; An Enemy On Their Own Shore Is Still Attacked")
@@ -501,6 +540,25 @@ void run_kill_tests() {
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(1400);
             ASSERT_TRUE(rig.as<StandardBot>().islands().active());
+            ASSERT_FALSE(rig.as<StandardBot>().tactics().no_work);
+            ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
+        }
+        {   // food behind a wall of fire is the work of the gate goals: the same
+            sim::SimulationEngine sim;
+            field(sim, 433);
+            sim.set_player_eggs(0, 0);
+            for (int x = 0; x < 60; ++x) sim.set_fire_at(TileCoord{x, 20}, 1000000);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{13, 12});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14, 12});
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 12});
+            place_crackers(sim, 12, 40, 25);
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.opportunity = false;
+            plan.assault_after = 200;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(1400);
+            ASSERT_TRUE(rig.as<StandardBot>().tactics().gate_map);
             ASSERT_FALSE(rig.as<StandardBot>().tactics().no_work);
             ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
         }

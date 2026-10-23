@@ -239,7 +239,7 @@
    "id": "no_work_ignores_gate_maps",
    "file": "src/ants_ai/standard_bot.cpp",
    "old": "&& !tactics_.gate_map && !tactics_.field_map;",
-   "new": "&& !(tactics_.gate_map && false) && !tactics_.field_map;",
+   "new": "&& !tactics_.field_map;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.6"
   },
@@ -272,8 +272,8 @@
    "file": "src/ants_ai/opportunity_task.cpp",
    "old": "if (st.since == 0 || st.tile != e.tile || e.state == sim::UnitState::Walking) {",
    "new": "if (st.since == 0) {",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI31.8"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8b ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8b"
   }
  ]
 }
