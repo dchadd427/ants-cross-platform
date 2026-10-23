@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.116 - 2026-10-23 - A Buy me a coffee button at the bottom of the front page
+
+**For players:**
+- **A "Buy me a coffee" button at the bottom of the front page.** If you enjoy the game you can support its owner: the yellow button, centered in the footer, opens the owner's Buy Me a Coffee page in a new tab. The repository has a Sponsor button for the same page.
+- The button is a picture that your browser fetches from Buy Me a Coffee's own server, so that server sees your address as any website does; the Legal page says so. Nothing else on the front page is loaded from another company.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the front page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b29f40d8...238252ad)
+
 ## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
 
 **For players:**
