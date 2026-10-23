@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.107 - 2026-10-22 - Map Maker: the Pick up tool moves, copies and deletes what is on a map
+
+**For players:**
+- **The Map Maker has a new tool, Pick up (key P).** Tap a hill, object, food pile, plant or starting ant and a gold ring shows everything it covers (a hill's 4 x 4 square and its door, a pile's footprint). A bar then offers **Move**, **Copy here**, **Delete**, **Select an area...** and **Cancel**.
+- **Move shows a see-through copy of the thing where it would land.** It is green when it fits and red when it does not, with the reason in plain words ("The red hill cannot go here. It needs a free 4 x 4 square, and the mushroom is in the way."). On a desktop it follows the mouse. Use the arrow buttons (or the arrow keys, Shift for 8 cells) to nudge it, or drag it, then press **Done**. Enter does the same, Escape cancels, Delete deletes.
+- **Ants: "this ant or its group".** One tap picks one ant; Move, Copy here and Delete each ask whether to take only that ant or the whole group of that team's ants that stand together.
+- **Select an area** picks every object that lies whole inside a box you draw, so a whole stretch of the map can be moved or copied at once.
+- **One Undo undoes a whole move, copy or delete**, including an area. A short help sheet, "What can be picked up?", is opened from the tool's note, and on a short screen (a phone held sideways) the bar is smaller and can be folded away.
+- **The old Move tool is now called Pan** (the M key still chooses it). It only looks around and never changes the map. Maps in the library are never changed by any tool.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.0.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/146ef42b...dc352756)
+
 ## v0.12.106 - 2026-10-22 - Where ants died: the map of deaths on the match page
 
 **For players:**
@@ -598,27 +612,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a3b5692e...e3bf5a1a)
 
-## v0.12.42 - 2026-10-14 - The changelog in pages named by version
+## Older versions (v0.12.42 and before)
 
-**For players:**
-- The changelog page now shows the releases ten at a time (five on a phone) in pages named by their versions, for example "v0.12.29 to v0.12.19", with Newer and Older buttons at the bottom; the long row of every version is folded behind "Jump to a version".
-- A link to one release (`#v0-12-30` or `#v0.12.30`) opens the page that holds it and frames the release in gold, and the Back and Forward buttons move between the pages you looked at. Without JavaScript the page is the whole list, as before.
-
-**Rules / network:** none. Only the changelog page changed; network protocol 20 is as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/079b8428...b4100330)
-
-## v0.12.41 - 2026-10-14 - Universal gate planner, windowed web mouse lock and server hardening
-
-**For players:**
-- In a browser window, clicking the game during a match now locks the mouse inside the picture (when *Fullscreen mouse: Locked* is on) so you can pan freely at every edge without the cursor leaving the window; hold **Ctrl+Alt** (or press **Esc**) to release the mouse.
-- When gate goals are switched on for a Hard computer player, it plans multi-hop power-up, fire-wall and bomb-barrier chains from any reachable land component where its ants stand, and unseals power-up doorways and shore approaches without map-specific rules.
-- Hardened the web and match server stack with `/ws` connection rate limiting, read-only container and capability restrictions, parameterized database backup bindings and pinned build dependencies.
-
-**Rules / network:** none. No simulation rule, golden hash or network protocol number changed (protocol 20).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2b102759...fb846d3a)
-
-## Older versions (v0.12.40 and before)
-
-Every release before v0.12.41, and the long notes of v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.43, and the long notes of v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -47,8 +47,9 @@ GROUND_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ground_check
 SPRITES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_sprites_check.js")
 EDGES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edges_check.js")
 ANTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ants_check.js")
+PICKUP_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_pickup_check.js")
 SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
-LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js", "mapmaker_ants.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
+LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js", "mapmaker_ants.js", "mapmaker_pickup.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
 ALL_SCRIPTS = SCRIPTS + LAZY_SCRIPTS
 
 
@@ -431,7 +432,7 @@ class TheCodeRuns(unittest.TestCase):
             "an undo that forces a splice on bytes that are not where it says": ("mapmaker_edit.js", "if (!sameBytes(self.file.bytes, at, out)) continue;", "void 0;"),
             "arrow keys in the team swatches that choose tiles": ("mapmaker_tools.js", "if (hasTeams()) chooseTeam(id); else chooseTile(id);", "chooseTile(id);"),
             "ants that do not all fit and say nothing": ("mapmaker_tools.js", "if (put < state.ants) fits = ' (only ' + put + ' fit)';", "void 0;"),
-            "a tap tool that begins a stroke": ("mapmaker_tools.js", "tapOnly: function () { return !!editor && (mine() ? mine().tapOnly() : places()); },", "tapOnly: function () { return false; },"),
+            "a tap tool that begins a stroke": ("mapmaker_tools.js", "tapOnly: function (cell) { return !!editor && (mine() ? mine().tapOnly(cell) : places()); },", "tapOnly: function (cell) { return false; },"),
             "a hill whose square is one cell": ("mapmaker_tools.js", "(state.tool === 'hills' ? Blocks.HILL : 1)", "1"),
             "a hill without its door marked": ("mapmaker_tools.js", "door: function () { return !!editor && (state.tool === 'hills' || state.tool === 'bigger'); },", "door: function () { return false; },"),
             "a brush that takes a hill away": ("mapmaker_edit.js", "if (kind === 'objects' && hooks.guard) {", "if (false) {"),
@@ -459,7 +460,7 @@ class TheCodeRuns(unittest.TestCase):
             "a stepper that goes past the most ants": ("mapmaker_tools.js", "return state.tool === 'ants' ? [Blocks.MIN_ANTS, Blocks.MAX_ANTS]", "return state.tool === 'ants' ? [Blocks.MIN_ANTS, 99]"),
             "a sheet whose stepper does not change the page's number": ("mapmaker_tools.js", "more.addEventListener('click', function () { stepBy(1); show(); onChange(); });", "more.addEventListener('click', function () { show(); onChange(); });"),
             "a line under the palette that does not say what the map has": ("mapmaker_tools.js", "if (state.tool === 'ants') return who + ': ' + (facts.ants[state.team]", "if (state.tool === 'ants') return who + ': ' + (false"),
-            "a tap tool that is turned into a stroke by the canvas": ("mapmaker_canvas.js", "var tapTool = !panning && !!cell && tapOnly();", "var tapTool = false;"),
+            "a tap tool that is turned into a stroke by the canvas": ("mapmaker_canvas.js", "var tapTool = !panning && !!cell && tapOnly(cell);", "var tapTool = false;"),
             "a tap that does not put": ("mapmaker_canvas.js", "if (placing && tap) painter.begin(tap);", "void 0;"),
             "undo that the keys do not reach": ("mapmaker_tools.js", "if (k === 'z') {", "if (k === 'q') {"),
             "a letter that is a tool while typing in a box": ("mapmaker_tools.js", "|| typing(e.target)) return;", ") return;"),
@@ -487,6 +488,10 @@ class TheCodeRuns(unittest.TestCase):
             "a brush that does not reach the painter": ("mapmaker_tools.js", "(paints() ? state.brush : (places()", "(paints() ? 1 : (places()"),
             "a splice of the header counted from the end of layer 2": ("mapmaker_edit.js", "return s.abs ? s.at : file.blocksAt + s.rel;", "return file.blocksAt + (s.abs ? s.at : s.rel);"),
             "a change of the properties that is not one step": ("mapmaker_tools.js", "var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; }", "var dirty = editor.act(change); if (dirty) changed(dirty); if (dirty) editor.act(change); return !!dirty; }"),
+            "a tool whose keys are the map's cursor keys first": ("mapmaker_canvas.js", "if (painter && painter.key && painter.key(e)) { e.preventDefault(); hover = null; redraw(); return; }", "void 0;"),
+            "a tool that is not told about the mouse over the map": ("mapmaker_canvas.js", "if (painter && painter.hover) painter.hover(over);          // (a tool that shows what a click would do: Pick up)", "void 0;"),
+            "a tool that is not told that the mouse left the map": ("mapmaker_canvas.js", "hover = null; if (painter && painter.hover) painter.hover(null); if (file) { chrome();", "hover = null; if (file) { chrome();"),
+            "a tool that is not told which cell is pressed": ("mapmaker_canvas.js", "var tapTool = !panning && !!cell && tapOnly(cell);", "var tapTool = !panning && !!cell && tapOnly();"),
             "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "function act(change) { if (!editor || canvas.isStroking()) return false;", "function act(change) { if (!editor) return false;"),
         }
         for what, (name, old, new) in mutants.items():
@@ -944,13 +949,13 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("overwrite", self.app.lower())
         self.assertIn("a.download = win.MapFile.downloadName(map.name);", self.app, "a download is a new file the browser saves, named by the map")
 
-    def test_the_tools_are_in_the_page_in_the_order_of_the_picture_and_all_eight_work(self):
+    def test_the_tools_are_in_the_page_in_the_order_of_the_picture_and_all_nine_work(self):
         tools = re.findall(r'<button class="tool" type="button" data-tool="([a-z]+)"[^>]*>', self.page)
-        self.assertEqual(tools, ["ground", "objects", "bigger", "hills", "ants", "food", "erase", "move"])
+        self.assertEqual(tools, ["ground", "objects", "bigger", "hills", "ants", "food", "erase", "pickup", "pan"])
         for button in re.findall(r'<button class="tool"[^>]*>', self.page):
             self.assertIn(" disabled", button, "every button starts off until the core is there: " + button)
         self.assertNotIn("Comes in the next update", self.page)
-        for tool, letter in (("ground", "G"), ("objects", "O"), ("bigger", "K"), ("hills", "H"), ("ants", "A"), ("food", "F"), ("erase", "E"), ("move", "M")):
+        for tool, letter in (("ground", "G"), ("objects", "O"), ("bigger", "K"), ("hills", "H"), ("ants", "A"), ("food", "F"), ("erase", "E"), ("pickup", "P"), ("pan", "M")):
             self.assertRegex(self.page, r'data-tool="%s"[^>]*aria-keyshortcuts="%s"' % (tool, letter))
         for part in ('id="stepper"', 'id="step-less"', 'id="step-more"', 'id="step-val"', 'aria-label="Fewer"', 'aria-label="More"'):
             self.assertIn(part, self.page, part)
@@ -960,7 +965,7 @@ class ThePage(unittest.TestCase):
             self.assertIn(part, self.page, part)
         self.assertEqual(re.findall(r'data-brush="(\d+)"', self.page), ["1"])
         palette = self.code["mapmaker_palette.js"]
-        self.assertEqual(re.findall(r"key: '([a-z])'", palette), ["g", "o", "k", "h", "a", "f", "e", "m"])
+        self.assertEqual(re.findall(r"key: '([a-z])'", palette), ["g", "o", "k", "h", "a", "f", "e", "p", "m"])
 
     def test_a_map_that_was_drawn_on_is_asked_about_and_handed_over_as_the_core_writes_it(self):
         app = self.app
@@ -1168,6 +1173,64 @@ class TheGroundAndTheSprites(unittest.TestCase):
         ants = read("web", "front", "mapmaker_ants.js")
         self.assertNotRegex(ants, r"innerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function", "words are put in with textContent only")
 
+    def test_the_pick_up_tool_passes_its_checks_on_made_up_maps_and_on_the_library(self):
+        done = run_check(script=PICKUP_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout[-3000:] + done.stderr[-2000:])
+        self.assertRegex(done.stdout, r"\d+ checks, 0 failed")
+
+    def test_the_checks_can_fail_on_the_broken_copies_of_the_pick_up_tool(self):
+        """tests/data/mapmaker_pickup_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check (--quick: 40 maps of the library, not all)"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_pickup_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 100)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    if "web_mapmaker_browser" in m["test"]:
+                        continue                # (a mutant that only the real browser can notice: tools/mutate.py runs it with ANTS_WEB_URL set)
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, PICKUP_CHECK, ["--quick"])
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_pick_up_tool_is_loaded_on_demand_with_its_style_and_the_tool_hands_it_the_canvas(self):
+        tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
+        self.assertNotIn("front/mapmaker_pickup.js", tags)
+        self.assertIn("add('script', 'script', 'src', 'front/mapmaker_pickup.js');", self.app)
+        self.assertIn("add('style', 'link', 'href', 'front/mapmaker_pickup.css', function (n) { n.rel = 'stylesheet'; });", self.app)
+        self.assertIn("if (id === 'pickup') askPick();", self.tools)
+        self.assertNotIn("MapPickup", self.app.split("var NEEDED = ")[1].split("];")[0], "the page does not need the tool to start: a part that did not load is said, and the tool is Pan")
+        self.assertIn("act: act", self.tools, "one change, one step of the history")
+        self.assertRegex(read(".github", "workflows", "ci.yml"), r"ls -l [^\n]*\bfront/mapmaker_pickup\.js\b[^\n]*\bfront/mapmaker_pickup\.css\b")
+        pickup = read("web", "front", "mapmaker_pickup.js")
+        self.assertNotRegex(pickup, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function", "words are put in with textContent only")
+        self.assertNotRegex(pickup, r"XMLHttpRequest|fetch\(|localStorage|indexedDB|createObjectURL|\.bytes\[[^\]]*\]\s*=[^=]", "the tool reads and gives changes; it writes no byte itself and keeps nothing")
+        self.assertRegex(pickup, r"^[\x00-\x7f]*$", "ASCII only (the dot and the arrows are escapes)")
+        css = read("web", "front", "mapmaker_pickup.css")
+        self.assertRegex(css, r"\.pk-b \{[^}]*min-height: 44px", "a button is 44 pixels high")
+        self.assertRegex(css, r"\.pk-arrow \{[^}]*min-height: 48px; min-width: 48px", "a nudge arrow is 48 pixels")
+        self.assertRegex(css, r"@media \(max-width: 600px\) \{\s*\.pk-bar \{ position: fixed; left: 0; right: 0; bottom: 0;", "on a phone the bar is at the foot of the screen")
+        self.assertRegex(css, r"\.pk-help \{[^}]*min-height: 36px", "the link to the help is a tap target (44 pixels on a touch screen)")
+        self.assertIn("@media (pointer: coarse), (max-width: 600px) { .pk-help { min-height: 44px; } }", css)
+        root = read("web", "front", "classic.css") + read("web", "front", "mapmaker.css")
+        for token in set(re.findall(r"var\(--([a-z-]+)", css)):
+            self.assertRegex(root, r"--%s:" % token, "the style uses only tokens that the page defines: --" + token)
+        self.assertNotIn("data-tool=\"move\"", self.page)
+        self.assertIn('data-tool="pickup"', self.page)
+        self.assertIn('data-tool="pan"', self.page)
+        self.assertNotRegex(self.tools, r"\bmove: '", "no hint for a tool that is not there")
+        self.assertNotIn("moveAt", read("web", "front", "mapmaker_blocks.js"), "what Pick up replaces is gone (the old drag of the Move tool)")
+
     def test_the_fix_edges_button_is_in_the_page_and_wired_by_the_app_once_the_parts_are_there(self):
         self.assertRegex(self.page, r'<button class="eb" type="button" id="edges-btn" disabled>Fix edges\.\.\.</button>')
         self.assertIn("if (!win.MapEdges || !win.MapGround) return;", self.app, "the button works only when both lazy scripts are there")
@@ -1195,6 +1258,7 @@ class TheImageCarriesThePage(unittest.TestCase):
         self.assertIn('web/mapmaker.html', read("build_web.sh"))
         ci = read(".github", "workflows", "ci.yml")
         self.assertIn("node tests/scripts/web_mapmaker_core_check.js --module lvl_core_from_image --require", ci)
+        self.assertIn("node tests/scripts/web_mapmaker_pickup_check.js --module lvl_core_from_image --require", ci)
 
     def test_the_map_maker_has_its_own_version_file_and_prints_it_in_the_bottom_footer(self):
         ver = read("web", "MAPMAKER_VERSION").strip()

@@ -377,6 +377,13 @@ async function caseG() {
     const plain = frame(rig, f, view, w, h, { ghost: null }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1);
     check(plain.length === 0, 'and nothing is see-through without one');
     check(frame(rig, f, view, w, h, { ghost: { id: 99, row: 1, column: 1 } }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1).length === 0, 'an id with no picture has no ghost');
+    // the Pick up tool draws the see-through picture of a hill, a pile or a plant by the same function
+    const gx = rig.env.makeCanvas().getContext('2d');
+    rig.env.log.length = 0;
+    check(typeof rig.sprites.ghost === 'function', 'the sprite layer offers its ghost to the Pick up tool');
+    rig.sprites.ghost(gx, view, w, h, 247, 30, 30);
+    const given = rig.env.log.filter((c) => c.op === 'drawImage' && c.alpha < 1);
+    check(given.length === 1 && given[0].a[2] === INDEX.objects.items['247'][2], 'and it is a see-through picture of that tile (a red hill)');
 }
 
 async function caseH() {
