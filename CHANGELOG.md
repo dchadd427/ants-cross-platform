@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the front page only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b29f40d8...238252ad)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b29f40d8...1158f600)
 
 ## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
 
