@@ -505,7 +505,7 @@
       "id": "leave_forfeit_when_over",
       "file": "src/ants_app/game_menu.cpp",
       "old": "if (match_running && other_sides == 1) return LeaveKind::Forfeit;",
-      "new": "if (other_sides == 1) return LeaveKind::Forfeit;",
+      "new": "if ((match_running || true) && other_sides == 1) return LeaveKind::Forfeit;",
       "build": [
         "test_game_menu"
       ],
@@ -525,7 +525,7 @@
       "id": "leave_drop_out_at_home",
       "file": "src/ants_app/game_menu.cpp",
       "old": "if (networked && other_sides >= 2) return LeaveKind::DropOut;",
-      "new": "if (other_sides >= 2) return LeaveKind::DropOut;",
+      "new": "if ((networked || true) && other_sides >= 2) return LeaveKind::DropOut;",
       "build": [
         "test_game_menu"
       ],
@@ -535,7 +535,7 @@
       "id": "leave_watch_first_lost",
       "file": "src/ants_app/game_menu.cpp",
       "old": "    if (watching) return LeaveKind::Watch;\n",
-      "new": "",
+      "new": "    if (watching && false) return LeaveKind::Watch;\n",
       "build": [
         "test_game_menu"
       ],
@@ -545,7 +545,7 @@
       "id": "leave_held_lost",
       "file": "src/ants_app/game_menu.cpp",
       "old": "    if (held) return LeaveKind::Held;\n",
-      "new": "",
+      "new": "    if (held && false) return LeaveKind::Held;\n",
       "build": [
         "test_game_menu"
       ],
@@ -582,10 +582,10 @@
       "test": "./build/tests/test_app/test_game_menu"
     },
     {
-      "id": "master_100_invalid",
+      "id": "master_101_valid",
       "file": "src/ants_app/game_menu.cpp",
       "old": "store.get_int(key(kMaster), 100, 0, kMasterMax + 1)",
-      "new": "store.get_int(key(kMaster), 100, 0, kMasterMax)",
+      "new": "store.get_int(key(kMaster), 100, 0, kMasterMax + 2)",
       "build": [
         "test_game_menu"
       ],
@@ -723,9 +723,9 @@
     },
     {
       "id": "menu_over_a_vote",
-      "file": "src/ants_app/application_game_menu.cpp",
-      "old": "return info.vote_open || info.reconnecting;",
-      "new": "return info.reconnecting;",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "(networked && (vote_open || reconnecting))",
+      "new": "(networked && (reconnecting || (vote_open && false)))",
       "build": [
         "test_game_menu"
       ],
@@ -733,9 +733,9 @@
     },
     {
       "id": "menu_over_a_dialog",
-      "file": "src/ants_app/application_game_menu.cpp",
-      "old": "if (hud_.is_modal_open() || catch_up_screen_active()) return true;",
-      "new": "if (catch_up_screen_active()) return true;",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return modal_open || catch_up ||",
+      "new": "return (modal_open && false) || catch_up ||",
       "build": [
         "test_game_menu"
       ],
@@ -753,9 +753,9 @@
     },
     {
       "id": "leave_kind_forgets_held",
-      "file": "src/ants_app/application_game_menu.cpp",
-      "old": "(net_->paused() || catch_up_screen_active() || hud_.is_match_start_modal_active())",
-      "new": "(net_->paused() || catch_up_screen_active())",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return networked && (paused || catch_up || start_modal);",
+      "new": "return networked && (paused || catch_up || (start_modal && false));",
       "build": [
         "test_game_menu"
       ],
@@ -917,6 +917,26 @@
       "old": "            fill();\n            input.addEventListener('input', function () {\n                fill();\n",
       "new": "            input.addEventListener('input', function () {\n",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "held_without_the_net",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return networked && (paused || catch_up || start_modal);",
+      "new": "return (networked || true) && (paused || catch_up || start_modal);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "catch_up_needs_no_answer",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return modal_open || catch_up || (networked",
+      "new": "return modal_open || (catch_up && false) || (networked",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
     }
   ]
 }

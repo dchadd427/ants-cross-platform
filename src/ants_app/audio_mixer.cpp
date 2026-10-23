@@ -378,6 +378,11 @@ void AudioMixer::set_output_gain(float gain) {
     output_gain_target_ = std::clamp(gain, 0.0f, 1.0f);
 }
 
+float AudioMixer::output_gain() const {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    return output_gain_target_;
+}
+
 void AudioMixer::set_sfx_volume(float volume) {
     set_sound_volume(static_cast<int32_t>(std::clamp(volume, 0.0f, 1.0f) * 100.0f + 0.5f));
 }

@@ -172,6 +172,14 @@ LeaveKind leave_kind(bool watching, bool held, bool networked, uint32_t other_si
     return LeaveKind::EndsMatch;
 }
 
+bool match_is_held(bool networked, bool paused, bool catch_up, bool start_modal) noexcept {
+    return networked && (paused || catch_up || start_modal);
+}
+
+bool needs_answer(bool modal_open, bool catch_up, bool networked, bool vote_open, bool reconnecting) noexcept {
+    return modal_open || catch_up || (networked && (vote_open || reconnecting));
+}
+
 bool leave_needs_confirm(LeaveKind kind) noexcept {
     return kind != LeaveKind::Held && kind != LeaveKind::Watch;
 }

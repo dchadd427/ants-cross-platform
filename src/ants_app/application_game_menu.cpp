@@ -57,17 +57,21 @@ int Application::game_menu_where() const {
 
 // A dialog of the match, a vote, a lost link or the catch-up screen needs its answer first: the panel does not open over it and closes when one comes up
 bool Application::game_menu_needs_answer() const {
-    if (hud_.is_modal_open() || catch_up_screen_active()) return true;
-    if (!network_active()) return false;
-    const net::PauseInfo info = net_->pause_info();
-    return info.vote_open || info.reconnecting;
+    const bool networked = network_active();
+    const net::PauseInfo info = networked ? net_->pause_info() : net::PauseInfo{};
+    return game_menu::needs_answer(hud_.is_modal_open(), catch_up_screen_active(), networked, info.vote_open, info.reconnecting);
+}
+
+// The match is held: confirm_quit and Leave game's kind read the same rule
+bool Application::match_held() const {
+    const bool networked = network_active();
+    return game_menu::match_is_held(networked, networked && net_->paused(), catch_up_screen_active(), hud_.is_match_start_modal_active());
 }
 
 // What Leave game would do (the rules of confirm_quit, in the same order)
 int Application::game_menu_leave_kind() const {
-    const bool held = network_active() && (net_->paused() || catch_up_screen_active() || hud_.is_match_start_modal_active());
     const bool running = state_ == AppState::Playing && !sim_.is_match_over();
-    return static_cast<int>(game_menu::leave_kind(replay_mode_, held, network_active(), sim_.other_sides(local_player_id_), running));
+    return static_cast<int>(game_menu::leave_kind(replay_mode_, match_held(), network_active(), sim_.other_sides(local_player_id_), running));
 }
 
 void Application::game_menu_set_open(bool open) {

@@ -803,6 +803,7 @@ private:
     void sync_game_menu_settings();                       // Ctrl+L flipped the hit point numbers: remembered
     int game_menu_where() const;                          // -1 no match screen, 0 a match, 1 a recording or a live match that is watched
     bool game_menu_needs_answer() const;                  // a dialog, a vote or a lost link comes first
+    bool match_held() const;                              // a seat is missing, the countdown runs or the link is on its way back (confirm_quit and Leave game)
     int game_menu_leave_kind() const;                     // game_menu::LeaveKind of Leave game now
     bool game_menu_takes(const SDL_Event& event) const noexcept;   // the panel is up and the event is one that the game does not take (the keys, text, clicks and wheel)
     void end_game_menu_frame();                           // the panel was closed: the game takes input again after the events of this frame

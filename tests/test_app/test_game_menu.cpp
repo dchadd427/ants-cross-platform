@@ -182,6 +182,11 @@ void test_leave() {
     check(gm::leave_kind(false, false, false, 2, true) == K::EndsMatch && gm::leave_kind(false, false, false, 0, true) == K::EndsMatch && gm::leave_kind(false, false, true, 0, true) == K::EndsMatch, "a game at home against several, or alone: the match ends");
     check(gm::leave_kind(false, false, true, 1, false) == K::EndsMatch && gm::leave_kind(false, false, false, 1, false) == K::EndsMatch, "a match that is over is no forfeit");
     check(gm::leave_needs_confirm(K::EndsMatch) && gm::leave_needs_confirm(K::DropOut) && gm::leave_needs_confirm(K::Forfeit) && !gm::leave_needs_confirm(K::Held) && !gm::leave_needs_confirm(K::Watch), "only a leave that loses something asks");
+    check(gm::match_is_held(true, true, false, false) && gm::match_is_held(true, false, true, false) && gm::match_is_held(true, false, false, true), "a network match is held by a pause, the catch-up screen or the countdown card, each alone");
+    check(!gm::match_is_held(true, false, false, false) && !gm::match_is_held(false, true, true, true), "...and by nothing else; a game at home is never held");
+    check(gm::needs_answer(true, false, false, false, false) && gm::needs_answer(false, true, false, false, false), "a dialog of the match or the catch-up screen needs its answer, at home too");
+    check(gm::needs_answer(false, false, true, true, false) && gm::needs_answer(false, false, true, false, true), "a vote or a lost link in a network match needs its answer");
+    check(!gm::needs_answer(false, false, true, false, false) && !gm::needs_answer(false, false, false, true, true), "...and nothing else does (no vote or lost link is one at home)");
     const std::string json = gm::describe_json(false, true);
     for (const K kind : {K::EndsMatch, K::DropOut, K::Forfeit}) check(has(json, "{\"kind\":" + std::to_string(static_cast<int>(kind)) + ",\"title\":"), "the question of every asking kind is in the JSON");
     check(!has(json, "{\"kind\":3") && !has(json, "{\"kind\":4"), "and none for a held match or a recording");
@@ -288,6 +293,21 @@ void test_esc() {
         check(asked == 2 && !app.hud().has_selection(), "an ant that is selected is deselected, not asked about");
     }
 
+    if (!own.empty()) {                                        // a pedestal that is latched is something to cancel, even with nothing selected (a latch outlives the selection)
+        app.hud().select_ant(own[0]);
+        const int32_t dx = app.layout().dx();
+        ViewportCamera& cam = app.renderer().camera();
+        app.hud().handle_mouse_down(485 + dx, 160, SDL_BUTTON_LEFT, app.sim(), cam);
+        app.hud().handle_mouse_up(485 + dx, 160, SDL_BUTTON_LEFT, app.sim(), cam);
+        app.hud().clear_selection();
+        check(app.hud().is_move_latched() && !app.hud().has_selection(), "(the Move pedestal is latched and nothing is selected)");
+        press_key(app, SDLK_ESCAPE);
+        check(asked == 2 && !app.hud().is_move_latched(), "Esc lets a latched pedestal go and asks for nothing");
+        press_key(app, SDLK_ESCAPE);
+        check(asked == 3, "...and the next one asks");
+        asked = 2;
+    }
+
     app.hud().open_quit_dialog();
     check(app.game_menu_get(gm::kFactNeedsAnswer) == 1, "the quit dialog needs its answer");
     press_key(app, SDLK_ESCAPE);
@@ -328,7 +348,11 @@ void test_values() {
 
         check(app.game_menu_set(gm::kMaster, 41) && app.game_menu_get(gm::kMaster) == 41, "Master volume is taken");
         check(app.game_menu_set(gm::kMaster, 400) && app.game_menu_get(gm::kMaster) == 100 && app.game_menu_set(gm::kMaster, -4) && app.game_menu_get(gm::kMaster) == 0, "...and held to 0 .. 100");
+        check(std::abs(app.audio_mixer().output_gain() - 0.0f) < 1e-6f, "(Master 0 is silence in the mixer)");
         app.game_menu_set(gm::kMaster, 41);
+        check(std::abs(app.audio_mixer().output_gain() - app.menu_settings().gain()) < 1e-6f && app.audio_mixer().output_gain() > 0.4f, "Master volume reaches the mixer");
+        check(app.game_menu_set(gm::kMute, 1) && app.audio_mixer().output_gain() == 0.0f, "Mute silences the mixer");
+        check(app.game_menu_set(gm::kMute, 0) && std::abs(app.audio_mixer().output_gain() - app.menu_settings().gain()) < 1e-6f, "...and Off gives Master back");
         check(app.game_menu_set(gm::kMute, 1) && app.game_menu_get(gm::kMute) == 1 && app.game_menu_get(gm::kMaster) == 41, "Mute is on and Master stays where it was");
         check(app.game_menu_get(gm::kMusic) == 65 && app.game_menu_get(gm::kEffects) == 100, "...and so do the original's two volumes");
         check(app.game_menu_set(gm::kMusic, 30) && app.game_menu_set(gm::kEffects, 77) && app.game_menu_set(gm::kScroll, 12), "the original's sliders are taken");
@@ -389,8 +413,12 @@ void test_input() {
     };
     check(edge() < 0.0f, "(the map scrolls left with the pointer on the left edge)");
 
+    const LayoutRect view = app.layout().view();
+    app.hud().handle_mouse_down(view.x + 100, view.y + 100, SDL_BUTTON_LEFT, app.sim(), app.renderer().camera());
+    check(app.hud().is_dragging(), "(a rubber band is begun with the left button)");
     app.game_menu_set_open(true);
     check(app.game_menu_is_open(), "the panel is up");
+    check(!app.hud().is_dragging(), "what the button began before it is let go, without its act");
     push_text("b");
     push_key(SDLK_b);
     push_key(SDLK_ESCAPE);
@@ -410,6 +438,22 @@ void test_input() {
     check(app.hud().is_show_hp() == had_numbers, "Ctrl+L does not turn the numbers");
 
     check(edge() == 0.0f, "the map does not scroll at the edge while the panel is up");
+    const auto finger = [&](uint32_t type) {
+        SDL_Event e;
+        SDL_zero(e);
+        e.type = type;
+        e.tfinger.type = type;
+        e.tfinger.timestamp = SDL_GetTicks();
+        e.tfinger.touchId = 7;
+        e.tfinger.fingerId = 1;
+        e.tfinger.x = 0.5f;
+        e.tfinger.y = 0.5f;
+        SDL_PushEvent(&e);
+        app.run_frame_with_delta(0.016f);
+    };
+    finger(SDL_FINGERDOWN);
+    check(app.touch().fingers() == 0, "a finger that goes down on the panel is not the game's");
+    finger(SDL_FINGERUP);
 
     app.game_menu_set_open(false);
     check(app.game_menu_is_open(), "closing waits for the events that are queued");
@@ -421,6 +465,9 @@ void test_input() {
     app.run_frame_with_delta(0.016f);
     check(app.hud().get_chat_input() == "d", "the next frame's text is the game's again");
     check(edge() < 0.0f, "and the map scrolls at the edge again");
+    finger(SDL_FINGERDOWN);
+    check(app.touch().fingers() == 1, "(the control: a finger is the game's again)");
+    finger(SDL_FINGERUP);
 }
 
 void test_acts() {
@@ -440,6 +487,18 @@ void test_acts() {
         app.game_menu_set_open(true);
         check(app.game_menu_do(gm::kActLeave) && !app.game_menu_is_open(), "Leave game is taken");
         check(!app.is_running() || app.sim().is_match_over(), "...and is the quit dialog's Yes: the program ends, or the match ends for a forfeit");
+    }
+    {
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
+        check(rig.ok, "the match is up (one opponent left)");
+        if (!rig.ok) return;
+        Application& app = rig.app;
+        app.sim().drop_player(2);
+        app.sim().drop_player(3);
+        check(app.sim().other_sides(app.local_player_id()) == 1 && app.game_menu_get(gm::kFactLeave) == static_cast<int>(gm::LeaveKind::Forfeit), "Leave game's kind is a forfeit");
+        app.game_menu_set_open(true);
+        check(app.game_menu_do(gm::kActLeave) && !app.game_menu_is_open(), "Leave game is taken");
+        check(app.sim().is_match_over() && app.is_running(), "...and is the quit dialog's Yes: the Quit command ends the match (the results are up), the program does not end");
     }
     {
         AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), false, true);

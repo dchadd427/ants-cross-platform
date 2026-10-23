@@ -82,6 +82,10 @@ enum class LeaveKind : int {
 };
 LeaveKind leave_kind(bool watching, bool held, bool networked, uint32_t other_sides, bool match_running) noexcept;
 bool leave_needs_confirm(LeaveKind kind) noexcept;
+/// The match is held (a seat is missing, the countdown runs, this machine is on its way back): the one rule of the quit dialog's Yes and of Leave game
+bool match_is_held(bool networked, bool paused, bool catch_up, bool start_modal) noexcept;
+/// A dialog of the match, the catch-up screen, or (in a network match) a vote or a lost link needs its answer first: the panel does not open over it and closes when one comes up
+bool needs_answer(bool modal_open, bool catch_up, bool networked, bool vote_open, bool reconnecting) noexcept;
 
 /// The new settings, remembered under their own names in the settings file (the original's names stay as they are)
 struct MenuSettings {

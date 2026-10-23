@@ -2609,7 +2609,7 @@ void Application::confirm_quit() {
     }
     // A match that is held (a seat is missing, the countdown runs, this machine is on its way back) seals no turn, and no session plays in the lobby phases of a match that starts again after a BadRequest (the
     // catch-up screen is up): a Quit command would be lost and the player would stay. The player leaves for good instead (NetGame::leave: the key is let go of, the others are told when the link is up).
-    if (network_active() && (net_->paused() || catch_up_screen_active() || hud_.is_match_start_modal_active())) {      // (protocol 21: the countdown card has a Quit button, and the first turn is not sealed yet either)
+    if (match_held()) {      // (protocol 21: the countdown card has a Quit button, and the first turn is not sealed yet either)
         leave_game();
         return;
     }

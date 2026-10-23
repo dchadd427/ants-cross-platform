@@ -101,6 +101,7 @@ public:
     /// The settings menu's Master volume and Mute (game_menu.hpp): one gain, 0.0 .. 1.0, on everything that is heard (sounds and music). It is reached by a short ramp, so that a slider that is dragged makes no click.
     /// The Sound Volume and the Music Volume stay as they are; 1.0 (the start) changes nothing of the mix.
     void set_output_gain(float gain);
+    float output_gain() const;                  // where it is set to (not where its ramp is)
     /// The gains of a playing channel (inspection)
     bool channel_volumes(int channel_id, float& left, float& right) const;
 
