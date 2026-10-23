@@ -120,6 +120,8 @@
         function select(cell) { cursor = cell; if (env.onCursor) env.onCursor(cell); }
 
         function cellOf(p) { return View.cellAt(view, file, w, h, p.x, p.y); }
+        // where a pointer is: off the canvas or past the map's edge ({outside}), and the page point (Pick up: a lift off the map takes the thing back)
+        function whereOf(e) { var p = at(e); return { outside: p.x < 0 || p.y < 0 || p.x > w || p.y > h || !cellOf(p), x: e.clientX, y: e.clientY }; }
 
         function startStroke(id, cell) {
             if (!painter || !painter.begin(cell)) return false;
@@ -186,6 +188,7 @@
             pointers[e.pointerId] = p;
             if (stroke && stroke.id === e.pointerId) {
                 if (e.pointerType === 'mouse' && e.buttons === 0) return endStroke();               // (the button was let go where this page could not hear it)
+                if (painter.away) painter.away(whereOf(e));
                 var inside = cellOf(p); if (inside) carryOn(inside); return;
             }
             if (pending && pending.id === e.pointerId) {
@@ -216,6 +219,7 @@
             pinch = null;
             if (stroke && stroke.id === e.pointerId) {
                 var ended = stroke;
+                if (painter.away && !cancelled) painter.away(whereOf(e));
                 setStroke(null);          // (the stroke is over when the tool is told: Pick up writes its change then, and the page does not take a change while a stroke goes on)
                 if (cancelled) painter.cancel(); else painter.end();
                 if (e.pointerType !== 'mouse') touched = ended.last;

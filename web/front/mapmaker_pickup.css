@@ -1,5 +1,4 @@
-/* The Pick up tool of the map maker (web/front/mapmaker_pickup.js, docs/MAP_EDITOR.md): the bar under the map with what is picked up and its buttons, the nudge arrows, and the canvas that lies over
-   the map (the ring and the ghost). Loaded with the script, the first time the tool is chosen; the tokens are mapmaker.css's and classic.css's. Every button is 44 pixels high or more. */
+/* The Pick up tool (mapmaker_pickup.js, docs/MAP_EDITOR.md): its bar, the nudge arrows and the canvas over the map. Every button is 44 pixels high or more. */
 .cv canvas.pk-over { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
 .cv .minimap, .cv .atlasnote { z-index: 2; }
 .pk-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 8px 12px 10px; color: var(--cream); background: rgba(8, 19, 15, .95); border-top: 2px solid var(--gold); box-shadow: 0 -16px 14px -8px rgba(8, 19, 15, .85); }
@@ -36,8 +35,7 @@
 }
 
 .pk-fold { display: none; }
-/* A short screen (a phone held sideways, a small window): the bar is a flowing row, the buttons 44 pixels high and next to each other, the arrows in a row, and the Hide button folds the bar
-   to one small button, so that the map and the ghost stay in view. Under 520 pixels of height the bar is fixed at the foot of the screen, as wide as the screen (a phone held sideways). */
+/* A short screen (a phone held sideways, a small window): one flowing row, the arrows in a row, a Hide button; under 520 pixels high the bar is fixed at the foot of the screen. */
 @media (min-width: 601px) and (max-height: 700px) {
     .pk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 8px 6px; }
     .pk-line, .pk-said { flex: 1 1 200px; margin: 0; font-size: 13.5px; line-height: 1.25; }

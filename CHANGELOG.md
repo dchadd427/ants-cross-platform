@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
+
+**For players:**
+- **Pick up: drag a thing off the map and let go, and it goes back.** If you let go of the mouse or lift your finger outside the map (off its edge, over the side panel or over the bar), nothing changes and the thing is back where it was. While your pointer is off the map the see-through copy goes away and the bar says "Let go here and it goes back where it was."
+- **Enter or Done while you are still dragging no longer throws the pick away.** They now wait: you lift, and the thing is put down where the copy is.
+- A drag that ends on the map still puts the thing down in one step (or stays in your hand, red, with the reason, when the place is blocked); Escape and a click work as before.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.4.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/37aeace1...1291d49e)
+
 ## v0.12.112 - 2026-10-23 - Hard computer players take the quick kill and stop sending ants where no walk goes
 
 **For players:**
@@ -600,18 +611,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...97aea54a), [the notes](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
 
-## v0.12.49 - 2026-10-15 - Computer players play maps whose food is walled in
+## Older versions (v0.12.49 and before)
 
-**For players:**
-- **Medium and Hard computer players now play maps whose food is walled in.** On HELLRAISER (rock walls round a vault of food) and POPcOrN (fire walls, a lake, a field of bombs) they used to stand still with a score of 0. A bot that finds no food it can walk to now puts a fire wall out with a Fire Ant, defuses a bomb that plugs a tunnel, or has a Bomber hop over a wall with its own bombs, takes the food and carries it home.
-- **Only where no food is in reach, and not Easy.** The bot decides once, at the start of a match. Every original map, ISLANDS and SMALL (with their ferry play), Bombz Away and the 456 community maps with food in reach play exactly as before. On 71 of the 84 community maps with a walled-in seat the computer players now play differently: over Hard 1v1, seeds 1 to 4, the scores add up to 102,535 where they were 85,988; 9 maps score more, 5 less (ANTS_PARTY 30,294 -> 27,825, Ghetto 3,706 -> 2,475, FKD Deathmatch 3,369 -> 2,400, !-Midz-! 675 -> 375, Dustbin 324 -> 45).
-- **What to watch on HELLRAISER:** the Bomber plants a bomb behind itself, hops over the wall into the vault, bites the food, hops out with it and banks it. Against another computer player the food is a fight, and a thief or a Combat Ant can take it back.
-- **POPcOrN works only in part:** a lone Hard bot banks food there in some games, two bots seldom do.
-
-**Rules / network:** none. No rule, no hash and no protocol number (protocol 21) changed; the computer players are outside the simulation.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...21c1ecd8)
-
-## Older versions (v0.12.48 and before)
-
-Every release before v0.12.49, and the long notes of v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.50, and the long notes of v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
