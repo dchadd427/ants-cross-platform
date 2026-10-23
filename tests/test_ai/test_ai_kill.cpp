@@ -4,6 +4,7 @@
 //           random tile next to it: the engine kills the victim exactly when the model says so (water, a bomb, a fire wall, the blow itself) and otherwise lets it land where the model says
 //   AI31.2  the scripted scenes: an enemy next to water and an own idle ant on the wrong side (a plain ant, a Combat Ant four tiles from the water): it walks to the right tile and the enemy drowns; the old hunts do not
 //   AI31.2c a walk that takes longer than half the clock of a job is not begun
+//   AI31.8  what is worth a trip: the enemy has stood a second, is no Combat Ant at rest, the economy's ants go only a short way
 //   AI31.3  priority: an ant that holds a chore (a rank 4 task) is taken, one that holds a pick-up (rank 3) is not; an ant that carries food never strikes; nothing happens with the plan off
 //   AI31.4  reach: an enemy across a channel that no walk crosses gets no attack order (the assault of the free ants sent them before: "Can't go there."), one on the same shore does
 //   AI31.5  the plans: Hard has the batch, Medium and Easy do not, the switch takes it out, a plan made by hand has none
@@ -259,6 +260,8 @@ void run_kill_tests() {
             const BotView view = BotView::build(sim, 0, &map);
             Tactics tactics;
             tactics.plan = plan_for(Level::Hard);
+            tactics.plan.opportunity_still = 0;                             // (the ranks are tested here: the other rules of a job have their own test, AI31.8)
+            tactics.plan.opportunity_harvest_d = 99;
             AntLedger ledger;
             ledger.set_rank(StandardBot::kOpportunity, 5);
             if (cs.holder != kNoTask) {
@@ -307,6 +310,73 @@ void run_kill_tests() {
             ASSERT_FALSE(alive(sim, enemy));
             ASSERT_EQ(rig.as<StandardBot>().opportunity().ambushes(), 1u);
             ASSERT_EQ(rig.proposed_count(CommandType::GroupMove), 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI31.8 What Is Worth A Trip: An Enemy That Has Not Stood For A Second Is Not Gone For (It Is Gone When The Striker Comes), A Combat Ant At Rest Is Not Gone For (Its Reflex Meets The Striker), An Ant Of The Economy Goes Only For A Kill That Is Close; An Ant That Stands On The Right Tile Strikes At Once")
+    {
+        struct Case {
+            sim::AntType enemy_type;
+            uint32_t still;                                                 // plan.opportunity_still
+            uint32_t wait;                                                  // ticks the enemy stands before the look
+            bool skip_guard;
+            TaskId holder;
+            int striker_x;                                                  // the stand is (20, 14): this many tiles away
+            int32_t harvest_d;
+            bool expect_job;
+        };
+        const Case cases[] = {
+            {sim::AntType::Worker, 20, 0, false, kNoTask, 16, 8, false},    // (it has just been seen: the first look)
+            {sim::AntType::Worker, 20, 24, false, kNoTask, 16, 8, true},    // (it has stood for 24 ticks)
+            {sim::AntType::Worker, 20, 24, false, kNoTask, 20, 8, true},    // (an ant on the tile strikes whatever the clock)
+            {sim::AntType::Worker, 20, 0, false, kNoTask, 20, 8, true},
+            {sim::AntType::Worker, 0, 0, false, kNoTask, 16, 8, true},      // (the rule off)
+            {sim::AntType::Combat, 0, 0, true, kNoTask, 16, 8, false},      // (a Combat Ant at rest: not by an ant that has to walk ...)
+            {sim::AntType::Combat, 0, 0, true, kNoTask, 20, 8, true},       // (... but by one that stands on the tile)
+            {sim::AntType::Combat, 0, 0, false, kNoTask, 16, 8, true},      // (the rule off)
+            {sim::AntType::Worker, 0, 0, false, StandardBot::kHarvest, 16, 2, false},    // (an ant of the economy, 4 tiles: no)
+            {sim::AntType::Worker, 0, 0, false, StandardBot::kHarvest, 18, 2, true},     // (2 tiles: yes)
+            {sim::AntType::Worker, 0, 0, false, StandardBot::kHarvest, 16, 8, true},     // (the rule off)
+            {sim::AntType::Worker, 0, 0, false, StandardBot::kBombs, 16, 2, true},       // (a chore of rank 4 is not the economy)
+        };
+        for (const Case& cs : cases) {
+            sim::SimulationEngine sim;
+            field(sim, 414);
+            for (int x = 14; x <= 26; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+            const uint32_t striker = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{cs.striker_x, 14});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 8});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 8});
+            sim.spawn_unit(1, cs.enemy_type, TileCoord{20, 15});
+            tick_all(sim, 2);
+            Tactics tactics;
+            tactics.plan = plan_for(Level::Hard);
+            tactics.plan.opportunity_still = cs.still;
+            tactics.plan.opportunity_skip_guard = cs.skip_guard;
+            tactics.plan.opportunity_harvest_d = cs.harvest_d;
+            AntLedger ledger;
+            ledger.set_rank(StandardBot::kOpportunity, 5);
+            if (cs.holder != kNoTask) {
+                ledger.set_rank(cs.holder, cs.holder == StandardBot::kHarvest ? 1 : 4);
+                ASSERT_TRUE(ledger.claim(striker, cs.holder));
+            }
+            const Profile profile = profile_for(Level::Hard);
+            OpportunityTask task(StandardBot::kOpportunity, tactics);
+            {   // the first look: the clock of the enemy starts here
+                const MapInfo map(sim);
+                const BotView view = BotView::build(sim, 0, &map);
+                Orders orders;
+                TaskContext context{view, orders, ledger, profile, map, 0};
+                task.step(context);
+            }
+            if (cs.wait > 0) tick_all(sim, cs.wait);
+            if (cs.wait > 0 || cs.still == 0 || cs.striker_x == 20) {
+                const MapInfo map(sim);
+                const BotView view = BotView::build(sim, 0, &map);
+                Orders orders;
+                TaskContext context{view, orders, ledger, profile, map, 0};
+                task.step(context);
+            }
+            ASSERT_EQ(task.started(), cs.expect_job ? 1u : 0u);
         }
     } TEST_END();
 
@@ -412,6 +482,27 @@ void run_kill_tests() {
                 if (idle_hunt && !food) ASSERT_TRUE(attacks >= 1u);
                 else ASSERT_EQ(attacks, 0u);
             }
+        }
+        {   // food beyond water is work for the Swimmers (the island play): the ants do not go hunting for want of a pile they reach on foot
+            sim::SimulationEngine sim;
+            field(sim, 432);
+            sim.set_player_eggs(0, 0);
+            for (int y = 0; y < 60; ++y) {
+                for (int x = 24; x <= 27; ++x) sim.set_terrain(x, y, sim::TERRAIN_WATER);
+            }
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{13, 12});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14, 12});
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 30});
+            place_pile(sim, 40, 12, 400, 25, {{400, 369}, {300, 370}, {200, 371}, {100, 372}, {0, kPileGone}});
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.opportunity = false;
+            plan.assault_after = 200;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(1400);
+            ASSERT_TRUE(rig.as<StandardBot>().islands().active());
+            ASSERT_FALSE(rig.as<StandardBot>().tactics().no_work);
+            ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
         }
     } TEST_END();
 

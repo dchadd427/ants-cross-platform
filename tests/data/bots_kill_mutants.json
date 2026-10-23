@@ -182,8 +182,8 @@
   {
    "id": "no_work_never",
    "file": "src/ants_ai/standard_bot.cpp",
-   "old": "tactics_.no_work = !any_reachable_pile;",
-   "new": "tactics_.no_work = false;",
+   "old": "tactics_.no_work = !any_reachable_pile && ",
+   "new": "tactics_.no_work = false && ",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.6"
   },
@@ -226,6 +226,54 @@
    "new": "            p.opportunity = false;                    // the kill batch",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.5 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.5"
+  },
+  {
+   "id": "no_work_ignores_islands",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "!(plan.islands && island_.active()) && ",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
+  },
+  {
+   "id": "no_work_ignores_gate_maps",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "&& !tactics_.gate_map && !tactics_.field_map;",
+   "new": "&& !(tactics_.gate_map && false) && !tactics_.field_map;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
+  },
+  {
+   "id": "opp_still_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (st == stood_.end() || now < st->second.since + plan.opportunity_still) continue;",
+   "new": "if (st == stood_.end() || now + 1000 < st->second.since + plan.opportunity_still) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8"
+  },
+  {
+   "id": "opp_guard_not_skipped",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (!at_stand && plan.opportunity_skip_guard && e.state == sim::UnitState::GuardIdle) continue;",
+   "new": "if (!at_stand && plan.opportunity_skip_guard && e.state == sim::UnitState::GuardIdle && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8"
+  },
+  {
+   "id": "opp_harvest_taken_far",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (owner != kNoTask && c.ledger.rank(owner) == 1) continue;",
+   "new": "if (owner != kNoTask && c.ledger.rank(owner) == 1 && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8"
+  },
+  {
+   "id": "opp_stood_clock_never_resets",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (st.since == 0 || st.tile != e.tile || e.state == sim::UnitState::Walking) {",
+   "new": "if (st.since == 0) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8"
   }
  ]
 }

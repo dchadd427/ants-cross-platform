@@ -107,6 +107,14 @@ void OpportunityTask::step(TaskContext& c) {
         }
         return;
     }
+    for (auto it = stood_.begin(); it != stood_.end();) it = find_ant(v.others(), it->first) == nullptr ? stood_.erase(it) : std::next(it);
+    for (const AntView& e : v.others()) {
+        Stand& st = stood_[e.id];
+        if (st.since == 0 || st.tile != e.tile || e.state == sim::UnitState::Walking) {
+            st.tile = e.tile;
+            st.since = now == 0 ? 1 : now;
+        }
+    }
     run_jobs(c);
     if (jobs_.size() < plan.opportunity_jobs) {
         const size_t before = jobs_.size();
@@ -217,8 +225,17 @@ void OpportunityTask::seek(TaskContext& c) {
                 for (const AntView* a : strikers) {
                     const bool at_stand = a->tile == stand;
                     if (walking && !(at_stand && a->idle())) continue;           // an enemy that walks is struck only by an ant that already stands on the right tile
+                    if (!at_stand && plan.opportunity_still > 0) {
+                        const auto st = stood_.find(e.id);
+                        if (st == stood_.end() || now < st->second.since + plan.opportunity_still) continue;      // (it has not stood long enough to be there when the striker comes)
+                    }
+                    if (!at_stand && plan.opportunity_skip_guard && e.state == sim::UnitState::GuardIdle) continue;
                     const int32_t d = at_stand ? 0 : a->tile.chebyshev_dist(stand);
                     if (d > plan.opportunity_reach || (!at_stand && held_by_other(v, stand, a->id))) continue;
+                    if (!at_stand && d > plan.opportunity_harvest_d) {
+                        const TaskId owner = c.ledger.owner(a->id);
+                        if (owner != kNoTask && c.ledger.rank(owner) == 1) continue;       // (an ant of the economy goes only for a kill that is close)
+                    }
                     const KillShot shot = kill_shot(grid, e.tile, e.hp, e.type, stand, a->type);
                     if (!shot.kills()) continue;
                     if (reserve && shot.kind != KillKind::Water) continue;

@@ -336,6 +336,9 @@ struct LevelPlan {
     int32_t opportunity_reach{8};        // ... the striker walks at most this many tiles (Chebyshev) to the tile it strikes from
     uint32_t opportunity_jobs{2};        // ... kills in hand at a time
     uint32_t opportunity_ticks{240};     // ... a job is given up this long after it began (12 s)
+    uint32_t opportunity_still{0};       // ... an enemy is a target (of a striker that has to walk to the tile) only after it has stood on its tile this long: an ant that was just ordered, or is about to be, reads as idle for a moment
+    int32_t opportunity_harvest_d{8};    // ... an ant of the economy (rank 1) is taken for a job only when the tile to strike from is at most this far from it (a trip for nothing costs food)
+    bool opportunity_skip_guard{false};  // ... an enemy Combat Ant at rest is struck only by an ant that stands on the tile already: its reflex meets a striker on the way
     bool reach_fights{false};            // a fight is not started at an enemy that no walk of the attacker reaches, and no ant is called to it (an order the engine refuses is no blow)
     bool chore_worth{false};             // a fire wall chore is done only when it is worth it: the ring round an enemy gate only while that team has food to bank (chore_worth.hpp)
     bool idle_hunt{false};               // with no food that the hill can walk to (nothing to bank, nothing to lose) the last ants do not stay home either: one ant stays (the reserve of a fight is 1, not 2 or 3)

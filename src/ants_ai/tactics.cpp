@@ -216,6 +216,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.vicinity_hunt = true;
             p.smart_counters = true;
             p.opportunity = true;                    // the kill batch (docs/BOT_FIGHT.md): Hard strikes the kill that one blow gives, and starts no fight that no walk reaches
+            p.opportunity_still = 20;                // ... only at an enemy that has stood on its tile for a second: the ones that stop for a moment are gone when the striker comes (7 in 10 jobs)
+            p.opportunity_skip_guard = true;         // ... and not at a Combat Ant at rest (its reflex meets the striker on the way)
+            p.opportunity_harvest_d = 2;             // ... and an ant of the economy goes only for a kill that is two tiles away
             p.reach_fights = true;
             p.idle_hunt = true;
             p.chore_worth = true;

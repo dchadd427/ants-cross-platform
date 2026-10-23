@@ -85,6 +85,11 @@ private:
 
     Tactics& tactics_;
     std::vector<Job> jobs_;
+    struct Stand {                           // where an enemy ant stands and since when (tick), for the ones that are not walking
+        sim::TileCoord tile{};
+        uint64_t since{0};
+    };
+    std::map<uint32_t, Stand> stood_;
     std::map<uint32_t, uint64_t> shunned_;   // enemy ant -> the tick until which no job is begun against it
     std::map<int64_t, uint64_t> bad_stands_; // a tile that no striker reached in time -> the tick until which it is not used
     uint32_t started_{0};

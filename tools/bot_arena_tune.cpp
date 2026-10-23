@@ -225,6 +225,9 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "oppreach") { p.opportunity_reach = static_cast<int32_t>(v); return true; }
     if (key == "oppjobs") { p.opportunity_jobs = static_cast<uint32_t>(v); return true; }
     if (key == "oppticks") { p.opportunity_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "oppstill") { p.opportunity_still = static_cast<uint32_t>(v); return true; }
+    if (key == "oppguard") return flag(p.opportunity_skip_guard);
+    if (key == "oppharv") { p.opportunity_harvest_d = static_cast<int32_t>(v); return true; }
     if (key == "reach") return flag(p.reach_fights);
     if (key == "idlehunt") return flag(p.idle_hunt);
     if (key == "worth") return flag(p.chore_worth);
