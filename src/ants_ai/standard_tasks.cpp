@@ -157,7 +157,7 @@ void FightTask::start_fights(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const LevelPlan& plan = tactics_.plan;
-    if (v.mine().size() <= plan.fight_reserve + (v.eggs() == 0 ? 1u : 0u)) return;                 // the last ants stay out of every fight (a wipe-out forces a hatch of 200 points, or ends the team)
+    if (v.mine().size() <= tactics_.reserve_of(v)) return;                 // the last ants stay out of every fight (a wipe-out forces a hatch of 200 points, or ends the team)
     // a blow: the attacker is the enemy ant that can be attacked and stands nearest to the place of the blow (within two tiles)
     for (const Hit& h : tactics_.memory.hits()) {
         const AntView* best = nullptr;
@@ -258,7 +258,7 @@ void FightTask::start_fire_defence(TaskContext& c) {
     if ((!plan.fire_defence && !plan.raider_hunt) || !v.has_grid()) return;
     const HillInfo& hill = c.map.hill(c.seat);
     if (!hill.present) return;
-    if (v.mine().size() <= plan.fight_reserve + (v.eggs() == 0 ? 1u : 0u)) return;
+    if (v.mine().size() <= tactics_.reserve_of(v)) return;
     const uint32_t duel_spare = duel_spare_of(tactics_);
     size_t walls = 0;
     for (const sim::TileCoord& t : SabotageTask::ring_of(hill)) walls += v.grid().in_bounds(t) && v.grid().has_fire_at(t) ? 1u : 0u;
@@ -384,7 +384,7 @@ void FightTask::start_offence(TaskContext& c) {
     const size_t assault_force = plan.assault_force + (war >= 2 ? 1u : 0u);
     if (!(plan.skirmish || plan.hunt || pressure_fights || assault_on) || !v.has_grid() || now < offence_pause_until_ || tactics_.guard_stance) return;     // (the leader of the last minute guards: no offence)
     const uint32_t odds_scale = plan.catchup && st.tier >= 3 ? 50u : pressure_fights ? 70u : 100u;
-    if (v.mine().size() <= plan.fight_reserve + (v.eggs() == 0 ? 1u : 0u)) return;                  // the last ants stay out of every fight
+    if (v.mine().size() <= tactics_.reserve_of(v)) return;      // the last ants stay out of every fight (idle_hunt: but with nothing to bank and nothing to lose only the last one)
     std::set<uint32_t> busy;                                                                         // the ants of the fights that run
     for (const auto& f : fights_) {
         for (const auto& d : f.second.defenders) busy.insert(d.first);
@@ -423,7 +423,7 @@ void FightTask::start_offence(TaskContext& c) {
     const auto form = [&](const AntView& e, int32_t reach, size_t force, bool assault = false) {
         std::vector<const AntView*> near;
         for (const AntView* a : pool) {
-            if (a->tile.chebyshev_dist(e.tile) > reach || (assault && !assault_ant(*a, pull))) continue;
+            if (a->tile.chebyshev_dist(e.tile) > reach || (assault && !assault_ant(*a, pull)) || (plan.reach_fights && !walk_reaches(c.map, c.seat, a->tile, e.tile))) continue;       // (reach_fights: no walk, no blow)
             near.push_back(a);
         }
         std::stable_sort(near.begin(), near.end(), [&](const AntView* x, const AntView* y) {
@@ -566,7 +566,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
     const LevelPlan& plan = tactics_.plan;
     const uint32_t duel_spare = duel_spare_of(tactics_);
     const AntView* target = find_ant(v.others(), f.target);
-    if (v.mine().size() <= plan.fight_reserve + (v.eggs() == 0 ? 1u : 0u)) {
+    if (v.mine().size() <= tactics_.reserve_of(v)) {
         end = true;                                                              // down to the last ants: they leave the fight
         return;
     }
@@ -719,7 +719,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         for (const AntView& a : v.mine()) {
             // (the stand batch) a Fire Ant of the own side strikes the Fire Ant that fires the gate in; with the draft every ant that can strike does
             const bool fire_striker = f.fire && plan.fire_duel && a.type == sim::AntType::Fire && a.id != duel_spare && draft_ant(v, a, shut);
-            if (f.defenders.count(a.id) != 0 || !(can_fight(v, a) || fire_striker || (draft && draft_ant(v, a, shut)))) continue;
+            if (f.defenders.count(a.id) != 0 || !(can_fight(v, a) || fire_striker || (draft && draft_ant(v, a, shut))) || (plan.reach_fights && !fire_striker && !walk_reaches(c.map, c.seat, a.tile, target->tile))) continue;
             if (f.ally && a.tile.chebyshev_dist(target->tile) > plan.ally_help_radius) continue;
             if (f.offence && a.tile.chebyshev_dist(target->tile) > (f.hunt ? plan.hunt_reach : f.assault ? plan.assault_reach : plan.skirmish_reach)) continue;
             if (f.fire && a.tile.chebyshev_dist(target->tile) > (draft && a.type == sim::AntType::Combat ? plan.fire_draft_far : kFireHuntReach)) continue;
@@ -2756,7 +2756,7 @@ void SabotageTask::step(TaskContext& c) {
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
         const TeamRow& row = v.rows()[t];
         if (t == c.seat || !row.present || row.dropped || (v.ally() < sim::MAX_PLAYERS && t == v.ally()) || !c.map.hill(t).present) continue;
-        if (plan.sabotage_safe && giveup_until_[t] > now) continue;
+        if ((plan.sabotage_safe && giveup_until_[t] > now) || (plan.chore_worth && !fire_in_worth_it(v, c.map, t))) continue;       // (chore_worth: a ring round a gate that has nothing to bank costs its owner nothing)
         if (row.score >= static_cast<int32_t>(plan.sabotage_min_score) && row.score > best) {
             best = row.score;
             victim = t;

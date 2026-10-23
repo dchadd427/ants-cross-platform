@@ -396,7 +396,7 @@ void run_cantgo_tests() {
                     b.level = Level::Hard;
                     spec.bots.push_back(b);
                 }
-                spec.factory = [aware](const BotSpec& b) { return std::make_unique<StandardBot>(b.level, b.style, [aware](LevelPlan& p) { p.cantgo_aware = aware; }); };
+                spec.factory = [aware](const BotSpec& b) { return std::make_unique<StandardBot>(b.level, b.style, [aware](LevelPlan& p) { without_kill_batch(p); p.cantgo_aware = aware; }); };      // (the kill batch refuses fewer orders by itself: AI31.4)
                 const ArenaResult r = play_match(spec);
                 ASSERT_TRUE(r.error.empty());
                 ASSERT_TRUE(r.match_over);
