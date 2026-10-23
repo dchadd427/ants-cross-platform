@@ -851,8 +851,8 @@
     {
       "id": "hover_done_acts_on_mouse",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "            var f = file();\n            previewOff();\n            if (st.mode !== 'moving' || !st.items.length) return;",
-      "new": "            var f = file();\n            if (st.mode !== 'moving' || !st.items.length) return;",
+      "old": "            if (st.drag) return;          // (the button is still down: the lift puts it down)\n            previewOff();",
+      "new": "            if (st.drag) return;          // (the button is still down: the lift puts it down)",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -970,15 +970,15 @@
     {
       "id": "drop_lift_does_not_drop",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "if (d.moved && st.mode === 'moving') return done();",
+      "old": "if (d.moved && st.mode === 'moving') return off ? letGo() : done();",
       "new": "if (d.moved && st.mode === 'moving') return render();",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
       "id": "drop_click_on_ghost_drops",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "if (d.moved && st.mode === 'moving') return done();",
-      "new": "if (st.mode === 'moving') return done();",
+      "old": "if (d.moved && st.mode === 'moving') return off ? letGo() : done();",
+      "new": "if (st.mode === 'moving') return off ? letGo() : done();",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -1021,6 +1021,69 @@
       "file": "web/front/mapmaker_tools.js",
       "old": "abandon: function () { if (mine() && mine().abandon) return mine().abandon(); painter.end(); },",
       "new": "abandon: function () { painter.end(); },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_lift_puts_down",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return off ? letGo() : done();",
+      "new": "return done();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_lift_always_back",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return off ? letGo() : done();",
+      "new": "return letGo();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_bar_not_counted",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "w.x >= r.left && w.x <= r.right",
+      "new": "w.x >= r.left + 99999 && w.x <= r.right",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_not_reset_by_the_lift",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "var d = st.drag, off = st.away;\n                st.drag = null; st.away = false;",
+      "new": "var d = st.drag, off = st.away;\n                st.drag = null;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_done_does_not_wait",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "            if (st.drag) return;          // (the button is still down: the lift puts it down)\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_text_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "(st.away ? 'Let go here and it goes back where it was.' : v.plain",
+      "new": "(v.plain",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_ghost_still_drawn",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!moving || st.away) return;",
+      "new": "if (!moving) return;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_not_for_a_ghost_drag",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "var d = st.drag, off = st.away;",
+      "new": "var d = st.drag, off = st.away && d && d.kind !== 'ghost';",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "away_tools_never_told",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "away: function (where) { if (mine() && mine().away) mine().away(where); },",
+      "new": "away: function (where) { void where; },",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     }
   ]
