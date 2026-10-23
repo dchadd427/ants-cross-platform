@@ -490,6 +490,13 @@
    "old": "lctx.drawImage(scaledPicture(it ? id : 'f' + id, img, sx, sy, sw, sh, iw, ih), dx, dy);",
    "new": "lctx.imageSmoothingQuality = 'low'; lctx.drawImage(img, sx, sy, sw, sh, dx + 0.4, dy + 0.4, iw, ih);",
    "test": "python3 tests/scripts/web_mapmaker_browser.py --web \"$ANTS_WEB_URL\" --only layer"
+  },
+  {
+   "id": "sprites_ghost_not_offered",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "chip: chip, ghost: ghost,",
+   "new": "chip: chip,",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   }
  ]
 }

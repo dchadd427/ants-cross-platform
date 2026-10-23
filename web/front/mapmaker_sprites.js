@@ -251,7 +251,7 @@
         }
 
         return {
-            load: load, FROM: FROM, ANT_FROM: ANT_FROM, draw: draw, chip: chip,
+            load: load, FROM: FROM, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
             ready: function () { return ready; }, failed: function () { return failed; },
             // A ground tile's picture drawn s by s pixels at (x, y) of a canvas (the before and after of Fix edges: mapmaker_edges.js); false when there is none
             ground: function (ctx, id, x, y, s) {

@@ -411,6 +411,29 @@
         s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
         doc.head.appendChild(c); doc.head.appendChild(s);
     }
+    // The Pick up tool (mapmaker_pickup.js and its style), loaded the first time the tool is chosen: done(the part), or done(null) when it did not load. Each of the two files is asked for again
+    // until it is there (a script that came while its style did not is not enough), and a tag of a file that failed is taken away before the next one is added.
+    var pickPart = { script: null, style: null };
+    function loadPick(done) {
+        var left = 0, bad = false;
+        function end(ok) { bad = bad || !ok; if (--left) return; done(bad || !win.MapPickup ? null : win.MapPickup); }
+        function add(slot, tag, attr, url, extra) {
+            var old = pickPart[slot], n, rec;
+            if (old && old.ok) return;
+            if (old && old.node && old.node.parentNode) old.node.parentNode.removeChild(old.node);
+            n = el(tag); rec = pickPart[slot] = { node: n, ok: false }; left++;
+            if (extra) extra(n);
+            n.onload = function () { rec.ok = slot === 'style' || !!win.MapPickup; end(rec.ok); };
+            n.onerror = function () { end(false); };
+            n[attr] = url;
+            doc.head.appendChild(n);
+        }
+        if (win.MapPickup && !pickPart.script) pickPart.script = { ok: true };
+        if (win.MapPickup && pickPart.style && pickPart.style.ok) return done(win.MapPickup);
+        add('style', 'link', 'href', 'front/mapmaker_pickup.css', function (n) { n.rel = 'stylesheet'; });
+        add('script', 'script', 'src', 'front/mapmaker_pickup.js');
+        if (!left) done(win.MapPickup || null);
+    }
     function antsAbout() { showSummary(); var p = summed && summed.props; return p && !p.error ? { ant: win.MapProps.summary(p).ant, eggs: p.eggs } : null; }
 
     var ACTIONS = {
@@ -442,7 +465,7 @@
                 tile: $('tile-btn'), map: $('map'), side: doc.querySelector('aside.side'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), autoEdges: [$('auto-edges-btn'), $('auto-edges-mob')], undo: $('undo-btn'), redo: $('redo-btn'),
                 stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more')
             },
-            loadAnts: loadAnts, about: antsAbout, props: function () { ACTIONS.props(); }, convert: function () { ACTIONS.convert(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
+            loadAnts: loadAnts, loadPick: loadPick, about: antsAbout, props: function () { ACTIONS.props(); }, convert: function () { ACTIONS.convert(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
         // The page asks before it is closed only when the work is not safe in the browser (the browser keeps nothing, or the last change has not been written yet)
         win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending)) { e.preventDefault(); e.returnValue = ''; } });

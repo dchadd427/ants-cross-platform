@@ -207,7 +207,7 @@
     {
       "id": "browser_tap_only_not_handed_over",
       "file": "web/front/mapmaker_tools.js",
-      "old": "(mine() ? mine().tapOnly() : places())",
+      "old": "(mine() ? mine().tapOnly(cell) : places())",
       "new": "places()",
       "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only ants"
     },

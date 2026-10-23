@@ -354,11 +354,11 @@ function caseF() {
     equal(Palette.TOOLS.filter((t) => t.draws).map((t) => t.id), ['ground', 'objects', 'erase'], 'the tools that paint with a brush');
     equal(Palette.TOOLS.filter((t) => t.places).map((t) => t.id), ['bigger', 'hills', 'ants', 'food'], 'the tools that put a whole thing with a tap');
     check(Palette.TOOLS.every((t) => Palette.usable(t.id)) && !Palette.usable('nothing'), 'every tool can be chosen');
-    equal(Palette.TOOLS.map((t) => t.id), ['ground', 'objects', 'bigger', 'hills', 'ants', 'food', 'erase', 'move'], 'the eight tools: the seven of the picture, and Bigger after Objects');
+    equal(Palette.TOOLS.map((t) => t.id), ['ground', 'objects', 'bigger', 'hills', 'ants', 'food', 'erase', 'pickup', 'pan'], 'the nine tools: the seven of the picture, Bigger after Objects, and Pick up and Pan (the old Move) last');
     check(Palette.toolOfKey('G').id === 'ground' && Palette.toolOfKey('x') === null, 'a letter finds its tool, in either case');
-    check(Palette.paints('ground') && Palette.paints('erase') && !Palette.paints('move') && !Palette.paints('hills'), 'which tools paint');
+    check(Palette.paints('ground') && Palette.paints('erase') && !Palette.paints('pan') && !Palette.paints('pickup') && !Palette.paints('hills') && !Palette.places('pickup') && Palette.usable('pickup') && Palette.usable('pan') && !Palette.usable('move'), 'which tools paint');
     check(Palette.places('hills') && Palette.places('ants') && Palette.places('food') && !Palette.places('ground') && !Palette.places('erase'), 'which tools put a whole thing');
-    equal(Palette.TOOLS.map((t) => t.key), ['g', 'o', 'k', 'h', 'a', 'f', 'e', 'm'], 'the letters of the tools (B, the two brackets and the keys of the canvas are not among them)');
+    equal(Palette.TOOLS.map((t) => t.key), ['g', 'o', 'k', 'h', 'a', 'f', 'e', 'p', 'm'], 'the letters of the tools (B, the two brackets and the keys of the canvas are not among them)');
     const teams = Palette.teams();
     equal(teams.map((t) => t.label), ['Green', 'Red', 'Blue', 'Black'], 'the four teams in the order of the game\'s seats, by the game\'s names');
     check(teams.every((t) => t.color === Tiles.TEAMS[t.key] && t.color === Tiles.css(0, Blocks.TEAMS[t.id].hill)), 'each with the color that its hill has on the canvas');
@@ -439,8 +439,8 @@ function toolsPage(file, opts) {
 
 function caseG() {
     const p = toolsPage(open(9, 30, 30));
-    equal(p.host.tools.map((b) => [b.getAttribute('data-tool'), b.disabled]), [['ground', false], ['objects', false], ['bigger', false], ['hills', false], ['ants', false], ['food', false], ['erase', false], ['move', false]], 'all eight tools are on');
-    check(p.button('ground').getAttribute('aria-pressed') === 'true' && p.button('move').getAttribute('aria-pressed') === 'false', 'Ground is the tool at the start');
+    equal(p.host.tools.map((b) => [b.getAttribute('data-tool'), b.disabled]), [['ground', false], ['objects', false], ['bigger', false], ['hills', false], ['ants', false], ['food', false], ['erase', false], ['pickup', false], ['pan', false]], 'all nine tools are on');
+    check(p.button('ground').getAttribute('aria-pressed') === 'true' && p.button('pan').getAttribute('aria-pressed') === 'false' && p.button('pickup').getAttribute('aria-pressed') === 'false', 'Ground is the tool at the start');
     check(!p.host.box.hidden && !p.host.tile.hidden && p.host.swatches.children.length === 5 && p.host.title.textContent === 'Ground', 'with its palette of 5 kinds');
     check(p.host.tile.querySelector('span').textContent === 'Gravel' && p.host.tile.querySelector('i').style.background === Tiles.css(485, Tiles.EMPTY2), 'the phone\'s palette button shows the tile that is chosen');
     p.host.tile.click();
@@ -457,16 +457,20 @@ function caseG() {
     check(p.tools.state().ground === 487, 'and the ground that was chosen is kept');
     p.button('erase').click();
     check(p.host.box.hidden && p.host.tile.hidden && p.host.fill.disabled && p.brush(5).disabled === false, 'Erase has no palette (nor the phone\'s palette button) and no Fill, and keeps the brushes');
-    p.button('move').click();
-    check(p.host.box.hidden && p.painter().size() === 0 && p.brush(5).disabled && p.host.fill.disabled, 'Move paints nothing: no brush, no fill');
+    p.button('pan').click();
+    check(p.host.box.hidden && p.painter().size() === 0 && p.brush(5).disabled && p.host.fill.disabled, 'Pan paints nothing: no brush, no fill');
+    check(!p.painter().canMove({ row: 1, column: 1 }) && !p.painter().tapOnly({ row: 1, column: 1 }) && p.painter().begin({ row: 1, column: 1 }) === false && p.painter().key({ key: 'ArrowUp' }) === false, 'Pan moves nothing: a drag only looks around, whatever stands there, and it has no keys');
+    p.button('pickup').click();
+    check(p.host.box.hidden && p.painter().size() === 0 && p.brush(5).disabled && p.host.fill.disabled && p.tools.state().tool === 'pickup', 'Pick up paints nothing either (its own part loads on demand: the page has none in this check)');
     p.stroking(true); p.button('hills').click(); p.stroking(false);
-    check(p.tools.state().tool === 'move', 'a tool cannot be chosen while a stroke is going on');
+    check(p.tools.state().tool === 'pickup', 'a tool cannot be chosen while a stroke is going on');
 
     // keys
     const q = toolsPage(open(9, 30, 30));
     q.doc.key('o'); check(q.tools.state().tool === 'objects', 'the letter O chooses Objects');
     q.doc.key('E'); check(q.tools.state().tool === 'erase', 'E chooses Erase (either case)');
-    q.doc.key('m'); check(q.tools.state().tool === 'move', 'M chooses Move');
+    q.doc.key('m'); check(q.tools.state().tool === 'pan', 'M chooses Pan (the letter of the old Move)');
+    q.doc.key('p'); check(q.tools.state().tool === 'pickup', 'P chooses Pick up');
     q.doc.key('h'); check(q.tools.state().tool === 'hills', 'H chooses Hills');
     q.doc.key('a'); check(q.tools.state().tool === 'ants', 'A chooses Ants');
     q.doc.key('F'); check(q.tools.state().tool === 'food', 'F chooses Food (either case)');
@@ -537,12 +541,12 @@ function caseG() {
     z.host.swatches.children[z.host.swatches.children.length - 1].click();
     check(z.painter().begin({ row: 1, column: 1 }) === false && z.said.length === 1 && /cannot be used/.test(z.said[0]), 'a tile beyond the dictionary is said in plain words, and nothing is painted: ' + z.said[0]);
     Palette.GROUND.pop();
-    // Erase through the painter; Move does not paint
+    // Erase through the painter; Pan does not paint
     r.button('erase').click();
     check(pt.size() === 1 && pt.begin({ row: 2, column: 2 }) === true, 'Erase has a stroke');
     pt.end();
-    r.button('move').click();
-    check(pt.size() === 0 && pt.begin({ row: 2, column: 2 }) === false, 'Move has none');
+    r.button('pan').click();
+    check(pt.size() === 0 && pt.begin({ row: 2, column: 2 }) === false, 'Pan has none');
     // the brush buttons
     r.button('ground').click();
     r.brush(5).click();
@@ -629,6 +633,26 @@ function caseH2() {
     p.canvas.fire('keydown', { key: 'ArrowRight', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, preventDefault() {} });
     p.canvas.fire('keydown', { key: 'Enter', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, preventDefault() {} });
     check(p.calls.length === 1, 'Enter puts it at the marked square');
+    // the tool is told which cell a press is on (Pick up: a press on a thing is a drag, one on empty ground a tap)
+    p = tapPage();
+    p.api.setPainter({ size: () => 0, tapOnly: (cell) => !!cell && typeof cell.row === 'number' && typeof cell.column === 'number', begin: (c) => { p.calls.push('begin'); return false; }, extend: () => {}, end: () => {}, cancel: () => {} });
+    p.mouse('pointerdown'); p.mouse('pointerup', { buttons: 0 });
+    check(p.calls.join() === 'begin' && !p.api.isStroking(), 'the canvas gives the tool the cell that was pressed, and a tool that takes a tap there gets it');
+    // a tool with keys of its own is asked first: its keys are not the cursor's
+    p = tapPage();
+    const keyed = [], where = () => p.canvas.attrs['data-center'];
+    p.api.setPainter({ size: () => 0, tapOnly: () => true, key: (e) => { keyed.push(e.key); return e.key === 'ArrowRight'; }, begin: () => false, extend: () => {}, end: () => {}, cancel: () => {} });
+    const prevented = [], event = (key) => ({ key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, preventDefault() { prevented.push(key); } });
+    p.canvas.fire('keydown', event('ArrowRight'));
+    p.canvas.fire('keydown', event('+'));
+    check(keyed.join() === 'ArrowRight,+' && prevented.join() === 'ArrowRight,+', 'a key of the tool is the tool\'s first: the tool is asked, and what it takes is not the map\'s (the arrow does not move the marked square: ' + keyed.join() + ')');
+    // a tool that shows what a click would do is told where the mouse is, and when it has left the map (Pick up: the ghost follows the mouse)
+    p = tapPage();
+    const hovered = [];
+    p.api.setPainter({ size: () => 0, tapOnly: () => true, hover: (c) => hovered.push(c ? c.row + ',' + c.column : 'none'), begin: () => false, extend: () => {}, end: () => {}, cancel: () => {} });
+    p.mouse('pointermove', { buttons: 0 }); p.canvas.fire('pointerleave');
+    check(hovered.length === 2 && /^\d+,\d+$/.test(hovered[0]) && hovered[1] === 'none', 'the mouse over a cell, and leaving the map, are told to the tool: ' + hovered.join(' | '));
+    check(p.canvas.attrs['data-view'] !== undefined && /^[0-9.]+,[0-9.]+,[0-9.]+$/.test(p.canvas.attrs['data-view']), 'the canvas says its view exactly (what a test reads): ' + p.canvas.attrs['data-view']);
 }
 
 // ---- I: hills ----
@@ -1244,7 +1268,7 @@ function caseN() {
     q.tools.use(null, null);
     check(q.host.name.textContent === 'Gravel' && q.host.swatches.children.length === 5, 'without the sheets the page keeps its five kinds');
 
-    // Plants (walk-under canopy and power-up droppers) and Move dragging
+    // Plants (walk-under canopy and power-up droppers)
     const pm = toolsPage(File.parse(mapWith(8, 24, 24, 486, [], []))), pmt = pm.painter();
     pm.button('objects').click();
     const clover = pm.host.swatches.children.filter((b) => b.getAttribute('data-tile') === '404')[0];
@@ -1258,29 +1282,22 @@ function caseN() {
     pmt.begin({ row: 8, column: 8 });
     play = Blocks.layout(pm.file());
     check(play.records.length === 2 && play.waypoints.length === 2 && play.waypoints[1].flag === 1 && play.waypoints[1].interval === 30, 'a power-up plant writes a 52-byte Block 4 dropper (flag 1) and names the 5 power-ups');
-    // Move tool drags placed items and undoes in one step
-    pm.button('move').click();
-    check(pmt.canMove({ row: 6, column: 6 }) === true && pmt.canMove({ row: 1, column: 1 }) === false, 'Move recognizes a placed plant and ignores empty ground');
-    check(pmt.begin({ row: 6, column: 6 }) === true, 'pressing on a placed item starts a drag move');
-    pmt.extend({ row: 6, column: 6 }, { row: 10, column: 12 });
-    pmt.end();
+    // Pan does not drag a placed item any more (Pick up does: tests/scripts/web_mapmaker_pickup_check.js)
+    pm.button('pan').click();
+    check(pmt.canMove({ row: 6, column: 6 }) === false && pmt.begin({ row: 6, column: 6 }) === false, 'Pan ignores a placed plant: a drag looks around');
     play = Blocks.layout(pm.file());
-    check(play.records[0].row === 10 && play.records[0].column === 12 && play.waypoints[0].row === 10 && play.waypoints[0].column === 12, 'dragging with Move relocates the plant and its Block 4 waypoint');
-    pm.doc.key('z', { ctrlKey: true });
-    play = Blocks.layout(pm.file());
-    check(play.records[0].row === 6 && play.records[0].column === 6, 'Ctrl+Z undoes the move in one step');
+    check(play.records[0].row === 6 && play.records[0].column === 6, 'and the plant stays where it is');
 
-    // Moving a Bigger object or erasing a leftover solid ground cell clears the Layer-1 solid footprint so starting ants do not avoid the area
+    // Erasing a leftover solid ground cell clears the Layer-1 solid footprint so starting ants do not avoid the area
     const hb = toolsPage(File.parse(mapWith(8, 24, 24, 486, [], []))), hbt = hb.painter();
     hb.button('bigger').click(); hbt.begin({ row: 10, column: 10 });
     check((Edit.flags(hb.file(), 1, 10 * 24 + 10) & 1) === 1, 'placing a Bigger object marks its footprint solid on Layer 1');
-    hb.button('move').click(); hbt.begin({ row: 10, column: 10 }); hbt.extend({ row: 10, column: 10 }, { row: 16, column: 16 }); hbt.end();
-    check((Edit.flags(hb.file(), 1, 10 * 24 + 10) & 1) === 0 && (Edit.flags(hb.file(), 1, 16 * 24 + 16) & 1) === 1, 'moving the Bigger object clears the old Layer-1 solid footprint and sets the new one');
     put(hb.file(), 1, 12, 12, 486, 1, 0);
     hb.button('erase').click(); hbt.begin({ row: 12, column: 12 }); hbt.end();
     check((Edit.flags(hb.file(), 1, 12 * 24 + 12) & 1) === 0, 'erasing an empty cell with a leftover solid flag clears the solid bit');
+    hb.button('erase').click(); hbt.begin({ row: 10, column: 10 }); hbt.end();
     hb.button('ants').click(); hbt.begin({ row: 10, column: 10 });
-    check(Blocks.layout(hb.file()).records.some((r) => r.row === 10 && r.column === 10), 'starting ants can be placed directly on the cell where the moved object stood');
+    check(Blocks.layout(hb.file()).records.some((r) => r.row === 10 && r.column === 10), 'starting ants can be placed directly on the cell where the erased object stood');
 
     // Resizing a map (growing and cropping) updates dimensions, cells, anchors and Blocks 1..4 in one undoable step, and drops partially clipped multi-cell objects whole
     const rs = toolsPage(File.parse(mapWith(8, 20, 20, 486, [], []))), rst = rs.painter();
