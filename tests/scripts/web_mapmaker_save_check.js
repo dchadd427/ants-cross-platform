@@ -146,6 +146,32 @@ async function caseC() {
     store = await opened(fakeIdb(), (u) => Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new Uint8Array([8, 0, u.length]).buffer) }));
     await new Promise((res) => store.fetchMap('Mosh Pit.lvl', (err, b) => { fetched = [err, b && b[2]]; res(); }));
     equal(fetched, ['', '/maps/files/Mosh%20Pit.lvl'.length], 'fetchMap downloads /maps/files/<percent-encoded>');
+    // what the player is told when the file does not come: a file the site does not have is not a bad connection, and a bad connection is not a missing file
+    const GONE = 'This map is not available from the site right now.', SITE = 'The site could not send this map. Try again in a moment.', NET = 'The map file could not be downloaded. Check your connection and try again.';
+    const told = async (fetch, file) => {
+        const s = await opened(fakeIdb(), fetch);
+        const calls = [];
+        await new Promise((res) => { s.fetchMap(file || 'TREASURE.LVL', (err, b) => { calls.push([err, b]); res(); }); });
+        await later();
+        return calls;
+    };
+    const answer = (status, body) => () => Promise.resolve({ ok: status >= 200 && status < 300, status, arrayBuffer: () => Promise.resolve(body || new ArrayBuffer(0)) });
+    equal(await told(answer(404)), [[GONE, null]], 'a 404 says the map is not available from the site (the six originals were that before the site served them)');
+    equal(await told(answer(410)), [[GONE, null]], 'a 410 says the same');
+    equal(await told(answer(500)), [[SITE, null]], 'a 500 says the site could not send it');
+    equal(await told(answer(200, new ArrayBuffer(0))), [[SITE, null]], 'an empty file is the site\'s fault, not the connection');
+    equal(await told(() => Promise.reject(new TypeError('Failed to fetch'))), [[NET, null]], 'a failed request is the connection');
+    equal(await told(() => { throw new Error('no network'); }), [[NET, null]], 'a fetch that throws is the connection');
+    equal(await told(() => Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.reject(new Error('cut')) })), [[NET, null]], 'a body that is cut off is the connection');
+    equal(await told(answer(200, new Uint8Array([1, 2, 3]).buffer)).then((c) => c.map((x) => [x[0], x[1] && x[1].length])), [['', 3]], 'a file that comes is handed over once');
+    equal(await told(answer(404), '../x.lvl'), [[GONE, null]], 'a name that is no map file is not available');
+    {
+        let times = 0, again = 0;
+        const s = await opened(fakeIdb(), answer(200, new Uint8Array([9]).buffer));
+        await new Promise((res) => { s.fetchMap('TINY.LVL', () => { times++; res(); if (again++ === 0) throw new Error('the caller breaks'); }); });
+        await later();
+        equal(times, 1, 'a caller that throws is not told a second time that the download failed');
+    }
     // asking: the answer comes, or does not come (the timer says so)
     let fired = [], timer = null;
     const waits = Store.create({ idb: null, fetch: () => new Promise(() => {}), later: (f, ms) => { timer = [f, ms]; } });
