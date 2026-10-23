@@ -1074,6 +1074,71 @@ int main() {
         CHECK(dot_cells == 99904 && maps_with_dots == 465);                  // (the 534 maps of the folder; 101,806 in 484 of the 558 that were first taken in)
     });
 
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Fix 8: a fire wall of the file (the map maker's permanent Fire wall, entry `wallup04`, solid bit set) is the fire wall of the game: a Fire ant puts it out like one that was lit
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    run_case("LF8.1 A Fire Wall Of The File (Entry wallup04, Solid Bit): It Burns For Ever Without A Timer, A Fire Ant Puts It Out (Cell Empty, Bit Clear, No Timer), An Ant Walks Over It And A Fire Ant Can Light It Again", [] {
+        for (const char* naming : {"wallup04", "."}) {
+            LevelData level = open_ground();
+            const std::vector<TileCoord> at = open_tiles(level, 1);
+            CHECK(at.size() == 1);
+            if (at.empty()) return;
+            const TileCoord wall = at[0];
+            set_layer2(level, wall, TILE_FIREWALL, 1, static_cast<uint16_t>((wall.x << 8) | wall.y));      // its own anchor, as the map maker writes it
+            set_solid_bit(level, wall, true);
+            name_tile(level, TILE_FIREWALL, naming);
+            SimulationEngine sim;
+            sim.init(level, 5, 0x03);
+            CHECK(sim.has_fire_at(wall));
+            const TileCell& c0 = sim.grid().get_cell(wall);
+            CHECK(c0.interactive_id == TILE_FIREWALL && c0.timer_ticks == 0 && c0.static_solid && sim.grid().is_solid_object(wall));
+            for (int t = 0; t < 3700; ++t) sim.tick();                                                   // (a fire that was lit in the game burns out after 3,600 ticks: this one has no timer)
+            CHECK(sim.has_fire_at(wall));
+            const uint32_t fire = sim.spawn_unit(0, AntType::Fire, TileCoord{wall.x, wall.y + 1});
+            AntOrder put_out{};
+            put_out.ant_id = fire;
+            put_out.type = OrderType::IgniteFire;
+            put_out.target_x = wall.x;
+            put_out.target_y = wall.y;
+            sim.issue_order(put_out);
+            CHECK(sim.get_unit(fire).orig_order == AntUnit::kOrderExtinguish);
+            for (int t = 0; t < 100 && sim.has_fire_at(wall); ++t) sim.tick();
+            CHECK(!sim.has_fire_at(wall));
+            const TileCell& c1 = sim.grid().get_cell(wall);
+            CHECK(c1.is_empty_overlay() && c1.timer_ticks == 0 && !c1.static_solid && !sim.grid().is_solid_object(wall));
+            for (int t = 0; t < 200; ++t) sim.tick();
+            CHECK(!sim.has_fire_at(wall));                                                               // (it does not come back)
+            bool arrived = false;
+            const auto seen = walk(sim, TileCoord{wall.x - 3, wall.y}, TileCoord{wall.x + 2, wall.y}, 300, &arrived);
+            CHECK(arrived && seen.count({wall.x, wall.y}) != 0);                                         // (a straight walk across the tile where the fire was)
+            AntOrder light{};
+            light.ant_id = fire;
+            light.type = OrderType::IgniteFire;
+            light.target_x = wall.x;
+            light.target_y = wall.y;
+            sim.issue_order(light);
+            for (int t = 0; t < 200 && !sim.has_fire_at(wall); ++t) sim.tick();
+            CHECK(sim.has_fire_at(wall));
+        }
+    });
+
+    run_case("LF8.2 The Community Library: 5 Maps Name The Fire Wall Entry wallup04 And Hold Fire Wall Cells (480 Cells); The Other Maps With Fire Walls Leave The Entry \".\"", [] {
+        long named_maps = 0, named_cells = 0, dotted_maps = 0, dotted_cells = 0;
+        for_each_community_map([&](const std::string&, const LevelData& level) {
+            long cells = 0;
+            for (uint32_t y = 0; y < level.height; ++y)
+                for (uint32_t x = 0; x < level.width; ++x)
+                    if (level.get_cell_layer2(x, y).tile_index == TILE_FIREWALL) ++cells;
+            if (cells == 0) return;
+            if (level.get_tile_name(TILE_FIREWALL) == "wallup04") { ++named_maps; named_cells += cells; }
+            else { ++dotted_maps; dotted_cells += cells; }
+        });
+        std::cout << "\n    fire wall cells, entry wallup04: " << named_cells << " in " << named_maps << " maps; other entries: " << dotted_cells << " in " << dotted_maps << " maps\n";
+        CHECK(named_maps == 5 && named_cells == 480);
+        CHECK(dotted_maps > 0 && dotted_cells > 5000);
+    });
+
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }
