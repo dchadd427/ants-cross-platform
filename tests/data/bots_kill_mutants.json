@@ -311,7 +311,7 @@
    "id": "opp_bad_walk_cache_off",
    "file": "src/ants_ai/opportunity_task.cpp",
    "old": "if (failed != bad_walks_.end() && failed->second > now) continue;",
-   "new": "if (false) continue;",
+   "new": "if (failed != bad_walks_.end() && failed->second > now && false) continue;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2d ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.2d"
   },
