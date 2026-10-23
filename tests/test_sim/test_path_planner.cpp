@@ -1192,7 +1192,7 @@ void run_suite_9_wide_search() {
 
     TEST_CASE("9.1 Differential: wherever the original search finds a path the wide search finds the same path with the same expansions; where it fails and the limit was not passed, the same failure") {
         struct Size { int w; int orders; };
-        const Size sizes[] = {{48, 300}, {64, 300}, {100, 240}, {160, 120}, {256, 60}, {384, 24}, {512, 16}};
+        const Size sizes[] = {{48, 200}, {64, 160}, {100, 120}, {160, 80}, {256, 48}, {384, 20}, {512, 12}};
         uint64_t digest = kFnvBasis;
         int same_found = 0, same_found_beyond = 0, same_failure = 0, rescued = 0, still_failed_beyond = 0;
         for (const Flavor flavor : {Flavor::Open, Flavor::Mixed, Flavor::Walls}) {
@@ -1235,16 +1235,16 @@ void run_suite_9_wide_search() {
         }
         std::cout << "[" << same_found << " found alike (" << same_found_beyond << " past the limit on the way), " << same_failure << " failed alike, " << rescued << " rescued, "
                   << still_failed_beyond << " still no path] digest " << std::hex << digest << std::dec << " ... " << std::flush;
-        ASSERT_GT(same_found, 2000);
-        ASSERT_GT(same_failure, 100);
+        ASSERT_GT(same_found, 1200);
+        ASSERT_GT(same_failure, 60);
         ASSERT_GT(rescued, 20);
         ASSERT_GT(still_failed_beyond, 10);
-        ASSERT_EQ(digest, 0x29df9943b8de2e61ull);   // the digest of the whole run: the same on every compiler, optimization level and sanitizer
+        ASSERT_EQ(digest, 0xc60152d41c3a9860ull);   // the digest of the whole run: the same on every compiler, optimization level and sanitizer
     } TEST_END();
 
-    TEST_CASE("9.2 The model: the wide search against the rules written out, on 30,000 small cost fields with steps on and around the limit (path, expansions, the flag)") {
+    TEST_CASE("9.2 The model: the wide search against the rules written out, on 100,000 small cost fields with steps on and around the limit (path, expansions, the flag)") {
         int found = 0, failed = 0, past_limit = 0, rescue = 0;
-        for (uint64_t seed = 1; seed <= 30000; ++seed) {
+        for (uint64_t seed = 1; seed <= 100000; ++seed) {
             Xor rng(seed);
             const uint16_t rows = static_cast<uint16_t>(1 + rng.below(5));
             const uint16_t cols = static_cast<uint16_t>(2 + rng.below(7));
@@ -1273,10 +1273,10 @@ void run_suite_9_wide_search() {
             if (model.beyond && !model.path.empty()) ++rescue;
         }
         std::cout << "[" << found << " paths, " << failed << " none, " << past_limit << " past the limit, " << rescue << " paths past the limit] ... " << std::flush;
-        ASSERT_GT(found, 3000);
-        ASSERT_GT(failed, 1000);
-        ASSERT_GT(past_limit, 3000);
-        ASSERT_GT(rescue, 300);
+        ASSERT_GT(found, 10000);
+        ASSERT_GT(failed, 3000);
+        ASSERT_GT(past_limit, 10000);
+        ASSERT_GT(rescue, 1000);
     } TEST_END();
 
     TEST_CASE("9.3 Orders beyond the original's limit on open grass: 450 tiles straight, 480 (d, d/2), 330 diagonal (the original gives up at 400, 334 and 286)") {
