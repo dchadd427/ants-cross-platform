@@ -1,8 +1,11 @@
 #include "ants_ai/opportunity_task.hpp"
 
 #include <algorithm>
-#include <cstdlib>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
 #include <map>
+#include <vector>
 
 #include "ants_ai/island_info.hpp"
 

@@ -19,12 +19,15 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <ios>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
