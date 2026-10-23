@@ -538,10 +538,10 @@
       "test": "./build/tests/test_app/test_game_menu"
     },
     {
-      "id": "leave_asks_when_held",
+      "id": "held_asks_nothing",
       "file": "src/ants_app/game_menu.cpp",
-      "old": "return kind != LeaveKind::Held && kind != LeaveKind::Watch;",
-      "new": "return kind != LeaveKind::Watch;",
+      "old": "return kind != LeaveKind::Watch;",
+      "new": "return kind != LeaveKind::Held && kind != LeaveKind::Watch;",
       "build": [
         "test_game_menu"
       ],
