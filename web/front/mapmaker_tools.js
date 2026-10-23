@@ -489,6 +489,8 @@
             tapOnly: function (cell) { return !!editor && (mine() ? mine().tapOnly(cell) : places()); },
             // the Pick up tool: a press on a thing that can be dragged (the thing that is picked up, or the ghost) is a drag, a press anywhere else looks around and a tap there is the tool's
             canMove: function (cell) { return !!editor && !!cell && !!mine() && !!mine().canMove && mine().canMove(cell); },
+            // the mouse is over a cell (or left the map: null): the Pick up tool shows where a click would put the thing
+            hover: function (cell) { if (editor && mine() && mine().hover) mine().hover(cell); },
             // a key that the tool uses (the arrows nudge the thing that is picked up, Enter, Escape and Delete)
             key: function (e) { return !!editor && !!mine() && !!mine().key && mine().key(e); },
             // the box of a bigger object, counted from the cell that is tapped

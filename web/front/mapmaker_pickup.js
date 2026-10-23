@@ -401,7 +401,7 @@
     //       refresh(), focus(), busy()}
     function create(env) {
         var doc = env.doc, win = env.win, host = env.host;
-        var st = { mode: 'idle', items: [], kind: 'one', group: [], copy: false, dr: 0, dc: 0, pad: false, box: null, drag: null, cycle: null, note: '', verdict: { ok: true }, target: [] };
+        var st = { mode: 'idle', items: [], kind: 'one', group: [], copy: false, dr: 0, dc: 0, pad: false, box: null, drag: null, cycle: null, note: '', verdict: { ok: true }, target: [], ask: '', hov: null, fold: false };
         var shown = false, over = null, bar = null, live = null, wrap = host.cv ? host.cv.parentNode : null, loop = 0, last = '';
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
@@ -424,11 +424,11 @@
         // what a screen reader is told (the bar may be hidden when the thing is let go)
         function tell(text) { if (live) live.textContent = text; }
         function clear(note) {
-            st.mode = 'idle'; st.items = []; st.group = []; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.box = null; st.drag = null; st.cycle = null; st.note = note || ''; st.verdict = { ok: true }; st.target = [];
+            st.mode = 'idle'; st.items = []; st.group = []; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.box = null; st.drag = null; st.cycle = null; st.note = note || ''; st.verdict = { ok: true }; st.target = []; st.ask = ''; st.hov = null;
             paint(); tell(st.note);
         }
         function pick(items, kind, group, cycle, box) {
-            st.items = items; st.kind = kind; st.group = group || []; st.cycle = cycle || null; st.mode = items.length ? 'picked' : 'idle'; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.note = ''; st.box = box || null; st.target = [];
+            st.items = items; st.kind = kind; st.group = group || []; st.cycle = cycle || null; st.mode = items.length ? 'picked' : 'idle'; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.note = ''; st.box = box || null; st.target = []; st.ask = ''; st.hov = null;
             paint();
         }
         function tapSelect(cell) {
@@ -441,11 +441,28 @@
             tell(d.name + d.rest + (list.length > 1 ? '. Tap again to pick the next thing on this cell.' : ''));
         }
         function startMove(items, kind, copy) {
-            st.items = items; st.kind = kind; st.mode = 'moving'; st.copy = !!copy; st.dr = 0; st.dc = 0; st.note = ''; st.drag = null;
+            st.items = items; st.kind = kind; st.mode = 'moving'; st.copy = !!copy; st.dr = 0; st.dc = 0; st.note = ''; st.drag = null; st.ask = ''; st.hov = null;
             evaluate(); paint();
             if (env.focus) env.focus();
         }
-        function setDelta(dr, dc) { if (dr === st.dr && dc === st.dc) return; st.dr = dr; st.dc = dc; evaluate(); render(); drawOver(); }
+        function setDelta(dr, dc) {
+            var had = !!st.hov;          // (a click puts the thing where the preview showed it)
+            st.hov = null;
+            if (dr === st.dr && dc === st.dc) { if (had) { render(); drawOver(); } return; }
+            st.dr = dr; st.dc = dc; evaluate(); render(); drawOver();
+        }
+        // The mouse is over a cell while a thing is on its way: the ghost follows it (green or red, with the sentence), and goes back to where it was put when the mouse leaves the map or a key is pressed
+        function previewOff() { if (!st.hov) return; st.dr = st.hov.dr; st.dc = st.hov.dc; st.hov = null; evaluate(); render(); drawOver(); }
+        function hoverAt(cell) {
+            var f = file(), b;
+            if (!cell || !shown || st.mode !== 'moving' || st.drag || !f) return previewOff();
+            b = bbox(f);
+            if (!b) return;
+            var dr = cell.row - Math.floor((b.r0 + b.r1) / 2), dc = cell.column - Math.floor((b.c0 + b.c1) / 2);
+            if (dr === st.dr && dc === st.dc) return;
+            if (!st.hov) st.hov = { dr: st.dr, dc: st.dc };
+            st.dr = dr; st.dc = dc; evaluate(); render(); drawOver();
+        }
         // the middle of what is picked goes to the cell (a tap)
         function centreOn(cell) {
             var b = bbox(file());
@@ -462,6 +479,7 @@
         }
         function done() {
             var f = file();
+            previewOff();
             if (st.mode !== 'moving' || !st.items.length) return;
             if (!st.copy && !st.dr && !st.dc) return pick(st.items, st.kind, st.group, st.cycle, st.box);
             if (!evaluate().ok) return render();
@@ -476,18 +494,18 @@
             st.note = word + ' ' + (n === 1 ? 'it' : plural(n, 'thing', 'things')) + (copy ? '' : ': ' + moved.join(', ')) + '. One Undo takes it back.';
             render(); tell(st.note);
         }
-        function deleteNow() {
-            var f = file(), n = st.items.length;
+        function deleteNow(items) {
+            var f = file(), list = items || st.items, n = list.length;
             if (!n || st.mode !== 'picked') return;
-            clear(env.act(build(f, st.items, 0, 0, 'delete')) ? 'Took away ' + (n === 1 ? 'it' : plural(n, 'thing', 'things')) + '. One Undo brings it back.' : 'Nothing changed.');
+            clear(env.act(build(f, list, 0, 0, 'delete')) ? 'Took away ' + (n === 1 ? 'it' : plural(n, 'thing', 'things')) + '. One Undo brings it back.' : 'Nothing changed.');
         }
-        function startBox() { st.mode = 'boxing'; st.items = []; st.group = []; st.kind = 'area'; st.box = null; st.note = ''; st.pad = false; paint(); }
+        function startBox() { st.mode = 'boxing'; st.items = []; st.group = []; st.kind = 'area'; st.box = null; st.note = ''; st.pad = false; st.ask = ''; st.hov = null; paint(); }
         function finishBox() {
             var f = file(), items = st.box ? areaItems(f, st.box) : [], box = st.box;
             if (!items.length) { st.mode = 'boxing'; st.items = []; st.box = null; st.note = 'Nothing is inside that box. Drag a bigger box, or Cancel.'; return paint(); }
             pick(items, 'area', [], null, box);
         }
-        function letGo() { if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }
+        function letGo() { if (st.ask) { st.ask = ''; return render(); } if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }
 
         // ---- the bar ----
         function button(key, text, cls, on) {
@@ -503,8 +521,24 @@
             if (dr) out.push(Math.abs(dr) + (dr < 0 ? ' up' : ' down'));
             return out.join(', ');
         }
+        // The bar is made again from the state each time; the button that had the keyboard's focus gets it back
         function render() {
             if (!bar) return;
+            var held = doc.activeElement && doc.activeElement.getAttribute && bar.contains && bar.contains(doc.activeElement) ? doc.activeElement.getAttribute('data-k') : null, i, again;
+            renderBody();
+            if (!bar.hidden) {
+                bar.appendChild(button('fold', st.fold ? 'Controls' : 'Hide', 'pk-fold', function () { st.fold = !st.fold; render(); }));          // (shown only where the screen is short: mapmaker_pickup.css)
+                bar.className = 'pk-bar' + (st.fold ? ' folded' : '');
+            }
+            if (held && bar.children) for (i = 0; i < bar.children.length; i++) { again = findKey(bar.children[i], held); if (again && !again.disabled && again.focus) { again.focus(); break; } }
+        }
+        function findKey(node, key) {
+            var i, hit;
+            if (node.getAttribute && node.getAttribute('data-k') === key) return node;
+            for (i = 0; node.children && i < node.children.length; i++) { hit = findKey(node.children[i], key); if (hit) return hit; }
+            return null;
+        }
+        function renderBody() {
             var f = file(), on = shown && st.mode !== 'idle' && !!f, line = el('p', 'pk-line'), a = row(), b = row();
             bar.hidden = !on;
             if (doc.body && doc.body.classList) doc.body.classList.toggle('pk-on', on);
@@ -526,11 +560,19 @@
                 bar.appendChild(line);
                 if (hill) { copy.disabled = true; bar.appendChild(el('p', 'pk-said', 'A team has one hill, so it cannot be copied.')); }
                 if (st.note) bar.appendChild(el('p', 'pk-said', st.note));
-                if (grouped) {
+                if (grouped && st.ask) {          // Copy or Delete of an ant that has a group: this ant or its group (as for Move)
+                    var asked = st.ask === 'copy' ? 'Copy' : 'Delete', all = st.group;
+                    bar.appendChild(el('p', 'pk-said', asked + ' only this ant, or its whole group of ' + all.length + '?'));
+                    a.className = 'pk-row two'; b.className = 'pk-row one';
+                    a.appendChild(button('ask-one', asked + ' this ant', '', function () { var q = st.ask; st.ask = ''; if (q === 'copy') startMove(st.items, 'one', true); else deleteNow(st.items); }));
+                    a.appendChild(button('ask-group', asked + ' its group (' + all.length + ')', '', function () { var q = st.ask; st.ask = ''; if (q === 'copy') startMove(all, 'group', true); else deleteNow(all); }));
+                    b.appendChild(button('cancel', 'Back', '', function () { st.ask = ''; render(); }));
+                } else if (grouped) {
                     a.className = 'pk-row two'; b.className = 'pk-row three';
                     a.appendChild(button('move', 'Move this ant', '', function () { startMove(st.items, 'one', false); }));
                     a.appendChild(button('group', 'Move its group (' + st.group.length + ')', '', function () { startMove(st.group, 'group', false); }));
-                    b.appendChild(copy); b.appendChild(button('delete', 'Delete', '', deleteNow)); b.appendChild(button('cancel', 'Cancel', '', clear));
+                    copy = button('copy', 'Copy here', '', function () { st.ask = 'copy'; render(); });
+                    b.appendChild(copy); b.appendChild(button('delete', 'Delete', '', function () { st.ask = 'delete'; render(); })); b.appendChild(button('cancel', 'Cancel', '', clear));
                 } else if (many) {
                     a.className = 'pk-row four';
                     a.appendChild(button('move', 'Move them', '', function () { startMove(st.items, 'area', false); })); a.appendChild(copy);
@@ -710,11 +752,14 @@
                 return st.mode === 'moving' ? inTarget(cell) : hasThing(cell);
             },
             tapOnly: function (cell) { return shown && !painter.canMove(cell); },
+            // the mouse is over a cell (null: it left the map): while a thing is on its way the ghost follows it
+            hover: function (cell) { hoverAt(cell); },
             begin: function (cell) {
                 if (!shown || !file()) return false;
                 if (st.mode === 'boxing') { st.drag = { kind: 'box', from: cell }; st.box = { r0: cell.row, c0: cell.column, r1: cell.row, c1: cell.column }; paint(); return true; }
                 if (st.mode === 'moving') {
                     if (!inTarget(cell)) { centreOn(cell); return false; }
+                    st.hov = null;          // (the ghost under the mouse is where the drag starts)
                     st.drag = { kind: 'ghost', from: cell, dr: st.dr, dc: st.dc };
                     return true;
                 }
@@ -751,6 +796,7 @@
             // the keys: arrows nudge a thing that is picked up, Enter picks the thing on the marked cell, puts it down (Done) or starts the move, Escape lets go, Delete takes it away
             key: function (e) {
                 if (!shown || !file() || (env.busy && env.busy())) return false;
+                previewOff();          // (a key acts on where the thing was put, not on where the mouse is)
                 var k = e.key, step = e.shiftKey ? 8 : 1, arrows = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
                 if (st.mode === 'idle') {
                     if (k !== 'Enter') return false;
@@ -771,6 +817,7 @@
             var tag2 = e.target && e.target.tagName ? String(e.target.tagName).toLowerCase() : '';
             if (tag2 === 'input' || tag2 === 'textarea' || tag2 === 'select') return;
             e.preventDefault(); letGo();
+            if (env.focus) env.focus();          // (the button that had the focus is gone: the map gets it)
         });
 
         return {
@@ -783,8 +830,8 @@
                 var f = file(), i;
                 for (i = 0; i < st.items.length; i++) if (!f || !same(f, st.items[i])) return clear();
             },
-            setMap: function () { st.mode = 'idle'; st.items = []; st.group = []; st.box = null; st.drag = null; st.note = ''; st.target = []; render(); },
-            state: function () { return { mode: st.mode, kind: st.kind, copy: st.copy, dr: st.dr, dc: st.dc, items: st.items.slice(), group: st.group.slice(), box: st.box, verdict: st.verdict, note: st.note, pad: st.pad }; },
+            setMap: function () { st.mode = 'idle'; st.items = []; st.group = []; st.box = null; st.drag = null; st.note = ''; st.target = []; st.ask = ''; st.hov = null; render(); },
+            state: function () { return { mode: st.mode, kind: st.kind, copy: st.copy, dr: st.dr, dc: st.dc, items: st.items.slice(), group: st.group.slice(), box: st.box, verdict: st.verdict, note: st.note, pad: st.pad, ask: st.ask, hover: !!st.hov, fold: st.fold }; },
             bar: bar, over: over, help: help
         };
     }

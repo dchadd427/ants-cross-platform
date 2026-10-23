@@ -331,6 +331,7 @@ function caseC() {
         v = cur([plant], -13, -13);
         check(!v.ok && /Starting ants/.test(v.text), 'a plant onto ants' + tag);
         check(cur([plant], 3, 3).ok, 'a plant on free ground' + tag);
+        check(cur([plant], 5, -21).ok && Edit.tile(f, 1, 38 * 40 + 12) === 476, 'a plant may stand on water, like a rock (only hills, ants and piles may not)' + tag);
         // a copy
         v = cur([rock], 0, 0, 'copy');
         check(!v.ok && v.plain === undefined && /The copy cannot go here\. The rock is in the way \(1 cell\)/.test(v.text), 'a copy cannot land on its own original: ' + v.text + tag);
@@ -638,7 +639,7 @@ function sceneBytes(version) {
     for (let c = 0; c < 6; c++) put(f, 1, 38, 10 + c, 476, 0, 0xCDCD);
     return f.bytes;
 }
-const labels = (pg) => { const o = []; const l = pg.bar.querySelectorAll('.pk-b'); for (let i = 0; i < l.length; i++) o.push(l[i].textContent); return o; };
+const labels = (pg) => { const o = []; const l = pg.bar.querySelectorAll('.pk-b'); for (let i = 0; i < l.length; i++) if (l[i].getAttribute('data-k') !== 'fold') o.push(l[i].textContent); return o; };          // (the Hide button of a short screen is not one of the tool's)
 
 function caseG() {
     for (const version of [8, 9]) {
@@ -677,6 +678,32 @@ function caseG() {
         check(pg.state().mode === 'picked' && pg.state().dr === 0, 'Cancel while moving goes back to the pick' + tag);
         pg.press('cancel');
         check(pg.state().mode === 'idle' && pg.hidden(), 'Cancel again lets go' + tag);
+        // the ghost follows the mouse while a thing is on its way (a desktop), shows the verdict as it goes, and is where it was put when the mouse leaves the map or a key is pressed
+        const hv = page(File.parse(sceneBytes(version)));
+        hv.tap(3, 3); hv.p.hover({ row: 30, column: 20 });
+        check(hv.state().dr === 0 && !hv.state().hover, 'with the hill only picked the mouse changes nothing' + tag);
+        hv.press('move');
+        hv.p.hover({ row: 30, column: 20 });
+        check(hv.state().hover && hv.state().dr === 27 && hv.state().dc === 17 && !hv.off('done') && /It lands on row 29, column 19\./.test(hv.text()), 'the ghost is under the mouse (the middle of the hill on the cell), green, with where it lands: ' + hv.text() + tag);
+        hv.p.hover({ row: 10, column: 26 });
+        check(hv.state().hover && hv.off('done') && /the mushroom is in the way/.test(hv.warn()), 'over the mushroom it is red, with the reason, and Done is off: ' + hv.warn() + tag);
+        hv.p.hover(null);
+        check(!hv.state().hover && hv.state().dr === 0 && hv.state().dc === 0 && hv.off('done') && /Tap the new place/.test(hv.text()), 'the mouse leaving the map puts the ghost back where it was put (nowhere yet)' + tag);
+        hv.p.hover({ row: 30, column: 20 }); hv.tap(30, 20);
+        check(!hv.state().hover && hv.state().dr === 27 && hv.state().dc === 17, 'a click puts it where the mouse is' + tag);
+        hv.p.hover({ row: 12, column: 12 });
+        check(hv.state().hover && hv.state().dr === 9, 'the mouse moves it again' + tag);
+        hv.key('ArrowRight');
+        check(!hv.state().hover && hv.state().dr === 27 && hv.state().dc === 18, 'a key acts on where it was put, not on where the mouse is' + tag);
+        hv.p.hover({ row: 12, column: 12 }); hv.press('done');
+        check(hv.log.acts === 1 && Edit.tile(hv.file(), 2, 29 * 40 + 20) === RED_HILL, 'Done puts it where it was put, not where the mouse is' + tag);
+        hv.p.hover({ row: 1, column: 1 });
+        check(!hv.state().hover && hv.state().mode === 'picked', 'the mouse changes nothing once it is down' + tag);
+        // on a short screen the bar can be folded to one small button
+        hv.press('fold');
+        check(hv.state().fold && /folded/.test(hv.bar.className) && hv.has('fold'), 'the bar folds' + tag);
+        hv.press('fold');
+        check(!hv.state().fold && !/folded/.test(hv.bar.className), 'and opens again' + tag);
         // the nudge arrows
         const g2 = page(File.parse(sceneBytes(version)));
         g2.tap(3, 3); g2.press('move'); g2.press('nudge');
@@ -737,6 +764,30 @@ function caseG() {
     const p2 = page(File.parse(sceneBytes(9)));
     p2.tap(21, 10); p2.press('move'); p2.tap(8, 8); p2.press('done');
     check(lay(p2.file()).records.filter((r) => r.row === 8).length === 1 && lay(p2.file()).records.filter((r) => r.row >= 20 && r.row <= 22).length === 5, 'Move this ant moves one ant');
+    // Copy here and Delete ask "this ant or its group" the way Move does
+    const q1 = page(File.parse(sceneBytes(9)));
+    q1.tap(21, 10); q1.press('copy');
+    equal(labels(q1), ['Copy this ant', 'Copy its group (6)', 'Back'], 'Copy here on an ant of a group asks: this ant or its group');
+    check(q1.state().ask === 'copy' && /Copy only this ant, or its whole group of 6\?/.test(q1.text()), 'with the question in plain words: ' + q1.text());
+    q1.press('cancel');
+    check(q1.state().ask === '' && q1.state().mode === 'picked' && labels(q1)[2] === 'Copy here', 'Back goes back to the five buttons');
+    q1.press('delete'); check(labels(q1).join() === 'Delete this ant,Delete its group (6),Back', 'Delete asks the same way');
+    q1.doc.key('Escape', { target: q1.buttons()['ask-one'] });
+    check(q1.state().ask === '' && q1.state().mode === 'picked', 'Escape on the question goes back one step, the ant is still picked');
+    q1.press('copy'); q1.press('ask-group');
+    check(q1.state().mode === 'moving' && q1.state().copy && q1.state().items.length === 6 && q1.state().kind === 'group', 'its group is copied as a group');
+    q1.tap(5, 20); q1.press('done');
+    check(lay(q1.file()).records.filter((r) => r.tile === 153).length === 12 && q1.ed().history.size().strokes === 1, 'six more Blue ants in one step');
+    const q2 = page(File.parse(sceneBytes(9))), n2 = lay(q2.file()).records.length;
+    q2.tap(21, 10); q2.press('copy'); q2.press('ask-one'); q2.tap(5, 20); q2.press('done');
+    check(lay(q2.file()).records.length === n2 + 1 && q2.ed().history.size().strokes === 1, 'this ant alone is copied alone');
+    const q3 = page(File.parse(sceneBytes(9))), b3 = Uint8Array.from(q3.file().bytes);
+    q3.tap(21, 10); q3.press('delete'); q3.press('ask-group');
+    check(lay(q3.file()).records.length === n2 - 6 && q3.ed().history.size().strokes === 1 && q3.hidden() && /Took away 6 things\./.test(q3.state().note), 'Delete its group takes the six away in one step: ' + q3.state().note);
+    q3.undo(); check(same(q3.file().bytes, b3), 'and one Undo brings them back');
+    const q4 = page(File.parse(sceneBytes(9)));
+    q4.tap(21, 10); q4.press('delete'); q4.press('ask-one');
+    check(lay(q4.file()).records.length === n2 - 1, 'Delete this ant takes one');
     // a lone ant has no group question
     const p3 = page(File.parse(sceneBytes(9)));
     p3.tap(30, 30);
@@ -768,8 +819,10 @@ function caseG() {
     equal(labels(p6), ['Move them', 'Copy here', 'Delete', 'Cancel'], 'Move them, Copy here, Delete, Cancel');
     check(/^Area: 6 items \u00b7 6 Blue ants$/.test(p6.bar.querySelector('.pk-line').textContent), 'the line counts them: ' + p6.bar.querySelector('.pk-line').textContent);
     p6.press('move'); p6.tap(5, 30);
-    const b6 = Uint8Array.from(p6.file().bytes);
+    const b6 = Uint8Array.from(p6.file().bytes), d6 = p6.state();
     p6.press('done');
+    equal(p6.state().box, { r0: 18 + d6.dr, c0: 8 + d6.dc, r1: 24 + d6.dr, c1: 14 + d6.dc }, 'the box of the area goes along with it, all four sides (rows and columns shifted differently)');
+    check(d6.dr !== d6.dc, 'and the two shifts differ, so a mix-up of rows and columns shows');
     check(p6.ed().history.size().strokes === 1 && lay(p6.file()).records.filter((r) => r.row < 10).length === 6, 'the area moves in one step');
     p6.undo(); check(same(p6.file().bytes, b6), 'Undo gives the six back');
     const p7 = page(File.parse(sceneBytes(9)));
@@ -822,8 +875,9 @@ function caseH() {
     // Escape heard on the document when the focus is on a button of the bar
     pg.setCursor({ row: 3, column: 3 }); pg.key('Enter');
     pg.doc.activeElement = pg.buttons().move;
-    const e = pg.doc.key('Escape', { target: pg.buttons().move });
+    const focused = pg.log.focus, e = pg.doc.key('Escape', { target: pg.buttons().move });
     check(pg.state().mode === 'idle' && e.prevented, 'Escape on a button of the bar lets go');
+    check(pg.log.focus === focused + 1, 'and the map gets the keyboard focus back (the button that had it is gone)');
     pg.setCursor({ row: 3, column: 3 }); pg.key('Enter');
     const inp = pg.doc.createElement('input'); pg.doc.key('Escape', { target: inp, tagName: 'input' });
     check(pg.state().mode === 'picked', 'Escape typed in a box is not the tool\'s');

@@ -177,6 +177,7 @@
                     var over = cellOf(p);
                     if (over && hover && over.row === hover.row && over.column === hover.column) return;
                     hover = over; chrome();
+                    if (painter && painter.hover) painter.hover(over);          // (a tool that shows what a click would do: Pick up)
                     if (brushNow() > 0) redraw();
                 }
                 return;
@@ -284,7 +285,7 @@
         canvas.addEventListener('lostpointercapture', function (e) { if (stroke && stroke.id === e.pointerId) endStroke(); });
         win.addEventListener('blur', function () { if (stroke) endStroke(); });
         doc.addEventListener('visibilitychange', function () { if (stroke && doc.visibilityState === 'hidden') endStroke(); });
-        canvas.addEventListener('pointerleave', function () { hover = null; if (file) { chrome(); if (brushNow() > 0) redraw(); } });
+        canvas.addEventListener('pointerleave', function () { hover = null; if (painter && painter.hover) painter.hover(null); if (file) { chrome(); if (brushNow() > 0) redraw(); } });
         canvas.addEventListener('wheel', wheel, { passive: false });
         canvas.addEventListener('keydown', key);
         canvas.addEventListener('keyup', function (e) { if (e.key === ' ' && spaceHeld) { spaceHeld = false; cursorStyle(); } });

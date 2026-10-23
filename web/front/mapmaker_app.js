@@ -411,14 +411,28 @@
         s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
         doc.head.appendChild(c); doc.head.appendChild(s);
     }
-    // The Pick up tool (mapmaker_pickup.js and its style), loaded the first time the tool is chosen: done(the part), or done(null) when it did not load
+    // The Pick up tool (mapmaker_pickup.js and its style), loaded the first time the tool is chosen: done(the part), or done(null) when it did not load. Each of the two files is asked for again
+    // until it is there (a script that came while its style did not is not enough), and a tag of a file that failed is taken away before the next one is added.
+    var pickPart = { script: null, style: null };
     function loadPick(done) {
-        if (win.MapPickup) return done(win.MapPickup);
-        var left = 2, bad = false, s = el('script'), c = el('link');
+        var left = 0, bad = false;
         function end(ok) { bad = bad || !ok; if (--left) return; done(bad || !win.MapPickup ? null : win.MapPickup); }
-        s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_pickup.css';
-        s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
-        doc.head.appendChild(c); doc.head.appendChild(s);
+        function add(slot, tag, attr, url, extra) {
+            var old = pickPart[slot], n, rec;
+            if (old && old.ok) return;
+            if (old && old.node && old.node.parentNode) old.node.parentNode.removeChild(old.node);
+            n = el(tag); rec = pickPart[slot] = { node: n, ok: false }; left++;
+            if (extra) extra(n);
+            n.onload = function () { rec.ok = slot === 'style' || !!win.MapPickup; end(rec.ok); };
+            n.onerror = function () { end(false); };
+            n[attr] = url;
+            doc.head.appendChild(n);
+        }
+        if (win.MapPickup && !pickPart.script) pickPart.script = { ok: true };
+        if (win.MapPickup && pickPart.style && pickPart.style.ok) return done(win.MapPickup);
+        add('style', 'link', 'href', 'front/mapmaker_pickup.css', function (n) { n.rel = 'stylesheet'; });
+        add('script', 'script', 'src', 'front/mapmaker_pickup.js');
+        if (!left) done(win.MapPickup || null);
     }
     function antsAbout() { showSummary(); var p = summed && summed.props; return p && !p.error ? { ant: win.MapProps.summary(p).ant, eggs: p.eggs } : null; }
 
