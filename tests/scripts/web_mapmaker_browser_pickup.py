@@ -5,6 +5,7 @@ group of six Red ants) is made here with struct and opened from the disk; the by
 import json
 import math
 import os
+import re
 import struct
 import tempfile
 import time
@@ -396,9 +397,9 @@ def run_pickup_phone(page, tab, args, check, env, edges_bytes, edges_js):
     x0, y0 = h.point(6, 6)
     x1, y1 = h.point(14, 8)
     h.drag_points(x0, y0, x1, y1)
-    check("Moving the red hill" in h.line() and "row 13, column 7" in h.line(), "a finger dragging the picked hill moves the ghost (the old Move's drag): %s" % h.line())
-    h.press("cancel")
-    h.press("cancel")
+    check(layer2_tile(edges_bytes(page)["bytes"], 13, 7) == RED_HILL and layer2_tile(edges_bytes(page)["bytes"], 6, 6) == EMPTY2 and "Moved it" in h.bar(), "a finger dragging the picked hill puts it down where the finger is lifted (row 13, column 7), the file says so: %s" % h.bar()[:60])
+    page.ev("document.getElementById('undo-btn').click()")
+    check(edges_bytes(page)["bytes"] == mosh_pit(), "and ONE Undo takes it back")
     h.focus_on(65, 61, 18, 0.5, 0.3)
     h.tap(63, 61)
     check(h.labels() == ["Move this ant", "Move its group (6)", "Copy here", "Delete", "Cancel"], "an ant of a group: %s" % h.labels())
@@ -469,3 +470,132 @@ def run_pickup_short(page, tab, args, check, env, edges_bytes, edges_js, name, t
     check(layer2_tile(edges_bytes(page)["bytes"], 12, 13) == RED_HILL, "%s: Done puts the hill down, nudged one cell" % name)
     page.ev("document.getElementById('undo-btn').click()")
     check(edges_bytes(page)["bytes"] == mosh_pit(), "%s: ONE Undo takes it back" % name)
+
+
+def run_pickup_drag(page, tab, args, check, env, edges_bytes, edges_js, name, touch):
+    """letting go of the mouse or the finger after a drag puts the thing down where the ghost is (reads the file's own bytes): a drag, a blocked place, Escape, a lift outside the map, an area, a click that only places"""
+    global wait_for
+    wait_for = env["wait_for"]
+    print("[web map maker] the Pick up tool, a drag is put down when it is let go (%s)" % name)
+    setup(page, args, check, edges_js, edges_bytes, name)
+    h = Pick(page, tab, touch)
+    page.tool("pickup")
+    check(wait_for(lambda: page.ev("!!document.querySelector('.pk-bar')"), 10), "%s: Pick up is chosen" % name)
+    h.focus_on(9, 11, 20, 0.4, 0.4)
+    undo = lambda: page.ev("document.getElementById('undo-btn').click()")
+    data = lambda: edges_bytes(page)["bytes"]
+    # 1. a drag of the picked hill: the lift puts it down
+    h.tap(6, 6)
+    h.drag_cells(6, 6, 12, 12)
+    d = data()
+    check(layer2_tile(d, 11, 11) == RED_HILL and layer2_tile(d, 5, 5) == EMPTY2 and "Moved it" in h.bar() and h.labels()[0] == "Move", "%s: the lift puts the hill down where the ghost was (row 11, column 11); it is picked still: %s" % (name, h.bar()[:70]))
+    undo()
+    check(data() == mosh_pit(), "%s: ONE Undo takes it back, byte for byte" % name)
+    # 2. a drag that starts on a thing that is not picked picks it and puts it down too
+    h.drag_cells(6, 6, 12, 12)
+    check(layer2_tile(data(), 11, 11) == RED_HILL, "%s: a press on a thing that is not picked, a drag and a lift: down" % name)
+    undo()
+    # 3. a blocked place: nothing is written, the ghost is red with the reason, the thing is still held
+    h.tap(6, 6)
+    h.drag_cells(6, 6, 13, 16)
+    check(data() == mosh_pit() and "the mushroom is in the way" in h.warn() and h.disabled("done") and "Done" in h.labels(), "%s: let go on the mushroom: nothing is written, red, with the reason: %s" % (name, h.warn()))
+    x, y = h.point(13, 16)
+    check(h.overlay_has(x - 2 * h.view()[2], y, (240, 138, 132), 8), "%s: and the ghost is red" % name)
+    h.drag_cells(13, 16, 12, 12)
+    check(layer2_tile(data(), 11, 11) == RED_HILL, "%s: dragging the red ghost to a free place puts it down" % name)
+    undo()
+    # 4. a click on a thing only picks it; a click on the ghost only places it (Done puts it down)
+    h.tap(6, 6)
+    check(data() == mosh_pit() and "Red hill" in h.line(), "%s: a tap picks and writes nothing" % name)
+    h.press("move")
+    h.tap(12, 12)
+    check(data() == mosh_pit() and not h.disabled("done") and "It lands on row 11, column 11" in h.line(), "%s: a tap on a free place puts the ghost there, nothing is written: %s" % (name, h.line()))
+    h.press("done")
+    check(layer2_tile(data(), 11, 11) == RED_HILL, "%s: Done still puts it down" % name)
+    undo()
+    h.press("cancel") if h.bar() else None
+    # 5. an area: dragged by one of its things, put down as a whole, one Undo
+    if touch:
+        h.focus_on(63, 55, 14, 0.5, 0.3)
+        h.tap(60, 47)
+        h.press("area")
+        cy, cx, sc = h.view()
+        x0, y0 = h.point(58, 46)
+        x1, y1 = h.point(67, 64)
+        pick_at, to, things = (60, 47), (72, 47), "Area: 8 items"
+    else:
+        h.focus_on(63, 54, 20, 0.5, 0.3)
+        h.tap(66, 44)
+        h.press("area")
+        cy, cx, sc = h.view()
+        x0, y0 = h.point(58, 42)
+        x1, y1 = h.point(68, 66)
+        pick_at, to, things = (66, 44), (73, 54), "Area: 9 items"
+    h.drag_points(x0 - sc / 2, y0 - sc / 2, x1 + sc / 2, y1 + sc / 2)
+    check(things in h.line(), "%s: an area is picked (%s): %s" % (name, things, h.line()))
+    h.press("move")
+    h.tap(to[0], to[1])
+    h.press("nudge")
+    moved = re.search(r"Moved (\d+) (right|left), (\d+) (down|up)", h.line())                  # (how far a tap on that cell takes the area: a place that is free)
+    h.press("cancel")
+    dc = int(moved.group(1)) * (1 if moved.group(2) == "right" else -1) if moved else 0
+    dr = int(moved.group(3)) * (1 if moved.group(4) == "down" else -1) if moved else 0
+    check(moved is not None and (dr or dc) and "Area" in h.line(), "%s: the area is picked again after Cancel (the place is %d, %d away): %s" % (name, dr, dc, h.line()))
+    h.drag_cells(pick_at[0], pick_at[1], pick_at[0] + dr, pick_at[1] + dc)
+    after = data()
+    check(after != mosh_pit() and re.search(r"Moved (8|9) things", h.bar()) is not None, "%s: the lift puts the whole area down: %s" % (name, h.bar()[:80]))
+    check(h.labels()[0] == "Move them", "%s: it is picked still, as an area" % name)
+    undo()
+    check(data() == mosh_pit(), "%s: ONE Undo gives the whole area back" % name)
+    h.press("cancel") if h.bar() else None
+    if touch:
+        return
+    # 6. Escape while the button is down: the thing goes back and the lift puts nothing down
+    h.focus_on(9, 11, 20, 0.4, 0.4)
+    h.tap(6, 6)
+    x0, y0 = h.point(6, 6)
+    x1, y1 = h.point(12, 12)
+    tab.mouse("mouseMoved", x0, y0, button="none")
+    tab.mouse("mousePressed", x0, y0)
+    for i in range(1, 7):
+        tab.mouse("mouseMoved", x0 + (x1 - x0) * i / 6, y0 + (y1 - y0) * i / 6, buttons=1)
+    time.sleep(0.3)
+    check("Moving the red hill" in h.line() or "It lands" in h.line(), "the ghost follows the held mouse: %s" % h.line())
+    page.key("Escape")
+    tab.mouse("mouseMoved", x1 + 20, y1 + 20, buttons=1)
+    tab.mouse("mouseReleased", x1 + 20, y1 + 20)
+    time.sleep(0.3)
+    check(data() == mosh_pit() and "Red hill" in h.line() and h.labels()[0] == "Move", "Escape during the drag takes the hill back, and the lift writes nothing: %s" % h.line())
+    # 7. let go outside the map (over the side panel): the pointer is captured, so it is a lift
+    x0, y0 = h.point(6, 6)
+    tab.mouse("mouseMoved", x0, y0, button="none")
+    tab.mouse("mousePressed", x0, y0)
+    for i in range(1, 7):
+        tab.mouse("mouseMoved", x0 + (x1 - x0) * i / 6, y0 + (y1 - y0) * i / 6, buttons=1)
+    box = page.box("#map")
+    out = (box["x"] + box["w"] + 70, box["y"] + 60)
+    tab.mouse("mouseMoved", out[0], out[1], buttons=1)
+    tab.mouse("mouseReleased", out[0], out[1])
+    time.sleep(0.4)
+    check(layer2_tile(data(), 5, 5) == EMPTY2 and "Moved it" in h.bar() and h.labels()[0] == "Move", "released outside the map (over the side panel): the pointer is captured, so it is a lift: the hill is put down: %s" % h.bar()[:90])
+    undo()
+    check(data() == mosh_pit(), "and ONE Undo takes it back")
+    # 8. the hover ghost follows the mouse while Move is on, starts no drag, and a lift with the ghost under it puts nothing down by itself
+    h.tap(6, 6)
+    h.press("move")
+    for r, c in ((10, 10), (12, 12), (14, 14)):
+        x, y = h.point(r, c)
+        tab.mouse("mouseMoved", x, y, button="none")
+        time.sleep(0.15)
+    x, y = h.point(12, 12)
+    tab.mouse("mouseMoved", x, y, button="none")
+    time.sleep(0.2)
+    check(data() == mosh_pit() and "It lands on row 11, column 11" in h.line(), "the hover ghost writes nothing and follows the mouse: %s" % h.line())
+    tab.mouse("mousePressed", x, y)
+    time.sleep(0.1)
+    tab.mouse("mouseReleased", x, y)
+    time.sleep(0.3)
+    check(data() == mosh_pit() and not h.disabled("done") and "Done" in h.labels(), "a click on the hover ghost only places it, Done is on")
+    h.press("done")
+    check(layer2_tile(data(), 11, 11) == RED_HILL, "and Done puts it down")
+    undo()

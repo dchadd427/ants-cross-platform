@@ -23,18 +23,38 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.109 - 2026-10-22 - Hard computer players take the quick kill and stop sending ants where no walk goes
+## v0.12.111 - 2026-10-23 - Hard computer players take the quick kill and stop sending ants where no walk goes
 
 **For players:**
-- **The Hard computer players now take a kill when they see one.** An enemy ant that stands next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over the whole map library they drown about two thirds more enemy ants on purpose than before.
-- **They no longer send ants where no walk goes.** An attack on an ant across a lake used to end in "Can't go there" and a shrug. Of every 100 orders the game refused about 30 before and 19 now, and fewer ants spend the match stuck.
-- **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home for the whole match. Where the food lies over water or behind a gate, the ants keep that work instead.
-- **The ring of fire round an enemy gate is lit only when that team has food to bank.**
-- Against the old Hard player the new one wins as often in four-player matches and more often in two-player matches on the community maps (57 of 100). Easy and Medium are unchanged.
+- **The Hard computer players shove more enemies into water, bombs and fire.** An enemy ant next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over many maps they get about a quarter more kills.
+- **They waste about 40 percent fewer orders.** They no longer send ants at enemies across a lake, which the game used to answer with "Can't go there": about 30 of every 100 orders before and 19 now over the map library (23 and 13 in an independent check).
+- **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home. Where the food lies over water or behind a gate, the ants keep that work.
+- **The ring of fire round an enemy gate is lit only when that team has food to bank.** Hard builds and puts out its other fire walls as often as before.
+- **This is not a stronger player.** Against the old Hard player it wins as often (about 50 of 100, with four players or with two), and against Medium as often as before. An enemy beside the water within reach is still left alone about 7 times in 10 (a Hard ant only goes for one that has stood still for a second), ants stand idle a little more because they no longer run pointless trips, and on one map, Acid Blood, the new kill made it play worse until the last ants were told to stay at their work. Easy and Medium are unchanged.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (computer players run on the server or the host and only send commands, so old recordings play as before).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...847f0c2b), [the quick kill](docs/BOT_FIGHT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...XXXXXXXX), [the quick kill](docs/BOT_FIGHT.md)
+
+## v0.12.110 - 2026-10-23 - Pick up: a drag is put down when you let go of the mouse
+
+**For players:**
+- **Pick up: a drag now ends when you let go.** Drag a hill, object, food pile, plant or ant (or a whole group or area) in the Map Maker and let go of the mouse or lift your finger: it is put down where the see-through copy is, in one step that one Undo takes back. Before, the copy kept following the mouse after you let go until you pressed Enter or Done.
+- **A red place keeps it in your hand.** If you let go where it cannot go (on a mushroom, over the edge, in the water), nothing is changed, the copy stays red and says why, and you can drag it on to a free place.
+- **Escape takes it back.** Escape while you drag, a touch that is cancelled, or leaving the window, puts the thing back where it was. A plain click or tap still only places the copy, and the arrow buttons, Enter and Done work as before.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.2.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea4ec07f...4c8c2434)
+
+## v0.12.109 - 2026-10-22 - A put-out fire leaves the screen on maps with fire walls
+
+**For players:**
+- **A fire that a Fire ant puts out now leaves the screen on maps that came with fire walls.** On a map made with the Map Maker's permanent Fire wall (and on five maps of the library), the Fire ant did its put-out move and the game agreed the fire was gone (the message "Fire put out." came, ants could walk there), but the picture of the fire stayed on the map. Now it disappears, as it does for a fire that was lit in the match.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; only the picture changed. Fire walls that the Map Maker puts on a map still burn until a Fire ant puts them out.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...1ac880b2)
 
 ## v0.12.108 - 2026-10-22 - Auto edges draw a strip of water one cell wide in mud, in any painting order
 
@@ -592,19 +612,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b843839c...b704515e)
 
-## v0.12.46 - 2026-10-15 - Every match has a page: stats, replay and live games
+## Older versions (v0.12.46 and before)
 
-**For players:**
-- **Every match has a page now.** **Matches** (a link in the footer of every page, a button at the top of the front page and of the game page) lists every match played here, newest first: the map, who played (computer players as "Pip (bot, Hard)"), who won and the scores, the length and when. Search for a map or a player, show only the matches with people or only the computers' matches, and narrow it by format, result, color, mode and whether the replay can still be watched. The list comes in pages of 25 and the address of a view can be sent to somebody.
-- **Open a match for all its stats and its replay.** Every seat's score, ants killed, lost and hatched, bombs set and defused and fires lit, a bar for each against the best seat, the share of the score, the total of a team, and who left early. **Show replay** opens the game on that page and plays the match; nothing of the game is downloaded until you press it. A match recorded by an older version, or whose recording is more than 30 days old, still shows its stats ("Older version", "Replay removed"), with the file to download where it is still kept.
-- **Matches that are being played have their own page,** **Live now**, and the Matches page shows a button "N live now" while one is on. The old addresses `/watch.html` and `/matches` lead to the new list.
-- **Stats on the replay page:** a **Stats** button (a row under the controls on a phone) shows the final numbers of the match you are watching. It is closed until you open it, so it does not tell you who won.
-- **What is kept, said plainly** on the front page and in the name card: recordings are kept for 30 days; results and names are kept for good and are public.
-
-**Rules / network:** none. No rule, no hash and no protocol number (protocol 20) changed; the pages read what the server already keeps (`GET /history`).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...ec086294)
-
-## Older versions (v0.12.45 and before)
-
-Every release before v0.12.46, and the long notes of v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.48, and the long notes of v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
