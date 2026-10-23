@@ -438,15 +438,24 @@ void rematch_process_scenario() {
     ASSERT_EQ(finished, size_t{1});
     // Bob's results screen holds his seat; a stranger is turned away
     RClient& bob_results = w.connect("Bob", code, std::nullopt, net::kClientGame, bob_key);
-    ASSERT_TRUE(w.until([&]() { return bob_results.lobby->phase() == net::ClientLobby::Phase::InRoom; }, 10000));
-    ASSERT_TRUE(bob_results.lobby->my_seat() == 1 && bob_results.lobby->room().seat_in_game(0) && bob_results.lobby->room().seat_in_game(1) && bob_results.lobby->room().leader == net::kNoLeader);
+    // (the Welcome puts the page in the room and the Room message follows it: wait for the whole picture, a slow machine delivers them apart)
+    const auto bob_holds_his_seat = [&]() {
+        return bob_results.lobby->phase() == net::ClientLobby::Phase::InRoom && bob_results.lobby->my_seat() == 1 && bob_results.lobby->room().seat_in_game(0) &&
+               bob_results.lobby->room().seat_in_game(1) && bob_results.lobby->room().leader == net::kNoLeader;
+    };
+    ASSERT_TRUE(w.until(bob_holds_his_seat, 10000));
+    ASSERT_TRUE(bob_holds_his_seat());
     RClient& stranger = w.connect("Sid", code, lobby_block_of(), net::kClientPage);
     ASSERT_TRUE(w.until([&]() { return stranger.was_rejected; }, 10000));
     ASSERT_EQ(stranger.rejected, net::RejectReason::MatchRunning);
     // Pia's page comes back with her key and leads; her START waits for Bob, and she is told
     RClient& pia_back = w.connect("Pia", code, lobby_block_of(), net::kClientPage, pia_key);
-    ASSERT_TRUE(w.until([&]() { return pia_back.lobby->phase() == net::ClientLobby::Phase::InRoom && pia_back.lobby->is_leader(); }, 10000));
-    ASSERT_TRUE(pia_back.lobby->my_seat() == 0 && !pia_back.lobby->room().seat_in_game(0) && pia_back.lobby->room().seat_in_game(1));
+    const auto pia_leads_without_bob = [&]() {
+        return pia_back.lobby->phase() == net::ClientLobby::Phase::InRoom && pia_back.lobby->is_leader() && pia_back.lobby->my_seat() == 0 && !pia_back.lobby->room().seat_in_game(0) &&
+               pia_back.lobby->room().seat_in_game(1);
+    };
+    ASSERT_TRUE(w.until(pia_leads_without_bob, 10000));
+    ASSERT_TRUE(pia_leads_without_bob());
     net::PlanMsg plan;                                                                  // (a Medium bot in Blue: Pia and the bot can play without Bob)
     plan.plan = {net::PlanKind::Open, net::PlanKind::Open, net::PlanKind::Medium, net::PlanKind::Nobody};
     ASSERT_TRUE(pia_back.lobby->request_plan(plan));
