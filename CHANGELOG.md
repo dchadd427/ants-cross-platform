@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.2.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...9beada58)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...4c8c2434)
 
 ## v0.12.108 - 2026-10-22 - Auto edges draw a strip of water one cell wide in mud, in any painting order
 
