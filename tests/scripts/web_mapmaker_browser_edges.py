@@ -226,5 +226,63 @@ def run_edges_in(page, tab, args, check, scratch, env):
                 small: [].filter.call(d.querySelectorAll('.dlg-foot .btn, .kind'), function (n) { return n.getBoundingClientRect().height < 43.5; }).length}; })())"""))
     check(got["inside"] and not got["out"] and not got["sideways"] and got["small"] == 0, "the sheet, its choices, pictures and buttons are inside the screen, 44 pixels high, no sideways scroll (%s)" % got)
     page.shot(args.shots, "mapmaker-fix-edges-phone-check")
+    page.shot(args.shots, "mapmaker-fix-edges-phone-check")
+    page.key("Escape")
+    tab.emulate(1280, 800, 1)
+    time.sleep(0.5)
+    run_scene(page, tab, args, check)
 
+
+# the owner's picture: a blob of mud on gravel with two strips of water one cell wide inside it, the lower one bending (g gravel, m mud, w water), and what Auto edges must leave
+SCENE = ["gggggggggggg", "gmmmmmmmmmmg", "gmmmwmmmmmmg", "gmmmwmmmmmmg", "gmmmwmmmmmmg", "gmmmwmmmmmmg", "gmmmmmmmmmmg", "gmmmwwmmmmmg", "gmmmmwmmmmmg", "gmmmmwmmmmmg", "gmmmmmmmmmmg", "gggggggggggg"]
+SCENE_AT = {(1, 4): "MW08a", (2, 3): "MW06a", (2, 4): "w01a", (2, 5): "MW05a", (5, 3): "MW06a", (5, 5): "MW05a", (6, 4): "M01a", (7, 3): "MW06a", (7, 4): "w01a", (7, 5): "wm04a", (8, 4): "MW04a", (8, 6): "MW05a",
+            (9, 4): "MW06a", (9, 5): "w01a", (9, 6): "MW05a", (10, 5): "MW03a", (0, 4): "gm08a", (11, 4): "gm03a"}
+LETTER_TILE = {"g": 485, "m": 439, "w": 476}
+
+
+def paint_letter(page, tab, letter):
+    """the cells of SCENE that hold `letter`, one drag for each run in a row, with a brush of 1"""
+    page.tile(LETTER_TILE[letter])
+    for r, row in enumerate(SCENE):
+        c = 0
+        while c < len(row):
+            if row[c] != letter:
+                c += 1
+                continue
+            e = c
+            while e + 1 < len(row) and row[e + 1] == letter:
+                e += 1
+            x0, y0 = page.cell_point(r + 8, c + 8)            # (the picture is put 8 cells down and to the right on the new map of 31 x 31)
+            x1, y1 = page.cell_point(r + 8, e + 8)
+            page.drag(x0, y0, x1, y1, steps=max(2, 2 * (e - c)))
+            c = e + 1
+
+
+def scene_names(page):
+    got = edges_bytes(page)
+    b, d, at, columns = got["bytes"], got["dictAt"], got["layer1"], got["columns"]
+    name = lambda r, c: b[d + 2 + 11 * struct.unpack_from("<H", b, at + 6 * (r * columns + c))[0]: d + 13 + 11 * struct.unpack_from("<H", b, at + 6 * (r * columns + c))[0]].split(b"\0")[0].decode("latin1")
+    return name, got
+
+
+def run_scene(page, tab, args, check):
+    """Auto edges on the owner's picture, in both orders of painting, with the mouse: every boundary of the water and the mud has its piece (the strips of water one cell wide have none of their own: the mud
+    beside them wears), the map is the one that Fix edges makes (nothing is left to fix), and the pictures are drawn from the game's tiles"""
+    for order in (("m", "w"), ("w", "m")):
+        page.press_act("new")
+        wait_for(lambda: page.ev("!!document.querySelector('.kinds')"), 8)
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+        wait_for(lambda: page.state()["rows"] == "31" and not page.ev("!!document.querySelector('.dlg')"), 8)
+        if page.ev("document.getElementById('auto-edges-btn').getAttribute('aria-checked')") != "true":
+            page.ev("document.getElementById('auto-edges-btn').click()")
+        check(page.ev("document.getElementById('auto-edges-btn').getAttribute('aria-checked')") == "true", "Auto edges is On")
+        page.ev("(function () { var r = document.getElementById('brush-range'); r.value = 1; r.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        for letter in order:
+            paint_letter(page, tab, letter)
+        time.sleep(0.4)
+        name, got = scene_names(page)
+        wrong = [(r, c, name(r + 8, c + 8), want) for (r, c), want in sorted(SCENE_AT.items()) if name(r + 8, c + 8) != want]
+        check(not wrong, "Auto edges, %s first: the water and the mud have their pieces (%s)" % ("mud" if order[0] == "m" else "water", wrong[:3]))
+        check(got["left"] == 0, "Auto edges, %s first: Fix edges finds nothing left to fix (%d)" % ("mud" if order[0] == "m" else "water", got["left"]))
+        page.shot(args.shots, "mapmaker-auto-edges-water-in-mud-" + ("mud-first" if order[0] == "m" else "water-first"))
 
