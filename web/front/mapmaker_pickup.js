@@ -237,7 +237,7 @@
 
     // Whether the items can be shifted by (dr, dc) as a move or a copy: {ok: true} or {ok: false, text, cells (the cells that are in the way)}. The text is the sentence that the bar shows.
     function check(file, items, dr, dc, mode, kind) {
-        var ix = index(file), lay = ix.lay, mv = movingSets(mode === 'copy' ? [] : items), i, k;
+        var ix = index(file), lay = ix.lay, mv = movingSets(mode === 'copy' ? [] : items), ties = footSet(items), i, k;
         var who = mode === 'copy' ? (items.length > 1 ? 'The copies' : 'The copy') : cap(nameOfPick(file, items, kind));
         if (kind === 'area' && mode !== 'copy') who = 'These ' + who;
         if (mode === 'copy') {
@@ -261,22 +261,50 @@
                 else text = (kindIt === 'hill' ? 'It needs a free 4 x 4 square, and ' + name : cap(name)) + ' is in the way (' + plural(n, 'cell', 'cells') + ').';
                 return { ok: false, cells: bad, text: who + ' cannot go here. ' + text + ' Move it a little' + (named ? ', or move ' + name + ' first.' : '.') };
             }
+            if (it.k === 'obj' || it.k === 'pile') {          // (a cell that is tied to another place of the map keeps its tie exactly, or the thing does not go)
+                var tied = shiftObject(file, it.k === 'pile' ? it.objs : it.fp, dr, dc, ties).filter(function (x) { return x.a === null; });
+                if (tied.length) return { ok: false, cells: tied.map(function (x) { return x.to; }), text: who + ' cannot go here. Part of it is tied to another place on the map (the file is from an old map maker), and that tie could not stay the same there. Move it a little, or leave it where it is.' };
+            }
         }
         return { ok: true };
     }
 
     // ---- the change ----
-    // The cells of an object after it is shifted, with their words: the third word names the anchor, the origin of the object (a version 8 file holds it as it is, a version 9 file as an offset); a
-    // bomb or wall that is not anchored to an origin of its own keeps its word (the owner of a bomb, or 0x0101 for a neutral one)
-    function shiftObject(file, cells, dr, dc) {
+    // The cells of an object after it is shifted, with their words. The third word names the anchor (a version 8 file holds the place of it as it is, a version 9 file as an offset from the cell),
+    // and the link of a cell to its anchor is carried exactly: the anchor that moves along (it is one of the cells that are shifted) moves by the same shift, an anchor that stays (or that lies
+    // outside the map, as in some old maps) stays where it is. A bomb or wall that is not anchored to an origin of its own keeps its word (the owner of a bomb, or 0x0101 for a neutral one).
+    // The word of a cell is null when the link cannot be kept (the anchor that stays would be the cell itself, or the offset does not fit).
+    function s8(v) { return v > 127 ? v - 256 : v; }
+    function targetOf(file, r, c, w) {          // (the place that a word names, as Edit.anchorIndex reads it, but without the test of the map)
+        var tr, tc;
+        if (file.version === 8) { tr = w & 255; tc = w >> 8; }
+        else { tr = r + s8(w & 255); tc = c + s8(w >> 8); if (file.rows <= 256 && file.columns <= 256) { tr &= 255; tc &= 255; } }
+        return { r: tr, c: tc };
+    }
+    function wordOf(file, r, c, tr, tc) { return file.version === 8 ? ((tr & 255) | ((tc & 255) << 8)) : (((tr - r) & 255) | (((tc - c) & 255) << 8)); }
+    function carried(file, idx, dr, dc, inSet) {
+        var cols = file.columns, p = rc(file, idx), w = Edit.third(file, 2, idx), t = targetOf(file, p.r, p.c, w), along, nt, nr = p.r + dr, nc = p.c + dc, nw, back;
+        along = t.r >= 0 && t.c >= 0 && t.r < file.rows && t.c < cols && !!inSet[t.r * cols + t.c];
+        nt = along ? { r: t.r + dr, c: t.c + dc } : t;
+        nw = wordOf(file, nr, nc, nt.r, nt.c); back = targetOf(file, nr, nc, nw);
+        if (back.r !== nt.r || back.c !== nt.c) return null;
+        if ((t.r === p.r && t.c === p.c) !== (back.r === nr && back.c === nc)) return null;
+        return nw;
+    }
+    function footSet(items) {
+        var set = {};
+        items.forEach(function (it) { if (it.k === 'obj' || it.k === 'pile') (it.k === 'pile' ? it.objs : it.fp).forEach(function (x) { set[x] = true; }); });
+        return set;
+    }
+    function shiftObject(file, cells, dr, dc, inSet) {
         var cols = file.columns, out = [], i, a, t;
         if (!cells.length) return out;
         a = Edit.anchorIndex(file, cells[0]); t = Edit.tile(file, 2, cells[0]);
         var whole = cells.length > 1 && a >= 0 && Edit.tile(file, 2, a) === t && (Edit.flags(file, 2, a) & 1) && Edit.anchorIndex(file, a) === a;
         for (i = 0; i < cells.length; i++) {
-            var idx = cells[i], p = rc(file, idx), t2 = Edit.tile(file, 2, idx), anchor = whole ? a : idx, ap = rc(file, anchor), r = p.r + dr, c = p.c + dc;
+            var idx = cells[i], p = rc(file, idx), t2 = Edit.tile(file, 2, idx), r = p.r + dr, c = p.c + dc;
             var word = Edit.third(file, 2, idx), keep = !whole && Edit.anchorIndex(file, idx) !== idx && t2 >= 129 && t2 <= 134;
-            if (!keep) word = file.version === 8 ? (((ap.r + dr) & 255) | (((ap.c + dc) & 255) << 8)) : (((ap.r + dr - r) & 255) | (((ap.c + dc - c) & 255) << 8));
+            if (!keep) word = carried(file, idx, dr, dc, inSet);
             out.push({ from: idx, to: r * cols + c, t: t2, f: Edit.flags(file, 2, idx), a: word });
         }
         return out;
@@ -285,11 +313,12 @@
     // The change that moves (mode 'move'), copies ('copy') or takes away ('delete') the items, shifted by (dr, dc): {names, cells, solid, splices} for the history, and `landed` (what the items
     // become, for finding them again)
     function build(file, items, dr, dc, mode) {
-        var ix = index(file), lay = ix.lay, cells = {}, order = [], solid = [], landed = [], i;
+        var ix = index(file), lay = ix.lay, cells = {}, order = [], solid = [], landed = [], i, inSet = footSet(items);
         var dropRec = {}, moveRec = {}, newRecs = [], dropPile = {}, movePile = {}, newPiles = [], dropWp = {}, moveWp = {}, newWps = [];
         function put(idx, t, f, a) { if (!(idx in cells)) order.push(idx); cells[idx] = [t, f, a]; }
         function objects(cellList) {
-            var words = shiftObject(file, cellList, dr, dc), k;
+            var words = shiftObject(file, cellList, dr, dc, inSet), k;
+            for (k = 0; k < words.length; k++) if (words[k].a === null) throw new Error('a tie that cannot be kept (check() refuses such a shift)');
             if (mode !== 'copy') for (k = 0; k < words.length; k++) put(words[k].from, EMPTY2, 0, 0);
             if (mode !== 'delete') for (k = 0; k < words.length; k++) { put(words[k].to, words[k].t, words[k].f, words[k].a); if (Solid.sets(words[k].t)) solid.push([words[k].to, true]); }
             return words;

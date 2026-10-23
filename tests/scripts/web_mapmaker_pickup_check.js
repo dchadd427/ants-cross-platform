@@ -476,6 +476,43 @@ function caseD() {
         doIt(te, items(te.file, 20, 20), 130, 140, 'move');
         equal(wordsOf(te.file, 150 * 200 + 160), [MUSH, 1, version === 8 ? (150 | (160 << 8)) : 0], 'the mushroom moved past row 127 is anchored at its origin');
         check(Edit.anchorIndex(te.file, 149 * 200 + 160 - 1) === 150 * 200 + 160, 'a cell of it names the origin: ' + Edit.anchorIndex(te.file, 149 * 200 + 159));
+
+        // the tie of a cell to its anchor is carried exactly (a cell of an old map that names another place): a tie to a place that stays is kept, a tie to a cell that moves along moves along
+        {
+        let f, ed, res;
+        const tag = ' (version ' + version + ')';
+        const off = (r, c, tr, tc) => (version === 8 ? ((tr & 255) | ((tc & 255) << 8)) : (((tr - r) & 255) | (((tc - c) & 255) << 8)));          // (the word of the cell (r, c) that names the place (tr, tc))
+        f = File.parse(mapWith(version, 30, 30, [], [], []));
+        put(f, 2, 5, 5, 62, 1, off(5, 5, 0, 0)); put(f, 2, 12, 5, 63, 1, off(12, 5, 200, 7)); put(f, 2, 20, 20, 64, 1, off(20, 20, 20, 20));
+        ed = editor(f);
+        res = doIt(ed, items(ed.file, 5, 5), 4, 3, 'move');
+        equal(wordsOf(ed.file, 9 * 30 + 8), [62, 1, off(9, 8, 0, 0)], 'a cell that names a place that stays (the corner) still names it after a move' + tag);
+        res = doIt(ed, items(ed.file, 12, 5), 2, 2, 'copy');
+        equal(wordsOf(ed.file, 14 * 30 + 7), [63, 1, off(14, 7, 200, 7)], 'a cell that names a place off the map still names it in a copy' + tag);
+        equal(wordsOf(ed.file, 12 * 30 + 5), [63, 1, off(12, 5, 200, 7)], 'and the first is as it was' + tag);
+        res = doIt(ed, items(ed.file, 20, 20), -3, 1, 'move');
+        equal(wordsOf(ed.file, 17 * 30 + 21), [64, 1, off(17, 21, 17, 21)], 'a cell that is its own anchor is its own anchor after a move' + tag);
+        // it cannot go where its tie would become a tie to itself, and the sentence says so in plain words; nothing is changed
+        let verdict = Pick.check(ed.file, items(ed.file, 9, 8), -9, -8, 'move', 'one');
+        check(!verdict.ok && /Part of it is tied to another place on the map/.test(verdict.text) && verdict.cells.length === 1 && verdict.cells[0] === 0, 'a cell cannot go on the place that it names: ' + verdict.text);
+        verdict = Pick.check(ed.file, items(ed.file, 9, 8), -9, -8, 'copy', 'one');
+        check(!verdict.ok && /Part of it is tied to another place on the map/.test(verdict.text), 'nor can its copy: ' + verdict.text);
+        check(Pick.check(ed.file, items(ed.file, 9, 8), -9, -7, 'move', 'one').ok, 'one cell to the side it can');
+        let thrown = ''; try { Pick.build(ed.file, items(ed.file, 9, 8), -9, -8, 'move'); } catch (e) { thrown = e.message; }
+        check(/tie/.test(thrown), 'and build() refuses it too, so that nothing wrong is ever written: ' + thrown);
+        // two cells, one of them naming the other (not an object of the format): picked together by an area, the tie moves along; picked alone, it stays
+        f = File.parse(mapWith(version, 30, 30, [], [], []));
+        put(f, 2, 10, 10, 62, 1, off(10, 10, 10, 10)); put(f, 2, 10, 12, 63, 0, off(10, 12, 10, 10));
+        ed = editor(f);
+        const both = Pick.areaItems(f, { r0: 9, c0: 9, r1: 11, c1: 13 });
+        check(both.length === 2, 'an area holds both cells (' + both.length + ')');
+        res = doIt(ed, both, 5, 4, 'move', 'area');
+        equal(wordsOf(ed.file, 15 * 30 + 16), [63, 0, off(15, 16, 15, 14)], 'the cell that names the other one names it at its new place' + tag);
+        res = doIt(ed, items(ed.file, 15, 16), 1, 1, 'move');
+        equal(wordsOf(ed.file, 16 * 30 + 17), [63, 0, off(16, 17, 15, 14)], 'moved alone it keeps naming the place that stays' + tag);
+        res = doIt(ed, Pick.areaItems(ed.file, { r0: 14, c0: 13, r1: 17, c1: 18 }), 0, -2, 'copy', 'area');
+        equal(wordsOf(ed.file, 16 * 30 + 15), [63, 0, off(16, 15, 15, 12)], 'the copy of the two cells names the copy of the other one' + tag);
+        }
     }
     // delete a hill
     const f = File.parse(mapWith(9, 30, 30, [[155, 20, 20]], [], []));
@@ -985,6 +1022,7 @@ function freeShift(f, picked, mode) {
 }
 // what the bytes must be after a move, from the facts of the file format, written apart from the script's own code: the layers cell by cell, then the three lists by their offsets
 function expected(file, it, dr, dc, mode) {
+    let refusedLink = false;
     const b = Uint8Array.from(file.bytes), cols = file.columns, L = lay(file);
     const rd = (x, at) => x[at] | (x[at + 1] << 8), wr = (x, at, v) => { x[at] = v & 255; x[at + 1] = (v >> 8) & 255; };
     const cellAt = (layer, idx) => (layer === 1 ? file.layer1 : file.layer2) + 6 * idx;
@@ -992,16 +1030,23 @@ function expected(file, it, dr, dc, mode) {
     function layer2() {
         const cells = it.k === 'pile' ? it.objs : it.fp;
         if (!cells.length) return;
-        const flagged = cells.filter((i) => rd(file.bytes, cellAt(2, i) + 2) & 1);
-        const originIdx = flagged.length === 1 ? flagged[0] : -1, origin = originIdx >= 0 && cells.length > 1 ? originIdx : -1;
+        const inSet = new Set(cells), small = file.rows <= 256 && file.columns <= 256, s8 = (v) => (v > 127 ? v - 256 : v);
         const words = cells.map((idx) => {
-            const p = cellAt(2, idx), t = rd(file.bytes, p), f = rd(file.bytes, p + 2), oldWord = rd(file.bytes, p + 4), np = shift(idx), nr = np / cols | 0, nc = np % cols;
-            const ownIdx = origin >= 0 ? origin : idx, orow = (ownIdx / cols | 0) + dr, ocol = ownIdx % cols + dc, r0 = idx / cols | 0, c0 = idx % cols;
+            const p = cellAt(2, idx), t = rd(file.bytes, p), f = rd(file.bytes, p + 2), oldWord = rd(file.bytes, p + 4), np = shift(idx), nr = np / cols | 0, nc = np % cols, r0 = idx / cols | 0, c0 = idx % cols;
             const ownWord = file.version === 8 ? (r0 & 255) | ((c0 & 255) << 8) : 0;
-            let w = file.version === 8 ? ((orow & 255) | ((ocol & 255) << 8)) : (((orow - nr) & 255) | (((ocol - nc) & 255) << 8));
-            if (cells.length === 1 && ((t >= 129 && t <= 132) || (t === 134 && oldWord !== ownWord))) w = oldWord;        // (a bomb's word is its owner, and a wall that names no origin of its own keeps its word)
-            return { idx, np, t, f, w };
+            // where the old word points (a place, maybe off the map), and where the link must point after the shift: along with the cells when it points at one of them, else where it did
+            let tr = file.version === 8 ? oldWord & 255 : r0 + s8(oldWord & 255), tc = file.version === 8 ? oldWord >> 8 : c0 + s8(oldWord >> 8);
+            if (file.version !== 8 && small) { tr &= 255; tc &= 255; }
+            const along = tr >= 0 && tc >= 0 && tr < file.rows && tc < cols && inSet.has(tr * cols + tc), ur = along ? tr + dr : tr, uc = along ? tc + dc : tc;
+            let w = file.version === 8 ? ((ur & 255) | ((uc & 255) << 8)) : (((ur - nr) & 255) | (((uc - nc) & 255) << 8));
+            // the link is kept only when the word reads back as that place, and a cell is its own anchor after the shift exactly when it was before
+            let br = file.version === 8 ? w & 255 : nr + s8(w & 255), bc = file.version === 8 ? w >> 8 : nc + s8(w >> 8);
+            if (file.version !== 8 && small) { br &= 255; bc &= 255; }
+            const refused = br !== ur || bc !== uc || ((tr === r0 && tc === c0) !== (br === nr && bc === nc));
+            if (cells.length === 1 && ((t >= 129 && t <= 132) || (t === 134 && oldWord !== ownWord))) return { idx, np, t, f, w: oldWord, refused: false };        // (a bomb's word is its owner, and a wall that names no origin of its own keeps its word)
+            return { idx, np, t, f, w, refused };
         });
+        if (words.some((x) => x.refused)) { refusedLink = true; return; }
         if (mode !== 'copy') for (const w of words) { const p = cellAt(2, w.idx); wr(b, p, EMPTY2); wr(b, p + 2, 0); wr(b, p + 4, 0); if (rd(file.bytes, p) !== 0 && Solid.clears(w.t) && w.idx >= cols) { const q = cellAt(1, w.idx) + 2; wr(b, q, rd(b, q) & ~1); } }
         if (mode !== 'delete') for (const w of words) { const p = cellAt(2, w.np); wr(b, p, w.t); wr(b, p + 2, w.f); wr(b, p + 4, w.w); if (Solid.sets(w.t)) { const q = cellAt(1, w.np) + 2; wr(b, q, rd(b, q) | 1); } }
     }
@@ -1027,8 +1072,9 @@ function expected(file, it, dr, dc, mode) {
         else if (mode === 'delete') { out = splice(out, at, 6, new Uint8Array(0)); wr(out, file.blocksAt, rd(out, file.blocksAt) - 1); }
         else { const bytes = Uint8Array.from(file.bytes.subarray(at, at + 6)); wr(bytes, 2, r.row + dr); wr(bytes, 4, r.column + dc); const end = file.blocksAt + L.b1.length; out = splice(out, end, 0, bytes); wr(out, file.blocksAt, rd(out, file.blocksAt) + 1); }
     }
-    return out;
+    return refusedLink ? null : out;
 }
+function expectedRefuses(f, it, dr, dc, mode) { return expected(f, it, dr, dc, mode) === null; }
 // an object whose words are the format's own (one origin that every cell names): the others (a quirk of an old map) are held to the looser check
 function canonical(f, it) {
     if (it.k !== 'obj' && it.k !== 'pile') return true;
@@ -1056,13 +1102,24 @@ function sweepOne(rel, bytes0, stats, core) {
     const before0 = core ? core.checkMap(Uint8Array.from(bytes0), 'extended').json : null;
     for (const cand of candidates(base)) {
         const picked = [cand.item];
+        if (cand.item.k === 'obj' || cand.item.k === 'pile') for (const [dr, dc] of [[0, 1], [1, 0], [-3, 2], [7, -5], [40, 40], [-25, 3]]) {          // (the tie of a cell to its anchor: the check and the file format agree on every shift)
+            const f = File.parse(Uint8Array.from(bytes0)), it = items(f, (cand.item.fp[0] / f.columns) | 0, cand.item.fp[0] % f.columns).filter((x) => x.k === cand.item.k)[0];
+            for (const mode of ['move', 'copy']) {
+                if (mode === 'copy' && cand.kind === 'hill') continue;
+                const v = Pick.check(f, [it], dr, dc, mode, 'one'), want = v.ok ? expected(f, it, dr, dc, mode) : 1;
+                stats.ties++;
+                if (v.ok) check(want !== null, rel + ': ' + mode + ' of a ' + cand.kind + ' by ' + dr + ',' + dc + ' is allowed, though its tie to an anchor could not be kept');
+                if (!v.ok && /tied to another place/.test(v.text)) { stats.tied++; check(expectedRefuses(f, it, dr, dc, mode), rel + ': the check says a tie could not be kept by ' + dr + ',' + dc + ' and the file format says it could'); }
+            }
+        }
         for (const mode of ['move', 'copy', 'delete']) {
             if (mode === 'copy' && cand.kind === 'hill') continue;
             const f = File.parse(Uint8Array.from(bytes0)), ed = editor(f), it = items(f, (cand.item.fp[0] / f.columns) | 0, cand.item.fp[0] % f.columns).filter((x) => x.k === cand.item.k)[0];
             const shiftBy = mode === 'delete' ? [0, 0] : freeShift(f, [it], mode);
             stats.tried++;
             if (!shiftBy) { stats.nofree++; continue; }
-            const want = expected(f, it, shiftBy[0], shiftBy[1], mode), was = Uint8Array.from(f.bytes), ok = canonical(f, it);
+            const want = expected(f, it, shiftBy[0], shiftBy[1], mode), was = Uint8Array.from(f.bytes), ok = want !== null;
+            check(want !== null, rel + ': ' + mode + ' of a ' + cand.kind + ' by ' + shiftBy + ' is allowed, though a tie of one of its cells to its anchor could not be kept');
             const res = doIt(ed, [it], shiftBy[0], shiftBy[1], mode);
             if (res.error) { check(false, rel + ': ' + mode + ' ' + cand.kind + ' was refused though the check allowed it: ' + res.error); continue; }
             stats.done++;
@@ -1085,7 +1142,7 @@ function sweepOne(rel, bytes0, stats, core) {
     }
 }
 function caseK(core) {
-    const files = libraryFiles(), stats = { tried: 0, nofree: 0, done: 0, exact: 0, back: 0, cored: 0 };
+    const files = libraryFiles(), stats = { tried: 0, nofree: 0, done: 0, exact: 0, back: 0, cored: 0, ties: 0, tied: 0 };
     const shas = {};
     const list = QUICK ? files.filter((x, i) => i % Math.ceil(files.length / 40) === 0 || /Original-Ants/.test(x)) : files;
     for (const rel of list) { const bytes = new Uint8Array(fs.readFileSync(path.join(ROOT, rel))); shas[rel] = sha(bytes); sweepOne(rel, bytes, stats, core); }
