@@ -501,6 +501,24 @@ function caseD() {
         check(Pick.check(ed.file, items(ed.file, 9, 8), -9, -7, 'move', 'one').ok, 'one cell to the side it can');
         let thrown = ''; try { Pick.build(ed.file, items(ed.file, 9, 8), -9, -8, 'move'); } catch (e) { thrown = e.message; }
         check(/tie/.test(thrown), 'and build() refuses it too, so that nothing wrong is ever written: ' + thrown);
+        // a wall of three cells (every cell names the origin) moves as a whole: each cell names the new origin, in version 8 as an absolute place
+        {
+            const wf = File.parse(mapWith(version, 30, 30, [], [], []));
+            putObject(wf, WALL, 5, 5, [[0, 0], [0, 1], [0, 2]]);
+            const we = editor(wf);
+            doIt(we, items(we.file, 5, 6), 4, 3, 'move');
+            for (const c of [8, 9, 10]) equal(wordsOf(we.file, 9 * 30 + c), [WALL, c === 8 ? 1 : 0, off(9, c, 9, 8)], 'a cell of a moved wall names the new origin of the wall, column ' + c + tag);
+        }
+        // a tie to a place that stays must fit the offset of a big map (a version 9 file over 256 rows or columns keeps it as a signed byte each): too far and the move is refused
+        if (version === 9) {
+            const bf = File.parse(mapWith(9, 300, 300, [], [], []));
+            put(bf, 2, 5, 150, 62, 1, off(5, 150, 5, 40));
+            const far = Pick.check(bf, items(bf, 5, 150), 0, 100, 'move', 'one'), near = Pick.check(bf, items(bf, 5, 150), 0, 10, 'move', 'one');
+            check(!far.ok && /Part of it is tied to another place on the map/.test(far.text), 'on a big map a tie that no offset could hold is refused: ' + far.text);
+            check(near.ok, 'and one that fits is not');
+            let thrownFar = ''; try { Pick.build(bf, items(bf, 5, 150), 0, 100, 'move'); } catch (e) { thrownFar = e.message; }
+            check(/tie/.test(thrownFar), 'and build() will not write it');
+        }
         // two cells, one of them naming the other (not an object of the format): picked together by an area, the tie moves along; picked alone, it stays
         f = File.parse(mapWith(version, 30, 30, [], [], []));
         put(f, 2, 10, 10, 62, 1, off(10, 10, 10, 10)); put(f, 2, 10, 12, 63, 0, off(10, 12, 10, 10));
@@ -699,6 +717,12 @@ function caseG() {
         check(hv.log.acts === 1 && Edit.tile(hv.file(), 2, 29 * 40 + 20) === RED_HILL, 'Done puts it where it was put, not where the mouse is' + tag);
         hv.p.hover({ row: 1, column: 1 });
         check(!hv.state().hover && hv.state().mode === 'picked', 'the mouse changes nothing once it is down' + tag);
+        // a click away from the ghost that follows the mouse puts the thing there, and the preview is gone (a key then acts on that place)
+        const hw = page(File.parse(sceneBytes(version)));
+        hw.tap(3, 3); hw.press('move'); hw.p.hover({ row: 30, column: 20 }); hw.tap(20, 10);
+        check(!hw.state().hover && hw.state().dr === 17 && hw.state().dc === 7, 'a click far from the preview puts the thing where it was clicked: ' + hw.state().dr + ',' + hw.state().dc + tag);
+        hw.key('ArrowRight');
+        check(hw.state().dr === 17 && hw.state().dc === 8, 'and a key goes on from there, not from where the preview was' + tag);
         // on a short screen the bar can be folded to one small button
         hv.press('fold');
         check(hv.state().fold && /folded/.test(hv.bar.className) && hv.has('fold'), 'the bar folds' + tag);
