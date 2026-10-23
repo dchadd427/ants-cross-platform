@@ -47,6 +47,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kExpedition, kRankPowerUps);                 // (the crew that is flown to the Swimmers and the Bombers that fly it)
     ledger_.set_rank(kGateGoals, kRankGates);                     // (the Fire ant and the Bomber of a gate goal)
     ledger_.set_rank(kField, kRankGates);                         // (the ant of the field breach)
+    ledger_.set_rank(kOpportunity, kRankFight);                   // (the kill that one blow gives: an ant is taken from the chores and the economy, never from a pick-up, a raid or a fight)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -104,6 +105,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         const PileInfo* info = map->pile(p.index);
         if (info == nullptr || info->approach[seat_].reachable()) any_reachable_pile = true;
     }
+    tactics_.far_work = (plan.islands && island_.active()) || tactics_.gate_map || tactics_.field_map;                            // (food beyond water, a gate or a field is work for the Swimmers and the goals: the ants do not go hunting, and the last ants do not go for a kill)
+    tactics_.no_work = !any_reachable_pile && !tactics_.far_work;
     const bool gate_breaching = tactics_.gate_map && !tactics_.gate_beside && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
     tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
@@ -161,6 +164,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (tactics_.gate_map && !fallback) gate_goals_.step(context);                          // (Medium and Hard on a walled map: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
     if (tactics_.field_map && !fallback) field_.step(context);                              // (a pile behind a field: one ant opens it)
     tactics_.gate_goals_live = tactics_.gate_map && !fallback && (!gate_goals_.exhausted() || (tactics_.field_map && field_.live()));    // (the counters spare the map's own bombs only while the goals are there to deal with them)
+    opportunity_.step(context);                                                              // (before the fights and every chore: an enemy that one blow kills is struck at once; nothing when the plan has none)
     fight_.step(context);
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
@@ -340,6 +344,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     gate_goals_.on_command(command, fate, tick);
     field_.on_command(command, fate, tick);
     brawl_.on_command(command, fate, tick);
+    opportunity_.on_command(command, fate, tick);
     gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);

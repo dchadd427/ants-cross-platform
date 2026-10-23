@@ -679,6 +679,7 @@ void run_stand_tests() {
                 sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 8});
                 const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});
                 LevelPlan plan = plan_for(Level::Hard);
+                without_kill_batch(plan);                                                     // (the subject is the hunts of the stand batch; the kill batch of AI31 would do it first)
                 plan.water_hunt = water_hunt;
                 plan.assault = false;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
@@ -704,6 +705,7 @@ void run_stand_tests() {
             const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 14});
             sim.get_unit(enemy).hp = 8;                                               // 8 HP cannot be killed by 3 workers on land, only by the 2-hit water push
             LevelPlan plan = plan_for(Level::Hard);
+            without_kill_batch(plan);                                                     // (the subject is the hunts of the stand batch; the kill batch of AI31 would do it first)
             plan.assault = false;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(220);
@@ -722,6 +724,7 @@ void run_stand_tests() {
                 const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});
                 sim.get_unit(enemy).hp = 3;
                 LevelPlan plan = plan_for(Level::Hard);
+                without_kill_batch(plan);                                                     // (the subject is the hunts of the stand batch; the kill batch of AI31 would do it first)
                 plan.vicinity_hunt = vicinity_hunt;
                 plan.assault = false;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
@@ -772,6 +775,7 @@ void run_stand_tests() {
             const TileCoord raid = map.hill(0).raid;
             const uint32_t raider = sim.spawn_unit(1, sim::AntType::Bomber, TileCoord{raid.x + 3, raid.y});
             LevelPlan plan = plan_for(Level::Hard);
+            without_kill_batch(plan);                                                     // (the subject is the hunts of the stand batch; the kill batch of AI31 would do it first)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(20);
             ASSERT_TRUE(rig.as<StandardBot>().fight().hunting(raider));

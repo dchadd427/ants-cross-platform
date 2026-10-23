@@ -19,6 +19,8 @@
 #include <set>
 #include <vector>
 
+#include "ants_ai/chore_worth.hpp"
+#include "ants_ai/opportunity_task.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
 

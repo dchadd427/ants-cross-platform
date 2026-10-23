@@ -215,6 +215,11 @@ if(NOT EMSCRIPTEN)
     add_executable(bot_arena EXCLUDE_FROM_ALL tools/bot_arena.cpp tools/bot_arena_tune.cpp)
     target_link_libraries(bot_arena PRIVATE ants_ai ants_server_core ants_replay ants_net ants_sim ants_assets ants_version ants_test_paths Threads::Threads)     # ants_server_core: the store that --save-replays keeps its files with
 
+    # Bot watcher (not part of the normal build): plays matches like bot_arena and counts what the bots do badly, per seat and minute (docs/BOT_FIGHT.md)
+    #   cmake --build build --target bot_watch && ./build/bot_watch --map TREASURE --seeds 1..4 --seat 0=standard:hard --seat 1=standard:medium --out watch.json
+    add_executable(bot_watch EXCLUDE_FROM_ALL tools/bot_watch.cpp tools/bot_arena_tune.cpp)
+    target_link_libraries(bot_watch PRIVATE ants_ai ants_replay ants_net ants_sim ants_assets ants_test_paths Threads::Threads)
+
     # Replay tool (not part of the normal build): checks a replay file and lists its orders with their time, place and ant type (docs/REPLAYS.md)
     #   cmake --build build --target replay_tool && ./build/replay_tool orders match.antsrep   (info, verify and orders; ./build/replay_tool --help)
     add_executable(replay_tool EXCLUDE_FROM_ALL tools/replay_tool.cpp)

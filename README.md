@@ -6,7 +6,7 @@ A faithful, deterministic C++17 engine remake and port of the 1998 real-time str
 
 The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) directly, without pre-conversion. The game's mechanics are re-derived from the disassembly of the original program, system by system ([the original program](docs/ORIGINAL_PROGRAM.md)); the network play, the computer players, the 16:9 picture, the zoom, the touch controls and the browser build are this project's own. It runs a deterministic 20 Hz simulation, with 32-channel spatial audio, MP3 music (the original's four pieces), TrueType text and an SDL2 2D renderer (hardware-accelerated, with a software fallback).
 
-**Current version: v0.12.111** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.12.48 are in the short **[changelog](CHANGELOG.md)** (also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**); the releases before v0.12.48 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+**Current version: v0.12.112** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.12.49 are in the short **[changelog](CHANGELOG.md)** (also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**); the releases before v0.12.49 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 ## Play
 
@@ -21,6 +21,8 @@ The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) di
 | Windows | Visual Studio 2022 Build Tools (the "Desktop development with C++" workload) and CMake 3.21 or newer (`start_game.bat` also finds the CMake that comes with Visual Studio); CMake downloads SDL2 itself | `start_game.bat` |
 
 The script builds the game each time it starts (quick when nothing changed) and opens one game with the start menu. Its options, the other ways to build, and the web build are in [Build and run](docs/BUILD_AND_RUN.md#quick-launch-desktop).
+
+**Support the project:** if you enjoy the game, you can [buy me a coffee](https://buymeacoffee.com/dchadd).
 
 ## Documentation
 
@@ -53,6 +55,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design and the protocol by version
 - [`BOTS.md`](docs/BOTS.md): the computer players: the rule, the architecture, the levels and tactics, the known limits (and [`docs/reverse_engineering/bomb_gates.md`](docs/reverse_engineering/bomb_gates.md) for the bomb-gate analysis and universal gate-goal planner)
 - [`BOT_GATES.md`](docs/BOT_GATES.md): walled maps: the map's own bombs left to the gate goals, the field breach (food beyond a field of bombs, a fire wall and water: POPcOrN and its family), the measurements, and POPcOrN in a match
+- [`BOT_FIGHT.md`](docs/BOT_FIGHT.md): the Hard computer player's quick kill (an enemy beside water, a bomb or a fire wall, struck from the tile that throws it in), fights that a walk reaches, hunting when there is nothing to bank, and the measuring tool `bot_watch`
 - [`BOT_187.md`](docs/BOT_187.md): the computer players in the game type 187: the brawl (packs on the enemy ants, the hurt sent home, what the engine allows), the measurements, what was tried and left out
 - [`MATCH_COUNTDOWN.md`](docs/MATCH_COUNTDOWN.md): the 30 s countdown with the chat open before an online match: the Begin that tells it, the card, the Fullscreen button
 - [`BOT_NAMES.md`](docs/BOT_NAMES.md): the names of the computer players ("Pip (bot, Hard)"): the list, the picker, the label, the names a person may not take, network protocol 20

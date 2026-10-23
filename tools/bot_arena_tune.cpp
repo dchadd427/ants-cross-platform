@@ -216,6 +216,21 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
     if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
+    if (key == "kill") {                                                              // the kill batch of docs/BOT_FIGHT.md (0: the bot as it was before it; 1: the plan that ships)
+        if (v == 0) ai::without_kill_batch(p);
+        else p.opportunity = p.reach_fights = p.idle_hunt = p.chore_worth = true;
+        return true;
+    }
+    if (key == "opp") return flag(p.opportunity);
+    if (key == "oppreach") { p.opportunity_reach = static_cast<int32_t>(v); return true; }
+    if (key == "oppjobs") { p.opportunity_jobs = static_cast<uint32_t>(v); return true; }
+    if (key == "oppticks") { p.opportunity_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "oppstill") { p.opportunity_still = static_cast<uint32_t>(v); return true; }
+    if (key == "oppguard") return flag(p.opportunity_skip_guard);
+    if (key == "oppharv") { p.opportunity_harvest_d = static_cast<int32_t>(v); return true; }
+    if (key == "reach") return flag(p.reach_fights);
+    if (key == "idlehunt") return flag(p.idle_hunt);
+    if (key == "worth") return flag(p.chore_worth);
     if (key == "stand") {                                                             // the stand batch of docs/BOTS.md, "The stand batch" (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_stand_batch(p);
         return true;
