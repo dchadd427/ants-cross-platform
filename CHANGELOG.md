@@ -26,15 +26,15 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.111 - 2026-10-23 - Hard computer players take the quick kill and stop sending ants where no walk goes
 
 **For players:**
-- **The Hard computer players shove more enemies into water, bombs and fire.** An enemy ant next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over many maps they get about a quarter more kills.
-- **They waste about 40 percent fewer orders.** They no longer send ants at enemies across a lake, which the game used to answer with "Can't go there": about 30 of every 100 orders before and 19 now over the map library (23 and 13 in an independent check).
+- **The Hard computer players shove more enemies into water, bombs and fire.** An enemy ant next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over many maps they get a seventh to a quarter more kills.
+- **They waste about 40 percent fewer orders.** They no longer send ants at enemies across a lake, which the game used to answer with "Can't go there": about 31 of every 100 orders before and 19 now over the map library (23 and 13 in an independent check).
 - **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home. Where the food lies over water or behind a gate, the ants keep that work.
 - **The ring of fire round an enemy gate is lit only when that team has food to bank.** Hard builds and puts out its other fire walls as often as before.
 - **This is not a stronger player.** Against the old Hard player it wins as often (about 50 of 100, with four players or with two), and against Medium as often as before. An enemy beside the water within reach is still left alone about 7 times in 10 (a Hard ant only goes for one that has stood still for a second), ants stand idle a little more because they no longer run pointless trips, and on one map, Acid Blood, the new kill made it play worse until the last ants were told to stay at their work. Easy and Medium are unchanged.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (computer players run on the server or the host and only send commands, so old recordings play as before).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...XXXXXXXX), [the quick kill](docs/BOT_FIGHT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...a3899325), [the quick kill](docs/BOT_FIGHT.md)
 
 ## v0.12.110 - 2026-10-23 - Pick up: a drag is put down when you let go of the mouse
 
