@@ -1,0 +1,107 @@
+{
+ "note": "Mutants of the six original maps that the site serves for the Map Maker's 'Start from a game map' and of the words that the editor says when a map does not come, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a built ants_server: python3 tools/mutate.py tests/data/original_maps_mutants.json --keep-going --jobs 1. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('The site's nginx') or docs/MAP_EDITOR.md (mapmaker_store.js, fetchMap, and the note of mapmaker_dialog.js). No mutant changes a map of the library: the files they change are the Dockerfile, docker/nginx.conf and the editor's scripts.",
+ "defaults": {
+  "test": "python3 tests/scripts/test_nginx_original_maps.py"
+ },
+ "mutants": [
+  {
+   "id": "originals_not_copied",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\n",
+   "new": ""
+  },
+  {
+   "id": "only_one_original_copied",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/",
+   "new": "COPY Original-Ants/Maps/TINY.LVL /srv/community-maps/files/"
+  },
+  {
+   "id": "originals_copied_to_another_folder",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/",
+   "new": "COPY Original-Ants/Maps/*.LVL /srv/original-maps/"
+  },
+  {
+   "id": "nginx_refuses_upper_case_ending",
+   "file": "docker/nginx.conf",
+   "old": "if ($uri !~ \"^/maps/files/[ -.0-\\[\\]-~]{1,80}\\.(lvl|LVL)\\z\") { return 404; }",
+   "new": "if ($uri !~ \"^/maps/files/[ -.0-\\[\\]-~]{1,80}\\.(lvl)\\z\") { return 404; }"
+  },
+  {
+   "id": "editor_404_is_a_bad_connection",
+   "file": "web/front/mapmaker_store.js",
+   "old": "r && (r.status === 404 || r.status === 410) ? 'gone' : 'site'",
+   "new": "false ? 'gone' : 'site'",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "editor_410_is_not_gone",
+   "file": "web/front/mapmaker_store.js",
+   "old": "(r.status === 404 || r.status === 410)",
+   "new": "(r.status === 404)",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "editor_bad_answer_is_a_bad_connection",
+   "file": "web/front/mapmaker_store.js",
+   "old": "kind === 'site' ? 'The site could not send this map. Try again in a moment.' : ",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "editor_failed_request_is_not_told",
+   "file": "web/front/mapmaker_store.js",
+   "old": ".then(null, function () { no(); });",
+   "new": ".then(null, function () {});",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "editor_empty_file_is_a_map",
+   "file": "web/front/mapmaker_store.js",
+   "old": "if (!buf || !buf.byteLength) return no('site');",
+   "new": "if (!buf) return no('site');",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "editor_told_twice",
+   "file": "web/front/mapmaker_store.js",
+   "old": "                    if (over) return;\n",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "editor_done_not_marked_over",
+   "file": "web/front/mapmaker_store.js",
+   "old": "over = true; done('', new Uint8Array(buf));",
+   "new": "done('', new Uint8Array(buf));",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "editor_bad_name_is_a_bad_connection",
+   "file": "web/front/mapmaker_store.js",
+   "old": "if (!validMapFile(file)) return no('gone');",
+   "new": "if (!validMapFile(file)) return no();",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "editor_error_set_as_markup",
+   "file": "web/front/mapmaker_dialog.js",
+   "old": "copyNote.textContent = err || ",
+   "new": "copyNote.innerHTML = err || ",
+   "test": "node tests/scripts/web_mapmaker_dialog_check.js"
+  },
+  {
+   "id": "player_map_clash_by_file_destination_copy",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\n",
+   "new": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\nCOPY Community-Maps/Treasure\\ 2.lvl /srv/community-maps/files/tiny.lvl\n"
+  },
+  {
+   "id": "player_map_clash_by_run_cp",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\n",
+   "new": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\nRUN cp /srv/community-maps/files/TREASURE.LVL /srv/community-maps/files/Tiny.Lvl\n"
+  }
+ ]
+}

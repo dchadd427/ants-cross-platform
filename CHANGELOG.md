@@ -31,7 +31,17 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. Network protocol 21 and the replay rules numbers are unchanged. A new map rules word 2 exists inside the simulation only; the map readers and writers still refuse it, so no map and no recording can use it.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...029c0d86)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/91a09a4b...029c0d86)
+
+## v0.12.111 - 2026-10-23 - Map Maker: Start from a game map opens the six original maps
+
+**For players:**
+- **Map Maker (v1.5.3): "Start from a game map" now opens the six maps that came with the game.** Tiny, Small, Medium, Gauntlet, Treasure and Islands always said "The map file could not be downloaded. Check your connection and try again.", because the site had no copy of those six files to hand out (only the players' maps). It has them now. Pick one and the editor opens a copy of it under a free name, so you can edit and save it right away; the original is never changed.
+- **The message now tells the truth.** A map the site does not have says "This map is not available from the site right now." A site that answers badly says "The site could not send this map. Try again in a moment." "Check your connection" stays for a connection that really failed.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the site and the Map Maker page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...588c0067)
 
 ## v0.12.110 - 2026-10-23 - Pick up: a drag is put down when you let go of the mouse
 
