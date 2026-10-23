@@ -7,7 +7,7 @@
 //   * the way in and out: the buttons (header, under the picture, over the picture in fullscreen, the replay's bar) show only when the game runs and the style is there and are off when a dialog needs its answer;
 //     Esc's request opens it; it opens inside the stage, the page behind it is inert, the focus goes to Resume, Tab stays inside, Esc closes it (once: a held key does nothing), a click on the dimmed area does not,
 //     the focus goes back to the canvas, the game is told (and the keys never reach the page's other listeners); the pointer lock is let go and asked for again; a dialog that needs its answer closes it;
-//   * Leave game: asks in the words of what it will do (a drop out, a forfeit, the end of a game), Esc and Stay stay, a held match and a recording ask nothing, "Back to the matches" in a recording;
+//   * Leave game: asks in the words of what it will do (a drop out, a forfeit, the end of a game), Esc and Stay stay, only a recording asks nothing, "Back to the matches" in a recording;
 //   * the style: fetched with the script, once more after a failure, then said in the toast; the buttons wait for it.
 // tests/scripts/test_web_game_menu.py runs this with node (the quick tier). usage: node web_game_menu_check.js web/game_menu.js tests/data     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -605,7 +605,8 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
 // ---- Leave game ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const kinds = [[0, 'Leave the game?', 'This match ends. Your game is not saved.', 'Leave game'], [1, 'Leave the game?', 'You will drop out. Your ants are lost, the others play on, and you cannot come back to this match.', 'Leave game'],
-                   [2, 'Forfeit and leave?', 'You give up this match. It ends now for everybody and counts as a loss for you.', 'Forfeit']];
+                   [2, 'Forfeit and leave?', 'You give up this match. It ends now for everybody and counts as a loss for you.', 'Forfeit'],
+                   [3, 'Leave the game?', 'The match is held. You leave it for good and cannot come back to this match.', 'Leave game']];
     kinds.forEach((k) => {
         const p = makePage().ready();
         p.game.leave = k[0];
@@ -635,11 +636,6 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
         expect('the button of the question leaves: the panel closes, the game is told, then it leaves (act 1)', [p.menu.isOpen(), p.game.calls], [false, [['open', 0], ['do', 1]]]);
         expect('...and no lock is asked for on the way out', p.state.locks.filter((x) => x === 'request'), []);
     });
-    const held = makePage().ready();
-    held.game.leave = 3;
-    held.open();
-    held.qa('.gm-leave')[0].click();
-    expect('a match that is held asks nothing when Leave game is clicked: the player leaves for good (the quit dialog\'s Yes does the same)', [held.menu.isOpen(), held.q('.gm-ask'), held.game.calls.filter((c) => c[0] === 'do')], [false, null, [['do', 1]]]);
     const watch = makePage({ watch: true }).ready();
     watch.game.leave = 4;
     watch.open();
@@ -658,7 +654,11 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.game.leave = 3;
     p.poll();
     p.poll();
-    expect('a match that becomes held while the question is up: the question stays as it was and nothing is sent', [p.menu.isOpen(), p.q('.gm-ask-t').textContent, p.game.calls.filter((c) => c[0] === 'do')], [true, 'Forfeit and leave?', []]);
+    expect('a match that becomes held while the question is up: it is drawn again in the words of the held match, and nothing is sent', [p.menu.isOpen(), p.q('.gm-ask-b').textContent, p.game.calls.filter((c) => c[0] === 'do')], [true, 'The match is held. You leave it for good and cannot come back to this match.', []]);
+    p.game.leave = 4;
+    p.poll();
+    p.poll();
+    expect('a kind that asks nothing (a table\'s word) leaves the question as it is, and still nothing is sent', [p.menu.isOpen(), p.q('.gm-ask-b').textContent.slice(0, 9), p.game.calls.filter((c) => c[0] === 'do')], [true, 'The match', []]);
     p.game.leave = 1;
     p.poll();
     expect('...and a kind that asks draws it again, still with nothing sent', [p.q('.gm-ask-t').textContent, p.game.calls.filter((c) => c[0] === 'do')], ['Leave the game?', []]);

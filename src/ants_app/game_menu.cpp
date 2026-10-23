@@ -160,7 +160,8 @@ std::string describe_json(bool watching, bool web) {
         out += ",\"body\":";
         put_string(out, kind == LeaveKind::Forfeit ? "You give up this match. It ends now for everybody and counts as a loss for you."
                         : kind == LeaveKind::DropOut ? "You will drop out. Your ants are lost, the others play on, and you cannot come back to this match."
-                                                     : "This match ends. Your game is not saved.");
+                        : kind == LeaveKind::Held ? "The match is held. You leave it for good and cannot come back to this match."
+                                                  : "This match ends. Your game is not saved.");
         out += ",\"go\":";
         put_string(out, kind == LeaveKind::Forfeit ? "Forfeit" : "Leave game");
         out += '}';
@@ -186,7 +187,7 @@ bool needs_answer(bool modal_open, bool catch_up, bool networked, bool vote_open
 }
 
 bool leave_needs_confirm(LeaveKind kind) noexcept {
-    return kind != LeaveKind::Held && kind != LeaveKind::Watch;
+    return kind != LeaveKind::Watch;
 }
 
 const char* MenuSettings::key(int row_id) noexcept {

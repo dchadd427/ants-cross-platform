@@ -1021,7 +1021,7 @@
       "id": "drag_saves",
       "file": "src/ants_app/application_game_menu.cpp",
       "old": "if (save) menu_settings_.write(config_store_, id);",
-      "new": "menu_settings_.write(config_store_, id);",
+      "new": "if (save || true) menu_settings_.write(config_store_, id);",
       "build": [
         "test_game_menu"
       ],

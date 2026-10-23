@@ -52,9 +52,9 @@ It asks first, in the words of what will happen (`game_menu::leave_kind`, the ru
 | exactly one opponent left in a running match | "Forfeit and leave?" It ends now for everybody and counts as a loss for you. | Forfeit |
 | two or more opponents in a network match | "Leave the game?" You will drop out; your ants are lost, the others play on, you cannot come back. | Leave game |
 | a game at home against several, or alone | "Leave the game?" This match ends. Your game is not saved. | Leave game |
-| the match is held (a seat missing, the countdown, a lost link) | nothing is asked: the player leaves for good, as the quit dialog's Yes does | |
+| the match is held (a seat missing, the countdown, a lost link) | "Leave the game?" The match is held. You leave it for good and cannot come back to this match. | Leave game |
 
-Only a click leaves: a question that is up stays when the match becomes held (a seat's link dropped) or the number of opponents changes under it (it is drawn again in the new words), and never turns into a leave by itself. Which kinds ask is the table's word (`asks`), not a rule of the page.
+A recording asks nothing (below). Only a click leaves: a question that is up stays when the match becomes held (a seat's link dropped) or the number of opponents changes under it (it is drawn again in the new words), and never turns into a leave by itself. Which kinds ask is the table's word (`asks`), not a rule of the page.
 
 There is no separate Surrender: the forfeit is the quit that the game always had. Leaving goes through `confirm_quit`, so the `Quit` command, a drop out, the recording and the state hashes are what they were. A game on this computer leaves for the front page (a game in the lobby's frame, for that page's setup screen), as Quit always did.
 

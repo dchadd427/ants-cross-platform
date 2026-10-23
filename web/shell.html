@@ -2524,14 +2524,18 @@
         });
         document.getElementById('pseudo-exit').addEventListener('click', leaveFullscreen);
 
-        // ---- The pointer in fullscreen: the bars, and the pointer lock ---- The bars and the lock are for a FULLSCREEN page (the browser's, or the page's own). A WINDOWED page has the margin ("The margin of a windowed page" below): a pointer that goes a little beyond the game's box still counts
-        // as at its edge. Touch is left alone in both.
+        // ---- The pointer in fullscreen: the bars, and the pointer lock ----
+        // The bars and the lock are for a FULLSCREEN page (the browser's, or the page's own). A WINDOWED page has the margin ("The margin of a windowed page" below): a pointer that goes a little
+        // beyond the game's box still counts as at its edge. Touch is left alone in both.
         //
-        // THE BARS. A screen of another shape than the picture has bars (the stage's black: the top and bottom on a 16:10 screen, the sides on a 21:9 or 4:3 one). They are part of the screen, so a pointer over a bar is at the nearest edge of the picture, as in the desktop game, whose window maps
-        // the bars to positions outside the picture that it holds to the edge pixel: the map scrolls with the pointer anywhere beyond the picture's edge, corners included. The browser sends the game nothing over a bar (its mouse events belong to the canvas; the stage under the bars is not the
-        // game's), and says that the pointer LEFT the canvas, which the game takes for a pointer that went away (SDL_WINDOWEVENT_LEAVE: no more scrolling). So the page does what the browser does not: (1) a pointer that moves over a bar is handed to the game as a motion at the nearest pixel of the
-        // picture (the game reads it as an ordinary pointer: ANTS_PAGE.edgePixel / clientFor), (2) the canvas's leave towards a bar is not passed on (the pointer is still on the screen), and a pointer that really goes (another monitor, the page's own fullscreen left, the stage left) is reported as
-        // a leave of the canvas, (3) a click or a wheel over a bar is the stage's and reaches nobody: no order, no selection, no zoom. Touch is left alone (a tap's emulated mouse events are not a pointer over a bar).
+        // THE BARS. A screen of another shape than the picture has bars (the stage's black: the top and bottom on a 16:10 screen, the sides on a 21:9 or 4:3 one). They are part of the
+        // screen, so a pointer over a bar is at the nearest edge of the picture, as in the desktop game, whose window maps the bars to positions outside the picture that it holds to
+        // the edge pixel: the map scrolls with the pointer anywhere beyond the picture's edge, corners included. The browser sends the game nothing over a bar (its mouse events belong to
+        // the canvas; the stage under the bars is not the game's), and says that the pointer LEFT the canvas, which the game takes for a pointer that went away (SDL_WINDOWEVENT_LEAVE: no
+        // more scrolling). So the page does what the browser does not: (1) a pointer that moves over a bar is handed to the game as a motion at the nearest pixel of the picture (the
+        // game reads it as an ordinary pointer: ANTS_PAGE.edgePixel / clientFor), (2) the canvas's leave towards a bar is not passed on (the pointer is still on the screen), and a
+        // pointer that really goes (another monitor, the page's own fullscreen left, the stage left) is reported as a leave of the canvas, (3) a click or a wheel over a bar is the stage's
+        // and reaches nobody: no order, no selection, no zoom. Touch is left alone (a tap's emulated mouse events are not a pointer over a bar).
         var edgeForwarded = false;          // the game was handed a pointer position that its canvas never saw (the pointer is over a bar)
         var edgeLast = { x: 0, y: 0 };      // ... and this is it
         var handingOver = false;            // the page is handing the game an event of its own: the listeners below let that one through
@@ -2672,12 +2676,15 @@
         window.addEventListener('scroll', windowedAgain, { passive: true });
         window.addEventListener('resize', windowedAgain);
 
-        // THE POINTER LOCK. On the Mac a pointer at the bottom or top edge of the screen makes the Dock or the menu bar appear, even in fullscreen, and a web page cannot stop that unless the pointer is LOCKED: then the pointer stays where it was, the browser hides it and reports only how far the
-        // mouse moved. The page asks for the lock when the player's click on the Fullscreen button makes the browser's fullscreen, or when the player clicks the game during a match in a window, and holds the game's own cursor in the meantime: it starts in the middle of the picture (or at the click)
-        // and moves by the distance of the mouse's motion, held to the picture (ANTS_PAGE.moveLocked, in fractions of a pixel); the game is handed that cursor as an ordinary pointer position, so every edge and corner of the picture scrolls the map from the clamped cursor, a click goes where the
-        // game's cursor is, and the game cannot tell the lock from a pointer that never leaves the picture. The game's window system (SDL) is NOT told of the lock: it would read all motion as relative, and as whole numbers of pixels (Emscripten stores movementX as an integer: fractions of a pixel
-        // on high-DPI screens would be lost and a slow mouse would crawl), so the page swallows the browser's lock events and locked mouse motion and hands the game its own. When the lock is let go (Ctrl+Alt, Esc, or another window taking focus) the pointer is the normal one at once (no jump, no
-        // click). A click on the game takes the lock again: where the page has held the lock before, that click is only that; where it has not, it is an ordinary click too. ESC is locked in Chromium fullscreen.
+        // THE POINTER LOCK. On the Mac a pointer at the bottom or top edge of the screen makes the Dock or the menu bar appear, even in fullscreen, and a web page cannot stop that unless
+        // the pointer is LOCKED: then the pointer stays where it was, the browser hides it and reports only how far the mouse moved. The page asks for the lock when the player's click on
+        // the Fullscreen button makes the browser's fullscreen, or when the player clicks the game during a match in a window, and holds the game's own cursor in the meantime: it starts in
+        // the middle of the picture (or at the click) and moves by the distance of the mouse's motion, held to the picture (ANTS_PAGE.moveLocked, in fractions of a pixel); the game is handed
+        // that cursor as an ordinary pointer position, so every edge and corner of the picture scrolls the map from the clamped cursor, a click goes where the game's cursor is, and the game
+        // cannot tell the lock from a pointer that never leaves the picture. The game's window system (SDL) is NOT told of the lock: it would read all motion as relative, and as whole numbers
+        // of pixels (Emscripten stores movementX as an integer: fractions of a pixel on high-DPI screens would be lost and a slow mouse would crawl), so the page swallows the browser's lock
+        // events and locked mouse motion and hands the game its own. When the lock is let go (Ctrl+Alt, Esc, or another window taking focus) the pointer is the normal one at once (no jump, no click).
+        // A click on the game takes the lock again: where the page has held the lock before, that click is only that; where it has not, it is an ordinary click too. ESC is locked in Chromium fullscreen.
         function requestLock(startAt) {                                     // true: the lock was asked for
             var request = canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock;
             if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked() || window.antsFinger) return false;          // (a replay or a live match watched is locked as a game is: its bar is reached through the game's cursor, see "THE BAR UNDER A LOCKED POINTER"; a finger is never locked: a locked browser reports its touches at x = 0 and the replay bar would seek to 0 wherever it is tapped)
@@ -2945,13 +2952,17 @@
             } else if (buildDate && buildDate.textContent.indexOf('@') !== -1) buildDate.style.display = 'none';
         })();
 
-        // The game's keys belong to the game: while it has the screen the browser's own reactions to them (Ctrl+O opens a file dialog, Ctrl+S saves the page, Ctrl+P prints, Ctrl+H opens the history, Ctrl+A selects the page, F1 opens the browser's help, F3 its search (F2 and F3 are the vote's keys),
-        // the arrows and Page Up / Down scroll the page) are switched off. The game still receives every key: only the default action is cancelled (never for Space or letters: they type into the chat box). Keys that a browser reserves (Ctrl+N, Ctrl+T, Ctrl+W) cannot be reached. The wheel and a
-        // trackpad's pinch (the browser's ctrl + wheel) over the game zoom the GAME and never scroll or zoom the page. SDL's own listener takes the wheel for the game (the deltas arrive as its notches); this one is not passive, so it can cancel the page's own reaction (the scroll, and the browser's
-        // page zoom of ctrl + wheel) in every browser. Only over the game's canvas: elsewhere on the page the browser behaves as usual. Safari reports a TRACKPAD's pinch as gesture events: they are turned into wheel events (a pinch of 25 % is one notch, the unit of the zoom's levels) for the game,
-        // and cancelled for the page (the touch block below; with fingers on the game it is their own pinch that zooms it). The middle button (back to the zoom 1) too: an unprevented middle press over a page that scrolls starts the browser's autoscroll (Windows: Chrome, Edge and Firefox), which
-        // would swallow the press and scroll the page instead. SDL cancels the `mouseup` only, so the press (`mousedown`) and the click that follows (`auxclick`) are cancelled here, for the canvas and the middle button only: the rest of the page keeps its middle button (autoscroll, a link opened in
-        // a new tab).
+        // The game's keys belong to the game: while it has the screen the browser's own reactions to them (Ctrl+O opens a file dialog, Ctrl+S saves the page,
+        // Ctrl+P prints, Ctrl+H opens the history, Ctrl+A selects the page, F1 opens the browser's help, F3 its search (F2 and F3 are the vote's keys), the arrows and Page Up / Down scroll the page) are switched off.
+        // The game still receives every key: only the default action is cancelled (never for Space or letters: they type into the chat box). Keys that a
+        // browser reserves (Ctrl+N, Ctrl+T, Ctrl+W) cannot be reached.
+        // The wheel and a trackpad's pinch (the browser's ctrl + wheel) over the game zoom the GAME and never scroll or zoom the page. SDL's own listener takes the wheel for the game (the
+        // deltas arrive as its notches); this one is not passive, so it can cancel the page's own reaction (the scroll, and the browser's page zoom of ctrl + wheel) in every browser. Only over
+        // the game's canvas: elsewhere on the page the browser behaves as usual. Safari reports a TRACKPAD's pinch as gesture events: they are turned into wheel events (a pinch of 25 % is one
+        // notch, the unit of the zoom's levels) for the game, and cancelled for the page (the touch block below; with fingers on the game it is their own pinch that zooms it).
+        // The middle button (back to the zoom 1) too: an unprevented middle press over a page that scrolls starts the browser's autoscroll (Windows: Chrome, Edge and Firefox), which would
+        // swallow the press and scroll the page instead. SDL cancels the `mouseup` only, so the press (`mousedown`) and the click that follows (`auxclick`) are cancelled here, for the
+        // canvas and the middle button only: the rest of the page keeps its middle button (autoscroll, a link opened in a new tab).
         canvas.addEventListener('mousedown', function(e) { if (e.button === 1) e.preventDefault(); }, {passive: false});
         canvas.addEventListener('auxclick', function(e) { if (e.button === 1) e.preventDefault(); }, {passive: false});
         canvas.addEventListener('wheel', function(e) { e.preventDefault(); }, {passive: false});
@@ -3847,12 +3858,18 @@
     </script>
     <!-- END replay glue -->
     <script>
-        // ---- The game's data (index.data, about 15 MB) ---- The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; several games on one page (the front page used to frame two or four) asked for the same file at the same moment and one of them was refused by
-        // the browser's cache (net::ERR_CACHE_WRITE_FAILURE in Chromium), after which its card said "Downloading data (0%)" for ever. So the page downloads the data itself, with fetch: the first try with the browser's cache (a repeat visit costs a 304), the retries (up to 3, after 0.4, 1.2 and 3
-        // seconds) without it, so that a cache entry that cannot be written cannot fail them again; progress is shown as before; the bytes are handed to the packager through Module.getPreloadedPackage (which it calls synchronously when index.js starts, so index.js is loaded after the download;
-        // index.js and index.wasm are asked for at once, so that they are in the browser's cache by then). What comes back must be the data: a body that is a web page (a captive portal answers every address with "200 OK") or that is not the size of the package is a failed try
-        // (ANTS_PAGE.badDownload). After the last failure the card says so and has a Reload button. A browser without fetch does what it always did. The loading of the program has its own failures: index.js that cannot be loaded (the script's `error`), index.wasm that cannot be fetched or compiled
-        // (a promise that nobody catches: the handler above) and a game that does not start (ANTS_START_TIMEOUT_MS after the data arrived, 60 s unless the page was given another); each puts the card with the Reload button up instead of leaving the loading screen at "Downloading data" for ever.
+        // ---- The game's data (index.data, about 15 MB) ----
+        // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; several games on one page (the front page used to frame two or four) asked for the same file at the same
+        // moment and one of them was refused by the browser's cache (net::ERR_CACHE_WRITE_FAILURE in Chromium), after which its card said "Downloading data (0%)" for ever. So the
+        // page downloads the data itself, with fetch: the first try with the browser's cache (a repeat visit costs a 304), the retries (up to 3, after 0.4, 1.2 and 3 seconds)
+        // without it, so that a cache entry that cannot be written cannot fail them again; progress is shown as before; the bytes are handed to the packager through
+        // Module.getPreloadedPackage (which it calls synchronously when index.js starts, so index.js is loaded after the download; index.js and index.wasm are asked for at once, so
+        // that they are in the browser's cache by then). What comes back must be the data: a body that is a web page (a captive portal answers every address with "200 OK") or
+        // that is not the size of the package is a failed try (ANTS_PAGE.badDownload). After the last failure the card says so and has a Reload button. A browser without fetch does
+        // what it always did.
+        // The loading of the program has its own failures: index.js that cannot be loaded (the script's `error`), index.wasm that cannot be fetched or compiled (a promise that nobody
+        // catches: the handler above) and a game that does not start (ANTS_START_TIMEOUT_MS after the data arrived, 60 s unless the page was given another); each puts the card
+        // with the Reload button up instead of leaving the loading screen at "Downloading data" for ever.
         (function() {
             var DATA_URL = Module.locateFile('index.data', '');
             var RETRY_DELAYS = [400, 1200, 3000];

@@ -181,15 +181,15 @@ void test_leave() {
     check(gm::leave_kind(false, false, true, 2, true) == K::DropOut && gm::leave_kind(false, false, true, 3, true) == K::DropOut, "two or more opponents in a network match: the player drops out");
     check(gm::leave_kind(false, false, false, 2, true) == K::EndsMatch && gm::leave_kind(false, false, false, 0, true) == K::EndsMatch && gm::leave_kind(false, false, true, 0, true) == K::EndsMatch, "a game at home against several, or alone: the match ends");
     check(gm::leave_kind(false, false, true, 1, false) == K::EndsMatch && gm::leave_kind(false, false, false, 1, false) == K::EndsMatch, "a match that is over is no forfeit");
-    check(gm::leave_needs_confirm(K::EndsMatch) && gm::leave_needs_confirm(K::DropOut) && gm::leave_needs_confirm(K::Forfeit) && !gm::leave_needs_confirm(K::Held) && !gm::leave_needs_confirm(K::Watch), "only a leave that loses something asks");
+    check(gm::leave_needs_confirm(K::EndsMatch) && gm::leave_needs_confirm(K::DropOut) && gm::leave_needs_confirm(K::Forfeit) && gm::leave_needs_confirm(K::Held) && !gm::leave_needs_confirm(K::Watch), "every leave asks except a recording's (nothing is lost): a held match too, as the quit dialog does");
     check(gm::match_is_held(true, true, false, false) && gm::match_is_held(true, false, true, false) && gm::match_is_held(true, false, false, true), "a network match is held by a pause, the catch-up screen or the countdown card, each alone");
     check(!gm::match_is_held(true, false, false, false) && !gm::match_is_held(false, true, true, true), "...and by nothing else; a game at home is never held");
     check(gm::needs_answer(true, false, false, false, false) && gm::needs_answer(false, true, false, false, false), "a dialog of the match or the catch-up screen needs its answer, at home too");
     check(gm::needs_answer(false, false, true, true, false) && gm::needs_answer(false, false, true, false, true), "a vote or a lost link in a network match needs its answer");
     check(!gm::needs_answer(false, false, true, false, false) && !gm::needs_answer(false, false, false, true, true), "...and nothing else does (no vote or lost link is one at home)");
     const std::string json = gm::describe_json(false, true);
-    check(has(json, "{\"kind\":3,\"asks\":0}") && has(json, "{\"kind\":4,\"asks\":0}"), "a held match and a recording say that they ask nothing, and have no words");
-    for (const K kind : {K::EndsMatch, K::DropOut, K::Forfeit}) check(has(json, "{\"kind\":" + std::to_string(static_cast<int>(kind)) + ",\"asks\":1,\"title\":"), "...and every kind that asks says so");
+    check(has(json, "{\"kind\":4,\"asks\":0}"), "a recording says that it asks nothing, and has no words");
+    for (const K kind : {K::EndsMatch, K::DropOut, K::Forfeit, K::Held}) check(has(json, "{\"kind\":" + std::to_string(static_cast<int>(kind)) + ",\"asks\":1,\"title\":"), "...and every kind that asks says so");
 }
 
 void test_settings() {

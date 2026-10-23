@@ -77,7 +77,7 @@ enum class LeaveKind : int {
     EndsMatch = 0,      // a game on this computer against several sides, or alone: the match ends and is not saved
     DropOut = 1,        // a network match with two or more other sides: the player drops out, the others play on
     Forfeit = 2,        // exactly one other side is left: the player gives the match up, it ends for everybody
-    Held = 3,           // the match is held (a seat is missing, the countdown, a lost link): the player leaves for good, nothing is asked (as the quit dialog's Yes does)
+    Held = 3,           // the match is held (a seat is missing, the countdown, a lost link): the player leaves for good (as the quit dialog's Yes does), and is asked first like for any leave
     Watch = 4,          // a recording or a live match that is watched: back to the list, nothing is lost and nothing is asked
 };
 LeaveKind leave_kind(bool watching, bool held, bool networked, uint32_t other_sides, bool match_running) noexcept;
