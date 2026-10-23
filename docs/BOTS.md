@@ -359,6 +359,10 @@ The requirement: Hard bots should be really aggressive. Every number below is TR
 
 Which food a bot eats first when other teams want it too, the classes of the piles (who else reaches a pile how soon), the denial order of Medium and Hard, the race of Easy and what was measured, is in [BOT_FOOD.md](BOT_FOOD.md).
 
+### The quick kill
+
+Hard strikes an enemy that one blow kills (beside water, a bomb or a fire wall) from the tile that makes it so, sends no fight at an enemy that no walk reaches, and hunts when it has nothing to bank: [BOT_FIGHT.md](BOT_FIGHT.md).
+
 ### Fights of its own: health, the kill and the skirmish (contest batch)
 
 *What the engine allows* (`kill_plan` in `standard_tasks.hpp`, measured with the bot's own orders on a clear field). One blow lands per hit clip (about 22 ticks) however many ants strike. A worker's blow takes 1 hit point, a Combat Ant's punch 2 and throws the victim four tiles. An ant left with ONE hit point walks home at the speed of its hunters and is not caught (the engine's `low_hp_check`). So only punches finish an ant, workers kill nothing above two hit points, and the order that gets the kill is: a Combat Ant strikes alone while the hit points are even, and when they are odd (3 or more) one other ant opens first so that no ant is left standing with one. A Combat Ant and a worker kill every wounded worker of 2 and of 4 to 9 hit points (12 of 12 arrangements of side and enemy hill), two Combat Ants the even numbers 12 of 12 and the odd ones 3 to 4 of 12, three workers only 1 and 2.

@@ -549,6 +549,7 @@ void run_contest_tests() {
         LevelPlan plan = plan_for(Level::Hard);
         without_war_batch(plan);                                                                                                      // (the assault would send the Combat Ants away from the entrance that the escorts hold)
         plan.sabotage = true;
+        plan.chore_worth = false;                          // (this test is about the ring itself: the rule that spares it has its own test, AI31.7)
         plan.sabotage_safe = true;                                                                                                    // (the subject; the shipped plans of Medium and Hard fire in whether or not the enemy can put it out: the war batch)
         plan.sabotage_after = 20;
         plan.sabotage_spare_keeper = false;                                                                                           // (the lone Fire Ant is free to go: the keeper of the own walls is not spared in this plan)
@@ -1063,6 +1064,7 @@ void run_contest_tests() {
             sim.spawn_unit(1, sim::AntType::Worker, ring[0]);
             LevelPlan plan = plan_for(Level::Hard);
             plan.sabotage = true;
+            plan.chore_worth = false;                          // (this test is about the ring itself: the rule that spares it has its own test, AI31.7)
             plan.sabotage_after = 20;
             plan.sabotage_spare_keeper = false;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
