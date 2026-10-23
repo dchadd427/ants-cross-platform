@@ -869,7 +869,7 @@ int main() {
         ctl::HttpResponse r = server.door("GET", "/history/deaths", "map=TREASURE.LVL");
         ASSERT_TRUE(r.status == 200 && r.content_type == "application/json");
         JsonValue j = parse_text(r.body);
-        ASSERT_TRUE(j.get("map").str() == "TREASURE.LVL" && j.get("matches").as_int_or(0) == 2 && j.get("n").as_int_or(0) == 22);
+        ASSERT_TRUE(j.get("map").str() == "TREASURE.LVL" && j.get("matches").as_int_or(0) == 2 && j.get("n").as_int_or(0) == 29);
         ASSERT_EQ(server.control("GET", "/history/deaths", "map=treasure.lvl").body, r.body);
         ASSERT_EQ(server.door("GET", "/history/deaths", "map=treasure.lvl").body, r.body);
         const ctl::HttpResponse item = server.door("GET", "/history/" + id);

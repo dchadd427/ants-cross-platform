@@ -118,6 +118,7 @@ void run_b41_offence_tests() {
     {
         LevelPlan plan = plan_for(Level::Hard);
         plan.sabotage = true;
+        plan.chore_worth = false;                          // (this test is about the ring itself: the rule that spares it has its own test, AI31.7)
         plan.sabotage_after = 20;
         sim::SimulationEngine probe;
         empty_field(probe, 62);

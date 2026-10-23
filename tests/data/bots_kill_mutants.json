@@ -1,0 +1,335 @@
+{
+ "defaults": {
+  "build": "test_ai"
+ },
+ "mutants": [
+  {
+   "id": "knock_fan_order_swapped",
+   "file": "src/ants_ai/knock.cpp",
+   "old": "static constexpr int kOffsets[5] = {0, 1, -1, 2, -2};",
+   "new": "static constexpr int kOffsets[5] = {0, -1, 1, 2, -2};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "knock_punch_range_three",
+   "file": "src/ants_ai/knock.cpp",
+   "old": "return striker == sim::AntType::Combat ? 4 : 1;",
+   "new": "return striker == sim::AntType::Combat ? 3 : 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "knock_punch_takes_one",
+   "file": "src/ants_ai/knock.cpp",
+   "old": "return striker == sim::AntType::Combat ? 2u : 1u;",
+   "new": "return striker == sim::AntType::Combat ? 1u : 1u;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "knock_blow_needs_more_hp",
+   "file": "src/ants_ai/knock.cpp",
+   "old": "if (hp <= dmg) {",
+   "new": "if (hp < dmg) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "knock_swimmer_drowns",
+   "file": "src/ants_ai/knock.cpp",
+   "old": "if (victim_type != sim::AntType::Swimmer) out.kind = KillKind::Water;",
+   "new": "out.kind = KillKind::Water;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "knock_bomb_kills_more",
+   "file": "src/ants_ai/knock.cpp",
+   "old": "if (grid.has_bomb_at(flight.land) && left <= 2u)",
+   "new": "if (grid.has_bomb_at(flight.land) && left <= 3u)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "knock_fire_kills_more",
+   "file": "src/ants_ai/knock.cpp",
+   "old": "victim_type != sim::AntType::Fire && left <= 1u",
+   "new": "victim_type != sim::AntType::Fire && left <= 2u",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "knock_no_water_kill",
+   "file": "src/ants_ai/knock.cpp",
+   "old": "if (victim_type != sim::AntType::Swimmer) out.kind = KillKind::Water;",
+   "new": "if (false) out.kind = KillKind::Water;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.1"
+  },
+  {
+   "id": "opp_no_chore_ants",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "return rank == 4 && a.type == v.default_ant_type();",
+   "new": "return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.3"
+  },
+  {
+   "id": "opp_takes_pickup_ants",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (rank <= 2) return true;",
+   "new": "if (rank <= 3) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.3"
+  },
+  {
+   "id": "opp_carrier_strikes",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (!can_strike(v, a)) return false;",
+   "new": "if (false) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.3"
+  },
+  {
+   "id": "opp_any_type_strikes",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (a.type != v.default_ant_type() && a.type != sim::AntType::Combat) return false;",
+   "new": "if (false) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.3"
+  },
+  {
+   "id": "opp_strikes_walkers",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (walking && !(at_stand && a->idle())) continue;",
+   "new": "if (walking && !(at_stand && a->idle()) && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.3"
+  },
+  {
+   "id": "opp_dynamic_walk_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (at < it->second.size() && it->second[at] >= 0 && MapInfo::walking_ticks(it->second[at]) <= static_cast<int32_t>(plan.opportunity_ticks / 2)) pick = &k;",
+   "new": "if (at < it->second.size() && it->second[at] >= 0 && MapInfo::walking_ticks(it->second[at]) <= 1000000) pick = &k;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2c ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.2c"
+  },
+  {
+   "id": "opp_no_move_to_stand",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "c.orders.move({a->id}, j.stand, Priority::Urgent);",
+   "new": "(void)j;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.2"
+  },
+  {
+   "id": "opp_attack_not_ordered",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "c.orders.attack({a->id}, e->tile, Priority::Urgent);",
+   "new": "(void)e;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.2"
+  },
+  {
+   "id": "opp_never_ambushes",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (best.at_stand) ++ambushes_;",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.3"
+  },
+  {
+   "id": "fight_reach_ignored_pool",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(plan.reach_fights && !walk_reaches(c.map, c.seat, a->tile, e.tile))",
+   "new": "false",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.4"
+  },
+  {
+   "id": "fight_reach_ignored_defenders",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(plan.reach_fights && !fire_striker && !walk_reaches(c.map, c.seat, a.tile, target->tile))",
+   "new": "false",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.4b ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.4b"
+  },
+  {
+   "id": "sabotage_worth_ignored",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(plan.chore_worth && !fire_in_worth_it(v, c.map, t))",
+   "new": "false",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.7"
+  },
+  {
+   "id": "idle_hunt_no_reserve_change",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "return plan.idle_hunt && no_work ? 1u :",
+   "new": "return false ? 1u :",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
+  },
+  {
+   "id": "idle_hunt_eggs_ignored",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": ": plan.fight_reserve + (view.eggs() == 0 ? 1u : 0u); }",
+   "new": ": plan.fight_reserve + (view.eggs() == 0 ? 0u : 0u); }",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
+  },
+  {
+   "id": "no_work_never",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.no_work = !any_reachable_pile && ",
+   "new": "tactics_.no_work = false && ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
+  },
+  {
+   "id": "opportunity_not_stepped",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    opportunity_.step(context);",
+   "new": "    (void)0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.2"
+  },
+  {
+   "id": "worth_unreachable_pile_counts",
+   "file": "src/ants_ai/chore_worth.cpp",
+   "old": "if (info == nullptr || info->approach[victim].reachable()) return true;",
+   "new": "if (info == nullptr || true) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.7"
+  },
+  {
+   "id": "worth_any_carrier_counts",
+   "file": "src/ants_ai/chore_worth.cpp",
+   "old": "if (a.team == victim && a.holding) return true;",
+   "new": "if (a.holding) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.7"
+  },
+  {
+   "id": "worth_no_carriers",
+   "file": "src/ants_ai/chore_worth.cpp",
+   "old": "if (a.team == victim && a.holding) return true;",
+   "new": "if (a.team == victim && a.holding && false) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.7"
+  },
+  {
+   "id": "plan_hard_without_batch",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.opportunity = true;                    // the kill batch",
+   "new": "            p.opportunity = false;                    // the kill batch",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.5"
+  },
+  {
+   "id": "no_work_ignores_islands",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "(plan.islands && island_.active()) ||",
+   "new": "false ||",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
+  },
+  {
+   "id": "no_work_ignores_gate_maps",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "|| tactics_.gate_map || tactics_.field_map;",
+   "new": "|| tactics_.field_map;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
+  },
+  {
+   "id": "opp_still_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (st == stood_.end() || now < st->second.since + plan.opportunity_still) continue;",
+   "new": "if (st == stood_.end() || now + 1000 < st->second.since + plan.opportunity_still) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8"
+  },
+  {
+   "id": "opp_guard_not_skipped",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (!at_stand && plan.opportunity_skip_guard && e.state == sim::UnitState::GuardIdle) continue;",
+   "new": "if (!at_stand && plan.opportunity_skip_guard && e.state == sim::UnitState::GuardIdle && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8"
+  },
+  {
+   "id": "opp_harvest_taken_far",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (owner != kNoTask && c.ledger.rank(owner) == 1) continue;",
+   "new": "if (owner != kNoTask && c.ledger.rank(owner) == 1 && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8"
+  },
+  {
+   "id": "opp_stood_clock_never_resets",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (st.since == 0 || st.tile != e.tile || e.state == sim::UnitState::Walking) {",
+   "new": "if (st.since == 0) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8b ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.8b"
+  },
+  {
+   "id": "opp_stand_on_hazard",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "|| grid.has_fire_at(stand) || grid.has_bomb_at(stand) ||",
+   "new": "||",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "opp_job_cap_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (jobs_.size() < plan.opportunity_jobs) {",
+   "new": "if (true) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "opp_reserve_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (reserve && (shot.kind != KillKind::Water || tactics_.far_work)) continue;",
+   "new": "if (reserve && (shot.kind != KillKind::Water || tactics_.far_work) && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "opp_far_work_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "(shot.kind != KillKind::Water || tactics_.far_work)",
+   "new": "(shot.kind != KillKind::Water)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "opp_bad_walk_cache_off",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (failed != bad_walks_.end() && failed->second > now) continue;",
+   "new": "if (failed != bad_walks_.end() && failed->second > now && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2d ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.2d"
+  },
+  {
+   "id": "opp_flood_cap_off",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (floods >= kMaxFloods) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "far_work_never",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.far_work = (plan.islands && island_.active()) || tactics_.gate_map || tactics_.field_map;",
+   "new": "tactics_.far_work = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
+  }
+ ]
+}

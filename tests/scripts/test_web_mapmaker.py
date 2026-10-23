@@ -60,7 +60,8 @@ def read(*parts):
 
 def run_check(front=None, script=CHECK, extra=()):
     args = [NODE, script] + (["--front", front] if front else []) + list(extra)
-    return subprocess.run(args, capture_output=True, text=True, timeout=300)
+    # 900 s, as ctest's own limit: a check that takes 2 s alone took more than 300 s on a loaded macOS runner (CI of PR 213)
+    return subprocess.run(args, capture_output=True, text=True, timeout=900)
 
 
 def library():
