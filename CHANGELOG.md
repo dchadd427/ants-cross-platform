@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.109 - 2026-10-22 - A put-out fire leaves the screen on maps with fire walls
+
+**For players:**
+- **A fire that a Fire ant puts out now leaves the screen on maps that came with fire walls.** On a map made with the Map Maker's permanent Fire wall (and on five maps of the library), the Fire ant did its put-out move and the game agreed the fire was gone (the message "Fire put out." came, ants could walk there), but the picture of the fire stayed on the map. Now it disappears, as it does for a fire that was lit in the match.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; only the picture changed. Fire walls that the Map Maker puts on a map still burn until a Fire ant puts them out.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...1ac880b2)
+
 ## v0.12.108 - 2026-10-22 - Auto edges draw a strip of water one cell wide in mud, in any painting order
 
 **For players:**

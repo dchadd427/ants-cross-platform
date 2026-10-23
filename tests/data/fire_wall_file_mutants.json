@@ -1,0 +1,45 @@
+{
+ "note": "Mutants of the fire wall of a map file (the renderer's static pass, Grid::clear_firewall and the loader's timer) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/fire_wall_file_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/reverse_engineering/map_loader_fidelity.md, 8 (a fire wall of the file is drawn from its cell and is gone from the screen when put out; it burns until put out; the put-out clears the cell and its solid bit).",
+ "defaults": {
+  "build": "test_loader_fidelity_render test_loader_fidelity",
+  "test": "./build/tests/test_app/test_loader_fidelity_render && ./build/tests/test_sim/test_loader_fidelity"
+ },
+ "mutants": [
+  {
+   "id": "static_pass_keeps_fire_wall",
+   "file": "src/ants_app/renderer.cpp",
+   "old": "            if (c2.tile_index == ants::sim::TILE_FIREWALL) continue;\n",
+   "new": ""
+  },
+  {
+   "id": "static_pass_skips_the_wrong_id",
+   "file": "src/ants_app/renderer.cpp",
+   "old": "            if (c2.tile_index == ants::sim::TILE_FIREWALL) continue;\n",
+   "new": "            if (c2.tile_index == ants::sim::TILE_FIREWALL + 1u) continue;\n"
+  },
+  {
+   "id": "runtime_pass_hides_fire",
+   "file": "src/ants_app/renderer.cpp",
+   "old": "                if (explored(c, r)) draw_template_world(anim_id_fire_, wx, wy);\n",
+   "new": "                if (explored(c, r) && cell.timer_ticks > 0) draw_template_world(anim_id_fire_, wx, wy);\n"
+  },
+  {
+   "id": "put_out_keeps_the_cell",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "        cell.interactive_id = TILE_EMPTY;\n        cell.timer_ticks = 0;\n        if (y > 0) cell.static_solid = false;               // SetTile(empty) clears the footprint's solid bit (FUN_0100744f",
+   "new": "        cell.timer_ticks = 0;\n        if (y > 0) cell.static_solid = false;               // SetTile(empty) clears the footprint's solid bit (FUN_0100744f"
+  },
+  {
+   "id": "put_out_keeps_the_solid_bit",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "        if (y > 0) cell.static_solid = false;               // SetTile(empty) clears the footprint's solid bit (FUN_0100744f -> FUN_0100660c(.., 0); row 0 never)\n    }\n}\n\nvoid Grid::place_bomb",
+   "new": "    }\n}\n\nvoid Grid::place_bomb"
+  },
+  {
+   "id": "file_fire_wall_gets_a_timer",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "            cell.interactive_owner = 255;\n            cell.timer_ticks = 0;\n            cell.is_food = false;",
+   "new": "            cell.interactive_owner = 255;\n            cell.timer_ticks = c2.tile_index == TILE_FIREWALL ? 600u : 0u;\n            cell.is_food = false;"
+  }
+ ]
+}

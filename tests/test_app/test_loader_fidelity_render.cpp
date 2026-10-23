@@ -364,6 +364,91 @@ void test_food_cell_and_stages(Renderer& r) {
     check(image_diff(previous, gone) == 0, "the pile that is eaten is gone from the picture");
 }
 
+// ---- A fire wall of the file is a tile id (134): drawn from the cells, and gone from the screen when a fire ant has put it out ------------------------------------------------------------------
+// The map maker writes the entry `wallup04` for the permanent fire wall it places. The renderer once made a static object of every layer-2 cell whose entry had a name, the fire wall
+// included, and drew it for ever: the Fire ant's put-out cleared the cell and the fire stayed on the screen (the owner's report). A power-up and a bomb were already left to the cells.
+void test_fire_wall_by_id(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[fire wall] a fire wall of the file is drawn from its cell, whatever its entry says, and leaves nothing on the screen when it is put out\n");
+    assets::LevelData base = tiny();
+    const int32_t g = arc.find_animation_id("g01a");
+    for (auto& c : base.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    if (base.tile_dictionary.size() <= static_cast<size_t>(g)) base.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    base.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : base.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    base.anthill_spawns.clear();
+    base.food_schedules.clear();
+    base.waypoints.clear();
+    const int cols[3] = {3, 6, 9};
+    const int row = 2;
+    Image empty;
+    {
+        sim::Grid gn;
+        check(gn.init_from_level(base), "init (no fire walls)");
+        empty = picture_with_grid(r, base, gn);
+    }
+    Image dotted;
+    for (const char* naming : {".", "wallup04"}) {
+        assets::LevelData with = base;
+        if (with.tile_dictionary.size() <= 134) with.tile_dictionary.resize(135, ".");
+        with.tile_dictionary[134] = naming;
+        for (const int c : cols) {
+            auto& cell = with.layer2_interactive[static_cast<size_t>(row) * with.width + static_cast<size_t>(c)];
+            cell.tile_index = 134;
+            cell.flags = 1;
+            cell.properties = static_cast<uint16_t>((c << 8) | row);          // the cell is its own anchor, as the map maker writes it
+        }
+        sim::Grid ga;
+        check(ga.init_from_level(with), "init (fire walls of the file)");
+        for (const int c : cols) check(ga.has_fire_at(sim::TileCoord{c, row}), "the fire wall of the file is in the grid");
+        Image alive = picture_with_grid(r, with, ga);
+        for (const int c : cols) check(crop_cells(alive, c, row, 1).px != crop_cells(empty, c, row, 1).px, std::string("the fire wall at column ") + std::to_string(c) + " is drawn (entry " + naming + ")");
+        // the same pixels whatever the entry is called
+        if (std::string(naming) == ".") dotted = alive;
+        else check(image_diff(dotted, alive) == 0, "a fire wall named wallup04 looks as one named \".\" (" + std::to_string(image_diff(dotted, alive)) + " pixels differ)");
+        // put out one by one: each leaves the picture of its cell as it was without the fire, nothing of it stays
+        for (size_t k = 0; k < 3; ++k) {
+            ga.clear_firewall(static_cast<uint32_t>(cols[k]), static_cast<uint32_t>(row));
+            Image now = picture_with_grid(r, with, ga);
+            for (size_t j = 0; j < 3; ++j) {
+                const bool out = j <= k;
+                const bool same_as_empty = crop_cells(now, cols[j], row, 1).px == crop_cells(empty, cols[j], row, 1).px;
+                check(same_as_empty == out, std::string("entry ") + naming + ": after " + std::to_string(k + 1) + " put out, the cell at column " + std::to_string(cols[j]) + (out ? " is bare (no ghost)" : " still burns"));
+            }
+        }
+        Image all_out = picture_with_grid(r, with, ga);
+        check(image_diff(all_out, empty) == 0, std::string("entry ") + naming + ": every fire wall put out, the picture is the bare one (" + std::to_string(image_diff(all_out, empty)) + " pixels differ)");
+    }
+    // the same through the engine: a Fire ant puts a fire wall of the file out and the world picture is the bare one
+    assets::LevelData level = base;
+    level.tile_dictionary.resize(std::max<size_t>(level.tile_dictionary.size(), 135), ".");
+    level.tile_dictionary[134] = "wallup04";
+    {
+        auto& cell = level.layer2_interactive[static_cast<size_t>(row) * level.width + 6];
+        cell.tile_index = 134;
+        cell.flags = 1;
+        cell.properties = static_cast<uint16_t>((6 << 8) | row);
+    }
+    level.anthill_spawns.clear();
+    sim::SimulationEngine eng;
+    eng.init(level, 7, 0x03);
+    check(eng.has_fire_at(sim::TileCoord{6, row}), "engine: the fire wall of the file burns");
+    const uint32_t ant = eng.spawn_unit(0, sim::AntType::Fire, sim::TileCoord{6, row - 1});
+    sim::AntOrder o{};
+    o.ant_id = ant;
+    o.type = sim::OrderType::IgniteFire;
+    o.target_x = 6;
+    o.target_y = row;
+    eng.issue_order(o);
+    for (int t = 0; t < 100 && eng.has_fire_at(sim::TileCoord{6, row}); ++t) eng.tick();
+    check(!eng.has_fire_at(sim::TileCoord{6, row}), "engine: the Fire ant put the fire wall of the file out");
+    Image after = picture_with_grid(r, level, eng.grid());
+    assets::LevelData bare = base;
+    sim::Grid gb;
+    check(gb.init_from_level(bare), "init (bare)");
+    Image bare_pic = picture_with_grid(r, base, gb);
+    check(crop_cells(after, 6, row, 1).px == crop_cells(bare_pic, 6, row, 1).px, "engine: nothing of the fire is left on the screen after the put-out");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -391,6 +476,7 @@ int main(int argc, char* argv[]) {
     test_food_by_flag(r, arc);
     test_food_without_file_cell(r);
     test_food_cell_and_stages(r);
+    test_fire_wall_by_id(r, arc);
 
     r.shutdown();
     SDL_DestroyWindow(win);

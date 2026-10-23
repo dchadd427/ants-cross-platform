@@ -619,6 +619,9 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             // A power-up is its tile id (62 .. 66), whatever the dictionary calls the entry ("." in many community maps): the ground power-up is drawn exclusively through
             // cell.has_powerup() (below), the same sprite of the same kind on every map; a file bomb (129 .. 132) likewise, via cell.has_bomb() (docs/reverse_engineering/map_file_bombs.md)
             if (ants::sim::movement::is_powerup_tile(c2.tile_index) || ants::sim::is_original_bomb_tile(c2.tile_index)) continue;
+            // A fire wall (134) is likewise drawn exclusively through cell.has_fire() (below): the map maker names the entry `wallup04`, and a static object made from that name would stay on the
+            // screen for ever after a fire ant put the fire out (docs/reverse_engineering/map_loader_fidelity.md, 7)
+            if (c2.tile_index == ants::sim::TILE_FIREWALL) continue;
             // anthills are drawn from their own templates, start markers never; both are tile ids (245 .. 248, 152 .. 155), whatever the dictionary calls them
             if (ants::assets::hill_team_of_id(c2.tile_index) >= 0 || ants::assets::start_marker_team_of_id(c2.tile_index) >= 0) continue;
             if (c2.tile_index >= level.tile_dictionary.size()) continue;
