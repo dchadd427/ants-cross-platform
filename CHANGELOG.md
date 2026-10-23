@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged; only the picture changed. Fire walls that the Map Maker puts on a map still burn until a Fire ant puts them out.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...2d7a03ed)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...1ac880b2)
 
 ## v0.12.108 - 2026-10-22 - Auto edges draw a strip of water one cell wide in mud, in any painting order
 
