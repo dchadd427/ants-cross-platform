@@ -27,15 +27,15 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **The Map Maker has a new tool, Pick up (key P).** Tap a hill, object, food pile, plant or starting ant and a gold ring shows everything it covers (a hill's 4 x 4 square and its door, a pile's footprint). A bar then offers **Move**, **Copy here**, **Delete**, **Select an area...** and **Cancel**.
-- **Move shows a see-through copy of the thing where it would land.** It is green when it fits and red when it does not, with the reason in plain words ("The red hill cannot go here. It needs a free 4 x 4 square, and the mushroom is in the way."). Use the arrow buttons (or the arrow keys, Shift for 8 cells) to nudge it, or drag it, then press **Done**. Enter does the same, Escape cancels, Delete deletes.
-- **Ants move as "this ant or its group".** One tap picks one ant; you choose whether the move takes only that ant or the whole group of that team's ants that stand together.
+- **Move shows a see-through copy of the thing where it would land.** It is green when it fits and red when it does not, with the reason in plain words ("The red hill cannot go here. It needs a free 4 x 4 square, and the mushroom is in the way."). On a desktop it follows the mouse. Use the arrow buttons (or the arrow keys, Shift for 8 cells) to nudge it, or drag it, then press **Done**. Enter does the same, Escape cancels, Delete deletes.
+- **Ants: "this ant or its group".** One tap picks one ant; Move, Copy here and Delete each ask whether to take only that ant or the whole group of that team's ants that stand together.
 - **Select an area** picks every object that lies whole inside a box you draw, so a whole stretch of the map can be moved or copied at once.
-- **One Undo undoes a whole move, copy or delete**, including an area. A short help sheet, "What can be picked up?", is opened from the tool's note.
+- **One Undo undoes a whole move, copy or delete**, including an area. A short help sheet, "What can be picked up?", is opened from the tool's note, and on a short screen (a phone held sideways) the bar is smaller and can be folded away.
 - **The old Move tool is now called Pan** (the M key still chooses it). It only looks around and never changes the map. Maps in the library are never changed by any tool.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.0.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/146ef42b...304ebd5a)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/146ef42b...dc352756)
 
 ## v0.12.106 - 2026-10-22 - Where ants died: the map of deaths on the match page
 
