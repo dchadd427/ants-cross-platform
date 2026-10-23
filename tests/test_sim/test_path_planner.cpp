@@ -1739,22 +1739,21 @@ void run_suite_9_wide_search() {
         }
         ASSERT_LT(scheduled_runs(pc.pops, pc.limit_pop, 8192), scheduled_runs(pc.pops, 0, 8192) / 2);    // (the big budget does shorten the search)
         ASSERT_GT(scheduled_runs(pc.pops, pc.limit_pop, 8192), (static_cast<uint32_t>(pc.pops) + 8191) / 8192);   // ... but it is not given from the first run
-        // (d) a copy of a manager made after the search has passed the limit (the constructor and the assignment) keeps the big budget: it delivers in the run of the original
+        // (d) a copy of a manager made after the search has passed the limit (the constructor and the assignment) keeps the big budget: given the rest of the search as one budget, the
+        // original and both copies deliver in the next run (a copy that forgot the limit would take 1,000 of it first and need a second run)
         {
-            const uint32_t runs_to_limit = static_cast<uint32_t>((pc.limit_pop + 999) / 1000);   // the run in which the first pop at f >= 8,000 happens
-            const uint32_t want = scheduled_runs(pc.pops, pc.limit_pop, 8192);
+            const uint32_t runs_to_limit = static_cast<uint32_t>((pc.limit_pop + 999) / 1000);   // the run in which the first pop at f >= 8,000 happens; the run after it has 8,192
+            const uint64_t rest = pc.pops - static_cast<uint64_t>(runs_to_limit) * 1000 - 8192;
+            ASSERT_TRUE(rest > 2000 && rest < 65535);
             PathManager original;
             original.request(1, {20, 256}, {470, 256}, 512, 512, false, true);
-            for (uint32_t r = 0; r < runs_to_limit; ++r) ASSERT_FALSE(original.run(big_provider, 8192).has_value());
+            for (uint32_t r = 0; r < runs_to_limit + 1; ++r) ASSERT_FALSE(original.run(big_provider, 8192).has_value());
             PathManager by_constructor(original);
             PathManager by_assignment;
             by_assignment = original;
             for (PathManager* pm : {&original, &by_constructor, &by_assignment}) {
-                uint32_t runs = runs_to_limit;
-                std::optional<PathManager::Delivery> d;
-                while (!d && runs < 5000) { d = pm->run(big_provider, 8192); ++runs; }
+                const std::optional<PathManager::Delivery> d = pm->run(big_provider, static_cast<uint16_t>(rest));
                 ASSERT_TRUE(d.has_value() && d->path.size() == 451);
-                ASSERT_EQ(runs, want);
             }
         }
         // a budget below 1,000 is kept (the wide search never takes more than it is given): two runs of 100 pops do not deliver a search of thousands

@@ -448,7 +448,7 @@
    "old": "rules_ = rules_word_played(level.rules);",
    "new": "rules_ = level.rules;",
    "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "test": "./build/tests/test_sim/test_map_roundtrip",
    "expect": "switched off"
   },
   {
@@ -457,7 +457,7 @@
    "old": "rules_ = rules_word_played(rules);",
    "new": "rules_ = rules;",
    "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "test": "./build/tests/test_sim/test_map_roundtrip",
    "expect": "switched off"
   },
   {
@@ -466,7 +466,7 @@
    "old": "word == 2u && rules_two_allowed_ ? word : uint16_t{1}",
    "new": "word == 2u ? word : uint16_t{1}",
    "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "test": "./build/tests/test_sim/test_map_roundtrip",
    "expect": "switched off"
   },
   {
@@ -475,7 +475,7 @@
    "old": "(word == 2u && rules_two_allowed_ ? word : uint16_t{1})",
    "new": "(rules_two_allowed_ ? word : uint16_t{1})",
    "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "test": "./build/tests/test_sim/test_map_roundtrip",
    "expect": "the hook lets 2 through"
   },
   {
@@ -484,7 +484,7 @@
    "old": ": uint16_t{1}); }",
    "new": ": uint16_t{0}); }",
    "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "test": "./build/tests/test_sim/test_map_roundtrip",
    "expect": "switched off"
   },
   {
@@ -493,7 +493,7 @@
    "old": "word <= 1u ? word",
    "new": "word <= 3u ? word",
    "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "test": "./build/tests/test_sim/test_map_roundtrip",
    "expect": "switched off"
   },
   {
