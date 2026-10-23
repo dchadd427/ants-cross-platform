@@ -13,7 +13,6 @@ namespace ants::ai {
 
 namespace {
 
-constexpr uint32_t kMinStrikerHp = 4;             // a healthy ant strikes (the same as a fight's: below this it heals at its hill)
 constexpr uint64_t kBlowTicks = 8;                // an ant that is idle this long after the attack order LEFT has struck (or cannot)
 constexpr uint64_t kApproachTicks = 60;           // an ant that stands idle this long after its move order LEFT, not on its tile, did not get there
 constexpr uint64_t kShunTicks = 300;              // an enemy that was struck at (or that moved away from the job) is left alone this long

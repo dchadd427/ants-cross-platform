@@ -56,7 +56,6 @@ namespace assets = ants::assets;
 namespace {
 
 constexpr uint64_t kIdleTicks = 100;       // an ant that stands with no order for this long (5 s) is idle
-constexpr uint64_t kStuckTicks = 200;      // an ant with an order that stays on at most two tiles for this long (10 s) is stuck
 constexpr uint64_t kEpisodeMin = 20;       // a chance must last this long (1 s) to count: a bot looks every 4 ticks and its orders leave 8 ticks later
 constexpr uint64_t kEpisodeGap = 12;       // a chance that is gone for this long is over
 constexpr uint64_t kSamplePeriod = 2;      // the chances are looked for every 2nd tick
@@ -129,7 +128,7 @@ struct Counters {
     uint64_t idle_free_ticks{0};              // ... held by no task (the bot had nothing for them)
     uint64_t idle_held_ticks{0};              // ... held by a task (a wait that the bot meant, or a task that forgot them)
     uint64_t carry_idle_ticks{0};             // carrying food and idle for kIdleTicks
-    uint64_t stuck_ticks{0};                  // an order and the same two tiles for kStuckTicks
+    uint64_t stuck_ticks{0};                  // an order and the same two tiles for a long time
     uint64_t stuck_ants{0};                   // ants that were ever stuck
     uint64_t cantgo_ticks{0};                 // ant ticks in the can't-go clip
     uint64_t contact_idle_ticks{0};           // a free ant stands next to an enemy ant and does nothing about it
@@ -227,7 +226,7 @@ struct SeatObs {
 
 class Observer {
 public:
-    Observer(const assets::LevelData& level) : level_(level) {}
+    explicit Observer(const assets::LevelData&) {}
     std::array<SeatObs, sim::MAX_PLAYERS> seats;
     std::vector<Event> events;
     std::map<uint64_t, Ep> open;
@@ -249,7 +248,6 @@ private:
         bool eligible{false};
         bool idle{false};
     };
-    const assets::LevelData& level_;
     std::unique_ptr<ai::MapInfo> map_;
     std::vector<uint8_t> bomb_owner_;        // by tile index: the owner of a bomb seen at the last scan (255: none)
     uint32_t bomb_w_{0};
