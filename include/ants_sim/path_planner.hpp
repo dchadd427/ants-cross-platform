@@ -26,6 +26,13 @@
 //     row of a tall map can be walked. Rules 0 (every map that exists today, at most 81 rows) is
 //     untouched: the wall is the default of every constructor below.
 //
+// The WIDE search (map rules word 2, docs/MAP_FORMAT.md "Orders on a big map"): the same A*, the same open list, the same neighbours, the same costs and the same tie-breaks, with
+// a cell that has no 14-bit cost and no 13-bit estimate (g has 24 bits, h is computed from the tile and the goal, so the cell is still one dword) and a give-up rule that is the
+// original's until a node has passed the original's limit: while no ordinary node has had f >= 8000 ("beyond" is clear) a popped node that was reached over a blocked step
+// (a step of cost 8000 or more) ends the search exactly as the original's f >= 8000 test does, so every search the original finishes (a path, or no path before its limit)
+// runs here pop for pop the same; once a node has passed the limit, such a node is dropped and the search goes on. No map reaches rules 2 yet (the map files and their readers
+// are a later change); the engine takes this search only for a Grid of rules 2, and rules 0 and 1 run the search above unchanged.
+//
 // Coordinates: the original's tile is {int16 row, int16 col}. This port uses ants::sim::TileCoord with
 // x = column and y = row throughout.
 //
@@ -121,8 +128,14 @@ public:
     static constexpr uint32_t kKeepNotH = 0xf8003fffu;     ///< mask clearing the h field
     static constexpr uint32_t kKeepNotDir = 0xc7ffffffu;   ///< mask clearing the direction field
 
+    // The wide search's cell (one dword as well): g = bits 0..23, bit 24 = "reached over a blocked step", the parent direction, opened and closed bits where they are above.
+    static constexpr uint32_t kWideGMask = 0x00ffffffu;    ///< bits 0..23: g (16,777,215)
+    static constexpr uint32_t kWideTaintBit = 0x01000000u; ///< bit 24: the last step into this node was blocked (cost >= kFailF)
+
     static constexpr uint32_t kFailF = 8000u;              ///< popped f >= 8000 -> no path (0x1019ae0)
     static constexpr uint16_t kDefaultBudget = 1000u;      ///< expansions per PATHMGR run (0x10247ac)
+    static constexpr uint32_t kWideBudgetFloor = 1000u;    ///< the wide search's budget never goes below the original's
+    static constexpr uint32_t kWideBudgetCellsPerStep = 32u; ///< ... and grows with the map: one step per 32 cells (512 x 512 = 8,192 steps)
     static constexpr int32_t kSentinelRow = 0x5a;          ///< invalid-neighbour marker (0x1019cbd)
     static constexpr int32_t kNoSentinelRow = -1;          ///< the marker when the wall is down (rules 1): never a real row
 
@@ -134,8 +147,9 @@ public:
      * @param cols    map columns (map+0xd2)
      * @param pool    grid pool; must outlive this search
      * @param wall_at_row_90  the default true means the wall is UP (rules 0): every engine caller must pass grid_.rules() == 0. True (the original, rules 0): a real tile in row 90 is never entered; false (rules 1): the wall is down and every row can be walked
+     * @param wide  false (the default, rules 0 and 1): the original's search, bit for bit. True (rules 2): the wide search described at the top of this file; every engine caller must pass grid_.rules() == 2
      */
-    PathSearch(uint32_t ant_id, TileCoord start, TileCoord goal, uint16_t rows, uint16_t cols, PathGridPool& pool, bool wall_at_row_90 = true);
+    PathSearch(uint32_t ant_id, TileCoord start, TileCoord goal, uint16_t rows, uint16_t cols, PathGridPool& pool, bool wall_at_row_90 = true, bool wide = false);
     ~PathSearch();
 
     PathSearch(const PathSearch&) = delete;
@@ -160,6 +174,12 @@ public:
     /** @brief True once the search has completed, successfully or not (the original's heap is freed). */
     bool finished() const noexcept { return finished_; }
 
+    /** @brief True for the wide search (rules 2). */
+    bool wide() const noexcept { return wide_; }
+
+    /** @brief The wide search only: true once a node with f >= 8000 (the original's limit) has been given to the open list. Always false for the original's search. */
+    bool beyond() const noexcept { return beyond_; }
+
     /** @brief True while the search holds a grid slot. */
     bool has_grid() const noexcept { return slot_ >= 0; }
 
@@ -180,6 +200,7 @@ private:
     void neighbours(TileCoord cur, std::array<TileCoord, 8>& out) const noexcept;
     void build_path();
     void finish() noexcept;
+    int step_wide(uint16_t budget, const StepCostFn& cost);
 
     uint32_t ant_id_;
     TileCoord start_;
@@ -193,6 +214,8 @@ private:
     std::vector<TileCoord> heap_;
     bool finished_{false};
     std::vector<TileCoord> path_;
+    bool wide_{false};     // the wide search (rules 2)
+    bool beyond_{false};   // wide search: a node with f >= kFailF has been given to the open list (the original's limit is passed)
 };
 
 /**
@@ -211,6 +234,12 @@ public:
     };
 
     using CostProvider = std::function<uint32_t(uint32_t ant_id, TileCoord from, TileCoord to)>;
+
+    /** @brief The wide search's budget for a map of @p rows x @p cols: max(1000, cells / 32), at most 65,535 (a map of at most 31,000 cells keeps the original's 1,000). */
+    static constexpr uint16_t wide_budget(uint32_t rows, uint32_t cols) noexcept {
+        const uint64_t steps = static_cast<uint64_t>(rows) * cols / PathSearch::kWideBudgetCellsPerStep;
+        return static_cast<uint16_t>(steps < PathSearch::kWideBudgetFloor ? PathSearch::kWideBudgetFloor : (steps > 65535u ? 65535u : steps));
+    }
 
     PathManager();
     ~PathManager() = default;
@@ -231,14 +260,16 @@ public:
      * @brief PathMgr::Request (0x10246e8): removes the first queued request of the same ant (releasing its
      *        grid slot), then appends a new request, which takes a free grid slot immediately if there is one.
      *        @p wall_at_row_90 is PathSearch's. Its default true means the wall is up: every engine caller must pass grid_.rules() == 0.
+     *        @p wide is PathSearch's: every engine caller must pass grid_.rules() == 2.
      */
-    void request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols, bool wall_at_row_90 = true);
+    void request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols, bool wall_at_row_90 = true, bool wide = false);
 
     /**
      * @brief One PATHMGR run (0x1024786).
+     * @param budget  expansions for the one request that runs (the original's 1,000; a map of rules 2 passes wide_budget(rows, cols))
      * @return the finished search's result if this run completed one, otherwise std::nullopt.
      */
-    std::optional<Delivery> run(const CostProvider& cost);
+    std::optional<Delivery> run(const CostProvider& cost, uint16_t budget = PathSearch::kDefaultBudget);
 
     /** @brief Drops every queued request and releases their grid slots. */
     void clear();

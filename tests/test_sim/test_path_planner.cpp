@@ -15,6 +15,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <algorithm>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -925,6 +927,655 @@ void run_suite_8_stale_heap() {
     } TEST_END();
 }
 
+// ============================================================================
+// SUITE 9: The wide search (map rules word 2)
+// ============================================================================
+namespace {
+
+// A small deterministic generator (xorshift64): the maps and orders of this suite are the same on every compiler.
+struct Xor {
+    uint64_t s;
+    explicit Xor(uint64_t seed) : s(seed * 0x9E3779B97F4A7C15ull + 0x1234567ull) {}
+    uint32_t next() {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        return static_cast<uint32_t>(s >> 16);
+    }
+    uint32_t below(uint32_t n) { return next() % n; }
+};
+
+enum class Flavor { Open, Mixed, Walls };
+
+// Open grass; mixed (lakes, mud, sand and dirt patches from integer value noise); walls (mixed, plus long rock walls with a 3-tile gap, which force detours).
+TerrainMap make_terrain(int w, int h, Flavor flavor, uint64_t seed) {
+    TerrainMap m = TerrainMap::filled(w, h);
+    if (flavor == Flavor::Open) return m;
+    Xor rng(seed);
+    constexpr int G = 12;
+    std::vector<int> a((G + 2) * (G + 2)), b((G + 2) * (G + 2));
+    for (int& v : a) v = static_cast<int>(rng.below(256));
+    for (int& v : b) v = static_cast<int>(rng.below(256));
+    const auto sample = [&](const std::vector<int>& g, int x, int y) {
+        const int fx = x * G * 256 / w;
+        const int fy = y * G * 256 / h;
+        const int ix = fx >> 8, tx = fx & 255, iy = fy >> 8, ty = fy & 255;
+        const auto at = [&](int i, int j) { return g[static_cast<size_t>(j * (G + 2) + i)]; };
+        const int top = at(ix, iy) * (256 - tx) + at(ix + 1, iy) * tx;
+        const int bottom = at(ix, iy + 1) * (256 - tx) + at(ix + 1, iy + 1) * tx;
+        return (top * (256 - ty) + bottom * ty) >> 16;
+    };
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const int n = sample(a, x, y);
+            const int n2 = sample(b, x, y);
+            char c = '.';
+            if (n > 179) c = '~';
+            else if (n > 158) c = 'm';
+            else if (n2 > 184) c = 's';
+            else if (n2 < 56) c = 'd';
+            m.set(x, y, c);
+        }
+    }
+    if (flavor == Flavor::Walls) {
+        const int count = w / 16;
+        for (int k = 0; k < count; ++k) {
+            const bool vertical = (rng.next() & 1u) != 0;
+            const int pos = static_cast<int>(rng.below(static_cast<uint32_t>(vertical ? w : h)));
+            const int len = w / 3 + static_cast<int>(rng.below(static_cast<uint32_t>(w / 2)));
+            const int start = static_cast<int>(rng.below(static_cast<uint32_t>(vertical ? h : w)));
+            const int gap = static_cast<int>(rng.below(static_cast<uint32_t>(len)));
+            for (int i = 0; i < len; ++i) {
+                if (i >= gap && i < gap + 3) continue;
+                const int x = vertical ? pos : start + i;
+                const int y = vertical ? start + i : pos;
+                if (x < w && y < h) m.set(x, y, '#');
+            }
+        }
+    }
+    return m;
+}
+
+bool walkable(const TerrainMap& m, int x, int y) {
+    if (x < 0 || y < 0 || x >= m.width() || y >= m.height()) return false;
+    const char c = m.at({x, y});
+    return c != '~' && c != '#';
+}
+
+TileCoord random_walkable(const TerrainMap& m, Xor& rng) {
+    for (int i = 0; i < 100000; ++i) {
+        const int x = static_cast<int>(rng.below(m.width()));
+        const int y = static_cast<int>(rng.below(m.height()));
+        if (walkable(m, x, y)) return {x, y};
+    }
+    return {0, 0};
+}
+
+uint64_t fnv_step(uint64_t h, uint64_t v) {
+    h ^= v;
+    return h * 0x100000001b3ull;
+}
+constexpr uint64_t kFnvBasis = 0xcbf29ce484222325ull;
+
+uint64_t path_digest(const std::vector<TileCoord>& p) {
+    uint64_t h = fnv_step(kFnvBasis, p.size());
+    for (const TileCoord& t : p) h = fnv_step(fnv_step(h, static_cast<uint32_t>(t.x)), static_cast<uint32_t>(t.y));
+    return h;
+}
+
+// What a search did: its path, how many times it asked for the cost of a step, and a digest of every (from, to) it asked about in order. Two searches with the same
+// trace expanded the same nodes in the same order (the neighbours are asked in order from each node that is expanded).
+struct Trace {
+    std::vector<TileCoord> path;
+    uint64_t calls{0};
+    uint64_t digest{kFnvBasis};
+    bool beyond{false};
+};
+
+Trace run_trace(uint16_t rows, uint16_t cols, TileCoord start, TileCoord goal, const PathSearch::StepCostFn& cost, bool wide, bool wall_at_row_90 = false,
+                uint16_t budget = 60000) {
+    Trace t;
+    const PathSearch::StepCostFn counted = [&](TileCoord a, TileCoord b) {
+        ++t.calls;
+        t.digest = fnv_step(fnv_step(fnv_step(fnv_step(t.digest, static_cast<uint32_t>(a.x)), static_cast<uint32_t>(a.y)), static_cast<uint32_t>(b.x)), static_cast<uint32_t>(b.y));
+        return cost(a, b);
+    };
+    PathGridPool pool;
+    PathSearch search(1, start, goal, rows, cols, pool, wall_at_row_90, wide);
+    for (int i = 0; i < 100000 && !search.finished(); ++i) search.step(budget, counted);
+    t.path = search.path();
+    t.beyond = search.beyond();
+    return t;
+}
+
+Trace run_trace(const TerrainMap& m, TileCoord start, TileCoord goal, bool wide, bool wall_at_row_90 = false, uint16_t budget = 60000) {
+    return run_trace(m.height(), m.width(), start, goal, m.step_cost(), wide, wall_at_row_90, budget);
+}
+
+bool path_is_walkable(const TerrainMap& m, const std::vector<TileCoord>& p, TileCoord start, TileCoord goal) {
+    if (p.empty() || p.front() != start || p.back() != goal || !is_connected(p)) return false;
+    for (size_t i = 1; i < p.size(); ++i) {
+        if (m.cost(p[i - 1], p[i]) >= kBlocked) return false;
+    }
+    return true;
+}
+
+// ---- the model: the wide search as the header describes it, written out with a field for each thing and no bit packing, for the small cost fields of 9.2 ------------------
+struct WideModel {
+    struct Node {
+        bool opened{false}, closed{false}, taint{false};
+        int64_t g{0};
+        int dir{0};
+    };
+    uint16_t rows{0}, cols{0};
+    TileCoord start{0, 0}, goal{0, 0};
+    PathSearch::StepCostFn cost;
+    std::vector<Node> nodes;
+    std::vector<int> heap;  // node indices
+    bool beyond{false};
+    uint64_t pops{0};
+    std::vector<TileCoord> path;
+
+    int idx(TileCoord t) const { return t.y * cols + t.x; }
+    TileCoord tile(int i) const { return {i % cols, i / cols}; }
+    int64_t h_of(TileCoord t) const { return 16 * std::max(std::abs(t.x - goal.x), std::abs(t.y - goal.y)); }
+    int64_t f(int i) const { return nodes[static_cast<size_t>(i)].g + h_of(tile(i)); }
+
+    void push(int i) {
+        heap.push_back(i);
+        size_t k = heap.size() - 1;
+        const int64_t key = f(i);
+        while (k != 0) {
+            const size_t p = k >> 1;
+            if (f(heap[p]) <= key) break;
+            std::swap(heap[p], heap[k]);
+            k = p;
+        }
+    }
+    int pop() {
+        const int top = heap[0];
+        heap[0] = heap.back();
+        heap.pop_back();
+        const size_t count = heap.size();
+        if (count >= 1) {
+            const int64_t key = f(heap[0]);
+            size_t i = 0, c = 0;
+            for (;;) {
+                size_t best = c;
+                int64_t fb = f(heap[c]);
+                if (c + 2 <= count) {
+                    const int64_t fr = f(heap[c + 1]);
+                    if (fr < fb) {
+                        best = c + 1;
+                        fb = fr;
+                    }
+                }
+                if (key <= fb) break;
+                std::swap(heap[i], heap[best]);
+                i = best;
+                c = 2 * best;
+                if (c + 1 > count) break;
+            }
+        }
+        return top;
+    }
+
+    // Runs to the end; fills path (empty = no path), pops, beyond.
+    void run() {
+        nodes.assign(static_cast<size_t>(rows) * cols, Node{});
+        nodes[static_cast<size_t>(idx(start))].opened = true;
+        beyond = h_of(start) >= 8000;
+        push(idx(start));
+        while (!heap.empty()) {
+            const int cur = pop();
+            ++pops;
+            Node& cn = nodes[static_cast<size_t>(cur)];
+            const TileCoord ct = tile(cur);
+            if (cn.taint) {
+                if (!beyond) { path.clear(); return; }
+                continue;
+            }
+            if (ct == goal) {
+                for (TileCoord t = goal;; ) {
+                    path.insert(path.begin(), t);
+                    if (t == start) break;
+                    const Node& n = nodes[static_cast<size_t>(idx(t))];
+                    static const int dr[8] = {-1, -1, 0, 1, 1, 1, 0, -1}, dc[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+                    t = {t.x + dc[n.dir], t.y + dr[n.dir]};
+                }
+                return;
+            }
+            for (int d = 0; d < 8; ++d) {   // N, NE, E, SE, S, SW, W, NW
+                static const int dr[8] = {-1, -1, 0, 1, 1, 1, 0, -1}, dc[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+                const TileCoord n{ct.x + dc[d], ct.y + dr[d]};
+                if (n.x < 0 || n.y < 0 || n.x >= cols || n.y >= rows) continue;
+                const uint32_t step = cost(ct, n);
+                const int64_t newg = static_cast<int64_t>(step) + cn.g;
+                if (newg > 16777215) continue;
+                Node& nn = nodes[static_cast<size_t>(idx(n))];
+                if ((nn.opened || nn.closed) && nn.g <= newg) continue;
+                nn.closed = false;
+                nn.g = newg;
+                nn.dir = (d + 4) % 8;       // the direction from the node to its parent
+                nn.taint = step >= 8000;
+                if (!nn.taint && newg + h_of(n) >= 8000) beyond = true;
+                if (!nn.opened) {
+                    nn.opened = true;
+                    push(idx(n));
+                }
+            }
+            cn.closed = true;
+        }
+        path.clear();
+    }
+};
+
+// A cost field made of nothing but a seed: every step (from, to) has a cost of its own, mostly hundreds (so that f reaches 8000 on a few tiles), some small, some blocked, some
+// exactly on the limits
+uint32_t synthetic_cost(uint64_t seed, TileCoord a, TileCoord b) {
+    uint64_t h = fnv_step(fnv_step(fnv_step(fnv_step(fnv_step(kFnvBasis, seed), static_cast<uint32_t>(a.x)), static_cast<uint32_t>(a.y)), static_cast<uint32_t>(b.x)), static_cast<uint32_t>(b.y));
+    h ^= h >> 29;
+    h *= 0xBF58476D1CE4E5B9ull;
+    h ^= h >> 32;
+    const uint32_t kind = static_cast<uint32_t>(h % 100);
+    const uint32_t v = static_cast<uint32_t>((h >> 8) & 0xffffff);
+    const uint32_t blocked = 3 + 14 * static_cast<uint32_t>(seed % 4);   // 3, 17, 31 or 45 steps in 100 are blocked
+    if (kind < blocked) return v % 3 == 0 ? 8000 : (v % 3 == 1 ? 8000 + v % 7 : 7999);
+    if (kind < blocked + 12) return 1 + v % 60;
+    return 250 + v % 1250;
+}
+
+}  // namespace
+
+void run_suite_9_wide_search() {
+    TEST_SUITE("Suite 9: The Wide Search (Map Rules Word 2)");
+
+    TEST_CASE("9.1 Differential: wherever the original search finds a path the wide search finds the same path with the same expansions; where it fails and the limit was not passed, the same failure") {
+        struct Size { int w; int orders; };
+        const Size sizes[] = {{48, 300}, {64, 300}, {100, 240}, {160, 120}, {256, 60}, {384, 24}, {512, 16}};
+        uint64_t digest = kFnvBasis;
+        int same_found = 0, same_found_beyond = 0, same_failure = 0, rescued = 0, still_failed_beyond = 0;
+        for (const Flavor flavor : {Flavor::Open, Flavor::Mixed, Flavor::Walls}) {
+            for (const Size& sz : sizes) {
+                for (int batch = 0; batch < 4; ++batch) {
+                    const uint64_t seed = static_cast<uint64_t>(sz.w) * 1000 + static_cast<uint64_t>(batch) * 17 + static_cast<uint64_t>(flavor);
+                    const TerrainMap m = make_terrain(sz.w, sz.w, flavor, seed);
+                    Xor rng(seed ^ 0xABCDEFu);
+                    for (int i = 0; i < sz.orders / 4; ++i) {
+                        const TileCoord s = random_walkable(m, rng);
+                        TileCoord g = random_walkable(m, rng);
+                        if (i % 7 == 3) g = {static_cast<int>(rng.below(static_cast<uint32_t>(sz.w))), static_cast<int>(rng.below(static_cast<uint32_t>(sz.w)))};   // sometimes blocked
+                        else if (sz.w >= 256 && i % 3 != 0) {                  // on the big maps most orders are long ones: the ones that go past the original's limit
+                            for (int tries = 0; tries < 200 && s.chebyshev_dist(g) < sz.w * 5 / 8; ++tries) g = random_walkable(m, rng);
+                        }
+                        const bool wall = sz.w <= 90 && (i & 1) != 0;       // (at most 90 rows there is no row 90: the flag changes nothing, as 5.4c)
+                        const Trace classic = run_trace(m, s, g, false, wall);
+                        const Trace wide = run_trace(m, s, g, true, wall);
+                        digest = fnv_step(fnv_step(fnv_step(digest, path_digest(classic.path)), path_digest(wide.path)), fnv_step(fnv_step(classic.digest, wide.digest), wide.beyond ? 1 : 0));
+                        if (!classic.path.empty()) {
+                            ASSERT_TRUE(wide.path == classic.path);
+                            ASSERT_EQ(wide.calls, classic.calls);
+                            ASSERT_EQ(wide.digest, classic.digest);
+                            ++same_found;
+                            if (wide.beyond) ++same_found_beyond;
+                        } else if (!wide.beyond) {
+                            ASSERT_TRUE(wide.path.empty());
+                            ASSERT_EQ(wide.calls, classic.calls);
+                            ASSERT_EQ(wide.digest, classic.digest);
+                            ++same_failure;
+                        } else if (!wide.path.empty()) {
+                            ASSERT_TRUE(path_is_walkable(m, wide.path, s, g));
+                            ++rescued;
+                        } else {
+                            ++still_failed_beyond;
+                        }
+                    }
+                }
+            }
+        }
+        std::cout << "[" << same_found << " found alike (" << same_found_beyond << " past the limit on the way), " << same_failure << " failed alike, " << rescued << " rescued, "
+                  << still_failed_beyond << " still no path] digest " << std::hex << digest << std::dec << " ... " << std::flush;
+        ASSERT_GT(same_found, 2000);
+        ASSERT_GT(same_failure, 100);
+        ASSERT_GT(rescued, 20);
+        ASSERT_GT(still_failed_beyond, 10);
+        ASSERT_EQ(digest, 0x29df9943b8de2e61ull);   // the digest of the whole run: the same on every compiler, optimization level and sanitizer
+    } TEST_END();
+
+    TEST_CASE("9.2 The model: the wide search against the rules written out, on 30,000 small cost fields with steps on and around the limit (path, expansions, the flag)") {
+        int found = 0, failed = 0, past_limit = 0, rescue = 0;
+        for (uint64_t seed = 1; seed <= 30000; ++seed) {
+            Xor rng(seed);
+            const uint16_t rows = static_cast<uint16_t>(1 + rng.below(5));
+            const uint16_t cols = static_cast<uint16_t>(2 + rng.below(7));
+            const TileCoord start{static_cast<int>(rng.below(cols)), static_cast<int>(rng.below(rows))};
+            const TileCoord goal{static_cast<int>(rng.below(cols)), static_cast<int>(rng.below(rows))};
+            const PathSearch::StepCostFn cost = [seed](TileCoord a, TileCoord b) { return synthetic_cost(seed, a, b); };
+            WideModel model;
+            model.rows = rows;
+            model.cols = cols;
+            model.start = start;
+            model.goal = goal;
+            model.cost = cost;
+            model.run();
+            PathGridPool pool;
+            PathSearch search(1, start, goal, rows, cols, pool, false, true);
+            uint64_t slices = 0;
+            while (!search.finished() && slices < 100000) {
+                search.step(1, cost);                          // budget 1: one pop a slice
+                ++slices;
+            }
+            ASSERT_TRUE(search.path() == model.path);
+            ASSERT_EQ(slices, model.pops);
+            ASSERT_EQ(search.beyond(), model.beyond);
+            if (model.path.empty()) ++failed; else ++found;
+            if (model.beyond) ++past_limit;
+            if (model.beyond && !model.path.empty()) ++rescue;
+        }
+        std::cout << "[" << found << " paths, " << failed << " none, " << past_limit << " past the limit, " << rescue << " paths past the limit] ... " << std::flush;
+        ASSERT_GT(found, 3000);
+        ASSERT_GT(failed, 1000);
+        ASSERT_GT(past_limit, 3000);
+        ASSERT_GT(rescue, 300);
+    } TEST_END();
+
+    TEST_CASE("9.3 Orders beyond the original's limit on open grass: 450 tiles straight, 480 (d, d/2), 330 diagonal (the original gives up at 400, 334 and 286)") {
+        const TerrainMap m = TerrainMap::filled(512, 512);
+        const auto cost = m.step_cost();
+        const struct { TileCoord from; TileCoord to; uint32_t length; uint32_t path_cost; } orders[] = {
+            {{20, 256}, {470, 256}, 451, 9000},       // straight: 450 x 20
+            {{20, 20}, {500, 260}, 481, 11520},       // (480, 240): 240 diagonal steps of 28 and 240 straight steps of 20
+            {{20, 20}, {350, 350}, 331, 9240},        // diagonal: 330 x 28
+        };
+        for (const auto& o : orders) {
+            const Trace classic = run_trace(m, o.from, o.to, false);
+            ASSERT_TRUE(classic.path.empty());                                  // the original gives up: "Can't go there"
+            const Trace wide = run_trace(m, o.from, o.to, true);
+            ASSERT_TRUE(path_is_walkable(m, wide.path, o.from, o.to));
+            ASSERT_EQ(wide.path.size(), static_cast<size_t>(o.length));
+            ASSERT_EQ(path_cost(wide.path, cost), o.path_cost);                 // the cost of the best path
+            ASSERT_TRUE(wide.beyond);
+        }
+        // the straight order is the straight line
+        const Trace straight = run_trace(m, {20, 256}, {470, 256}, true);
+        for (size_t i = 0; i < straight.path.size(); ++i) ASSERT_TRUE((straight.path[i] == TileCoord{20 + static_cast<int>(i), 256}));
+        // up to the original's limit nothing changes: 399 tiles straight is found by both (cost 7,980, f at the goal 7,980), 400 is the first the original refuses
+        for (int d : {399, 400}) {
+            const Trace classic = run_trace(m, {20, 256}, {20 + d, 256}, false);
+            const Trace wide = run_trace(m, {20, 256}, {20 + d, 256}, true);
+            ASSERT_EQ(classic.path.empty(), d == 400);
+            ASSERT_FALSE(wide.path.empty());
+            if (d == 400) ASSERT_TRUE(wide.beyond);
+            if (d == 399) {
+                ASSERT_TRUE(wide.path == classic.path);
+                ASSERT_EQ(wide.digest, classic.digest);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("9.4 Past the limit by cost, not by distance: a 220-tile mud road (48 a step, the original gives up at 166); a detour around a long wall") {
+        TerrainMap road = TerrainMap::filled(230, 3, 'm');
+        const Trace classic = run_trace(road, {5, 1}, {225, 1}, false);
+        const Trace wide = run_trace(road, {5, 1}, {225, 1}, true);
+        ASSERT_TRUE(classic.path.empty());
+        ASSERT_EQ(wide.path.size(), static_cast<size_t>(221));
+        ASSERT_EQ(path_cost(wide.path, road.step_cost()), 220u * 48u);
+        // a wall across a 300 x 40 field, its gap at the far bottom: the way round is longer than the original's limit
+        TerrainMap field = TerrainMap::filled(400, 120);
+        for (int y = 0; y < 117; ++y) field.set(200, y, '#');
+        const Trace c2 = run_trace(field, {10, 2}, {390, 2}, false);
+        const Trace w2 = run_trace(field, {10, 2}, {390, 2}, true);
+        ASSERT_TRUE(c2.path.empty());
+        ASSERT_TRUE(path_is_walkable(field, w2.path, {10, 2}, {390, 2}));
+        ASSERT_LE(path_cost(w2.path, field.step_cost()), dijkstra_cost({10, 2}, {390, 2}, 120, 400, field.step_cost()) * 101u / 100u);
+        ASSERT_TRUE(w2.beyond);
+    } TEST_END();
+
+    TEST_CASE("9.5 A blocked node that is taken before the limit is passed ends the search as in the original: the same 144, 120 and 136 expansions as 4.1 to 4.4, and a flag that stays clear") {
+        TerrainMap moat = TerrainMap::filled(12, 12);
+        for (int y = 6; y <= 10; ++y) {
+            for (int x = 6; x <= 10; ++x) {
+                if (std::max(std::abs(x - 8), std::abs(y - 8)) == 2) moat.set(x, y, '~');
+            }
+        }
+        TerrainMap pool_goal = TerrainMap::filled(12, 12);
+        pool_goal.set(3, 2, '~');
+        TerrainMap rocks = TerrainMap::filled(12, 12);
+        for (int y = 7; y <= 9; ++y) {
+            for (int x = 7; x <= 9; ++x) {
+                if (x != 8 || y != 8) rocks.set(x, y, '#');
+            }
+        }
+        const struct { const TerrainMap* map; TileCoord s; TileCoord g; int expansions; } cases[] = {{&moat, {2, 2}, {8, 8}, 120}, {&pool_goal, {2, 2}, {3, 2}, 144}, {&rocks, {2, 2}, {8, 8}, 136}};
+        for (const auto& c : cases) {
+            const Trace wide = run_trace(*c.map, c.s, c.g, true);
+            ASSERT_TRUE(wide.path.empty());
+            ASSERT_FALSE(wide.beyond);
+            ASSERT_EQ(wide.calls, run_trace(*c.map, c.s, c.g, false).calls);
+            PathGridPool pool;
+            PathSearch search(1, c.s, c.g, c.map->height(), c.map->width(), pool, true, true);
+            int slices = 0;
+            while (!search.finished()) {
+                search.step(1, c.map->step_cost());
+                ++slices;
+            }
+            ASSERT_EQ(slices, c.expansions);
+        }
+    } TEST_END();
+
+    TEST_CASE("9.6 An unreachable goal past the limit: the wide search sweeps everything it can reach and drops the blocked nodes (the original gives up at the first of them)") {
+        const auto sweep = [](const TerrainMap& field, TileCoord s, TileCoord g, bool wide, bool* beyond) {
+            PathGridPool pool;
+            PathSearch search(1, s, g, field.height(), field.width(), pool, false, wide);
+            const PathSearch::StepCostFn cost = field.step_cost();
+            int slices = 0;
+            while (!search.finished() && slices < 1000000) {
+                search.step(1, cost);
+                ++slices;
+            }
+            *beyond = search.beyond();
+            return search.path().empty() ? slices : -1;
+        };
+        bool beyond = false;
+        {   // a start that is 500 columns from the goal has f = 8,000 at once: past the limit before the first expansion (a start 499 columns away is not)
+            PathGridPool pool;
+            const TerrainMap strip = TerrainMap::filled(512, 1);
+            ASSERT_TRUE(PathSearch(1, {0, 0}, {500, 0}, 1, 512, pool, false, true).beyond());
+            ASSERT_FALSE(PathSearch(1, {0, 0}, {499, 0}, 1, 512, pool, false, true).beyond());
+            ASSERT_FALSE(PathSearch(1, {0, 0}, {511, 0}, 1, 512, pool, false, false).beyond());       // (the original's search never sets it)
+        }
+        // 512 x 12 grass cut by a rock wall at column 250: the goal, 500 columns from the start, is already past the limit (16 x 500 = 8,000) at the first node
+        TerrainMap field = TerrainMap::filled(512, 12);
+        for (int y = 0; y < 12; ++y) field.set(250, y, '#');
+        ASSERT_EQ(sweep(field, {5, 5}, {505, 5}, false, &beyond), 1);
+        ASSERT_FALSE(beyond);
+        ASSERT_EQ(sweep(field, {5, 5}, {505, 5}, true, &beyond), 250 * 12 + 12);        // the 3,000 tiles west of the wall and the 12 rocks, each once
+        ASSERT_TRUE(beyond);
+        // 300 x 12 of mud (48 a step) with the same kind of wall at column 150: the limit is passed on the way, at about column 120
+        TerrainMap mud = TerrainMap::filled(300, 12, 'm');
+        for (int y = 0; y < 12; ++y) mud.set(150, y, '#');
+        const int classic_pops = sweep(mud, {10, 5}, {290, 5}, false, &beyond);
+        ASSERT_FALSE(beyond);
+        const int wide_pops = sweep(mud, {10, 5}, {290, 5}, true, &beyond);
+        ASSERT_TRUE(beyond);
+        ASSERT_LT(classic_pops, 1800);
+        ASSERT_EQ(wide_pops, 150 * 12 + 12);                                            // every tile west of the wall (150 columns of 12) and the 12 rocks, once each
+    } TEST_END();
+
+    TEST_CASE("9.7 g has 24 bits: a road of steps that cost 7,999 is walked to 16,000,000 and no further; a road of 1,000 steps is not cut") {
+        const auto strip = [](int n, uint32_t step) {
+            return [n, step](TileCoord a, TileCoord b) -> uint32_t { return (a.x < 0 || b.x < 0 || a.x >= n || b.x >= n) ? kBlocked : step; };
+        };
+        const PathSearch::StepCostFn cost = strip(3000, 7999);
+        const Trace short_road = run_trace(1, 3000, {0, 0}, {1000, 0}, cost, true);
+        ASSERT_EQ(short_road.path.size(), static_cast<size_t>(1001));
+        const Trace long_road = run_trace(1, 3000, {0, 0}, {2000, 0}, cost, true);         // g = 15,998,000 at the goal: below 16,777,215
+        ASSERT_EQ(long_road.path.size(), static_cast<size_t>(2001));
+        const Trace too_long = run_trace(1, 3000, {0, 0}, {2200, 0}, cost, true);          // 17,597,800: does not fit
+        ASSERT_TRUE(too_long.path.empty());
+        ASSERT_EQ(too_long.calls, 4195u);                                                   // the search stops where g stops fitting (node 2,098); without the guard it runs on over wrapped costs
+        ASSERT_TRUE(run_trace(1, 3000, {0, 0}, {2200, 0}, cost, false).path.empty());       // (the original gives up at the first step)
+    } TEST_END();
+
+    TEST_CASE("9.8 The wide flag and the limit are state of a search: a copy of a manager made in the middle of a wide search (constructor and assignment) finishes it as the original does, at the same run") {
+        const TerrainMap field = make_terrain(256, 256, Flavor::Walls, 77);
+        Xor rng(5);
+        const PathManager::CostProvider provider = field.provider();
+        constexpr uint16_t kSlice = 300;
+        int copied = 0;
+        for (int round = 0; round < 12; ++round) {
+            TileCoord s = random_walkable(field, rng);
+            TileCoord g = random_walkable(field, rng);
+            while (s.chebyshev_dist(g) < 120) g = random_walkable(field, rng);
+            PathManager reference;
+            reference.request(9, s, g, field.height(), field.width(), false, true);
+            std::optional<PathManager::Delivery> want;
+            int want_runs = 0;
+            while (!want && want_runs < 2000) {
+                want = reference.run(provider, kSlice);
+                ++want_runs;
+            }
+            ASSERT_TRUE(want.has_value());
+            ASSERT_GT(want_runs, 4);
+            PathManager original;
+            original.request(9, s, g, field.height(), field.width(), false, true);
+            for (int r = 0; r < 4; ++r) ASSERT_FALSE(original.run(provider, kSlice).has_value());
+            PathManager by_constructor(original);
+            PathManager by_assignment;
+            by_assignment.request(1, {0, 0}, {1, 1}, field.height(), field.width());   // (it has a search of its own, which the assignment replaces)
+            by_assignment = original;
+            for (PathManager* pm : {&original, &by_constructor, &by_assignment}) {
+                std::optional<PathManager::Delivery> got;
+                int runs = 4;
+                while (!got && runs < 2000) {
+                    got = pm->run(provider, kSlice);
+                    ++runs;
+                }
+                ASSERT_TRUE(got.has_value());
+                ASSERT_EQ(runs, want_runs);
+                ASSERT_TRUE(got->path == want->path);
+            }
+            ++copied;
+        }
+        ASSERT_EQ(copied, 12);
+        // a start that is 500 columns from the goal has passed the limit before the first step; it is shut in by rocks, so every node it makes is blocked: with the flag
+        // (the copy has it, as the original) the 5 rocks are dropped one after the other, without it the first of them would end the search
+        {
+            TerrainMap shut = TerrainMap::filled(512, 3);
+            shut.set(0, 0, '#');
+            shut.set(1, 0, '#');
+            shut.set(1, 1, '#');
+            shut.set(1, 2, '#');
+            shut.set(0, 2, '#');
+            const PathManager::CostProvider shut_provider = shut.provider();
+            PathManager original;
+            original.request(4, {0, 1}, {500, 1}, 3, 512, false, true);
+            PathManager copy(original);
+            PathManager assigned;
+            assigned = original;
+            const auto runs_until_delivery = [&](PathManager& pm) {
+                for (int r = 1; r < 100; ++r) {
+                    if (const std::optional<PathManager::Delivery> d = pm.run(shut_provider, 2)) return d->path.empty() ? r : -r;
+                }
+                return 0;
+            };
+            const int runs = runs_until_delivery(original);
+            ASSERT_EQ(runs, 3);                                   // 6 pops (the start and its 5 rocks) at 2 a run
+            ASSERT_EQ(runs_until_delivery(copy), runs);
+            ASSERT_EQ(runs_until_delivery(assigned), runs);
+        }
+        // a copy made after the limit was passed: the flag is part of what is copied (without it the first blocked node ends the search)
+        TerrainMap wall = TerrainMap::filled(400, 120);
+        for (int y = 0; y < 117; ++y) wall.set(200, y, '#');
+        const PathManager::CostProvider wall_provider = wall.provider();
+        PathGridPool probe_pool;
+        PathSearch probe(1, {10, 2}, {390, 2}, 120, 400, probe_pool, false, true);
+        int slices_to_limit = 0;
+        while (!probe.beyond() && !probe.finished()) {
+            probe.step(kSlice, wall.step_cost());
+            ++slices_to_limit;
+        }
+        ASSERT_TRUE(probe.beyond() && !probe.finished());
+        PathManager m1;
+        m1.request(1, {10, 2}, {390, 2}, 120, 400, false, true);
+        for (int r = 0; r < slices_to_limit; ++r) ASSERT_FALSE(m1.run(wall_provider, kSlice).has_value());
+        PathManager m2(m1);
+        std::optional<PathManager::Delivery> d2, d1;
+        for (int r = 0; r < 2000 && !d2; ++r) d2 = m2.run(wall_provider, kSlice);
+        for (int r = slices_to_limit; r < 2000 && !d1; ++r) d1 = m1.run(wall_provider, kSlice);
+        ASSERT_TRUE(d1.has_value() && d2.has_value());
+        ASSERT_FALSE(d1->path.empty());
+        ASSERT_TRUE(d2->path == d1->path);
+    } TEST_END();
+
+    TEST_CASE("9.9 The budget: max(1000, cells / 32) steps a run for rules 2, 1,000 for the others; the manager spends what it is given") {
+        ASSERT_EQ(PathManager::wide_budget(60, 60), 1000u);
+        ASSERT_EQ(PathManager::wide_budget(81, 129), 1000u);                 // the biggest map of the library
+        ASSERT_EQ(PathManager::wide_budget(250, 128), 1000u);                // 32,000 cells
+        ASSERT_EQ(PathManager::wide_budget(1, 32001), 1000u);                // 1,000.03
+        ASSERT_EQ(PathManager::wide_budget(1, 32032), 1001u);
+        ASSERT_EQ(PathManager::wide_budget(1, 32063), 1001u);
+        ASSERT_EQ(PathManager::wide_budget(1, 32064), 1002u);
+        ASSERT_EQ(PathManager::wide_budget(256, 256), 2048u);
+        ASSERT_EQ(PathManager::wide_budget(400, 400), 5000u);
+        ASSERT_EQ(PathManager::wide_budget(512, 512), 8192u);
+        ASSERT_EQ(PathManager::wide_budget(1024, 256), 8192u);
+        ASSERT_EQ(PathManager::wide_budget(2048, 2048), 65535u);             // (the manager's budget is 16 bits)
+        ASSERT_EQ(static_cast<unsigned>(PathSearch::kDefaultBudget), 1000u);
+        // a search of 5,400 expansions: 6 runs of 1,000, one of 8,192
+        const TerrainMap open = TerrainMap::filled(512, 512);
+        const PathManager::CostProvider provider = open.provider();
+        for (const uint16_t budget : {uint16_t{1000}, uint16_t{2048}, uint16_t{8192}}) {
+            PathManager pm;
+            pm.request(3, {10, 10}, {60, 40}, 512, 512, false, true);
+            int runs = 0;
+            std::optional<PathManager::Delivery> d;
+            while (!d && runs < 1000) {
+                d = pm.run(provider, budget);
+                ++runs;
+            }
+            ASSERT_TRUE(d.has_value() && !d->path.empty());
+            PathGridPool pool;
+            PathSearch ps(1, {10, 10}, {60, 40}, 512, 512, pool, false, true);
+            int pops = 0;
+            while (!ps.finished()) {
+                ps.step(1, open.step_cost());
+                ++pops;
+            }
+            ASSERT_EQ(runs, (pops + budget - 1) / budget);                   // the manager gave each run `budget` expansions
+        }
+        // the default of run() is the original's 1,000
+        PathManager a, b;
+        a.request(3, {10, 10}, {60, 40}, 512, 512, false, true);
+        b.request(3, {10, 10}, {60, 40}, 512, 512, false, true);
+        int ra = 0, rb = 0;
+        std::optional<PathManager::Delivery> da, db;
+        while (!da) { da = a.run(provider); ++ra; }
+        while (!db) { db = b.run(provider, PathSearch::kDefaultBudget); ++rb; }
+        ASSERT_TRUE(ra == rb && da->path == db->path);
+    } TEST_END();
+
+    TEST_CASE("9.10 A search that is not wide is the original's: the flag is off by default, and request() without it never goes beyond the limit") {
+        const TerrainMap m = TerrainMap::filled(512, 512);
+        PathGridPool pool;
+        PathSearch plain(1, {20, 256}, {470, 256}, 512, 512, pool);
+        ASSERT_FALSE(plain.wide());
+        while (!plain.finished()) plain.step(PathSearch::kDefaultBudget, m.step_cost());
+        ASSERT_TRUE(plain.path().empty());
+        ASSERT_FALSE(plain.beyond());
+        PathManager pm;
+        pm.request(1, {20, 256}, {470, 256}, 512, 512, false);
+        std::optional<PathManager::Delivery> d;
+        for (int i = 0; i < 400 && !d; ++i) d = pm.run(m.provider(), 8192);
+        ASSERT_TRUE(d.has_value() && d->path.empty());
+        PathManager wide;
+        wide.request(1, {20, 256}, {470, 256}, 512, 512, false, true);
+        std::optional<PathManager::Delivery> dw;
+        for (int i = 0; i < 400 && !dw; ++i) dw = wide.run(m.provider(), 8192);
+        ASSERT_TRUE(dw.has_value() && dw->path.size() == 451);
+    } TEST_END();
+}
+
 int main() {
     std::cout << "=======================================================\n"
               << " ANTS - ORIGINAL PATH PLANNER (PATHMGR A*) TEST SUITE  \n"
@@ -938,6 +1589,7 @@ int main() {
     run_suite_6_slicing_and_pool();
     run_suite_7_manager();
     run_suite_8_stale_heap();
+    run_suite_9_wide_search();
 
     std::cout << "\n=======================================================\n"
               << " PATH PLANNER TEST SUMMARY\n"

@@ -88,7 +88,7 @@ inline bool same_cell(const ants::sim::TileCell& a, const ants::sim::TileCell& b
 }
 
 
-// The play of `level` at rules 0 and, side by side, the same level with its rules word forced to 1 (the same engine seed, the same scripted players with the same seed): at
+// The play of `level` at rules 0 and, side by side, the same level with its rules word forced to 1 (or, with `rules`, to 2) (the same engine seed, the same scripted players with the same seed): at
 // rules 1 the wall at row 90 is down, and a map of at most 90 rows has no row 90, so nothing may change. At every checkpoint (the start and every game second) the two engines
 // must agree on every part of the state hash but the grid's (which mixes the rules word in when it is not 0: that is its job), and on every cell, hill and track of the grid itself.
 // `hashes` is the play at rules 0, exactly play_hashes; `difference` is "" when the two agree at every checkpoint, else the first thing that differs.
@@ -98,7 +98,7 @@ struct RulesOneComparison {
     uint32_t checkpoints{0};
 };
 
-inline std::string rules_one_difference(const ants::sim::SimulationEngine& zero, const ants::sim::SimulationEngine& one) {
+inline std::string rules_one_difference(const ants::sim::SimulationEngine& zero, const ants::sim::SimulationEngine& one, uint16_t rules = 1) {
     const ants::sim::StateHash a = zero.state_hash();
     const ants::sim::StateHash b = one.state_hash();
     if (a.engine != b.engine) return "the engine state (clocks, generators, match)";
@@ -119,13 +119,14 @@ inline std::string rules_one_difference(const ants::sim::SimulationEngine& zero,
         const auto& y = gb.anthills()[i];
         if (x.tile_id != y.tile_id || x.x != y.x || x.y != y.y || x.team_id != y.team_id) return "a hill";
     }
-    if (gb.rules() != 1) return "the rules word (the second engine is not at rules 1)";
+    if (gb.rules() != rules) return "the rules word (the second engine is not at rules " + std::to_string(rules) + ")";
     return "";
 }
 
-inline RulesOneComparison play_hashes_rules_one(const ants::assets::LevelData& level, uint32_t ticks) {
+// (Also for rules 2, the wide search of the path finder, with `rules` = 2: a map of the library is at most 10,449 cells, so its budget is the original's 1,000 and nothing may change either.)
+inline RulesOneComparison play_hashes_rules_one(const ants::assets::LevelData& level, uint32_t ticks, uint16_t rules = 1) {
     ants::assets::LevelData forced = level;
-    forced.rules = 1;
+    forced.rules = rules;
     ants::sim::SimulationEngine zero;
     ants::sim::SimulationEngine one;
     zero.init(level, kLibrarySeed, 0x0F);
@@ -137,7 +138,7 @@ inline RulesOneComparison play_hashes_rules_one(const ants::assets::LevelData& l
     const auto compare = [&](uint32_t tick) {
         ++out.checkpoints;
         if (out.difference.empty()) {
-            const std::string d = rules_one_difference(zero, one);
+            const std::string d = rules_one_difference(zero, one, rules);
             if (!d.empty()) out.difference = d + " at tick " + std::to_string(tick);
         }
     };

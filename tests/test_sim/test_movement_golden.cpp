@@ -945,6 +945,121 @@ static void run_suite_7_rules_one() {
     } TEST_END();
 }
 
+// Rules 2: the wide search of the path finder (path_planner.hpp). No file can carry rules 2 yet (docs/MAP_FORMAT.md), so these worlds are made by hand.
+static std::vector<TileCoord> walked_path(SimulationEngine& sim, uint32_t id) {
+    return sim.get_unit(id).waypoints;
+}
+
+static void run_suite_8_rules_two() {
+    TEST_SUITE("Suite 8: Rules 2, The Wide Search");
+
+    TEST_CASE("8.1 A 450-tile order on an open 512 x 512 world: refused at rules 1 (the original's limit), walked at rules 2; rules 0 and 1 are as they were") {
+        for (const uint16_t rules : {uint16_t{0}, uint16_t{1}, uint16_t{2}}) {
+            SimulationEngine sim;
+            sim.init_test_world(512, 512, 7, 600000, rules);
+            const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 256});
+            sim.tick();
+            sim.issue_move_order(id, TileCoord{470, 256});
+            for (int t = 0; t < 60; ++t) sim.tick();                         // 450 tiles take about 52,000 expansions: 7 runs of 8,192
+            const AntUnit& a = sim.get_unit(id);
+            if (rules == 2) {
+                ASSERT_EQ(a.waypoints.size(), static_cast<size_t>(451));
+                ASSERT_TRUE((a.waypoints.back() == TileCoord{470, 256}));
+                ASSERT_TRUE(a.orig_order != AntUnit::kOrderNone);
+            } else {
+                ASSERT_TRUE(a.waypoints.empty());                            // "Can't go there": no path, the ant stays
+                ASSERT_TRUE(a.orig_order == AntUnit::kOrderNone);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("8.2 Rules 2 takes the wall at row 90 down, as rules 1 does: a walk across row 90 on a 100-row world") {
+        SimulationEngine sim;
+        sim.init_test_world(20, 100, 7, 600000, 2);
+        const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 80});
+        sim.tick();
+        sim.issue_move_order(id, TileCoord{5, 95});
+        for (int t = 0; t < 1200; ++t) sim.tick();
+        const AntUnit& a = sim.get_unit(id);
+        ASSERT_TRUE((TileCoord{a.pixel_x / 32, a.pixel_y / 32} == TileCoord{5, 95}));
+        ASSERT_TRUE(a.waypoints.empty());
+    } TEST_END();
+
+    TEST_CASE("8.3 The budget follows the map: eight ants sent 200 tiles on a 512 x 512 world all have a path by tick 40 at rules 2 (8,192 expansions a run), at rules 1 (1,000) not before tick 100 (4) and 200 (8)") {
+        const auto paths_at = [](uint16_t rules, int ticks) {
+            SimulationEngine sim;
+            sim.init_test_world(512, 512, 7, 600000, rules);
+            std::vector<uint32_t> ids;
+            for (int i = 0; i < 8; ++i) ids.push_back(sim.spawn_unit(0, AntType::Worker, TileCoord{20 + (i % 4) * 2, 250 + (i / 4) * 2}));
+            sim.tick();
+            for (size_t i = 0; i < ids.size(); ++i) sim.issue_move_order(ids[i], TileCoord{230 + static_cast<int32_t>(i % 4) * 2, 250 + static_cast<int32_t>(i / 4) * 2});
+            int have = 0;
+            for (int t = 0; t < ticks; ++t) {
+                sim.tick();
+            }
+            for (const uint32_t id : ids) {
+                if (!walked_path(sim, id).empty()) ++have;
+            }
+            return have;
+        };
+        ASSERT_EQ(paths_at(2, 20), 4);                                       // (pinned: the walk of each ant is the real one, so the groups' numbers are the run's)
+        ASSERT_EQ(paths_at(2, 40), 8);
+        ASSERT_EQ(paths_at(1, 40), 0);
+        ASSERT_EQ(paths_at(1, 100), 4);
+        ASSERT_EQ(paths_at(1, 200), 8);
+    } TEST_END();
+
+    TEST_CASE("8.4 A world of 100 x 100 at rules 2 plays as at rules 1, tick for tick: ten ants, orders every second (the budget of a small map is the original's 1,000)") {
+        SimulationEngine one;
+        SimulationEngine two;
+        one.init_test_world(100, 100, 11, 600000, 1);
+        two.init_test_world(100, 100, 11, 600000, 2);
+        std::vector<uint32_t> ids_one, ids_two;
+        for (int i = 0; i < 10; ++i) {
+            ids_one.push_back(one.spawn_unit(static_cast<uint8_t>(i % 2), AntType::Worker, TileCoord{10 + i * 3, 10 + (i % 3) * 3}));
+            ids_two.push_back(two.spawn_unit(static_cast<uint8_t>(i % 2), AntType::Worker, TileCoord{10 + i * 3, 10 + (i % 3) * 3}));
+        }
+        uint32_t rng = 12345;
+        const auto next = [&rng]() { rng = rng * 1664525u + 1013904223u; return rng >> 8; };
+        for (int t = 0; t < 600; ++t) {
+            if (t % 20 == 0) {
+                for (size_t i = 0; i < ids_one.size(); ++i) {
+                    const TileCoord dest{static_cast<int32_t>(next() % 100), static_cast<int32_t>(next() % 100)};
+                    one.issue_move_order(ids_one[i], dest);
+                    two.issue_move_order(ids_two[i], dest);
+                }
+            }
+            one.tick();
+            two.tick();
+            const StateHash a = one.state_hash();
+            const StateHash b = two.state_hash();
+            ASSERT_TRUE(a.ants == b.ants && a.paths == b.paths && a.engine == b.engine && a.players == b.players);
+        }
+    } TEST_END();
+
+    TEST_CASE("8.5 A copy of the engine made while a wide search is half done delivers the same path in the same tick") {
+        SimulationEngine sim;
+        sim.init_test_world(512, 512, 7, 600000, 2);
+        const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 256});
+        sim.tick();
+        sim.issue_move_order(id, TileCoord{470, 256});
+        for (int t = 0; t < 3; ++t) sim.tick();
+        ASSERT_TRUE(sim.get_unit(id).waypoints.empty());                     // not yet: the search needs 7 runs
+        SimulationEngine copy(sim);
+        int tick_original = -1;
+        int tick_copy = -1;
+        for (int t = 0; t < 60; ++t) {
+            sim.tick();
+            copy.tick();
+            if (tick_original < 0 && !sim.get_unit(id).waypoints.empty()) tick_original = t;
+            if (tick_copy < 0 && !copy.get_unit(id).waypoints.empty()) tick_copy = t;
+            ASSERT_TRUE(sim.state_hash() == copy.state_hash());
+        }
+        ASSERT_TRUE(tick_original > 0 && tick_original == tick_copy);
+        ASSERT_EQ(copy.get_unit(id).waypoints.size(), sim.get_unit(id).waypoints.size());
+    } TEST_END();
+}
+
 int main() {
     std::cout << "=======================================================\n"
               << " ANTS - ORIGINAL MOVEMENT GOLDEN TEST SUITE\n"
@@ -957,6 +1072,7 @@ int main() {
     run_suite_5_terrain();
     run_suite_6_before_the_first_tick();
     run_suite_7_rules_one();
+    run_suite_8_rules_two();
 
     std::cout << "\n=======================================================\n"
               << " MOVEMENT GOLDEN TEST SUMMARY\n"

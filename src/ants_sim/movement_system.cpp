@@ -1533,7 +1533,8 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
         return false;
     }
     path_managers_[a.player_id < MAX_PLAYERS ? a.player_id : 0].request(
-        a.id, cur, t, static_cast<uint16_t>(grid_.height()), static_cast<uint16_t>(grid_.width()), grid_.rules() == 0);   // rules 1: the wall at row 90 is down
+        a.id, cur, t, static_cast<uint16_t>(grid_.height()), static_cast<uint16_t>(grid_.width()), grid_.rules() == 0,   // rules 1 and 2: the wall at row 90 is down
+        grid_.rules() == 2);                                                                                                // rules 2: the wide search (path_planner.hpp)
     path_request_serial_[a.id] = a.move_serial;
     // Remake bookkeeping: player orders (and the ability orders, which the re-path gives again) report the resolved destination;
     // orders from remake systems keep the tile they asked for, so that repeating the same order is recognised as such.
@@ -1774,12 +1775,14 @@ void SimulationEngineImpl::movement_tick() {
     now_ms_ = t_end;
     anim_clock_ms_ = t_end;
     // PATHMGR: one run per player every 50 ms; at most one path delivered per run.
+    // (rules 2: the budget grows with the map, PathManager::wide_budget; rules 0 and 1 run the original's 1,000 expansions)
+    const uint16_t path_budget = grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget;
     for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
         auto delivery = path_managers_[team].run([this](uint32_t ant_id, TileCoord from, TileCoord to) -> uint32_t {
             const AntUnit* u = find_unit(ant_id);
             if (!u) return kBlockedCost;
             return step_cost(*u, from, to);
-        });
+        }, path_budget);
         if (delivery) deliver_path(delivery->ant_id, delivery->path);
     }
 }
