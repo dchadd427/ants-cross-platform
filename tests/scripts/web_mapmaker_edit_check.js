@@ -636,6 +636,13 @@ function caseH() {
         p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(900, 220)); p.mouse('pointercancel', Object.assign(at(900, 220), { type: 'pointercancel' }));
         check(p.log.slice(-1)[0] === 'cancel' && p.aways.length <= 1 && p.aways.indexOf('on:900,220') < 0, type + ': a cancelled pointer is a cancel, and is not told as a lift');
     }
+    // the lift is told where it is (not where the last move was), and off the canvas counts even where the map goes on under the pointer (a map bigger than the canvas)
+    p = dropTool(); p.mouse('pointerdown', { clientX: 300, clientY: 200 }); p.mouse('pointermove', { clientX: 340, clientY: 220 }); p.mouse('pointerup', { clientX: 900, clientY: 220 });
+    check(p.aways[p.aways.length - 1] === 'off:900,220', 'a lift is told where it is, not where the last move was: ' + p.aways.join(' '));
+    p = dropTool(); p.api.setFile(open(9, 300, 300));
+    for (let i = 0; i < 6; i++) p.canvas.fire('wheel', { clientX: 300, clientY: 200, deltaY: -600, deltaMode: 0, preventDefault() {} });
+    p.mouse('pointerdown', { clientX: 300, clientY: 200 }); p.mouse('pointermove', { clientX: 320, clientY: 210 }); p.mouse('pointermove', { clientX: 900, clientY: 210 }); p.mouse('pointerup', { clientX: 900, clientY: 210 });
+    check(p.aways[p.aways.length - 1] === 'off:900,210' && p.log.indexOf('extend') >= 0, 'off the canvas is off the map even where the map goes on under the pointer: ' + p.aways.join(' ') + ' / ' + p.log.join());
     p = dropTool(); p.mouse('pointerdown', { pointerType: 'pen', pointerId: 4 }); p.mouse('pointermove', { pointerType: 'pen', pointerId: 4, clientX: 330 }); p.mouse('pointerup', { pointerType: 'pen', pointerId: 4 });
     check(p.log.join().indexOf('end') > 0 && !p.api.isStroking(), 'a pen is a lift too: ' + p.log.join());
 }

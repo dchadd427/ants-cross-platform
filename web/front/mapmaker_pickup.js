@@ -1,10 +1,8 @@
-// The map maker's Pick up tool (docs/MAP_EDITOR.md, "Pick up"): a tap picks a thing up (a hill, a team's ant or its group, a food pile, a plant or any object), a bar says what it is and offers Move,
-// Copy here, Delete and Select an area...; Move shows a see-through ghost where the thing will land, red with the reason in plain words when it cannot go there, and Done puts it there. Everything it
-// does is ONE CHANGE of the open file's bytes (the cells of layer 2, the solid bits, and the lists after the layers: block 1 holds the ants and plants, block 2 the piles, block 4 the plants'
-// waypoints), built from the helpers of the other tools (mapmaker_blocks.js) and given to the history as one step, so a move, a copy, a delete and the move of a whole area are one Undo each.
-// The ring round what is picked and the ghost are drawn on a canvas of their own that lies over the map, so the tool never asks the page to paint the map again for them (the canvas of the map still paints its own frame, 1 to 7 ms, as the pointer moves, as it does for a pan). A lazily loaded script (the page
-// loads it, with mapmaker_pickup.css, the first time the tool is chosen), so the editor's eager scripts stay small. The words come from fixed lists here and in the palette, never from the file.
-// A plain ES5 script that a page and node can load.
+// The map maker's Pick up tool (docs/MAP_EDITOR.md, "Pick up"): a tap picks a thing up (a hill, an ant or its group, a food pile, a plant, any object); a bar offers Move, Copy here, Delete and
+// Select an area...; Move shows a see-through ghost (red, with the reason in plain words, where it cannot go) and the lift of the mouse or Done puts it down. Everything it does is ONE CHANGE of the
+// open file's bytes (layer 2, the solid bits, and blocks 1, 2 and 4 after the layers), built with the helpers of mapmaker_blocks.js and given to the history as one step: one Undo each. The ring and
+// the ghost are drawn on a canvas of their own over the map, so the tool never asks the page to paint the map for them. Loaded lazily with mapmaker_pickup.css, the first time the tool is chosen.
+// The words come from fixed lists here and in the palette, never from the file. A plain ES5 script that a page and node can load.
 (function (root, factory) {
     'use strict';
     if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_edit.js'), require('./mapmaker_blocks.js'), require('./mapmaker_view.js'), require('./mapmaker_solid.js'), require('./mapmaker_tiles.js'), require('./mapmaker_palette.js'));
@@ -424,11 +422,11 @@
         // what a screen reader is told (the bar may be hidden when the thing is let go)
         function tell(text) { if (live) live.textContent = text; }
         function clear(note) {
-            st.mode = 'idle'; st.items = []; st.group = []; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.box = null; st.drag = null; st.cycle = null; st.note = note || ''; st.verdict = { ok: true }; st.target = []; st.ask = ''; st.hov = null; st.away = false;
+            st.mode = 'idle'; st.items = []; st.group = []; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.box = null; st.drag = null; st.cycle = null; st.note = note || ''; st.verdict = { ok: true }; st.target = []; st.ask = ''; st.hov = null;
             paint(); tell(st.note);
         }
         function pick(items, kind, group, cycle, box) {
-            st.items = items; st.kind = kind; st.group = group || []; st.cycle = cycle || null; st.mode = items.length ? 'picked' : 'idle'; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.note = ''; st.box = box || null; st.target = []; st.ask = ''; st.hov = null; st.away = false;
+            st.items = items; st.kind = kind; st.group = group || []; st.cycle = cycle || null; st.mode = items.length ? 'picked' : 'idle'; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.note = ''; st.box = box || null; st.target = []; st.ask = ''; st.hov = null;
             paint();
         }
         function tapSelect(cell) {
@@ -479,7 +477,7 @@
         }
         function done() {
             var f = file();
-            if (st.drag) return;          // (the button or the finger is still down: the lift puts it down, and the page takes no change before it)
+            if (st.drag) return;          // (the button is still down: the lift puts it down)
             previewOff();
             if (st.mode !== 'moving' || !st.items.length) return;
             if (!st.copy && !st.dr && !st.dc) return pick(st.items, st.kind, st.group, st.cycle, st.box);
@@ -757,7 +755,6 @@
             hover: function (cell) { hoverAt(cell); },
             begin: function (cell) {
                 if (!shown || !file()) return false;
-                st.away = false;
                 if (st.mode === 'boxing') { st.drag = { kind: 'box', from: cell }; st.box = { r0: cell.row, c0: cell.column, r1: cell.row, c1: cell.column }; paint(); return true; }
                 if (st.mode === 'moving') {
                     if (!inTarget(cell)) { centreOn(cell); return false; }
@@ -785,21 +782,22 @@
                 } else setDelta(to.row - d.from.row, to.column - d.from.column);
             },
             end: function () {
-                var d = st.drag; st.drag = null;
+                var d = st.drag, off = st.away;
+                st.drag = null; st.away = false;
                 if (!d) return;
                 if (d.kind === 'box') return finishBox();
                 if (d.kind === 'item' && !d.moved) return tapSelect(d.from);
-                if (d.moved && st.mode === 'moving') return st.away ? letGo() : done();          // letting go of the mouse or the finger after a drag puts the thing down where the ghost is (red: it stays, with the reason); off the map or over the bar it goes back
+                if (d.moved && st.mode === 'moving') return off ? letGo() : done();          // the lift puts it down where the ghost is (red: it stays, with the reason); off the map or over the bar it goes back
                 render();
             },
             // the pointer was lost (a cancelled touch, the window lost the focus): what was dragged goes back, like Escape
             cancel: function () {
-                var d = st.drag; st.drag = null;
+                var d = st.drag; st.drag = null; st.away = false;
                 if (!d) return;
                 if (d.kind === 'box') { st.box = null; paint(); } else if (d.moved) letGo();
             },
             abandon: function () { painter.cancel(); },
-            // where the pointer is during a drag: off the map or over the bar, a lift takes the thing back (the ghost goes away)
+            // off the map or over the bar a lift takes the thing back
             away: function (w) {
                 var r = bar && !bar.hidden && bar.getBoundingClientRect ? bar.getBoundingClientRect() : null, a = !!st.drag && st.drag.kind !== 'box' && !!w && (w.outside || (!!r && w.x >= r.left && w.x <= r.right && w.y >= r.top && w.y <= r.bottom));
                 if (a !== st.away) { st.away = a; render(); drawOver(); }

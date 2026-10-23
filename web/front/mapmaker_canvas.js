@@ -120,7 +120,7 @@
         function select(cell) { cursor = cell; if (env.onCursor) env.onCursor(cell); }
 
         function cellOf(p) { return View.cellAt(view, file, w, h, p.x, p.y); }
-        // where a pointer is for a tool that takes a thing back when it is let go outside the map: off the canvas or off the map's edge ({outside}), and the page point (what lies over the canvas: Pick up's bar)
+        // where a pointer is: off the canvas or past the map's edge ({outside}), and the page point (Pick up: a lift off the map takes the thing back)
         function whereOf(e) { var p = at(e); return { outside: p.x < 0 || p.y < 0 || p.x > w || p.y > h || !cellOf(p), x: e.clientX, y: e.clientY }; }
 
         function startStroke(id, cell) {

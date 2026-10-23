@@ -1362,6 +1362,15 @@ function caseN() {
         check(q.state().mode === 'moving' && /Let go here and it goes back where it was\./.test(q.text()), 'dragged off the map the bar says that a lift takes it back' + tag);
         q.p.end();
         check(q.log.acts === 0 && q.log.refused === 0 && same(q.file().bytes, was) && q.state().mode === 'picked' && q.state().dr === 0 && q.state().items[0].fp[0] === 2 * 40 + 2, 'let go off the map: nothing is written, the hill is picked where it was' + tag);
+        // while the pointer is off the map the ghost is not drawn
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.tap(3, 3); q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 });
+        const ink = q.over.getContext('2d').log;
+        ink.strokes.length = 0; q.p.away(inside);
+        ink.strokes.length = 0; q.p.away(off);
+        const drawn = ink.strokes.slice();
+        ink.strokes.length = 0; q.p.away(inside);
+        check(drawn.indexOf('#8be0b0') < 0 && ink.strokes.indexOf('#8be0b0') >= 0, 'the ghost is not drawn while the pointer is off the map, and comes back with it' + tag);
         // back on the map before the lift: it is put down
         q = page(File.parse(Uint8Array.from(bytes)));
         q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.away(off); q.p.away(inside); q.p.end();
@@ -1392,6 +1401,13 @@ function caseN() {
         q = page(File.parse(Uint8Array.from(bytes)));
         q.tap(3, 3); q.press('move'); q.p.away(off);
         check(q.state().mode === 'moving' && !/goes back/.test(q.text()), 'a pointer off the map with nothing dragged changes nothing' + tag);
+        // a press on the ghost that never moved, with the pointer off the map, and its lift: the ghost is back, nothing says "goes back"
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.tap(3, 3); q.press('move'); q.tap(25, 30);
+        q.p.begin({ row: 25, column: 30 }); q.p.away(off); q.p.end();
+        check(q.state().mode === 'moving' && q.log.acts === 0 && !/goes back/.test(q.text()), 'a press that never moved, let go off the map, leaves the ghost where it is and the bar as it was' + tag);
+        q.p.begin({ row: 25, column: 30 }); q.p.extend({ row: 25, column: 30 }, { row: 26, column: 31 }); q.p.end();
+        check(q.log.acts === 1, 'and the next drag is put down' + tag);
         // the arrows and Enter still work after a blocked drop
         q = page(File.parse(Uint8Array.from(bytes)));
         q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 10, column: 26 }); q.p.end();
