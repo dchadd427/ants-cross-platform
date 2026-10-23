@@ -300,6 +300,7 @@ void run_contest_tests() {
                     sim::SimulationEngine hunt;
                     const auto h = world(hunt, hp, 1, 1);
                     LevelPlan plan = plan_for(Level::Hard);
+                    without_kill_batch(plan);                                                                   // (the kill batch's idle hunt and reach rule are AI31)
                     if (three_blows) plan.hunt_blows = 3;
                     Rig rig(hunt, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                     uint64_t guard = 0;
@@ -429,7 +430,9 @@ void run_contest_tests() {
                 sim.spawn_unit(0, sim::AntType::Combat, TileCoord{27, 30});
                 sim.spawn_unit(0, sim::AntType::Worker, TileCoord{28, 30});
                 enemy_at(sim, 30, 30, 4);
-                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+                LevelPlan plan = plan_for(Level::Hard);
+                without_kill_batch(plan);                                                                                               // (the idle hunt of the kill batch lets the last ants go when there is nothing to bank: AI31.6)
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(120);
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
                 ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 0u);                                                           // (not even begun)
@@ -546,6 +549,7 @@ void run_contest_tests() {
         LevelPlan plan = plan_for(Level::Hard);
         without_war_batch(plan);                                                                                                      // (the assault would send the Combat Ants away from the entrance that the escorts hold)
         plan.sabotage = true;
+        plan.chore_worth = false;                          // (this test is about the ring itself: the rule that spares it has its own test, AI31.7)
         plan.sabotage_safe = true;                                                                                                    // (the subject; the shipped plans of Medium and Hard fire in whether or not the enemy can put it out: the war batch)
         plan.sabotage_after = 20;
         plan.sabotage_spare_keeper = false;                                                                                           // (the lone Fire Ant is free to go: the keeper of the own walls is not spared in this plan)
@@ -1060,6 +1064,7 @@ void run_contest_tests() {
             sim.spawn_unit(1, sim::AntType::Worker, ring[0]);
             LevelPlan plan = plan_for(Level::Hard);
             plan.sabotage = true;
+            plan.chore_worth = false;                          // (this test is about the ring itself: the rule that spares it has its own test, AI31.7)
             plan.sabotage_after = 20;
             plan.sabotage_spare_keeper = false;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);

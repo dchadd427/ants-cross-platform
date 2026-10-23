@@ -769,6 +769,7 @@ void run_b41_style_tests() {
                 LevelPlan plan = Pinned::plan(Level::Hard, Style::Aggressive);
                 ASSERT_EQ(plan.harass_strong_defence, 3u);
                 plan.harass_retreat_hp = 0;                                                                        // (the retreat of a hurt member is the next block's subject)
+                without_kill_batch(plan);                                                                          // (the idle hunt of the kill batch hunts the carriers with the two ants of this world: AI31.6)
                 if (!rule) plan.harass_strong_defence = 0;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 for (int t = 0; t < 400; ++t) {

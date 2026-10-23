@@ -55,6 +55,7 @@ void run_b41_fight_tests() {
                 const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 24});
                 LevelPlan plan = plan_for(level);
                 plan.wipe_focus = false;
+                without_kill_batch(plan);                                                                       // (the idle hunt of the kill batch lets the last ants fight when there is nothing to bank: AI31.6)
                 Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(3);
                 for (int t = 0; t < 240; ++t) {
@@ -76,6 +77,7 @@ void run_b41_fight_tests() {
             const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 24});
             LevelPlan plan = plan_for(Level::Hard);
             plan.wipe_focus = false;
+            without_kill_batch(plan);                                                                           // (the idle hunt keeps only the last ant home when there is nothing to bank: AI31.6)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(3);
             for (int t = 0; t < 120; ++t) {

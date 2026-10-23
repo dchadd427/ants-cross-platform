@@ -490,6 +490,13 @@ function caseG() {
     const ctrl = q.doc.key('g', { ctrlKey: true });
     check(!ctrl.defaultPrevented && q.tools.state().tool === 'ground', 'Control with a letter is not a tool');
 
+    // a painting tool keeps a stroke when the pointer is lost (the window loses the focus): `abandon` ends it like a lift (Pick up takes its thing back instead), and `away` changes nothing for it
+    {
+        const a = toolsPage(open(9, 30, 30)), ap = a.painter();
+        a.host.swatches.children[1].click();
+        ap.begin({ row: 5, column: 5 }); ap.extend({ row: 5, column: 5 }, { row: 5, column: 8 }); ap.away({ outside: true, x: 900, y: 0 }); ap.abandon();
+        check([5, 6, 7, 8].every((c) => Edit.tile(a.file(), 1, 5 * 30 + c) === 487) && a.tools.state().history.strokes === 1, 'a painting stroke whose pointer was lost is kept, as a lift keeps it');
+    }
     // a stroke through the painter, undo and redo
     const r = toolsPage(open(9, 30, 30)), pt = r.painter(), start = digest(r.file().bytes);
     r.host.swatches.children[1].click();                                    // dirt (487), which the dictionary does not have yet
@@ -595,7 +602,7 @@ function caseH() {
     p.mouse('pointerup', { pointerType: 'touch' });
     check(p.log.join() === 'begin,end', 'a tap is a one-cell stroke');
     // a tool that puts a thing down when the pointer lifts (Pick up) is told a lost pointer is not a lift
-    const dropTool = () => { const q = fakeCanvasPage(); q.api.setPainter({ size: () => 1, begin: () => { q.log.push('begin'); return true; }, extend: () => q.log.push('extend'), end: () => { q.log.push('end'); q.stroking = q.api.isStroking(); }, cancel: () => { q.log.push('cancel'); q.stroking = q.api.isStroking(); }, abandon: () => { q.log.push('abandon'); q.stroking = q.api.isStroking(); } }); return q; };
+    const dropTool = () => { const q = fakeCanvasPage(); q.api.setPainter({ size: () => 1, begin: () => { q.log.push('begin'); return true; }, extend: () => q.log.push('extend'), end: () => { q.log.push('end'); q.stroking = q.api.isStroking(); }, cancel: () => { q.log.push('cancel'); q.stroking = q.api.isStroking(); }, abandon: () => { q.log.push('abandon'); q.stroking = q.api.isStroking(); }, away: (w) => q.aways.push((w.outside ? 'off' : 'on') + ':' + w.x + ',' + w.y) }); q.aways = []; return q; };
     p = dropTool(); p.mouse('pointerdown'); p.mouse('pointermove', { clientX: 330 }); p.mouse('pointerup', { clientX: 900, clientY: 700 });
     check(!p.api.isStroking() && p.log.join() === 'begin,extend,end', 'the button let go far outside the map (the pointer is captured) is a lift: end');
     check(p.stroking === false, 'the stroke is over when the tool is told of the lift (the page takes no change while a stroke goes on, and the tool writes its change then)');
@@ -615,6 +622,27 @@ function caseH() {
     check(p.api.isStroking() && p.log.join() === 'begin,extend,extend', 'a finger that has moved begins the drag and follows it: ' + p.log.join());
     p.mouse('pointerup', { pointerType: 'touch', pointerId: 3, clientX: 900, clientY: 700 });
     check(!p.api.isStroking() && p.log.join() === 'begin,extend,extend,end', 'the finger lifted (even outside the map) is a lift');
+    // the tool is told where the pointer is, in the page's own coordinates, before it is told of the lift: on the map, off the canvas, past the map's edge (a mouse, a finger and a pen alike)
+    for (const type of ['mouse', 'touch', 'pen']) {
+        const id = { mouse: 7, touch: 3, pen: 4 }[type], at = (x, y) => ({ pointerType: type, pointerId: id, clientX: x, clientY: y });
+        p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(340, 220)); p.mouse('pointerup', at(340, 220));
+        check(p.aways[p.aways.length - 1] === 'on:340,220' && p.log.slice(-1)[0] === 'end', type + ': a lift on the map is told as on the map, then the lift: ' + p.aways.join(' '));
+        p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(340, 220)); p.mouse('pointermove', at(900, 220)); const heldOff = p.aways.indexOf('off:900,220') >= 0; p.mouse('pointerup', at(900, 220));
+        check(heldOff && p.aways.indexOf('off:900,220') >= 0 && p.aways[p.aways.length - 1] === 'off:900,220' && p.log.slice(-1)[0] === 'end', type + ': a lift off the canvas is told as off the map: ' + p.aways.join(' '));
+        p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(340, 220)); p.mouse('pointermove', at(595, 220)); p.mouse('pointerup', at(595, 220));
+        check(p.aways[p.aways.length - 1] === 'off:595,220', type + ': a lift on the canvas but past the edge of the map is off the map too: ' + p.aways.join(' '));
+        p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(900, 220)); p.mouse('pointermove', at(340, 220)); p.mouse('pointerup', at(340, 220));
+        check(p.aways[p.aways.length - 1] === 'on:340,220', type + ': out and back is on the map again: ' + p.aways.join(' '));
+        p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(900, 220)); p.mouse('pointercancel', Object.assign(at(900, 220), { type: 'pointercancel' }));
+        check(p.log.slice(-1)[0] === 'cancel' && p.aways.length <= 1 && p.aways.indexOf('on:900,220') < 0, type + ': a cancelled pointer is a cancel, and is not told as a lift');
+    }
+    // the lift is told where it is (not where the last move was), and off the canvas counts even where the map goes on under the pointer (a map bigger than the canvas)
+    p = dropTool(); p.mouse('pointerdown', { clientX: 300, clientY: 200 }); p.mouse('pointermove', { clientX: 340, clientY: 220 }); p.mouse('pointerup', { clientX: 900, clientY: 220 });
+    check(p.aways[p.aways.length - 1] === 'off:900,220', 'a lift is told where it is, not where the last move was: ' + p.aways.join(' '));
+    p = dropTool(); p.api.setFile(open(9, 300, 300));
+    for (let i = 0; i < 6; i++) p.canvas.fire('wheel', { clientX: 300, clientY: 200, deltaY: -600, deltaMode: 0, preventDefault() {} });
+    p.mouse('pointerdown', { clientX: 300, clientY: 200 }); p.mouse('pointermove', { clientX: 320, clientY: 210 }); p.mouse('pointermove', { clientX: 900, clientY: 210 }); p.mouse('pointerup', { clientX: 900, clientY: 210 });
+    check(p.aways[p.aways.length - 1] === 'off:900,210' && p.log.indexOf('extend') >= 0, 'off the canvas is off the map even where the map goes on under the pointer: ' + p.aways.join(' ') + ' / ' + p.log.join());
     p = dropTool(); p.mouse('pointerdown', { pointerType: 'pen', pointerId: 4 }); p.mouse('pointermove', { pointerType: 'pen', pointerId: 4, clientX: 330 }); p.mouse('pointerup', { pointerType: 'pen', pointerId: 4 });
     check(p.log.join().indexOf('end') > 0 && !p.api.isStroking(), 'a pen is a lift too: ' + p.log.join());
 }
