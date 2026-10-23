@@ -301,8 +301,8 @@
   {
    "id": "gate_rules_one_and_up_takes_the_wide_search",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "        grid_.rules() == 2);",
-   "new": "        grid_.rules() >= 1);",
+   "old": "grid_.rules() == 0, grid_.rules() == 2);",
+   "new": "grid_.rules() == 0, grid_.rules() >= 1);",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "8.1"
@@ -310,8 +310,8 @@
   {
    "id": "gate_rules_two_does_not_take_the_wide_search",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "        grid_.rules() == 2);",
-   "new": "        false);",
+   "old": "grid_.rules() == 0, grid_.rules() == 2);",
+   "new": "grid_.rules() == 0, false);",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "8.1"
@@ -319,8 +319,8 @@
   {
    "id": "gate_budget_for_rules_one_and_up",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "const uint16_t path_budget = grid_.rules() == 2 ?",
-   "new": "const uint16_t path_budget = grid_.rules() >= 1 ?",
+   "old": "}, grid_.rules() == 2 ? PathManager::wide_budget",
+   "new": "}, grid_.rules() >= 1 ? PathManager::wide_budget",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "8.3"
@@ -328,8 +328,8 @@
   {
    "id": "gate_budget_never_wide",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "const uint16_t path_budget = grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget;",
-   "new": "const uint16_t path_budget = PathSearch::kDefaultBudget;",
+   "old": "}, grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget);",
+   "new": "}, PathSearch::kDefaultBudget);",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "8.1"
@@ -337,8 +337,8 @@
   {
    "id": "gate_budget_for_every_map",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "const uint16_t path_budget = grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget;",
-   "new": "const uint16_t path_budget = PathManager::wide_budget(grid_.height(), grid_.width());",
+   "old": "}, grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget);",
+   "new": "}, PathManager::wide_budget(grid_.height(), grid_.width()));",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "8.3"
@@ -346,8 +346,8 @@
   {
    "id": "gate_wall_at_row_90_up_for_rules_two",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "grid_.rules() == 0,   // rules 1 and 2: the wall at row 90 is down",
-   "new": "grid_.rules() != 1,   // rules 1 and 2: the wall at row 90 is down",
+   "old": "static_cast<uint16_t>(grid_.width()), grid_.rules() == 0, grid_.rules() == 2);",
+   "new": "static_cast<uint16_t>(grid_.width()), grid_.rules() != 1, grid_.rules() == 2);",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "8.2"
