@@ -44,6 +44,8 @@ public:
     uint32_t kills() const noexcept { return kills_; }
     uint32_t gave_up() const noexcept { return gave_up_; }
     uint32_t ambushes() const noexcept { return ambushes_; }
+    /// Searches of the whole map made to see whether a striker can walk to a tile now (for the tests: a candidate that fails must not cost one at every look)
+    uint32_t floods() const noexcept { return floods_; }
     /// The jobs in hand now
     size_t jobs() const noexcept { return jobs_.size(); }
     /// The striker of the job against `target` (0: none)
@@ -91,12 +93,14 @@ private:
     };
     std::map<uint32_t, Stand> stood_;
     std::map<uint32_t, uint64_t> shunned_;   // enemy ant -> the tick until which no job is begun against it
+    std::map<int64_t, uint64_t> bad_walks_;   // (striker, tile to strike from) that the walk of the moment did not take there in time -> the tick until which it is not searched again
     std::map<int64_t, uint64_t> bad_stands_; // a tile that no striker reached in time -> the tick until which it is not used
     uint32_t started_{0};
     uint32_t blows_{0};
     uint32_t kills_{0};
     uint32_t gave_up_{0};
     uint32_t ambushes_{0};
+    uint32_t floods_{0};
 };
 
 }  // namespace ants::ai

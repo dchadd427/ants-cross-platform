@@ -563,6 +563,8 @@ struct Tactics {
     size_t surplus{0};
     /// No pile that the own hill can walk to lies on the map (set at every look by StandardBot): the economy has nothing to do and no points are at risk in a fight (LevelPlan::idle_hunt)
     bool no_work{false};
+    /// Food lies beyond water (the island play) or behind a gate or a field (the gate goals): the few ants of the seat are the crews of that work
+    bool far_work{false};
     /// The ants that no fight takes: the last ones (a wipe-out forces a hatch of 200 points, or ends the team); with LevelPlan::idle_hunt and no work (nothing to bank, nothing to lose) only the last one
     size_t reserve_of(const BotView& view) const noexcept { return plan.idle_hunt && no_work ? 1u : plan.fight_reserve + (view.eggs() == 0 ? 1u : 0u); }
     Standing standing;                   // where the bot stands at this look

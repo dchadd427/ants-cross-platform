@@ -141,7 +141,7 @@ struct Counters {
     uint64_t walls_pre_thief{0};              // ... of the home ones, begun before any enemy Thief was seen anywhere
     uint64_t outs_started{0};                 // fires put out
     uint64_t outs_home{0};
-    uint64_t drown_kills{0};                  // enemy ants that drowned with this seat's blow the last damage
+    uint64_t drown_kills{0};                  // enemy ants that drowned with this team the last to damage them (any cause: a punch, a bomb, the quick kill)
     uint64_t drown_own{0};                    // own ants that drowned
     uint64_t bomb_victims{0};                 // own ants blown up
     uint64_t fire_hits{0};                    // own ants that lost a hit point on a fire wall
@@ -154,7 +154,7 @@ struct Counters {
     std::array<uint64_t, kKinds> ep_att{};    // ... in which the seat ordered an attack on that ant
     std::array<uint64_t, kKinds> ep_near_att{};
     std::array<uint64_t, kKinds> ep_still{};  // ... the enemy stood still
-    uint64_t water_conv{0};                   // water chances that ended with the enemy drowned by this seat
+    uint64_t water_conv{0};                   // water chances (an enemy beside water for a second, a free ant near) that ended with the enemy drowned, this team the last to damage it (not only by the quick kill)
     std::array<std::array<uint64_t, 32>, kKinds> epm{};   // every chance by its flags: bit 0 the enemy stood still, 1 the nearest free ant within kNear, 2 that ant was held by no task or by the economy, the guard, the ferry or a fight (the fight task may take it), 3 an attack was ordered, 4 that ant stood idle
     std::array<uint64_t, 32> task_ticks{};    // ant ticks by the task that holds the ant (0: none)
     std::array<uint64_t, 32> task_idle_ticks{};

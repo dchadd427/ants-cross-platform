@@ -6,6 +6,7 @@
 //   AI31.2c a walk that takes longer than half the clock of a job is not begun
 //   AI31.8  what is worth a trip: the enemy has stood a second, is no Combat Ant at rest, the economy's ants go only a short way
 //   AI31.8b the clock of an enemy starts again when it has moved
+//   AI31.9  where a job may stand (no fire wall, no bomb), the cap of jobs, the reserve of the last ants; AI31.2d no search of the map at every look for a candidate that fails
 //   AI31.3  priority: an ant that holds a chore (a rank 4 task) is taken, one that holds a pick-up (rank 3) is not; an ant that carries food never strikes; nothing happens with the plan off
 //   AI31.4  reach: an enemy across a channel that no walk crosses gets no attack order (the assault of the free ants sent them before: "Can't go there."), one on the same shore does
 //   AI31.5  the plans: Hard has the batch, Medium and Easy do not, the switch takes it out, a plan made by hand has none
@@ -417,6 +418,147 @@ void run_kill_tests() {
         tick_all(sim, 24);
         look();
         ASSERT_EQ(task.started(), 1u);                                           // (a second on the new tile)
+    } TEST_END();
+
+    TEST_CASE("AI31.9 Where A Job May Stand And How Many There Are: No Job From A Tile With A Fire Wall Or A Bomb On It, At Most plan.opportunity_jobs Jobs At A Time, And The Last Ants Of A Seat Strike Only A Kill That Drowns (Not A Finishing Blow)")
+    {
+        const Profile profile = profile_for(Level::Hard);
+        const auto look = [&](sim::SimulationEngine& sim, OpportunityTask& task, AntLedger& ledger) {
+            const MapInfo map(sim);
+            const BotView view = BotView::build(sim, 0, &map);
+            Orders orders;
+            TaskContext context{view, orders, ledger, profile, map, 0};
+            task.step(context);
+        };
+        for (int hazard = 0; hazard < 3; ++hazard) {                          // 0 none, 1 fire walls, 2 bombs on the three tiles that throw the enemy into the water
+            sim::SimulationEngine sim;
+            field(sim, 416);
+            for (int x = 14; x <= 26; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{17, 14});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 8});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 8});
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});
+            for (int x = 19; x <= 21; ++x) {
+                if (hazard == 1) sim.set_fire_at(TileCoord{x, 14}, 1000000);
+                if (hazard == 2) sim.grid_mut().place_bomb(static_cast<uint32_t>(x), 14, 1);
+            }
+            tick_all(sim, 2);
+            Tactics tactics;
+            tactics.plan = plan_for(Level::Hard);
+            tactics.plan.opportunity_still = 0;
+            AntLedger ledger;
+            ledger.set_rank(StandardBot::kOpportunity, 5);
+            OpportunityTask task(StandardBot::kOpportunity, tactics);
+            look(sim, task, ledger);
+            ASSERT_EQ(task.started(), hazard == 0 ? 1u : 0u);
+        }
+        for (const uint32_t cap : {1u, 2u, 3u}) {                                // four enemies beside the water, four free ants close by: never more jobs than the cap
+            sim::SimulationEngine sim;
+            field(sim, 417);
+            for (int x = 14; x <= 28; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+            for (int i = 0; i < 4; ++i) {
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{16 + 4 * i, 12});
+                sim.spawn_unit(1, sim::AntType::Worker, TileCoord{18 + 3 * i, 15});
+            }
+            tick_all(sim, 2);
+            Tactics tactics;
+            tactics.plan = plan_for(Level::Hard);
+            tactics.plan.opportunity_still = 0;
+            tactics.plan.opportunity_jobs = cap;
+            AntLedger ledger;
+            ledger.set_rank(StandardBot::kOpportunity, 5);
+            OpportunityTask task(StandardBot::kOpportunity, tactics);
+            for (int k = 0; k < 8; ++k) {
+                look(sim, task, ledger);
+                tick_all(sim, 4);
+            }
+            ASSERT_EQ(task.jobs(), size_t{cap});
+        }
+        for (const bool water : {false, true}) {                                 // the last ants of a seat: a finishing blow is not struck, a drowning is
+            for (const bool spare : {false, true}) {
+                sim::SimulationEngine sim;
+                field(sim, 418);
+                sim.set_player_eggs(0, 0);
+                if (water) {
+                    for (int x = 14; x <= 26; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+                }
+                const TileCoord at = water ? TileCoord{20, 15} : TileCoord{30, 30};
+                const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, at);
+                if (!water) sim.get_unit(enemy).hp = 1;                          // (one blow finishes it)
+                Tactics tactics;
+                tactics.plan = plan_for(Level::Hard);
+                tactics.plan.opportunity_still = 0;
+                const size_t reserve = tactics.plan.fight_reserve + 1u;          // (no egg: one more)
+                const size_t ants = reserve + (spare ? 1u : 0u);
+                for (size_t i = 0; i < ants; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{at.x - 3 + static_cast<int32_t>(i % 3), at.y - 2 - static_cast<int32_t>(i / 3)});
+                tick_all(sim, 2);
+                AntLedger ledger;
+                ledger.set_rank(StandardBot::kOpportunity, 5);
+                OpportunityTask task(StandardBot::kOpportunity, tactics);
+                look(sim, task, ledger);
+                ASSERT_EQ(task.started(), (water || spare) ? 1u : 0u);
+            }
+        }
+        {   // food beyond water, a gate or a field is the work of the last ants: they do not go for a kill even if it drowns
+            sim::SimulationEngine sim;
+            field(sim, 420);
+            sim.set_player_eggs(0, 0);
+            for (int x = 14; x <= 26; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});
+            Tactics tactics;
+            tactics.plan = plan_for(Level::Hard);
+            tactics.plan.opportunity_still = 0;
+            const size_t reserve = tactics.plan.fight_reserve + 1u;
+            for (size_t i = 0; i < reserve; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{17 + static_cast<int32_t>(i % 3), 13 - static_cast<int32_t>(i / 3)});
+            tick_all(sim, 2);
+            for (const bool far_work : {true, false}) {
+                tactics.far_work = far_work;
+                AntLedger ledger;
+                ledger.set_rank(StandardBot::kOpportunity, 5);
+                OpportunityTask task(StandardBot::kOpportunity, tactics);
+                look(sim, task, ledger);
+                ASSERT_EQ(task.started(), far_work ? 0u : 1u);
+            }
+        }
+        {   // at most a few searches of the whole map at one look, however many candidates fail the walk of the moment
+            sim::SimulationEngine sim;
+            field(sim, 421);
+            for (int x = 3; x <= 56; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+            for (int i = 0; i < 5; ++i) {
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{18 + 4 * i, 18});            // south of the long channel
+                sim.spawn_unit(1, sim::AntType::Worker, TileCoord{18 + 4 * i, 15});            // beside it on the north
+            }
+            tick_all(sim, 2);
+            Tactics tactics;
+            tactics.plan = plan_for(Level::Hard);
+            tactics.plan.opportunity_still = 0;
+            AntLedger ledger;
+            ledger.set_rank(StandardBot::kOpportunity, 5);
+            OpportunityTask task(StandardBot::kOpportunity, tactics);
+            look(sim, task, ledger);
+            ASSERT_EQ(task.started(), 0u);
+            ASSERT_TRUE(task.floods() >= 1u && task.floods() <= 2u);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI31.2d A Candidate That The Walk Of The Moment Does Not Take There In Time Costs No New Search Of The Whole Map At Every Look (At Most A Few In Two Seconds Of Looks)")
+    {
+        sim::SimulationEngine sim;
+        field(sim, 419);
+        for (int x = 3; x <= 56; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);          // the long channel of AI31.2c
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 18});
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30, 40});
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{31, 40});
+        sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});
+        LevelPlan plan = plan_for(Level::Hard);
+        plan.assault = false;
+        plan.water_hunt = false;
+        plan.opportunity_still = 0;
+        Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+        rig.run(80);                                                             // (some twenty looks)
+        ASSERT_EQ(rig.as<StandardBot>().opportunity().started(), 0u);
+        ASSERT_TRUE(rig.as<StandardBot>().opportunity().floods() >= 1u);        // (it was asked)
+        ASSERT_TRUE(rig.as<StandardBot>().opportunity().floods() <= 6u);        // (but not at every look)
     } TEST_END();
 
     TEST_CASE("AI31.4 Reach: The Free Ants Send No Attack Order At An Enemy That No Walk Reaches (Across A Channel), Where They Sent Many Before; An Enemy On Their Own Shore Is Still Attacked")

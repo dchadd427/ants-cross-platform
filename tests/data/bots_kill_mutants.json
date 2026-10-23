@@ -230,16 +230,16 @@
   {
    "id": "no_work_ignores_islands",
    "file": "src/ants_ai/standard_bot.cpp",
-   "old": "!(plan.islands && island_.active()) && ",
-   "new": "",
+   "old": "(plan.islands && island_.active()) ||",
+   "new": "false ||",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.6"
   },
   {
    "id": "no_work_ignores_gate_maps",
    "file": "src/ants_ai/standard_bot.cpp",
-   "old": "&& !tactics_.gate_map && !tactics_.field_map;",
-   "new": "&& !tactics_.field_map;",
+   "old": "|| tactics_.gate_map || tactics_.field_map;",
+   "new": "|| tactics_.field_map;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.6"
   },
@@ -274,6 +274,62 @@
    "new": "if (st.since == 0) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.8b ' ./build/tests/test_ai/test_ai",
    "expect": "AI31.8b"
+  },
+  {
+   "id": "opp_stand_on_hazard",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "|| grid.has_fire_at(stand) || grid.has_bomb_at(stand) ||",
+   "new": "||",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "opp_job_cap_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (jobs_.size() < plan.opportunity_jobs) {",
+   "new": "if (true) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "opp_reserve_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (reserve && (shot.kind != KillKind::Water || tactics_.far_work)) continue;",
+   "new": "if (reserve && (shot.kind != KillKind::Water || tactics_.far_work) && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "opp_far_work_ignored",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "(shot.kind != KillKind::Water || tactics_.far_work)",
+   "new": "(shot.kind != KillKind::Water)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "opp_bad_walk_cache_off",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (failed != bad_walks_.end() && failed->second > now) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.2d ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.2d"
+  },
+  {
+   "id": "opp_flood_cap_off",
+   "file": "src/ants_ai/opportunity_task.cpp",
+   "old": "if (floods >= kMaxFloods) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.9"
+  },
+  {
+   "id": "far_work_never",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.far_work = (plan.islands && island_.active()) || tactics_.gate_map || tactics_.field_map;",
+   "new": "tactics_.far_work = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI31.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI31.6"
   }
  ]
 }

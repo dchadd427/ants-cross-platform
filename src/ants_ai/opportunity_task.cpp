@@ -17,6 +17,8 @@ constexpr uint64_t kBlowTicks = 8;                // an ant that is idle this lo
 constexpr uint64_t kApproachTicks = 60;           // an ant that stands idle this long after its move order LEFT, not on its tile, did not get there
 constexpr uint64_t kShunTicks = 300;              // an enemy that was struck at (or that moved away from the job) is left alone this long
 constexpr uint64_t kBadStandTicks = 300;
+constexpr uint64_t kBadWalkTicks = 100;          // a striker that the walk of the moment did not take to a tile in time is not tried again for this tile for this long (5 s)
+constexpr size_t kMaxFloods = 2;                  // searches of the whole map at one look
 constexpr int32_t kCrowd = 3;                     // no job where this many other enemy ants stand within two tiles of the tile to strike from
 
 const AntView* find_ant(const std::vector<AntView>& ants, uint32_t id) noexcept {
@@ -102,6 +104,7 @@ void OpportunityTask::step(TaskContext& c) {
     const uint64_t now = v.tick();
     for (auto it = shunned_.begin(); it != shunned_.end();) it = it->second <= now ? shunned_.erase(it) : std::next(it);
     for (auto it = bad_stands_.begin(); it != bad_stands_.end();) it = it->second <= now ? bad_stands_.erase(it) : std::next(it);
+    for (auto it = bad_walks_.begin(); it != bad_walks_.end();) it = it->second <= now ? bad_walks_.erase(it) : std::next(it);
     if (!plan.opportunity || !v.has_grid() || tactics_.guard_stance) {
         if (!jobs_.empty()) {
             for (const Job& j : jobs_) end_job(c, j);
@@ -240,7 +243,7 @@ void OpportunityTask::seek(TaskContext& c) {
                     }
                     const KillShot shot = kill_shot(grid, e.tile, e.hp, e.type, stand, a->type);
                     if (!shot.kills()) continue;
-                    if (reserve && shot.kind != KillKind::Water) continue;
+                    if (reserve && (shot.kind != KillKind::Water || tactics_.far_work)) continue;
                     if (!at_stand && !walk_reaches(c.map, c.seat, a->tile, stand)) continue;
                     Candidate cand;
                     cand.score = worth(shot.kind, e) - 25 * d;
@@ -264,17 +267,27 @@ void OpportunityTask::seek(TaskContext& c) {
     const Candidate* pick = nullptr;
     std::map<int64_t, std::vector<int32_t>> fields;
     const size_t width = grid.width();
+    size_t floods = 0;
     for (size_t i = 0; i < cands.size() && i < 6 && pick == nullptr; ++i) {
         const Candidate& k = cands[i];
         if (k.at_stand) {
             pick = &k;
             break;
         }
+        const int64_t walk_key = (static_cast<int64_t>(k.striker) << 32) ^ key_of(k.stand);
+        const auto failed = bad_walks_.find(walk_key);
+        if (failed != bad_walks_.end() && failed->second > now) continue;           // (this ant was found shut in or too far from this tile a moment ago: no new search for it)
         auto it = fields.find(key_of(k.stand));
-        if (it == fields.end()) it = fields.emplace(key_of(k.stand), MapInfo::cost_field(grid, c.seat, k.stand, v.walk_context())).first;
+        if (it == fields.end()) {
+            if (floods >= kMaxFloods) continue;                                       // (a search of the whole map is the dear part of a look: only a few at each)
+            ++floods;
+            ++floods_;
+            it = fields.emplace(key_of(k.stand), MapInfo::cost_field(grid, c.seat, k.stand, v.walk_context())).first;
+        }
         const AntView* a = find_ant(v.mine(), k.striker);
         const size_t at = static_cast<size_t>(a->tile.y) * width + static_cast<size_t>(a->tile.x);
         if (at < it->second.size() && it->second[at] >= 0 && MapInfo::walking_ticks(it->second[at]) <= static_cast<int32_t>(plan.opportunity_ticks / 2)) pick = &k;
+        else bad_walks_[walk_key] = now + kBadWalkTicks;
     }
     if (pick == nullptr || !c.ledger.take(pick->striker, id())) return;
     const Candidate best = *pick;
