@@ -466,8 +466,8 @@
     {
       "id": "escape_in_move_clears",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "function letGo() { if (st.ask) { st.ask = ''; return render(); } if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }",
-      "new": "function letGo() { if (st.ask) { st.ask = ''; return render(); } clear(); }",
+      "old": "function letGo() { st.drag = null; if (st.ask) { st.ask = ''; return render(); } if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }",
+      "new": "function letGo() { st.drag = null; if (st.ask) { st.ask = ''; return render(); } clear(); }",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -529,15 +529,8 @@
     {
       "id": "ghost_drag_wrong_way",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "else if (d.kind === 'ghost') setDelta(d.dr + to.row - d.from.row, d.dc + to.column - d.from.column);",
-      "new": "else if (d.kind === 'ghost') setDelta(d.dr - to.row + d.from.row, d.dc + to.column - d.from.column);",
-      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
-    },
-    {
-      "id": "cancelled_drag_keeps_ghost",
-      "file": "web/front/mapmaker_pickup.js",
-      "old": "else if (d.kind === 'ghost') setDelta(d.dr, d.dc); else if (d.moved) letGo();",
-      "new": "else if (d.moved) letGo();",
+      "old": "else if (d.kind === 'ghost') { d.moved = true; setDelta(d.dr + to.row - d.from.row, d.dc + to.column - d.from.column); }",
+      "new": "else if (d.kind === 'ghost') { d.moved = true; setDelta(d.dr - to.row + d.from.row, d.dc + to.column - d.from.column); }",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -921,8 +914,8 @@
     {
       "id": "ask_escape_lets_go_of_all",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "function letGo() { if (st.ask) { st.ask = ''; return render(); }",
-      "new": "function letGo() { if (st.ask) { st.ask = ''; return clear(); }",
+      "old": "function letGo() { st.drag = null; if (st.ask) { st.ask = ''; return render(); }",
+      "new": "function letGo() { st.drag = null; if (st.ask) { st.ask = ''; return clear(); }",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -973,6 +966,69 @@
       "old": "    .pk-row, .pk-row.one, .pk-row.two, .pk-row.three, .pk-row.four, .pk-padwrap, .pk-side { display: contents; }",
       "new": "    .pk-row.one { display: contents; }",
       "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "drop_lift_does_not_drop",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (d.moved && st.mode === 'moving') return done();",
+      "new": "if (d.moved && st.mode === 'moving') return render();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "drop_click_on_ghost_drops",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (d.moved && st.mode === 'moving') return done();",
+      "new": "if (st.mode === 'moving') return done();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "drop_ghost_drag_not_counted",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "else if (d.kind === 'ghost') { d.moved = true; setDelta(",
+      "new": "else if (d.kind === 'ghost') { setDelta(",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "drop_cancel_drops",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "} else if (d.moved) letGo();\n            },\n            abandon:",
+      "new": "} else if (d.moved) done();\n            },\n            abandon:",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "drop_cancel_forgotten",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "} else if (d.moved) letGo();\n            },\n            abandon:",
+      "new": "} else if (d.moved) render();\n            },\n            abandon:",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "drop_abandon_drops",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "abandon: function () { painter.cancel(); },",
+      "new": "abandon: function () { painter.end(); },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "drop_escape_keeps_drag",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "function letGo() { st.drag = null; if (st.ask)",
+      "new": "function letGo() { if (st.ask)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "drop_after_done_moves_again",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "else if ((d.kind === 'ghost' || d.moved) && st.mode !== 'moving') return;",
+      "new": "else if (false) return;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "drop_tools_abandon_ends",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "abandon: function () { if (mine() && mine().abandon) return mine().abandon(); painter.end(); },",
+      "new": "abandon: function () { painter.end(); },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     }
   ]
 }

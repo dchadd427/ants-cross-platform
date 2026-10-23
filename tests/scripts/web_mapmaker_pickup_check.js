@@ -1314,6 +1314,10 @@ function caseN() {
         check(q.key('Escape') === true && q.state().mode === 'idle' || q.state().mode === 'picked', 'Escape during a drag lets go' + tag);
         q.p.extend({ row: 12, column: 20 }, { row: 14, column: 22 }); q.p.end();
         check(q.log.acts === 0 && same(q.file().bytes, was) && q.state().dr === 0, 'the lift after Escape puts nothing down, the thing is where it was' + tag);
+        // Escape before the mouse has moved: the lift that follows does not pick the thing again
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.tap(3, 3); q.p.begin({ row: 3, column: 3 }); q.key('Escape'); q.p.end();
+        check(q.state().mode === 'idle' && q.log.acts === 0, 'Escape with the button down and the mouse not moved lets go, and the lift does not pick it again' + tag);
         // the pointer is lost (a cancelled touch, the window): the same
         q = page(File.parse(Uint8Array.from(bytes)));
         q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.cancel(); q.p.end();
