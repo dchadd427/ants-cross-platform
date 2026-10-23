@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the wide search of the path finder (map rules word 2; include/ants_sim/path_planner.hpp, docs/MAP_FORMAT.md 'Orders on a big map', docs/TESTING.md 2.3): the rules of when the search gives up, the flags and the 24-bit cost, the budget formula, the engine's gate on the rules word, and the copies. Run: python3 tools/mutate.py tests/data/rules_two_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Every mutant must be caught by the test named in its expect (a test of test_path_planner.cpp suite 9 or test_movement_golden.cpp suite 8). (The reader and writer of rules 2, the bots' limit and the editor are a later change and have their own mutants.)",
+ "note": "Mutants of the wide search of the path finder (map rules word 2; include/ants_sim/path_planner.hpp, docs/MAP_FORMAT.md 'Orders on a big map', docs/TESTING.md 2.3): the rules of when the search gives up, the flags and the 24-bit cost, the budget formula, the engine's gate on the rules word, and the copies. Run: python3 tools/mutate.py tests/data/rules_two_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Every mutant must be caught by the test named in its expect (a test of test_path_planner.cpp suite 9 or test_movement_golden.cpp suite 8). (The reader and writer of rules 2, the bots' limit and the editor come with the next release and have their own mutants.)",
  "mutants": [
   {
    "id": "taint_not_set_on_a_blocked_step",
@@ -112,7 +112,7 @@
   {
    "id": "blocked_pop_is_expanded_after_the_limit",
    "file": "src/ants_sim/path_planner.cpp",
-   "old": "                if (heap_.empty()) break;      // past the limit: a blocked node is a dead end, dropped (not expanded, not closed)\n                continue;\n",
+   "old": "                if (heap_.empty()) break;\n                continue;\n",
    "new": "                if (heap_.empty()) break;\n",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
@@ -211,8 +211,8 @@
   {
    "id": "copy_of_a_search_forgets_the_limit_flag",
    "file": "src/ants_sim/path_planner.cpp",
-   "old": "      beyond_(other.beyond_) {}",
-   "new": "      beyond_(false) {}",
+   "old": "      beyond_(other.beyond_),",
+   "new": "      beyond_(false),",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "9.8"
@@ -360,6 +360,150 @@
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "9.1"
+  },
+  {
+   "id": "wide_g_wrap_guard_missing",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "newg > kWideGMask || newg < step",
+   "new": "newg > kWideGMask",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.11"
+  },
+  {
+   "id": "limit_hit_never_set",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "            if (!limit_hit_ && f_of(cur) >= kFailF) limit_hit_ = true;",
+   "new": "",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.13"
+  },
+  {
+   "id": "limit_hit_threshold_8001",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "f_of(cur) >= kFailF) limit_hit_ = true;",
+   "new": "f_of(cur) > kFailF) limit_hit_ = true;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.2"
+  },
+  {
+   "id": "limit_hit_threshold_7999",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "f_of(cur) >= kFailF) limit_hit_ = true;",
+   "new": "f_of(cur) >= kFailF - 1u) limit_hit_ = true;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.2"
+  },
+  {
+   "id": "limit_hit_always_true",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "            if (!limit_hit_ && f_of(cur) >= kFailF) limit_hit_ = true;",
+   "new": "            limit_hit_ = true;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.13"
+  },
+  {
+   "id": "budget_given_from_the_first_run",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "const uint16_t slice = limit_hit_ || budget < kDefaultBudget ? budget : kDefaultBudget;",
+   "new": "const uint16_t slice = budget;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.13"
+  },
+  {
+   "id": "budget_floor_ignores_a_small_budget",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "const uint16_t slice = limit_hit_ || budget < kDefaultBudget ? budget : kDefaultBudget;",
+   "new": "const uint16_t slice = limit_hit_ ? budget : kDefaultBudget;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.2"
+  },
+  {
+   "id": "copy_of_a_search_forgets_the_limit_hit",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "      limit_hit_(other.limit_hit_) {}",
+   "new": "      limit_hit_(false) {}",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.13"
+  },
+  {
+   "id": "budget_grows_at_the_flag_not_at_the_pop",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "const uint16_t slice = limit_hit_ || budget < kDefaultBudget ? budget : kDefaultBudget;",
+   "new": "const uint16_t slice = beyond_ || budget < kDefaultBudget ? budget : kDefaultBudget;",
+   "build": "test_path_planner",
+   "test": "./build/tests/test_sim/test_path_planner",
+   "expect": "9.13"
+  },
+  {
+   "id": "grid_level_keeps_every_rules_word",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "rules_ = rules_word_played(level.rules);",
+   "new": "rules_ = level.rules;",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "expect": "switched off"
+  },
+  {
+   "id": "grid_world_by_hand_keeps_every_rules_word",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "rules_ = rules_word_played(rules);",
+   "new": "rules_ = rules;",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "expect": "switched off"
+  },
+  {
+   "id": "grid_hook_ignored",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "word == 2u && rules_two_allowed_ ? word : uint16_t{1}",
+   "new": "word == 2u ? word : uint16_t{1}",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "expect": "switched off"
+  },
+  {
+   "id": "grid_hook_lets_every_word_through",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "(word == 2u && rules_two_allowed_ ? word : uint16_t{1})",
+   "new": "(rules_two_allowed_ ? word : uint16_t{1})",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "expect": "the hook lets 2 through"
+  },
+  {
+   "id": "grid_word_above_one_plays_as_rules_zero",
+   "file": "include/ants_sim/grid.hpp",
+   "old": ": uint16_t{1}); }",
+   "new": ": uint16_t{0}); }",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "expect": "switched off"
+  },
+  {
+   "id": "grid_word_three_passes",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "word <= 1u ? word",
+   "new": "word <= 3u ? word",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY",
+   "expect": "switched off"
+  },
+  {
+   "id": "engine_test_hook_does_nothing",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    impl_->grid_.allow_rules_two_for_tests();\n",
+   "new": "",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "8.1"
   }
  ]
 }

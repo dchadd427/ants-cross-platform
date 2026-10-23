@@ -27,9 +27,10 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Nothing changes in play yet.** The game now contains the groundwork for very long orders on very big maps (today an order of about 400 tiles or more, 286 on a diagonal, is refused with "Can't go there", and a group of ants sent far gets its paths slowly). It is the original's own search, with the same routes and tie-breaks, only without the width limits, and it is switched off: no map can ask for it yet, and every map of the library plays exactly as before (all 540 maps hash byte for byte the same, also when the new search is forced on for all of them).
-- A later release lets a new big map ask for it.
+- Whatever the original can play, the new search plays the same, at the same speed: it keeps the original's 1,000 search steps every 50 ms until an order is past the original's limit, and only then goes faster on a big map.
+- The next release lets a new big map ask for it.
 
-**Rules / network:** none. Network protocol 21 and the replay rules numbers are unchanged. A new map rules word 2 exists inside the simulation only; the map readers and writers still refuse it, so no map and no recording can use it.
+**Rules / network:** none. Network protocol 21 and the replay rules numbers are unchanged. A new map rules word 2 exists inside the simulation only; the map readers and writers still refuse it, and the simulation itself plays a word of 2 as 1 outside the tests, so no map and no recording can use it.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/91a09a4b...029c0d86)
 

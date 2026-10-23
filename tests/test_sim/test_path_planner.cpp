@@ -1030,6 +1030,8 @@ struct Trace {
     uint64_t calls{0};
     uint64_t digest{kFnvBasis};
     bool beyond{false};
+    bool limit_hit{false};   // a node with f >= 8000 was popped: the original would have given up
+    uint32_t slices{0};      // calls of step() until the search finished (with the budget that run_trace was given)
 };
 
 Trace run_trace(uint16_t rows, uint16_t cols, TileCoord start, TileCoord goal, const PathSearch::StepCostFn& cost, bool wide, bool wall_at_row_90 = false,
@@ -1042,9 +1044,13 @@ Trace run_trace(uint16_t rows, uint16_t cols, TileCoord start, TileCoord goal, c
     };
     PathGridPool pool;
     PathSearch search(1, start, goal, rows, cols, pool, wall_at_row_90, wide);
-    for (int i = 0; i < 100000 && !search.finished(); ++i) search.step(budget, counted);
+    for (int i = 0; i < 100000 && !search.finished(); ++i) {
+        search.step(budget, counted);
+        ++t.slices;
+    }
     t.path = search.path();
     t.beyond = search.beyond();
+    t.limit_hit = search.limit_hit();
     return t;
 }
 
@@ -1073,6 +1079,7 @@ struct WideModel {
     std::vector<Node> nodes;
     std::vector<int> heap;  // node indices
     bool beyond{false};
+    bool limit_hit{false};   // a node with f >= 8000 was popped (the pop at which the original gives up)
     uint64_t pops{0};
     std::vector<TileCoord> path;
 
@@ -1131,6 +1138,7 @@ struct WideModel {
             ++pops;
             Node& cn = nodes[static_cast<size_t>(cur)];
             const TileCoord ct = tile(cur);
+            if (cn.g + h_of(ct) >= 8000) limit_hit = true;
             if (cn.taint) {
                 if (!beyond) { path.clear(); return; }
                 continue;
@@ -1185,6 +1193,39 @@ uint32_t synthetic_cost(uint64_t seed, TileCoord a, TileCoord b) {
     return 250 + v % 1250;
 }
 
+// The runs that a search of `pops` pops takes when each run has the original's 1,000 pops until the run in which the pop number `limit_pop` (the first pop with f >= 8000, 0 = never)
+// happened, and `budget` after it (a search is stepped slice by slice: PathManager::run gives it the budget, the search takes 1,000 of it until its limit_hit()).
+uint32_t scheduled_runs(uint64_t pops, uint64_t limit_pop, uint16_t budget) {
+    uint64_t done = 0;
+    uint32_t runs = 0;
+    bool hit = false;
+    while (done < pops) {
+        done = std::min<uint64_t>(pops, done + (hit ? budget : std::min<uint16_t>(budget, PathSearch::kDefaultBudget)));
+        ++runs;
+        if (limit_pop != 0 && limit_pop <= done) hit = true;
+    }
+    return runs;
+}
+
+// How many pops a search takes (stepped one pop at a time) and the number of the first pop with f >= 8000 (0 = none).
+struct PopCount {
+    uint64_t pops{0};
+    uint64_t limit_pop{0};
+    bool found{false};
+};
+PopCount count_pops(uint16_t rows, uint16_t cols, TileCoord start, TileCoord goal, const PathSearch::StepCostFn& cost) {
+    PathGridPool pool;
+    PathSearch search(1, start, goal, rows, cols, pool, false, true);
+    PopCount c;
+    while (!search.finished() && c.pops < 5000000) {
+        search.step(1, cost);
+        ++c.pops;
+        if (c.limit_pop == 0 && search.limit_hit()) c.limit_pop = c.pops;
+    }
+    c.found = !search.path().empty();
+    return c;
+}
+
 }  // namespace
 
 void run_suite_9_wide_search() {
@@ -1216,6 +1257,7 @@ void run_suite_9_wide_search() {
                             ASSERT_TRUE(wide.path == classic.path);
                             ASSERT_EQ(wide.calls, classic.calls);
                             ASSERT_EQ(wide.digest, classic.digest);
+                            ASSERT_FALSE(wide.limit_hit);                   // (the original found a path, so no pop had f >= 8000: the big budget was never given)
                             ++same_found;
                             if (wide.beyond) ++same_found_beyond;
                         } else if (!wide.beyond) {
@@ -1268,6 +1310,8 @@ void run_suite_9_wide_search() {
             ASSERT_TRUE(search.path() == model.path);
             ASSERT_EQ(slices, model.pops);
             ASSERT_EQ(search.beyond(), model.beyond);
+            ASSERT_EQ(search.limit_hit(), model.limit_hit);
+            if (model.limit_hit && !model.beyond) ASSERT_TRUE(model.path.empty());   // (a pop at f >= 8000 with the flag clear is the original's give-up: a blocked node is popped and the search ends)
             if (model.path.empty()) ++failed; else ++found;
             if (model.beyond) ++past_limit;
             if (model.beyond && !model.path.empty()) ++rescue;
@@ -1508,7 +1552,7 @@ void run_suite_9_wide_search() {
         ASSERT_TRUE(d2->path == d1->path);
     } TEST_END();
 
-    TEST_CASE("9.9 The budget: max(1000, cells / 32) steps a run for rules 2, 1,000 for the others; the manager spends what it is given") {
+    TEST_CASE("9.9 The budget: a wide search that has passed the original's limit gets max(1000, cells / 32) steps a run, before that (and at every other rules word) 1,000") {
         ASSERT_EQ(PathManager::wide_budget(60, 60), 1000u);
         ASSERT_EQ(PathManager::wide_budget(81, 129), 1000u);                 // the biggest map of the library
         ASSERT_EQ(PathManager::wide_budget(250, 128), 1000u);                // 32,000 cells
@@ -1522,7 +1566,8 @@ void run_suite_9_wide_search() {
         ASSERT_EQ(PathManager::wide_budget(1024, 256), 8192u);
         ASSERT_EQ(PathManager::wide_budget(2048, 2048), 65535u);             // (the manager's budget is 16 bits)
         ASSERT_EQ(static_cast<unsigned>(PathSearch::kDefaultBudget), 1000u);
-        // a search of 5,400 expansions: 6 runs of 1,000, one of 8,192
+        // a search of 5,400 expansions that stays below f = 8,000 (the original's limit is not passed) takes 1,000 a run whatever it is given: owner's rule, a search that the original
+        // can finish is delivered in the run in which the original delivers it (before, it took the big budget from the first run on: 6 runs of 1,000 became one of 8,192)
         const TerrainMap open = TerrainMap::filled(512, 512);
         const PathManager::CostProvider provider = open.provider();
         for (const uint16_t budget : {uint16_t{1000}, uint16_t{2048}, uint16_t{8192}}) {
@@ -1542,7 +1587,8 @@ void run_suite_9_wide_search() {
                 ps.step(1, open.step_cost());
                 ++pops;
             }
-            ASSERT_EQ(runs, (pops + budget - 1) / budget);                   // the manager gave each run `budget` expansions
+            ASSERT_FALSE(ps.limit_hit());
+            ASSERT_EQ(runs, (pops + 1000 - 1) / 1000);                       // the manager gave each run the original's 1,000 expansions, not `budget`
         }
         // the default of run() is the original's 1,000
         PathManager a, b;
@@ -1573,6 +1619,156 @@ void run_suite_9_wide_search() {
         std::optional<PathManager::Delivery> dw;
         for (int i = 0; i < 400 && !dw; ++i) dw = wide.run(m.provider(), 8192);
         ASSERT_TRUE(dw.has_value() && dw->path.size() == 451);
+    } TEST_END();
+
+    TEST_CASE("9.11 A step cost that does not fit 32 bits is not added with a wrap: 0xFFFFFFFF on one step (with g > 0) is refused, and the search goes round it") {
+        // a 4 x 2 field, grass at 20 a step; the one step (1, 0) -> (2, 0) is said to cost 0xFFFFFFFF. g(1, 0) is 20, so g + step wraps to 19 in 32 bits: without the test of the sum the node
+        // (2, 0) would get g = 19, the best cost of any node, and (a step of 8000 or more) a taint: the search would end there with no path. The engine's costs are at most 8,000 (the guard
+        // is for a provider that is not the engine's), so this is the only place that reaches it.
+        const PathSearch::StepCostFn cost = [](TileCoord a, TileCoord b) -> uint32_t {
+            if (b.x < 0 || b.y < 0 || b.x >= 4 || b.y >= 2) return kBlocked;
+            if (a == TileCoord{1, 0} && b == TileCoord{2, 0}) return 0xFFFFFFFFu;
+            return a.x != b.x && a.y != b.y ? 28u : 20u;
+        };
+        const Trace wide = run_trace(2, 4, {0, 0}, {3, 0}, cost, true);
+        ASSERT_FALSE(wide.path.empty());
+        ASSERT_TRUE((wide.path.front() == TileCoord{0, 0}) && (wide.path.back() == TileCoord{3, 0}));
+        for (size_t i = 1; i < wide.path.size(); ++i) ASSERT_FALSE((wide.path[i - 1] == TileCoord{1, 0} && wide.path[i] == TileCoord{2, 0}));
+        ASSERT_FALSE(wide.beyond);
+        ASSERT_FALSE(wide.limit_hit);
+        // the same step, taken from the start (g = 0): 0 + 0xFFFFFFFF fits 32 bits but not the 24 of g, and is refused the same way
+        const PathSearch::StepCostFn from_start = [](TileCoord a, TileCoord b) -> uint32_t {
+            if (b.x < 0 || b.y < 0 || b.x >= 4 || b.y >= 2) return kBlocked;
+            if (a == TileCoord{0, 0} && b == TileCoord{1, 0}) return 0xFFFFFFFFu;
+            return a.x != b.x && a.y != b.y ? 28u : 20u;
+        };
+        const Trace round_it = run_trace(2, 4, {0, 0}, {3, 0}, from_start, true);
+        ASSERT_FALSE(round_it.path.empty());
+        for (size_t i = 1; i < round_it.path.size(); ++i) ASSERT_FALSE((round_it.path[i - 1] == TileCoord{0, 0} && round_it.path[i] == TileCoord{1, 0}));
+    } TEST_END();
+
+    TEST_CASE("9.12 A path found while the flag is set: the original finds it, the wide search finds the same path with the same expansions, and the big budget is never given (tolls of 7,990 push nodes past f = 8,000 without being popped)") {
+        // a toll tile costs 7,990 to enter (not blocked: below 8,000); the node behind it has f >= 8,000, which sets the flag when it is pushed, but it stays in the open list because the goal
+        // is found at a lower f. 9.1 meets this case about once in a thousand orders; here every order has a toll beside the way.
+        int found_with_flag = 0, flag_orders = 0;
+        uint64_t digest = kFnvBasis;
+        for (uint64_t seed = 1; seed <= 600; ++seed) {
+            Xor rng(seed * 7919);
+            const uint16_t side = static_cast<uint16_t>(16 + rng.below(40));
+            const TileCoord s{static_cast<int>(rng.below(side)), static_cast<int>(rng.below(side))};
+            TileCoord g{static_cast<int>(rng.below(side)), static_cast<int>(rng.below(side))};
+            const uint32_t toll_modulus = 3 + static_cast<uint32_t>(seed % 9);   // 1 tile in 3 to 11 is a toll tile
+            const auto toll = [seed, toll_modulus, g](TileCoord t) { return !(t == g) && (fnv_step(fnv_step(seed, static_cast<uint32_t>(t.x)), static_cast<uint32_t>(t.y)) >> 7) % toll_modulus == 0; };
+            const PathSearch::StepCostFn cost = [&](TileCoord a, TileCoord b) -> uint32_t {
+                if (b.x < 0 || b.y < 0 || b.x >= side || b.y >= side) return kBlocked;
+                if (toll(b)) return 7990u;
+                return a.x != b.x && a.y != b.y ? 28u : 20u;
+            };
+            if (toll(s) || s == g) continue;
+            ++flag_orders;
+            const Trace classic = run_trace(side, side, s, g, cost, false, false, PathSearch::kDefaultBudget);
+            const Trace wide = run_trace(side, side, s, g, cost, true, false, PathSearch::kDefaultBudget);
+            digest = fnv_step(fnv_step(fnv_step(digest, path_digest(classic.path)), path_digest(wide.path)), wide.beyond ? 1 : 0);
+            if (classic.path.empty()) continue;                                 // (the tolls shut the goal in: not a case of this test)
+            ASSERT_TRUE(wide.path == classic.path);
+            ASSERT_EQ(wide.calls, classic.calls);
+            ASSERT_EQ(wide.digest, classic.digest);
+            ASSERT_FALSE(wide.limit_hit);
+            ASSERT_EQ(wide.slices, classic.slices);                              // (the same number of 1,000-pop slices: the timing is the original's)
+            if (wide.beyond) ++found_with_flag;
+        }
+        std::cout << "[" << found_with_flag << " of " << flag_orders << " orders found with the flag set] digest " << std::hex << digest << std::dec << " ... " << std::flush;
+        ASSERT_GT(found_with_flag, 400);
+        ASSERT_EQ(digest, 0x0a8341a6f46413bcull);   // the digest of the whole run, as in 9.1
+    } TEST_END();
+
+    TEST_CASE("9.13 The budget schedule: 1,000 a run until the pop at which the original would have given up, the budget of the map after; a map of 190 x 190 delivers what the original can handle in the original's runs") {
+        // (a) 190 x 190 open grass, 36,100 cells: wide_budget is 1,128. Orders of 40 to 90 tiles take about 700 to 3,500 pops (48 to 50 tiles: 1,001 to 1,128); a run of 1,128 would deliver one that takes 1,001 to 1,128 a run
+        // earlier than the original's 1,000 does.
+        const TerrainMap field = TerrainMap::filled(190, 190);
+        ASSERT_EQ(PathManager::wide_budget(190, 190), 1128u);
+        const PathManager::CostProvider provider = field.provider();
+        int took_more_than_one_run = 0, in_the_window = 0;
+        for (int dist = 40; dist <= 90; ++dist) {
+            PathManager classic, wide;
+            classic.request(1, {20, 95}, {20 + dist, 95}, 190, 190, false, false);
+            wide.request(1, {20, 95}, {20 + dist, 95}, 190, 190, false, true);
+            std::optional<PathManager::Delivery> dc, dw;
+            int rc = 0, rw = 0;
+            while (!dc && rc < 100) { dc = classic.run(provider, PathSearch::kDefaultBudget); ++rc; }
+            while (!dw && rw < 100) { dw = wide.run(provider, PathManager::wide_budget(190, 190)); ++rw; }
+            ASSERT_TRUE(dc.has_value() && dw.has_value());
+            ASSERT_FALSE(dc->path.empty());
+            ASSERT_TRUE(dw->path == dc->path);
+            ASSERT_EQ(rw, rc);
+            if (rc > 1) ++took_more_than_one_run;
+            const PopCount pc = count_pops(190, 190, {20, 95}, {20 + dist, 95}, field.step_cost());
+            if (pc.pops > 1000 && pc.pops <= 1128) ++in_the_window;          // (the orders for which a run of 1,128 would have been one run too few)
+        }
+        ASSERT_GT(took_more_than_one_run, 35);
+        ASSERT_GE(in_the_window, 1);
+        // (b) the same with a toll beside the way (the flag is set on the way, no pop reaches f = 8,000): the original's runs
+        const PathManager::CostProvider toll_provider = [&](uint32_t id, TileCoord a, TileCoord b) -> uint32_t { return b == TileCoord{50, 97} ? 7990u : provider(id, a, b); };
+        for (int dist = 40; dist <= 90; ++dist) {
+            PathManager classic, wide;
+            classic.request(1, {20, 95}, {20 + dist, 95}, 190, 190, false, false);
+            wide.request(1, {20, 95}, {20 + dist, 95}, 190, 190, false, true);
+            std::optional<PathManager::Delivery> dc, dw;
+            int rc = 0, rw = 0;
+            while (!dc && rc < 100) { dc = classic.run(toll_provider, PathSearch::kDefaultBudget); ++rc; }
+            while (!dw && rw < 100) { dw = wide.run(toll_provider, PathManager::wide_budget(190, 190)); ++rw; }
+            ASSERT_TRUE(dc.has_value() && dw.has_value() && !dc->path.empty() && dw->path == dc->path);
+            ASSERT_EQ(rw, rc);
+        }
+        // (c) after the limit: 450 tiles straight on 512 x 512 (the original gives up): the schedule is 1,000 a run up to and including the run of the first pop with f >= 8000, then the
+        // budget of the map, however it is given
+        const TerrainMap big = TerrainMap::filled(512, 512);
+        const PopCount pc = count_pops(512, 512, {20, 256}, {470, 256}, big.step_cost());
+        ASSERT_TRUE(pc.found);
+        ASSERT_GT(pc.limit_pop, static_cast<uint64_t>(10000));                   // (a long way of searching before the limit is met)
+        ASSERT_GT(pc.pops, pc.limit_pop);
+        const PathManager::CostProvider big_provider = big.provider();
+        for (const uint16_t budget : {uint16_t{1000}, uint16_t{2048}, uint16_t{8192}, uint16_t{30000}}) {
+            PathManager pm;
+            pm.request(1, {20, 256}, {470, 256}, 512, 512, false, true);
+            uint32_t runs = 0;
+            std::optional<PathManager::Delivery> d;
+            while (!d && runs < 5000) { d = pm.run(big_provider, budget); ++runs; }
+            ASSERT_TRUE(d.has_value() && d->path.size() == 451);
+            ASSERT_EQ(runs, scheduled_runs(pc.pops, pc.limit_pop, budget));
+        }
+        ASSERT_LT(scheduled_runs(pc.pops, pc.limit_pop, 8192), scheduled_runs(pc.pops, 0, 8192) / 2);    // (the big budget does shorten the search)
+        ASSERT_GT(scheduled_runs(pc.pops, pc.limit_pop, 8192), (static_cast<uint32_t>(pc.pops) + 8191) / 8192);   // ... but it is not given from the first run
+        // (d) a copy of a manager made after the search has passed the limit (the constructor and the assignment) keeps the big budget: it delivers in the run of the original
+        {
+            const uint32_t runs_to_limit = static_cast<uint32_t>((pc.limit_pop + 999) / 1000);   // the run in which the first pop at f >= 8,000 happens
+            const uint32_t want = scheduled_runs(pc.pops, pc.limit_pop, 8192);
+            PathManager original;
+            original.request(1, {20, 256}, {470, 256}, 512, 512, false, true);
+            for (uint32_t r = 0; r < runs_to_limit; ++r) ASSERT_FALSE(original.run(big_provider, 8192).has_value());
+            PathManager by_constructor(original);
+            PathManager by_assignment;
+            by_assignment = original;
+            for (PathManager* pm : {&original, &by_constructor, &by_assignment}) {
+                uint32_t runs = runs_to_limit;
+                std::optional<PathManager::Delivery> d;
+                while (!d && runs < 5000) { d = pm->run(big_provider, 8192); ++runs; }
+                ASSERT_TRUE(d.has_value() && d->path.size() == 451);
+                ASSERT_EQ(runs, want);
+            }
+        }
+        // a budget below 1,000 is kept (the wide search never takes more than it is given): two runs of 100 pops do not deliver a search of thousands
+        PathManager small;
+        small.request(1, {20, 256}, {470, 256}, 512, 512, false, true);
+        ASSERT_FALSE(small.run(big_provider, 100).has_value());
+        ASSERT_FALSE(small.run(big_provider, 100).has_value());
+        const TerrainMap tiny = TerrainMap::filled(8, 3);
+        PathManager one_pop;
+        one_pop.request(1, {0, 1}, {7, 1}, 3, 8, false, true);
+        int tiny_runs = 0;
+        std::optional<PathManager::Delivery> dt;
+        while (!dt && tiny_runs < 1000) { dt = one_pop.run(tiny.provider(), 1); ++tiny_runs; }
+        ASSERT_EQ(static_cast<uint64_t>(tiny_runs), count_pops(3, 8, {0, 1}, {7, 1}, tiny.step_cost()).pops);   // one pop a run when it is given one
     } TEST_END();
 }
 

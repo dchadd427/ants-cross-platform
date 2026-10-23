@@ -1773,7 +1773,7 @@ void SimulationEngineImpl::movement_tick() {
     }
     now_ms_ = t_end;
     anim_clock_ms_ = t_end;
-    // PATHMGR: one run per player every 50 ms; at most one path delivered per run. Rules 2: the run's budget grows with the map (PathManager::wide_budget); rules 0 and 1: the original's 1,000.
+    // PATHMGR: one run per player every 50 ms; at most one path delivered per run. Rules 2: a search that has passed the original's limit gets a budget that grows with the map (PathManager::wide_budget), before that the original's 1,000; rules 0 and 1: 1,000.
     for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
         auto delivery = path_managers_[team].run([this](uint32_t ant_id, TileCoord from, TileCoord to) -> uint32_t {
             const AntUnit* u = find_unit(ant_id);

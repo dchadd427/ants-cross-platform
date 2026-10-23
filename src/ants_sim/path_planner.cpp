@@ -140,7 +140,8 @@ PathSearch::PathSearch(const PathSearch& other, PathGridPool& pool)
       finished_(other.finished_),
       path_(other.path_),
       wide_(other.wide_),
-      beyond_(other.beyond_) {}
+      beyond_(other.beyond_),
+      limit_hit_(other.limit_hit_) {}
 
 PathSearch::~PathSearch() {
     // 0x1019a39: only a request that holds a grid frees its slot.
@@ -340,18 +341,24 @@ int PathSearch::step(uint16_t budget, const StepCostFn& cost) {
 // the top of path_planner.hpp. The order of the pops, the neighbours, the improvement test, the re-opening and the "pushed at most once" quirk are the original's.
 int PathSearch::step_wide(uint16_t budget, const StepCostFn& cost) {
     uint16_t it = 0;
+    const uint16_t slice = limit_hit_ || budget < kDefaultBudget ? budget : kDefaultBudget;   // the original's 1,000 until a pop has passed its limit (decided at the start of the slice)
     if (!heap_.empty()) {
-        while (it < budget) {
+        while (it < slice) {
             ++it;
             const TileCoord cur = heap_pop();
             uint32_t& cc = cell(cur);
+            if (!limit_hit_ && f_of(cur) >= kFailF) limit_hit_ = true;   // the original's f test: it would have given up at this pop
             if ((cc & kWideTaintBit) != 0u) {  // reached over a blocked step: its f is 8000 or more, the original gives up here
                 if (!beyond_) {                // ... and so does this search, until a node has passed the limit
                     path_.clear();
                     finish();
                     return 1;
                 }
-                if (heap_.empty()) break;      // past the limit: a blocked node is a dead end, dropped (not expanded, not closed)
+                // Past the limit: a blocked node is a dead end, dropped (not expanded, not closed). It stays opened, so a later cheaper step into the same tile (only a step that depends on where
+                // it comes from, a hill entered from its entrance, can be cheaper) updates its g and does not push it again: it is never expanded. This happens only at or after the pop at
+                // which the original would have given up, where the original has no behavior to keep (every search it finishes is pop for pop the same here), and it is rare: about 1 random
+                // order in 125,000 with hills and walls, where pushing the node again would have found a path that this search misses. Kept: "pushed at most once" is the original's rule.
+                if (heap_.empty()) break;
                 continue;
             }
             if (cur == goal_) {

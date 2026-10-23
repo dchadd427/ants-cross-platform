@@ -17,6 +17,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -956,11 +957,12 @@ static void run_suite_8_rules_two() {
     TEST_CASE("8.1 A 450-tile order on an open 512 x 512 world: refused at rules 1 (the original's limit), walked at rules 2; rules 0 and 1 are as they were") {
         for (const uint16_t rules : {uint16_t{0}, uint16_t{1}, uint16_t{2}}) {
             SimulationEngine sim;
+            if (rules == 2) sim.allow_rules_two_for_tests();
             sim.init_test_world(512, 512, 7, 600000, rules);
             const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 256});
             sim.tick();
             sim.issue_move_order(id, TileCoord{470, 256});
-            for (int t = 0; t < 60; ++t) sim.tick();                         // 450 tiles take about 52,000 expansions: 7 runs of 8,192
+            for (int t = 0; t < 60; ++t) sim.tick();                         // 450 tiles take about 52,000 expansions: 1,000 a run up to the limit, then 8,192 (tick 27)
             const AntUnit& a = sim.get_unit(id);
             if (rules == 2) {
                 ASSERT_EQ(a.waypoints.size(), static_cast<size_t>(451));
@@ -975,6 +977,7 @@ static void run_suite_8_rules_two() {
 
     TEST_CASE("8.2 Rules 2 takes the wall at row 90 down, as rules 1 does: a walk across row 90 on a 100-row world") {
         SimulationEngine sim;
+        sim.allow_rules_two_for_tests();
         sim.init_test_world(20, 100, 7, 600000, 2);
         const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 80});
         sim.tick();
@@ -985,14 +988,17 @@ static void run_suite_8_rules_two() {
         ASSERT_TRUE(a.waypoints.empty());
     } TEST_END();
 
-    TEST_CASE("8.3 The budget follows the map: eight ants sent 200 tiles on a 512 x 512 world all have a path by tick 40 at rules 2 (8,192 expansions a run), at rules 1 (1,000) not before tick 100 (4) and 200 (8)") {
-        const auto paths_at = [](uint16_t rules, int ticks) {
+    TEST_CASE("8.3 The budget grows only after the original's limit: eight 200-tile orders on a 512 x 512 world are delivered at rules 2 exactly when they are at rules 1 (the original's 1,000 a run); eight 450-tile orders, which the original refuses, are delivered at rules 2 and the run grows to 8,192 after the limit") {
+        // (The first part is what the owner's rule asks: a search that the original can finish takes the original's 1,000 expansions a 50 ms run, whatever the map. Before, rules 2 took 8,192 a
+        // run on this map from the first run on and delivered the 200-tile orders by tick 40 instead of at tick 100 and 200: the same path, earlier.)
+        const auto paths_at = [](uint16_t rules, int ticks, int dist) {
             SimulationEngine sim;
+            if (rules == 2) sim.allow_rules_two_for_tests();
             sim.init_test_world(512, 512, 7, 600000, rules);
             std::vector<uint32_t> ids;
             for (int i = 0; i < 8; ++i) ids.push_back(sim.spawn_unit(0, AntType::Worker, TileCoord{20 + (i % 4) * 2, 250 + (i / 4) * 2}));
             sim.tick();
-            for (size_t i = 0; i < ids.size(); ++i) sim.issue_move_order(ids[i], TileCoord{230 + static_cast<int32_t>(i % 4) * 2, 250 + static_cast<int32_t>(i / 4) * 2});
+            for (size_t i = 0; i < ids.size(); ++i) sim.issue_move_order(ids[i], TileCoord{20 + dist + static_cast<int32_t>(i % 4) * 2, 250 + static_cast<int32_t>(i / 4) * 2});
             int have = 0;
             for (int t = 0; t < ticks; ++t) {
                 sim.tick();
@@ -1002,17 +1008,24 @@ static void run_suite_8_rules_two() {
             }
             return have;
         };
-        ASSERT_EQ(paths_at(2, 20), 4);                                       // (pinned: the walk of each ant is the real one, so the groups' numbers are the run's)
-        ASSERT_EQ(paths_at(2, 40), 8);
-        ASSERT_EQ(paths_at(1, 40), 0);
-        ASSERT_EQ(paths_at(1, 100), 4);
-        ASSERT_EQ(paths_at(1, 200), 8);
+        for (const int ticks : {20, 40, 99, 100, 101, 150, 199, 200, 201}) ASSERT_EQ(paths_at(2, ticks, 210), paths_at(1, ticks, 210));      // tick for tick the same number of paths
+        ASSERT_EQ(paths_at(1, 40, 210), 0);                                  // (pinned: the walk of each ant is the real one, so the groups' numbers are the run's)
+        ASSERT_EQ(paths_at(1, 100, 210), 4);
+        ASSERT_EQ(paths_at(1, 200, 210), 8);
+        // 450 tiles: the original refuses them (rules 1, nothing, ever); rules 2 searches 1,000 a run until its pops pass f = 8,000 and 8,192 a run after that (one ant: delivered at tick 27)
+        ASSERT_EQ(paths_at(1, 230, 450), 0);
+        ASSERT_EQ(paths_at(2, 104, 450), 0);
+        ASSERT_EQ(paths_at(2, 105, 450), 1);
+        ASSERT_EQ(paths_at(2, 108, 450), 4);
+        ASSERT_EQ(paths_at(2, 212, 450), 4);
+        ASSERT_EQ(paths_at(2, 216, 450), 8);
     } TEST_END();
 
     TEST_CASE("8.4 A world of 100 x 100 at rules 2 plays as at rules 1, tick for tick: ten ants, orders every second (the budget of a small map is the original's 1,000)") {
         SimulationEngine one;
         SimulationEngine two;
         one.init_test_world(100, 100, 11, 600000, 1);
+        two.allow_rules_two_for_tests();
         two.init_test_world(100, 100, 11, 600000, 2);
         std::vector<uint32_t> ids_one, ids_two;
         for (int i = 0; i < 10; ++i) {
@@ -1039,12 +1052,13 @@ static void run_suite_8_rules_two() {
 
     TEST_CASE("8.5 A copy of the engine made while a wide search is half done delivers the same path in the same tick") {
         SimulationEngine sim;
+        sim.allow_rules_two_for_tests();
         sim.init_test_world(512, 512, 7, 600000, 2);
         const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 256});
         sim.tick();
         sim.issue_move_order(id, TileCoord{470, 256});
         for (int t = 0; t < 3; ++t) sim.tick();
-        ASSERT_TRUE(sim.get_unit(id).waypoints.empty());                     // not yet: the search needs 7 runs
+        ASSERT_TRUE(sim.get_unit(id).waypoints.empty());                     // not yet: the search needs 27 runs
         SimulationEngine copy(sim);
         int tick_original = -1;
         int tick_copy = -1;
@@ -1057,6 +1071,39 @@ static void run_suite_8_rules_two() {
         }
         ASSERT_TRUE(tick_original > 0 && tick_original == tick_copy);
         ASSERT_EQ(copy.get_unit(id).waypoints.size(), sim.get_unit(id).waypoints.size());
+    } TEST_END();
+
+    TEST_CASE("8.6 A map of 190 x 190 at rules 2 plays as at rules 1, tick for tick: orders of 40 to 90 tiles (searches of 700 to 3,500 expansions) are delivered in the same 50 ms run, the state hash is the same at every tick") {
+        // 190 x 190 = 36,100 cells would be a budget of 1,128 with the formula alone: a search of 1,001 to 1,128 expansions would be delivered a run earlier than the original does.
+        std::set<int> delivery_ticks;
+        for (int dist = 40; dist <= 90; ++dist) {
+            SimulationEngine one;
+            SimulationEngine two;
+            two.allow_rules_two_for_tests();
+            one.init_test_world(190, 190, 5, 600000, 1);
+            two.init_test_world(190, 190, 5, 600000, 2);
+            const uint32_t a = one.spawn_unit(0, AntType::Worker, TileCoord{20, 95});
+            const uint32_t b = two.spawn_unit(0, AntType::Worker, TileCoord{20, 95});
+            one.tick();
+            two.tick();
+            one.issue_move_order(a, TileCoord{20 + dist, 95});
+            two.issue_move_order(b, TileCoord{20 + dist, 95});
+            int delivered_one = -1;
+            int delivered_two = -1;
+            for (int t = 0; t < 40; ++t) {
+                one.tick();
+                two.tick();
+                if (delivered_one < 0 && !one.get_unit(a).waypoints.empty()) delivered_one = t;
+                if (delivered_two < 0 && !two.get_unit(b).waypoints.empty()) delivered_two = t;
+                const StateHash x = one.state_hash();
+                const StateHash y = two.state_hash();
+                ASSERT_TRUE(x.ants == y.ants && x.paths == y.paths && x.engine == y.engine && x.players == y.players);
+            }
+            ASSERT_TRUE(delivered_one >= 0);
+            ASSERT_EQ(delivered_one, delivered_two);
+            delivery_ticks.insert(delivered_one);
+        }
+        ASSERT_GE(delivery_ticks.size(), static_cast<size_t>(2));              // (the orders take one run and more than one: the budget is used)
     } TEST_END();
 }
 

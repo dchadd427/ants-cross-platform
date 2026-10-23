@@ -123,12 +123,13 @@ inline std::string rules_one_difference(const ants::sim::SimulationEngine& zero,
     return "";
 }
 
-// (Also for rules 2, the wide search of the path finder, with `rules` = 2: a map of the library is at most 10,449 cells, so its budget is the original's 1,000 and nothing may change either.)
+// (Also for rules 2, the wide search of the path finder, with `rules` = 2: a map of the library is at most 10,449 cells, so its budget is the original's 1,000 and nothing may change either; the engine needs its test hook for a word of 2.)
 inline RulesOneComparison play_hashes_rules_one(const ants::assets::LevelData& level, uint32_t ticks, uint16_t rules = 1) {
     ants::assets::LevelData forced = level;
     forced.rules = rules;
     ants::sim::SimulationEngine zero;
     ants::sim::SimulationEngine one;
+    if (rules == 2) one.allow_rules_two_for_tests();                          // (the test hook: without it a word of 2 plays as 1, Grid::allow_rules_two_for_tests)
     zero.init(level, kLibrarySeed, 0x0F);
     one.init(forced, kLibrarySeed, 0x0F);
     ScriptedPlayers script_zero(level, 0x0F, kLibraryScriptSeed, true);       // (a script also acts on its engine directly, so each engine has its own, with the same seed)

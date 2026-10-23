@@ -30,8 +30,10 @@
 // a cell that has no 14-bit cost and no 13-bit estimate (g has 24 bits, h is computed from the tile and the goal, so the cell is still one dword) and a give-up rule that is the
 // original's until a node has passed the original's limit: while no ordinary node has had f >= 8000 ("beyond" is clear) a popped node that was reached over a blocked step
 // (a step of cost 8000 or more) ends the search exactly as the original's f >= 8000 test does, so every search the original finishes (a path, or no path before its limit)
-// runs here pop for pop the same; once a node has passed the limit, such a node is dropped and the search goes on. No map reaches rules 2 yet (the map files and their readers
-// are a later change); the engine takes this search only for a Grid of rules 2, and rules 0 and 1 run the search above unchanged.
+// runs here pop for pop the same; once a node has passed the limit, such a node is dropped and the search goes on. The same holds for TIME: a slice has the original's 1,000
+// expansions until the search has popped a node with f >= 8000 (the pop at which the original would have given up, limit_hit()); only the slices after that one get the larger
+// budget of a big map (PathManager::wide_budget), so a rules-2 map that the original can play delivers every path in the same 50 ms run as rules 1 does. No map reaches rules 2 yet
+// (the map files and their readers come with the next release); the engine takes this search only for a Grid of rules 2, and rules 0 and 1 run the search above unchanged.
 //
 // Coordinates: the original's tile is {int16 row, int16 col}. This port uses ants::sim::TileCoord with
 // x = column and y = row throughout.
@@ -163,7 +165,8 @@ public:
     PathSearch(const PathSearch& other, PathGridPool& pool);
 
     /**
-     * @brief Runs one A* slice of at most @p budget node expansions (PathRequest::Step, 0x1019a66).
+     * @brief Runs one A* slice of at most @p budget node expansions (PathRequest::Step, 0x1019a66). The wide search takes at most the original's 1,000 of them until its own
+     *        limit_hit() (a smaller @p budget is always kept).
      *
      * @return 0 when no grid slot could be obtained (nothing ran), 1 otherwise. After a return of 1 the
      *         search is either finished (see finished(), path()) or still has open nodes for a later slice.
@@ -179,6 +182,9 @@ public:
 
     /** @brief The wide search only: true once a node with f >= 8000 (the original's limit) has been given to the open list. Always false for the original's search. */
     bool beyond() const noexcept { return beyond_; }
+
+    /** @brief The wide search only: true once a node with f >= 8000 has been popped, the pop at which the original's search would have given up. From the next slice on the search gets the big budget. Always false for the original's search. */
+    bool limit_hit() const noexcept { return limit_hit_; }
 
     /** @brief True while the search holds a grid slot. */
     bool has_grid() const noexcept { return slot_ >= 0; }
@@ -216,6 +222,7 @@ private:
     std::vector<TileCoord> path_;
     bool wide_{false};     // the wide search (rules 2)
     bool beyond_{false};   // wide search: a node with f >= kFailF has been given to the open list (the original's limit is passed)
+    bool limit_hit_{false}; // wide search: a node with f >= kFailF has been popped (the original would have ended here): the slices after this one get the big budget
 };
 
 /**
@@ -235,7 +242,7 @@ public:
 
     using CostProvider = std::function<uint32_t(uint32_t ant_id, TileCoord from, TileCoord to)>;
 
-    /** @brief The wide search's budget for a map of @p rows x @p cols: max(1000, cells / 32), at most 65,535 (a map of at most 31,000 cells keeps the original's 1,000). */
+    /** @brief The budget of a wide search that has passed the original's limit (limit_hit()), for a map of @p rows x @p cols: max(1000, cells / 32), at most 65,535 (exactly 1,000 up to 32,031 cells). Before that a wide search gets the original's 1,000. */
     static constexpr uint16_t wide_budget(uint32_t rows, uint32_t cols) noexcept {
         const uint64_t steps = static_cast<uint64_t>(rows) * cols / PathSearch::kWideBudgetCellsPerStep;
         return static_cast<uint16_t>(steps < PathSearch::kWideBudgetFloor ? PathSearch::kWideBudgetFloor : (steps > 65535u ? 65535u : steps));
@@ -266,7 +273,7 @@ public:
 
     /**
      * @brief One PATHMGR run (0x1024786).
-     * @param budget  expansions for the one request that runs (the original's 1,000; a map of rules 2 passes wide_budget(rows, cols))
+     * @param budget  expansions for the one request that runs (the original's 1,000; a map of rules 2 passes wide_budget(rows, cols), which only a wide search that has passed the original's limit gets: until then it takes 1,000)
      * @return the finished search's result if this run completed one, otherwise std::nullopt.
      */
     std::optional<Delivery> run(const CostProvider& cost, uint16_t budget = PathSearch::kDefaultBudget);
