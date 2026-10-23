@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the site and the Map Maker page only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...80fce033)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...588c0067)
 
 ## v0.12.110 - 2026-10-23 - Pick up: a drag is put down when you let go of the mouse
 
