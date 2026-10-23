@@ -130,8 +130,8 @@
         function setStroke(next) { stroke = next; if (next) canvas.setAttribute('data-stroke', 'on'); else canvas.removeAttribute('data-stroke'); }       // (what a test reads: a stroke is going on)
 
         // A stroke ends when its pointer lifts; it also ends when the browser lost the pointer without saying so (a button let go outside the window, a lost capture, a window that lost focus)
-        function endStroke() {
-            if (stroke) { painter.end(); setStroke(null); }
+        function endStroke(abandon) {
+            if (stroke) { setStroke(null); if (abandon && painter.abandon) painter.abandon(); else painter.end(); }          // (a tool that puts a thing down when the pointer lifts takes it back when the pointer was lost)
             pending = null; pointers = {}; drag = null; pinch = null;
             redraw();
         }
@@ -215,9 +215,10 @@
             delete pointers[e.pointerId];
             pinch = null;
             if (stroke && stroke.id === e.pointerId) {
+                var ended = stroke;
+                setStroke(null);          // (the stroke is over when the tool is told: Pick up writes its change then, and the page does not take a change while a stroke goes on)
                 if (cancelled) painter.cancel(); else painter.end();
-                if (e.pointerType !== 'mouse') touched = stroke.last;
-                setStroke(null);
+                if (e.pointerType !== 'mouse') touched = ended.last;
             } else if (pending && pending.id === e.pointerId) {
                 touched = pending.cell;
                 if (!cancelled && startStroke(e.pointerId, pending.cell)) { painter.end(); }
@@ -282,9 +283,9 @@
         canvas.addEventListener('pointermove', move);
         canvas.addEventListener('pointerup', up);
         canvas.addEventListener('pointercancel', up);
-        canvas.addEventListener('lostpointercapture', function (e) { if (stroke && stroke.id === e.pointerId) endStroke(); });
-        win.addEventListener('blur', function () { if (stroke) endStroke(); });
-        doc.addEventListener('visibilitychange', function () { if (stroke && doc.visibilityState === 'hidden') endStroke(); });
+        canvas.addEventListener('lostpointercapture', function (e) { if (stroke && stroke.id === e.pointerId) endStroke(true); });
+        win.addEventListener('blur', function () { if (stroke) endStroke(true); });
+        doc.addEventListener('visibilitychange', function () { if (stroke && doc.visibilityState === 'hidden') endStroke(true); });
         canvas.addEventListener('pointerleave', function () { hover = null; if (painter && painter.hover) painter.hover(null); if (file) { chrome(); if (brushNow() > 0) redraw(); } });
         canvas.addEventListener('wheel', wheel, { passive: false });
         canvas.addEventListener('keydown', key);

@@ -594,6 +594,29 @@ function caseH() {
     check(!p.api.isStroking() && p.log.length === 0, 'a finger that has only come down has not begun a stroke yet (it may be the first of two)');
     p.mouse('pointerup', { pointerType: 'touch' });
     check(p.log.join() === 'begin,end', 'a tap is a one-cell stroke');
+    // a tool that puts a thing down when the pointer lifts (Pick up) is told a lost pointer is not a lift
+    const dropTool = () => { const q = fakeCanvasPage(); q.api.setPainter({ size: () => 1, begin: () => { q.log.push('begin'); return true; }, extend: () => q.log.push('extend'), end: () => { q.log.push('end'); q.stroking = q.api.isStroking(); }, cancel: () => { q.log.push('cancel'); q.stroking = q.api.isStroking(); }, abandon: () => { q.log.push('abandon'); q.stroking = q.api.isStroking(); } }); return q; };
+    p = dropTool(); p.mouse('pointerdown'); p.mouse('pointermove', { clientX: 330 }); p.mouse('pointerup', { clientX: 900, clientY: 700 });
+    check(!p.api.isStroking() && p.log.join() === 'begin,extend,end', 'the button let go far outside the map (the pointer is captured) is a lift: end');
+    check(p.stroking === false, 'the stroke is over when the tool is told of the lift (the page takes no change while a stroke goes on, and the tool writes its change then)');
+    p = dropTool(); p.mouse('pointerdown'); p.mouse('pointermove', { clientX: 330 }); p.win.fire('blur', {});
+    check(p.stroking === false, 'and when a lost pointer is told');
+    p = dropTool(); p.mouse('pointerdown'); p.mouse('pointermove', { clientX: 330 }); p.mouse('pointercancel', { type: 'pointercancel' });
+    check(!p.api.isStroking() && p.log.join() === 'begin,extend,cancel', 'a cancelled pointer is a cancel');
+    p = dropTool(); p.mouse('pointerdown'); p.mouse('pointermove', { clientX: 330 }); p.mouse('lostpointercapture');
+    check(!p.api.isStroking() && p.log.join() === 'begin,extend,abandon', 'a pointer that is lost without a lift is abandoned, not dropped');
+    p = dropTool(); p.mouse('pointerdown'); p.mouse('pointermove', { clientX: 330 }); p.win.fire('blur', {});
+    check(!p.api.isStroking() && p.log.join() === 'begin,extend,abandon', 'a window that loses the focus abandons it');
+    p = dropTool(); p.mouse('pointerdown'); p.mouse('pointermove', { clientX: 330 }); p.doc.visibilityState = 'hidden'; p.doc.fire('visibilitychange', {});
+    check(!p.api.isStroking() && p.log.join() === 'begin,extend,abandon', 'a page that is hidden abandons it');
+    p = dropTool(); p.mouse('pointerdown'); p.mouse('pointermove', { clientX: 330 }); p.mouse('pointermove', { buttons: 0, clientX: 340 });
+    check(!p.api.isStroking() && p.log.join() === 'begin,extend,end', 'a move with no button down (the lift was not heard) is a lift');
+    p = dropTool(); p.mouse('pointerdown', { pointerType: 'touch', pointerId: 3 }); p.mouse('pointermove', { pointerType: 'touch', pointerId: 3, clientX: 340, clientY: 230 }); p.mouse('pointermove', { pointerType: 'touch', pointerId: 3, clientX: 380, clientY: 260 });
+    check(p.api.isStroking() && p.log.join() === 'begin,extend,extend', 'a finger that has moved begins the drag and follows it: ' + p.log.join());
+    p.mouse('pointerup', { pointerType: 'touch', pointerId: 3, clientX: 900, clientY: 700 });
+    check(!p.api.isStroking() && p.log.join() === 'begin,extend,extend,end', 'the finger lifted (even outside the map) is a lift');
+    p = dropTool(); p.mouse('pointerdown', { pointerType: 'pen', pointerId: 4 }); p.mouse('pointermove', { pointerType: 'pen', pointerId: 4, clientX: 330 }); p.mouse('pointerup', { pointerType: 'pen', pointerId: 4 });
+    check(p.log.join().indexOf('end') > 0 && !p.api.isStroking(), 'a pen is a lift too: ' + p.log.join());
 }
 
 
