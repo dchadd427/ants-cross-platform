@@ -397,7 +397,7 @@ def phone(p, args, check):
     print("[web game menu] a phone, 390 x 844 with touch")
     p.open_game(LOCAL, 390, 844, mobile=True)
     check(p.start_match(), "a match is running")
-    wait_for(lambda: p.buttons().get("settings-btn-narrow", {}).get("shown"), 10)
+    wait_for(lambda: p.buttons().get("settings-btn-narrow", {}).get("shown") and not p.buttons()["settings-btn-narrow"]["disabled"], 10)       # (shown and on are two moments of the page's quarter-second poll)
     b = p.buttons()
     check(b.get("settings-btn-narrow", {}).get("shown") and b["settings-btn-narrow"]["h"] >= 43.5 and not b["settings-btn"]["shown"],
           "the Settings button is under the picture, at least 44 px high, and the header's is not shown (%s)" % {k: (v["shown"], round(v["h"])) for k, v in b.items()})
