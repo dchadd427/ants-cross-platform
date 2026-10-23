@@ -152,16 +152,23 @@
             },
             libraryState: function () { return libraryState; },
             libraryList: function () { return libraryItems.slice(); },
+            // done(text, bytes): text is '' when the bytes came, else what to tell the player: a file the site does not have (404), a site that answered badly, or a connection that failed
             fetchMap: function (file, done) {
-                var fail = function () { done('The map file could not be downloaded. Check your connection and try again.', null); };
-                if (!validMapFile(file) || !env.fetch) return fail();
+                var over = false;
+                function no(kind) {
+                    if (over) return;
+                    over = true;
+                    done(kind === 'gone' ? 'This map is not available from the site right now.' : kind === 'site' ? 'The site could not send this map. Try again in a moment.' : 'The map file could not be downloaded. Check your connection and try again.', null);
+                }
+                if (!validMapFile(file)) return no('gone');
+                if (!env.fetch) return no();
                 if (!guard(function () {
-                    env.fetch(fileUrl(file)).then(function (r) { return r && r.ok && r.arrayBuffer ? r.arrayBuffer() : null; }).then(function (buf) {
-                        if (!buf || !buf.byteLength) return fail();
-                        done('', new Uint8Array(buf));
-                    }).then(null, fail);
+                    env.fetch(fileUrl(file)).then(function (r) {
+                        if (!r || !r.ok || !r.arrayBuffer) return no(r && (r.status === 404 || r.status === 410) ? 'gone' : 'site');
+                        return r.arrayBuffer().then(function (buf) { if (!buf || !buf.byteLength) return no('site'); over = true; done('', new Uint8Array(buf)); });
+                    }).then(null, function () { no(); });
                     return 1;
-                })) fail();
+                })) no();
             },
             // fn is called once when the answer has come (at once when it has)
             onLibrary: function (fn) { if (libraryState === 'pending') waiting.push(fn); else fn(); },

@@ -180,6 +180,13 @@ function openMapChecks() {
     Dialog.openMap({ doc: p.doc, dialogs: p.dialogs, store, numbered: (n) => n + ' 2', onDisk: () => { diskClicked++; }, onChoose() {} });
     q('#open-disk-btn').click();
     equal([diskClicked, p.dialogs.isOpen()], [1, false], 'Open from device triggers onDisk and closes the dialog');
+    // a failed download is told as plain text: whatever the store says never becomes markup (the words are fixed today; this holds them to textContent)
+    const bad = '<img src=x onerror=alert(1)>';
+    const badStore = { loadLibrary() {}, libraryState: () => 'ready', libraryList: () => entries, fetchMap: (file, cb) => cb(bad, null) };
+    chosen = [];
+    Dialog.openMap({ doc: p.doc, dialogs: p.dialogs, store: badStore, numbered: (n) => n + ' 2', onDisk() {}, onChoose: (bytes, name) => chosen.push(name) });
+    q('.dlg-foot').querySelectorAll('button')[1].click();
+    equal([q('.open-copy-note').textContent, q('.open-copy-note').className, q('.open-copy-note').children.length, chosen.length, p.dialogs.isOpen()], [bad, 'open-copy-note bad', 0, 0, true], 'a failed download shows its words as text, in the bad style, and keeps the dialog open');
 }
 
 for (const [name, fn] of [['A the box', boxChecks], ['B New map', newMapChecks], ['C Resize map', resizeMapChecks], ['D Open a map', openMapChecks]]) {

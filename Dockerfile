@@ -128,8 +128,11 @@ COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 
 # The players' maps for the browser (docs/SERVER.md "The list of maps"): the preview pictures (534 small WebP files) and the .lvl files themselves, served by docker/nginx.conf at /maps/previews/ and /maps/files/ from
 # a folder outside the web root, so that only those two locations can reach them. The six originals' pictures are the front page's own (web/front/): no second copy.
+# The six original maps (Original-Ants/Maps, read only) go into the same files folder, so that the Map Maker's "Start from a game map" can fetch them at /maps/files/ like any other map (the game server
+# serves only the players' maps that the owner approved, and the page's data package is the game's own). A test keeps their names apart from the players' (tests/scripts/test_nginx_original_maps.py).
 COPY Community-Maps/previews/ /srv/community-maps/previews/
 COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
+COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/
 
 # The match history and the replays (docs/REPLAYS.md "The match pages", "Watching a replay"): the list of every match (matches.html), one match (match.html) and the matches that run now (live.html), linked from
 # the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css), the map of deaths (death_map.js and death_map.css, also on the game page in replay mode) and the helpers
