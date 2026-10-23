@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (computer players run on the server or the host and only send commands, so old recordings play as before).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...b69719b2), [the quick kill](docs/BOT_FIGHT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...da3a77cb), [the quick kill](docs/BOT_FIGHT.md)
 
 ## v0.12.107 - 2026-10-22 - Map Maker: the Pick up tool moves, copies and deletes what is on a map
 
