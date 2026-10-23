@@ -627,8 +627,8 @@ function caseH() {
         const id = { mouse: 7, touch: 3, pen: 4 }[type], at = (x, y) => ({ pointerType: type, pointerId: id, clientX: x, clientY: y });
         p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(340, 220)); p.mouse('pointerup', at(340, 220));
         check(p.aways[p.aways.length - 1] === 'on:340,220' && p.log.slice(-1)[0] === 'end', type + ': a lift on the map is told as on the map, then the lift: ' + p.aways.join(' '));
-        p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(340, 220)); p.mouse('pointermove', at(900, 220)); p.mouse('pointerup', at(900, 220));
-        check(p.aways.indexOf('off:900,220') >= 0 && p.aways[p.aways.length - 1] === 'off:900,220' && p.log.slice(-1)[0] === 'end', type + ': a lift off the canvas is told as off the map: ' + p.aways.join(' '));
+        p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(340, 220)); p.mouse('pointermove', at(900, 220)); const heldOff = p.aways.indexOf('off:900,220') >= 0; p.mouse('pointerup', at(900, 220));
+        check(heldOff && p.aways.indexOf('off:900,220') >= 0 && p.aways[p.aways.length - 1] === 'off:900,220' && p.log.slice(-1)[0] === 'end', type + ': a lift off the canvas is told as off the map: ' + p.aways.join(' '));
         p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(340, 220)); p.mouse('pointermove', at(595, 220)); p.mouse('pointerup', at(595, 220));
         check(p.aways[p.aways.length - 1] === 'off:595,220', type + ': a lift on the canvas but past the edge of the map is off the map too: ' + p.aways.join(' '));
         p = dropTool(); p.mouse('pointerdown', at(300, 200)); p.mouse('pointermove', at(330, 210)); p.mouse('pointermove', at(900, 220)); p.mouse('pointermove', at(340, 220)); p.mouse('pointerup', at(340, 220));
