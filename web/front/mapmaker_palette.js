@@ -1,4 +1,4 @@
-// What the tools of the map maker can put on a map (docs/MAP_EDITOR.md): the eight tools, which of them draw in this version, and for the Ground and Objects tools the tiles that the palette
+// What the tools of the map maker can put on a map (docs/MAP_EDITOR.md): the nine tools, which of them draw in this version, and for the Ground and Objects tools the tiles that the palette
 // offers, each with the plain name the person reads, the name that the tile has in the game's own dictionary (the names of Table 4 of ants.chd, as src/ants_assets/lvl_tile_names.inc
 // lists them: the page has no ants.chd, and tests/scripts/web_mapmaker_edit_check.js holds this table to that list) and the color that the canvas uses for it when it has no picture. The palette holds
 // the plain tiles and the objects that stand on one cell; the bigger objects (the Bigger tool: grass, leaves, rocks, toys, each over several cells) are a curated list with their footprints.
@@ -60,7 +60,7 @@
         [354, 'yelcray', '-1,0 0,-1 0,0 1,-1'],
         [352, 'pinkcray', '-1,0 0,0 1,0']
     ];
-    // the tools: `draws` is true for a tool that paints cells with a brush (a drag paints a line), `places` for a tool that puts one whole thing with a tap (a drag looks around), `pans` for the
+    // the tools: `draws` is true for a tool that paints cells with a brush (a drag paints a line), `places` for a tool that puts one whole thing with a tap (a drag looks around), `picks` for the one that picks a placed item up (mapmaker_pickup.js), `pans` for the
     // one that only looks around; `key` is its letter; `palette` is true when the tool has a palette (a box beside the map, a sheet on a phone)
     var TOOLS = [
         { id: 'ground', label: 'Ground', key: 'g', draws: true, palette: true },
@@ -70,7 +70,8 @@
         { id: 'ants', label: 'Ants', key: 'a', places: true, palette: true },
         { id: 'food', label: 'Food', key: 'f', places: true, palette: true },
         { id: 'erase', label: 'Erase', key: 'e', draws: true },
-        { id: 'move', label: 'Move', key: 'm', pans: true }
+        { id: 'pickup', label: 'Pick up', key: 'p', picks: true },
+        { id: 'pan', label: 'Pan', key: 'm', pans: true }
     ];
 
     function footprint(text) { return text.split(' ').map(function (pair) { var rc = pair.split(','); return [+rc[0], +rc[1]]; }); }
@@ -107,7 +108,7 @@
     // does the tool put a whole thing with one tap (Hills, Ants, Food)
     function places(id) { var t = tool(id); return !!(t && t.places); }
     // can the tool be chosen
-    function usable(id) { var t = tool(id); return !!(t && (t.draws || t.places || t.pans)); }
+    function usable(id) { var t = tool(id); return !!(t && (t.draws || t.places || t.picks || t.pans)); }
     // the four teams of Hills and Ants, as the swatches show them: [{id: 0..3 (the game's seat), label, color}]
     function teams() { return Blocks.TEAMS.map(function (t, i) { return { id: i, key: t.key, label: t.label, color: Tiles.TEAMS[t.key], hill: t.hill }; }); }
     // the tile that an item stands for, for a painting tool (null for Erase)

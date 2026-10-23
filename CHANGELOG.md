@@ -23,17 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.107 - 2026-10-22 - Auto edges draw a strip of water one cell wide in mud, in any painting order
+## v0.12.107 - 2026-10-22 - Map Maker: the Pick up tool moves, copies and deletes what is on a map
 
 **For players:**
-- **Map Maker (v1.4.6), Auto edges: water painted one cell wide inside mud now gets its soft edges.** A narrow stream used to keep hard square sides, with a single rounded piece where it bent. The mud on both sides of it now takes the edge pieces toward the water, the way the game's own maps draw a narrow lake. It comes out the same whether you paint the water first and the mud round it, or the mud first and the water inside.
-- **The same for every other pair of ground that has edge pieces:** a strip one cell wide of gravel in mud or dirt, of slate in dirt or mud, of dirt in mud, and a one-cell inlet or a single cell of one kind inside another (the square notch in a blob of mud is rounded too). **Fix edges...** does the same on a map you have already drawn. It still never takes a piece away, and what you placed by hand stays.
-- **Water beside gravel, dirt or slate keeps a hard edge:** the game has no edge piece for those pairs, so none is put there.
-- **Painting in several strokes always leaves what Fix edges would make.** Auto edges now looks a little further round each stroke, so a piece from an earlier step is never left out of date.
+- **The Map Maker has a new tool, Pick up (key P).** Tap a hill, object, food pile, plant or starting ant and a gold ring shows everything it covers (a hill's 4 x 4 square and its door, a pile's footprint). A bar then offers **Move**, **Copy here**, **Delete**, **Select an area...** and **Cancel**.
+- **Move shows a see-through copy of the thing where it would land.** It is green when it fits and red when it does not, with the reason in plain words ("The red hill cannot go here. It needs a free 4 x 4 square, and the mushroom is in the way."). On a desktop it follows the mouse. Use the arrow buttons (or the arrow keys, Shift for 8 cells) to nudge it, or drag it, then press **Done**. Enter does the same, Escape cancels, Delete deletes.
+- **Ants: "this ant or its group".** One tap picks one ant; Move, Copy here and Delete each ask whether to take only that ant or the whole group of that team's ants that stand together.
+- **Select an area** picks every object that lies whole inside a box you draw, so a whole stretch of the map can be moved or copied at once.
+- **One Undo undoes a whole move, copy or delete**, including an area. A short help sheet, "What can be picked up?", is opened from the tool's note, and on a short screen (a phone held sideways) the bar is smaller and can be folded away.
+- **The old Move tool is now called Pan** (the M key still chooses it). It only looks around and never changes the map. Maps in the library are never changed by any tool.
 
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.0.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/146ef42b...1e27a98b)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/146ef42b...dc352756)
 
 ## v0.12.106 - 2026-10-22 - Where ants died: the map of deaths on the match page
 

@@ -394,7 +394,7 @@
         return sortSplices(change);
     }
 
-    // ---- taking things away (the Erase tool) and moving things (the Move tool) ----
+    // ---- taking things away (the Erase tool); picking things up and moving them is mapmaker_pickup.js ----
 
     // Where the ants, the plants, the piles and the waypoints of the lists are, by cell (made once for a reading of the lists: an eraser with a big brush asks for many cells)
     function indexOf(file, lay) {
@@ -454,118 +454,6 @@
         }
         if (!change.splices.length && !change.cells.length) return null;
         return sortSplices(change);
-    }
-
-    // Whether the cell (row, column) holds a placed item (a starting ant, a plant, a food pile, a hill or a layer-2 object) that the Move tool can drag to another cell
-    function hasMovable(file, row, column) {
-        if (!file || row < 0 || column < 0 || row >= file.rows || column >= file.columns) return false;
-        var idx = row * file.columns + column, lay = layout(file), ix = indexOf(file, lay);
-        if (lay.ok1 && (ix.markers[idx] || ix.plants[idx])) return true;
-        if (lay.ok2 && ix.piles[idx]) return true;
-        return Edit.tile(file, 2, idx) !== EMPTY2;
-    }
-
-    // Move whatever stands on (fromRow, fromCol) to (toRow, toCol) as one CHANGE: a starting ant, a plant (and its block-4 waypoint/dropper), a food pile, a team's hill, or a single/multi-cell layer-2 object
-    function moveAt(file, fromRow, fromCol, toRow, toCol) {
-        if (!file || fromRow < 0 || fromCol < 0 || fromRow >= file.rows || fromCol >= file.columns) return null;
-        if (toRow < 0 || toCol < 0 || toRow >= file.rows || toCol >= file.columns) return { error: 'There is no room for it outside the map.' };
-        var dr = toRow - fromRow, dc = toCol - fromCol;
-        if (!dr && !dc) return null;
-        var fromIdx = fromRow * file.columns + fromCol, lay = layout(file), ix = indexOf(file, lay), change = emptyChange(), i;
-        // 1. A starting ant on (fromRow, fromCol)
-        if (lay.ok1 && ix.markers[fromIdx]) {
-            var movedAnt = false, antRecs = lay.records.map(function (rec) {
-                if (!movedAnt && teamOfMarker(rec.tile) >= 0 && rec.row === fromRow && rec.column === fromCol) { movedAnt = true; return { tile: rec.tile, row: toRow, column: toCol }; }
-                return rec;
-            });
-            var spAnt = diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(antRecs));
-            if (spAnt) change.splices.push(spAnt);
-            return sortSplices(change);
-        }
-        // 2. A plant / dropper on (fromRow, fromCol)
-        if (lay.ok1 && ix.plants[fromIdx]) {
-            var toIdx = toRow * file.columns + toCol, whyPlant = inTheWay(file, toIdx);
-            if (whyPlant) return { error: blockedText(file, toIdx) };
-            var plantIdx = ix.plants[fromIdx][0], plantRecs = [];
-            for (i = 0; i < lay.records.length; i++) {
-                var r = lay.records[i];
-                if (i === plantIdx) plantRecs.push({ tile: r.tile, row: toRow, column: toCol });
-                else if (!(PLANT_NAMES[r.tile] && r.row === toRow && r.column === toCol)) plantRecs.push(r);
-            }
-            var spP1 = diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(plantRecs));
-            if (spP1) change.splices.push(spP1);
-            if (lay.ok4 && ix.waypoints[fromIdx]) {
-                var wpIdx = ix.waypoints[fromIdx][0], wpList = [];
-                for (i = 0; i < lay.waypoints.length; i++) {
-                    var w = lay.waypoints[i];
-                    if (i === wpIdx) wpList.push({ keep: true, rel: w.rel, length: w.length, row: toRow, column: toCol });
-                    else if (!(w.row === toRow && w.column === toCol)) wpList.push({ keep: true, rel: w.rel, length: w.length });
-                }
-                var spP4 = diffSplice(file, lay.b4.rel, lay.b4.length, block4Bytes(file, wpList));
-                if (spP4) change.splices.push(spP4);
-            }
-            return sortSplices(change);
-        }
-        // 3. A food pile on (fromRow, fromCol) or whose stage object covers (fromRow, fromCol)
-        var t2 = Edit.tile(file, 2, fromIdx), anchor = t2 !== EMPTY2 ? Edit.anchorIndex(file, fromIdx) : -1;
-        var pileHits = lay.ok2 ? (ix.piles[fromIdx] || (anchor >= 0 ? ix.piles[anchor] : null)) : null;
-        if (pileHits && pileHits.length) {
-            var pIdx = pileHits[0], targetPile = lay.piles[pIdx], nr = targetPile.row + dr, nc = targetPile.column + dc;
-            if (nr < 0 || nc < 0 || nr >= file.rows || nc >= file.columns) return { error: 'There is no room for a food pile there.' };
-            var whyPile = inTheWay(file, nr * file.columns + nc);
-            if (whyPile && whyPile !== 'pile') return { error: blockedText(file, nr * file.columns + nc) };
-            var pilesList = [];
-            for (i = 0; i < lay.piles.length; i++) {
-                var p = lay.piles[i];
-                if (i === pIdx) {
-                    takePileCells(file, change, p);
-                    pilesList.push({ row: nr, column: nc, units: p.units, points: p.points, stages: p.stages });
-                } else if (p.row === nr && p.column === nc) {
-                    takePileCells(file, change, p);
-                } else {
-                    pilesList.push({ keep: true, rel: p.rel, length: p.length });
-                }
-            }
-            var sp2 = diffSplice(file, lay.b2.rel, lay.b2.length, block2Bytes(file, pilesList));
-            if (sp2) change.splices.push(sp2);
-            return sortSplices(change);
-        }
-        // 4. A team's hill on layer 2
-        var hillTeam = teamOfHill(t2);
-        if (hillTeam >= 0) {
-            var er = fromRow, ec = fromCol;
-            if (anchor >= 0) { er = (anchor / file.columns) | 0; ec = anchor - er * file.columns; }
-            return placeHill(file, hillTeam, er + dr, ec + dc);
-        }
-        // 5. A single-cell or multi-cell layer-2 object
-        if (t2 !== EMPTY2) {
-            var objCells = Edit.objectCells(file, fromIdx), origIdx = anchor >= 0 && Edit.tile(file, 2, anchor) === t2 ? anchor : fromIdx;
-            var ar = ((origIdx / file.columns) | 0) + dr, ac = (origIdx % file.columns) + dc;
-            if (ar < 0 || ac < 0 || ar >= file.rows || ac >= file.columns) return { error: 'There is no room for it there.' };
-            var oldSet = {}, movedCells = [];
-            for (i = 0; i < objCells.length; i++) oldSet[objCells[i]] = true;
-            for (i = 0; i < objCells.length; i++) {
-                var cr = ((objCells[i] / file.columns) | 0) + dr, cc = (objCells[i] % file.columns) + dc;
-                if (cr < 0 || cc < 0 || cr >= file.rows || cc >= file.columns) continue;
-                var nIdx = cr * file.columns + cc, whyObj = inTheWay(file, nIdx);
-                if (whyObj) return { error: blockedText(file, nIdx) };
-                movedCells.push({ idx: nIdx, r: cr, c: cc, flag: Edit.flags(file, 2, objCells[i]) });
-            }
-            for (i = 0; i < objCells.length; i++) putCell(change, objCells[i], EMPTY2, 0, 0);
-            for (i = 0; i < movedCells.length; i++) {
-                var dest = movedCells[i].idx;
-                if (!oldSet[dest] && Edit.tile(file, 2, dest) !== EMPTY2) takeObject(file, change, dest);
-            }
-            change.solid = [];
-            for (i = 0; i < movedCells.length; i++) {
-                var mc = movedCells[i], w = (t2 >= 129 && t2 <= 132) ? 0x0101 : (file.version === 8 ? ((ar & 255) | ((ac & 255) << 8)) : (((ar - mc.r) & 255) | (((ac - mc.c) & 255) << 8)));
-                putCell(change, mc.idx, t2, mc.flag, w);
-                if (Solid && Solid.sets(t2)) change.solid.push([mc.idx, true]);
-                else if (Solid && Solid.clears(Edit.tile(file, 2, mc.idx))) change.solid.push([mc.idx, false]);
-            }
-            return change;
-        }
-        return null;
     }
 
     // What stands on the cell `idx` that another tool owns and that nothing may be put over without being asked: 'hill' (a cell of a team's hill), 'ants' (a start of a team is on the cell) and
@@ -709,6 +597,6 @@
         team: team, teamOfMarker: teamOfMarker, typeOfMarker: typeOfMarker, markerTile: markerTile, teamOfHill: teamOfHill, clampTo: clampTo, foodItem: foodItem,
         layout: layout, block1Bytes: block1Bytes, block2Bytes: block2Bytes, block4Bytes: block4Bytes, diffSplice: diffSplice,
         hillCells: hillCells, placeHill: placeHill, startCells: startCells, placeStart: placeStart, eraseStart: eraseStart, placePile: placePile, placePlant: placePlant,
-        eraseAt: eraseAt, hasMovable: hasMovable, moveAt: moveAt, resizeMap: resizeMap, inTheWay: inTheWay, blockedText: blockedText, facts: facts
+        eraseAt: eraseAt, resizeMap: resizeMap, inTheWay: inTheWay, blockedText: blockedText, facts: facts
     };
 });
