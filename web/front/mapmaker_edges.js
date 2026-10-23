@@ -17,6 +17,10 @@
     // gravel and dirt split evenly)
     var RANK = { mud: 0, dirt: 1, slate: 2, gravel: 3, water: 4 };
 
+    // The cells round a stroke's area that its plan works out as well, so that no cell it changes rests on an out-of-date piece of the stroke's earlier steps (none: about 2 random stroke maps in 100
+    // end wrong; one was enough for every map tried; three keep a margin)
+    var CONTEXT = 3;
+
     // The piece for a cell that has the other kind on these orthogonal sides (n, s, w, e): one side makes an edge piece, two sides that meet a corner piece (02 NW, 03 N, 04 NE, 05 W, 06 E,
     // 07 SW, 08 S, 09 SE); a cell with the other kind on opposite sides, on three sides or only at a diagonal gets none (0: the game has no piece for it)
     function shapeOf(n, s, w, e) {
@@ -26,29 +30,68 @@
         return n ? (w ? 2 : 4) : (w ? 7 : 9);
     }
 
-    // The tile that a cell of layer 1 should have: its own when it is right, when the rule has no answer for it, or when the new tile would walk differently. The rule has an answer only where a
-    // cell of the higher kind touches a lower kind (a piece to put in) and the pieces of that pair exist; a piece that the rule cannot place (water beside gravel with a wm piece, a piece toward
-    // a kind that is not beside it) is a choice of the person who made the map and stays.
-    function wanted(kindAt, G, r, c, id, tileAt) {
+    // The shapes that face a cell from the neighbor on its north, south, west and east side (the neighbor to the north faces south with 7, 8 or 9, and so on)
+    var TOWARD = [[7, 8, 9], [2, 3, 4], [4, 6, 9], [2, 5, 7]];
+
+    // The other kind that a cell of kind `kind` has its pieces toward, from the kinds round it alone (no tile is read): the one with the most sides (a tie goes to the lower rank)
+    function pick(kindAt, G, r, c, kind) {
+        var list = G.others(kind), best = '', bestCount = 0, i;
+        for (i = 0; i < list.length; i++) {
+            var o = list[i], count = RANK[o] < RANK[kind] ? (kindAt(r - 1, c) === o) + (kindAt(r + 1, c) === o) + (kindAt(r, c - 1) === o) + (kindAt(r, c + 1) === o) : 0;
+            if (count > bestCount || (count && count === bestCount && RANK[o] < RANK[best])) { best = o; bestCount = count; }
+        }
+        return best;
+    }
+    // the shape that the sides of the kind `best` make round a cell (0: none: opposite sides, three or four sides)
+    function rawShape(kindAt, r, c, best) { return best ? shapeOf(kindAt(r - 1, c) === best, kindAt(r + 1, c) === best, kindAt(r, c - 1) === best, kindAt(r, c + 1) === best) : 0; }
+
+    // The tile that a cell of layer 1 gets from the LOWER kinds beside it (the higher kind wears the piece): its own when it is right, when the rule has no answer for it, or when the new tile would
+    // walk differently. A piece that the rule cannot place (a wm piece on water beside gravel, a piece toward a kind that is not beside it) is the map maker's choice and stays. `primAt` gives the
+    // tile that a cell ENDS with at this step (a neighbor may change its own piece in the same pass).
+    function primary(kindAt, G, r, c, id, primAt) {
         var t = G.info(id);
         if (!t) return id;
-        var n = kindAt(r - 1, c), s = kindAt(r + 1, c), w = kindAt(r, c - 1), e = kindAt(r, c + 1), list = G.others(t.kind), i;
-        function sides(o) { return (n === o) + (s === o) + (w === o) + (e === o); }
-        var best = '', bestCount = 0;
-        for (i = 0; i < list.length; i++) {
-            var o = list[i], count = RANK[o] < RANK[t.kind] ? sides(o) : 0;
-            if (count > bestCount || (count && count === bestCount && (o === t.other || (best !== t.other && RANK[o] < RANK[best])))) { best = o; bestCount = count; }
-        }
+        var n = kindAt(r - 1, c), s = kindAt(r + 1, c), w = kindAt(r, c - 1), e = kindAt(r, c + 1), best = pick(kindAt, G, r, c, t.kind), i;
         // One boundary, one wearer: the game's own maps never have both facing cells wearing a piece. A side whose neighbor already wears a piece that faces this cell (its other kind is this cell's
-        // kind and its shape points here: the neighbor to the north faces south with 7, 8 or 9, and so on) is already drawn and does not count. `tileAt` gives the tile that a cell ENDS with (the
-        // neighbor may change its own piece in the same pass), so a boundary never loses its wearer between two passes. (Only a side that holds a LOWER kind asks, so the asking goes down in rank
-        // and stops.)
-        function worn(dr, dc, faces) { var u = G.info(tileAt(r + dr, c + dc)); return !!(u && u.other === t.kind && faces.indexOf(u.shape) >= 0); }
-        var shape = best ? shapeOf(n === best && !worn(-1, 0, [7, 8, 9]), s === best && !worn(1, 0, [2, 3, 4]), w === best && !worn(0, -1, [4, 6, 9]), e === best && !worn(0, 1, [2, 5, 7])) : 0;
+        // kind and its shape points here) is already drawn and does not count (only a side that holds a LOWER kind asks, so the asking goes down in rank and stops). A cell with the other kind on
+        // opposite sides or on three gets no piece of its own whatever its neighbors wear: the cells beside it wear (`lowered`).
+        function worn(dr, dc, d) { var u = G.info(primAt(r + dr, c + dc)); return !!(u && u.other === t.kind && TOWARD[d].indexOf(u.shape) >= 0); }
+        var shape = rawShape(kindAt, r, c, best) ? shapeOf(n === best && !worn(-1, 0, 0), s === best && !worn(1, 0, 1), w === best && !worn(0, -1, 2), e === best && !worn(0, 1, 3)) : 0;
         if (!shape || (t.other === best && t.shape === shape)) return id;
         var pieces = G.edges(t.kind, best);
         for (i = 0; i < pieces.length; i++) if (pieces[i].shape === shape) return pieces[i].id && G.terrain(pieces[i].id) === G.terrain(id) ? pieces[i].id : id;
         return id;
+    }
+
+    // The cell of the LOWER kind wears the piece where the higher kind cannot (a strip of water one cell wide in mud, an inlet, a lone cell: the higher cell has the lower kind on opposite sides or
+    // on three, so no piece fits it, and the mud beside it wears the piece toward it, as the game's own MEDIUM draws its lakes). `p` is the tile that `primary` left here: only a plain tile takes a
+    // piece, on the sides that the higher cell does not draw (it draws a side when its sides make a piece for this kind, or when its tile already faces this cell). The answer comes from the kinds
+    // and the higher cell's own pieces, never from this cell's, so a second pass finds the same.
+    function lowered(kindAt, G, r, c, p, primAt) {
+        var t = G.info(p), list = G.others(t.kind), best = '', bestSides = null, bestCount = 0, i, d, at = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+        for (i = 0; i < list.length; i++) {
+            var o = list[i], sides = [0, 0, 0, 0], count = 0;
+            if (RANK[o] < RANK[t.kind]) continue;
+            for (d = 0; d < 4; d++) {
+                var nr = at[d][0], nc = at[d][1], u;
+                if (kindAt(nr, nc) !== o) continue;
+                var x = pick(kindAt, G, nr, nc, o);
+                if (x === t.kind && rawShape(kindAt, nr, nc, x)) continue;                      // (its sides make a piece toward this kind)
+                u = G.info(primAt(nr, nc));
+                if (u && u.other === t.kind && TOWARD[d].indexOf(u.shape) >= 0) continue;     // (it wears a piece that faces this cell already)
+                sides[d] = 1; count++;
+            }
+            if (count > bestCount || (count && count === bestCount && RANK[o] < RANK[best])) { best = o; bestSides = sides; bestCount = count; }
+        }
+        var shape = best ? shapeOf(bestSides[0], bestSides[1], bestSides[2], bestSides[3]) : 0, pieces = shape ? G.edges(t.kind, best) : [];
+        for (i = 0; i < pieces.length; i++) if (pieces[i].shape === shape) return pieces[i].id && G.terrain(pieces[i].id) === G.terrain(p) ? pieces[i].id : p;
+        return p;
+    }
+
+    // The tile that a cell ends with: what `primary` left, and a plain tile that is still plain gets `lowered`
+    function ends(kindAt, G, r, c, p, primAt) {
+        var t = G.info(p);
+        return t && !t.other ? lowered(kindAt, G, r, c, p, primAt) : p;
     }
 
     // The cells of `region` ({r0, r1, c0, c1}, both ends in; null: the whole map) that should have another tile of layer 1: {cells: [[index, tile]] in row order, count, region}
@@ -56,46 +99,59 @@
         var rows = file.rows, columns = file.columns, r0 = 0, r1 = rows - 1, c0 = 0, c1 = columns - 1, cells = [], r, c;
         if (region) { r0 = Math.max(0, region.r0); r1 = Math.min(rows - 1, region.r1); c0 = Math.max(0, region.c0); c1 = Math.min(columns - 1, region.c1); }
         function kindAt(row, column) { return row < 0 || column < 0 || row >= rows || column >= columns ? null : G.kindOf(file.tile1(row, column)); }
-        // The tile that a cell ends with: what the rule wants inside the area, its own tile outside. Worked out once for each cell, on the tiles as they were when the button was pressed (the result does
-        // not depend on the order of the scan).
-        var ends = new Int32Array(rows * columns).fill(-1);
-        function endAt(row, column) {
+        // The tile that a cell ends with at the first step: what the rule wants inside the area, its own outside. Worked out once for each cell, on the tiles as they were when the button was
+        // pressed (the result does not depend on the order of the scan).
+        var prims = new Int32Array(rows * columns).fill(-1);
+        function primAt(row, column) {
             if (row < 0 || column < 0 || row >= rows || column >= columns) return file.tile1(row, column);
             var k = row * columns + column;
-            if (ends[k] < 0) { var id = file.tile1(row, column); ends[k] = row >= r0 && row <= r1 && column >= c0 && column <= c1 ? wanted(kindAt, G, row, column, id, endAt) : id; }
-            return ends[k];
+            if (prims[k] < 0) { var id = file.tile1(row, column); prims[k] = row >= r0 && row <= r1 && column >= c0 && column <= c1 ? primary(kindAt, G, row, column, id, primAt) : id; }
+            return prims[k];
         }
         for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
-            var id = file.tile1(r, c), now = endAt(r, c);
+            var id = file.tile1(r, c), now = ends(kindAt, G, r, c, primAt(r, c), primAt);
             if (now !== id) cells.push([r * columns + c, now]);
         }
         return { cells: cells, count: cells.length, region: { r0: r0, r1: r1, c0: c0, c1: c1 } };
     }
 
-    // Auto edges on the cells of a ground stroke (`painted` cells painted with `tileId`, and their border `region`): hand-placed tiles outside `painted` stay as they were
+    // Auto edges on the cells of a ground stroke (`painted` cells painted with `tileId`, and their border `region`): hand-placed tiles outside `painted` stay as they were. The rule is worked out
+    // over CONTEXT more cells all round (a piece that the rule made earlier is worked out again there too); only the cells of `region` can change.
     function strokePlan(file, region, G, tileId, painted, beforeTile) {
-        var rows = file.rows, columns = file.columns, r0 = Math.max(0, region.r0), r1 = Math.min(rows - 1, region.r1), c0 = Math.max(0, region.c0), c1 = Math.min(columns - 1, region.c1), cells = [], r, c;
-        var span = c1 - c0 + 1, ends = new Int32Array((r1 - r0 + 1) * span).fill(-1);
+        var rows = file.rows, columns = file.columns, R0 = Math.max(0, region.r0), R1 = Math.min(rows - 1, region.r1), C0 = Math.max(0, region.c0), C1 = Math.min(columns - 1, region.c1), cells = [], r, c;
+        var r0 = Math.max(0, region.r0 - CONTEXT), r1 = Math.min(rows - 1, region.r1 + CONTEXT), c0 = Math.max(0, region.c0 - CONTEXT), c1 = Math.min(columns - 1, region.c1 + CONTEXT);
+        var span = c1 - c0 + 1, prims = new Int32Array((r1 - r0 + 1) * span).fill(-1), starts = new Int32Array((r1 - r0 + 1) * span).fill(-1);
         function oldAt(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? 0 : beforeTile(row * columns + col); }
         function oldKind(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? null : G.kindOf(oldAt(row, col)); }
         function baseAt(row, col) { if (row < 0 || col < 0 || row >= rows || col >= columns) return 0; var k = row * columns + col; return painted[k] ? tileId : beforeTile(k); }
         function kindAt(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? null : G.kindOf(baseAt(row, col)); }
-        function endAt(row, col) {
+        function inArea(row, col) { return row >= r0 && row <= r1 && col >= c0 && col <= c1; }
+        // The tile that the rule starts from: the stroke's tile where it painted, the plain tile where the cell is plain or holds a piece that the rule would have put there on the map as it was,
+        // the cell's own tile where it is a hand-placed one (a piece the rule would not have put, a look-alike, a tile that is not ground)
+        function startAt(row, col) {
             if (row < 0 || col < 0 || row >= rows || col >= columns) return 0;
-            var bId = baseAt(row, col);
-            if (row < r0 || row > r1 || col < c0 || col > c1) return bId;
-            var idx = (row - r0) * span + (col - c0), k = row * columns + col;
-            if (ends[idx] >= 0) return ends[idx];
-            if (painted[k]) return (ends[idx] = wanted(kindAt, G, row, col, tileId, endAt));
+            var k = row * columns + col, bId = baseAt(row, col);
+            if (!inArea(row, col)) return bId;
+            var idx = (row - r0) * span + (col - c0);
+            if (starts[idx] >= 0) return starts[idx];
+            if (painted[k]) return (starts[idx] = tileId);
             var t = G.info(bId), plain = t ? G.kind(t.kind).plain : bId;
-            if (!t || (bId !== plain && (t.variant !== 'a' || wanted(oldKind, G, row, col, plain, oldAt) !== bId))) return (ends[idx] = bId);
-            return (ends[idx] = wanted(kindAt, G, row, col, plain, endAt));
+            return (starts[idx] = !t || bId === plain || (t.variant === 'a' && ends(oldKind, G, row, col, primary(oldKind, G, row, col, plain, oldAt), oldAt) === bId) ? plain : bId);
         }
-        for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
-            var k = r * columns + c, now = endAt(r, c);
+        // a cell of the area that the rule may change: painted, or plain at its start
+        function editable(row, col) { var t = G.info(baseAt(row, col)); return !!(t && (painted[row * columns + col] || startAt(row, col) === G.kind(t.kind).plain)); }
+        function primAt(row, col) {
+            if (row < 0 || col < 0 || row >= rows || col >= columns) return 0;
+            if (!inArea(row, col)) return baseAt(row, col);
+            var idx = (row - r0) * span + (col - c0);
+            if (prims[idx] < 0) prims[idx] = editable(row, col) ? primary(kindAt, G, row, col, startAt(row, col), primAt) : baseAt(row, col);
+            return prims[idx];
+        }
+        for (r = R0; r <= R1; r++) for (c = C0; c <= C1; c++) {
+            var k = r * columns + c, now = editable(r, c) ? ends(kindAt, G, r, c, primAt(r, c), primAt) : baseAt(r, c);
             if (now !== file.tile1(r, c)) cells.push([k, now]);
         }
-        return { cells: cells, count: cells.length, region: { r0: r0, r1: r1, c0: c0, c1: c1 } };
+        return { cells: cells, count: cells.length, region: { r0: R0, r1: R1, c0: C0, c1: C1 } };
     }
 
     // The dictionary of the file with the names of the pieces that a plan puts (docs/MAP_FORMAT.md: a tile that the dictionary names "." is not drawn by the original, and a tile outside it is refused):
@@ -213,5 +269,5 @@
         return ctl;
     }
 
-    return { plan: plan, strokePlan: strokePlan, change: change, dictionary: dictionary, open: open, shapeOf: shapeOf, wanted: wanted, RANK: RANK, WINDOW: WINDOW };
+    return { plan: plan, strokePlan: strokePlan, change: change, dictionary: dictionary, open: open, shapeOf: shapeOf, primary: primary, lowered: lowered, RANK: RANK, WINDOW: WINDOW };
 });
