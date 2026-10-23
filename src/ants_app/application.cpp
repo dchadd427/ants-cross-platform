@@ -692,6 +692,7 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.init(0);
     hud_.options().load(config_store_);
     hud_.set_config_store(&config_store_);
+    load_game_menu_settings();                                        // (Master volume, Mute and the hit point numbers: application_game_menu.cpp)
     local_player_id_ = 0;
 
     scorecard_.set_on_replay([this]() {
@@ -724,6 +725,7 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_on_quit([this]() {
         confirm_quit();
     });
+    hud_.set_on_menu_request([this]() { request_game_menu(); });         // (Esc with nothing to cancel: the page's settings panel)
     hud_.set_on_fullscreen([this]() { toggle_fullscreen(); });          // (the countdown card's Fullscreen button, protocol 21: the native game's own; the page's button does it in the browser)
 
     hud_.set_on_sfx_volume([this](int32_t v) {
@@ -1929,7 +1931,7 @@ void Application::handle_events() {
             if (!take_touch_event(event)) continue;          // (a pan, a zoom, the end of a press: done there; a mouse event is handled below like any that SDL sends)
         } else if (SDL_PollEvent(&event)) {
             if (event.type == SDL_FINGERDOWN || event.type == SDL_FINGERMOTION || event.type == SDL_FINGERUP) {
-                feed_touch(event.tfinger);                   // (what the model says is queued and comes first, before the next event of SDL's)
+                if (!game_menu_open_) feed_touch(event.tfinger);   // (what the model says is queued and comes first, before the next event of SDL's; no finger is the game's while the settings panel is up)
                 continue;
             }
             if (event.type == touch_cancel_event_type()) {   // (the page's touchcancel, behind the finger events that came before it: cancel_touch_queued)
@@ -2056,6 +2058,8 @@ void Application::handle_events() {
             continue;
         }
 
+        if (game_menu_takes(event)) continue;                // (the settings panel is up: its keys, text, clicks and wheel are the panel's)
+
         // Gameplay Event Dispatch
         switch (event.type) {
             case SDL_TEXTINPUT:
@@ -2082,6 +2086,7 @@ void Application::handle_events() {
     }
     watch_screen();
     if (pointer_gone) pointer_outside_ = true;
+    end_game_menu_frame();
 }
 
 // Is the position of a button event, as SDL delivered it (before the clamp), outside the window? Not merely outside the picture: the black bars are part of
@@ -3122,6 +3127,7 @@ void Application::render_frame() {
         sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
         const auto& world = view.get_world_state();
         renderer_->set_show_hp(hud_.is_show_hp());
+        sync_game_menu_settings();                           // (Ctrl+L flipped it: remembered)
         renderer_->render_world(world, view.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,

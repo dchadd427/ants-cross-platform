@@ -30,6 +30,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [How the game plays](docs/GAMEPLAY.md): the data files, the 20 Hz simulation, the six kinds of ant and their abilities, movement, food, power-ups, combat, the anthill, the start and end of a match, fog of war
 - [View and HUD](docs/VIEW_AND_HUD.md): the 16:9 view, mouse-wheel zoom, edge scrolling and the minimap, the HUD, messages and the chat log, the results screen, sound and music
 - [Controls](docs/CONTROLS.md): the start menu, the setup screen, options and settings, the mouse controls, the keyboard
+- [The settings menu](docs/GAME_MENU.md): what Esc opens in a match (sound, video, controls, Leave game), the one table of rows, and the browser's panel
 - [Touch](docs/TOUCH.md): playing with a finger on a phone or a tablet
 - [Network play and bots](docs/MULTIPLAYER.md): LAN and server games, lag and drop-outs, computer players
 - [Replays](docs/REPLAYS.md): recording a match in the desktop game, the file, and the tool that lists every order of a recorded match

@@ -543,6 +543,61 @@ void run_suite_4_audio_mixer() {
         ASSERT_GT(max_sample, 5000);
     } TEST_END();
 
+    TEST_CASE("4.5b The settings menu's Master volume and Mute: one gain on the whole mix, reached by a ramp, the two volumes of the options stay, and a muted sound goes on playing") {
+        const auto render = [&](AudioMixer& m, size_t frames) {
+            m.play_sfx(4, 0.8f, 10, false);
+            return m.render_frames(frames);
+        };
+        AudioMixer plain;
+        plain.set_headless_mode(true);
+        plain.init(archive);
+        const std::vector<int16_t> full = render(plain, 4096);
+        AudioMixer half;
+        half.set_headless_mode(true);
+        half.init(archive);
+        half.set_output_gain(0.5f);
+        const std::vector<int16_t> halved = render(half, 4096);
+        ASSERT_EQ(full.size(), halved.size());
+        int16_t loud = 0;
+        for (size_t i = 2048 * 2; i < full.size(); ++i) {                            // (past the ramp: 12 ms is about 530 frames)
+            ASSERT_TRUE(std::abs(halved[i] - full[i] / 2) <= 2);
+            loud = std::max<int16_t>(loud, static_cast<int16_t>(std::abs(full[i])));
+        }
+        ASSERT_GT(loud, 500);                                                        // (the sound was there to be halved)
+        ASSERT_TRUE(std::abs(halved[0]) <= std::abs(full[0]) && std::abs(halved[2]) >= 0);
+        ASSERT_EQ(half.sound_volume(), plain.sound_volume());                       // (the original's Sound Volume is not touched)
+        ASSERT_NEAR(half.get_music_volume(), plain.get_music_volume(), 0.0001f);     // (nor the Music Volume)
+
+        // the ramp: the first frames are not the new gain at once (no step in the wave)
+        AudioMixer steep;
+        steep.set_headless_mode(true);
+        steep.init(archive);
+        steep.set_output_gain(0.0f);
+        const std::vector<int16_t> fading = render(steep, 2048);
+        int on_the_ramp = 0;
+        for (size_t f = 0; f < 400; ++f) {                                           // (the gain falls by 12 ms of the way a frame at a time: 1000 / (12 * 44100) per frame, the same wave scaled by it)
+            const double gain = 1.0 - static_cast<double>(f + 1) * 1000.0 / (12.0 * 44100.0);
+            const double want = full[f * 2] * gain;
+            ASSERT_TRUE(std::abs(fading[f * 2] - want) <= 4.0 + 0.02 * std::abs(want));
+            if (std::abs(full[f * 2]) > 200) ++on_the_ramp;
+        }
+        ASSERT_GT(on_the_ramp, 5);                                                   // (the wave was there to be scaled)
+        for (size_t f = 1500; f < 2048; ++f) ASSERT_EQ(fading[f * 2], 0);            // (then it is silent)
+
+        // a muted sound goes on playing: unmuted later, the mix is what the mixer that was never muted has at the same place
+        AudioMixer muted;
+        muted.set_headless_mode(true);
+        muted.init(archive);
+        muted.set_output_gain(0.0f);
+        muted.play_sfx(4, 0.8f, 10, false);
+        const std::vector<int16_t> silent = muted.render_frames(2048);
+        for (size_t f = 1500; f < 2048; ++f) ASSERT_EQ(silent[f * 2], 0);
+        muted.set_output_gain(1.0f);
+        const std::vector<int16_t> back = muted.render_frames(2048);
+        const std::vector<int16_t> reference = full;                                  // (4096 frames of the same sound, never muted)
+        for (size_t f = 1500; f < 2048; ++f) ASSERT_TRUE(std::abs(back[f * 2] - reference[(2048 + f) * 2]) <= 2);
+    } TEST_END();
+
     TEST_CASE("4.6 Native In-Engine MP3 Background Music Playback & Streaming Mixing") {
         AudioMixer mixer;
         mixer.set_headless_mode(true);

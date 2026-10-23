@@ -98,6 +98,9 @@ public:
     void set_sound_volume(int32_t sound_volume);
     int32_t sound_volume() const noexcept { return sound_volume_; }
     void set_sfx_volume(float volume);          // volume 0.0 .. 1.0 -> Sound Volume 0 .. 100
+    /// The settings menu's Master volume and Mute (game_menu.hpp): one gain, 0.0 .. 1.0, on everything that is heard (sounds and music). It is reached by a short ramp, so that a slider that is dragged makes no click.
+    /// The Sound Volume and the Music Volume stay as they are; 1.0 (the start) changes nothing of the mix.
+    void set_output_gain(float gain);
     /// The gains of a playing channel (inspection)
     bool channel_volumes(int channel_id, float& left, float& right) const;
 
@@ -149,6 +152,8 @@ private:
     int32_t listener_y_{0};
 
     float master_volume_{1.0f};
+    float output_gain_target_{1.0f};              // set_output_gain
+    float output_gain_now_{1.0f};                 // where the ramp to it is (the mixing thread)
     int32_t sound_volume_{100};                   // the Sound Volume option, 0 .. 100
 
     bool headless_mode_{false};
