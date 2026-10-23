@@ -33,7 +33,10 @@ FILES_FOLDER = "/srv/community-maps/files/"
 def image_files():
     """{name: source path} of the folder /srv/community-maps/files/ as the web image's Dockerfile fills it: every COPY line with that destination, its wildcards read against the checkout, in order."""
     out = {}
-    for line in maps.read("Dockerfile").splitlines():
+    for line in maps.read("Dockerfile").replace("\\\n", " ").splitlines():
+        if "/srv/community-maps" in line.split("#", 1)[0]:
+            known = line.startswith("COPY ") and shlex.split(line.split("#", 1)[0])[-1] in (FILES_FOLDER, "/srv/community-maps/previews/")
+            assert known, "a Dockerfile line puts something under /srv/community-maps in a way this test does not read (a file as the destination, ADD, RUN cp, ...): " + line
         if not line.startswith("COPY "):
             continue
         words = shlex.split(line.split("#", 1)[0])
