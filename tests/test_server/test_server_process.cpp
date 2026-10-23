@@ -264,9 +264,8 @@ void real_process_scenario(const char* tag, int stop_signal, bool control_room) 
     j = ctl_call(ctl_port, "GET", "/rooms/" + code, secret);
     ASSERT_TRUE(j.get("state").str() == "running" && j.get("restored").is_object() && j.get("restored").get("turns").as_int_or(0) == static_cast<int64_t>(record_turns));
     ASSERT_TRUE(j.get("rejoins").as_int_or(0) == 2 && !j.get("paused").as_bool_or(true) && j.get("record").get("kept").as_bool_or(false));
-    w.run_for(4000);
-    j = ctl_call(ctl_port, "GET", "/rooms/" + code, secret);
-    ASSERT_TRUE(j.get("turns").as_int_or(0) > static_cast<int64_t>(record_turns) + 60);  // the match goes on
+    // the match goes on: more than 60 turns (3 s of play) after the record, however slow the machine is (a loaded runner played fewer than 60 in a fixed 4 s)
+    ASSERT_TRUE(w.until([&]() { j = ctl_call(ctl_port, "GET", "/rooms/" + code, secret); return j.get("turns").as_int_or(0) > static_cast<int64_t>(record_turns) + 60; }, 30000));
     // ---- Bob quits: the match ends, on the machines and on the referee, in one state -------------------------------------------------------------------------------------------------
     sim::Command quit;
     quit.type = sim::CommandType::Quit;
