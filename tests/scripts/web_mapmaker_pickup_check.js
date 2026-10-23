@@ -23,6 +23,7 @@
 //   K  the library: every kind of thing of every map picked, moved to a free place and back (undo and redo byte for byte, only what was named changed, the old place empty, the anchors right)
 //   L  with a built core: the check of the map says the same after a move, a copy and a delete as it said before (no new finding), on the library
 //   M  big maps (512 x 512) stay fast: a pick, the verdict of a ghost and the area of the whole map are measured
+//   N  a drag is put down where the ghost is when the mouse or the finger is let go (one change, one Undo; red: stays, with the reason; Escape, a cancelled or lost pointer, a second lift, Done while held; a copy, an area, a group)
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -920,19 +921,19 @@ function caseH() {
     check(g.state().dr === -2 && /edge/.test(g.text()), 'the top edge too');
     // the pointer: a press that is a drag, ghost drags, a tap that picks the next thing on the cell
     const q = page(File.parse(sceneBytes(9)));
-    check(q.drag(3, 3, 12, 20) === true && q.state().mode === 'moving' && q.state().dr === 9 && q.state().dc === 17, 'a press on a thing and a drag moves it: the ghost follows (v1.2.0 dragged too)');
-    check(q.state().items[0].hill === 1 && q.off('done') === false, 'the thing is the hill, Done is on');
-    check(q.p.canMove({ row: 12, column: 20 }) && !q.p.canMove({ row: 3, column: 3 }) && q.p.tapOnly({ row: 3, column: 3 }), 'a press on the ghost drags it; a press where the hill was is a tap that moves the ghost');
-    q.p.begin({ row: 12, column: 20 }); q.p.extend({ row: 12, column: 20 }, { row: 14, column: 22 }); q.p.end();
-    check(q.state().dr === 11 && q.state().dc === 19, 'a drag that starts on the ghost moves it by the same cells');
-    q.p.begin({ row: 14, column: 22 }); q.p.extend({ row: 14, column: 22 }, { row: 20, column: 30 }); q.p.cancel();
-    check(q.state().dr === 11 && q.state().dc === 19, 'a drag that is cancelled (a second finger) puts the ghost back');
-    q.press('cancel'); q.press('cancel');
+    check(q.drag(3, 3, 12, 20) === true && q.state().mode === 'picked' && q.log.acts === 1 && Edit.tile(q.file(), 2, 11 * 40 + 19) === RED_HILL, 'a press on a thing and a drag puts it down where the mouse is let go (the old Move tool dragged too): one change');
+    check(q.state().items[0].hill === 1 && q.state().items[0].fp[0] === 11 * 40 + 19, 'the hill is picked still, at its new place');
+    q.press('move');
+    q.tap(25, 30);
+    check(q.p.canMove({ row: 25, column: 30 }) && !q.p.canMove({ row: 12, column: 20 }) && q.p.tapOnly({ row: 12, column: 20 }), 'a press on the ghost drags it; a press where the hill was is a tap that moves the ghost');
+    q.p.begin({ row: 25, column: 30 }); q.p.extend({ row: 25, column: 30 }, { row: 14, column: 22 }); q.p.cancel();
+    check(q.state().mode === 'picked' && q.log.acts === 1, 'a drag of the ghost that is cancelled (a second finger, the window) takes it back to the pick, and nothing is written');
+    q.press('cancel');
     // the thing under the finger is picked and moved even when something else was picked
     const w = page(File.parse(sceneBytes(9)));
     w.tap(3, 3); w.drag(36, 4, 34, 6);
-    check(w.state().items.length === 1 && w.state().items[0].k === 'obj' && w.state().items[0].hill === -1 && w.state().dr === -2, 'a drag that starts on another thing picks that one and moves it');
-    w.press('done'); check(Edit.tile(w.file(), 2, 34 * 40 + 6) === ROCK, 'and Done puts it down');
+    check(w.state().items.length === 1 && w.state().items[0].k === 'obj' && w.state().items[0].hill === -1 && w.state().mode === 'picked', 'a drag that starts on another thing picks that one and puts it down');
+    check(Edit.tile(w.file(), 2, 34 * 40 + 6) === ROCK && Edit.tile(w.file(), 2, 36 * 40 + 4) === EMPTY2, 'at the place where the mouse was let go');
     // a tap on empty ground lets go
     w.tap(0, 39); check(w.state().mode === 'idle', 'a tap on empty ground lets go');
     // a stack: each tap on the cell picks the next thing, and round again
@@ -993,6 +994,11 @@ function caseI() {
         check(t.log.dirty.length >= 1 && t.log.minis >= 1, 'the canvas is told which cells changed, and the small map is made again' + tag);
         t.doc.key('z', { ctrlKey: true });
         check(t.pickPage().state().mode === 'idle' && t.tools.state().history.strokes === 0, 'Ctrl+Z undoes it and lets the pick go' + tag);
+        p.begin({ row: 3, column: 3 }); p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); p.end();
+        check(t.tools.state().history.strokes === 1 && t.pickPage().state().mode === 'picked', 'a drag through the page\'s tools is put down by the lift: one step of the page\'s history' + tag);
+        t.doc.key('z', { ctrlKey: true });
+        p.begin({ row: 3, column: 3 }); p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); p.abandon(); p.end();
+        check(t.tools.state().history.strokes === 0 && t.pickPage().state().mode !== 'moving', 'a pointer that was lost without a lift (the window) takes the thing back through the tools too' + tag);
         t.button('pan').click();
         check(t.pickPage().state().mode === 'idle' && p.canMove({ row: 3, column: 3 }) === false && p.key({ key: 'Enter' }) === false && p.begin({ row: 3, column: 3 }) === false, 'Pan is the old Move without the moving: a press on a thing looks around' + tag);
         t.doc.key('p'); check(t.tools.state().tool === 'pickup', 'the letter P chooses Pick up' + tag);
@@ -1272,6 +1278,95 @@ function caseM() {
     pa.undo(); check(same(pa.file().bytes, before), 'and Undo puts it all back');
 }
 
+
+// ================= N =================
+// letting go of the mouse (or the finger) after a drag puts the thing down where the ghost is
+function caseN() {
+    for (const version of [8, 9]) {
+        const tag = ' (version ' + version + ')';
+        const bytes = sceneBytes(version);
+        // a drag: down, moves, up = ONE change, one Undo
+        let q = page(File.parse(Uint8Array.from(bytes))), was = Uint8Array.from(q.file().bytes);
+        check(q.p.begin({ row: 3, column: 3 }) === true && q.state().mode === 'idle', 'the press on the hill starts a drag and changes nothing' + tag);
+        q.p.extend({ row: 3, column: 3 }, { row: 8, column: 10 });
+        check(q.state().mode === 'moving' && q.log.acts === 0 && same(q.file().bytes, was), 'while the button is down the ghost follows and nothing is written' + tag);
+        q.p.extend({ row: 8, column: 10 }, { row: 12, column: 20 });
+        q.p.end();
+        check(q.log.acts === 1 && q.ed().history.size().strokes === 1 && q.state().mode === 'picked' && Edit.tile(q.file(), 2, 11 * 40 + 19) === RED_HILL && Edit.tile(q.file(), 2, 3 * 40 + 3) === EMPTY2, 'the button let go puts the hill down where the ghost was: one change' + tag);
+        q.undo(); check(same(q.file().bytes, was), 'and one Undo takes it back' + tag);
+        // let go twice (a second up, or one that follows the lost capture): nothing more
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.end(); q.p.end(); q.p.cancel(); q.p.abandon();
+        check(q.log.acts === 1 && q.ed().history.size().strokes === 1, 'a second lift, a cancel or a lost pointer after the drop does nothing more' + tag);
+        // a blocked place: the thing stays picked, the ghost is red with the reason, nothing is written
+        q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 10, column: 26 }); q.p.end();
+        check(q.log.acts === 0 && same(q.file().bytes, was) && q.state().mode === 'moving' && q.off('done') && /the mushroom is in the way/.test(q.warn()), 'let go on the mushroom: nothing is written, the thing is still picked, the ghost is red and says why: ' + q.warn() + tag);
+        q.p.begin({ row: 10, column: 26 }); q.p.extend({ row: 10, column: 26 }, { row: 30, column: 20 }); q.p.end();
+        check(q.log.acts === 1 && q.state().mode === 'picked' && Edit.tile(q.file(), 2, 29 * 40 + 19) === RED_HILL, 'a drag of the red ghost to a free place puts it down' + tag);
+        // off the map: the same
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 0, column: 0 }); q.p.end();
+        check(q.log.acts === 0 && q.state().mode === 'moving' && /inside the map/.test(q.warn()), 'let go past the edge of the map: red, with the reason, nothing written' + tag);
+        // Escape while the button is down: the thing goes back, and the lift that follows does nothing
+        q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 });
+        check(q.key('Escape') === true && q.state().mode === 'idle' || q.state().mode === 'picked', 'Escape during a drag lets go' + tag);
+        q.p.extend({ row: 12, column: 20 }, { row: 14, column: 22 }); q.p.end();
+        check(q.log.acts === 0 && same(q.file().bytes, was) && q.state().dr === 0, 'the lift after Escape puts nothing down, the thing is where it was' + tag);
+        // the pointer is lost (a cancelled touch, the window): the same
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.cancel(); q.p.end();
+        check(q.log.acts === 0 && q.state().mode !== 'moving', 'a cancelled pointer takes it back like Escape' + tag);
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.abandon(); q.p.end();
+        check(q.log.acts === 0 && q.state().mode !== 'moving', 'so does a pointer that was lost without a lift (abandon)' + tag);
+        // a press that does not move is a tap: it picks (on a thing) or puts the ghost (on the ghost) and drops nothing
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.end();
+        check(q.state().mode === 'picked' && q.log.acts === 0, 'a click on a thing only picks it' + tag);
+        q.press('move'); q.tap(25, 30);
+        const spot = q.state().dr;
+        q.p.begin({ row: 25, column: 30 }); q.p.end();
+        check(q.state().mode === 'moving' && q.log.acts === 0 && q.state().dr === spot && !q.off('done'), 'a click on the ghost puts nothing down: Done does' + tag);
+        // the ghost that follows the mouse starts no drag and puts nothing down by itself
+        q.p.hover({ row: 20, column: 20 }); q.p.hover({ row: 21, column: 22 });
+        q.p.end();
+        check(q.log.acts === 0 && q.state().mode === 'moving', 'the hover ghost does not drag, and a lift with nothing pressed does nothing' + tag);
+        q.p.hover(null); q.press('done');
+        check(q.log.acts === 1, 'Done still puts it down' + tag);
+        // Done (or Enter) while the button is still held, then the lift: one change
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.press('done'); q.p.extend({ row: 12, column: 20 }, { row: 15, column: 25 }); q.p.end();
+        check(q.log.acts === 1 && q.ed().history.size().strokes === 1 && q.state().dr === 0, 'Done pressed while the button is held, then the lift: one change, at the place of Done' + tag);
+        // the arrows and Enter still work after a blocked drop
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 10, column: 26 }); q.p.end();
+        q.p.hover({ row: 30, column: 20 }); q.p.hover(null);
+        q.key('ArrowLeft');
+        q.p.begin({ row: 10, column: 25 }); q.p.extend({ row: 10, column: 25 }, { row: 30, column: 20 }); q.p.end();
+        check(q.log.acts === 1 && q.state().mode === 'picked', 'a red drop can be dragged on to a free place' + tag);
+    }
+    // a copy: dragging the ghost of a copy and letting go puts the copy down
+    let c = page(File.parse(sceneBytes(9)));
+    c.tap(36, 4); c.press('copy'); c.tap(34, 8);
+    c.p.begin({ row: 34, column: 8 }); c.p.extend({ row: 34, column: 8 }, { row: 30, column: 12 }); c.p.end();
+    check(c.log.acts === 1 && Edit.tile(c.file(), 2, 36 * 40 + 4) === ROCK && Edit.tile(c.file(), 2, 30 * 40 + 8 + 4) === ROCK && /^Copied it/.test(c.state().note), 'a dragged copy is put down when the button is let go, the rock is still where it was');
+    // an area and a group move as one change
+    let a = page(File.parse(sceneBytes(9)));
+    a.tap(36, 4); a.press('area'); a.drag(18, 8, 24, 14);
+    const box = a.state().items.length, wasA = Uint8Array.from(a.file().bytes);
+    a.drag(21, 10, 5, 30);
+    check(box === 6 && a.log.acts === 1 && a.ed().history.size().strokes === 1 && a.state().mode === 'picked' && a.state().kind === 'area' && lay(a.file()).records.filter((r) => r.row < 12 && r.column >= 20).length === 6, 'an area dragged by one of its things is put down as a whole, in one step');
+    a.undo(); check(same(a.file().bytes, wasA), 'and one Undo gives all of it back');
+    let g = page(File.parse(sceneBytes(9)));
+    g.tap(21, 10); g.press('group'); g.tap(5, 20); g.press('done');
+    const wasG = Uint8Array.from(g.file().bytes), mid = g.state().items[2].fp[0], mr = (mid / 40) | 0, mc = mid % 40;
+    g.drag(mr, mc, mr - 2, mc - 5);
+    check(g.log.acts === 2 && g.state().kind === 'group' && g.state().items.length === 6 && lay(g.file()).records.filter((r) => r.tile === 153 && r.row <= 4 && r.column <= 16).length === 6, 'a group dragged by one of its ants is put down as a whole');
+    g.undo(); check(same(g.file().bytes, wasG), 'in one step');
+}
+
 // ================= L (the core) =================
 async function caseL() {
     const js = path.join(MODULE, 'lvl_core.js');
@@ -1286,7 +1381,7 @@ async function caseL() {
 
 module.exports = { page, sceneBytes, mapWith, putHill, putObject, items, lay, File, Edit, Blocks, Pick };
 const CASES = [['A what stands on a cell', caseA], ['B a group and an area', caseB], ['C where a thing cannot go', caseC], ['D the change of a move', caseD], ['E copy, delete and an area', caseE], ['F lists, limits, crowds', caseF],
-    ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['K the library', () => caseK(null)], ['M big maps', caseM]];
+    ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['K the library', () => caseK(null)], ['M big maps', caseM], ['N a drag is put down when the button is let go', caseN]];
 async function run(cases) {
     for (const [name, fn] of cases) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');

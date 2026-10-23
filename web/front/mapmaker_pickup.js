@@ -505,7 +505,7 @@
             if (!items.length) { st.mode = 'boxing'; st.items = []; st.box = null; st.note = 'Nothing is inside that box. Drag a bigger box, or Cancel.'; return paint(); }
             pick(items, 'area', [], null, box);
         }
-        function letGo() { if (st.ask) { st.ask = ''; return render(); } if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }
+        function letGo() { st.drag = null; if (st.ask) { st.ask = ''; return render(); } if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }
 
         // ---- the bar ----
         function button(key, text, cls, on) {
@@ -771,7 +771,8 @@
                 var d = st.drag;
                 if (!d) return;
                 if (d.kind === 'box') { st.box = { r0: Math.min(d.from.row, to.row), c0: Math.min(d.from.column, to.column), r1: Math.max(d.from.row, to.row), c1: Math.max(d.from.column, to.column) }; render(); drawOver(); }
-                else if (d.kind === 'ghost') setDelta(d.dr + to.row - d.from.row, d.dc + to.column - d.from.column);
+                else if ((d.kind === 'ghost' || d.moved) && st.mode !== 'moving') return;          // (put down by Enter or the Done button while the button was still held)
+                else if (d.kind === 'ghost') { d.moved = true; setDelta(d.dr + to.row - d.from.row, d.dc + to.column - d.from.column); }
                 else if (!d.moved) {
                     var f = file(), idx0 = d.from.row * f.columns + d.from.column, sel = null, i;
                     for (i = 0; i < st.items.length; i++) if (st.items[i].fp.indexOf(idx0) >= 0) sel = st.items;
@@ -786,13 +787,17 @@
                 var d = st.drag; st.drag = null;
                 if (!d) return;
                 if (d.kind === 'box') return finishBox();
-                if (d.kind === 'item' && !d.moved) tapSelect(d.from); else render();
+                if (d.kind === 'item' && !d.moved) return tapSelect(d.from);
+                if (d.moved && st.mode === 'moving') return done();          // letting go of the mouse or the finger after a drag puts the thing down where the ghost is (red: it stays, with the reason)
+                render();
             },
+            // the pointer was lost (a cancelled touch, the window lost the focus): what was dragged goes back, like Escape
             cancel: function () {
                 var d = st.drag; st.drag = null;
                 if (!d) return;
-                if (d.kind === 'box') { st.box = null; paint(); } else if (d.kind === 'ghost') setDelta(d.dr, d.dc); else if (d.moved) letGo();
+                if (d.kind === 'box') { st.box = null; paint(); } else if (d.moved) letGo();
             },
+            abandon: function () { painter.cancel(); },
             // the keys: arrows nudge a thing that is picked up, Enter picks the thing on the marked cell, puts it down (Done) or starts the move, Escape lets go, Delete takes it away
             key: function (e) {
                 if (!shown || !file() || (env.busy && env.busy())) return false;
