@@ -910,6 +910,13 @@
         "test_app_integration"
       ],
       "test": "ANTS_TEST_FILTER=4.5 ./build/tests/test_app/test_app_integration"
+    },
+    {
+      "id": "slider_green_not_drawn",
+      "file": "web/game_menu.js",
+      "old": "            fill();\n            input.addEventListener('input', function () {\n                fill();\n",
+      "new": "            input.addEventListener('input', function () {\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
   ]
 }

@@ -53,7 +53,7 @@
 
 /* the sliders */
 .gm-slide input[type=range] { -webkit-appearance: none; appearance: none; flex: 1 1 auto; height: 44px; margin: 0; padding: 0; background: transparent; cursor: pointer; touch-action: pan-y; }
-.gm-slide input[type=range]::-webkit-slider-runnable-track { height: 14px; background: #04070a; border: 2px solid var(--frame, #2b6b4f); border-radius: 8px; }
+.gm-slide input[type=range]::-webkit-slider-runnable-track { height: 14px; background: linear-gradient(90deg, #2f7d62 var(--f, 0%), #04070a var(--f, 0%)); border: 2px solid var(--frame, #2b6b4f); border-radius: 8px; }
 .gm-slide input[type=range]::-moz-range-track { height: 10px; background: #04070a; border: 2px solid var(--frame, #2b6b4f); border-radius: 8px; }
 .gm-slide input[type=range]::-moz-range-progress { height: 10px; background: #2f7d62; border-radius: 8px; }
 .gm-slide input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 32px; margin-top: -11px; background: var(--teal, #1f4f40) var(--sheen); border: 2px solid var(--edge, #050a08); border-radius: 6px;

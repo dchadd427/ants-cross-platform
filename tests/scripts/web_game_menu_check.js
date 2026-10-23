@@ -389,8 +389,10 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     expect('they show what the game says (a value past the end is the end)', sliders.map((s) => s.value), ['99', '65', '99']);
     expect('...and the number beside each', p.qa('.gm-val').map((v) => v.textContent), ['99', '65', '99']);
     const master = sliders[0], music = sliders[1], sfx = sliders[2];
+    expect('the track is green up to the thumb, as drawn (--f is the share of the range)', sliders.map((s) => s.getAttribute('style')), ['--f:100%', '--f:65.65656565656566%', '--f:100%']);
     master.value = '40';
     master.fire('input', {});
+    expect('...and the green follows the thumb while it is dragged', master.getAttribute('style'), '--f:40.4040404040404%');
     expect('Master volume acts while it is dragged', p.game.calls.filter((c) => c[0] === 'set'), [['set', 1, 40]]);
     expect('...and the number follows', p.qa('.gm-val')[0].textContent, '40');
     master.fire('change', {});

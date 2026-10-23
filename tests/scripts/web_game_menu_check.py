@@ -219,7 +219,7 @@ def computer(p, args, check):
     tab = p.tab
     p.open_game(LOCAL, 1280, 800)
     check(p.start_match(), "a match is running (the quick help's Enter and the setup screen's Enter)")
-    wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown"), 10)
+    wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown") and not p.buttons()["settings-btn"]["disabled"], 10)       # (the page polls the game every quarter second: shown and on are two moments)
     b = p.buttons()
     check(b.get("settings-btn", {}).get("shown") and not b["settings-btn"]["disabled"] and not b["settings-btn-narrow"]["shown"] and not b["settings-btn-fs"]["shown"],
           "the Settings button is in the header and on, the narrow one and the fullscreen one are not shown (%s)" % {k: v["shown"] for k, v in b.items()})

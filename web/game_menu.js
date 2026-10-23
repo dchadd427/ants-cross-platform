@@ -130,7 +130,10 @@
             input.value = String(now);
             out.textContent = String(now);
             out.setAttribute('aria-hidden', 'true');
+            function fill() { input.setAttribute('style', '--f:' + (input.value - row.min) * 100 / (row.max - row.min) + '%'); }
+            fill();
             input.addEventListener('input', function () {
+                fill();
                 out.textContent = String(input.value);
                 if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10));
             });
