@@ -151,7 +151,7 @@ async function caseC() {
     const told = async (fetch, file) => {
         const s = await opened(fakeIdb(), fetch);
         const calls = [];
-        await new Promise((res) => { s.fetchMap(file || 'TREASURE.LVL', (err, b) => { calls.push([err, b]); res(); }); });
+        await new Promise((res) => { s.fetchMap(file || 'TREASURE.LVL', (err, b) => { calls.push([err, b]); res(); }); setTimeout(res, 300); });       // (a download that is never reported leaves calls empty)
         await later();
         return calls;
     };

@@ -42,7 +42,8 @@ def image_files():
         for pattern in words[1:-1]:
             for path in sorted(glob.glob(os.path.join(REPO, pattern))):
                 name = os.path.basename(path)
-                assert name not in out, "two COPY lines put %s into the folder: %s and %s" % (name, out[name], path)
+                path = os.path.normpath(path)
+                assert out.get(name, path) == path, "two COPY lines put %s into the folder: %s and %s" % (name, out[name], path)       # (Windows folds case: *.lvl and *.LVL find the same files there)
                 out[name] = path
     return out
 
@@ -56,7 +57,7 @@ class TheImageHoldsTheOriginals(unittest.TestCase):
         folder = image_files()
         for name in ORIGINALS:
             self.assertIn(name, folder, name + " is not copied into the web image's folder of map files")
-            self.assertEqual(folder[name], os.path.join(REPO, "Original-Ants", "Maps", name), name)
+            self.assertEqual(folder[name], os.path.normpath(os.path.join(REPO, "Original-Ants", "Maps", name)), name)
         self.assertIn("alias /srv/community-maps/files/;", maps.FILES)                       # (the folder of the Dockerfile is the one the location serves)
 
     def test_the_originals_are_exactly_the_files_of_original_ants_maps(self):
