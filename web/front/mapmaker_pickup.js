@@ -2,7 +2,7 @@
 // Copy here, Delete and Select an area...; Move shows a see-through ghost where the thing will land, red with the reason in plain words when it cannot go there, and Done puts it there. Everything it
 // does is ONE CHANGE of the open file's bytes (the cells of layer 2, the solid bits, and the lists after the layers: block 1 holds the ants and plants, block 2 the piles, block 4 the plants'
 // waypoints), built from the helpers of the other tools (mapmaker_blocks.js) and given to the history as one step, so a move, a copy, a delete and the move of a whole area are one Undo each.
-// The ring round what is picked and the ghost are drawn on a canvas of their own that lies over the map, so the map itself is never painted again for them. A lazily loaded script (the page
+// The ring round what is picked and the ghost are drawn on a canvas of their own that lies over the map, so the tool never asks the page to paint the map again for them (the canvas of the map still paints its own frame, 1 to 7 ms, as the pointer moves, as it does for a pan). A lazily loaded script (the page
 // loads it, with mapmaker_pickup.css, the first time the tool is chosen), so the editor's eager scripts stay small. The words come from fixed lists here and in the palette, never from the file.
 // A plain ES5 script that a page and node can load.
 (function (root, factory) {

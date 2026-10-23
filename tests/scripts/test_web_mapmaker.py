@@ -489,6 +489,8 @@ class TheCodeRuns(unittest.TestCase):
             "a splice of the header counted from the end of layer 2": ("mapmaker_edit.js", "return s.abs ? s.at : file.blocksAt + s.rel;", "return file.blocksAt + (s.abs ? s.at : s.rel);"),
             "a change of the properties that is not one step": ("mapmaker_tools.js", "var dirty = editor.act(change); if (dirty) changed(dirty); return !!dirty; }", "var dirty = editor.act(change); if (dirty) changed(dirty); if (dirty) editor.act(change); return !!dirty; }"),
             "a tool whose keys are the map's cursor keys first": ("mapmaker_canvas.js", "if (painter && painter.key && painter.key(e)) { e.preventDefault(); hover = null; redraw(); return; }", "void 0;"),
+            "a tool that is not told about the mouse over the map": ("mapmaker_canvas.js", "if (painter && painter.hover) painter.hover(over);          // (a tool that shows what a click would do: Pick up)", "void 0;"),
+            "a tool that is not told that the mouse left the map": ("mapmaker_canvas.js", "hover = null; if (painter && painter.hover) painter.hover(null); if (file) { chrome();", "hover = null; if (file) { chrome();"),
             "a tool that is not told which cell is pressed": ("mapmaker_canvas.js", "var tapTool = !panning && !!cell && tapOnly(cell);", "var tapTool = !panning && !!cell && tapOnly();"),
             "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "function act(change) { if (!editor || canvas.isStroking()) return false;", "function act(change) { if (!editor) return false;"),
         }
@@ -1204,7 +1206,8 @@ class TheGroundAndTheSprites(unittest.TestCase):
     def test_the_pick_up_tool_is_loaded_on_demand_with_its_style_and_the_tool_hands_it_the_canvas(self):
         tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
         self.assertNotIn("front/mapmaker_pickup.js", tags)
-        self.assertIn("s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_pickup.css';", self.app)
+        self.assertIn("add('script', 'script', 'src', 'front/mapmaker_pickup.js');", self.app)
+        self.assertIn("add('style', 'link', 'href', 'front/mapmaker_pickup.css', function (n) { n.rel = 'stylesheet'; });", self.app)
         self.assertIn("if (id === 'pickup') askPick();", self.tools)
         self.assertNotIn("MapPickup", self.app.split("var NEEDED = ")[1].split("];")[0], "the page does not need the tool to start: a part that did not load is said, and the tool is Pan")
         self.assertIn("act: act", self.tools, "one change, one step of the history")

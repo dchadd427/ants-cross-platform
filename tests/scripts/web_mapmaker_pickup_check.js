@@ -13,10 +13,10 @@
 //   A  what stands on a cell, and what a pick is called: a hill (its 16 cells and its door), a food pile with its stage object, a plant with its dropper, ants and a stack of them, what is under what
 //   B  an ant's group (the ants of its team that touch), and an area (whole objects only), with the words of the bar
 //   C  where a thing cannot go and why, in plain words: the edge, water, a hill, an object, ants, a pile, a plant, solid ground, a Classic map's one byte; and what a copy cannot be
-//   D  the change of a move, in version 8 and 9: the cells and their anchors, the solid bits, a bomb's owner word, a pile's bites and points, a plant's dropper, an ant's own type; ONE step of the history
+//   D  the change of a move, in version 8 and 9: the cells and their anchors (a cell's tie to another place of the map is kept exactly or the move is refused), the solid bits, a bomb's owner word, a pile's bites and points, a plant's dropper, an ant's own type; ONE step of the history
 //   E  copy, delete and the move of a whole area: each one Undo, byte for byte, with Redo
 //   F  the lists and their limits: 65,535 records, a stack of ants, ants on the move together
-//   G  the page: the bar, its buttons and the sentences, on a strict fake DOM; the ghost and the ring drawn on the canvas that lies over the map (and the map itself never painted for them)
+//   G  the page: the bar, its buttons and the sentences (this ant or its group for Move, Copy and Delete; the ghost that follows the mouse; the fold of a short screen), on a strict fake DOM; the ghost and the ring drawn on the canvas that lies over the map (and the tool never asks for the map to be painted for them)
 //   H  the keys: Enter, the arrows, Shift, Escape, Delete; and the pointer: a tap, a press that drags, a box
 //   I  a map that changes under a pick (Undo, another map): the pick is let go; the tool through the page's own Tools (loaded on demand, a part that did not load, Pan has no keys of its own)
 //   J  text of a file is only text: names come from the fixed lists; a file whose dictionary holds markup shows none
@@ -665,7 +665,7 @@ function caseG() {
         check(pg.state().dr === 27 && pg.state().dc === 17 && /It lands on row 29, column 19\./.test(line()) && !pg.off('done'), 'a tap far away puts the middle of the hill there (the top left lands on row 29, column 19), Done on: ' + line() + tag);
         pg.tap(10, 26);
         check(pg.off('done') && /cannot go here/.test(pg.warn()) && /the mushroom is in the way/.test(pg.warn()) && !/It lands/.test(pg.text()), 'a tap on the mushroom turns it red, says why, and turns Done off: ' + pg.warn() + tag);
-        check(pg.log.refreshes === 0 && !pg.map.ctx, 'the map was never painted again for it (the ghost lives on the canvas over it)' + tag);
+        check(pg.log.refreshes === 0 && !pg.map.ctx, 'the tool asked for no repaint of the map (the ghost lives on the canvas over it)' + tag);
         pg.tap(30, 20);
         const before = Uint8Array.from(pg.file().bytes);
         pg.press('done');
@@ -1234,7 +1234,7 @@ function caseM() {
     pg.tap(301, 301); pg.press('move');
     t0 = Date.now(); pg.tap(305, 310); pg.tap(306, 311); pg.tap(307, 312);
     const rects = pg.over.getContext('2d').log.rects;
-    check(Date.now() - t0 < 500 && rects < 5000 && !pg.map.ctx && pg.log.refreshes === 0, 'three taps of the ghost draw ' + rects + ' squares on the overlay in ' + (Date.now() - t0) + ' ms, and the map is never painted for them');
+    check(Date.now() - t0 < 500 && rects < 5000 && !pg.map.ctx && pg.log.refreshes === 0, 'three taps of the ghost draw ' + rects + ' squares on the overlay in ' + (Date.now() - t0) + ' ms, and the tool asks for no repaint of the map');
     // a whole 20,000-ant crowd as an area, moved in one step
     const pa = page(big);
     t0 = Date.now();

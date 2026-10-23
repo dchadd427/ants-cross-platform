@@ -277,15 +277,15 @@
     {
       "id": "v9_offset_ignores_move",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "(((ap.r + dr - r) & 255) | (((ap.c + dc - c) & 255) << 8))",
-      "new": "(((ap.r - r) & 255) | (((ap.c - c) & 255) << 8))",
+      "old": "(((tr - r) & 255) | (((tc - c) & 255) << 8))",
+      "new": "(((tr) & 255) | (((tc) & 255) << 8))",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
       "id": "v8_anchor_wrong_byte",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "(((ap.r + dr) & 255) | (((ap.c + dc) & 255) << 8))",
-      "new": "(((ap.r + dr) & 127) | (((ap.c + dc) & 255) << 8))",
+      "old": "file.version === 8 ? ((tr & 255) | ((tc & 255) << 8))",
+      "new": "file.version === 8 ? ((tr & 127) | ((tc & 255) << 8))",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -466,8 +466,8 @@
     {
       "id": "escape_in_move_clears",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "function letGo() { if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }",
-      "new": "function letGo() { clear(); }",
+      "old": "function letGo() { if (st.ask) { st.ask = ''; return render(); } if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }",
+      "new": "function letGo() { if (st.ask) { st.ask = ''; return render(); } clear(); }",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -480,8 +480,8 @@
     {
       "id": "keys_while_dialog_open",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "if (!shown || !file() || (env.busy && env.busy())) return false;\n                var k = e.key",
-      "new": "if (!shown || !file()) return false;\n                var k = e.key",
+      "old": "if (!shown || !file() || (env.busy && env.busy())) return false;\n                previewOff();",
+      "new": "if (!shown || !file()) return false;\n                previewOff();",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -767,8 +767,8 @@
     {
       "id": "browser_loader_asks_the_wrong_file",
       "file": "web/front/mapmaker_app.js",
-      "old": "s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_pickup.css';",
-      "new": "s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_ants.css';",
+      "old": "add('style', 'link', 'href', 'front/mapmaker_pickup.css', function (n) { n.rel = 'stylesheet'; });",
+      "new": "add('style', 'link', 'href', 'front/mapmaker_ants.css', function (n) { n.rel = 'stylesheet'; });",
       "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
     },
     {
@@ -776,6 +776,202 @@
       "file": "web/front/mapmaker_app.js",
       "old": "function end(ok) { bad = bad || !ok; if (--left) return; done(bad || !win.MapPickup ? null : win.MapPickup); }",
       "new": "function end(ok) { done(win.MapPickup || null); }",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "tie_always_own",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "nt = along ? { r: t.r + dr, c: t.c + dc } : t;",
+      "new": "nt = { r: nr, c: nc };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tie_always_along",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "along = t.r >= 0 && t.c >= 0 && t.r < file.rows && t.c < cols && !!inSet[t.r * cols + t.c];",
+      "new": "along = true;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tie_never_along",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "&& t.r < file.rows && t.c < cols && !!inSet[t.r * cols + t.c];",
+      "new": "&& t.r < file.rows && t.c < cols && false;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tie_becomes_own_not_refused",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if ((t.r === p.r && t.c === p.c) !== (back.r === nr && back.c === nc)) return null;",
+      "new": "if (false) return null;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tie_offset_that_does_not_fit_not_refused",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (back.r !== nt.r || back.c !== nt.c) return null;",
+      "new": "if (false) return null;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tie_check_skipped_in_check",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (it.k === 'obj' || it.k === 'pile') {          // (a cell that is tied",
+      "new": "if (false) {          // (a cell that is tied",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tie_set_empty",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "(it.k === 'pile' ? it.objs : it.fp).forEach(function (x) { set[x] = true; }); });",
+      "new": "(it.k === 'pile' ? it.objs : it.fp).forEach(function (x) { void x; }); });",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "tie_build_writes_refused_word",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (words[k].a === null) throw new Error('a tie that cannot be kept (check() refuses such a shift)');",
+      "new": "if (words[k].a === null) words[k].a = 0;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hover_acts_when_only_picked",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!cell || !shown || st.mode !== 'moving' || st.drag || !f) return previewOff();",
+      "new": "if (!cell || !shown || st.drag || !f) return previewOff();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hover_not_given_back",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "function previewOff() { if (!st.hov) return; st.dr = st.hov.dr; st.dc = st.hov.dc; st.hov = null;",
+      "new": "function previewOff() { if (!st.hov) return; st.hov = null;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hover_key_acts_on_mouse",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "previewOff();          // (a key acts on where the thing was put, not on where the mouse is)\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hover_done_acts_on_mouse",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "            var f = file();\n            previewOff();\n            if (st.mode !== 'moving' || !st.items.length) return;",
+      "new": "            var f = file();\n            if (st.mode !== 'moving' || !st.items.length) return;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hover_kept_after_drag_starts",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "                    st.hov = null;          // (the ghost under the mouse is where the drag starts)\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hover_kept_after_click",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "            var had = !!st.hov;          // (a click puts the thing where the preview showed it)\n            st.hov = null;",
+      "new": "            var had = !!st.hov;          // (a click puts the thing where the preview showed it)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "hover_moves_other_than_middle",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "var dr = cell.row - Math.floor((b.r0 + b.r1) / 2), dc = cell.column - Math.floor((b.c0 + b.c1) / 2);\n            if (dr === st.dr && dc === st.dc) return;",
+      "new": "var dr = cell.row - b.r0, dc = cell.column - b.c0;\n            if (dr === st.dr && dc === st.dc) return;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ask_copy_group_copies_one",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (q === 'copy') startMove(all, 'group', true); else deleteNow(all);",
+      "new": "if (q === 'copy') startMove(st.items, 'one', true); else deleteNow(all);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ask_delete_group_deletes_one",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (q === 'copy') startMove(all, 'group', true); else deleteNow(all);",
+      "new": "if (q === 'copy') startMove(all, 'group', true); else deleteNow(st.items);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ask_one_takes_group",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (q === 'copy') startMove(st.items, 'one', true); else deleteNow(st.items); }));",
+      "new": "if (q === 'copy') startMove(st.group, 'group', true); else deleteNow(st.group); }));",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ask_copy_not_asked",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "copy = button('copy', 'Copy here', '', function () { st.ask = 'copy'; render(); });",
+      "new": "copy = button('copy', 'Copy here', '', function () { startMove(st.items, 'one', true); });",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ask_delete_not_asked",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "b.appendChild(button('delete', 'Delete', '', function () { st.ask = 'delete'; render(); }));",
+      "new": "b.appendChild(button('delete', 'Delete', '', function () { deleteNow(st.items); }));",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "ask_escape_lets_go_of_all",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "function letGo() { if (st.ask) { st.ask = ''; return render(); }",
+      "new": "function letGo() { if (st.ask) { st.ask = ''; return clear(); }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "escape_focus_not_given_back",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "            if (env.focus) env.focus();          // (the button that had the focus is gone: the map gets it)\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "fold_class_not_set",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "bar.className = 'pk-bar' + (st.fold ? ' folded' : '');",
+      "new": "bar.className = 'pk-bar';",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "fold_button_missing",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "bar.appendChild(button('fold', st.fold ? 'Controls' : 'Hide', 'pk-fold',",
+      "new": "void button('fold', st.fold ? 'Controls' : 'Hide', 'pk-fold',",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "browser_bar_focus_not_kept",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (held && bar.children) for (i = 0; i < bar.children.length; i++)",
+      "new": "if (false) for (i = 0; i < bar.children.length; i++)",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "browser_loader_style_not_asked_again",
+      "file": "web/front/mapmaker_app.js",
+      "old": "if (win.MapPickup && pickPart.style && pickPart.style.ok) return done(win.MapPickup);",
+      "new": "if (win.MapPickup) return done(win.MapPickup);",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "browser_loader_failed_tag_stays",
+      "file": "web/front/mapmaker_app.js",
+      "old": "if (old && old.node && old.node.parentNode) old.node.parentNode.removeChild(old.node);",
+      "new": "void 0;",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "browser_compact_bar_lost",
+      "file": "web/front/mapmaker_pickup.css",
+      "old": "    .pk-row, .pk-row.one, .pk-row.two, .pk-row.three, .pk-row.four, .pk-padwrap, .pk-side { display: contents; }",
+      "new": "    .pk-row.one { display: contents; }",
       "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
     }
   ]

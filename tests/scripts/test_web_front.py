@@ -54,7 +54,7 @@ BUDGET = 1430 * 1000        # bytes: the whole folder (about 1.41 MB: some 427 K
 ANTS_LAZY = ("mapmaker_ants.js", "mapmaker_ants.css")        # the map maker's Ants tool box (docs/MAP_EDITOR.md, "Ants: one at a time, group, mix"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadAnts)
 ANTS_BUDGET, ANTS_GZIP_BUDGET = 44 * 1000, 13 * 1000        # bytes, raw and gzipped, both files together: their own limits, because the editor's eagerly loaded scripts are at 93,320 of their 94,000 gzipped, so all of this new code (about 39,600 bytes, 12,100 gzipped) is lazy; a player who never uses the Ants tool downloads none of it
 PICKUP_LAZY = ("mapmaker_pickup.js", "mapmaker_pickup.css")        # the map maker's Pick up tool (docs/MAP_EDITOR.md, "Pick up"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadPick)
-PICKUP_BUDGET, PICKUP_GZIP_BUDGET = 66 * 1000, 18500        # bytes, raw and gzipped, both files together (about 61,200 and 17,000): their own limits, because the editor's eagerly loaded scripts are near their caps (about 389,500 of 400,000 and 108,700 of 111,000 gzipped), so all of this new code is lazy; a player who never uses the tool downloads none of it
+PICKUP_BUDGET, PICKUP_GZIP_BUDGET = 74 * 1000, 20500        # bytes, raw and gzipped, both files together (about 69,900 and 19,200; raised from 66,000 and 18,500 on purpose for the review's fixes: a tie to an anchor is kept exactly, the ghost follows the mouse, Copy and Delete ask for a group, the compact bar of a short screen): their own limits, because the editor's eagerly loaded scripts are near their caps (about 389,500 of 400,000 and 108,700 of 111,000 gzipped), so all of this new code is lazy; a player who never uses the tool downloads none of it
 PLAY_LAZY = ("mapmaker_play.js", "mapmaker_play.css")        # the map maker's Play this map (docs/MAP_EDITOR.md): its script and its style are loaded together the first time the button is pressed (web/front/mapmaker_app.js, playMap)
 PLAY_BUDGET, PLAY_GZIP_BUDGET = 30 * 1000, 9 * 1000        # bytes, raw and gzipped, both files together (about 27,500 and 7,700): their own limits, because the editor's eagerly loaded scripts are at 92,400 of their 94,000 gzipped and every other new part had to be loaded on demand; a player who never tests a map downloads none of it
 GAME_SCRIPTS = ("test_game.js",)        # the game page's side of Play this map (web/shell.html loads it with the other scripts of this folder): not the lobby's, not the editor's
@@ -294,7 +294,8 @@ class TheFolder(unittest.TestCase):
             self.assertNotIn(name, read("web", "mapmaker.html"), "a lazily loaded file has no tag in the page")
         self.assertLess(raw, PICKUP_BUDGET, "the Pick up tool's script and style are %d bytes" % raw)
         self.assertLess(zipped, PICKUP_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
-        self.assertIn("s.src = 'front/mapmaker_pickup.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_pickup.css';", read("web", "front", "mapmaker_app.js"), "the page loads both itself, when the tool is chosen")
+        for ask in ("add('script', 'script', 'src', 'front/mapmaker_pickup.js');", "add('style', 'link', 'href', 'front/mapmaker_pickup.css', function (n) { n.rel = 'stylesheet'; });"):
+            self.assertIn(ask, read("web", "front", "mapmaker_app.js"), "the page loads both itself, when the tool is chosen, and asks again for the one that failed")
 
     def test_play_this_map_is_loaded_on_demand_and_has_budgets_of_its_own(self):
         import gzip

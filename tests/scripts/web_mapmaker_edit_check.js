@@ -646,6 +646,12 @@ function caseH2() {
     p.canvas.fire('keydown', event('ArrowRight'));
     p.canvas.fire('keydown', event('+'));
     check(keyed.join() === 'ArrowRight,+' && prevented.join() === 'ArrowRight,+', 'a key of the tool is the tool\'s first: the tool is asked, and what it takes is not the map\'s (the arrow does not move the marked square: ' + keyed.join() + ')');
+    // a tool that shows what a click would do is told where the mouse is, and when it has left the map (Pick up: the ghost follows the mouse)
+    p = tapPage();
+    const hovered = [];
+    p.api.setPainter({ size: () => 0, tapOnly: () => true, hover: (c) => hovered.push(c ? c.row + ',' + c.column : 'none'), begin: () => false, extend: () => {}, end: () => {}, cancel: () => {} });
+    p.mouse('pointermove', { buttons: 0 }); p.canvas.fire('pointerleave');
+    check(hovered.length === 2 && /^\d+,\d+$/.test(hovered[0]) && hovered[1] === 'none', 'the mouse over a cell, and leaving the map, are told to the tool: ' + hovered.join(' | '));
     check(p.canvas.attrs['data-view'] !== undefined && /^[0-9.]+,[0-9.]+,[0-9.]+$/.test(p.canvas.attrs['data-view']), 'the canvas says its view exactly (what a test reads): ' + p.canvas.attrs['data-view']);
 }
 

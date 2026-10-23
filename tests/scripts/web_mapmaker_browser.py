@@ -2100,6 +2100,10 @@ def run_part(part, tab, args, check, tiny, junk):
         pickup_part.run_pickup(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
         tab.emulate(390, 844, 2, mobile=True)
         pickup_part.run_pickup_phone(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
+        tab.emulate(844, 390, 2, mobile=True)
+        pickup_part.run_pickup_short(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, "phone sideways 844x390", True)
+        tab.emulate(1280, 600, 1)
+        pickup_part.run_pickup_short(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, "desktop 1280x600", False)
     elif part == "play":
         import web_mapmaker_play_browser as play                      # (Play this map: its own file, this one is at the limit of lines)
         tab.emulate(1280, 800, 1)
