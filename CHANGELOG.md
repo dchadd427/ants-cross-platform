@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. Network protocol 21 and the replay rules numbers are unchanged. A new map rules word 2 exists inside the simulation only; the map readers and writers still refuse it, and the simulation itself plays a word of 2 as 1 outside the tests, so no map and no recording can use it.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/91a09a4b...029c0d86)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b29f40d8...1a1f55e3)
 
 ## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
 
