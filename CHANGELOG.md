@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.108 - 2026-10-22 - Hard computer players take the quick kill and stop sending ants where no walk goes
+
+**For players:**
+- **The Hard computer players now take a kill when they see one.** An enemy ant that stands next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over the whole map library they drown about two thirds more enemy ants on purpose than before.
+- **They no longer send ants where no walk goes.** An attack on an ant across a lake used to end in "Can't go there" and a shrug. Of every 100 orders the game refused about 30 before and 19 now, and fewer ants spend the match stuck.
+- **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home for the whole match. Where the food lies over water or behind a gate, the ants keep that work instead.
+- **The ring of fire round an enemy gate is lit only when that team has food to bank.**
+- Against the old Hard player the new one wins as often in four-player matches and more often in two-player matches on the community maps (57 of 100). Easy and Medium are unchanged.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (computer players run on the server or the host and only send commands, so old recordings play as before).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...b69719b2), [the quick kill](docs/BOT_FIGHT.md)
+
 ## v0.12.107 - 2026-10-22 - Map Maker: the Pick up tool moves, copies and deletes what is on a map
 
 **For players:**
@@ -591,27 +604,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...a366cb21), [the bot tool](docs/BOTS.md#running-bots)
 
-## v0.12.44 - 2026-10-15 - A 30 second countdown with the chat open before an online match
+## Older versions (v0.12.44 and before)
 
-**For players:**
-- A match of an online room with two or more people now opens with a **30 second countdown** instead of the 5 second "Get ready to play!" dialog. It starts when everybody's game has loaded. The card shows the seconds left, who plays which color (computer players are marked) and the chat, which is open: type and press Enter (on a phone, tap the chat box) to say hello and arrange before the ants move. The status line above the chat says "Match starts in N s".
-- The card has a **Fullscreen** button, so you can go fullscreen before the match starts (in the browser the page's own button, on the desktop a button on the card). The Quit button and Ctrl+Q still leave the room; clicks on the map and the keys of the match stay out of reach until the match begins.
-- Rooms of one person (with computer players), games on the local network and games on this computer keep the 5 second dialog.
-
-**Rules / network:** the simulation, its rules and every state hash are unchanged (the countdown is not a turn, so recordings and replays are as before). Network protocol 21 (was 20): the Begin message carries the seconds that the host holds the first turn, so a game of an older version cannot join a room of this one (a browser page asks for a reload). The server's `--start-countdown-seconds` (default 30, 0 = none) and a room's `countdown_seconds` set the length.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...58b8f468), [the countdown](docs/MATCH_COUNTDOWN.md)
-
-## v0.12.43 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
-
-**For players:**
-- The Auto camera of a replay, and of a match that you watch live, now locks on the biggest action and follows it: kills, fights of several ants, thefts and chains of bombs or fires draw it (food carried home counts a little), a stray hit or blow does not, and the picture goes along with a fight that moves across the map.
-- It stays on a place at least 7 seconds and moves on only to a place that is clearly busier (1.5 times as busy; a fight that is cooling is not taken from by a place that has only just begun) or when the action has died out, and then the picture stays where it is. It glides there smoothly, with no snap, and keeps your zoom. Taking the camera by hand still wins, and the **Auto camera** button comes back to the biggest action.
-
-**Rules / network:** none. Only the camera of the viewer changed; no rule, no hash and no protocol number (protocol 20) changed.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a3b5692e...e3bf5a1a)
-
-## Older versions (v0.12.42 and before)
-
-Every release before v0.12.43, and the long notes of v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.45, and the long notes of v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
