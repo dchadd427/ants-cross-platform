@@ -7,8 +7,11 @@
 //   --front DIR  the folder of the mapmaker_*.js files to hold to the checks (default: web/front; the Python test gives it broken copies, to show that the checks can fail)
 //
 //   A  the shapes: which sides of a cell touch the other kind, and the piece that follows (one side: an edge piece, two sides that meet: a corner piece, anything else: none)
-//   B  the rule on made-up maps: the kind of the higher rank wears the piece, the other side stays plain; water only against mud; opposite sides, three sides and a diagonal get none; a piece
+//   B  the rule on made-up maps: the kind of the higher rank wears the piece, the other side stays plain; water only against mud; opposite sides, three sides and a diagonal get none of their own (B2: the cells beside them wear); a piece
 //      placed by hand is kept when right (and in its look-alike) and chosen again when not; the border of the map has no neighbor; a region changes nothing outside it
+//   B2 the lower kind wears where the higher cannot (a strip of water one cell wide in mud, an inlet, a lone cell): the owner's scene painted stroke by stroke in both orders (Auto edges, the real
+//      stroke of mapmaker_edit.js), every pair that has pieces, the pairs that have none (water beside gravel, dirt or slate: nothing is put), no doubled edge, a notch of the lower kind stays plain,
+//      and random strokes: the map Auto edges leaves is the one that Fix edges makes from the plain ground, and a second Fix edges finds nothing
 //   C  the library (Community-Maps and the original maps): the rule never changes a kind, only tiles of the table change, it is idempotent (a fixed map is left as it is), and how much of the
 //      library it changes is held under a cap (the numbers are printed)
 //   C2 the game's own maps as the gold standard: Fix edges on TREASURE.LVL changes nothing and on ISLANDS.LVL only its two known gaps, never rewrites a hand-made piece there, and on no map of the
@@ -74,8 +77,8 @@ function ruleChecks() {
         equal([nameAt(f, 1, 1), Ground.kindOf(f.tile1(0, 1)), Ground.info(f.tile1(0, 1)).other], [piece, LETTER[under], null], LETTER[top] + ' under ' + LETTER[under] + ': the ' + LETTER[top] + ' side wears ' + piece + ', the other stays plain');
     });
     // the shapes by the sides: a channel (opposite sides), three sides and a diagonal get no piece
-    f = grid(['mmm', 'ggg', 'mmm']); equal(Edges.plan(f, null, Ground).count, 0, 'a channel of gravel one cell wide: opposite sides, no piece');
-    f = grid(['mmm', 'mgm', 'mgm']); made = Edges.plan(f, null, Ground); apply(f, made); equal(nameAt(f, 1, 1), 'g01a', 'a cell with mud on three sides gets none');
+    f = grid(['mmm', 'ggg', 'mmm']); apply(f, Edges.plan(f, null, Ground)); equal(names(f, 0, 2), ['mg08a mg08a mg08a', 'g01a g01a g01a', 'mg03a mg03a mg03a'], 'a channel of gravel one cell wide: the gravel has no piece for opposite sides, the mud on both sides wears');
+    f = grid(['mmm', 'mgm', 'mgm']); made = Edges.plan(f, null, Ground); apply(f, made); equal(nameAt(f, 1, 1), 'g01a', 'a cell with mud on three sides gets none (the mud round it wears)');
     f = grid(['mgg', 'ggg', 'ggg']); equal(Edges.plan(f, null, Ground).cells.map((c) => c[0]), [1, 3], 'mud only at a diagonal: no piece for the cell at its corner (the two beside it have a side)');
     // the border of the map has no neighbor; a tile that is not ground has none
     f = grid(['gg', 'mm']); apply(f, Edges.plan(f, null, Ground)); equal(names(f, 0, 0), ['gm08a gm08a'], 'the border: only the side that has a neighbor counts');
@@ -134,6 +137,136 @@ function ruleChecks() {
     equal(Array.from(grown.inserted.subarray(2 + 11 * 500, 2 + 11 * 500 + 2)), [0x2E, 0], 'the new slots before the piece are "."');
 }
 
+// ---- the lower kind wears where the higher cannot ----
+
+// A made-up map for the real stroke of mapmaker_edit.js: `rows` x `columns` of plain `fill` ground, version 8 (a dictionary of 700 names, '.' all of them: the pieces are not named here)
+function strokeMap(rows, columns, fill) {
+    const names = 700, cells = rows * columns, head = 8 + 2 + 30, out = new Uint8Array(head + 2 + 11 * names + 8 + 12 * cells + 12), view = new DataView(out.buffer);
+    let at = 0;
+    const dword = (v) => { view.setUint32(at, v, true); at += 4; }, word = (v) => { view.setUint16(at, v, true); at += 2; };
+    dword(8); dword(1); word(10); at += 30; word(names - 1);
+    for (let i = 0; i < names; i++) { out[at] = 0x2E; at += 11; }
+    dword(rows); dword(columns);
+    for (let i = 0; i < cells; i++) { word(fill); word(0); word(0xCDCD); }
+    for (let i = 0; i < cells; i++) { word(0x7FFE); word(0); word(0); }
+    word(0); word(0); word(0); word(0x7FFE); word(0); word(6);
+    return Edit.create(File.parse(out));
+}
+// one stroke with Auto edges On, as mapmaker_tools.js does it (`applyAuto`: the brush's square and two cells more all round): `path` is the cells that the pointer comes to, the first is where it goes down
+function paintStroke(ed, tile, path, brush) {
+    const stroke = ed.begin('ground', tile);
+    const auto = (rect) => {
+        const made = Edges.strokePlan(ed.file, { r0: rect.r0 - 2, r1: rect.r1 + 2, c0: rect.c0 - 2, c1: rect.c1 + 2 }, Ground, tile, stroke.painted, stroke.beforeTile);
+        if (made.count) stroke.change({ names: [], cells: [], solid: [], splices: [], ground: made.cells });
+    };
+    stroke.stamp(path[0][0], path[0][1], brush); auto(Edit.brushRect(ed.file, path[0][0], path[0][1], brush));
+    for (let i = 1; i < path.length; i++) {
+        const [r0, c0] = path[i - 1], [r1, c1] = path[i];
+        stroke.segment(r0, c0, r1, c1, brush);
+        const a = Edit.brushRect(ed.file, r0, c0, brush), b = Edit.brushRect(ed.file, r1, c1, brush);
+        auto({ r0: Math.min(a.r0, b.r0), r1: Math.max(a.r1, b.r1), c0: Math.min(a.c0, b.c0), c1: Math.max(a.c1, b.c1) });
+    }
+    stroke.end();
+}
+// paint the cells of `picture` (rows of letters) that hold `letter`, row by row with a brush of 1 (a run of cells is one stroke)
+function paintLetter(ed, picture, letter) {
+    picture.forEach((row, r) => { for (let c = 0; c < row.length; c++) if (row[c] === letter) { let e = c; while (e + 1 < row.length && row[e + 1] === letter) e++; paintStroke(ed, PLAIN[LETTER[letter]], [[r, c], [r, e]], 1); c = e; } });
+}
+function editNames(ed, r0, r1, c0, c1) {
+    const out = [];
+    for (let r = r0; r <= r1; r++) { const row = []; for (let c = c0; c <= c1; c++) row.push(Ground.name(ed.file.tile1(r, c))); out.push(row.join(' ')); }
+    return out;
+}
+
+// the owner's picture: a blob of mud on gravel with two strips of water one cell wide inside it, the lower one bending (g gravel, m mud, w water)
+const SCENE = ['gggggggggggg', 'gmmmmmmmmmmg', 'gmmmwmmmmmmg', 'gmmmwmmmmmmg', 'gmmmwmmmmmmg', 'gmmmwmmmmmmg', 'gmmmmmmmmmmg', 'gmmmwwmmmmmg', 'gmmmmwmmmmmg', 'gmmmmwmmmmmg', 'gmmmmmmmmmmg', 'gggggggggggg'];
+const SCENE_WEARS = ['gm08a gm08a gm08a gm08a gm08a gm08a gm08a gm08a gm08a gm08a', 'M01a M01a M01a MW08a M01a M01a M01a M01a M01a M01a', 'M01a M01a MW06a w01a MW05a M01a M01a M01a M01a M01a',
+    'M01a M01a MW06a w01a MW05a M01a M01a M01a M01a M01a', 'M01a M01a MW06a w01a MW05a M01a M01a M01a M01a M01a', 'M01a M01a MW06a w01a MW05a M01a M01a M01a M01a M01a', 'M01a M01a M01a M01a M01a M01a M01a M01a M01a M01a',
+    'M01a M01a MW06a w01a wm04a M01a M01a M01a M01a M01a', 'M01a M01a M01a MW04a w01a MW05a M01a M01a M01a M01a', 'M01a M01a M01a MW06a w01a MW05a M01a M01a M01a M01a', 'M01a M01a M01a M01a MW03a M01a M01a M01a M01a M01a', 'gm03a gm03a gm03a gm03a gm03a gm03a gm03a gm03a gm03a gm03a'];
+
+function lowerChecks() {
+    const plain = (k) => Ground.name(PLAIN[k]);
+    // every pair that has pieces: a strip of the higher kind one cell wide in the lower kind has no piece of its own, the lower cells on both sides wear the pieces toward it; the higher kind wears
+    // them where two or more cells wide
+    const pairs = [['g', 'd'], ['g', 'm'], ['g', 's'], ['s', 'd'], ['d', 'm'], ['s', 'm'], ['w', 'm']];
+    pairs.forEach(([hi, lo]) => {
+        const H = LETTER[hi], L = LETTER[lo], toward = (shape) => Ground.name(Ground.edges(L, H).filter((e) => e.shape === shape)[0].id);
+        let f = grid([lo.repeat(3), hi.repeat(3), lo.repeat(3)]);
+        apply(f, Edges.plan(f, null, Ground));
+        equal(names(f, 0, 2), [[toward(8), toward(8), toward(8)].join(' '), plain(H) + ' ' + plain(H) + ' ' + plain(H), [toward(3), toward(3), toward(3)].join(' ')], H + ' in ' + L + ' one cell wide: no piece on the ' + H + ', the ' + L + ' on both sides wears ' + toward(8) + ' and ' + toward(3));
+        equal(Edges.plan(f, null, Ground).count, 0, H + ' strip: a second pass changes nothing');
+        f = grid([lo.repeat(4), hi.repeat(4), hi.repeat(4), lo.repeat(4)]);
+        apply(f, Edges.plan(f, null, Ground));
+        const wears = (shape) => Ground.name(Ground.edges(H, L).filter((e) => e.shape === shape)[0].id);
+        equal(names(f, 0, 3).map((row) => row.split(' ')[1]), [plain(L), wears(3), wears(8), plain(L)], H + ' two cells wide in ' + L + ': the ' + H + ' wears (' + wears(3) + ', ' + wears(8) + '), the ' + L + ' stays plain');
+    });
+    // the pairs that have no piece: water beside gravel, dirt or slate stays as it is, and the editor puts nothing
+    ['g', 'd', 's'].forEach((k) => { const f = grid(['www', k.repeat(3), 'www']); equal(Edges.plan(f, null, Ground).count, 0, 'a strip of ' + LETTER[k] + ' in water: no piece exists, nothing changes'); equal(Edges.plan(grid([k.repeat(3), 'www', k.repeat(3)]), null, Ground).count, 0, 'a strip of water in ' + LETTER[k] + ': no piece exists, nothing changes'); });
+    // an inlet (the water has mud on three sides) and a lone cell: the mud round it wears, the water stays plain
+    let f = grid(['mmmm', 'mwwm', 'mmmm']); apply(f, Edges.plan(f, null, Ground));
+    equal(names(f, 0, 2), ['M01a MW08a MW08a M01a', 'MW06a w01a w01a MW05a', 'M01a MW03a MW03a M01a'], 'a stub of water in mud: the mud round it wears');
+    f = grid(['mmm', 'mwm', 'mmm']); apply(f, Edges.plan(f, null, Ground));
+    equal(names(f, 0, 2), ['M01a MW08a M01a', 'MW06a w01a MW05a', 'M01a MW03a M01a'], 'a lone cell of water in mud: the four cells beside it wear');
+    equal(Edges.plan(f, null, Ground).count, 0, 'and a second pass changes nothing');
+    f = grid(['gmg', 'ggg']); equal(Edges.plan(f, null, Ground).cells.map((c) => c[0]), [0, 2, 4], 'a lone cell of mud in gravel: the gravel beside and below it wears, as before');
+    // where two strips of water are one cell apart the mud between has water on two opposite sides: no piece fits it
+    f = grid(['mmm', 'www', 'mmm', 'www', 'mmm']); apply(f, Edges.plan(f, null, Ground));
+    equal(names(f, 0, 4).map((row) => row.split(' ')[1]), ['MW08a', 'w01a', 'M01a', 'w01a', 'MW03a'], 'one row of mud between two strips of water has water on opposite sides: it stays plain');
+    // a notch of the lower kind (an inner corner of a staircase) stays plain: the higher cells beside it draw it
+    f = grid(['ggg', 'gdd', 'gdd']); apply(f, Edges.plan(f, null, Ground)); equal(nameAt(f, 1, 1), 'd01a', 'a notch: the dirt cell with gravel on two sides that meet stays plain');
+    // a hand-placed piece of the higher cell that faces a lower cell is a boundary that is drawn: that cell does not wear it a second time (water with mud on three sides keeps its wm03a)
+    f = grid(['mmm', 'mwm', 'mmm'], { '1,1': Ground.FIRST + Ground.NAMES.indexOf('wm03a') }); apply(f, Edges.plan(f, null, Ground));
+    equal(names(f, 0, 2), ['M01a M01a M01a', 'MW06a wm03a MW05a', 'M01a MW03a M01a'], 'a hand-placed wm03a on the water: the mud to the north is drawn already; the others wear');
+    check(doubled(f.rows, f.columns, (r, c) => f.tile1(r, c)) === 0, 'and no boundary has two facing pieces');
+    // a hand-placed piece of the mud (mg08a: gravel on the south) is kept, and the water beside it still is drawn by its neighbors
+    f = grid(['mmm', 'mwm', 'mgm'], { '0,1': Ground.FIRST + Ground.NAMES.indexOf('md08a') }); apply(f, Edges.plan(f, null, Ground));
+    equal(nameAt(f, 0, 1), 'md08a', 'a hand-placed piece beside the water stays');
+    // the owner's scene on the whole map: Fix edges
+    f = grid(SCENE); apply(f, Edges.plan(f, null, Ground));
+    equal(names(f, 0, 11).map((row) => row.split(' ').slice(1, 11).join(' ')), SCENE_WEARS, 'the owner\'s scene (mud on gravel with two strips of water one cell wide, one bending) after Fix edges');
+    equal(Edges.plan(f, null, Ground).count, 0, 'and a second Fix edges finds nothing');
+}
+
+// Auto edges: painting stroke by stroke leaves the same map in either order, and the same as Fix edges makes of the plain ground
+function strokeChecks() {
+    const canonical = (ed) => { const rows = ed.file.rows, columns = ed.file.columns, plainOf = (r, c) => Ground.kind(Ground.kindOf(ed.file.tile1(r, c))).plain, f = grid(Array.from({ length: rows }, (_, r) => Array.from({ length: columns }, (_, c) => Ground.kind(Ground.kindOf(plainOf(r, c))).letter).join('')));
+        apply(f, Edges.plan(f, null, Ground)); return f; };
+    const same = (ed) => { const f = canonical(ed); for (let r = 0; r < ed.file.rows; r++) for (let c = 0; c < ed.file.columns; c++) if (ed.file.tile1(r, c) !== f.tile1(r, c)) return [r, c, Ground.name(ed.file.tile1(r, c)), Ground.name(f.tile1(r, c))]; return true; };
+    const gravel = SCENE.map((row) => row.replace(/[mw]/g, 'g')), rows = SCENE.length, columns = SCENE[0].length;
+    [['mud first, then the water', ['m', 'w']], ['water first, then the mud round it', ['w', 'm']]].forEach(([what, order]) => {
+        const ed = strokeMap(rows, columns, 485);
+        order.forEach((letter) => paintLetter(ed, SCENE, letter));
+        equal(editNames(ed, 0, 11, 1, 10), SCENE_WEARS, 'Auto edges, the owner\'s scene, ' + what + ': every water and mud boundary has its piece');
+        equal(same(ed), true, 'Auto edges, ' + what + ': the map is the one that Fix edges makes of the plain ground');
+        equal(Edges.plan(ed.file, null, Ground).count, 0, 'Auto edges, ' + what + ': Fix edges finds nothing left');
+    });
+    // a brush of 3 and one long stroke, the strips painted over the finished mud, then some of the mud painted over a strip again
+    const ed = strokeMap(rows, columns, 485);
+    paintStroke(ed, 439, [[2, 2], [2, 9], [8, 9], [8, 2], [3, 2]], 3);
+    paintStroke(ed, 476, [[2, 5], [9, 5]], 1);
+    paintStroke(ed, 439, [[4, 5], [4, 5]], 1);
+    equal(same(ed), true, 'Auto edges: a brush of 3, a long stroke, a strip and a gap painted over it: the map is the one that Fix edges makes of the plain ground');
+    // random strokes of any kind: the same, and a second Fix edges finds nothing (the stroke's own plan and Fix edges agree)
+    const rnd = seeded(20261023), pick = (n) => Math.floor(rnd() * n), kinds = [485, 487, 571, 439, 476];
+    let differ = 0, left = 0, first = null;
+    for (let k = 0; k < 120; k++) {
+        const rs = 8 + pick(10), cs = 8 + pick(10), m = strokeMap(rs, cs, 485);
+        for (let s = 1 + pick(7); s > 0; s--) {
+            const path = [[pick(rs), pick(cs)]];
+            for (let i = pick(8); i > 0; i--) path.push([Math.max(0, Math.min(rs - 1, path[path.length - 1][0] + pick(5) - 2)), Math.max(0, Math.min(cs - 1, path[path.length - 1][1] + pick(5) - 2))]);
+            paintStroke(m, kinds[pick(5)], path, [1, 1, 1, 2, 3][pick(5)]);
+        }
+        const got = same(m);
+        if (got !== true) { differ++; first = first || got; }
+        if (Edges.plan(m.file, null, Ground).count) left++;
+    }
+    equal([differ, left, first], [0, 0, null], 'random strokes (120 maps): Auto edges leaves what Fix edges makes of the plain ground, and Fix edges finds nothing left');
+    // a hand-placed piece beside a stroke is kept (a mud piece next to the water that is painted)
+    const hand = strokeMap(6, 6, 439); hand.file.bytes.set([Ground.FIRST + Ground.NAMES.indexOf('md08a') & 255, Ground.FIRST + Ground.NAMES.indexOf('md08a') >> 8], hand.file.layer1 + 6 * (2 * 6 + 2));
+    paintStroke(hand, 476, [[2, 3], [4, 3]], 1);
+    equal(hand.file.tile1(2, 2), Ground.FIRST + Ground.NAMES.indexOf('md08a'), 'Auto edges keeps a piece that was put by hand beside the water');
+}
+
 // ---- the library ----
 function libraryFiles() {
     const out = [];
@@ -141,7 +274,7 @@ function libraryFiles() {
     return out;
 }
 
-const SHARE_CAP = 0.03;          // the share of the library's ground cells that Fix edges changes (2.2 in 100 when this was written; no piece is ever taken away)
+const SHARE_CAP = 0.03;          // the share of the library's ground cells that Fix edges changes (2.2 in 100 when this was written, 2.6 with the lower kind wearing where the higher cannot; no piece is ever taken away)
 
 function inc() {
     const text = fs.readFileSync(path.join(ROOT, 'src', 'ants_sim', 'movement_tables_data.inc'), 'utf8'), at = text.indexOf('kTileTerrain[1344] = {');
@@ -203,7 +336,7 @@ function doubled(rows, columns, at) {
 }
 
 function goldChecks() {
-    const limits = { 'TREASURE.LVL': 0, 'ISLANDS.LVL': 2 };
+    const limits = { 'TREASURE.LVL': 0, 'ISLANDS.LVL': 2, 'MEDIUM.LVL': 0 };         // (MEDIUM draws its lakes the other way, the mud wearing toward the water: nothing to add there either)
     Object.keys(limits).forEach((name) => {
         const f = File.parse(new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', name))));
         const made = Edges.plan(f, null, Ground), by = new Map(made.cells);
@@ -423,6 +556,8 @@ ruleChecks();
 goldChecks();
 libraryChecks();
 randomChecks();
+lowerChecks();
+strokeChecks();
 speedChecks();
 bytesChecks();
 dialogChecks();
