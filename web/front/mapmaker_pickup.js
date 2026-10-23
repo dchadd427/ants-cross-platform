@@ -401,7 +401,7 @@
     //       refresh(), focus(), busy()}
     function create(env) {
         var doc = env.doc, win = env.win, host = env.host;
-        var st = { mode: 'idle', items: [], kind: 'one', group: [], copy: false, dr: 0, dc: 0, pad: false, box: null, drag: null, cycle: null, note: '', verdict: { ok: true }, target: [], ask: '', hov: null, fold: false };
+        var st = { mode: 'idle', items: [], kind: 'one', group: [], copy: false, dr: 0, dc: 0, pad: false, box: null, drag: null, cycle: null, note: '', verdict: { ok: true }, target: [], ask: '', hov: null, fold: false, away: false };
         var shown = false, over = null, bar = null, live = null, wrap = host.cv ? host.cv.parentNode : null, loop = 0, last = '';
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
@@ -424,11 +424,11 @@
         // what a screen reader is told (the bar may be hidden when the thing is let go)
         function tell(text) { if (live) live.textContent = text; }
         function clear(note) {
-            st.mode = 'idle'; st.items = []; st.group = []; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.box = null; st.drag = null; st.cycle = null; st.note = note || ''; st.verdict = { ok: true }; st.target = []; st.ask = ''; st.hov = null;
+            st.mode = 'idle'; st.items = []; st.group = []; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.box = null; st.drag = null; st.cycle = null; st.note = note || ''; st.verdict = { ok: true }; st.target = []; st.ask = ''; st.hov = null; st.away = false;
             paint(); tell(st.note);
         }
         function pick(items, kind, group, cycle, box) {
-            st.items = items; st.kind = kind; st.group = group || []; st.cycle = cycle || null; st.mode = items.length ? 'picked' : 'idle'; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.note = ''; st.box = box || null; st.target = []; st.ask = ''; st.hov = null;
+            st.items = items; st.kind = kind; st.group = group || []; st.cycle = cycle || null; st.mode = items.length ? 'picked' : 'idle'; st.copy = false; st.dr = 0; st.dc = 0; st.pad = false; st.note = ''; st.box = box || null; st.target = []; st.ask = ''; st.hov = null; st.away = false;
             paint();
         }
         function tapSelect(cell) {
@@ -479,6 +479,7 @@
         }
         function done() {
             var f = file();
+            if (st.drag) return;          // (the button or the finger is still down: the lift puts it down, and the page takes no change before it)
             previewOff();
             if (st.mode !== 'moving' || !st.items.length) return;
             if (!st.copy && !st.dr && !st.dc) return pick(st.items, st.kind, st.group, st.cycle, st.box);
@@ -607,9 +608,9 @@
                 padwrap.appendChild(pad); padwrap.appendChild(side); bar.appendChild(padwrap);
                 return;
             }
-            if (ok || v.plain) {
+            if (ok || v.plain || st.away) {
                 line.appendChild(el('span', 'pk-name', (st.copy ? 'Copying ' : 'Moving ') + name + '.'));
-                line.appendChild(el('span', 'pk-rest', ' ' + (v.plain ? v.text : (st.copy ? 'Tap where the copy goes' : 'Tap the new place') + ', or drag ' + them + '. It lands on row ' + land.row + ', column ' + land.column + '.')));
+                line.appendChild(el('span', 'pk-rest', ' ' + (st.away ? 'Let go here and it goes back where it was.' : v.plain ? v.text : (st.copy ? 'Tap where the copy goes' : 'Tap the new place') + ', or drag ' + them + '. It lands on row ' + land.row + ', column ' + land.column + '.')));
                 bar.appendChild(line);
             } else bar.appendChild(el('p', 'pk-warn', v.text));
             if (st.note) bar.appendChild(el('p', 'pk-said', st.note));
@@ -690,7 +691,7 @@
                 if (!moving && it.k === 'obj' && it.hill >= 0 && it.entrance >= 0) door(c, f, it.entrance);
             }
             if (st.mode === 'picked' && st.kind === 'one' && st.group.length > 1) for (i = 1; i < st.group.length; i++) outline(c, f, st.group[i].fp, GOLD, 2, [4, 3]);
-            if (!moving) return;
+            if (!moving || st.away) return;
             var v = st.verdict, good = v.ok || v.plain, sprites = env.sprites ? env.sprites() : null, few = items.length <= 400, b0 = bbox(f);
             for (i = 0; i < items.length; i++) {         // the ghost: see-through, green where it can go and red where it cannot
                 var g = st.target[i] || [], gi = items[i];
@@ -756,6 +757,7 @@
             hover: function (cell) { hoverAt(cell); },
             begin: function (cell) {
                 if (!shown || !file()) return false;
+                st.away = false;
                 if (st.mode === 'boxing') { st.drag = { kind: 'box', from: cell }; st.box = { r0: cell.row, c0: cell.column, r1: cell.row, c1: cell.column }; paint(); return true; }
                 if (st.mode === 'moving') {
                     if (!inTarget(cell)) { centreOn(cell); return false; }
@@ -787,7 +789,7 @@
                 if (!d) return;
                 if (d.kind === 'box') return finishBox();
                 if (d.kind === 'item' && !d.moved) return tapSelect(d.from);
-                if (d.moved && st.mode === 'moving') return done();          // letting go of the mouse or the finger after a drag puts the thing down where the ghost is (red: it stays, with the reason)
+                if (d.moved && st.mode === 'moving') return st.away ? letGo() : done();          // letting go of the mouse or the finger after a drag puts the thing down where the ghost is (red: it stays, with the reason); off the map or over the bar it goes back
                 render();
             },
             // the pointer was lost (a cancelled touch, the window lost the focus): what was dragged goes back, like Escape
@@ -797,6 +799,11 @@
                 if (d.kind === 'box') { st.box = null; paint(); } else if (d.moved) letGo();
             },
             abandon: function () { painter.cancel(); },
+            // where the pointer is during a drag: off the map or over the bar, a lift takes the thing back (the ghost goes away)
+            away: function (w) {
+                var r = bar && !bar.hidden && bar.getBoundingClientRect ? bar.getBoundingClientRect() : null, a = !!st.drag && st.drag.kind !== 'box' && !!w && (w.outside || (!!r && w.x >= r.left && w.x <= r.right && w.y >= r.top && w.y <= r.bottom));
+                if (a !== st.away) { st.away = a; render(); drawOver(); }
+            },
             // the keys: arrows nudge a thing that is picked up, Enter picks the thing on the marked cell, puts it down (Done) or starts the move, Escape lets go, Delete takes it away
             key: function (e) {
                 if (!shown || !file() || (env.busy && env.busy())) return false;

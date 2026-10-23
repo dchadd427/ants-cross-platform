@@ -543,6 +543,8 @@
                 current = null;
                 if (n) { canvas.refreshMini(); showButtons(); showInfo(); env.onEdit(); }
             },
+            // the pointer is at a place of the page (a stroke is going on): Pick up takes the thing back when it is let go off the map
+            away: function (where) { if (mine() && mine().away) mine().away(where); },
             // the pointer was lost without a lift (the window lost the focus): Pick up takes the thing back, the painting tools keep the stroke
             abandon: function () { if (mine() && mine().abandon) return mine().abandon(); painter.end(); },
             cancel: function () {

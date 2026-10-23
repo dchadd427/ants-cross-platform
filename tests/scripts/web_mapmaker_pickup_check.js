@@ -149,11 +149,11 @@ function page(file, opts) {
     const wrap = el('div'), cv = el('div'), map = el('canvas'), cvbar = el('div');
     wrap.appendChild(cv); wrap.appendChild(cvbar); cv.appendChild(map); doc.body.appendChild(wrap);
     map.offsetLeft = 0; map.offsetTop = 0;
-    let ed = editor(file), view = View.create(file, opts.width || 600, opts.height || 400), cursor = null, busy = false;
-    const log = { acts: 0, refreshes: 0, said: [], focus: 0, frames: [], dialogs: [] };
+    let ed = editor(file), view = View.create(file, opts.width || 600, opts.height || 400), cursor = null, busy = false, stroking = false;          // (`stroking`: the real page takes no change while a stroke goes on, tools.act)
+    const log = { acts: 0, refused: 0, refreshes: 0, said: [], focus: 0, frames: [], dialogs: [] };
     const env = {
         doc, win: { devicePixelRatio: 1, requestAnimationFrame: null }, host: { map, cv, hint: el('p') },
-        file: () => ed.file, act: (change) => { log.acts++; const d = ed.act(change); if (d) pickRef.refresh(); return !!d; },
+        file: () => ed.file, act: (change) => { if (stroking) { log.refused++; return false; } log.acts++; const d = ed.act(change); if (d) pickRef.refresh(); return !!d; },
         say: (t, m) => log.said.push(t + ': ' + m), sprites: () => null, view: () => ({ view, cursor, width: opts.width || 600, height: opts.height || 400 }),
         refresh: () => { log.refreshes++; }, focus: () => { log.focus++; }, busy: () => busy,
         dialogs: { open: (spec) => { const body = el('div'); spec.build(body, { close() {} }); log.dialogs.push({ spec, body }); } }
@@ -161,7 +161,9 @@ function page(file, opts) {
     if (opts.sprites) env.sprites = opts.sprites;
     const pick = Pick.create(env), pickRef = pick;
     pick.show(true);
-    const bar = pick.bar, p = pick.painter;
+    const bar = pick.bar, real = pick.painter;
+    // the canvas's stroke: it begins when the tool takes the press, and is over when the tool is told of the lift (canvas.js up)
+    const p = Object.assign({}, real, { begin: (c) => { const r = real.begin(c); if (r) stroking = true; return r; }, end: (w) => { stroking = false; return real.end(w); }, cancel: () => { stroking = false; return real.cancel(); }, abandon: () => { stroking = false; return real.abandon(); } });
     const buttons = () => { const o = {}; bar.querySelectorAll('.pk-b').length; for (let i = 0; i < bar.querySelectorAll('.pk-b').length; i++) { const b = bar.querySelectorAll('.pk-b')[i]; o[b.getAttribute('data-k')] = b; } return o; };
     const api = {
         doc, pick, p, bar, env, log, ed: () => ed, file: () => ed.file, buttons, map, over: pick.over,
@@ -999,6 +1001,11 @@ function caseI() {
         t.doc.key('z', { ctrlKey: true });
         p.begin({ row: 3, column: 3 }); p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); p.abandon(); p.end();
         check(t.tools.state().history.strokes === 0 && t.pickPage().state().mode !== 'moving', 'a pointer that was lost without a lift (the window) takes the thing back through the tools too' + tag);
+        p.begin({ row: 3, column: 3 }); p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); p.away({ outside: true, x: 900, y: 50 }); p.end();
+        check(t.tools.state().history.strokes === 0 && t.pickPage().state().mode === 'picked', 'a lift off the map, told through the page\'s tools, takes the hill back: nothing is written' + tag);
+        p.begin({ row: 3, column: 3 }); p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); p.away({ outside: false, x: 50, y: 50 }); p.end();
+        check(t.tools.state().history.strokes === 1, 'and one on the map puts it down' + tag);
+        t.doc.key('z', { ctrlKey: true });
         t.button('pan').click();
         check(t.pickPage().state().mode === 'idle' && p.canMove({ row: 3, column: 3 }) === false && p.key({ key: 'Enter' }) === false && p.begin({ row: 3, column: 3 }) === false, 'Pan is the old Move without the moving: a press on a thing looks around' + tag);
         t.doc.key('p'); check(t.tools.state().tool === 'pickup', 'the letter P chooses Pick up' + tag);
@@ -1339,10 +1346,52 @@ function caseN() {
         check(q.log.acts === 0 && q.state().mode === 'moving', 'the hover ghost does not drag, and a lift with nothing pressed does nothing' + tag);
         q.p.hover(null); q.press('done');
         check(q.log.acts === 1, 'Done still puts it down' + tag);
-        // Done (or Enter) while the button is still held, then the lift: one change
+        // Done or Enter while the button is still held: the page would refuse the change (a stroke goes on) and the pick would be thrown away; they wait for the lift, which puts it down where the ghost is then
         q = page(File.parse(Uint8Array.from(bytes)));
-        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.press('done'); q.p.extend({ row: 12, column: 20 }, { row: 15, column: 25 }); q.p.end();
-        check(q.log.acts === 1 && q.ed().history.size().strokes === 1 && q.state().dr === 0, 'Done pressed while the button is held, then the lift: one change, at the place of Done' + tag);
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 });
+        q.press('done');
+        check(q.state().mode === 'moving' && q.log.acts === 0 && q.log.refused === 0, 'Done while the button is held waits: the move is still on, nothing refused, nothing written' + tag);
+        check(q.key('Enter') === true && q.state().mode === 'moving' && q.log.acts === 0 && q.log.refused === 0, 'so does Enter' + tag);
+        q.p.extend({ row: 12, column: 20 }, { row: 15, column: 25 }); q.p.end();
+        check(q.log.acts === 1 && q.log.refused === 0 && q.ed().history.size().strokes === 1 && q.state().mode === 'picked' && q.state().items[0].fp[0] === 14 * 40 + 24, 'the lift puts it down where the ghost is then, in one change' + tag);
+        // let go off the map (off the canvas, past the map's edge, over the side panel: {outside}) or over the bar: the thing goes back, nothing is written
+        const inside = { outside: false, x: 100, y: 100 }, off = { outside: true, x: 900, y: 100 };
+        q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
+        q.tap(3, 3); q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 });
+        q.p.away(off);
+        check(q.state().mode === 'moving' && /Let go here and it goes back where it was\./.test(q.text()), 'dragged off the map the bar says that a lift takes it back' + tag);
+        q.p.end();
+        check(q.log.acts === 0 && q.log.refused === 0 && same(q.file().bytes, was) && q.state().mode === 'picked' && q.state().dr === 0 && q.state().items[0].fp[0] === 2 * 40 + 2, 'let go off the map: nothing is written, the hill is picked where it was' + tag);
+        // back on the map before the lift: it is put down
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.away(off); q.p.away(inside); q.p.end();
+        check(q.log.acts === 1 && Edit.tile(q.file(), 2, 11 * 40 + 19) === RED_HILL, 'out and back before the lift: put down where the ghost is' + tag);
+        // over the bar
+        q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
+        q.bar.getBoundingClientRect = () => ({ left: 0, right: 600, top: 300, bottom: 400 });
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.away({ outside: false, x: 300, y: 350 }); q.p.end();
+        check(q.log.acts === 0 && same(q.file().bytes, was) && q.state().mode === 'picked', 'let go over the bar: it goes back' + tag);
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.bar.getBoundingClientRect = () => ({ left: 0, right: 600, top: 300, bottom: 400 });
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.away({ outside: false, x: 300, y: 250 }); q.p.end();
+        check(q.log.acts === 1, 'just above the bar it is put down' + tag);
+        // the ghost of a dragged ghost, a copy, an area, a group: the same
+        q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
+        q.tap(3, 3); q.press('move'); q.tap(25, 30);
+        q.p.begin({ row: 25, column: 30 }); q.p.extend({ row: 25, column: 30 }, { row: 26, column: 31 }); q.p.away(off); q.p.end();
+        check(q.log.acts === 0 && same(q.file().bytes, was) && q.state().mode === 'picked', 'a dragged ghost let go off the map: back to the pick' + tag);
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.tap(36, 4); q.press('copy'); q.tap(34, 8);
+        q.p.begin({ row: 34, column: 8 }); q.p.extend({ row: 34, column: 8 }, { row: 30, column: 12 }); q.p.away(off); q.p.end();
+        check(q.log.acts === 0 && q.state().mode === 'picked', 'so does a copy' + tag);
+        q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
+        q.tap(36, 4); q.press('area'); q.drag(18, 8, 24, 14);
+        q.p.begin({ row: 21, column: 10 }); q.p.extend({ row: 21, column: 10 }, { row: 5, column: 30 }); q.p.away(off); q.p.end();
+        check(q.log.acts === 0 && same(q.file().bytes, was) && q.state().mode === 'picked' && q.state().kind === 'area' && q.state().items.length === 6, 'and an area' + tag);
+        // away with no drag (a hover, a tap) changes nothing
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.tap(3, 3); q.press('move'); q.p.away(off);
+        check(q.state().mode === 'moving' && !/goes back/.test(q.text()), 'a pointer off the map with nothing dragged changes nothing' + tag);
         // the arrows and Enter still work after a blocked drop
         q = page(File.parse(Uint8Array.from(bytes)));
         q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 10, column: 26 }); q.p.end();

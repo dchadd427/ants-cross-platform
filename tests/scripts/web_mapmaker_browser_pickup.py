@@ -115,6 +115,32 @@ class Pick:
             t("touchEnd", x1, y1)
         time.sleep(0.35)
 
+    def held(self, start, mid, release, pen=False, during=None):
+        """press at the page point `start`, move to `mid`, (call `during` with the button still down), move to `release` and let go there; a mouse, a pen or a finger"""
+        def run(kind, x, y, **extra):
+            if self.touch:
+                self.tab.call("Input.dispatchTouchEvent", {"type": {"down": "touchStart", "move": "touchMove", "up": "touchEnd"}[kind], "touchPoints": [] if kind == "up" else [{"x": x, "y": y, "id": 1, "radiusX": 8, "radiusY": 8, "force": .5}]})
+            else:
+                more = {"pointerType": "pen"} if pen else {}
+                if kind == "down":
+                    self.tab.mouse("mouseMoved", x, y, button="none", **more)
+                    self.tab.mouse("mousePressed", x, y, **more)
+                elif kind == "move":
+                    self.tab.mouse("mouseMoved", x, y, buttons=1, **more)
+                else:
+                    self.tab.mouse("mouseReleased", x, y, **more)
+            time.sleep(0.03)
+        run("down", *start)
+        for i in range(1, 7):
+            run("move", start[0] + (mid[0] - start[0]) * i / 6, start[1] + (mid[1] - start[1]) * i / 6)
+        time.sleep(0.2)
+        if during:
+            during()
+        for i in range(1, 4):
+            run("move", mid[0] + (release[0] - mid[0]) * i / 3, mid[1] + (release[1] - mid[1]) * i / 3)
+        run("up", *release)
+        time.sleep(0.4)
+
     def drag_cells(self, r0, c0, r1, c1):
         x0, y0 = self.point(r0, c0)
         x1, y1 = self.point(r1, c1)
@@ -522,7 +548,7 @@ def run_pickup_drag(page, tab, args, check, env, edges_bytes, edges_js, name, to
         cy, cx, sc = h.view()
         x0, y0 = h.point(58, 46)
         x1, y1 = h.point(67, 64)
-        pick_at, to, things = (60, 47), (72, 47), "Area: 8 items"
+        pick_at, to, things = (60, 47), (70, 47), "Area: 8 items"
     else:
         h.focus_on(63, 54, 20, 0.5, 0.3)
         h.tap(66, 44)
@@ -533,14 +559,17 @@ def run_pickup_drag(page, tab, args, check, env, edges_bytes, edges_js, name, to
         pick_at, to, things = (66, 44), (73, 54), "Area: 9 items"
     h.drag_points(x0 - sc / 2, y0 - sc / 2, x1 + sc / 2, y1 + sc / 2)
     check(things in h.line(), "%s: an area is picked (%s): %s" % (name, things, h.line()))
-    h.press("move")
-    h.tap(to[0], to[1])
-    h.press("nudge")
-    moved = re.search(r"Moved (\d+) (right|left), (\d+) (down|up)", h.line())                  # (how far a tap on that cell takes the area: a place that is free)
-    h.press("cancel")
-    dc = int(moved.group(1)) * (1 if moved.group(2) == "right" else -1) if moved else 0
-    dr = int(moved.group(3)) * (1 if moved.group(4) == "down" else -1) if moved else 0
-    check(moved is not None and (dr or dc) and "Area" in h.line(), "%s: the area is picked again after Cancel (the place is %d, %d away): %s" % (name, dr, dc, h.line()))
+    if touch:
+        dr, dc = 5, 0                                              # (the map of a phone is small: a short way, and the lift stays on the map)
+    else:
+        h.press("move")
+        h.tap(to[0], to[1])
+        h.press("nudge")
+        moved = re.search(r"Moved (\d+) (right|left), (\d+) (down|up)", h.line())                  # (how far a tap on that cell takes the area: a place that is free)
+        h.press("cancel")
+        dc = int(moved.group(1)) * (1 if moved.group(2) == "right" else -1) if moved else 0
+        dr = int(moved.group(3)) * (1 if moved.group(4) == "down" else -1) if moved else 0
+        check(moved is not None and (dr or dc) and "Area" in h.line(), "%s: the area is picked again after Cancel (the place is %d, %d away): %s" % (name, dr, dc, h.line()))
     h.drag_cells(pick_at[0], pick_at[1], pick_at[0] + dr, pick_at[1] + dc)
     after = data()
     check(after != mosh_pit() and re.search(r"Moved (8|9) things", h.bar()) is not None, "%s: the lift puts the whole area down: %s" % (name, h.bar()[:80]))
@@ -548,7 +577,20 @@ def run_pickup_drag(page, tab, args, check, env, edges_bytes, edges_js, name, to
     undo()
     check(data() == mosh_pit(), "%s: ONE Undo gives the whole area back" % name)
     h.press("cancel") if h.bar() else None
+    # 5b. let go off the map or over the bar: the thing goes back (a finger; a mouse is tried below)
     if touch:
+        h.focus_on(9, 11, 18, 0.4, 0.35)
+        h.tap(6, 6)
+        start, mid = h.point(6, 6), h.point(10, 9)
+        box = page.box("#map")
+        barbox = page.box(".pk-bar")
+        for what, where in (("above the map", (box["x"] + 40, 12)), ("the bar", (barbox["x"] + barbox["w"] / 2, barbox["y"] + barbox["h"] / 2))):
+            h.held(start, mid, where)
+            check(data() == mosh_pit() and "Red hill" in h.line() and h.labels()[0] == "Move", "a finger lifted %s: the hill goes back, nothing is written: %s" % (what, h.line()))
+            h.tap(6, 6) if "Red hill" not in h.line() else None
+        h.held(start, mid, mid, during=lambda: page.key("Enter"))
+        check(layer2_tile(data(), 5, 5) == EMPTY2 and "Nothing changed" not in h.bar(), "and a finger lifted on the map puts it down: %s" % h.bar()[:50])
+        undo()
         return
     # 6. Escape while the button is down: the thing goes back and the lift puts nothing down
     h.focus_on(9, 11, 20, 0.4, 0.4)
@@ -566,18 +608,27 @@ def run_pickup_drag(page, tab, args, check, env, edges_bytes, edges_js, name, to
     tab.mouse("mouseReleased", x1 + 20, y1 + 20)
     time.sleep(0.3)
     check(data() == mosh_pit() and "Red hill" in h.line() and h.labels()[0] == "Move", "Escape during the drag takes the hill back, and the lift writes nothing: %s" % h.line())
-    # 7. let go outside the map (over the side panel): the pointer is captured, so it is a lift
-    x0, y0 = h.point(6, 6)
-    tab.mouse("mouseMoved", x0, y0, button="none")
-    tab.mouse("mousePressed", x0, y0)
-    for i in range(1, 7):
-        tab.mouse("mouseMoved", x0 + (x1 - x0) * i / 6, y0 + (y1 - y0) * i / 6, buttons=1)
+    # 7. let go off the map (over the side panel), over the bar, outside the window, with a pen: the hill goes back and nothing is written
     box = page.box("#map")
-    out = (box["x"] + box["w"] + 70, box["y"] + 60)
-    tab.mouse("mouseMoved", out[0], out[1], buttons=1)
-    tab.mouse("mouseReleased", out[0], out[1])
-    time.sleep(0.4)
-    check(layer2_tile(data(), 5, 5) == EMPTY2 and "Moved it" in h.bar() and h.labels()[0] == "Move", "released outside the map (over the side panel): the pointer is captured, so it is a lift: the hill is put down: %s" % h.bar()[:90])
+    start, mid = h.point(6, 6), h.point(12, 12)
+    barbox = page.box(".pk-bar")
+    inwin = page.ev("window.innerWidth")
+    for what, where, pen in (("the side panel", (box["x"] + box["w"] + 70, box["y"] + 60), False), ("the bar", (barbox["x"] + barbox["w"] / 2, barbox["y"] + barbox["h"] / 2), False), ("outside the window", (inwin + 90, box["y"] + 60), False), ("the side panel with a pen", (box["x"] + box["w"] + 70, box["y"] + 60), True)):
+        h.held(start, mid, where, pen=pen)
+        check(data() == mosh_pit() and "Red hill" in h.line() and h.labels()[0] == "Move", "let go over %s: the hill goes back, nothing is written: %s" % (what, h.line()))
+        h.tap(6, 6) if "Red hill" not in h.line() else None
+    # while the pointer is off the map the ghost is gone and the bar says so
+    h.held(start, mid, mid, during=lambda: (tab.mouse("mouseMoved", box["x"] + box["w"] + 70, box["y"] + 60, buttons=1), time.sleep(0.25), check("goes back where it was" in h.line(), "off the map the bar says that a lift takes it back: %s" % h.line())))
+    # a pen on the map puts it down, Enter while the button is down waits for the lift
+    check("Moved it" in h.bar() and layer2_tile(data(), 5, 5) == EMPTY2, "and on the map the lift puts it down: %s" % h.bar()[:50])
+    undo()
+    h.tap(6, 6)
+    h.held(start, mid, mid, pen=True)
+    check(layer2_tile(data(), 5, 5) == EMPTY2 and "Moved it" in h.bar(), "a pen lifted on the map puts the hill down: %s" % h.bar()[:60])
+    undo()
+    h.tap(6, 6)
+    h.held(start, mid, mid, during=lambda: page.key("Enter"))
+    check(layer2_tile(data(), 5, 5) == EMPTY2 and "Moved it" in h.bar() and "Nothing changed" not in h.bar(), "Enter pressed while the button is down does not throw the pick away: the lift puts it down: %s" % h.bar()[:60])
     undo()
     check(data() == mosh_pit(), "and ONE Undo takes it back")
     # 8. the hover ghost follows the mouse while Move is on, starts no drag, and a lift with the ghost under it puts nothing down by itself
