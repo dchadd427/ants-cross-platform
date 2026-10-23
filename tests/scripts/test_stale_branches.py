@@ -27,6 +27,8 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TOOL = os.path.join(REPO, "tools", "stale_branches.py")
 WORKFLOW = os.path.join(REPO, ".github", "workflows", "stale-branches.yml")
 sys.path.insert(0, os.path.join(REPO, "tools"))
+sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
+import quick_http  # noqa: E402   (the stdlib server asks the network for a name when it binds: tests/scripts/quick_http.py)
 import stale_branches  # noqa: E402
 
 NOW = datetime.datetime.now(datetime.timezone.utc)
@@ -117,7 +119,7 @@ class FakeGitHub:
         return H
 
     def __enter__(self):
-        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), self.handler())
+        self.server = quick_http.QuickThreadingHTTPServer(("127.0.0.1", 0), self.handler())
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = "http://127.0.0.1:%d" % self.server.server_address[1]
         return self
