@@ -32,7 +32,7 @@ A trip has to be worth it. Measured over 4,600 jobs of the first version, 7 in 1
 
 ## Fights that can be reached (`reach_fights`)
 
-Over the 534 maps of the library, 30.5 percent of all orders of four Hard players were refused by the engine with "Can't go there": the free ants and the defenders were sent to an enemy on the other side of water that no walk crosses. The ant then stands in its can't-go clip and nothing is struck. Now an ant is only picked for a fight when the start analysis ([BOTS.md](BOTS.md)) says that a walk takes it next to the enemy (`walk_reaches`).
+Over the 534 maps of the library, 30.7 percent of all orders of four Hard players were refused by the engine with "Can't go there": the free ants and the defenders were sent to an enemy on the other side of water that no walk crosses. The ant then stands in its can't-go clip and nothing is struck. Now an ant is only picked for a fight when the start analysis ([BOTS.md](BOTS.md)) says that a walk takes it next to the enemy (`walk_reaches`).
 
 ## Fights when there is nothing else to do (`idle_hunt`)
 
