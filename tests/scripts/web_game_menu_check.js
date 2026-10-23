@@ -183,13 +183,13 @@ function makeGame(json) {
     const g = {
         where: 0, needsAnswer: 0, leave: 2, opened: false, calls: [],
         values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 1, 9: 50, 10: 1, 11: 1 },
-        describes: 0,
+        describes: 0, saves: [],
     };
     g.module = {
         UTF8ToString: (p) => p,
         _ants_menu_describe: () => { g.describes++; return json; },
         _ants_menu_get: (what) => (what === 100 ? g.where : what === 101 ? g.needsAnswer : what === 102 ? g.leave : (what in g.values ? g.values[what] : -1)),
-        _ants_menu_set: (id, v) => { g.calls.push(['set', id, v]); if (!(id in g.values)) return 0; g.values[id] = v; return 1; },
+        _ants_menu_set: (id, v, save) => { g.calls.push(['set', id, v]); g.saves.push([id, v, save]); if (!(id in g.values)) return 0; g.values[id] = v; return 1; },
         _ants_menu_do: (what) => { g.calls.push(['do', what]); return 1; },
         _ants_menu_open: (on) => { g.calls.push(['open', on]); g.opened = !!on; },
     };
@@ -199,7 +199,12 @@ function makeGame(json) {
 // ---- the page ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 function makePage(opts) {
     opts = opts || {};
-    const doc = makeDocument(), win = { matchMedia: (q) => ({ matches: !!opts.touch && q === '(hover: none)' }) };
+    const doc = makeDocument(), win = { matchMedia: (q) => ({ matches: !!opts.touch && q === '(hover: none)' }), listeners: {} };
+    // the window takes listeners too (the page's own pointer-lock handler is there, in the capture phase, and stops the event before the document's)
+    win.addEventListener = (type, fn, capture) => { (win.listeners[type] = win.listeners[type] || []).push({ fn, capture: !!capture }); };
+    win.removeEventListener = (type, fn, capture) => { win.listeners[type] = (win.listeners[type] || []).filter((l) => !(l.fn === fn && l.capture === !!capture)); };
+    win.count = (type) => (win.listeners[type] || []).length;
+    win.emit = (type) => { for (const l of (win.listeners[type] || []).filter((x) => x.capture).slice()) l.fn({ type, stopPropagation() {} }); };
     const game = makeGame(opts.watch ? WATCH : MATCH);
     if (opts.watch) { game.where = 1; game.leave = 4; }
     const make = (tag, id, parent, cls) => { const n = doc.createElement(tag); if (id) n.setAttribute('id', id); if (cls) n.className = cls; (parent || doc.body).appendChild(n); return n; };
@@ -340,6 +345,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     expect('every row of the table is drawn once, and nothing else', drawn.slice().sort(), MATCH_ROWS.map((r) => r.label).sort());
     p.tab('controls');
     ok('the Controls list: the mouse, the keys, and a note, with no control in it', p.qa('.gm-gh').map((h) => h.textContent).join() === 'MOUSE,KEYS' && p.qa('.gm-krow').length === Menu.CONTROLS.mouse.length + Menu.CONTROLS.keys.length && p.qa('.gm-fine').length === 1 && p.qa('.gm-panel input').length === 0);
+    ok('...each group\'s lines are in one grid under its heading (two columns of pairs on a wide panel: both columns have the heading above them)', p.qa('.gm-kgrid').length === 2 && p.qa('.gm-kgrid')[0].children.length === Menu.CONTROLS.mouse.length && p.qa('.gm-kgrid')[1].children.length === Menu.CONTROLS.keys.length);
     ok('...the Esc line says what Esc does now', p.qa('.gm-krow').some((r) => r.textContent.indexOf('Esc') === 0 && r.textContent.indexOf('Deselect; then this menu') > 0));
     ok('...a chord is its keys', p.qa('.gm-krow').some((r) => r.querySelectorAll('.gm-kbd').map((k) => k.textContent).join('+') === 'Ctrl+N+P' && r.textContent.indexOf('/') > 0));
     p.menu.close();
@@ -395,8 +401,10 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     expect('...and the green follows the thumb while it is dragged', master.getAttribute('style'), '--f:40.4040404040404%');
     expect('Master volume acts while it is dragged', p.game.calls.filter((c) => c[0] === 'set'), [['set', 1, 40]]);
     expect('...and the number follows', p.qa('.gm-val')[0].textContent, '40');
+    expect('...heard and not written (the save flag is 0 while it is dragged)', p.game.saves, [[1, 40, 0]]);
     master.fire('change', {});
     expect('...and at the release', p.game.calls.filter((c) => c[0] === 'set').length, 2);
+    expect('...it is written (the flag is 1)', p.game.saves[1], [1, 40, 1]);
     p.game.calls.length = 0;
     music.value = '30';
     music.fire('input', {});
@@ -486,7 +494,13 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     e = p.doc.key('Tab');
     ok('Tab with the focus outside comes back in', e.prevented && scrim.contains(p.doc.activeElement));
     e = p.doc.key('a');
-    ok('a letter is not the page\'s (and the game drops it: it was told)', !e.reachedPage && !e.prevented);
+    ok('a letter is left to the page (the game drops it: it was told)', e.reachedPage && !e.prevented);
+    e = p.doc.key('s', { ctrlKey: true });
+    ok('so is Ctrl+S: the page cancels the browser\'s own reaction to it, as it does in the game', e.reachedPage);
+    e = p.doc.key('F1');
+    ok('...and F1', e.reachedPage);
+    e = p.doc.key('Enter');
+    ok('Enter and Space are the panel\'s own', !e.reachedPage && !p.doc.key(' ').reachedPage);
     p.qa('[role=tab]')[0].focus();
     e = p.doc.key('ArrowDown');
     expect('the arrow keys move between the sections, and the section follows', [e.prevented, p.doc.activeElement.textContent, p.qa('[role=tab]')[1].getAttribute('aria-selected')], [true, 'Video', 'true']);
@@ -512,7 +526,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     expect('the pointer lock is asked for again, as it was held', p.state.locks, ['request']);
     expect('the page is live again', [p.header.hasAttribute('inert'), p.bar.hasAttribute('inert'), p.box.hasAttribute('inert'), p.toast.hasAttribute('inert')], [false, false, false, false]);
     ok('the focus is on the canvas', p.doc.activeElement === p.canvas);
-    expect('no key listener is left on the document', [p.doc.count('keydown'), p.doc.count('keyup'), p.doc.count('pointerlockchange'), p.doc.count('fullscreenchange')], [0, 0, 0, 0]);
+    expect('no listener is left on the document or the window', [p.doc.count('keydown'), p.doc.count('keyup'), p.win.count('pointerlockchange'), p.doc.count('fullscreenchange')], [0, 0, 0, 0]);
     e = p.doc.key('Escape');
     ok('with the panel gone the document takes no Esc of its own', !e.prevented && e.reachedPage);
 }
@@ -534,13 +548,37 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('...with the words of the table', p.q('.gm-x').getAttribute('aria-label') === 'Close the settings' && p.q('.gm-esc').textContent.indexOf('closes') > 0);
 }
 {
+    // the focus goes back to where it came from: the Settings button when a key opened it, the game's canvas for a click, a tap or Esc
+    const p = makePage().ready();
+    const b = p.q('#settings-btn');
+    b.fire('click', { detail: 0 });
+    ok('opened with the keyboard through the button', p.menu.isOpen());
+    p.qa('.gm-resume')[0].click();
+    ok('...the focus goes back to the button', p.doc.activeElement === b);
+    b.fire('click', { detail: 1 });
+    p.qa('.gm-resume')[0].click();
+    ok('opened with a click: the canvas has it', p.doc.activeElement === p.canvas);
+    b.fire('click', { detail: 0 });
+    b.disabled = true;
+    p.qa('.gm-resume')[0].click();
+    ok('a button that is off by then does not take it', p.doc.activeElement === p.canvas);
+    p.open();
+    p.qa('.gm-resume')[0].click();
+    ok('Esc (the game\'s own ask) leaves it to the canvas', p.doc.activeElement === p.canvas);
+}
+{
     // the pointer lock while it is up: the browser takes the lock again when fullscreen begins, and the panel gives it back
     const p = makePage().ready();
     p.open();
     p.state.locked = true;
     p.state.locks.length = 0;
-    p.doc.emit('pointerlockchange');
+    p.win.emit('pointerlockchange');
     ok('a lock that comes while the panel is up is let go', p.state.locks.length === 1 && p.state.locks[0] === 'release' && !p.state.locked);
+    expect('the listener is on the window, in the capture phase (the page\'s own handler stops the event before the document\'s)', [p.win.count('pointerlockchange'), p.doc.count('pointerlockchange')], [1, 0]);
+    p.state.locked = true;
+    p.state.locks.length = 0;
+    p.poll();
+    ok('...and the poll lets go of one that no event told of', p.state.locks.length === 1 && !p.state.locked);
     p.state.locked = true;
     p.doc.emit('fullscreenchange');
     ok('so is the one that fullscreen asks for', !p.state.locked);
@@ -601,7 +639,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     held.game.leave = 3;
     held.open();
     held.qa('.gm-leave')[0].click();
-    expect('a match that is held asks nothing: the player leaves for good', [held.menu.isOpen(), held.q('.gm-ask'), held.game.calls.filter((c) => c[0] === 'do')], [false, null, [['do', 1]]]);
+    expect('a match that is held asks nothing when Leave game is clicked: the player leaves for good (the quit dialog\'s Yes does the same)', [held.menu.isOpen(), held.q('.gm-ask'), held.game.calls.filter((c) => c[0] === 'do')], [false, null, [['do', 1]]]);
     const watch = makePage({ watch: true }).ready();
     watch.game.leave = 4;
     watch.open();
@@ -615,9 +653,26 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.game.leave = 2;
     p.poll();
     expect('an opponent that leaves while the question is up turns it into a forfeit', [p.q('.gm-ask-t').textContent, p.qa('.gm-ask-btns button')[1].textContent], ['Forfeit and leave?', 'Forfeit']);
+    // B1: a question that is up never leaves by itself: a match that becomes held (a seat's link dropped) changes what Leave game would do, not what the player decided
+    p.game.calls.length = 0;
     p.game.leave = 3;
     p.poll();
-    expect('...and a match that becomes held ends the question: the player leaves', [p.menu.isOpen(), p.game.calls.slice(-1)[0]], [false, ['do', 1]]);
+    p.poll();
+    expect('a match that becomes held while the question is up: the question stays as it was and nothing is sent', [p.menu.isOpen(), p.q('.gm-ask-t').textContent, p.game.calls.filter((c) => c[0] === 'do')], [true, 'Forfeit and leave?', []]);
+    p.game.leave = 1;
+    p.poll();
+    expect('...and a kind that asks draws it again, still with nothing sent', [p.q('.gm-ask-t').textContent, p.game.calls.filter((c) => c[0] === 'do')], ['Leave the game?', []]);
+    p.game.leave = 3;
+    p.poll();
+    p.qa('.gm-ask-btns button')[1].click();
+    expect('only the button leaves', [p.menu.isOpen(), p.game.calls.filter((c) => c[0] === 'do')], [false, [['do', 1]]]);
+    // while the question is up the rest of the panel waits for the answer (not inert for a screen reader otherwise)
+    const w = makePage().ready();
+    w.open();
+    w.qa('.gm-leave')[0].click();
+    ok('the rest of the panel is inert while the question is up', ['.gm-head', '.gm-tabs', '.gm-pane', '.gm-note', '.gm-btns'].every((sel) => w.q(sel).hasAttribute('inert')) && !w.q('.gm-ask').hasAttribute('inert'));
+    w.qa('.gm-ask-btns button')[0].click();
+    ok('...and live again when it is answered', ['.gm-head', '.gm-tabs', '.gm-pane', '.gm-note', '.gm-btns'].every((sel) => !w.q(sel).hasAttribute('inert')) && w.doc.activeElement === w.q('.gm-leave'));
 }
 
 // ---- the style -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------

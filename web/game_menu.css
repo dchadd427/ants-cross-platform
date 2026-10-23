@@ -61,7 +61,7 @@
 .gm-slide input[type=range]::-moz-range-thumb { width: 22px; height: 28px; background: var(--teal, #1f4f40) var(--sheen); border: 2px solid var(--edge, #050a08); border-radius: 6px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow, #9d0d17); }
 
 /* the Controls list */
-@media (min-width: 701px) { .gm-keys { column-count: 2; column-gap: 30px; } .gm-keys > * { break-inside: avoid; } .gm-keys .gm-gh { break-after: avoid; } }
+@media (min-width: 701px) { .gm-kgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 30px; } }
 .gm-gh { margin: 12px 0 2px; font-size: 13px; font-weight: 600; letter-spacing: .1em; color: var(--gold, #f6d058); }
 .gm-krow { padding: 5px 0; }
 .gm-krow .gm-lab { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; white-space: nowrap; }

@@ -119,7 +119,8 @@ class TheScript(unittest.TestCase):
         self.assertEqual(acts, {"Leave": 1, "QuickHelp": 2, "OptionsWindow": 3})
         self.assertIn("call('_ants_menu_do', 1)", self.script)
         self.assertIn("row.key === 'quickhelp' ? 2 : 3", self.script)
-        self.assertIn("kind === 3 || kind === 4", self.script, "a held match (3) and a recording (4) ask nothing")
+        self.assertNotIn("kind === 3", self.script, "what asks nothing is the table's word (asks), not a number of the page's")
+        self.assertIn("!found.asks", self.script)
         self.assertRegex(header, r"Held = 3,")
         self.assertRegex(header, r"Watch = 4,")
 
@@ -137,10 +138,10 @@ class TheScript(unittest.TestCase):
             self.assertNotIn(label, self.script, "the words of a row are the game's, in its table")
 
     def test_it_listens_to_nothing_outside_the_panels_life(self):
-        self.assertNotIn("win.addEventListener", self.script)
         self.assertNotIn("window.addEventListener", self.script)
         self.assertNotIn("stage.addEventListener", self.script)
-        self.assertEqual(len(re.findall(r"listen\(doc, ", self.script)), 3, "the keys, the pointer lock (three names) and fullscreen (two names): all removed when it closes")
+        self.assertEqual(len(re.findall(r"listen\(doc, ", self.script)), 2, "the keys and fullscreen (two names): all removed when it closes")
+        self.assertEqual(len(re.findall(r"listen\(win, name, keepPointerFree, true\)", self.script)), 1, "the pointer lock (three names) is heard on the window in the capture phase: the page's own handler there stops the event before the document's")
         self.assertNotIn("'keyup'", self.script, "the lifts of keys are the game's: swallowed, its window system would read the next press as a repeat")
         self.assertIn("removers[i]()", self.script)
 

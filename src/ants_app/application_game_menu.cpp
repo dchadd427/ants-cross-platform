@@ -127,12 +127,12 @@ int Application::game_menu_get(int what) {
 }
 
 // A change from the panel: stored and applied as the original's options window does it (the same state, so that the two always agree). True when the row is the game's and the value was taken.
-bool Application::game_menu_set(int id, int value) {
+bool Application::game_menu_set(int id, int value, bool save) {
     namespace gm = game_menu;
     switch (id) {
         case gm::kMaster:
             menu_settings_.master = std::clamp(value, 0, gm::MenuSettings::kMasterMax);
-            menu_settings_.write(config_store_, id);
+            if (save) menu_settings_.write(config_store_, id);
             audio_mixer_.set_output_gain(menu_settings_.gain());
             return true;
         case gm::kMute:
@@ -198,8 +198,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_menu_get(int what) {
 }
 
 // ... a change of a row that is the game's: 1 when it was taken
-extern "C" EMSCRIPTEN_KEEPALIVE int ants_menu_set(int id, int value) {
-    return g_web_app != nullptr && g_web_app->game_menu_set(id, value) ? 1 : 0;
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_menu_set(int id, int value, int save) {
+    return g_web_app != nullptr && g_web_app->game_menu_set(id, value, save != 0) ? 1 : 0;
 }
 
 // ... an act (game_menu::Action): Leave game, the quick help, the options window; 1 when the game did it

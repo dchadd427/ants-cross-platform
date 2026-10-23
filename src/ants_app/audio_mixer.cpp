@@ -607,7 +607,10 @@ void AudioMixer::mix_samples_i16(int16_t* out_stereo, size_t num_frames) {
         }
     }
 
-    if (master_volume_ <= 0.0001f) return;
+    if (master_volume_ <= 0.0001f) {
+        output_gain_now_ = output_gain_target_;                // (a silent block: the ramp of the menu's gain is where it was heading, not where it was before the silence)
+        return;
+    }
     const float ramp_step = 1000.0f / (AUDIO_GAIN_RAMP_MS * static_cast<float>(output_sample_rate_));      // the change of one output frame
     const float sfx_gain = master_volume_;                 // the Sound Volume option is inside every channel's gain (apply_law)
 

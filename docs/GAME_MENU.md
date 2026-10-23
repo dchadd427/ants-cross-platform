@@ -18,7 +18,8 @@ The panel is a child of the stage (`#game-stage`), the element that goes fullscr
 - the game takes **no key, text, click, wheel or finger** (`Application::game_menu_takes`, told by `ants_menu_open`) and the map does not scroll at the edges; what a drag or a held button began before it opened is let go; the simulation, the sound and the network run on and nothing is sent;
 - closing takes effect after the events that were queued, so the Esc that closes it is not a second Esc for the game;
 - the page behind it is `inert`, Tab stays inside, the focus starts on Resume and goes back to the canvas when it closes, and the dialog is named (`role="dialog"`, `aria-modal`, the tabs a `tablist`, the sliders real `input type=range`);
-- the **pointer lock is let go** (a locked pointer has no cursor) and asked for again when it closes, if it was held or the page is fullscreen; a lock that fullscreen asks for while the panel is up is let go at once.
+- the **pointer lock is let go** (a locked pointer has no cursor) and asked for again when it closes, if it was held or the page is fullscreen; a lock that the page is given while the panel is up (fullscreen asks for one) is let go at once: the panel hears it on the window in the capture phase, because the page's own handler there stops the event before the document's, and the 250 ms poll catches the rest.
+- only the keys of the panel's own controls (Tab, Enter, Space, the arrows, Home, End and Esc) stop at the panel; every other key goes on to the page, which keeps the browser's reactions to Ctrl+S, F1 and the like off, and the game takes none while the panel is up. The focus goes back to the canvas when it closes, or to the Settings button when a key opened it.
 
 ## The rows
 
@@ -53,6 +54,8 @@ It asks first, in the words of what will happen (`game_menu::leave_kind`, the ru
 | a game at home against several, or alone | "Leave the game?" This match ends. Your game is not saved. | Leave game |
 | the match is held (a seat missing, the countdown, a lost link) | nothing is asked: the player leaves for good, as the quit dialog's Yes does | |
 
+Only a click leaves: a question that is up stays when the match becomes held (a seat's link dropped) or the number of opponents changes under it (it is drawn again in the new words), and never turns into a leave by itself. Which kinds ask is the table's word (`asks`), not a rule of the page.
+
 There is no separate Surrender: the forfeit is the quit that the game always had. Leaving goes through `confirm_quit`, so the `Quit` command, a drop out, the recording and the state hashes are what they were. A game on this computer leaves for the front page (a game in the lobby's frame, for that page's setup screen), as Quit always did.
 
 ## A recording or a live match that is watched
@@ -61,10 +64,10 @@ The same panel, without what a seat needs: no Game section, a tag ("Watching a r
 
 ## How the browser's panel is built
 
-- **The game's side** (`src/ants_app/application_game_menu.cpp`): the exports `ants_menu_describe`, `ants_menu_get`, `ants_menu_set`, `ants_menu_do` and `ants_menu_open`; the HUD's Esc hook (`HUD::set_on_menu_request`) that calls `window.antsGameMenuAsk` of the page (a page without the script, or a frame, has none and Esc stays what it was); the three new settings (`game_menu::MenuSettings`).
+- **The game's side** (`src/ants_app/application_game_menu.cpp`): the exports `ants_menu_describe`, `ants_menu_get`, `ants_menu_set` (a third number says whether to write the value now: a slider that is dragged is heard at once and written at the release), `ants_menu_do` and `ants_menu_open`; the HUD's Esc hook (`HUD::set_on_menu_request`) that calls `window.antsGameMenuAsk` of the page (a page without the script, or a frame, has none and Esc stays what it was); the three new settings (`game_menu::MenuSettings`).
 - **The page's side** (`web/game_menu.js`, `web/game_menu.css`, beside `web/shell.html` like `countdown_button.js`): fetched once the game runs (`antsLoadGameMenu` in the page; retried once, then said in the toast, and Esc keeps its old meaning), never in an embedded frame and not in the first load. It makes its own Settings buttons and panel (every text with `textContent`), fetches its own stylesheet, and asks the game for everything that is the game's. ES5, no module system.
-- **Size**: the two files together are held to 40,000 bytes (11,000 gzipped) by `tests/scripts/test_web_front.py`, apart from the `web/front` folder's cap.
-- **Tests**: `tests/test_app/test_game_menu.cpp` (the table, Leave game's kinds, the settings, Esc's rule, the input the game does not take, the acts; one case in `test_replay_app.cpp` for a recording, one in `test_app_integration_basics.cpp` for the mixer's gain), `tests/scripts/test_web_game_menu.py` with `web_game_menu_check.js` (the page's script on a strict fake of the DOM, in the quick tier) and the opt-in `tests/scripts/test_web_game_menu.sh` (a real browser: 1280 x 800, a phone at 390 x 844 and on its side, a recording, a frame). Its mutants are `tests/data/game_menu_mutants.json`.
+- **Size**: the two files together are held to 41,000 bytes (12,000 gzipped; about 40,000 and 11,600 now) by `tests/scripts/test_web_front.py`, apart from the `web/front` folder's cap.
+- **Tests**: `tests/test_app/test_game_menu.cpp` (the table, Leave game's kinds, the settings, Esc's rule, the input the game does not take, the acts; one case in `test_replay_app.cpp` for a recording, one in `test_app_integration_basics.cpp` for the mixer's gain), `tests/scripts/test_web_game_menu.py` with `web_game_menu_check.js` (the page's script on a strict fake of the DOM, in the quick tier) and the opt-in `tests/scripts/test_web_game_menu.sh` (a real browser: 1280 x 800 with a pointer lock that comes while the panel is up, a phone at 390 x 844 with a finger held on the map as the panel opens, and on its side, a recording, a frame). Its mutants are `tests/data/game_menu_mutants.json`.
 
 ## Not yet
 

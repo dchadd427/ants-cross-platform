@@ -564,7 +564,8 @@ void run_suite_4_audio_mixer() {
             loud = std::max<int16_t>(loud, static_cast<int16_t>(std::abs(full[i])));
         }
         ASSERT_GT(loud, 500);                                                        // (the sound was there to be halved)
-        ASSERT_TRUE(std::abs(halved[0]) <= std::abs(full[0]) && std::abs(halved[2]) >= 0);
+        ASSERT_TRUE(std::abs(halved[0]) <= std::abs(full[0]));
+        for (size_t f = 20; f < 400; f += 20) ASSERT_TRUE(std::abs(halved[f * 2]) <= std::abs(full[f * 2]) + 2 && std::abs(halved[f * 2]) + 2 >= std::abs(full[f * 2]) / 2);   // (on the ramp: between the old gain and the new)
         ASSERT_EQ(half.sound_volume(), plain.sound_volume());                       // (the original's Sound Volume is not touched)
         ASSERT_NEAR(half.get_music_volume(), plain.get_music_volume(), 0.0001f);     // (nor the Music Volume)
 

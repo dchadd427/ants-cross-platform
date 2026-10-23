@@ -362,7 +362,7 @@ public:
     void request_game_menu();
     void set_on_game_menu(std::function<void()> cb) { on_game_menu_ = std::move(cb); }     // a skin of the game's own (the browser's is the page's: ants_menu_open)
     int game_menu_get(int what);
-    bool game_menu_set(int id, int value);
+    bool game_menu_set(int id, int value, bool save = true);     // save false: heard now and not yet written (a slider that is dragged: the release keeps it)
     bool game_menu_do(int action);
     void game_menu_set_open(bool open);
     bool game_menu_is_open() const noexcept { return game_menu_open_; }

@@ -74,15 +74,15 @@
     {
       "id": "lock_listener_dropped",
       "file": "web/game_menu.js",
-      "old": "['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(function (name) { listen(doc, name, keepPointerFree, false); });",
+      "old": "if (win.addEventListener) listen(win, name, keepPointerFree, true);",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "fullscreen_listener_keeps_lock",
       "file": "web/game_menu.js",
-      "old": "listen(doc, name, function () { keepPointerFree(); refresh(); }, false);",
-      "new": "listen(doc, name, function () { refresh(); }, false);",
+      "old": "listen(doc, name, function () { refresh(); }, false);",
+      "new": "listen(doc, name, function () { }, false);",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -107,23 +107,9 @@
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
-      "id": "held_match_asks",
-      "file": "web/game_menu.js",
-      "old": "words = info.words, found = null;\n            if (kind === 3 || kind === 4 || kind < 0) { leaveNow(); return; }",
-      "new": "words = info.words, found = null;\n            if (kind === 9 || kind === 4 || kind < 0) { leaveNow(); return; }",
-      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
-    },
-    {
-      "id": "recording_asks",
-      "file": "web/game_menu.js",
-      "old": "words = info.words, found = null;\n            if (kind === 3 || kind === 4 || kind < 0) { leaveNow(); return; }",
-      "new": "words = info.words, found = null;\n            if (kind === 3 || kind === 9 || kind < 0) { leaveNow(); return; }",
-      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
-    },
-    {
       "id": "leave_never_asks",
       "file": "web/game_menu.js",
-      "old": "state.leave.addEventListener('click', showAsk);",
+      "old": "state.leave.addEventListener('click', function () { showAsk(true); });",
       "new": "state.leave.addEventListener('click', leaveNow);",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
@@ -158,29 +144,29 @@
     {
       "id": "question_does_not_follow",
       "file": "web/game_menu.js",
-      "old": "else if (state && ask && get(102) !== shown.askKind) showAsk();",
+      "old": "if (ask && get(102) !== shown.askKind) showAsk(false);",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "master_acts_at_release_only",
       "file": "web/game_menu.js",
-      "old": "if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10));",
+      "old": "if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10), 0);",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "every_slider_acts_while_dragged",
       "file": "web/game_menu.js",
-      "old": "if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10));",
-      "new": "call('_ants_menu_set', row.id, parseInt(input.value, 10));",
+      "old": "if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10), 0);",
+      "new": "call('_ants_menu_set', row.id, parseInt(input.value, 10), 0);",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "slider_release_does_nothing",
       "file": "web/game_menu.js",
-      "old": "input.addEventListener('change', function () { out.textContent = String(input.value); call('_ants_menu_set', row.id, parseInt(input.value, 10)); });",
-      "new": "input.addEventListener('change', function () { out.textContent = String(input.value); });",
+      "old": "call('_ants_menu_set', row.id, parseInt(input.value, 10), 1); });",
+      "new": "});",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -193,8 +179,8 @@
     {
       "id": "switch_values_swapped",
       "file": "web/game_menu.js",
-      "old": "function (v) { call('_ants_menu_set', row.id, v); }, [1, 0]);",
-      "new": "function (v) { call('_ants_menu_set', row.id, v); }, [0, 1]);",
+      "old": "function (v) { call('_ants_menu_set', row.id, v, 1); }, [1, 0]);",
+      "new": "function (v) { call('_ants_menu_set', row.id, v, 1); }, [0, 1]);",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -214,8 +200,8 @@
     {
       "id": "keys_reach_the_page",
       "file": "web/game_menu.js",
-      "old": "            e.stopPropagation(); // (a key that goes down",
-      "new": "            // (a key that goes down",
+      "old": "if (USED.test(key)) e.stopPropagation();",
+      "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -263,8 +249,8 @@
     {
       "id": "focus_not_back_on_canvas",
       "file": "web/game_menu.js",
-      "old": "try { if (canvas && canvas.focus) canvas.focus(); }",
-      "new": "try { if (false) canvas.focus(); }",
+      "old": "if (back && back.focus) back.focus();",
+      "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -466,7 +452,7 @@
     {
       "id": "esc_function_missing",
       "file": "web/game_menu.js",
-      "old": "win.antsGameMenuAsk = function () { open(); };",
+      "old": "win.antsGameMenuAsk = function () { open(null); };",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
@@ -933,6 +919,119 @@
       "file": "src/ants_app/game_menu.cpp",
       "old": "return modal_open || catch_up || (networked",
       "new": "return modal_open || (catch_up && false) || (networked",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "poll_leaves_by_itself",
+      "file": "web/game_menu.js",
+      "old": "if (!found || !found.asks) { if (clicked) leaveNow(); return; }",
+      "new": "if (!found || !found.asks) { leaveNow(); return; }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "kind_without_asks_asks",
+      "file": "web/game_menu.js",
+      "old": "if (!found || !found.asks) {",
+      "new": "if (!found) {",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "poll_leaves_pointer_locked",
+      "file": "web/game_menu.js",
+      "old": "                keepPointerFree(); // (a lock that came",
+      "new": "                // (a lock that came",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "pointer_lock_on_the_document",
+      "file": "web/game_menu.js",
+      "old": "listen(win, name, keepPointerFree, true)",
+      "new": "listen(doc, name, keepPointerFree, false)",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "every_key_stopped",
+      "file": "web/game_menu.js",
+      "old": "if (USED.test(key)) e.stopPropagation();",
+      "new": "e.stopPropagation();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "master_saved_while_dragged",
+      "file": "web/game_menu.js",
+      "old": "row.id, parseInt(input.value, 10), 0);",
+      "new": "row.id, parseInt(input.value, 10), 1);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "release_does_not_save",
+      "file": "web/game_menu.js",
+      "old": "row.id, parseInt(input.value, 10), 1); });",
+      "new": "row.id, parseInt(input.value, 10), 0); });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "focus_not_given_back",
+      "file": "web/game_menu.js",
+      "old": "open(e && e.detail === 0 ? b : null);",
+      "new": "open(null);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "question_leaves_panel_live",
+      "file": "web/game_menu.js",
+      "old": "{ panel.children[c].setAttribute('inert', ''); dimmed.push(panel.children[c]); }",
+      "new": "{ dimmed.push(panel.children[c]); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "open_keeps_the_finger",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        cancel_touch_queued();\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "wheel_reaches_the_map",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        case SDL_MOUSEWHEEL:\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "scroll_not_held",
+      "file": "src/ants_app/hud.cpp",
+      "old": "state.scroll_speed = std::clamp<int32_t>(value, 0, 99);",
+      "new": "state.scroll_speed = std::clamp<int32_t>(value, 0, 255);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "drag_saves",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "if (save) menu_settings_.write(config_store_, id);",
+      "new": "menu_settings_.write(config_store_, id);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "everything_asks",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "(leave_needs_confirm(kind) ? \"1\" : \"0\")",
+      "new": "\"1\"",
       "build": [
         "test_game_menu"
       ],

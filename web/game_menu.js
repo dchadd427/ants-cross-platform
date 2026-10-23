@@ -18,6 +18,7 @@
     var SHAPES = ['4:3', '16:10', '16:9', '21:9']; // the places of the picture's choices (game_menu.hpp kPicture: the words of the row, in this order)
     var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
     var CSS_FILE = 'game_menu.css';
+    var USED = /^(Tab|Enter| |Spacebar|Arrow(Left|Right|Up|Down)|Home|End)$/; // the keys of the panel's own controls (Esc is handled before)
 
     // The Controls list: what the game's keys and the mouse do (docs/CONTROLS.md "Camera & Hotkeys"). [keys, what]: the mouse and touch lines name their input in words, a key line is a list of keys (a word that
     // starts with ~ is the text between two keys); `watch` leaves out what a recording ignores.
@@ -36,15 +37,15 @@
         var doc = page.doc, win = page.win || (doc && doc.defaultView) || {}, stage = page.stage, canvas = page.canvas;
         var info = null; // the game's table, once read
         var scrim = null, panel = null, ask = null, state = null;
-        var opening = false, styleReady = false, styleFailed = 0, wasLocked = false, behind = [], removers = [], shown = { askKind: -1 };
+        var dimmed = [], opener = null, opening = false, styleReady = false, styleFailed = 0, wasLocked = false, behind = [], removers = [], shown = { askKind: -1 };
         var buttons = [];
 
         // ---- the game's side: every call is guarded (a game that is not there answers -1) ----
         function mod() { try { return page.module ? page.module() : null; } catch (e) { return null; } }
-        function call(name, a, b) {
+        function call(name, a, b, c) {
             var m = mod();
             if (!m || typeof m[name] !== 'function') return -1;
-            try { return m[name](a, b); } catch (e) { return -1; }
+            try { return m[name](a, b, c); } catch (e) { return -1; }
         }
         function get(what) { return call('_ants_menu_get', what); }
         function describe() {
@@ -89,7 +90,7 @@
             b.id = id;
             show(b, false);
             b.setAttribute('aria-haspopup', 'dialog');
-            b.addEventListener('click', function () { open(); });
+            b.addEventListener('click', function (e) { open(e && e.detail === 0 ? b : null); }); // (a press with the keyboard has the focus given back to the button; a click or a tap gives it to the game)
             buttons.push(b);
             return b;
         }
@@ -114,7 +115,10 @@
                 b.title = up ? 'Settings: sound, picture, controls and Leave game' : 'Not now';
             }
             if (state && (where() < 0 || !answered())) close({ relock: false }); // a dialog needs its answer, or the match is over
-            else if (state && ask && get(102) !== shown.askKind) showAsk(); // (the question follows Leave game)
+            else if (state) {
+                keepPointerFree(); // (a lock that came while the panel is up: the page's own handler stops the event before the panel's listener, so the poll catches it too)
+                if (ask && get(102) !== shown.askKind) showAsk(false); // (the question follows Leave game: it may be redrawn here, it never leaves by itself)
+            }
             if (state && state.fsButton) state.fsButton.textContent = state.fsWords[page.isFullscreen && page.isFullscreen() ? 1 : 0];
         }
 
@@ -135,9 +139,9 @@
             input.addEventListener('input', function () {
                 fill();
                 out.textContent = String(input.value);
-                if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10));
+                if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10), 0); // (heard while it is dragged, kept at the release)
             });
-            input.addEventListener('change', function () { out.textContent = String(input.value); call('_ants_menu_set', row.id, parseInt(input.value, 10)); });
+            input.addEventListener('change', function () { out.textContent = String(input.value); call('_ants_menu_set', row.id, parseInt(input.value, 10), 1); });
             wrap.appendChild(input);
             wrap.appendChild(out);
             return wrap;
@@ -188,7 +192,7 @@
             if (row.page && (!own && row.kind !== 'button')) return null;
             if (own && !own.has()) return null;
             if (row.kind === 'slider') control = slider(row, id);
-            else if (row.kind === 'switch') control = choice(row, id, function () { return get(row.id); }, function (v) { call('_ants_menu_set', row.id, v); }, [1, 0]);
+            else if (row.kind === 'switch') control = choice(row, id, function () { return get(row.id); }, function (v) { call('_ants_menu_set', row.id, v, 1); }, [1, 0]);
             else if (row.kind === 'choice') control = choice(row, id, own.read, own.write, row.words.map(function (w, i) { return i; }));
             else if (row.kind === 'button') control = action(row, id);
             else { control = el('div', 'gm-ctl gm-info', page.version || ''); }
@@ -199,7 +203,9 @@
         function controlsList(watching) {
             var box = el('div', 'gm-keys'), touch = touchy();
             function group(title, list) {
+                var grid = el('div', 'gm-kgrid'); // (two columns on a wide panel, the lines in pairs under one heading, as the picture has them)
                 box.appendChild(el('h3', 'gm-gh', title));
+                box.appendChild(grid);
                 list.forEach(function (item) {
                     if (watching && item[2] === 'watch') return;
                     var line = el('div', 'gm-row gm-krow'), keys = el('div', 'gm-lab');
@@ -207,7 +213,7 @@
                     else item[0].forEach(function (part) { keys.appendChild(part.charAt(0) === '~' ? el('span', 'gm-plus', part.slice(1)) : el('kbd', 'gm-kbd', part)); });
                     line.appendChild(keys);
                     line.appendChild(el('div', 'gm-ctl gm-what', item[1]));
-                    box.appendChild(line);
+                    grid.appendChild(line);
                 });
             }
             if (touch) group('TOUCH', watching ? CONTROLS.touchWatch : CONTROLS.touch);
@@ -289,7 +295,7 @@
             state.resume.addEventListener('click', function () { close(); });
             state.leave = el('button', 'btn gm-leave' + (watching ? ' gm-back' : ''), watching ? w.back : w.leave);
             state.leave.type = 'button';
-            state.leave.addEventListener('click', showAsk);
+            state.leave.addEventListener('click', function () { showAsk(true); });
             btns.appendChild(state.resume);
             btns.appendChild(state.leave);
             panel.appendChild(btns);
@@ -299,11 +305,11 @@
 
         // ---- Leave game ----
         function leaveNow() { close({ relock: false }); call('_ants_menu_do', 1); }
-        function showAsk() {
+        // the table says which kinds ask ("asks") and in what words; a kind that asks nothing leaves when Leave game is clicked, and a poll never leaves: a question that is up stays as it is (or is drawn again) when the kind changes
+        function showAsk(clicked) {
             var kind = get(102), words = info.words, found = null;
-            if (kind === 3 || kind === 4 || kind < 0) { leaveNow(); return; } // held, or a recording: nothing is asked
-            info.words.ask.forEach(function (a) { if (a.kind === kind) found = a; });
-            if (!found) found = info.words.ask[0];
+            words.ask.forEach(function (a) { if (a.kind === kind) found = a; });
+            if (!found || !found.asks) { if (clicked) leaveNow(); return; }
             hideAsk(true);
             shown.askKind = kind;
             ask = el('div', 'gm-ask');
@@ -326,6 +332,7 @@
             row.appendChild(go);
             [t, b, n, row].forEach(function (c) { ask.appendChild(c); });
             panel.appendChild(ask);
+            for (var c = 0; c < panel.children.length; c++) if (panel.children[c] !== ask) { panel.children[c].setAttribute('inert', ''); dimmed.push(panel.children[c]); } // (the rest of the panel waits for the answer)
             panel.setAttribute('data-asking', '1');
             stay.focus();
         }
@@ -333,6 +340,8 @@
             if (!ask) return;
             panel.removeChild(ask);
             ask = null;
+            for (var d = 0; d < dimmed.length; d++) dimmed[d].removeAttribute('inert');
+            dimmed = [];
             shown.askKind = -1;
             panel.removeAttribute('data-asking');
             if (!quiet) state.leave.focus();
@@ -372,7 +381,7 @@
                 if (ask) hideAsk(); else close();
                 return;
             }
-            e.stopPropagation(); // (a key that goes down in the panel is nobody else's; the lifts are left alone, or the game's window system reads the next press as a repeat)
+            if (USED.test(key)) e.stopPropagation(); // (only the keys that the panel uses are its own; the others reach the page, which keeps the browser's reactions to Ctrl+S, F1 and the like off, and the game, which takes none while the panel is up; the lifts are left alone, or the game's window system reads the next press as a repeat)
             if (key === 'Tab') {
                 var items = focusables();
                 if (!items.length) return;
@@ -394,12 +403,13 @@
         // Fullscreen begins while the panel is up (its own row): the page asks for the lock then; the panel needs the free pointer
         function keepPointerFree() { if (page.isLocked && page.isLocked()) page.releaseLock(); }
 
-        function open() {
+        function open(from) {
             if (state || opening) return false;
             if (!available()) return false;
             info = info || describe();
             if (!info || !info.rows || !info.sections || !info.sections.length) return false;
             opening = true;
+            opener = from || null;
             try {
                 wasLocked = !!(page.isLocked && page.isLocked());
                 build();
@@ -408,8 +418,8 @@
                 call('_ants_menu_open', 1);
                 if (page.releaseLock) page.releaseLock();
                 listen(doc, 'keydown', onKey, true);
-                ['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(function (name) { listen(doc, name, keepPointerFree, false); });
-                ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) { listen(doc, name, function () { keepPointerFree(); refresh(); }, false); });
+                ['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(function (name) { if (win.addEventListener) listen(win, name, keepPointerFree, true); }); // (the window in the capture phase, as the page's own handler: it stops the event before the document's)
+                ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) { listen(doc, name, function () { refresh(); }, false); });
                 state.resume.focus();
             } finally { opening = false; }
             return true;
@@ -427,7 +437,11 @@
             scrim = panel = state = null;
             call('_ants_menu_open', 0);
             if (again && page.requestLock && (wasLocked || (page.isFullscreen && page.isFullscreen()))) page.requestLock(); // (Resume is a click: the gesture that the browser wants)
-            try { if (canvas && canvas.focus) canvas.focus(); } catch (e) { /* no focus to give */ }
+            try {
+                var back = opener && !opener.disabled && !opener.hidden ? opener : canvas;
+                opener = null;
+                if (back && back.focus) back.focus();
+            } catch (e) { /* no focus to give */ }
         }
 
         function say(text) { var t = page.toast; if (!t) return; t.textContent = text; t.hidden = false; setTimeout(function () { t.hidden = true; }, 5000); }
@@ -448,7 +462,7 @@
         }
 
         placeButtons();
-        win.antsGameMenuAsk = function () { open(); }; // (the game's Esc with nothing to cancel: src/ants_app/application_game_menu.cpp)
+        win.antsGameMenuAsk = function () { open(null); }; // (the game's Esc with nothing to cancel: src/ants_app/application_game_menu.cpp)
         (page.every || function (fn, ms) { return setInterval(fn, ms); })(refresh, POLL_MS);
         loadStyle();
         return { open: open, close: close, isOpen: function () { return !!state; }, refresh: refresh, buttons: buttons, onKey: onKey, setStyleReady: function (v) { styleReady = v; refresh(); } };

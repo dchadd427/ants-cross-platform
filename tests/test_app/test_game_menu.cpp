@@ -188,8 +188,8 @@ void test_leave() {
     check(gm::needs_answer(false, false, true, true, false) && gm::needs_answer(false, false, true, false, true), "a vote or a lost link in a network match needs its answer");
     check(!gm::needs_answer(false, false, true, false, false) && !gm::needs_answer(false, false, false, true, true), "...and nothing else does (no vote or lost link is one at home)");
     const std::string json = gm::describe_json(false, true);
-    for (const K kind : {K::EndsMatch, K::DropOut, K::Forfeit}) check(has(json, "{\"kind\":" + std::to_string(static_cast<int>(kind)) + ",\"title\":"), "the question of every asking kind is in the JSON");
-    check(!has(json, "{\"kind\":3") && !has(json, "{\"kind\":4"), "and none for a held match or a recording");
+    check(has(json, "{\"kind\":3,\"asks\":0}") && has(json, "{\"kind\":4,\"asks\":0}"), "a held match and a recording say that they ask nothing, and have no words");
+    for (const K kind : {K::EndsMatch, K::DropOut, K::Forfeit}) check(has(json, "{\"kind\":" + std::to_string(static_cast<int>(kind)) + ",\"asks\":1,\"title\":"), "...and every kind that asks says so");
 }
 
 void test_settings() {
@@ -349,12 +349,15 @@ void test_values() {
         check(app.game_menu_set(gm::kMaster, 41) && app.game_menu_get(gm::kMaster) == 41, "Master volume is taken");
         check(app.game_menu_set(gm::kMaster, 400) && app.game_menu_get(gm::kMaster) == 100 && app.game_menu_set(gm::kMaster, -4) && app.game_menu_get(gm::kMaster) == 0, "...and held to 0 .. 100");
         check(std::abs(app.audio_mixer().output_gain() - 0.0f) < 1e-6f, "(Master 0 is silence in the mixer)");
+        check(app.game_menu_set(gm::kMaster, 77, false) && app.game_menu_get(gm::kMaster) == 77 && !has(read_file(file), "master=77"), "a Master that is dragged is heard at once and not written yet");
         app.game_menu_set(gm::kMaster, 41);
+        check(has(read_file(file), "master=41\n"), "...and the release writes it");
         check(std::abs(app.audio_mixer().output_gain() - app.menu_settings().gain()) < 1e-6f && app.audio_mixer().output_gain() > 0.4f, "Master volume reaches the mixer");
         check(app.game_menu_set(gm::kMute, 1) && app.audio_mixer().output_gain() == 0.0f, "Mute silences the mixer");
         check(app.game_menu_set(gm::kMute, 0) && std::abs(app.audio_mixer().output_gain() - app.menu_settings().gain()) < 1e-6f, "...and Off gives Master back");
         check(app.game_menu_set(gm::kMute, 1) && app.game_menu_get(gm::kMute) == 1 && app.game_menu_get(gm::kMaster) == 41, "Mute is on and Master stays where it was");
         check(app.game_menu_get(gm::kMusic) == 65 && app.game_menu_get(gm::kEffects) == 100, "...and so do the original's two volumes");
+        check(app.game_menu_set(gm::kScroll, 500) && app.game_menu_get(gm::kScroll) == 99 && app.game_menu_set(gm::kScroll, -3) && app.game_menu_get(gm::kScroll) == 0, "the scroll speed is held to 0 .. 99, as the original's slider is");
         check(app.game_menu_set(gm::kMusic, 30) && app.game_menu_set(gm::kEffects, 77) && app.game_menu_set(gm::kScroll, 12), "the original's sliders are taken");
         check(app.hud().get_music_volume() == 30 && app.hud().get_sound_volume() == 77 && app.hud().get_scroll_speed() == 12, "in the options state that the original's window reads");
         check(app.game_menu_set(gm::kChat, 0) && !app.hud().is_chat_enabled() && app.game_menu_set(gm::kQuickHelpAtStart, 0) && !app.hud().is_quick_help_enabled(), "the two switches too");
@@ -468,6 +471,42 @@ void test_input() {
     finger(SDL_FINGERDOWN);
     check(app.touch().fingers() == 1, "(the control: a finger is the game's again)");
     finger(SDL_FINGERUP);
+
+    // a finger that went down on the map before the panel opened is ended when it opens: its lift is not fed while the panel is up, and the next finger must not meet a model that still holds it
+    finger(SDL_FINGERDOWN);
+    check(app.touch().fingers() == 1, "(a finger is down on the map)");
+    app.game_menu_set_open(true);
+    app.run_frame_with_delta(0.016f);
+    check(app.touch().fingers() == 0, "the panel opens: that finger is ended, not left held");
+    finger(SDL_FINGERUP);
+    app.game_menu_set_open(false);
+    app.run_frame_with_delta(0.016f);
+    finger(SDL_FINGERDOWN);
+    check(app.touch().fingers() == 1, "closed again: the next finger is the game's and is the only one");
+    finger(SDL_FINGERUP);
+
+    // the wheel is the panel's too (it zooms the map otherwise)
+    SDL_MouseMotionEvent over{};
+    over.type = SDL_MOUSEMOTION;
+    over.x = view.x + 100;
+    over.y = view.y + 100;
+    app.handle_mouse_motion(over);
+    app.run_frame_with_delta(0.016f);
+    const auto wheel = [&]() {
+        SDL_Event e;
+        SDL_zero(e);
+        e.type = SDL_MOUSEWHEEL;
+        e.wheel.y = 1;
+        SDL_PushEvent(&e);
+        const float before = app.zoom();
+        app.run_frame_with_delta(0.016f);
+        return app.zoom() != before;
+    };
+    check(wheel(), "(the control: the wheel zooms the map)");
+    app.game_menu_set_open(true);
+    check(!wheel(), "the wheel does not reach the map while the panel is up");
+    app.game_menu_set_open(false);
+    app.run_frame_with_delta(0.016f);
 }
 
 void test_acts() {

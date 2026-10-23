@@ -281,6 +281,16 @@ def computer(p, args, check):
     p.esc()
     check(p.state()["open"], "...and the next Esc opens it again")
 
+    # ---- a pointer lock that comes while the panel is up (the page's own handler of the event stops it before the panel's: the panel lets it go itself)
+    tab.call("Runtime.evaluate", {"expression": "document.getElementById('canvas').requestPointerLock(); 1", "userGesture": True, "returnByValue": True})
+    time.sleep(1.0)
+    s = p.state()
+    check(s["open"] and s["locked"] is None, "a lock that the page is given while the panel is up is let go (locked %s)" % s["locked"])
+    p.click_element(".gm-resume")
+    check(not p.state()["open"], "...so the mouse still reaches the panel (a click on Resume closes it)")
+    p.esc()
+    check(p.state()["open"], "(the panel again)")
+
     # ---- the values
     p.tab_to("sound")
     tab.ev("document.querySelector('.gm-panel input').focus(); 1")
@@ -425,6 +435,22 @@ def phone(p, args, check):
     p.tap_element(".gm-x")
     s = p.state()
     check(not s["open"] and s["active"] == "canvas", "the cross closes it and the canvas has the focus")
+    # a finger that is on the map when the panel opens (Esc, or a second hand) is ended with no act, and the next finger is the game's
+    cx, cy = json.loads(tab.ev("JSON.stringify((function(){var b=document.getElementById('canvas').getBoundingClientRect();return [b.x+b.width*0.4,b.y+b.height*0.5];})())"))
+    taps = p.state()["taps"]
+    tab.call("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": cx, "y": cy}]})
+    time.sleep(0.3)
+    tab.ev("window.antsGameMenuAsk(); 1")
+    time.sleep(0.5)
+    tab.call("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    time.sleep(0.4)
+    s = p.state()
+    check(s["open"] and s["taps"] == taps and tab.ev("Module._ants_probe(34)") == 0 and tab.ev("Module._ants_probe(35)") == 0, "a finger held on the map while the panel opens, lifted on the panel: no tap, nothing left held (taps %s, was %s)" % (s["taps"], taps))
+    p.tap_element(".gm-x")
+    tab.tap(cx, cy)
+    time.sleep(0.6)
+    s = p.state()
+    check(not s["open"] and s["taps"] == taps + 1 and tab.ev("Module._ants_probe(34)") == 0, "...and after it closes the next finger on the map is a tap of the game's (taps %s, was %s)" % (s["taps"], taps))
     p.tap_element("#settings-btn-narrow")
     check(p.state()["open"], "(the button opens it again)")
 

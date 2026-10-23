@@ -139,18 +139,23 @@ std::string describe_json(bool watching, bool web) {
         put_words(out, row.words);
         out += std::string(",\"live\":") + ((row.show & kShowLive) != 0 ? "1" : "0") + ",\"new\":" + ((row.show & kShowNew) != 0 ? "1" : "0") + ",\"page\":" + ((row.show & kShowPage) != 0 ? "1" : "0") + '}';
     }
-    // The words that are not a row's: the footer's notes, the tags of a screen that is watched, Resume and Leave, and the question that Leave asks (one entry for each LeaveKind that asks)
+    // The words that are not a row's: the footer's notes, the tags of a screen that is watched, Resume and Leave, and the question that Leave asks (one entry for each LeaveKind: "asks" says whether it asks, and the words are only there when it does)
     out += "],\"words\":{\"title\":\"Settings\",\"resume\":\"Resume\",\"leave\":\"Leave game\",\"back\":\"Back to the matches\",\"close\":\"Close the settings\",\"esc\":\"closes\","
            "\"note\":\"The game keeps running while this menu is open.\","
            "\"noteReplay\":\"The replay keeps playing. Pause it with the bar.\",\"noteLive\":\"The match keeps playing.\","
            "\"tagReplay\":\"Watching a replay\",\"tagLive\":\"Watching live\",\"stay\":\"Stay in the game\",\"deciding\":\"The game keeps running while you decide.\","
            "\"ask\":[";
-    constexpr std::array<LeaveKind, 3> kAsking = {LeaveKind::EndsMatch, LeaveKind::DropOut, LeaveKind::Forfeit};
+    constexpr std::array<LeaveKind, 5> kKinds = {LeaveKind::EndsMatch, LeaveKind::DropOut, LeaveKind::Forfeit, LeaveKind::Held, LeaveKind::Watch};
     first = true;
-    for (const LeaveKind kind : kAsking) {
+    for (const LeaveKind kind : kKinds) {
         if (!first) out += ',';
         first = false;
-        out += "{\"kind\":" + std::to_string(static_cast<int>(kind)) + ",\"title\":";
+        out += "{\"kind\":" + std::to_string(static_cast<int>(kind)) + ",\"asks\":" + (leave_needs_confirm(kind) ? "1" : "0");     // (a kind that asks nothing has no words)
+        if (!leave_needs_confirm(kind)) {
+            out += '}';
+            continue;
+        }
+        out += ",\"title\":";
         put_string(out, kind == LeaveKind::Forfeit ? "Forfeit and leave?" : "Leave the game?");
         out += ",\"body\":";
         put_string(out, kind == LeaveKind::Forfeit ? "You give up this match. It ends now for everybody and counts as a loss for you."
