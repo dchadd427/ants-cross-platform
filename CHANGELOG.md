@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (computer players run on the server or the host and only send commands, so old recordings play as before).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...b69719b2), [the quick kill](docs/BOT_FIGHT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...847f0c2b), [the quick kill](docs/BOT_FIGHT.md)
 
 ## v0.12.108 - 2026-10-22 - Auto edges draw a strip of water one cell wide in mud, in any painting order
 
