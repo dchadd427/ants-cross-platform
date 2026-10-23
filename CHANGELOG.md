@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.108 - 2026-10-22 - Hard computer players take the quick kill and stop sending ants where no walk goes
+## v0.12.109 - 2026-10-22 - Hard computer players take the quick kill and stop sending ants where no walk goes
 
 **For players:**
 - **The Hard computer players now take a kill when they see one.** An enemy ant that stands next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over the whole map library they drown about two thirds more enemy ants on purpose than before.
@@ -34,7 +34,19 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (computer players run on the server or the host and only send commands, so old recordings play as before).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...da3a77cb), [the quick kill](docs/BOT_FIGHT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...b69719b2), [the quick kill](docs/BOT_FIGHT.md)
+
+## v0.12.108 - 2026-10-22 - Auto edges draw a strip of water one cell wide in mud, in any painting order
+
+**For players:**
+- **Map Maker (v1.5.1), Auto edges: water painted one cell wide inside mud now gets its soft edges.** A narrow stream used to keep hard square sides, with a single rounded piece where it bent. The mud on both sides of it now takes the edge pieces toward the water, the way the game's own maps draw a narrow lake. It comes out the same whether you paint the water first and the mud round it, or the mud first and the water inside.
+- **The same for every other pair of ground that has edge pieces:** a strip one cell wide of gravel in mud or dirt, of slate in dirt or mud, of dirt in mud, and a one-cell inlet or a single cell of one kind inside another (the square notch in a blob of mud is rounded too). **Fix edges...** does the same on a map you have already drawn. It still never takes a piece away, and what you placed by hand stays.
+- **Water beside gravel, dirt or slate keeps a hard edge:** the game has no edge piece for those pairs, so none is put there.
+- **Painting in several strokes always leaves what Fix edges would make.** Auto edges now looks a little further round each stroke, so a piece from an earlier step is never left out of date.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...be7df044)
 
 ## v0.12.107 - 2026-10-22 - Map Maker: the Pick up tool moves, copies and deletes what is on a map
 
@@ -593,17 +605,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...ec086294)
 
-## v0.12.45 - 2026-10-15 - The bot arena container is gone from the stack
+## Older versions (v0.12.45 and before)
 
-**For players:**
-- Nothing changes in the game or on the site. The list of matches still always has one to watch: the game server itself starts a match of computer players every hour (`ANTS_BOT_MATCH_EVERY_MIN`, 60 by default), and anybody can watch it live.
-- **For whoever runs a stack:** one container less. The extra bot arena container (`ants-arena`, which started only when the `arena` profile of `docker-compose.stack.yml` was asked for) is gone, with its image stage in `Dockerfile.server`, its loop script and its setting `ANTS_ARENA_EVERY_MIN`; the stack is the web page and the game server again. If you had started it, remove the old container once with `docker rm -f ants-arena`.
-- The `bot_arena` command-line tool stays as it was: it plays computer players against each other on your own computer, and `--save-replays` still puts its matches in the server's replays folder.
-
-**Rules / network:** none. No rule, no state hash and no protocol number changed.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...a366cb21), [the bot tool](docs/BOTS.md#running-bots)
-
-## Older versions (v0.12.44 and before)
-
-Every release before v0.12.45, and the long notes of v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.46, and the long notes of v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
