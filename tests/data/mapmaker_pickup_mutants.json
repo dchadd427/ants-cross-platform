@@ -1017,13 +1017,6 @@
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
-      "id": "drop_after_done_moves_again",
-      "file": "web/front/mapmaker_pickup.js",
-      "old": "else if ((d.kind === 'ghost' || d.moved) && st.mode !== 'moving') return;",
-      "new": "else if (false) return;",
-      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
-    },
-    {
       "id": "drop_tools_abandon_ends",
       "file": "web/front/mapmaker_tools.js",
       "old": "abandon: function () { if (mine() && mine().abandon) return mine().abandon(); painter.end(); },",

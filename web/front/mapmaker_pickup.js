@@ -771,7 +771,6 @@
                 var d = st.drag;
                 if (!d) return;
                 if (d.kind === 'box') { st.box = { r0: Math.min(d.from.row, to.row), c0: Math.min(d.from.column, to.column), r1: Math.max(d.from.row, to.row), c1: Math.max(d.from.column, to.column) }; render(); drawOver(); }
-                else if ((d.kind === 'ghost' || d.moved) && st.mode !== 'moving') return;          // (put down by Enter or the Done button while the button was still held)
                 else if (d.kind === 'ghost') { d.moved = true; setDelta(d.dr + to.row - d.from.row, d.dc + to.column - d.from.column); }
                 else if (!d.moved) {
                     var f = file(), idx0 = d.from.row * f.columns + d.from.column, sel = null, i;
