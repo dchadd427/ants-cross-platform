@@ -22,6 +22,8 @@ The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) di
 
 The script builds the game each time it starts (quick when nothing changed) and opens one game with the start menu. Its options, the other ways to build, and the web build are in [Build and run](docs/BUILD_AND_RUN.md#quick-launch-desktop).
 
+**Support the project:** if you enjoy the game, you can [buy me a coffee](https://buymeacoffee.com/dchadd).
+
 ## Documentation
 
 **Playing**
