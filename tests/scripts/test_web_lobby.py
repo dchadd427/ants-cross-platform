@@ -374,7 +374,7 @@ class TheFrontPageMarkup(PageCase):
         anchors = re.findall(r"<a [^>]*>", self.page)
         blank = [a for a in anchors if 'target="_blank"' in a]
         hrefs = sorted(set(re.search(r'href="([^"]*)"', a).group(1) for a in blank))
-        self.assertEqual(hrefs, ["/asset_catalog/", "/changelog.html", "/legal.html", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues"])
+        self.assertEqual(hrefs, ["/asset_catalog/", "/changelog.html", "/legal.html", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "https://www.buymeacoffee.com/dchadd"])       # (the last is the owner's Buy Me a Coffee button, the one link that leaves for another site)
         self.assertEqual(len(re.findall(r"window\.open\(", self.page)), 0, "the front page opens no window of its own")
 
     def test_start_goes_to_this_tab(self):
