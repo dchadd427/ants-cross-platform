@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9aa3e544...c19b2fdb)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9aa3e544...02eabd8e)
 
 ## v0.12.116 - 2026-10-23 - Map Maker: red drops go back, things may stand on water, flowers have stems
 
