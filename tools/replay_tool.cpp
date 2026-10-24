@@ -812,6 +812,26 @@ int selftest() {
         const Run damaged = run_words({"map", dir.file("flipped.antsrep"), dir.file("from-damaged.lvl")});
         t.check(damaged.status == 1 && !fs::exists(dir.path / "from-damaged.lvl"), "map of a damaged file is refused and writes nothing");
 
+        // a file of more than 1 MiB that holds a map is read (the match is under 1 MiB: a skipped chunk makes up the rest), one past the longest there can be is not
+        {
+            const size_t head_end = 8 + 12 + (static_cast<size_t>(with_map[12]) | (static_cast<size_t>(with_map[13]) << 8) | (static_cast<size_t>(with_map[14]) << 16) | (static_cast<size_t>(with_map[15]) << 24));
+            const size_t filler = kMaxFileBytes - 100 - (with_map.size() - map_bytes.size() - kChunkFrameBytes) - kChunkFrameBytes;       // (a match 100 bytes under its limit)
+            std::vector<uint8_t> chunk = {'p', 'a', 'd', 'd'};
+            for (int shift = 0; shift < 32; shift += 8) chunk.push_back(static_cast<uint8_t>((filler >> shift) & 0xFFu));
+            chunk.insert(chunk.end(), filler, 0);
+            const uint32_t crc = crc32(chunk.data() + 8, filler, crc32(chunk.data(), 4));
+            for (int shift = 0; shift < 32; shift += 8) chunk.push_back(static_cast<uint8_t>((crc >> shift) & 0xFFu));
+            std::vector<uint8_t> big(with_map.begin(), with_map.begin() + static_cast<std::ptrdiff_t>(head_end));
+            big.insert(big.end(), chunk.begin(), chunk.end());
+            big.insert(big.end(), with_map.begin() + static_cast<std::ptrdiff_t>(head_end), with_map.end());
+            t.check(big.size() > kMaxFileBytes && big.size() < kMaxFileBytesWithMap && write_bytes(dir.file("big.antsrep"), big), "a file of more than 1 MiB that carries its map is written");
+            const Run big_info = run_words({"info", dir.file("big.antsrep")});
+            t.check(big_info.status == 0 && has(big_info.out, "embedded map: " + std::to_string(map_bytes.size()) + " bytes"), "info reads it");
+            t.check(write_bytes(dir.file("past.antsrep"), std::vector<uint8_t>(kMaxFileBytesWithMap + 1, 0x41)), "a file past the longest there can be is written");
+            const Run past = run_words({"info", dir.file("past.antsrep")});
+            t.check(past.status == 2 && has(past.err, "larger than a replay file can be"), "info does not read it: exit 2");
+        }
+
         // the map in the file is the file that the head names, or the file is not read: a map of another hash, a second map, one that is too long
         Replay wrong = carrying;
         wrong.embedded_map.push_back(0);
