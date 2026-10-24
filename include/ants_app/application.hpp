@@ -71,7 +71,7 @@ struct ApplicationConfig {
     int window_width{1280};  // the classic canvas at 2x: the size that the window is created with; a 16:9 game is given its own first window right after (apply_window_layout)
     int window_height{960};
     bool fullscreen{false};
-    /// --aspect 4:3 | 16:10 | 16:9 | 21:9 (the settings key `aspect` when the command line does not say): the shape of the picture (the web page's selector changes it while the game runs:
+    /// --aspect NAME, a name of a row of the shape table (canvas_layout.hpp kAspectTable: 4:3, 16:10, 16:9, 21:9) (the settings key `aspect` when the command line does not say): the shape of the picture (the web page's selector changes it while the game runs:
     /// Application::set_aspect). 4:3 is the original's fixed 640 x 480 canvas; 16:10 is 960 x 600 and 21:9 is 1260 x 540 (the 16:9 match screen with a taller or a wider map view; each page is the
     /// 960 x 540 one, centred in the canvas); 16:9 is a fixed 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and every screen outside a match is
     /// composed for the whole canvas from the original's own art: the setup screen and the room (setup_layout.hpp, with a map preview), the loading screen and the quick help at the start

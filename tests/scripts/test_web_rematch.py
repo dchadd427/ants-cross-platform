@@ -176,7 +176,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/rematch_mutants.json that need no build, on a COPY of the files, one at a time: each must make its check fail (a command that exits non-zero), and the copy with
     nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/front/rematch.js", "web/front/lobby_net.js", "web/front/lobby_rules.js", "web/front/lobby_chat.js", "web/front/game_modes.js", "web/front/game_type.js", "web/lobby.html", "web/shell.html", "tests/data/match_over.txt", "tests/data/replay_players.txt", "tests/data/lobby_messages.txt",
+    FILES = ("web/front/rematch.js", "web/front/lobby_net.js", "web/front/lobby_rules.js", "web/front/lobby_chat.js", "web/front/game_modes.js", "web/front/game_type.js", "web/lobby.html", "web/shell.html", "web/shapes.js", "tests/data/match_over.txt", "tests/data/replay_players.txt", "tests/data/lobby_messages.txt",
              "tests/scripts/web_rematch_check.js", "tests/scripts/web_lobby_rules_check.js", "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/web_name_check.js",
              "include/ants_net/flood.hpp", "include/ants_net/protocol.hpp")      # (the client check reads the server's limits, the rules check the server's sentences)
 

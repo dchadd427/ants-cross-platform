@@ -36,10 +36,8 @@ class PagesStartWith16x9(unittest.TestCase):
         self.assertIn('<div id="game-stage" data-aspect="16:9">', page)
         self.assertRegex(page, r'id="aspect-16-9" data-aspect="16:9" aria-checked="true"')
         self.assertRegex(page, r'id="aspect-4-3" data-aspect="4:3" aria-checked="false"')
-        self.assertRegex(page, r"#game-stage \{\s*--ar-w: 16;\s*--ar-h: 9;")              # the slot's own shape; only data-aspect="4:3" changes it
-        self.assertRegex(page, r'#game-stage\[data-aspect="4:3"\] \{\s*--ar-w: 4;\s*--ar-h: 3;')
-        self.assertRegex(page, r'#game-stage\[data-aspect="16:10"\] \{\s*--ar-w: 8;\s*--ar-h: 5;')       # the slot of the two other shapes (their smallest whole numbers)
-        self.assertRegex(page, r'#game-stage\[data-aspect="21:9"\] \{\s*--ar-w: 7;\s*--ar-h: 3;')
+        self.assertRegex(page, r":root \{\s*--chrome: 180px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # the slot's own shape; the script sets the other shapes' numbers (web/shapes.js's rows: slotVars), a rule for each shape is gone
+        self.assertNotIn('#game-stage[data-aspect=', page)
         self.assertIn("var ANTS_ASPECT = '16:9';", page)
         self.assertIn("return { aspect: '16:9', source: 'default' };", page)                 # nothing says otherwise: 16:9 on every device, a phone held upright included
 
@@ -56,19 +54,21 @@ class PagesStartWith16x9(unittest.TestCase):
         self.assertEqual(bar.count('<span class="fit-tag" hidden>fills your screen</span>'), 4)             # one tag under each button, hidden until the script says which shape is the screen's
 
     def test_the_page_and_the_game_agree_on_the_shapes(self):
-        """The selector's order is the game's kAllAspects, ants_set_aspect takes the shape's place in it, and each canvas is a whole number of steps of the page's box."""
+        """The selector's order is the game's table (kAspectTable, which kAllAspects is made from), ants_set_aspect takes the shape's place in it, and each canvas is a whole number of steps of the page's box.
+        The two tables themselves are compared row by row in test_web_shapes.py."""
         page = read(SHELL)
         header = read(os.path.join(REPO, "include", "ants_app", "canvas_layout.hpp"))
         game = read(os.path.join(REPO, "src", "ants_app", "application.cpp"))
-        order = re.search(r"kAllAspects = \{([^}]*)\}", header).group(1)
-        self.assertEqual([x.strip() for x in order.split(",")], ["Aspect::Classic4x3", "Aspect::Wide16x10", "Aspect::Wide16x9", "Aspect::Ultra21x9"])
-        self.assertIn("var SHAPE_ORDER = ['4:3', '16:10', '16:9', '21:9'];", page)
+        table = re.search(r"kAspectTable = \{\{(.*?)\}\};", header, re.S).group(1)
+        self.assertEqual(re.findall(r"\{(Aspect::\w+),", table), ["Aspect::Classic4x3", "Aspect::Wide16x10", "Aspect::Wide16x9", "Aspect::Ultra21x9"])
+        self.assertIn("kAllAspects = shape_table_detail::aspects_of_table();", header)
         self.assertIn("extern \"C\" EMSCRIPTEN_KEEPALIVE int ants_set_aspect(int shape) {", game)
         self.assertIn("Module._ants_set_aspect(ANTS_PAGE.shapeNumber(ANTS_ASPECT))", page)
+        shapes = read(os.path.join(REPO, "web", "shapes.js"))
         steps = {"4:3": (4, 3), "16:10": (8, 5), "16:9": (16, 9), "21:9": (7, 3)}
         canvas = {"4:3": (640, 480), "16:10": (960, 600), "16:9": (960, 540), "21:9": (1260, 540)}
         for name, (w, h) in steps.items():
-            self.assertIn("'" + name + "': { w: %d, h: %d }" % (w, h), page)
+            self.assertRegex(shapes, r"name: '%s', label: '[^']+', width: %d, height: %d," % (name, canvas[name][0], canvas[name][1]))
             self.assertEqual((canvas[name][0] % w, canvas[name][1] % h), (0, 0), name)
             self.assertEqual(canvas[name][0] // w, canvas[name][1] // h, name)                           # the same number of steps on both axes: the canvas has the box's shape
         self.assertIn("kWideCanvasWidth = 960", header)
@@ -97,8 +97,9 @@ class PagesStartWith16x9(unittest.TestCase):
         front = re.findall(r'<input type="radio" name="aspect" id="aspect-[0-9-]+" value="([0-9:]+)"(?: checked)?><label for="aspect-[0-9-]+" title="([^"]+)">([^<]+)</label>', row)
         self.assertEqual([shape for shape, _, _ in front], ["4:3", "16:10", "16:9", "21:9"])
         self.assertEqual(front, game)                                                                     # the same names and the same hover texts as the game page's own buttons
-        shapes = lambda text: re.search(r"var SHAPES = (\{.*?\});\n", text, re.S).group(1)
-        self.assertEqual(shapes(page), shapes(shell))                                                     # (the table of the shapes is the game page's)
+        self.assertNotIn("var SHAPES = {", page + shell)                                                  # (no table of its own: both pages read web/shapes.js, which test_web_shapes.py pins to the game's)
+        self.assertIn('<script src="shapes.js"></script>', page)
+        self.assertIn('<script src="shapes.js"></script>', shell)
 
     def test_the_front_page_buttons_are_the_picture_row_of_the_match_column_under_the_map_and_above_start(self):
         """The picture draws the match column as the map picker, the map's line, the "Picture" row with the four buttons and START! (a window too narrow for the label and the buttons wraps the label above them); the footer has no selector."""

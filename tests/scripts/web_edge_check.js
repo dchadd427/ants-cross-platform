@@ -11,6 +11,8 @@
 // usage: node web_edge_check.js web/shell.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
+// the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
+globalThis.AntsShapes = require(require('path').resolve(__dirname, '..', '..', 'web', 'shapes.js'));
 
 // The lines between the line of `begin` and the line of `end`
 function between(text, begin, end, path) {
@@ -68,7 +70,7 @@ function loadPage(text) {
     const win = { location: { search: '', protocol: 'https:', host: 'example.test', href: 'https://example.test/', assign() {} }, localStorage: storage, confirm() { return true; } };
     const stage = element({ 'data-aspect': '16:9' });
     const doc = {
-        body: element(),
+        body: Object.assign(element(), { style: { setProperty() {} } }),       // (the page sets the slot's custom properties on it)
         getElementById(id) { if (id === 'game-stage') return stage; throw new Error('the page asked for #' + id); },
         querySelectorAll(selectorText) { if (selectorText === '.seg button[data-aspect]') return []; throw new Error('the page asked for ' + selectorText); },
     };

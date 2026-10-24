@@ -32,7 +32,7 @@ The rows are **one table in C++** (`include/ants_app/game_menu.hpp`, `src/ants_a
 | Sound | Sound effects volume | the original's `Sound Volume` | at the release, with the test voice |
 | Sound | **Mute everything** (new) | `mute=on` / `off` | at once; every slider stays where it is and a muted sound goes on playing |
 | Video | Fullscreen | the page | the page's own enter / leave (a real click: the browser's permission) |
-| Video | Picture shape | the page (`ants.aspect.v2`, the address) | the page's own selector button is clicked: one function for all of them |
+| Video | Picture shape | the page (`ants.aspect.v2`, the address) | the page's own selector button is clicked: one function for all of them; the row's words and range are made from the game's shape table (`kAspectTable`), the page's menu reads `web/shapes.js` |
 | Video | Fullscreen mouse | the page (`ants.pointerlock`) | Locked / Free; not on a touch screen |
 | Video | **Hit point numbers** (new: remembered) | `hp_numbers=` (Ctrl+L flips the same flag) | at once |
 | Video | Map scroll speed | the original's `Scroll Speed` | at the release |

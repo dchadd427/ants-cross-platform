@@ -381,6 +381,40 @@ ApplicationConfig parse(std::initializer_list<const char*> args) {
     return Application::parse_arguments(static_cast<int>(argv.size()), argv.data());
 }
 
+// The one table of the shapes (kAspectTable): everything else (canvas_width_of, aspect_name, kAllAspects, the place that the page's ants_set_aspect takes, the words of the refusals, the Esc menu's
+// picture row: test_game_menu) is read from it, and web/shapes.js has the same four rows (tests/scripts/test_web_shapes.py compares the two tables).
+void test_shape_table() {
+    group("table", "the shape table: one row per shape, narrowest to widest; names, places and canvases are read from it");
+    check(kAspectTable.size() == 4 && kAllAspects.size() == kAspectTable.size(), "four shapes, and kAllAspects is the table's own order");
+    for (size_t i = 0; i < kAspectTable.size(); ++i) {
+        const AspectRow& row = kAspectTable[i];
+        const std::string name = row.name;
+        check(kAllAspects[i] == row.aspect, name + ": kAllAspects lists it in the table's place");
+        check(aspect_place(row.aspect) == static_cast<int>(i), name + ": its place is its row's, the number that ants_set_aspect takes");
+        Aspect at = Aspect::Wide16x9;
+        check(aspect_at_place(static_cast<int>(i), at) && at == row.aspect, name + ": the place gives the shape back");
+        check(canvas_width_of(row.aspect) == row.width && canvas_height_of(row.aspect) == row.height && std::string(aspect_name(row.aspect)) == name && std::string(aspect_label(row.aspect)) == row.label,
+              name + ": the canvas, the name and the words are the row's");
+        Aspect parsed = Aspect::Classic4x3;
+        std::string why;
+        check(parse_aspect(name, parsed, why) && parsed == row.aspect, name + ": its name parses back to it");
+        for (size_t j = i + 1; j < kAspectTable.size(); ++j) check(row.aspect != kAspectTable[j].aspect && name != kAspectTable[j].name, name + ": no other row has its shape or its name");
+        // the pages exist for the canvas of 640 x 480 and for every canvas of 960 x 540 or more (CanvasLayout::page), nothing between
+        check((row.width == 640 && row.height == 480) || (row.width >= kWideCanvasWidth && row.height >= kWideCanvasHeight), name + ": a canvas the pages can stand in");
+        if (i > 0) {
+            const AspectRow& before = kAspectTable[i - 1];
+            check(row.width * before.height > before.width * row.height, name + ": wider than the row before it (narrowest to widest)");
+        }
+    }
+    Aspect keep = Aspect::Wide16x10;
+    check(!aspect_at_place(-1, keep) && !aspect_at_place(4, keep) && !aspect_at_place(1000, keep) && keep == Aspect::Wide16x10, "a place outside the table is no shape, and leaves the value alone");
+    check(aspect_place(kWebDefaultAspect) == 2 && aspect_place(kDesktopDefaultAspect) == 2 && std::string(aspect_name(kPlatformDefaultAspect)) == "16:9", "the default is the row of 16:9");
+    check(aspect_names(" and ") == "4:3, 16:10, 16:9 and 21:9" && aspect_names(" or ") == "4:3, 16:10, 16:9 or 21:9", "the refusals name every row of the table, in its order");
+    std::string why;
+    Aspect none = Aspect::Classic4x3;
+    check(!parse_aspect("3:2", none, why) && why == "\"3:2\": only " + aspect_names(" and "), "a refusal says the names of the table");
+}
+
 void test_aspect_option() {
     group("option", "--aspect on the command line");
     ApplicationConfig c = parse({"ants"});
@@ -1368,6 +1402,7 @@ int main(int argc, char* argv[]) {
     test_window_sizes();
     test_aspect_parsing();
     test_aspect_canvases();
+    test_shape_table();
     test_aspect_option();
     test_window_size_option();
     test_renderer_picture(arc);

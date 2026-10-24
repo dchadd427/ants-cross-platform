@@ -1,0 +1,301 @@
+{
+  "note": "Mutants of the shape table for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the game's table (include/ants_app/canvas_layout.hpp kAspectTable and what reads it) and the pages' table (web/shapes.js and what reads it) against tests/scripts/test_web_shapes.py (the two tables agree, no page keeps a list of its own), tests/scripts/web_aspect_key_check.js (what the table's functions decide, run on the pages' own code), tests/test_app/test_canvas_layout.cpp and tests/test_app/test_game_menu.cpp. Run from the checkout: tools/mutate.py tests/data/shape_table_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_shapes.py runs the ones that name it on a copy of the files.",
+  "mutants": [
+    {
+      "id": "cpp_row_height",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "{Aspect::Wide16x10, \"16:10\", \"16:10\", 960, 600},",
+      "new": "{Aspect::Wide16x10, \"16:10\", \"16:10\", 960, 601},",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "cpp_row_width",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "{Aspect::Ultra21x9, \"21:9\", \"21:9\", 1260, 540},",
+      "new": "{Aspect::Ultra21x9, \"21:9\", \"21:9\", 1261, 540},",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "cpp_row_words",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "\"Classic 4:3\", 640, 480}",
+      "new": "\"Classic 4x3\", 640, 480}",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "cpp_row_name",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "{Aspect::Wide16x9, \"16:9\", \"16:9\", 960, 540},",
+      "new": "{Aspect::Wide16x9, \"16x9\", \"16:9\", 960, 540},",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "cpp_rows_swapped",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "    {Aspect::Wide16x10, \"16:10\", \"16:10\", 960, 600},\n    {Aspect::Wide16x9, \"16:9\", \"16:9\", 960, 540},\n",
+      "new": "    {Aspect::Wide16x9, \"16:9\", \"16:9\", 960, 540},\n    {Aspect::Wide16x10, \"16:10\", \"16:10\", 960, 600},\n",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "cpp_row_dropped",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "    {Aspect::Ultra21x9, \"21:9\", \"21:9\", 1260, 540},\n",
+      "new": "",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "js_row_height",
+      "file": "web/shapes.js",
+      "old": "        { name: '16:10', label: '16:10', width: 960, height: 600, slot: 1280 },\n",
+      "new": "        { name: '16:10', label: '16:10', width: 960, height: 601, slot: 1280 },\n",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "js_row_name",
+      "file": "web/shapes.js",
+      "old": "        { name: '16:9', label: '16:9', width: 960, height: 540, slot: 1280 },\n",
+      "new": "        { name: '16x9', label: '16:9', width: 960, height: 540, slot: 1280 },\n",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "js_row_words",
+      "file": "web/shapes.js",
+      "old": "label: 'Classic 4:3'",
+      "new": "label: 'Classic 4x3'",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "js_rows_swapped",
+      "file": "web/shapes.js",
+      "old": "        { name: '16:10', label: '16:10', width: 960, height: 600, slot: 1280 },\n        { name: '16:9', label: '16:9', width: 960, height: 540, slot: 1280 },\n",
+      "new": "        { name: '16:9', label: '16:9', width: 960, height: 540, slot: 1280 },\n        { name: '16:10', label: '16:10', width: 960, height: 600, slot: 1280 },\n",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "js_extra_row",
+      "file": "web/shapes.js",
+      "old": "        { name: '21:9', label: '21:9', width: 1260, height: 540, slot: 1280 }\n",
+      "new": "        { name: '21:9', label: '21:9', width: 1260, height: 540, slot: 1280 },\n        { name: '32:9', label: '32:9', width: 1920, height: 540, slot: 1920 }\n",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "js_slot_classic_wide",
+      "file": "web/shapes.js",
+      "old": "width: 640, height: 480, slot: 960",
+      "new": "width: 640, height: 480, slot: 1280",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_parse_inherited_names",
+      "file": "web/shapes.js",
+      "old": "return (typeof text === 'string' && Object.prototype.hasOwnProperty.call(BY_NAME, text)) ? BY_NAME[text] : null;",
+      "new": "return (typeof text === 'string' && text in BY_NAME) ? BY_NAME[text] : null;",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "js_place_off_by_one",
+      "file": "web/shapes.js",
+      "old": "return row ? row.place : -1;",
+      "new": "return row ? row.place + 1 : -1;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_steps_not_reduced",
+      "file": "web/shapes.js",
+      "old": "return b === 0 ? a : gcd(b, a % b);",
+      "new": "return 1;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_id_keeps_colon",
+      "file": "web/shapes.js",
+      "old": "id: row.name.replace(':', '-')",
+      "new": "id: row.name",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_fills_too_loose",
+      "file": "web/shapes.js",
+      "old": "var FILLS_WITHIN = 0.08;",
+      "new": "var FILLS_WITHIN = 0.12;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_fills_too_tight",
+      "file": "web/shapes.js",
+      "old": "var FILLS_WITHIN = 0.08;",
+      "new": "var FILLS_WITHIN = 0.06;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_fills_ratio_not_symmetric",
+      "file": "web/shapes.js",
+      "old": "var off = Math.max(ratio / screenRatio, screenRatio / ratio) - 1;",
+      "new": "var off = Math.min(ratio / screenRatio, screenRatio / ratio) - 1;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_copy_in_lobby",
+      "file": "web/lobby.html",
+      "old": "function shapeOr169(text) { return AntsShapes.parse(text) || '16:9'; }",
+      "new": "function shapeOr169(text) { return ['4:3', '16:10', '16:9', '21:9'].indexOf(text) !== -1 ? text : '16:9'; }",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "page_copy_in_menu",
+      "file": "web/game_menu.js",
+      "old": "var SHAPES = page.shapes.names();",
+      "new": "var SHAPES = ['4:3', '16:10', '16:9', '21:9'];",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "page_rule_in_style",
+      "file": "web/shell.html",
+      "old": "        #game-stage {\n            position: relative;",
+      "new": "        #game-stage[data-aspect=\"4:3\"] { --ar-w: 4; --ar-h: 3; }\n\n        #game-stage {\n            position: relative;",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "page_does_not_load_the_table",
+      "file": "web/shell.html",
+      "old": "<script src=\"shapes.js\"></script><script src=\"replay_page.js\">",
+      "new": "<script src=\"replay_page.js\">",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "page_slot_not_set",
+      "file": "web/shell.html",
+      "old": "Object.keys(vars).forEach(function (name) { document.body.style.setProperty(name, vars[name]); });",
+      "new": "",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_slot_max_fixed",
+      "file": "web/shell.html",
+      "old": "'--stage-max': row.slot + 'px'",
+      "new": "'--stage-max': '1280px'",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "image_lacks_the_table",
+      "file": "Dockerfile",
+      "old": "COPY web/shapes.js /usr/share/nginx/html/shapes.js\n",
+      "new": "",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "game_export_ignores_table",
+      "file": "src/ants_app/application.cpp",
+      "old": "if (!aspect_at_place(shape, aspect)) return 0;",
+      "new": "if (shape < 0 || shape > 3) return 0;",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "game_probe_ignores_table",
+      "file": "src/ants_app/application.cpp",
+      "old": "case 42: return aspect_place(g_web_app->aspect());",
+      "new": "case 42: return static_cast<int>(g_web_app->aspect());",
+      "test": "python3 tests/scripts/test_web_shapes.py"
+    },
+    {
+      "id": "cpp_place_off_by_one",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "if (kAspectTable[i].aspect == aspect) return static_cast<int>(i);",
+      "new": "if (kAspectTable[i].aspect == aspect) return static_cast<int>(i) + 1;",
+      "build": [
+        "test_canvas_layout"
+      ],
+      "test": "./build/tests/test_app/test_canvas_layout"
+    },
+    {
+      "id": "cpp_last_place_refused",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "if (place < 0 || static_cast<size_t>(place) >= kAspectTable.size()) return false;",
+      "new": "if (place < 0 || static_cast<size_t>(place) + 1 >= kAspectTable.size()) return false;",
+      "build": [
+        "test_canvas_layout"
+      ],
+      "test": "./build/tests/test_app/test_canvas_layout"
+    },
+    {
+      "id": "cpp_names_without_last_joiner",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "out += (i + 1 == kAspectTable.size()) ? last : \", \";",
+      "new": "out += \", \";",
+      "build": [
+        "test_canvas_layout"
+      ],
+      "test": "./build/tests/test_app/test_canvas_layout"
+    },
+    {
+      "id": "cpp_refusal_says_or",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "why = \"\\\"\" + text + \"\\\": only \" + aspect_names(\" and \");",
+      "new": "why = \"\\\"\" + text + \"\\\": only \" + aspect_names(\" or \");",
+      "build": [
+        "test_canvas_layout"
+      ],
+      "test": "./build/tests/test_app/test_canvas_layout"
+    },
+    {
+      "id": "cpp_canvas_width_is_height",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "constexpr int32_t canvas_width_of(Aspect aspect) noexcept { return shape_table_detail::row_of(aspect).width; }",
+      "new": "constexpr int32_t canvas_width_of(Aspect aspect) noexcept { return shape_table_detail::row_of(aspect).height; }",
+      "build": [
+        "test_canvas_layout"
+      ],
+      "test": "./build/tests/test_app/test_canvas_layout"
+    },
+    {
+      "id": "cpp_all_aspects_reversed",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "out[i] = kAspectTable[i].aspect;",
+      "new": "out[kAspectTable.size() - 1 - i] = kAspectTable[i].aspect;",
+      "build": [
+        "test_canvas_layout"
+      ],
+      "test": "./build/tests/test_app/test_canvas_layout"
+    },
+    {
+      "id": "menu_words_separator",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "constexpr PictureText kPictureWords = picture_text(\"|\", \"|\", \"\");",
+      "new": "constexpr PictureText kPictureWords = picture_text(\"|\", \",\", \"\");",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "menu_hint_joiner",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "picture_text(\", \", \" or \", \"; the match goes on\")",
+      "new": "picture_text(\", \", \" and \", \"; the match goes on\")",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "menu_default_not_the_webs",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "aspect_place(kWebDefaultAspect), kShowWeb",
+      "new": "0, kShowWeb",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "menu_one_choice_short",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "0, static_cast<int>(kAspectTable.size()) - 1, aspect_place",
+      "new": "0, static_cast<int>(kAspectTable.size()) - 2, aspect_place",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    }
+  ]
+}

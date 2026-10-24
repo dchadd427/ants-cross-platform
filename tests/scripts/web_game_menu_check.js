@@ -29,6 +29,7 @@ function ok(label, cond) { expect(label, !!cond, true); }
 const modulePath = process.argv[2], dataDir = process.argv[3];
 if (!modulePath || !dataDir) { console.log('usage: web_game_menu_check.js game_menu.js data-folder'); process.exit(2); }
 const Menu = require(path.resolve(modulePath));
+const AntsShapes = require(path.resolve(__dirname, '..', '..', 'web', 'shapes.js'));       // (the page's one table of shapes: the page hands it to the menu as `shapes`)
 const MATCH = fs.readFileSync(path.join(dataDir, 'game_menu_match.json'), 'utf8').trim();
 const WATCH = fs.readFileSync(path.join(dataDir, 'game_menu_watch.json'), 'utf8').trim();
 
@@ -213,7 +214,7 @@ function makePage(opts) {
     stage.setAttribute('data-aspect', '16:9');
     const bar = make('div', 'view-bar'), label = make('span', 'view-bar-label', bar);
     const shapes = {};
-    ['4:3', '16:10', '16:9', '21:9'].forEach((s) => {
+    AntsShapes.names().forEach((s) => {
         const b = make('button', 'aspect-' + s.replace(':', '-'), bar);
         b.setAttribute('data-aspect', s);
         b.setAttribute('aria-checked', s === '16:9' ? 'true' : 'false');
@@ -230,7 +231,7 @@ function makePage(opts) {
     toast.hidden = true;
     const intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
     const page = {
-        doc, win, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
+        doc, win, shapes: AntsShapes, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
         isFullscreen: () => state.fullscreen, enter: () => { state.enters++; state.fullscreen = true; }, leave: () => { state.leaves++; state.fullscreen = false; },
         isLocked: () => state.locked, releaseLock: () => { state.locks.push('release'); state.locked = false; }, requestLock: () => { state.locks.push('request'); state.locked = true; },
         every: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },

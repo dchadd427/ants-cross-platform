@@ -131,6 +131,17 @@ void test_table() {
         if (row.kind == gm::Kind::Slider) check(row.min == 0 && row.max == 99 && row.def >= row.min, std::string("the slider ") + row.key + " runs 0 to 99, as the original's");
         if (row.kind == gm::Kind::Switch) check(std::string(row.words) == "On|Off", std::string("the switch ") + row.key + " says On and Off");
     }
+    {   // the picture row is made from the shape table (canvas_layout.hpp): a choice for each shape, in the table's order, with its words, and the web's default shape
+        const gm::Row* picture = gm::find_row(gm::kPicture);
+        std::string words, hint;
+        for (size_t i = 0; i < kAspectTable.size(); ++i) {
+            words += (i > 0 ? "|" : "") + std::string(kAspectTable[i].label);
+            hint += (i == 0 ? "" : (i + 1 == kAspectTable.size() ? " or " : ", ")) + std::string(kAspectTable[i].label);
+        }
+        check(picture != nullptr && std::string(picture->words) == words && picture->min == 0 && picture->max == static_cast<int>(kAspectTable.size()) - 1 && picture->def == aspect_place(kWebDefaultAspect),
+              "the picture row has one word for each row of the shape table, in its order, and the web's default shape as its default");
+        check(picture != nullptr && std::string(picture->hint) == hint + "; the match goes on", "the picture row's hint names the shapes of the table");
+    }
     check(gm::find_row(0) == nullptr && gm::find_row(15) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
     check(gm::find_row(gm::kMaster)->def == 100 && gm::find_row(gm::kMusic)->def == 65 && gm::find_row(gm::kEffects)->def == 100 && gm::find_row(gm::kScroll)->def == 50, "the defaults are the original's (Master 100: nothing changes)");
     check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kHpNumbers)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the three new rows carry the new tag");

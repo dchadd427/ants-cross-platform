@@ -17,6 +17,8 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+// the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
+globalThis.AntsShapes = require(path.resolve(__dirname, '..', '..', 'web', 'shapes.js'));
 
 const shellPath = process.argv[2];
 const lobbyPath = process.argv[3];
@@ -113,7 +115,7 @@ function loadShell() {
     const win = { location: { search: '', protocol: 'https:', host: 'example.test', href: 'https://example.test/', assign() {} }, localStorage: makeStorage({}), confirm() { return true; }, AntsMapFiles: require(path.join(repo, 'web', 'map_files.js')), AntsTestGame: require(path.join(repo, 'web', 'front', 'test_game.js')) };
     const stage = element({ 'data-aspect': '16:9' });
     const doc = {
-        body: element(),
+        body: Object.assign(element(), { style: { setProperty() {} } }),       // (the page sets the slot's custom properties on it)
         getElementById(id) { if (id === 'game-stage') return stage; throw new Error('the page asked for #' + id); },
         querySelectorAll(selectorText) { if (selectorText === '.seg button[data-aspect]') return []; throw new Error('the page asked for ' + selectorText); },
     };
