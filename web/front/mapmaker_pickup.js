@@ -412,7 +412,7 @@
 
     // ---- the tool in the page ----
     // env: {doc, win, host: {map, cv, hint}, file() -> the open map's reader view, act(change) -> true when it was made, say(title, text), sprites() -> the sprite layer or null, view() -> {view, cursor, width, height},
-    //       refresh(), focus(), busy()}
+    //       settle(look) (the map's size changed: look(view, width, height) puts the view where it should be), refresh(), focus(), busy()}
     function create(env) {
         var doc = env.doc, win = env.win, host = env.host;
         var st = { mode: 'idle', items: [], kind: 'one', group: [], copy: false, dr: 0, dc: 0, pad: false, box: null, drag: null, cycle: null, note: '', verdict: { ok: true }, target: [], ask: '', hov: null, fold: false, away: false };
@@ -552,7 +552,24 @@
                 bar.className = 'pk-bar' + (st.fold ? ' folded' : '');
             }
             if (held && bar.children) for (i = 0; i < bar.children.length; i++) { again = findKey(bar.children[i], held); if (again && !again.disabled && again.focus) { again.focus(); break; } }
+            settle();
         }
+        // The bar has a row of its own, so the map changes its size when the bar comes, goes or changes its height: it keeps its top row and its scale (nothing under a pointer moves), and the picked thing
+        // is brought into view when the bar would cover it (never while the pointer drives the ghost: it is under the pointer)
+        function settle() {
+            var f = file(), was = env.view ? env.view() : null, b = !bar.hidden && f && !st.hov && !st.drag ? bbox(f) : null, high = bar.hidden ? 0 : bar.offsetHeight || 0;
+            if (doc.body && doc.body.style && doc.body.style.setProperty) doc.body.style.setProperty('--pk-h', high + 'px');          // (a phone's bar is fixed to the screen: the page gets as much room below it as the bar is high)
+            if (b) b = { r0: b.r0 + st.dr, c0: b.c0 + st.dc, r1: b.r1 + st.dr, c1: b.c1 + st.dc };
+            if (env.settle && was) env.settle(function (view, w, h) {
+                view.cx += (w - was.width) / (2 * view.scale); view.cy += (h - was.height) / (2 * view.scale);
+                if (!b) return;
+                View.clamp(view, f, w, h);
+                var s = view.scale, pad = Math.min(s * 2, 40), a = View.toScreen(view, w, h, b.r0, b.c0), z = View.toScreen(view, w, h, b.r1 + 1, b.c1 + 1);
+                view.cx += into(a.x, z.x, w, pad, s); view.cy += into(a.y, z.y, h, pad, s);
+            });
+        }
+        // how far (in cells) the middle of the map moves so that the stretch lo..hi (pixels) is inside 0..size; one that is longer than that has its start there
+        function into(lo, hi, size, pad, s) { return hi - lo > size - 2 * pad || lo < pad ? (lo - pad) / s : Math.max(0, hi - (size - pad)) / s; }
         function findKey(node, key) {
             var i, hit;
             if (node.getAttribute && node.getAttribute('data-k') === key) return node;
@@ -756,7 +773,7 @@
         if (wrap) {
             live = el('div', 'sr'); live.setAttribute('role', 'status'); wrap.appendChild(live);
             bar = el('div', 'pk-bar'); bar.hidden = true; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Pick up');
-            host.cv.appendChild(bar);          // (over the foot of the map, so that the map never changes its size when the bar comes and goes)
+            wrap.insertBefore(bar, host.cv.nextSibling);          // (a row of its own under the map: the map ends above the bar, so every cell can be brought above it)
         }
 
         // ---- the painter the Pick up tool hands the canvas to (mapmaker_tools.js) ----

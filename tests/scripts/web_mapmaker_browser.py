@@ -72,7 +72,7 @@ Parts:
              the refusals are plain words
   * pickup   1280 x 800 and a touch screen (390 x 844), the Pick up tool (tests/scripts/web_mapmaker_browser_pickup.py, which says what it covers): its part loads on first use, a tap picks a hill, an ant (and its group),
              a pile or a box of things, the gold ring and the green or red ghost are read from the overlay canvas, Move, the nudge arrows and the keys put a thing down in ONE step (the bytes that Download hands over are
-             read with struct; one Undo gives the file back), the bar is at the foot of a phone's screen with 44 pixel buttons and 48 pixel arrows, Pan only looks around, and the pictures M1 to M7 are saved with --shots
+             read with struct; one Undo gives the file back), the bar is at the foot of a phone's screen with 44 pixel buttons and 48 pixel arrows (on a desktop it is a row under the map, so the map ends above it: its last row and a thing at its foot are in view above the bar, at 1280 x 800, 1000 x 700 and 390 x 844), Pan only looks around, and the pictures M1 to M7 are saved with --shots
   * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -2106,6 +2106,9 @@ def run_part(part, tab, args, check, tiny, junk):
         pickup_part.run_pickup_short(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, "phone sideways 844x390", True)
         tab.emulate(1280, 600, 1)
         pickup_part.run_pickup_short(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, "desktop 1280x600", False)
+        for width, height, mobile, name in ((1280, 800, False, "desktop 1280x800"), (1000, 700, False, "desktop 1000x700"), (390, 844, True, "phone 390x844")):
+            tab.emulate(width, height, 2 if mobile else 1, mobile=mobile)
+            pickup_part.run_pickup_sheet(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, name, mobile)
     elif part == "play":
         import web_mapmaker_play_browser as play                      # (Play this map: its own file, this one is at the limit of lines)
         tab.emulate(1280, 800, 1)

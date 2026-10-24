@@ -1326,8 +1326,9 @@ class TheGroundAndTheSprites(unittest.TestCase):
         self.assertRegex(css, r"\.pk-help \{[^}]*min-height: 36px", "the link to the help is a tap target (44 pixels on a touch screen)")
         self.assertIn("@media (pointer: coarse), (max-width: 600px) { .pk-help { min-height: 44px; } }", css)
         root = read("web", "front", "classic.css") + read("web", "front", "mapmaker.css")
-        for token in set(re.findall(r"var\(--([a-z-]+)", css)):
+        for token in set(re.findall(r"var\(--([a-z-]+)", css)) - {"pk-h"}:          # (--pk-h is the bar's height: the script sets it, and the style has a fallback)
             self.assertRegex(root, r"--%s:" % token, "the style uses only tokens that the page defines: --" + token)
+        self.assertIn("'--pk-h'", pickup, "the script sets the one token that the page does not define")
         self.assertNotIn("data-tool=\"move\"", self.page)
         self.assertIn('data-tool="pickup"', self.page)
         self.assertIn('data-tool="pan"', self.page)

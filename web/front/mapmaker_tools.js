@@ -396,7 +396,7 @@
                 if (!Part) { askedPick = false; if (env.say) env.say('This part did not load', 'The part of the page that picks things up did not load. Check your connection and choose Pick up again.'); if (state.tool === 'pickup') chooseTool('pan'); return; }
                 pick = Part.create({
                     doc: doc, win: env.win, host: { map: host.map, cv: host.map && host.map.parentNode, hint: host.hint }, file: env.file, act: act, say: env.say, dialogs: env.dialogs,
-                    sprites: function () { return sprites && sprites.ready() ? sprites : null; }, view: function () { return canvas.state(); }, refresh: function () { canvas.refresh(); }, focus: function () { canvas.focus(); }, busy: env.busy
+                    sprites: function () { return sprites && sprites.ready() ? sprites : null; }, view: function () { return canvas.state(); }, settle: function (look) { canvas.settle(look); }, refresh: function () { canvas.refresh(); }, focus: function () { canvas.focus(); }, busy: env.busy
                 });
                 if (editor) pick.setMap();
                 showTools();
