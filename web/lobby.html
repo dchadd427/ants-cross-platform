@@ -264,7 +264,7 @@
     /* the line of numbers flows as one text, as the phone picture draws it ("... 5 players online · 31 games / played (5 today)"): the dot that joins the two parts keeps a no-break space before it (a line never begins with it) and a space after it */
     #stats-played::before { content: "\00a0\00b7\0020"; }
     #stats-played:empty { display: none; }
-    .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; }                      /* the recording notice, for a visitor who is not asked for a name */
+    .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; } .bar .coffee { margin: 6px 0 0; text-align: center; } .bar .coffee a { display: inline-block; padding: 0; } .bar .coffee img { display: block; width: 217px; max-width: 100%; height: auto; border-radius: 6px; }                      /* the recording notice, for a visitor who is not asked for a name */
     .name-step-notice { margin-top: 8px; }
     .shape .seg { position: relative; display: inline-flex; gap: 8px; }                     /* the picture's four shapes: radio buttons that look like the game's two-state buttons */
     .shape .opt { position: relative; display: inline-flex; }                               /* a shape's button with its "fills your screen" tag */
@@ -339,7 +339,7 @@
     <p class="notice" id="footer-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>
     <div class="bar-row"><span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
     <nav aria-label="Footer links"><button class="lnk" type="button" id="how-open">How it works</button><a href="/matches.html" id="watch-link">Matches</a><a href="/live.html">Live now</a><a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a><a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a><a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a><a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a></nav></div>
-</div></footer>
+<p class="coffee"><a href="https://www.buymeacoffee.com/dchadd" target="_blank" rel="noopener noreferrer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous"></a></p></div></footer>
 </div>
 
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>

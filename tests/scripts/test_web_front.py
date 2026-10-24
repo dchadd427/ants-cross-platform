@@ -44,6 +44,8 @@ PICTURES = {
 }
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
+COFFEE_LINK = "https://www.buymeacoffee.com/dchadd"              # the owner's Buy Me a Coffee page and its button picture: the one thing on the front page that comes from another site
+COFFEE_IMAGE = "https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
 SCRIPT_FILES = ("map_maker_link.js", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py), the rematch's strip (tests/scripts/test_web_rematch.py; the game page loads it too) the game type's rows and control (tests/scripts/test_web_game_type.py) and the map list: scripts, not pictures
 MAPMAKER_FILES = ("mapmaker.css", "mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_palette.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")      # the map maker page's own style and scripts (web/mapmaker.html; tests/scripts/test_web_mapmaker.py): not the lobby's, not pictures
 LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py), the chat box's and the rematch's (the game page links it too)
@@ -737,7 +739,7 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)
 
     def test_every_img_has_the_size_of_its_file(self):
-        tags = re.findall(r"<img [^>]*>", self.page)
+        tags = [tag for tag in re.findall(r"<img [^>]*>", self.page) if COFFEE_IMAGE not in tag]               # (the pictures of web/front/; the coffee button is checked with the links that leave the page)
         sources = sorted(re.search(r'src="front/([^"?]+)', tag).group(1) for tag in tags)
         self.assertEqual(sources, ["logo.png", "preview_treasure.png", "qh_power.png", "qh_quickhelp.png"])      # (the logo, the map's picture and the two help sheets; the ants are not <img>: the style draws them from ants.png, TheRosterAnts)
         for tag in tags:
@@ -768,11 +770,15 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertNotRegex(self.page, r'<link[^>]*href="(?:https?:)?//')
         self.assertNotRegex(self.page, r"url\(\s*[\"']?(?:https?:)?//")
         self.assertNotIn("@import", self.page)
-        self.assertNotRegex(self.page, r"<(?:img|iframe|video|audio|source)[^>]*src=\"(?:https?:)?//")
+        self.assertNotRegex(self.page, r"<(?:iframe|video|audio|source)[^>]*src=\"(?:https?:)?//")
+        outside = re.findall(r"<img[^>]*src=\"((?:https?:)?//[^\"]*)\"[^>]*>", self.page)               # (the one picture from another site: the owner's Buy Me a Coffee button, with the attribute that the page's COEP needs; docs/PLAY_IN_BROWSER.md, web/legal.html)
+        self.assertEqual(outside, [COFFEE_IMAGE])
+        self.assertRegex(self.page, r'<img[^>]*src="' + re.escape(COFFEE_IMAGE) + r'"[^>]*crossorigin="anonymous"')
         for target in re.findall(r"url\(\s*[\"']?([^\"')]+)", self.style):                  # (the style's addresses: a file of this folder, its address may end in ?v=, or the select's own arrow, drawn in the page)
             self.assertTrue(target.startswith("data:image/svg+xml,") or (target.startswith("front/") and target[len("front/"):].split("?")[0] in os.listdir(FRONT)), target)
         for url in set(re.findall(r'href="(https?://[^"]+)"', self.page)):                  # (the links that leave the page are the repository's)
-            self.assertTrue(url.startswith("https://github.com/dchadd427/ants-cross-platform"), url)
+            self.assertTrue(url.startswith("https://github.com/dchadd427/ants-cross-platform") or url == COFFEE_LINK, url)
+        self.assertIn('<a href="' + COFFEE_LINK + '" target="_blank" rel="noopener noreferrer"><img src="' + COFFEE_IMAGE + '"', self.page)
 
     def test_the_map_info_lines_are_the_ones_of_the_level_files(self):
         maps = self.maps()
@@ -799,7 +805,7 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn('<img id="preview" src="front/preview_%s.png" alt="The map: %s"' % (default, default.capitalize()), self.page)       # (the picture that the page opens with is the default map's)
 
     def test_the_pictures_that_are_not_seen_at_once_load_lazily_and_the_ones_that_are_do_not(self):
-        tags = re.findall(r"<img [^>]*>", self.page)
+        tags = [tag for tag in re.findall(r"<img [^>]*>", self.page) if COFFEE_IMAGE not in tag]               # (the pictures of web/front/; the coffee button is checked with the links that leave the page)
         lazy = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' in t)
         at_once = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' not in t)
         self.assertEqual(lazy, {"qh_quickhelp.png", "qh_power.png"})                       # the two help sheets (behind "How it works")
