@@ -165,7 +165,7 @@ int64_t system_seconds() { return std::chrono::duration_cast<std::chrono::second
 
 bool read_whole(const std::string& path, uint64_t expected, std::vector<uint8_t>& out) {
     out.clear();
-    if (expected > replay::kMaxFileBytes) return false;
+    if (expected > replay::kMaxFileBytesWithMap) return false;           // (decode() holds the match to kMaxFileBytes without its map)
     std::ifstream in(path, std::ios::binary);
     if (!in) return false;
     out.resize(static_cast<size_t>(expected));
@@ -509,7 +509,7 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
     }
     ReplayEntry entry;
     std::string why;
-    if (bytes.empty() || bytes.size() > replay::kMaxFileBytes || !summarize(bytes, entry, why)) return refuse("the recording is not a replay file that can be kept" + (why.empty() ? std::string() : " (" + why + ")"));
+    if (bytes.empty() || bytes.size() > replay::kMaxFileBytesWithMap || !summarize(bytes, entry, why)) return refuse("the recording is not a replay file that can be kept" + (why.empty() ? std::string() : " (" + why + ")"));
     const int64_t now = now_s();
     saved_at_.erase(std::remove_if(saved_at_.begin(), saved_at_.end(), [now](int64_t t) { return now - t >= 3600 || t > now; }), saved_at_.end());
     if (saved_at_.size() >= cfg_.max_saves_per_hour) return refuse("the limit of " + std::to_string(cfg_.max_saves_per_hour) + " kept matches an hour is reached");

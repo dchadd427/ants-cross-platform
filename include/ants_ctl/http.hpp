@@ -75,8 +75,8 @@ struct HttpRequest {
 struct HttpResponse {
     int status{200};                                           // 200 - 599; anything else is answered as 500
     std::string content_type{"application/json"};              // visible ASCII only, else replaced by application/json
-    std::string body;                                          // at most HttpServer::kMaxResponseBytes (a door's own limit, DoorOptions::max_response_bytes), else 500; a map file (`file`) may be up to kMaxFileResponseBytes
-    bool file{false};                                          // a map file (the format allows up to 4 MiB): its body may be up to HttpServer::kMaxFileResponseBytes, whatever the limit of the door; every other answer keeps the door's
+    std::string body;                                          // at most HttpServer::kMaxResponseBytes (a door's own limit, DoorOptions::max_response_bytes), else 500; a map or replay file (`file`) may be up to kMaxFileResponseBytes
+    bool file{false};                                          // a map file (the format allows up to 4 MiB) or a replay file (up to about 2 MiB when it carries its map): its body may be up to HttpServer::kMaxFileResponseBytes, whatever the limit of the door; every other answer keeps the door's
     std::vector<std::string> set_cookies;                      // the value of one Set-Cookie header each (the owner's session: docs/MAP_SUBMISSIONS.md); a value with a control character or a non-ASCII byte is dropped
 };
 
@@ -97,7 +97,7 @@ public:
     static constexpr size_t kMaxHeaders = 100;
     static constexpr size_t kMaxBodyBytes = 64 * 1024;
     static constexpr size_t kMaxResponseBytes = 1024 * 1024;
-    static constexpr size_t kMaxFileResponseBytes = 4 * 1024 * 1024;   // a map file (HttpResponse::file): the largest map that the server keeps (MapStore::kMaxMapBytes; a 512 x 512 Extended map is 3.1 MB)
+    static constexpr size_t kMaxFileResponseBytes = 4 * 1024 * 1024;   // a map or replay file (HttpResponse::file): the largest map that the server keeps (MapStore::kMaxMapBytes; a 512 x 512 Extended map is 3.1 MB); a replay is at most 2 MiB
     static constexpr size_t kMaxConnections = 32;
     static constexpr uint32_t kRequestTimeoutMs = 5000;        // from accept to a complete request (head and body)
     static constexpr uint32_t kWriteTimeoutMs = 5000;          // a client that does not take its answer

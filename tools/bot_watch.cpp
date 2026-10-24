@@ -1127,7 +1127,7 @@ std::string watch_replay(const Options& o, const std::string& file, std::string&
     }
     assets::LevelData level;
     const std::vector<std::string> dirs = {o.maps_dir.empty() ? std::string(ORIGINAL_ASSETS_DIR) + "/Maps" : o.maps_dir, std::string(ANTS_SOURCE_DIR) + "/Community-Maps"};
-    if (!ants::replay::load_map(replay.head, dirs, level, why)) {
+    if (!ants::replay::load_map_or_embedded(replay, dirs, level, why)) {
         line = file + ": " + why;
         return "";
     }

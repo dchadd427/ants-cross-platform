@@ -19,13 +19,10 @@ namespace ants::net {
 bool hash_file(const std::string& path, uint64_t& out) {
     std::ifstream f(path, std::ios::binary);
     if (!f.is_open()) return false;
-    uint64_t h = 0xcbf29ce484222325ULL;
+    uint64_t h = kFnv64Basis;
     char buf[8192];
     while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
-        for (std::streamsize i = 0; i < f.gcount(); ++i) {
-            h ^= static_cast<uint8_t>(buf[i]);
-            h *= 0x100000001b3ULL;
-        }
+        h = hash_bytes(reinterpret_cast<const uint8_t*>(buf), static_cast<size_t>(f.gcount()), h);
         if (f.eof()) break;
     }
     if (f.bad()) return false;
