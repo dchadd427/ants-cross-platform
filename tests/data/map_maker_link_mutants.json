@@ -81,8 +81,8 @@
   {
    "id": "js_no_touch_layer",
    "file": "web/front/map_maker_link.js",
-   "old": "top: -6px; bottom: -6px;",
-   "new": "top: -3px; bottom: -3px;",
+   "old": "#mapmaker-top::before { content: \"\"; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px;",
+   "new": "#mapmaker-top::before { content: \"\"; position: absolute; left: -4px; right: -4px; top: -3px; bottom: -3px;",
    "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
   },
   {
@@ -144,8 +144,8 @@
   {
    "id": "js_layer_blocks_touches",
    "file": "web/front/map_maker_link.js",
-   "old": "bottom: -6px; }",
-   "new": "bottom: -6px; pointer-events: none; }",
+   "old": "#mapmaker-top::before { content: \"\"; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }",
+   "new": "#mapmaker-top::before { content: \"\"; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; pointer-events: none; }",
    "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
   },
   {
@@ -179,8 +179,29 @@
   {
    "id": "js_layer_reaches_too_little",
    "file": "web/front/map_maker_link.js",
-   "old": "left: -4px; right: -4px;",
-   "new": "left: 0; right: 0;",
+   "old": "#mapmaker-top::before { content: \"\"; position: absolute; left: -4px; right: -4px;",
+   "new": "#mapmaker-top::before { content: \"\"; position: absolute; left: 0; right: 0;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_discord_not_beside_matches",
+   "file": "web/front/map_maker_link.js",
+   "old": "'.mast #discord-top { margin-left: -12px;",
+   "new": "'.mast #discord-top { margin-left: 22px;",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_discord_no_phone_place",
+   "file": "web/front/map_maker_link.js",
+   "old": "\"text text text disc\"",
+   "new": "\"text text text text\"",
+   "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
+  },
+  {
+   "id": "js_discord_word_shows_on_a_phone",
+   "file": "web/front/map_maker_link.js",
+   "old": "clip: rect(0 0 0 0); }'",
+   "new": "clip: rect(0 0 0 0); position: static; }'",
    "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
   }
  ]
