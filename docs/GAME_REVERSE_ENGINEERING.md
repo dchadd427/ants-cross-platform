@@ -1847,11 +1847,10 @@ random walks; the models and the remake agree on every path tile and on every po
   heuristic `16 x Chebyshev`, 0-rooted binary heap reading f live with **no decrease-key** (stale order, occasional
   non-optimal paths and even false "no path"), failure when a popped node has f >= 8000, path = start .. goal.
 
-- **Remake-only: past the original's limits.** The original stops at a 14-bit cost, a 13-bit estimate, the first popped node with f >= 8000 (a blocked step costs 8000, so a blocked node
-  ends the search) and 1000 expansions every 50 ms: about 400 grass tiles (286 on a diagonal) fail. Rules 0 and 1 play exactly that. Rules word 2 (the wide search of
-  `path_planner.cpp`, off until the next release) goes past it and only there: the same A*, neighbour order, live f, tie-breaks and "pushed at most
-  once", a 24-bit cost, a computed estimate, a blocked node dropped once a node has passed f = 8000, and 1000 expansions a run until a node at that limit is popped. Every search the
-  original finishes is the same, pop for pop and run for run; past it there is no original to check against.
+- **Remake-only: past the original's limits.** The original stops at a 14-bit cost, a 13-bit estimate, the first popped node with f >= 8000 (a blocked step costs 8000) and 1000 expansions every 50 ms:
+  about 400 grass tiles (286 on a diagonal) fail. Rules 0 and 1 play that. Rules word 2 (the wide search of `path_planner.cpp`, off until the next release) goes past it, only there: the same A*, neighbour order, live f, tie-breaks and "pushed at most
+  once", a 24-bit cost, a computed estimate, a blocked node dropped once a node has passed f = 8000, and 1000 expansions a run until such a node is popped. Every search the
+  original finishes is the same, pop for pop and run for run.
 
 - Step cost `FUN_01020951`: `(C(a)+C(b)) >> 1` orthogonally, `trunc((double)(C(a)+C(b)) * 1.4) >> 1` diagonally;
   8000 for enemy or waiting / idle-without-order team-mates, other teams' hill tiles and queue tiles, solid objects
@@ -2558,7 +2557,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `inc
     reached more cheaply and pushes a node only when its opened bit is clear, and the opened bit is never cleared: a node is pushed once, a closed node that is reached again is not
     expanded again. So a doorway that was blocked when its neighbour was expanded keeps the cost it got then (g about 8088) although it is free by the next slice, and the search can end with
     no path although a fresh search from the same state finds one (TREASURE seat 0, seed 1: ant 12 is dispatched from the waiting tile at tick 232 while ant 2 stands paused on the doorway
-    `(37, 20)`; the pause ends at tick 233, the doorway is free at tick 234, and the request is answered "no path" at tick 234). This is not the "no decrease-key" of the heap: the
+    `(37, 20)`; the pause ends at tick 233, the doorway is free at tick 234, and the request is answered "no path" at tick 234; the doorway holds g 8088 from slice 1, its other neighbours were already closed in that slice, nothing relaxes it again). This is not the "no decrease-key" of the heap: the
     relaxation is as the disassembly says.
 
   * **The failure itself** (`FUN_0100cba4`, message 6, count 0 at `0x100cbe7`): `FUN_010214d9` (StopSync), `SetActionDefault(0xb)` (`FUN_0101ace3`, the can't-go clip) and text 0x3a

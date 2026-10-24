@@ -413,6 +413,12 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
         room = g["inner"][1] - (g["box"][1] + g["box"][3])
         if room > 120:
             x, y = g["inner"][0] / 2, g["box"][1] + g["box"][3] + 100
+            for dy in (100, 160, 220, 280, 60):                                  # (a spot with no button or link under it: the page has the Settings button and the picture's buttons under the game, and a double tap on one would press it)
+                bottom = g["box"][1] + g["box"][3] + dy
+                free = bottom < g["inner"][1] - 10 and tab.ev("(function (x, y) { var e = document.elementFromPoint(x, y); return !!e && !e.closest('button, a, input, select, label, summary'); })(%r, %r)" % (g["inner"][0] / 2, bottom))
+                if free:
+                    y = bottom
+                    break
             fingers.down(1, x, y)
             for i in range(1, 9):
                 fingers.move(a=(x, y - 20 * i))

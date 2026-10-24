@@ -87,6 +87,8 @@ AudioMixer::AudioMixer(AudioMixer&& other) noexcept {
     listener_x_ = other.listener_x_;
     listener_y_ = other.listener_y_;
     master_volume_ = other.master_volume_;
+    output_gain_target_ = other.output_gain_target_;
+    output_gain_now_ = other.output_gain_now_;
     sound_volume_ = other.sound_volume_;
     headless_mode_ = other.headless_mode_;
     sdl_audio_device_ = other.sdl_audio_device_;
@@ -106,6 +108,8 @@ AudioMixer& AudioMixer::operator=(AudioMixer&& other) noexcept {
         listener_x_ = other.listener_x_;
         listener_y_ = other.listener_y_;
         master_volume_ = other.master_volume_;
+        output_gain_target_ = other.output_gain_target_;
+        output_gain_now_ = other.output_gain_now_;
         sound_volume_ = other.sound_volume_;
         headless_mode_ = other.headless_mode_;
         sdl_audio_device_ = other.sdl_audio_device_;
@@ -369,6 +373,16 @@ void AudioMixer::set_sound_volume(int32_t sound_volume) {
     }
 }
 
+void AudioMixer::set_output_gain(float gain) {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    output_gain_target_ = std::clamp(gain, 0.0f, 1.0f);
+}
+
+float AudioMixer::output_gain() const {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    return output_gain_target_;
+}
+
 void AudioMixer::set_sfx_volume(float volume) {
     set_sound_volume(static_cast<int32_t>(std::clamp(volume, 0.0f, 1.0f) * 100.0f + 0.5f));
 }
@@ -593,7 +607,10 @@ void AudioMixer::mix_samples_i16(int16_t* out_stereo, size_t num_frames) {
         }
     }
 
-    if (master_volume_ <= 0.0001f) return;
+    if (master_volume_ <= 0.0001f) {
+        output_gain_now_ = output_gain_target_;                // (a silent block: the ramp of the menu's gain is where it was heading, not where it was before the silence)
+        return;
+    }
     const float ramp_step = 1000.0f / (AUDIO_GAIN_RAMP_MS * static_cast<float>(output_sample_rate_));      // the change of one output frame
     const float sfx_gain = master_volume_;                 // the Sound Volume option is inside every channel's gain (apply_law)
 
@@ -648,6 +665,10 @@ void AudioMixer::mix_samples_i16(int16_t* out_stereo, size_t num_frames) {
                 mix_r += music_buf[f] * music_gain;
             }
         }
+
+        output_gain_now_ += std::clamp(output_gain_target_ - output_gain_now_, -ramp_step, ramp_step);      // (the settings menu's Master volume and Mute)
+        mix_l *= output_gain_now_;
+        mix_r *= output_gain_now_;
 
         mix_l = std::clamp(mix_l, -1.0f, 1.0f);
         mix_r = std::clamp(mix_r, -1.0f, 1.0f);

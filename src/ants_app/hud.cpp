@@ -1505,10 +1505,13 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
         case SDLK_RETURN: case SDLK_KP_ENTER:                  // FUN_010103eb: the team when the player has an ally, else everybody
             send_chat_message();
             return true;
-        case SDLK_ESCAPE:                                      // FUN_01028c44(0): deselect everything, no quit dialog
+        case SDLK_ESCAPE: {                                    // FUN_01028c44(0): deselect everything, no quit dialog; with nothing to deselect, a first press asks for the settings menu
+            const bool nothing_to_cancel = !has_selection() && !slot_latched_[0] && !slot_latched_[1];
             clear_selection();
             unlatch_pedestals();
+            if (nothing_to_cancel && !repeat && on_menu_request_) on_menu_request_();
             return true;
+        }
         default:
             break;
     }
@@ -1621,6 +1624,19 @@ void HUD::apply_option(OptionSetting setting) {
         default:
             break;
     }
+}
+
+void HUD::set_option(OptionSetting setting, int32_t value) {
+    OptionsState& state = options_.state();
+    switch (setting) {
+        case OptionSetting::SoundVolume: state.sound_volume = std::clamp<int32_t>(value, 0, 100); break;
+        case OptionSetting::MusicVolume: state.music_volume = std::clamp<int32_t>(value, 0, 100); break;
+        case OptionSetting::ScrollSpeed: state.scroll_speed = std::clamp<int32_t>(value, 0, 99); break;
+        case OptionSetting::Chat:        state.chat = value != 0; break;
+        case OptionSetting::QuickHelp:   state.quick_help = value != 0; break;
+        default: return;
+    }
+    apply_option(setting);
 }
 
 void HUD::trigger_quick_chat(size_t index) {

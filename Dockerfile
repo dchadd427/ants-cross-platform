@@ -155,6 +155,10 @@ COPY web/map_files.js /usr/share/nginx/html/map_files.js
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
 
+# The settings menu (docs/GAME_MENU.md): the panel that Esc opens over the game, its script and its style, fetched by the game page once the game runs (game_menu.js, game_menu.css)
+COPY web/game_menu.js /usr/share/nginx/html/game_menu.js
+COPY web/game_menu.css /usr/share/nginx/html/game_menu.css
+
 # The map maker (docs/MAP_EDITOR.md): web/mapmaker.html with its scripts and style in web/front/ (copied above) and the map core's module (lvl_core.js, lvl_core.wasm and lvl_core_api.js, copied above)
 COPY web/mapmaker.html /usr/share/nginx/html/mapmaker.html
 COPY --from=builder /src/mapmaker.html /usr/share/nginx/html/mapmaker.html
