@@ -7,6 +7,8 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+// the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
+globalThis.AntsShapes = require(path.resolve(__dirname, '..', '..', 'web', 'shapes.js'));
 
 const [modulePath, shellPath] = process.argv.slice(2);
 if (!modulePath || !shellPath) { console.log('usage: web_lobby_entry_check.js lobby_net.js shell.html'); process.exit(2); }
@@ -34,6 +36,7 @@ const code = ['ANTS_PAGE', 'NAME', 'REJOINKEY', 'NAMEGATE'].map((m) => between(s
 const shell = new Function('window', 'document', code)({ location: { search: '' }, localStorage: null }, {
     getElementById() { return { setAttribute() {}, classList: { add() {} } }; },
     querySelectorAll() { return []; },
+    body: { style: { setProperty() {} } },
 });
 const P = shell.P;
 

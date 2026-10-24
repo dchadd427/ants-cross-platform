@@ -54,7 +54,7 @@ class ThePage(unittest.TestCase):
         self.assertLessEqual(self.page.count("\n"), 1500)
 
     def test_the_scripts_come_before_the_pages_own_in_this_order(self):
-        self.assertTrue('<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>' in self.page)
+        self.assertTrue('<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script>\n<script>' in self.page)
 
     def test_a_choice_sets_the_rooms_map_like_the_selector_and_warms_the_cache(self):
         self.assertTrue("known ? !sendPlan({ map: known.key }) : !sendPlan({ file: entry.file })" in self.page)

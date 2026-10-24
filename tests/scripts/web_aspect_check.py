@@ -141,6 +141,8 @@ JSON.stringify((function () {
 # Each shape of the selector in the smallest whole numbers (the steps of the page's box), the game's canvas for it and the selector's buttons as the page lists them (left to right)
 SHAPE_STEPS = {"4:3": (4, 3), "16:10": (8, 5), "16:9": (16, 9), "21:9": (7, 3)}
 SHAPE_CANVAS = {"4:3": (640, 480), "16:10": (960, 600), "16:9": (960, 540), "21:9": (1260, 540)}
+# The four shapes in the selector's order, written out here ON PURPOSE: an independent oracle for the page's table (web/shapes.js) and the game's (kAspectTable), which this check reads back from the running
+# game (probe 42). Do not derive it from either: a shape added to them must be added here by hand, so that a table that drifts is seen.
 SHAPE_ORDER = ["4:3", "16:10", "16:9", "21:9"]
 
 

@@ -18,6 +18,8 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+// the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
+globalThis.AntsShapes = require(path.resolve(__dirname, '..', '..', 'web', 'shapes.js'));
 
 const lobbyPath = process.argv[2];
 const shellPath = process.argv[3];
@@ -60,7 +62,7 @@ function loadShell() {
     const element = () => ({ attributes: {}, style: {}, getAttribute(n) { return this.attributes[n] === undefined ? null : this.attributes[n]; }, setAttribute(n, v) { this.attributes[n] = String(v); }, addEventListener() {}, classList: { add() {}, contains() { return false; } } });
     const win = { location: { search: '', protocol: 'https:', host: 'example.test', href: 'https://example.test/', assign() {} }, localStorage: { getItem() { return null; }, setItem() {} }, confirm() { return true; } };
     const stage = element();
-    const doc = { body: element(), getElementById(id) { if (id === 'game-stage') return stage; throw new Error('the page asked for #' + id); }, querySelectorAll() { return []; } };
+    const doc = { body: Object.assign(element(), { style: { setProperty() {} } }), getElementById(id) { if (id === 'game-stage') return stage; throw new Error('the page asked for #' + id); }, querySelectorAll() { return []; } };
     return new Function('window', 'document', text + '\nreturn ANTS_PAGE;')(win, doc);
 }
 

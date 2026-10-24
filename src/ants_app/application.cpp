@@ -439,10 +439,10 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             }
         } else if (std::strcmp(argv[i], "--start-menu") == 0) {                // forces the start menu (also headless, with --screenshot: the tests and the screenshots)
             menu_forced = true;
-        } else if (std::strcmp(argv[i], "--aspect") == 0) {                      // --aspect 4:3 | 16:10 | 16:9 | 21:9 (nothing else exists yet)
+        } else if (std::strcmp(argv[i], "--aspect") == 0) {                      // --aspect NAME: a name of the shape table (canvas_layout.hpp kAspectTable)
             std::string why;
             if (i + 1 >= argc) {
-                if (cfg.startup_error.empty()) cfg.startup_error = "--aspect needs 4:3, 16:10, 16:9 or 21:9";
+                if (cfg.startup_error.empty()) cfg.startup_error = "--aspect needs " + aspect_names(" or ");
             } else if (parse_aspect(argv[++i], cfg.aspect, why)) {
                 cfg.aspect_given = true;
             } else if (cfg.startup_error.empty()) {
@@ -1743,13 +1743,14 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel() {
 }
 
 // For the page (web/shell.html): the selector of the picture under the game changes the shape of the picture while the game runs (Application::set_aspect: no reload, no new match, nothing of the
-// simulation is touched). `shape` is the place of the shape in the selector, left to right: 0 Classic 4:3, 1 16:10, 2 16:9, 3 21:9 (kAllAspects: a number, because the page's exports take only
-// numbers). Returns 1 when the game has that shape now (also when it had it already), 0 for a number that is no shape (nothing changes), -1 when the game is not up yet (the page asks again
+// simulation is touched). `shape` is the place of the shape in the shape table (aspect_place / aspect_at_place in canvas_layout.hpp: the selector's order, left to right; a number, because the page's exports
+// take only numbers). Returns 1 when the game has that shape now (also when it had it already), 0 for a number that is no shape (nothing changes), -1 when the game is not up yet (the page asks again
 // when it is: its postRun hook, and the arguments that it starts with name the shape that the page has now).
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_set_aspect(int shape) {
     if (g_web_app == nullptr) return -1;
-    if (shape < 0 || static_cast<size_t>(shape) >= kAllAspects.size()) return 0;
-    return g_web_app->set_aspect(kAllAspects[static_cast<size_t>(shape)]) ? 1 : -1;
+    Aspect aspect = Aspect::Classic4x3;
+    if (!aspect_at_place(shape, aspect)) return 0;
+    return g_web_app->set_aspect(aspect) ? 1 : -1;
 }
 
 // For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The Menu button and the footer's link ask the player first when this says 1
@@ -1780,8 +1781,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_replay_do(int what, int value) {
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
 // The seats of the match, for the page's browser check (tests/scripts/web_home_check.py): 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
 // 21 - 24: the ants of seat 0 - 3 that are alive now (-1 outside a match).
-// The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (its place in the selector, left to right: 0 4:3, 1 16:10, 2 16:9, 3 21:9: the
-// index in kAllAspects), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
+// The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (its place in the shape table, ants_set_aspect's number), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // The picking, for the page's browser check of a replay (tests/scripts/web_camera_check.py): 50: the ants that are picked, plus 1000 when a base is picked and 100000 when an ant is inspected (0: nothing is picked; -1 outside a match).
@@ -1838,12 +1838,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         }
         case 40: return g_web_app->canvas().width;
         case 41: return g_web_app->canvas().height;
-        case 42: {                                                       // the shape's place in the selector (ants_set_aspect's number)
-            for (size_t i = 0; i < kAllAspects.size(); ++i) {
-                if (kAllAspects[i] == g_web_app->aspect()) return static_cast<int>(i);
-            }
-            return -1;
-        }
+        case 42: return aspect_place(g_web_app->aspect());               // the shape's place in the shape table (ants_set_aspect's number)
         case 43: return g_web_app->picture().x;
         case 44: return g_web_app->picture().y;
         case 45: return g_web_app->picture().w;

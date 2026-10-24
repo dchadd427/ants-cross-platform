@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 
+#include "ants_app/canvas_layout.hpp"
 #include "ants_app/config_store.hpp"
 
 namespace ants::app::game_menu {
@@ -11,6 +12,27 @@ namespace {
 
 constexpr uint8_t kBoth = kShowWeb | kShowDesktop;
 
+// The picture row's texts are made from the shape table (canvas_layout.hpp kAspectTable), so that a new shape needs no edit here: the words "Classic 4:3|16:10|16:9|21:9" and the hint
+// "Classic 4:3, 16:10, 16:9 or 21:9; the match goes on". A fixed buffer, filled at compile time (a table that outgrows it does not compile).
+struct PictureText {
+    char chars[160]{};
+    size_t size{0};
+    constexpr void put(const char* text) {
+        for (const char* p = text; *p != '\0'; ++p) chars[size++] = *p;      // (past the buffer: out of bounds, so no compile)
+    }
+};
+constexpr PictureText picture_text(const char* separator, const char* last_separator, const char* tail) {
+    PictureText out;
+    for (size_t i = 0; i < kAspectTable.size(); ++i) {
+        if (i > 0) out.put(i + 1 == kAspectTable.size() ? last_separator : separator);
+        out.put(kAspectTable[i].label);
+    }
+    out.put(tail);
+    return out;
+}
+constexpr PictureText kPictureWords = picture_text("|", "|", "");
+constexpr PictureText kPictureHint = picture_text(", ", " or ", "; the match goes on");
+
 // The table. Texts are plain ASCII with no markup (a skin puts them in with its text calls). The original's own names stay in the hints, so that a player who knows the options window finds them.
 constexpr std::array<Row, 14> kRows = {{
     {kMaster, "master", Section::Sound, Kind::Slider, 0, 99, 100, kBoth | kShowWatch | kShowLive | kShowNew, "Master volume", "Everything you hear", ""},
@@ -18,7 +40,7 @@ constexpr std::array<Row, 14> kRows = {{
     {kEffects, "effects", Section::Sound, Kind::Slider, 0, 99, 100, kBoth | kShowWatch, "Sound effects volume", "The original's \"Sound Volume\"", ""},
     {kMute, "mute", Section::Sound, Kind::Switch, 0, 1, 0, kBoth | kShowWatch | kShowNew, "Mute everything", "One switch; your volumes stay as they are", "On|Off"},
     {kFullscreen, "fullscreen", Section::Video, Kind::Button, 0, 0, 0, kBoth | kShowWatch | kShowPage, "Fullscreen", "Same as the Fullscreen button; Alt+Enter in the desktop app", "Enter fullscreen|Leave fullscreen"},
-    {kPicture, "picture", Section::Video, Kind::Choice, 0, 3, 2, kShowWeb | kShowWatch | kShowPage, "Picture shape", "Classic 4:3, 16:10, 16:9 or 21:9; the match goes on", "Classic 4:3|16:10|16:9|21:9"},
+    {kPicture, "picture", Section::Video, Kind::Choice, 0, static_cast<int>(kAspectTable.size()) - 1, aspect_place(kWebDefaultAspect), kShowWeb | kShowWatch | kShowPage, "Picture shape", kPictureHint.chars, kPictureWords.chars},
     {kLockMouse, "lockmouse", Section::Video, Kind::Choice, 0, 1, 0, kShowWeb | kShowWatch | kShowPage, "Fullscreen mouse", "Browser only; holds the mouse inside the picture", "Locked|Free"},
     {kHpNumbers, "hp_numbers", Section::Video, Kind::Switch, 0, 1, 1, kBoth | kShowWatch | kShowNew, "Hit point numbers", "White numbers over every ant (Ctrl+L); remembered", "On|Off"},
     {kScroll, "scroll", Section::Video, Kind::Slider, 0, 99, 50, kBoth | kShowWatch, "Map scroll speed", "Edge scrolling; the original's \"Scroll Speed\"", ""},
