@@ -3749,8 +3749,8 @@
             window.antsAfterReplay = function (start) {
                 fetched.then(function (got) {
                     if (got.error) return;                    // (its card is up already)
-                    var need = window.antsMapFiles ? window.AntsMapFiles.mapOfReplay(ANTS_LIVE_MODE ? latest : got.bytes) : null;       // (a match on a map of the players: fetched now, written when the game's file system is there)
-                    (need ? window.antsMapFiles.fetchOnly(need.name, need.hash) : Promise.resolve({ ok: true })).then(function (map) {
+                    var seen = ANTS_LIVE_MODE ? latest : got.bytes, carried = window.AntsMapFiles ? window.AntsMapFiles.embeddedMapOfReplay(seen) : null, need = carried || (window.antsMapFiles ? window.AntsMapFiles.mapOfReplay(seen) : null);       // (a match on a test map carries its map, checked against the head's hash: nothing is fetched; else a match on a map of the players: fetched now; either way written when the game's file system is there)
+                    (carried ? Promise.resolve({ ok: true, bytes: carried.bytes }) : need ? window.antsMapFiles.fetchOnly(need.name, need.hash) : Promise.resolve({ ok: true })).then(function (map) {
                         if (!map.ok) { card('cant', map.text); return; }
                         if (map.bytes) Module.preRun.push(window.AntsMapFiles.writer(function () { return Module.FS; }, need.name, map.bytes));
                         if (ANTS_LIVE_MODE) {

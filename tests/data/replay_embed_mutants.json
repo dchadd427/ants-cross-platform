@@ -1,0 +1,326 @@
+{
+ "note": "Mutants of the map that a replay carries (the optional chunk tmap: ants_replay/replay, recorder and player, net::hash_bytes, the door's file flag for a replay of up to 2 MiB, the store's caps, the viewer and replay_tool) for tools/mutate.py: python3 tools/mutate.py tests/data/replay_embed_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: test_replay (RP1.9, RP9.x), replay_tool --selftest, test_replay_store (RS10.x), tests/scripts/test_nginx_big_replays.py (the real server) and test_replay_app (RA7.9). The page's reader (web/map_files.js embeddedMapOfReplay) has its mutants in tests/scripts/test_web_map_files.py. The mutant that would make replay_tool map write into the map library is left out on purpose (a mutant that works would write a file there): the guard has library_guard_mutants.json.",
+ "defaults": {},
+ "mutants": [
+  {
+   "id": "a_file_past_two_mib_is_read_on",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (size > kMaxFileBytesWithMap) {",
+   "new": "if (false) {",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_map_chunk_of_any_length_is_taken",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (name == \"tmap\" && length > kMaxEmbeddedMapBytes) {",
+   "new": "if (false) {",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_second_map_is_taken",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "            if (have_map) {\n                error = \"tmap: two tmap chunks\";",
+   "new": "            if (have_map && false) {\n                error = \"tmap: two tmap chunks\";",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_map_of_another_hash_is_taken",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (length == 0 || net::hash_bytes(payload, length) != r.head.map_hash) {",
+   "new": "if (length == 0) {",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "an_empty_map_is_taken",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (length == 0 || net::hash_bytes(payload, length) != r.head.map_hash) {",
+   "new": "if (net::hash_bytes(payload, length) != r.head.map_hash) {",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_map_is_not_kept_by_the_reader",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "r.embedded_map.assign(payload, payload + length);",
+   "new": "",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_match_over_1_mib_is_read_for_its_map",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (size - map_chunk_bytes > kMaxFileBytes) {",
+   "new": "if (false) {",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_match_over_1_mib_is_written_for_its_map",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (out.size() > max_file_bytes(with_map ? r.embedded_map.size() : 0)) {",
+   "new": "if (out.size() > kMaxFileBytesWithMap) {",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_map_over_1_mib_is_written",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (r.embedded_map.size() > kMaxEmbeddedMapBytes) {\n            error",
+   "new": "if (false) {\n            error",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_map_of_another_hash_is_written",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (net::hash_bytes(r.embedded_map.data(), r.embedded_map.size()) != r.head.map_hash) {\n            error",
+   "new": "if (false) {\n            error",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_snapshot_holds_the_map",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "const bool with_map = live_turns == nullptr && !r.embedded_map.empty();",
+   "new": "const bool with_map = !r.embedded_map.empty();",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_map_is_not_written",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "        put_chunk(out, \"tmap\", r.embedded_map);\n",
+   "new": "",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_map_chunk_is_critical",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "put_chunk(out, \"tmap\", r.embedded_map);",
+   "new": "put_chunk(out, \"Tmap\", r.embedded_map);",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_cap_of_a_map_is_2_mib",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "kMaxEmbeddedMapBytes = 1u << 20;",
+   "new": "kMaxEmbeddedMapBytes = 2u << 20;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_longest_file_has_no_frame",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "kMaxFileBytes + kMaxEmbeddedMapBytes + kChunkFrameBytes;",
+   "new": "kMaxFileBytes + kMaxEmbeddedMapBytes;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_cap_of_a_match_ignores_the_frame",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "embedded_map_bytes + kChunkFrameBytes)",
+   "new": "embedded_map_bytes)",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_recorder_keeps_a_map_over_1_mib",
+   "file": "src/ants_replay/recorder.cpp",
+   "old": "bytes.size() > kMaxEmbeddedMapBytes ||",
+   "new": "",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_recorder_keeps_another_files_map",
+   "file": "src/ants_replay/recorder.cpp",
+   "old": " || net::hash_bytes(bytes.data(), bytes.size()) != replay_.head.map_hash) return false;",
+   "new": ") return false;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_finished_recording_takes_a_map",
+   "file": "src/ants_replay/recorder.cpp",
+   "old": "if (finished_ || bytes.empty()",
+   "new": "if (bytes.empty()",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_file_without_a_map_loses_the_folders_words",
+   "file": "src/ants_replay/player.cpp",
+   "old": "    if (replay.embedded_map.empty()) return false;                // (the folder's own words)\n",
+   "new": "",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_embedded_map_comes_first",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (load_map(replay.head, dirs, level, error)) return true;",
+   "new": "if (false && load_map(replay.head, dirs, level, error)) return true;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_embedded_maps_hash_is_not_checked",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (hash != replay.head.map_hash) {\n        error = \"the map in the replay",
+   "new": "if (false) {\n        error = \"the map in the replay",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_embedded_map_has_no_length_limit",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (bytes.size() > kMaxEmbeddedMapBytes) {                    // (decode()",
+   "new": "if (false) {                    // (decode()",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "the_embedded_map_is_held_to_the_classic_limits",
+   "file": "src/ants_replay/player.cpp",
+   "old": "level.load_from_memory(bytes.data(), bytes.size(), &verdict, assets::LevelLimits::for_play_extended())",
+   "new": "level.load_from_memory(bytes.data(), bytes.size(), &verdict, assets::LevelLimits{})",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "hash_bytes_multiplies_by_another_prime",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "h *= 0x100000001b3ULL;",
+   "new": "h *= 0x100000001b5ULL;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "hash_bytes_adds",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "h ^= data[i];",
+   "new": "h += data[i];",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "hash_bytes_forgets_its_seed",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "uint64_t h = seed;",
+   "new": "uint64_t h = seed * 0 + kFnv64Basis;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "hash_file_starts_each_block_anew",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "static_cast<size_t>(f.gcount()), h);",
+   "new": "static_cast<size_t>(f.gcount()));",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "info_is_silent_about_the_map",
+   "file": "tools/replay_tool.cpp",
+   "old": "if (!r.embedded_map.empty()) out << \"embedded map: \"",
+   "new": "if (false) out << \"embedded map: \"",
+   "build": "replay_tool",
+   "test": "timeout 300 ./build/replay_tool --selftest"
+  },
+  {
+   "id": "map_writes_over_a_file",
+   "file": "tools/replay_tool.cpp",
+   "old": "std::fopen(path.c_str(), \"wbx\")",
+   "new": "std::fopen(path.c_str(), \"wb\")",
+   "build": "replay_tool",
+   "test": "timeout 300 ./build/replay_tool --selftest"
+  },
+  {
+   "id": "map_of_a_file_without_a_map_writes_nothing_and_says_nothing",
+   "file": "tools/replay_tool.cpp",
+   "old": "    if (replay.embedded_map.empty()) {\n        err << \"replay_tool: \" << o.file << \" carries no map",
+   "new": "    if (false) {\n        err << \"replay_tool: \" << o.file << \" carries no map",
+   "build": "replay_tool",
+   "test": "timeout 300 ./build/replay_tool --selftest"
+  },
+  {
+   "id": "verify_ignores_the_files_map",
+   "file": "tools/replay_tool.cpp",
+   "old": "load_map_or_embedded(replay, std::vector<std::string>{maps_dir}, level, why)",
+   "new": "load_map(replay.head, maps_dir, level, why)",
+   "build": "replay_tool",
+   "test": "timeout 300 ./build/replay_tool --selftest"
+  },
+  {
+   "id": "the_tool_reads_no_file_over_1_mib_with_its_map",
+   "file": "tools/replay_tool.cpp",
+   "old": "static_cast<uint64_t>(size) > kMaxFileBytesWithMap",
+   "new": "static_cast<uint64_t>(size) > kMaxFileBytes",
+   "build": "replay_tool",
+   "test": "timeout 300 ./build/replay_tool --selftest"
+  },
+  {
+   "id": "a_replay_over_1_mib_is_a_500",
+   "file": "src/ants_server/control.cpp",
+   "old": "    r.file = true;                                       // a replay that carries",
+   "new": "    // a replay that carries",
+   "build": "ants_server",
+   "test": "timeout 300 python3 -m unittest tests.scripts.test_nginx_big_replays"
+  },
+  {
+   "id": "the_store_reads_no_file_over_1_mib",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "if (expected > replay::kMaxFileBytesWithMap) return false;",
+   "new": "if (expected > replay::kMaxFileBytes) return false;",
+   "build": "test_replay_store",
+   "test": "timeout 300 ./build/tests/test_server/test_replay_store"
+  },
+  {
+   "id": "the_store_keeps_no_file_over_1_mib",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "bytes.empty() || bytes.size() > replay::kMaxFileBytesWithMap || !summarize",
+   "new": "bytes.empty() || bytes.size() > replay::kMaxFileBytes || !summarize",
+   "build": "test_replay_store",
+   "test": "timeout 300 ./build/tests/test_server/test_replay_store"
+  },
+  {
+   "id": "the_viewer_reads_no_file_over_1_mib",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "if (bytes.size() > replay::kMaxFileBytesWithMap) bytes.clear();\n        }\n    }\n    auto replay = std::make_unique<replay::Replay>();",
+   "new": "if (bytes.size() > replay::kMaxFileBytes) bytes.clear();\n        }\n    }\n    auto replay = std::make_unique<replay::Replay>();",
+   "build": "test_replay_app",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RA7.9 ./build/tests/test_app/test_replay_app"
+  },
+  {
+   "id": "the_viewer_ignores_the_files_map",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "replay::load_map_or_embedded(*replay, std::vector<std::string>{config_.maps_dir}, replay_level_, why)",
+   "new": "replay::load_map(replay->head, config_.maps_dir, replay_level_, why)",
+   "build": "test_replay_app",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RA7.9 ./build/tests/test_app/test_replay_app"
+  },
+  {
+   "id": "a_cut_map_counts_as_match",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "            if (name == \"tmap\") map_chunk_bytes += size - at;",
+   "new": "            if (name == \"tmap\") map_chunk_bytes += 0;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_whole_map_counts_as_match",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "            map_chunk_bytes += length + kChunkFrameBytes;",
+   "new": "            map_chunk_bytes += 0;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  }
+ ]
+}

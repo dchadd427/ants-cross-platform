@@ -140,6 +140,7 @@ ants-cross-platform/
 │   │   ├── test_web_camera.sh          # The camera of a replay (Auto / Manual) with the real game, desktop and phone
 │   │   ├── test_web_changelog.sh       # The changelog page's pages: tabs, addresses, Back and Forward, a phone, no JavaScript
 │   │   ├── test_web_replay_lock.sh     # The mouse in the fullscreen of a replay (the pointer lock, the bar under it) with the real game
+│   │   ├── test_web_replay_map.sh      # A replay that carries its map (tmap) in a real browser with the real game: no fetch of the map
 │   │   ├── test_web_edge.sh            # The pointer of a fullscreen page (the bars, the pointer lock), the margin of
 │   │   │                               # a windowed one
 │   │   ├── test_web_hidden.sh          # The game in a hidden browser tab

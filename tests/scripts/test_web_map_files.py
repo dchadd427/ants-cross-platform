@@ -19,6 +19,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SCRIPT = os.path.join(REPO, "web", "map_files.js")
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_map_files_check.js")
 HEAD = os.path.join(REPO, "tests", "data", "replay_head.hex")
+TMAP = os.path.join(REPO, "tests", "data", "replay_tmap.hex")
 REAL_MAP = os.path.join(REPO, "Community-Maps", "eze jungal.lvl")
 MAPS_JSON = os.path.join(REPO, "Community-Maps", "maps.json")
 
@@ -39,7 +40,7 @@ def fnv1a64(data):
 def run_check(script=SCRIPT):
     with open(REAL_MAP, "rb") as f:
         digest = fnv1a64(f.read())
-    return subprocess.run([shutil.which("node"), CHECK_JS, script, HEAD, REAL_MAP, digest, MAPS_JSON], capture_output=True, text=True, timeout=120)
+    return subprocess.run([shutil.which("node"), CHECK_JS, script, HEAD, REAL_MAP, digest, MAPS_JSON, TMAP], capture_output=True, text=True, timeout=120)
 
 
 class TheGameSide(unittest.TestCase):
@@ -74,7 +75,10 @@ class TheGameSide(unittest.TestCase):
     def test_the_page_loads_the_script_and_makes_the_object_the_game_calls(self):
         self.assertTrue('<script src="map_files.js"></script>' in self.page)
         self.assertTrue("window.antsMapFiles = window.AntsMapFiles ? window.AntsMapFiles.forPage(window," in self.page)
-        self.assertTrue("AntsMapFiles.mapOfReplay(ANTS_LIVE_MODE ? latest : got.bytes)" in self.page)                              # a recording of a map of the players
+        self.assertTrue("var seen = ANTS_LIVE_MODE ? latest : got.bytes," in self.page)                                            # the bytes of the recording (the live page's newest copy)
+        self.assertTrue("window.AntsMapFiles.mapOfReplay(seen)" in self.page)                                                      # a recording of a map of the players: fetched by its name
+        self.assertTrue("window.AntsMapFiles.embeddedMapOfReplay(seen)" in self.page)                                              # a recording that carries its map: that map, nothing fetched
+        self.assertTrue("carried ? Promise.resolve({ ok: true, bytes: carried.bytes })" in self.page)
 
     def test_the_script_is_in_the_image_and_the_ci_looks_for_it(self):
         self.assertTrue("COPY web/map_files.js /usr/share/nginx/html/map_files.js" in read("Dockerfile"))
@@ -168,7 +172,7 @@ class ThePagesOwnCode(unittest.TestCase):
             "warm leaves its timer running": ("}).then(stop, function () { stop(); /* the game page asks again */ });", "}).then(undefined, function () { /* the game page asks again */ });"),
             "warm leaves its timer running after a failure": ("}).then(stop, function () { stop(); /* the game page asks again */ });", "}).then(stop, function () { /* the game page asks again */ });"),
             "a failure is not said in the toast": ("if (state !== FAILED || !toast) return;", "return;"),
-            "an original is fetched": ("&& !ORIGINALS.test(name) ? { name: name", "? { name: name"),
+            "an original is fetched": ("return head && !ORIGINALS.test(head.name) ? { name: head.name", "return head ? { name: head.name"),
             "an original's file is a map of the players": ("return validName(name) && !ORIGINALS.test(name) ? name : '';", "return validName(name) ? name : '';"),
             "a game for one starts without its map": ("if (!file) { go(); return; }", "if (!file) { return; }"),
             "a game on an original fetches a map too": ("if (!file) { go(); return; }", "if (false) { go(); return; }"),
@@ -178,6 +182,16 @@ class ThePagesOwnCode(unittest.TestCase):
             "a map that is gone is not marked": ("gone: true, text: 'The map ' + name + ' is not on the server", "text: 'The map ' + name + ' is not on the server"),
             "a 404 of a game for one is not told as gone": ("fail(map.text, !!map.gone)", "fail(map.text, false)"),
             "a fetch that rejects is not told": ("}, function () { fail('Could not download the map ' + file + '. Check your connection and try again.', false); });", "});"),
+            "a map is taken whatever its hash": ("if (!found || hash64(found) !== head.hash) return null;", "if (!found) return null;"),
+            "a second map is taken": ("if (found || length === 0 || length > MAX_EMBEDDED_BYTES) return null;", "if (length === 0 || length > MAX_EMBEDDED_BYTES) return null;"),
+            "an empty map is taken": ("if (found || length === 0 || length > MAX_EMBEDDED_BYTES) return null;", "if (found || length > MAX_EMBEDDED_BYTES) return null;"),
+            "a map of any length is taken": ("if (found || length === 0 || length > MAX_EMBEDDED_BYTES) return null;", "if (found || length === 0) return null;"),
+            "the cap is 2 MiB": ("var MAX_EMBEDDED_BYTES = 1024 * 1024;", "var MAX_EMBEDDED_BYTES = 2 * 1024 * 1024;"),
+            "a length that runs past the file is read": ("if (length > bytes.length - pos - 12) break;", ""),
+            "a map named like an original is written over it": ("if (!head || !validName(head.name) || ORIGINALS.test(head.name)) return null;", "if (!head || !validName(head.name)) return null;"),
+            "a name that is no map name is written": ("if (!head || !validName(head.name) || ORIGINALS.test(head.name)) return null;", "if (!head || ORIGINALS.test(head.name)) return null;"),
+            "the map is read from the wrong place": ("found = bytes.subarray(pos + 8, pos + 8 + length);", "found = bytes.subarray(pos + 4, pos + 4 + length);"),
+            "the walk skips a chunk too many": ("pos += 12 + length;\n        }\n        if (!found", "pos += 13 + length;\n        }\n        if (!found"),
             "a path is a map name": ("if (/[\\/\\\\:*?\"<>|]/.test(name) || name.charAt(0) === '.') return false;", ""),
         }
         with tempfile.TemporaryDirectory() as folder:

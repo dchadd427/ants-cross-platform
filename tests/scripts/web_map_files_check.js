@@ -1,11 +1,11 @@
 // Runs the page's OWN code for the players' maps (web/map_files.js) with fakes for the network, the timers and the game's file system: the address and the hash of a file, what the game is told for
 // every way a download can end (done, 404, a connection that fails, a server that errs, a page that is not a map, a file of another hash, a slow one), that a failure is never kept, that the file is
 // written where the game looks, and the map that a recording names. tests/scripts/test_web_map_files.py runs this with node (the quick tier).
-// usage: node web_map_files_check.js web/map_files.js tests/data/replay_head.hex REAL_MAP_FILE REAL_MAP_HASH    (exit 0: every check holds; every failure is printed)
+// usage: node web_map_files_check.js web/map_files.js tests/data/replay_head.hex REAL_MAP_FILE REAL_MAP_HASH [maps.json] [tests/data/replay_tmap.hex]    (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
 
-const [, , modulePath, headPath, realMap, realHash, mapsJson] = process.argv;
+const [, , modulePath, headPath, realMap, realHash, mapsJson, tmapPath] = process.argv;
 if (!modulePath || !headPath || !realMap || !realHash) { console.log('usage: web_map_files_check.js map_files.js replay_head.hex map.lvl hash'); process.exit(2); }
 const M = require(require('path').resolve(modulePath));
 
@@ -85,6 +85,68 @@ check('a number is no name', M.validName(5) === false);
     check('a head with a name and no hash names no map', M.mapOfReplay(Uint8Array.from([...head('Some Map.lvl', 'aabbccddeeff0011').slice(0, 8 + 4 + 4), 2, 0, 0, 0, 1, 0, 0, 0, 0, 0])) === null);
     const damaged = bytes.slice(); damaged[8] = 0x58;
     check('a first chunk that is not HEAD names no map', M.mapOfReplay(damaged) === null);
+}
+
+// ---- the map that a recording carries (its optional tmap chunk) -------------------------------------------------------------------------------------------------------------------------------------------
+{
+    // the file as the C++ writer makes it (tests/data/replay_tmap.hex, held by RP9.9): the map is the 40 bytes 3 i + 1
+    if (tmapPath) {
+        const lines = fs.readFileSync(tmapPath, 'utf8').split('\n').filter((l) => l && l[0] !== '#');
+        const file = Uint8Array.from(Buffer.from(lines[lines.length - 1], 'hex'));
+        const got = M.embeddedMapOfReplay(file);
+        check('a recording written by the C++ encoder carries its map', got !== null && got.name === 'Draft Map ~test-0badf00d.lvl' && got.bytes.length === 40 && got.bytes.every((b, i) => b === i * 3 + 1), JSON.stringify(got));
+        check('its hash is the one of the head and of the bytes', got !== null && got.hash === M.hash64(got.bytes), JSON.stringify(got && got.hash));
+        same('and mapOfReplay still reads its head the old way', M.mapOfReplay(file), { name: 'Draft Map ~test-0badf00d.lvl', hash: got && got.hash });
+    }
+    // files made here, chunk by chunk (the checksum is the C++ reader's business: the page checks lengths and the map's own hash)
+    const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+    const crc = (bytes) => { let c = 0xffffffff; for (const b of bytes) c = table[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+    const le32 = (n) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+    const chunk = (tag, payload) => { const t = [...Buffer.from(tag)]; return [...t, ...le32(payload.length), ...payload, ...le32(crc([...t, ...payload]))]; };
+    const field = (id, body) => [id, body.length, ...body];
+    const hexBytes = (hex) => [...Buffer.from(hex, 'hex')].reverse();
+    const headChunk = (name, hash) => chunk('HEAD', [1, 0, 21, 0, ...field(3, [...Buffer.from(name)]), ...field(4, hexBytes(hash))]);
+    const MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];
+    const MAP = Uint8Array.from({ length: 300 }, (_, i) => (i * 7 + 3) & 255);
+    const GOOD = M.hash64(MAP);
+    const make = (chunks) => Uint8Array.from([...MAGIC, ...chunks.flat()]);
+    const ENDS = chunk('ENDS', [...le32(20), 0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    const NAME = 'Draft Map ~test-0badf00d.lvl';
+    const good = make([headChunk(NAME, GOOD), chunk('tmap', [...MAP]), ENDS]);
+    const got = M.embeddedMapOfReplay(good);
+    check('a recording with its map: the name, the hash and exactly the bytes', got !== null && got.name === NAME && got.hash === GOOD && got.bytes.length === 300 && got.bytes.every((b, i) => b === MAP[i]));
+    check('a Buffer is read like a Uint8Array', M.embeddedMapOfReplay(Buffer.from(good)) !== null);
+    const none = (label, bytes) => check(label, M.embeddedMapOfReplay(bytes) === null);
+    none('a map whose hash is not the head\'s is not taken', make([headChunk(NAME, 'aabbccddeeff0011'), chunk('tmap', [...MAP]), ENDS]));
+    const flipped = MAP.slice(); flipped[150] ^= 1;
+    none('a map with one flipped byte is not taken', make([headChunk(NAME, GOOD), chunk('tmap', [...flipped]), ENDS]));
+    none('a recording with no tmap chunk takes the old way (its map by name)', make([headChunk(NAME, GOOD), chunk('CMDS', [0, 0, 0, 0, 0, 0, 0, 0]), ENDS]));
+    none('two tmap chunks are not taken (the game refuses the file)', make([headChunk(NAME, GOOD), chunk('tmap', [...MAP]), chunk('tmap', [...MAP]), ENDS]));
+    none('an empty tmap is not taken', make([headChunk(NAME, M.hash64(new Uint8Array(0))), chunk('tmap', []), ENDS]));
+    const big = new Uint8Array(1024 * 1024 + 1).fill(7);
+    none('a map over 1 MiB is not taken, though its hash is right', make([headChunk(NAME, M.hash64(big)), chunk('tmap', [...big]), ENDS]));
+    const claim = Uint8Array.from([...MAGIC, ...headChunk(NAME, GOOD), ...Buffer.from('tmap'), 0xff, 0xff, 0xff, 0xff, 1, 2, 3, 4]);
+    none('a chunk that claims four billion bytes is not looked at', claim);
+    const cut = good.slice(0, good.length - 12 - 13 - 5);                                                       // (cut inside the map's bytes: the chunk runs past the end)
+    none('a file cut inside the map has none', cut.slice(0, MAGIC.length + headChunk(NAME, GOOD).length + 8 + 100));
+    {   // a chunk that runs past the end of the file, whose cut bytes are the map that the head names: it is a cut chunk, not a map (the game reads such a file as one with no map of its own)
+        const part = MAP.slice(0, 120);
+        const lying = Uint8Array.from([...MAGIC, ...headChunk(NAME, M.hash64(part)), ...Buffer.from('tmap'), ...le32(300), ...part]);
+        none('a map chunk that is cut is not a map, whatever the hash of what is left', lying);
+    }
+    const afterMap = good.slice(0, MAGIC.length + headChunk(NAME, GOOD).length + 8 + 300 + 4);
+    check('a file cut after the map still has it', M.embeddedMapOfReplay(afterMap) !== null && M.embeddedMapOfReplay(afterMap).bytes.length === 300);
+    none('a first chunk that is not HEAD names nothing', make([chunk('tmap', [...MAP]), headChunk(NAME, GOOD), ENDS]));
+    none('bytes that are no recording carry nothing', Uint8Array.from({ length: 400 }, (_, i) => i));
+    check('nothing carries nothing', M.embeddedMapOfReplay(null) === null && M.embeddedMapOfReplay(new Uint8Array(0)) === null && M.embeddedMapOfReplay(undefined) === null);
+    for (const original of ['TINY.LVL', 'tiny.lvl', 'Treasure.LVL', 'ISLANDS.lvl']) none('a map named like one of the six originals is never written (' + original + ')', make([headChunk(original, GOOD), chunk('tmap', [...MAP]), ENDS]));
+    for (const bad of ['../x.lvl', 'a/b/cdef.lvl', 'a\\bcdef.lvl', '.hidden.lvl', 'x.txt', '.lvl', 'tab\there.lvl']) none('a name that is no map name is never written (' + JSON.stringify(bad) + ')', make([headChunk(bad, GOOD), chunk('tmap', [...MAP]), ENDS]));
+    // the bytes are a view into the file: nothing is copied, and a hostile file is walked once, by its lengths
+    check('the bytes are a view of the file, not a copy', got.bytes.buffer === good.buffer);
+    const many = [headChunk(NAME, GOOD)];
+    for (let i = 0; i < 2000; i++) many.push(chunk('padd', [i & 255]));
+    many.push(chunk('tmap', [...MAP]), ENDS);
+    check('a map after two thousand other chunks is found', M.embeddedMapOfReplay(make(many)) !== null);
 }
 
 // ---- the downloads ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

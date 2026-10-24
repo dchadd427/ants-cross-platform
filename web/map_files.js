@@ -54,14 +54,19 @@
         return hex8(hi) + hex8(lo);
     }
 
-    // The map that a recording (.antsrep) was played on: { name, hash } from its HEAD chunk (src/ants_replay/replay.cpp: the magic, then chunks tag(4) length(u32) payload crc(u32); the head is u16 format,
-    // u16 rules and fields varint id, varint length, bytes; field 3 the map's file name, field 4 its FNV-1a 64, little endian), or null when the file is no recording, has no such fields or plays one of the six originals.
-    function mapOfReplay(bytes) {
-        var MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];
+    var MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];
+    var MAX_EMBEDDED_BYTES = 1024 * 1024;      // kMaxEmbeddedMapBytes (include/ants_replay/replay.hpp): the longest tmap chunk
+
+    function u32(bytes, at) { return (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24)) >>> 0; }
+    function tagAt(bytes, at) { return String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]); }
+
+    // The head of a recording (.antsrep; src/ants_replay/replay.cpp: the magic, then chunks tag(4) length(u32) payload crc(u32); the head is u16 format, u16 rules and fields varint id, varint length, bytes;
+    // field 3 the map's file name, field 4 its FNV-1a 64, little endian): { name, hash, next (where the chunk after HEAD starts) }, or null when the file is no recording or its head holds no such fields.
+    function headOf(bytes) {
         if (!bytes || bytes.length < 16 + 4) return null;
         for (var m = 0; m < MAGIC.length; m++) if (bytes[m] !== MAGIC[m]) return null;
-        if (String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]) !== 'HEAD') return null;
-        var length = (bytes[12] | (bytes[13] << 8) | (bytes[14] << 16) | (bytes[15] << 24)) >>> 0;
+        if (tagAt(bytes, 8) !== 'HEAD') return null;
+        var length = u32(bytes, 12);
         var pos = 16 + 4, end = 16 + length;
         if (end > bytes.length) return null;
         function varint() {
@@ -73,11 +78,38 @@
         while (pos < end) {
             var id = varint(), len = varint();
             if (id < 0 || len < 0 || pos + len > end) return null;
-            if (id === 3) { for (var i = 0; i < len; i++) name += String.fromCharCode(bytes[pos + i]); }
+            if (id === 3) { name = ''; for (var i = 0; i < len; i++) name += String.fromCharCode(bytes[pos + i]); }
             else if (id === 4 && len === 8) { hash = ''; for (var k = 7; k >= 0; k--) hash += ('0' + bytes[pos + k].toString(16)).slice(-2); }
             pos += len;
         }
-        return name && hash && !ORIGINALS.test(name) ? { name: name, hash: hash } : null;
+        return name && hash ? { name: name, hash: hash, next: end + 4 } : null;
+    }
+
+    // The map that a recording (.antsrep) was played on: { name, hash } from its HEAD chunk, or null when the file is no recording, has no such fields or plays one of the six originals.
+    function mapOfReplay(bytes) {
+        var head = headOf(bytes);
+        return head && !ORIGINALS.test(head.name) ? { name: head.name, hash: head.hash } : null;
+    }
+
+    // The map that a recording carries (its optional tmap chunk, written for a match on a map that the server keeps only for a while): { name, hash, bytes } when the file has exactly one, its length is within the
+    // cap and inside the file, and the FNV-1a 64 of its bytes is the head's hash; else null (the page then takes the old way, the map by its name; the game itself refuses a file that holds a bad tmap). The name is one that
+    // the game takes (validName) and none of the six originals' (the file system holds those: a recording never writes over one). The chunks are walked by their lengths, each checked against what is left of the file before it
+    // is used; the bytes are a view into the file, copied by nobody, and nothing is made of a claimed length.
+    function embeddedMapOfReplay(bytes) {
+        var head = headOf(bytes);
+        if (!head || !validName(head.name) || ORIGINALS.test(head.name)) return null;
+        var pos = head.next, found = null;
+        while (bytes.length - pos >= 12) {
+            var tag = tagAt(bytes, pos), length = u32(bytes, pos + 4);
+            if (length > bytes.length - pos - 12) break;                  // (the file is cut here: what there was before it counts)
+            if (tag === 'tmap') {
+                if (found || length === 0 || length > MAX_EMBEDDED_BYTES) return null;
+                found = bytes.subarray(pos + 8, pos + 8 + length);
+            }
+            pos += 12 + length;
+        }
+        if (!found || hash64(found) !== head.hash) return null;
+        return { name: head.name, hash: head.hash, bytes: found };
     }
 
     // env: { fetch, getFS() (the game's file system, or null before the game runs), setTimeout, clearTimeout, now, timeoutMs, tries, retryMs, AbortController, onChange(name, state) }
@@ -255,5 +287,5 @@
         }, function () { fail('Could not download the map ' + file + '. Check your connection and try again.', false); });
     }
 
-    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, create: create };
+    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, embeddedMapOfReplay: embeddedMapOfReplay, create: create };
 });

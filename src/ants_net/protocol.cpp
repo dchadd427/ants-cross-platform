@@ -86,6 +86,15 @@ bool valid_map_name(const std::string& name) noexcept {
     return tail == ".LVL" || tail == ".lvl";
 }
 
+uint64_t hash_bytes(const uint8_t* data, size_t size, uint64_t seed) noexcept {
+    uint64_t h = seed;
+    for (size_t i = 0; i < size; ++i) {
+        h ^= data[i];
+        h *= 0x100000001b3ULL;
+    }
+    return h;
+}
+
 bool parse_game_mode_name(const std::string& text, uint8_t& mode) noexcept {
     for (uint8_t candidate = 0; candidate <= sim::kLastGameMode; ++candidate) {
         if (text == sim::game_mode_name(static_cast<sim::GameMode>(candidate))) {

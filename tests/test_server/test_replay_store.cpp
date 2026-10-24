@@ -3,6 +3,7 @@
 // are left alone), the half-written files of a crash, a file that cannot be read, and the lookups (only by a name of the index, never a path).
 //
 // No network and no match: the files are small replays that the test makes with replay::encode, and the clock and the free space of the disk are the test's own.
+#include "ants_net/protocol.hpp"
 #include "ants_replay/replay.hpp"
 #include "ants_server/replay_store.hpp"
 #include "ants_sim/command.hpp"
@@ -180,6 +181,54 @@ std::vector<uint8_t> make_file_of_size(size_t size, uint32_t seed = 1) {
         }
     }
     return std::vector<uint8_t>();
+}
+
+// A replay that carries a map of `map_bytes` bytes (the head names its hash) and about `at_least` bytes in all: the orders make up the rest. Empty when the writer refuses it.
+std::vector<uint8_t> make_file_with_map(size_t map_bytes, size_t at_least, uint32_t seed = 1) {
+    replay::Replay r;
+    r.head.game_version = "v0.0.0";
+    r.head.build_id = "test";
+    r.head.venue = "game server";
+    r.head.map_name = "Draft Map ~test-0badf00d.lvl";
+    r.embedded_map.resize(map_bytes);
+    for (size_t i = 0; i < map_bytes; ++i) r.embedded_map[i] = static_cast<uint8_t>((i * 31 + seed) & 0xFFu);
+    r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+    r.head.seed = seed;
+    r.head.roster = 0x05;
+    r.head.names[2] = "Bot (Medium)";
+    r.complete = true;
+    r.total_turns = 700;
+    r.match_over = true;
+    r.final_hash = 77;
+    r.hashes.assign(7, 0xABCDu);
+    std::string error;
+    std::vector<uint8_t> bytes = replay::encode(r, error);
+    for (uint32_t count = 0; !bytes.empty() && bytes.size() < at_least && count < 200000;) {
+        count += static_cast<uint32_t>((at_least - bytes.size()) / 9 + 1);
+        r.commands.clear();
+        for (uint32_t i = 0; i < count; ++i) {
+            sim::Command c;
+            c.type = sim::CommandType::Hatch;
+            c.issuer = 0;
+            r.commands.push_back(replay::TimedCommand{i * 700 / count, c});
+        }
+        bytes = replay::encode(r, error);
+    }
+    return bytes;
+}
+
+// The file with one more chunk right after its head (a lower case one that a reader skips): what makes a match part longer than the writer would write
+std::vector<uint8_t> with_filler_chunk(const std::vector<uint8_t>& file, size_t filler_bytes) {
+    const size_t head_end = 8 + 12 + (static_cast<size_t>(file[12]) | (static_cast<size_t>(file[13]) << 8) | (static_cast<size_t>(file[14]) << 16) | (static_cast<size_t>(file[15]) << 24));
+    std::vector<uint8_t> chunk = {'p', 'a', 'd', 'd'};
+    for (int shift = 0; shift < 32; shift += 8) chunk.push_back(static_cast<uint8_t>((filler_bytes >> shift) & 0xFFu));
+    chunk.insert(chunk.end(), filler_bytes, 0);
+    const uint32_t crc = replay::crc32(chunk.data() + 8, filler_bytes, replay::crc32(chunk.data(), 4));
+    for (int shift = 0; shift < 32; shift += 8) chunk.push_back(static_cast<uint8_t>((crc >> shift) & 0xFFu));
+    std::vector<uint8_t> out(file.begin(), file.begin() + static_cast<std::ptrdiff_t>(head_end));
+    out.insert(out.end(), chunk.begin(), chunk.end());
+    out.insert(out.end(), file.begin() + static_cast<std::ptrdiff_t>(head_end), file.end());
+    return out;
 }
 
 // A store in a folder of the test, on the test's clock and disk
@@ -413,7 +462,7 @@ int main() {
 
     // ---- refusals -----------------------------------------------------------------------------------------------------------------
 
-    TEST_CASE("RS3.1 A Recording That Is No Whole Replay File Is Refused With A Reason And Writes Nothing: Nothing, Garbage, A Cut File, A File Without Its End, A File Past 1 MiB; The Same Refusal Is Told Once And Then Counted") {
+    TEST_CASE("RS3.1 A Recording That Is No Whole Replay File Is Refused With A Reason And Writes Nothing: Nothing, Garbage, A Cut File, A File Without Its End, A File Past 2 MiB; The Same Refusal Is Told Once And Then Counted") {
         Fixture f;
         ReplayStore store(f.config());
         std::string why;
@@ -424,7 +473,7 @@ int main() {
         std::vector<uint8_t> flipped = good;
         flipped[flipped.size() / 2] ^= 0x10;
         const std::vector<uint8_t> unfinished = make_file("TREASURE.LVL", 700, true, 0, 1, 0x05, false);
-        const std::vector<uint8_t> huge(replay::kMaxFileBytes + 1, 0x41);
+        const std::vector<uint8_t> huge(replay::kMaxFileBytesWithMap + 1, 0x41);          // (past the longest file there can be: a match and its map)
         const std::vector<const std::vector<uint8_t>*> broken = {&cut, &flipped, &unfinished, &huge};
         for (const std::vector<uint8_t>* bytes : broken) {
             const ReplaySave refused = store.save(*bytes);
@@ -1221,6 +1270,67 @@ int main() {
         ASSERT_EQ(store.rescan(), size_t{1});
         ASSERT_TRUE(store.find(fifth)->readable && store.find(fifth)->bytes == sized.size());
         ASSERT_EQ(store.readable_count(), store.count());
+    } TEST_END();
+
+    // ---- a replay that carries its map (the chunk tmap) is a file of up to 2 MiB --------------------------------------------------
+
+    TEST_CASE("RS10.1 A Replay Of 1.5 MiB That Carries Its Map Is Kept, Listed As Readable, Read Back Byte For Byte And Found Again When The Store Is Opened Anew; Every Cap Is Counted In Bytes Of What Is In The File") {
+        Fixture f;
+        ReplayStore store(f.config());
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const std::vector<uint8_t> big = make_file_with_map(replay::kMaxEmbeddedMapBytes, 3 * 512 * 1024);
+        ASSERT_TRUE(big.size() >= 3 * 512 * 1024 && big.size() < 3 * 512 * 1024 + 20000 && big.size() > replay::kMaxFileBytes);
+        const ReplaySave saved = store.save(big);
+        ASSERT_TRUE(saved.kept && saved.bytes == big.size());
+        ASSERT_TRUE(store.count() == 1 && store.readable_count() == 1 && store.list().at(0).readable && store.list().at(0).bytes == big.size());
+        ASSERT_EQ(store.list().at(0).map, std::string("Draft Map ~test-0badf00d.lvl"));
+        std::vector<uint8_t> read;
+        ASSERT_TRUE(store.read(saved.file, read) && read == big);
+        ASSERT_EQ(slurp(f.dir / saved.file), big);
+        ReplayStore again(f.config());                                                      // (opened anew: the file is read from the folder and is listed)
+        ASSERT_TRUE(again.prepare(why));
+        ASSERT_TRUE(again.count() == 1 && again.list().at(0).readable && again.list().at(0).bytes == big.size());
+        ASSERT_TRUE(again.read(saved.file, read) && read == big);
+        // the longest there can be: a map of 1 MiB and a match of 1 MiB
+        const std::vector<uint8_t> small_map = make_file_with_map(1000, 0, 2);
+        ASSERT_FALSE(small_map.empty());
+        const std::vector<uint8_t> longest = with_filler_chunk(make_file_with_map(replay::kMaxEmbeddedMapBytes, 0, 3), 1);
+        ASSERT_TRUE(longest.size() < replay::kMaxFileBytesWithMap);
+        // a match part of exactly 1 MiB beside a map of 1000 bytes is kept; one byte more is not
+        const std::vector<uint8_t> base = make_file_with_map(1000, 0, 4);
+        const size_t map_chunk = 1000 + replay::kChunkFrameBytes;
+        const size_t filler = replay::kMaxFileBytes + map_chunk - base.size() - replay::kChunkFrameBytes;
+        const std::vector<uint8_t> exact = with_filler_chunk(base, filler);
+        ASSERT_EQ(exact.size(), replay::kMaxFileBytes + map_chunk);
+        ASSERT_TRUE(again.save(exact).kept);
+        const std::vector<uint8_t> over = with_filler_chunk(base, filler + 1);
+        const ReplaySave refused = again.save(over);
+        ASSERT_TRUE(!refused.kept && contains(refused.note, "KiB"));
+        // a file past 2 MiB is refused before it is read
+        std::vector<uint8_t> past = exact;
+        past.resize(replay::kMaxFileBytesWithMap + 1, 0);
+        ASSERT_FALSE(again.save(past).kept);
+        ASSERT_EQ(again.count(), size_t{2});
+    } TEST_END();
+
+    TEST_CASE("RS10.2 A File Past The Longest A Replay Can Be Is Listed As Unreadable; A Match Over 1 MiB Is Unreadable Whatever Its Size In All") {
+        Fixture f;
+        fs::create_directories(f.dir);
+        const std::string name = "ants-TREASURE-20261008-143209Z.antsrep";
+        write_file(f.dir / name, std::vector<uint8_t>(replay::kMaxFileBytesWithMap + 1, 0x41));
+        const std::string second = "ants-TREASURE-20261008-143210Z.antsrep";
+        const std::vector<uint8_t> match = with_filler_chunk(make_file("TREASURE.LVL", 700, true, 0, 5), replay::kMaxFileBytes);        // a match of 1 MiB and some, with no map of its own
+        ASSERT_TRUE(match.size() > replay::kMaxFileBytes && match.size() < replay::kMaxFileBytesWithMap);
+        write_file(f.dir / second, match);
+        ReplayStore store(f.config());
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        ASSERT_EQ(store.count(), size_t{2});
+        ASSERT_TRUE(store.readable_count() == 0 && !store.find(name)->readable && !store.find(second)->readable);
+        std::vector<uint8_t> read;
+        ASSERT_FALSE(store.read(name, read));
+        ASSERT_TRUE(read.empty());
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures
