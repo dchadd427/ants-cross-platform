@@ -1,7 +1,8 @@
 // The settings menu of the game page (docs/GAME_MENU.md; the game's side: src/ants_app/application_game_menu.cpp and its one table of rows, game_menu.hpp).
 // Esc with nothing to cancel, or a Settings button, opens a panel over the running game: Sound, Video, Controls, Game, Resume and Leave game.
 //   * The rows come from the game as one JSON text (Module._ants_menu_describe): this script draws what the table says. A row's value is read with Module._ants_menu_get and changed with Module._ants_menu_set;
-//     Fullscreen, Picture shape and Fullscreen mouse are the page's own (its buttons are clicked: one function for the selector, the address and the stored choice). The Controls list is data of this file.
+//     Fullscreen, Picture shape and Fullscreen mouse are the page's own (its buttons are clicked, and the shape is its function `pickShape`: one function for the selector, the address and the stored choice). The Picture shape is a
+//     native dropdown that this file fills from the page's table of shapes (`shapes`, web/shapes.js; the game's own row only says how many there are); the arrows change the picture of the running game at once and the panel stays open. The Controls list is data of this file.
 //   * The panel is a child of the stage (it goes fullscreen with it), fixed over the window. The pointer lock is let go while it is up and asked for again when it closes; the page behind it is inert; Tab stays
 //     inside; Esc closes it (in the question of Leave game it means stay; a held key does nothing); the game is told (Module._ants_menu_open) and takes no input meanwhile; a click on the dimmed area does nothing;
 //     a dialog that needs an answer closes it (ask 101). Leave game asks in the words of what it will do (ask 102). A recording has no Game section.
@@ -15,7 +16,7 @@
     'use strict';
 
     var POLL_MS = 250;
-    var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
+    var FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled])';
     var CSS_FILE = 'game_menu.css';
     var USED = /^(Tab|Enter| |Spacebar|Arrow(Left|Right|Up|Down)|Home|End)$/; // the keys of the panel's own controls (Esc is handled before)
 
@@ -34,7 +35,6 @@
 
     function forPage(page) {
         var doc = page.doc, win = page.win || (doc && doc.defaultView) || {}, stage = page.stage, canvas = page.canvas;
-        var SHAPES = page.shapes.names(); // the places of the picture's choices: the page's one table of shapes (web/shapes.js; game_menu.hpp's kPicture row is made from the game's, in the same order)
         var info = null; // the game's table, once read
         var scrim = null, panel = null, ask = null, state = null;
         var dimmed = [], opener = null, opening = false, styleReady = false, styleFailed = 0, wasLocked = false, behind = [], removers = [], shown = { askKind: -1 };
@@ -67,13 +67,14 @@
         function available() { return ready() && styleReady && where() >= 0 && answered(); }
 
         // ---- the page's own rows: its functions, by name ----
-        function shapeNow() { var v = stage.getAttribute('data-aspect'); return Math.max(0, indexOf(SHAPES, v)); }
+        function shapeNow() { return stage.getAttribute('data-aspect'); } // (a shape's name: the dropdown's entries are made from the page's one table of shapes, web/shapes.js, and the page's function takes a name)
         function lockButton(on) { return doc.getElementById(on ? 'lock-on' : 'lock-off'); }
         var PAGE_ROWS = {
             picture: {
-                has: function () { return !!doc.querySelector('button[data-aspect]'); },
+                dropdown: true,
+                has: function () { return typeof page.pickShape === 'function'; },
                 read: shapeNow,
-                write: function (i) { var b = doc.querySelector('button[data-aspect="' + SHAPES[i] + '"]'); if (b) b.click(); }
+                write: function (name) { page.pickShape(name); }
             },
             lockmouse: {
                 has: function () { return !!lockButton(true) && !touchy(); },
@@ -147,7 +148,7 @@
 
         // On / Off (value 1 is the first word) or a choice of words: radio buttons, as the page's selector has them
         function choice(row, labelId, read, write, values) {
-            var group = el('div', 'gm-ctl gm-seg' + (row.words.length > 3 ? ' gm-seg4' : '')), items = [];
+            var group = el('div', 'gm-ctl gm-seg'), items = [];
             group.setAttribute('role', 'radiogroup');
             group.setAttribute('aria-labelledby', labelId);
             function mark() { var now = read(); for (var i = 0; i < items.length; i++) { var on = values[i] === now; items[i].setAttribute('aria-checked', on ? 'true' : 'false'); items[i].classList.toggle('on', on); } }
@@ -161,6 +162,20 @@
             });
             mark();
             return group;
+        }
+
+        // The picture's shape: a native dropdown, one entry for each row of the page's table (shape and canvas), the quiet line under it that names the shape that fills the screen
+        function dropdown(row, labelId, own) {
+            var wrap = el('div', 'gm-ctl gm-pick'), select = el('select', 'pick-select gm-select'), line = '';
+            select.setAttribute('aria-labelledby', labelId);
+            page.shapes.fillSelect(select, doc);
+            function mark() { select.value = own.read(); }
+            select.addEventListener('change', function () { own.write(select.value); mark(); });
+            mark();
+            wrap.appendChild(el('span', 'pick')).appendChild(select);                      // (the page's .pick: the chevron of its dropdowns)
+            try { line = page.shapes.fillsLine(win.screen.width, win.screen.height); } catch (e) { /* no screen to ask */ }
+            if (line) wrap.appendChild(el('div', 'gm-fits', line));
+            return wrap;
         }
 
         function action(row, labelId) {
@@ -191,7 +206,7 @@
             if (own && !own.has()) return null;
             if (row.kind === 'slider') control = slider(row, id);
             else if (row.kind === 'switch') control = choice(row, id, function () { return get(row.id); }, function (v) { call('_ants_menu_set', row.id, v, 1); }, [1, 0]);
-            else if (row.kind === 'choice') control = choice(row, id, own.read, own.write, row.words.map(function (w, i) { return i; }));
+            else if (row.kind === 'choice') control = own.dropdown ? dropdown(row, id, own) : choice(row, id, own.read, own.write, row.words.map(function (w, i) { return i; }));
             else if (row.kind === 'button') control = action(row, id);
             else { control = el('div', 'gm-ctl gm-info', page.version || ''); }
             line.appendChild(control);

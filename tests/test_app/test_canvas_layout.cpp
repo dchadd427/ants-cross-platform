@@ -4,7 +4,7 @@
 //     fits, centred, with bars: `CanvasLayout::fit` is that arithmetic (a table of window sizes: 1920 x 1080 is 2x exactly, 2560 x 1440 2.667x, 2880 x 1800 3x with bars above and
 //     below ...), checked against SDL itself; the window that opens is the largest scale in steps of 0.5 of the canvas that fits the display's usable area (at least 1x), also for a
 //     game that starts in fullscreen (the window that Alt+Enter gives back);
-//   * the application: `--aspect 4:3` / `16:10` / `16:9` / `21:9` and the key `aspect` (refusals say "only 4:3, 16:10, 16:9 and 21:9"), the classic picture in the wide canvas (the quick help's two columns pixel for pixel
+//   * the application: `--aspect 4:3` / `3:2` / `16:10` / `16:9` / `20:9` / `21:9` / `32:9` and the key `aspect` (refusals say "only 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9"), the classic picture in the wide canvas (the quick help's two columns pixel for pixel
 //     what the 4:3 application draws, moved by (160, 30); every screen is composed for the whole canvas: test_wide_pages; the plate in the canvas's corner), the pointer over the bars (it is
 //     the picture's nearest edge pixel, the map scrolls), Alt+Enter, the screenshot.
 // Usage: test_canvas_layout. Exit code 0 when every check passes.
@@ -323,35 +323,40 @@ void test_window_sizes() {
 // =====================================================================================================================================================
 
 void test_aspect_parsing() {
-    group("aspect", "the text of --aspect and of the key: 4:3, 16:10, 16:9 and 21:9, nothing else");
+    group("aspect", "the text of --aspect and of the key: 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9, nothing else");
     Aspect a = Aspect::Classic4x3;
     std::string why;
     check(parse_aspect("16:9", a, why) && a == Aspect::Wide16x9 && why.empty(), "16:9");
     check(parse_aspect("4:3", a, why) && a == Aspect::Classic4x3, "4:3");
     check(parse_aspect("16:10", a, why) && a == Aspect::Wide16x10, "16:10");
     check(parse_aspect("21:9", a, why) && a == Aspect::Ultra21x9, "21:9");
+    check(parse_aspect("3:2", a, why) && a == Aspect::Wide3x2, "3:2");
+    check(parse_aspect("20:9", a, why) && a == Aspect::Wide20x9, "20:9");
+    check(parse_aspect("32:9", a, why) && a == Aspect::Super32x9, "32:9");
     check(std::string(aspect_name(Aspect::Wide16x9)) == "16:9" && std::string(aspect_name(Aspect::Classic4x3)) == "4:3" && std::string(aspect_name(Aspect::Wide16x10)) == "16:10" &&
-              std::string(aspect_name(Aspect::Ultra21x9)) == "21:9",
+              std::string(aspect_name(Aspect::Ultra21x9)) == "21:9" && std::string(aspect_name(Aspect::Wide3x2)) == "3:2" && std::string(aspect_name(Aspect::Wide20x9)) == "20:9" && std::string(aspect_name(Aspect::Super32x9)) == "32:9",
           "the names are the values");
     for (const Aspect each : kAllAspects) {
         Aspect back = Aspect::Classic4x3;
         check(parse_aspect(aspect_name(each), back, why) && back == each, std::string("the name of ") + aspect_name(each) + " parses back to it");
     }
-    check(kAllAspects.size() == 4 && kAllAspects[0] == Aspect::Classic4x3 && kAllAspects[1] == Aspect::Wide16x10 && kAllAspects[2] == Aspect::Wide16x9 && kAllAspects[3] == Aspect::Ultra21x9,
+    check(kAllAspects.size() == 7 && kAllAspects[0] == Aspect::Classic4x3 && kAllAspects[1] == Aspect::Wide3x2 && kAllAspects[2] == Aspect::Wide16x10 && kAllAspects[3] == Aspect::Wide16x9 && kAllAspects[4] == Aspect::Wide20x9 &&
+              kAllAspects[5] == Aspect::Ultra21x9 && kAllAspects[6] == Aspect::Super32x9,
           "the shapes are listed from the narrowest to the widest (the page's selector's order)");
-    for (const char* bad : {"3:2", "5:4", "32:9", "21:10", "16:16", "", "abc", "16", "16:9 ", " 16:9", "16x9", "16/9", "0:0", "4:3:2", "4:3 ", "16:09", "21:09", "1.78", "wide", "-16:9", "16:10 ", "21:9\n"}) {
+    for (const char* bad : {"5:4", "19.5:9", "fit", "32:10", "21:10", "3:2 ", "20:09", "32:09", "03:2", "2:3", "9:32", "21:9:9", "21:10", "16:16", "", "abc", "16", "16:9 ", " 16:9", "16x9", "16/9", "0:0", "4:3:2", "4:3 ", "16:09", "21:09", "1.78", "wide", "-16:9", "16:10 ", "21:9\n"}) {
         Aspect keep = Aspect::Wide16x9;
         std::string reason;
         const bool ok = parse_aspect(bad, keep, reason);
-        check(!ok && keep == Aspect::Wide16x9 && reason.find("only 4:3, 16:10, 16:9 and 21:9") != std::string::npos && reason.find(std::string("\"") + bad + "\"") != std::string::npos,
+        check(!ok && keep == Aspect::Wide16x9 && reason.find("only 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9") != std::string::npos && reason.find(std::string("\"") + bad + "\"") != std::string::npos,
               std::string("\"") + bad + "\" is refused with the message and leaves the value alone");
     }
 }
 
 void test_aspect_canvases() {
-    group("shapes", "the canvas of each shape: 960 x 540, 960 x 600, 1260 x 540 and the original's 640 x 480; the pages stand where CanvasLayout::page says");
+    group("shapes", "the canvas of each shape: 960 x 540, 960 x 640, 960 x 600, 1200 x 540, 1260 x 540, 1920 x 540 and the original's 640 x 480; the pages stand where CanvasLayout::page says");
     struct Row { Aspect aspect; int32_t w; int32_t h; };
-    for (const Row& row : {Row{Aspect::Classic4x3, 640, 480}, Row{Aspect::Wide16x9, 960, 540}, Row{Aspect::Wide16x10, 960, 600}, Row{Aspect::Ultra21x9, 1260, 540}}) {
+    for (const Row& row : {Row{Aspect::Classic4x3, 640, 480}, Row{Aspect::Wide16x9, 960, 540}, Row{Aspect::Wide16x10, 960, 600}, Row{Aspect::Ultra21x9, 1260, 540}, Row{Aspect::Wide3x2, 960, 640}, Row{Aspect::Wide20x9, 1200, 540},
+                           Row{Aspect::Super32x9, 1920, 540}}) {
         const std::string name = aspect_name(row.aspect);
         check(canvas_width_of(row.aspect) == row.w && canvas_height_of(row.aspect) == row.h, name + ": the canvas is " + std::to_string(row.w) + " x " + std::to_string(row.h));
         check(CanvasLayout::of(row.aspect) == CanvasLayout{row.w, row.h}, name + ": CanvasLayout::of gives it");
@@ -363,6 +368,9 @@ void test_aspect_canvases() {
     }
     check(ScreenLayout::with_size(960, 600).view() == LayoutRect{16, 21, 762, 560}, "16:10: the map view is 762 x 560");
     check(ScreenLayout::with_size(1260, 540).view() == LayoutRect{16, 21, 1062, 500}, "21:9: the map view is 1062 x 500");
+    check(ScreenLayout::with_size(960, 640).view() == LayoutRect{16, 21, 762, 600}, "3:2: the map view is 762 x 600");
+    check(ScreenLayout::with_size(1200, 540).view() == LayoutRect{16, 21, 1002, 500}, "20:9: the map view is 1002 x 500");
+    check(ScreenLayout::with_size(1920, 540).view() == LayoutRect{16, 21, 1722, 500}, "32:9: the map view is 1722 x 500");
     check(ScreenLayout::with_size(960, 540).view() == LayoutRect{16, 21, 762, 500} && ScreenLayout::with_size(640, 480).view() == LayoutRect{16, 21, 442, 440}, "16:9 and 4:3 keep their map views");
 
     // the pages: the canvas itself where it is 640 x 480 or 960 x 540, the 960 x 540 page centred in the bigger wide ones
@@ -370,6 +378,9 @@ void test_aspect_canvases() {
     check(CanvasLayout::of(Aspect::Wide16x9).page() == LayoutRect{0, 0, 960, 540}, "16:9: the page is the canvas");
     check(CanvasLayout::of(Aspect::Wide16x10).page() == LayoutRect{0, 30, 960, 540}, "16:10: the 960 x 540 page is centred (30 rows of black above and below)");
     check(CanvasLayout::of(Aspect::Ultra21x9).page() == LayoutRect{150, 0, 960, 540}, "21:9: the 960 x 540 page is centred (150 columns of black either side)");
+    check(CanvasLayout::of(Aspect::Wide3x2).page() == LayoutRect{0, 50, 960, 540}, "3:2: the 960 x 540 page is centred (50 rows of black above and below)");
+    check(CanvasLayout::of(Aspect::Wide20x9).page() == LayoutRect{120, 0, 960, 540}, "20:9: the 960 x 540 page is centred (120 columns of black either side)");
+    check(CanvasLayout::of(Aspect::Super32x9).page() == LayoutRect{480, 0, 960, 540}, "32:9: the 960 x 540 page is centred (480 columns of black either side)");
     check(CanvasLayout{1280, 720}.page() == LayoutRect{160, 90, 960, 540} && CanvasLayout{800, 600}.page() == LayoutRect{0, 0, 800, 600} && CanvasLayout{960, 539}.page() == LayoutRect{0, 0, 960, 539},
           "any other canvas of at least 960 x 540 centres the page, a smaller one is its own page");
 }
@@ -382,10 +393,10 @@ ApplicationConfig parse(std::initializer_list<const char*> args) {
 }
 
 // The one table of the shapes (kAspectTable): everything else (canvas_width_of, aspect_name, kAllAspects, the place that the page's ants_set_aspect takes, the words of the refusals, the Esc menu's
-// picture row: test_game_menu) is read from it, and web/shapes.js has the same four rows (tests/scripts/test_web_shapes.py compares the two tables).
+// picture row: test_game_menu) is read from it, and web/shapes.js has the same rows (tests/scripts/test_web_shapes.py compares the two tables).
 void test_shape_table() {
     group("table", "the shape table: one row per shape, narrowest to widest; names, places and canvases are read from it");
-    check(kAspectTable.size() == 4 && kAllAspects.size() == kAspectTable.size(), "four shapes, and kAllAspects is the table's own order");
+    check(kAspectTable.size() == 7 && kAllAspects.size() == kAspectTable.size(), "seven shapes, and kAllAspects is the table's own order");
     for (size_t i = 0; i < kAspectTable.size(); ++i) {
         const AspectRow& row = kAspectTable[i];
         const std::string name = row.name;
@@ -407,12 +418,12 @@ void test_shape_table() {
         }
     }
     Aspect keep = Aspect::Wide16x10;
-    check(!aspect_at_place(-1, keep) && !aspect_at_place(4, keep) && !aspect_at_place(1000, keep) && keep == Aspect::Wide16x10, "a place outside the table is no shape, and leaves the value alone");
-    check(aspect_place(kWebDefaultAspect) == 2 && aspect_place(kDesktopDefaultAspect) == 2 && std::string(aspect_name(kPlatformDefaultAspect)) == "16:9", "the default is the row of 16:9");
-    check(aspect_names(" and ") == "4:3, 16:10, 16:9 and 21:9" && aspect_names(" or ") == "4:3, 16:10, 16:9 or 21:9", "the refusals name every row of the table, in its order");
+    check(!aspect_at_place(-1, keep) && !aspect_at_place(7, keep) && !aspect_at_place(1000, keep) && keep == Aspect::Wide16x10, "a place outside the table is no shape, and leaves the value alone");
+    check(aspect_place(kWebDefaultAspect) == 3 && aspect_place(kDesktopDefaultAspect) == 3 && std::string(aspect_name(kPlatformDefaultAspect)) == "16:9", "the default is the row of 16:9");
+    check(aspect_names(" and ") == "4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9" && aspect_names(" or ") == "4:3, 3:2, 16:10, 16:9, 20:9, 21:9 or 32:9", "the refusals name every row of the table, in its order");
     std::string why;
     Aspect none = Aspect::Classic4x3;
-    check(!parse_aspect("3:2", none, why) && why == "\"3:2\": only " + aspect_names(" and "), "a refusal says the names of the table");
+    check(!parse_aspect("5:4", none, why) && why == "\"5:4\": only " + aspect_names(" and "), "a refusal says the names of the table");
 }
 
 void test_aspect_option() {
@@ -428,14 +439,18 @@ void test_aspect_option() {
     check(c.aspect == Aspect::Wide16x10 && c.aspect_given && c.startup_error.empty(), "--aspect 16:10");
     c = parse({"ants", "--aspect", "21:9"});
     check(c.aspect == Aspect::Ultra21x9 && c.aspect_given && c.startup_error.empty(), "--aspect 21:9");
-    c = parse({"ants", "--aspect", "3:2"});
-    check(c.startup_error.find("--aspect") != std::string::npos && c.startup_error.find("3:2") != std::string::npos && c.startup_error.find("only 4:3, 16:10, 16:9 and 21:9") != std::string::npos &&
+    for (const Aspect each : {Aspect::Wide3x2, Aspect::Wide20x9, Aspect::Super32x9}) {
+        c = parse({"ants", "--aspect", aspect_name(each)});
+        check(c.aspect == each && c.aspect_given && c.startup_error.empty(), std::string("--aspect ") + aspect_name(each));
+    }
+    c = parse({"ants", "--aspect", "5:4"});
+    check(c.startup_error.find("--aspect") != std::string::npos && c.startup_error.find("5:4") != std::string::npos && c.startup_error.find("only 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9") != std::string::npos &&
               !c.aspect_given && c.aspect == kPlatformDefaultAspect,
-          "--aspect 3:2 is refused: \"" + c.startup_error + "\"");
+          "--aspect 5:4 is refused: \"" + c.startup_error + "\"");
     c = parse({"ants", "--aspect"});
-    check(c.startup_error.find("--aspect needs 4:3, 16:10, 16:9 or 21:9") != std::string::npos, "--aspect without a value is refused");
-    c = parse({"ants", "--aspect", "3:2", "--aspect", "16:9"});
-    check(c.startup_error.find("3:2") != std::string::npos && c.aspect == Aspect::Wide16x9 && c.aspect_given, "the first refusal stays the one that is reported");
+    check(c.startup_error.find("--aspect needs 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 or 32:9") != std::string::npos, "--aspect without a value is refused");
+    c = parse({"ants", "--aspect", "5:4", "--aspect", "16:9"});
+    check(c.startup_error.find("5:4") != std::string::npos && c.aspect == Aspect::Wide16x9 && c.aspect_given, "the first refusal stays the one that is reported");
     c = parse({"ants", "--window-size", "1280,720", "--aspect", "16:9", "--fullscreen"});
     check(c.aspect == Aspect::Wide16x9 && c.has_window_size && c.fullscreen && c.startup_error.empty(), "the other options are not disturbed");
 
@@ -443,7 +458,7 @@ void test_aspect_option() {
     {
         const QuietStdout quiet;
         Application app;
-        ApplicationConfig bad = parse({"ants", "--headless", "--aspect", "3:2"});
+        ApplicationConfig bad = parse({"ants", "--headless", "--aspect", "5:4"});
         check(!app.init(bad), "init() refuses to start with a refused --aspect");
     }
 }
@@ -467,7 +482,7 @@ void test_window_size_option() {
     c = parse({"ants", "--window-size", "10x10", "--window-size", "1280x720"});
     check(!c.has_window_size || c.window_w == 1280, "(a later good one still counts for the window)");
     check(c.startup_error.find("10x10") != std::string::npos, "the first refusal stays the one that is reported");
-    c = parse({"ants", "--aspect", "3:2", "--window-size", "bad"});
+    c = parse({"ants", "--aspect", "5:4", "--window-size", "bad"});
     check(c.startup_error.find("--aspect") != std::string::npos, "an earlier refusal of another option stays the one that is reported");
     // the parser alone
     int32_t w = 5, h = 6;
@@ -601,7 +616,7 @@ void test_application_aspects() {
             check(ww == 1280 && wh == 720, "16:9: --window-size wins");
         }
     }
-    for (const Aspect aspect : {Aspect::Wide16x10, Aspect::Ultra21x9}) {   // the two other wide shapes: the canvas, the match screen's layout and the picture are theirs
+    for (const Aspect aspect : {Aspect::Wide16x10, Aspect::Ultra21x9, Aspect::Wide3x2, Aspect::Wide20x9, Aspect::Super32x9}) {   // the other wide shapes: the canvas, the match screen's layout and the picture are theirs
         AppFixture f("", config_of(aspect, true, canvas_width_of(aspect), canvas_height_of(aspect)));
         const std::string name = aspect_name(aspect);
         check(f.ok, "--aspect " + name + " starts");
@@ -629,7 +644,7 @@ void test_application_aspects() {
     }
     {   // the window is CREATED in the shape of the picture it will show: it used to be created 1280 x 960 (4:3) and made 16:9 before the first frame, so that a 4:3 window could flash on screen at
         // the start. The first size (what SDL_CreateWindow got) has the canvas's aspect, 16:9 by default and 4:3 with --aspect 4:3, and it is the size that the window has afterwards: no resize followed.
-        for (const Aspect aspect : {Aspect::Wide16x9, Aspect::Classic4x3, Aspect::Wide16x10, Aspect::Ultra21x9}) {
+        for (const Aspect aspect : kAllAspects) {
             AppFixture f("", config_of(aspect, true), false);
             check(f.ok, std::string("a ") + aspect_name(aspect) + " application starts (the window's first size)");
             if (!f.ok) continue;
@@ -766,7 +781,8 @@ void test_settings_key() {
     check(aspect_of("aspect=4:3\n") == Aspect::Classic4x3, "aspect=4:3 gives the classic one");
     check(aspect_of("Scroll Speed=20\n") == Aspect::Classic4x3, "no key: 4:3");
     check(aspect_of("aspect=16:10\n") == Aspect::Wide16x10 && aspect_of("aspect=21:9\n") == Aspect::Ultra21x9, "aspect=16:10 and aspect=21:9 give their canvases");
-    check(aspect_of("aspect=3:2\n") == Aspect::Classic4x3, "aspect=3:2 is ignored (4:3), the game starts");
+    check(aspect_of("aspect=3:2\n") == Aspect::Wide3x2 && aspect_of("aspect=20:9\n") == Aspect::Wide20x9 && aspect_of("aspect=32:9\n") == Aspect::Super32x9, "aspect=3:2, aspect=20:9 and aspect=32:9 give their canvases");
+    check(aspect_of("aspect=5:4\n") == Aspect::Classic4x3, "aspect=5:4 is ignored (4:3), the game starts");
     check(aspect_of("aspect=\n") == Aspect::Classic4x3, "an empty value is ignored");
     check(aspect_of("aspect=wide\n") == Aspect::Classic4x3, "a word is ignored");
     check(aspect_of("aspect=16:9\n", config_of(Aspect::Classic4x3, true)) == Aspect::Classic4x3, "--aspect 4:3 beats aspect=16:9");

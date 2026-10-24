@@ -68,7 +68,7 @@ class TheFrontPageMarkup(PageCase):
     def test_the_page_is_one_lobby_the_room_with_its_four_colors_and_the_match_with_its_map_and_start(self):
         self.assertEqual(len(re.findall(r'<section class="card', self.page)), 0)                  # the one card of the earlier front page (New match: Friend seats, Sit here, START) is gone: the page is a room
         self.assertEqual(self.markup.count('<div class="grid" id="lobby">'), 1)
-        self.assertEqual(len(re.findall(r'<select ', self.page)), 1)                               # the map's (the drop-down of a color is made by the script, for the colors that the host can set)
+        self.assertEqual(len(re.findall(r'<select ', self.page)), 2)                               # the game type's and the picture's shape (the drop-down of a color is made by the script, for the colors that the host can set; the picture's is filled by the script from web/shapes.js)
         for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match',
                      'Opponents</span>', 'Sit here', 'seat-row-', 'id="h-match"', 'id="player-name"', 'btn_start', 'setup-hint', 'four.html'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
@@ -364,10 +364,9 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(len(re.findall(r"\baskName\(\{", self.script)), 2, "the name card is asked for by a typed code and a link to a room")
         self.assertIn("pencil.setAttribute('aria-label', 'Change your name');", self.script)
         self.assertIn("if (client && client.rename(checked.name)) remember(NAME_KEY, checked.name);", self.script)
-        # the picture's shape: the four buttons of the Picture row in the match column, 16:9 first and checked until the page reads another
-        self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture \(960 x 540\)">16:9</label>')
-        for shape, name in (("4-3", "Classic 4:3"), ("16-10", "16:10"), ("21-9", "21:9")):
-            self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-%s" value="[0-9:]+"><label for="aspect-%s" title="[^"]+">%s</label>' % (shape, shape, name))
+        # the picture's shape: the Picture row in the match column is a label, an empty dropdown that the script fills from the table (the first visit's shape is chosen by it) and the quiet line under it
+        self.found(self.markup, r'<label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture"></select></span><span class="fit-note" id="fit-note" hidden></span>')
+        self.assertNotIn('name="aspect"', self.markup)
         # the test room (a second page inside this file, with the games in frames) is gone
         for ident in ("room-panel", "play-tab", "all-here", "all-windows", "new-room", "any-link", "copy-any", "seat-rows", "room-code", "room-map", "popup-hint", "fill-hint", "sync", "grid", "frames-note"):
             self.assertEqual(self.markup.count('id="%s"' % ident), 0, ident)
@@ -453,7 +452,6 @@ class TheFrontPageMarkup(PageCase):
         ids = re.findall(r'\sid="([^"]+)"', self.markup)
         self.assertEqual(sorted(i for i in set(ids) if ids.count(i) > 1), [], "an id that is used twice")
         asked = set(re.findall(r"\$\('([\w-]+)'\)", self.script)) | set(re.findall(r"getElementById\('([\w-]+)'\)", self.script)) | set(re.findall(r"freshNode\('([\w-]+)'\)", self.script))
-        asked |= {"aspect-%s" % shape for shape in ("4-3", "16-10", "16-9", "21-9")} | {"fit-%s" % shape for shape in ("4-3", "16-10", "16-9", "21-9")}      # (asked for through the table of shapes)
         self.assertEqual(sorted(asked - set(ids)), [], "the script asks for an element that is not in the page")
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():

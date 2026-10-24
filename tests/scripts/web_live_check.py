@@ -664,7 +664,7 @@ def main():
             width_of = "(function () { var s = document.getElementById('game-stage').getBoundingClientRect(), b = document.getElementById('rbar').getBoundingClientRect(); return [Math.round(s.width), Math.round(b.width), Math.round(s.left), Math.round(b.left)]; })()"
             state = "(function () { return [document.getElementById('picpop').hidden, document.getElementById('picbtn').getAttribute('aria-expanded'), document.activeElement && document.activeElement.id]; })()"
             key = lambda tab, name, code, vk: [tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": code, "windowsVirtualKeyCode": vk}) for kind in ("keyDown", "keyUp")]
-            for query, shape in (("", "16:9"), ("&aspect=4:3", "4:3"), ("&aspect=16:10", "16:10"), ("&aspect=21:9", "21:9")):
+            for query, shape in (("", "16:9"), ("&aspect=4:3", "4:3"), ("&aspect=16:10", "16:10"), ("&aspect=21:9", "21:9"), ("&aspect=32:9", "32:9")):
                 tab = new_tab()
                 tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {}")
                 open_page(tab, "/play.html?replay=" + KEPT + query)
@@ -678,12 +678,13 @@ def main():
                 tab.click(bx[0], bx[1])
                 check(tab.ev(state)[:2] == [False, "true"], "%s: the button opens the window and says so" % shape)
                 pos = tab.ev("(function () { var p = document.getElementById('picpop').getBoundingClientRect(), b = document.getElementById('picbtn').getBoundingClientRect(), r = document.getElementById('rbar').getBoundingClientRect();"
-                             " return [p.bottom <= b.top, Math.abs(p.right - b.right) <= 2, p.left >= 0 && p.right <= window.innerWidth, p.top >= 0, [].map.call(document.querySelectorAll('#picpop button'), function (x) { return x.getAttribute('data-aspect'); }).join(' ')]; })()")
-                check(pos == [True, True, True, True, "4:3 16:10 16:9 21:9"], "%s: the window opens above the bar at its right end, inside the screen, with the four shapes (%s)" % (shape, pos))
+                             " return [p.bottom <= b.top, Math.abs(p.right - b.right) <= 2, p.left >= 0 && p.right <= window.innerWidth, p.top >= 0, [].map.call(document.querySelectorAll('#pic-select option'), function (x) { return x.value; }).join(' ')]; })()")
+                check(pos == [True, True, True, True, "4:3 3:2 16:10 16:9 20:9 21:9 32:9"], "%s: the window opens above the bar at its right end, inside the screen, with the dropdown of the seven shapes (%s)" % (shape, pos))
+                check(tab.ev("document.getElementById('pic-select').value") == shape, "%s: the dropdown shows the picture's shape" % shape)
                 if shape == "16:9":
                     shot(tab, "picture-open")
-                    check(tab.ev("(function () { var want = ANTS_PAGE.shapeForScreen(window.screen.width, window.screen.height), seen = [].filter.call(document.querySelectorAll('#picpop .fit-tag'), function (t) { return !t.hidden; }).map(function (t) { return t.parentNode.querySelector('button').getAttribute('data-aspect'); }); return JSON.stringify(seen) === JSON.stringify(want ? [want] : []); })()") is True,
-                          "the 'fills your screen' tag stands under the shape nearest to the screen, as in a match, and under no other")
+                    check(tab.ev("(function () { var n = document.getElementById('pic-note'); return (n.hidden ? '' : n.textContent) === AntsShapes.fillsLine(window.screen.width, window.screen.height); })()") is True,
+                          "the quiet line under the dropdown names the shape that fills the screen, as in a match, and says nothing when none does")
                     ox, oy = 200, 200
                     tab.click(ox, oy)
                     check(tab.ev(state)[:2] == [True, "false"], "a click elsewhere closes the window")
@@ -691,13 +692,14 @@ def main():
                     key(tab, "Escape", "Escape", 27)
                     check(tab.ev(state) == [True, "false", "picbtn"], "Esc closes the window and gives the focus back to the button")
                     tab.click(bx[0], bx[1])
-                    tx, ty = tab.ev("(function () { var r = document.querySelector('#picpop button[data-aspect=\"21:9\"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
-                    tab.click(tx, ty)
+                    tab.ev("document.getElementById('pic-select').focus(); 1")
+                    key(tab, "ArrowDown", "ArrowDown", 40)
+                    key(tab, "ArrowDown", "ArrowDown", 40)                                          # (16:9, 20:9, 21:9: the keys of a native dropdown; the window stays open)
                     time.sleep(0.5)
                     got = tab.ev(width_of)
-                    check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9" and abs(got[0] - got[1]) <= 1 and got[0] > 1200, "a shape picked in the window changes the picture at once and the bar follows it (stage %s, bar %s)" % (got[0], got[1]))
+                    check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9" and abs(got[0] - got[1]) <= 1 and got[0] > 1200, "a shape chosen in the window changes the picture at once and the bar follows it (stage %s, bar %s)" % (got[0], got[1]))
                     check(tab.ev("localStorage.getItem('ants.aspect.v2')") == "21:9" and "aspect=21:9" in tab.ev("location.search") and tab.ev(state)[0] is False, "the choice is remembered and put in the address; the window stays open")
-                    check(tab.ev("[].map.call(document.querySelectorAll('#picpop button'), function (x) { return x.getAttribute('aria-checked'); }).join(' ')") == "false false false true", "the chosen shape is the pressed one")
+                    check(tab.ev("document.getElementById('pic-select').value") == "21:9", "the chosen shape is the dropdown's")
                     tab.call("Page.reload")
                     check(until(tab, READY) is True and tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9", "the page, opened again with the address as it was, keeps the shape")
                     tab.call("Page.navigate", {"url": door.url("/play.html?replay=" + KEPT)})

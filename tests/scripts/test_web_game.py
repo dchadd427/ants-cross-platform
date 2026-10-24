@@ -140,7 +140,7 @@ class TheLookIsTheFrontPages(PageCase):
                 "Sprites and sounds": (style_of(read("asset_catalog", "index.html")), FAMILY)}
 
     def faces_and_corners(self):
-        """{where: rule} of every teal button face of the site: the front page (the buttons, the heading banner of the name card and the footer's two-state buttons; its black message strip .banner is no teal
+        """{where: rule} of every teal button face of the site: the front page (the buttons, the heading banner of the name card and the picture's dropdown; its black message strip .banner is no teal
         face), the game page, the style sheet of the changelog pages and Sprites and sounds."""
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         group = [d for s, d in blocks(style_of(read("asset_catalog", "index.html"))) if s.startswith(".sort-btn, .copy-btn,") and "border-radius" in d]
@@ -148,10 +148,11 @@ class TheLookIsTheFrontPages(PageCase):
         return {
             "the front page's buttons": rule(self.lobby_style, ".btn"),
             "the front page's name card title": rule(self.lobby_style, ".name-step-title"),
-            "the front page's two-state buttons": rule(self.lobby_style, ".shape .seg label"),
+            "the front page's picture dropdown": rule(self.lobby_style, ".shape-select"),
             "the game page's buttons": rule(self.style, ".btn"),
             "the game page's banner": rule(self.style, ".banner"),
             "the game page's pairs": rule(self.style, ".seg button"),
+            "the game page's picture dropdown": rule(self.style, ".pick-select"),
             "the changelog pages' buttons and banners": rule(classic, ".btn, .banner"),
             "the small buttons of Sprites and sounds": group[0],
         }
@@ -228,17 +229,18 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertEqual(declarations["background"], "var(--teal) var(--sheen, none)" if where == "the small buttons of Sprites and sounds" else "var(--teal) var(--sheen)", where)
         color_only = {
             "the front page's hovered button": rule(self.lobby_style, ".btn:hover"),
-            "the front page's hovered two-state button": rule(self.lobby_style, ".shape .seg label:hover"),
+            "the front page's hovered picture dropdown": rule(self.lobby_style, ".shape-select:hover"),
             # (the front page's teal match banner, `.card.match > .banner`, is gone: its .banner is the picture's black message strip, which has no teal face to keep the sheen of)
             "the game page's hovered button": rule(self.style, ".btn:hover"),
             "the game page's hovered pair": rule(self.style, '.seg button[aria-checked="false"]:hover'),
+            "the game page's hovered picture dropdown": rule(self.style, ".pick-select:hover"),
             "the changelog pages' hovered button": rule(classic, ".btn:hover"),
             "the hovered small buttons of Sprites and sounds": next(d for s, d in blocks(catalogue) if s.startswith(".sort-btn:hover, .copy-btn:hover,")),
         }
         for where, declarations in color_only.items():
             self.assertNotIn("background", declarations, where + " (the shorthand would wipe the sheen)")
             self.assertRegex(declarations["background-color"], r"^(?:var\(--teal(?:-hi)?\)|#[0-9a-f]{6})$", where)
-        for where, declarations in (("the front page's chosen two-state button", rule(self.lobby_style, ".shape .seg input:checked + label")), ("the game page's chosen pair", rule(self.style, '.seg button[aria-checked="true"]'))):
+        for where, declarations in (("the game page's chosen pair", rule(self.style, '.seg button[aria-checked="true"]')),):
             self.assertEqual(declarations["background"], "#102b25", where)                           # (flat and dark: pressed in)
         # The light of the sheen sits at the very top and is gone by 4 px, above the words (the gradient starts inside the border, so 4 px of it is 6 px below the outer edge; the 12 px words of the smallest
         # buttons, the chips of Sprites and sounds and the release plates, begin about 7 px down), so every text is still at least 4.5:1 on its face (the pairs of the tests above are the colors without
@@ -286,27 +288,19 @@ class TheLookIsTheFrontPages(PageCase):
         for token, bevel in (("--btn-shadow", "var(--bevel)"), ("--btn-shadow-down", "var(--bevel)"), ("--btn-shadow-sm", "var(--bevel-sm)")):
             self.assertTrue(roots["the style sheet of the changelog pages"][token].startswith(bevel + ", "), token)
 
-    def test_the_two_state_buttons_are_the_front_pages_with_the_chosen_one_pressed_in(self):
-        # The front page's two-state buttons are the labels of the footer's Screen radio buttons (`.shape .seg label`). They have the face of this page's `.seg button` (the colors, the frame, the corners,
-        # the bevel and the red shadow) but not its size: the picture's footer buttons are smaller (min-height 30px, padding 3px 10px, font 14px), while this page's are the 42 px pair of the game's
-        # menus, so only the face is compared, and the line height, which is the same.
-        button, label = rule(self.style, ".seg button"), rule(self.lobby_style, ".shape .seg label")
+    def test_the_picture_dropdown_has_the_face_of_the_two_pages_buttons_and_the_two_state_buttons_stay_the_game_pages(self):
+        # The front page's Picture row is a native dropdown (`.shape-select`) with the face of the game page's own (`.pick-select`): the colors, the frame, the corners, the bevel and the chevron, but
+        # not its size (the front page's is as wide as the match column). Only the face is compared. The two-state buttons that are left (the fullscreen mouse, the replay's speed) are this page's `.seg button`.
+        ours, theirs = rule(self.style, ".pick-select"), rule(self.lobby_style, ".shape-select")
         for name in ("line-height", "color", "background", "border", "border-radius"):
-            self.assertEqual(button[name], label[name], name)
-        # the shadow: the same small bevel, then a red shadow without blur. Pending a decision (reported): the offset of the red shadow differs, `.seg button` 2px 3px 0 var(--shadow)
-        # against `.shape .seg label` 2px 2px 0 var(--shadow), so the offset is not compared.
-        for shadow in (button["box-shadow"], label["box-shadow"]):
+            self.assertEqual(ours[name], theirs[name], name)
+        for shadow in (ours["box-shadow"], theirs["box-shadow"]):
             self.assertRegex(shadow, r"^var\(--bevel-sm\), \d+px \d+px 0 var\(--shadow\)$")
-        # Pending a decision (reported): the gap between the two buttons is 6px on this page (`.seg`) and 8px on the front page (`.shape .seg`), so it is not compared.
-        chosen, theirs = rule(self.style, '.seg button[aria-checked="true"]'), rule(self.lobby_style, ".shape .seg input:checked + label")
-        for name in ("color", "background", "transform", "box-shadow"):
-            self.assertEqual(chosen[name], theirs[name], name)
         # the buttons are the same elements as ever (the page's script and the browser checks find them by these)
-        for markup in ('id="aspect-16-9" data-aspect="16:9" aria-checked="true"', 'id="aspect-4-3" data-aspect="4:3" aria-checked="false"', 'id="lock-on" data-lock="on" aria-checked="true"',
-                       'id="lock-off" data-lock="off" aria-checked="false"'):
+        for markup in ('id="aspect-select"', 'id="lock-on" data-lock="on" aria-checked="true"', 'id="lock-off" data-lock="off" aria-checked="false"'):
             self.assertIn(markup, self.page)
-        self.assertEqual(len(re.findall(r'<button type="button" role="radio" id="(?:aspect-16-9|aspect-4-3|lock-on|lock-off)"', self.page)), 4)
-        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 4)           # (the picture and the mouse, the replay bar's speed and the replay bar's Picture window: TheReplayPage)
+        self.assertEqual(len(re.findall(r'<button type="button" role="radio" id="(?:lock-on|lock-off)"', self.page)), 2)
+        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 2)           # (the mouse and the replay bar's speed: TheReplayPage)
 
     def test_the_black_boxes_are_the_front_pages(self):
         # (the front page's black box with its frame is `.panel`; its name card, the same card as this page's own, has the same field)

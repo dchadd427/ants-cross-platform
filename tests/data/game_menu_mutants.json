@@ -317,13 +317,6 @@
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
-      "id": "shapes_misplaced",
-      "file": "web/game_menu.js",
-      "old": "var SHAPES = page.shapes.names();",
-      "new": "var SHAPES = page.shapes.names().reverse();",
-      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
-    },
-    {
       "id": "replay_not_detected",
       "file": "web/game_menu.js",
       "old": "var w = info.words, watching = where() === 1;",
@@ -1036,6 +1029,20 @@
         "test_game_menu"
       ],
       "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "picture_dropdown_writes_another_shape",
+      "file": "web/game_menu.js",
+      "old": "write: function (name) { page.pickShape(name); }",
+      "new": "write: function (name) { page.pickShape('16:9'); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_shows_the_first_entry",
+      "file": "web/game_menu.js",
+      "old": "            function mark() { select.value = own.read(); }",
+      "new": "            function mark() { select.value = 'x'; }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
   ]
 }

@@ -1,13 +1,14 @@
-// The live aspect switch: `Application::set_aspect` changes the shape of the picture while the game runs (the selector under the game in the browser: Classic 4:3, 16:10, 16:9, 21:9),
+// The live aspect switch: `Application::set_aspect` changes the shape of the picture while the game runs (the selector under the game in the browser: every row of the shape table, kAspectTable),
 // with no restart, no reconnect, and the simulation untouched.
-//   * layouts: from every shape to every shape (and back) the canvas, SDL's logical size, the match screen's layout, the renderer's, the HUD's and the camera's view, and the picture are
+//   * layouts: from every shape of the table to every shape (and back; seven shapes, 49 pairs) the canvas, SDL's logical size, the match screen's layout, the renderer's, the HUD's and the camera's view, and the picture are
 //     the new shape's; a frame is drawn there, in the whole canvas;
 //   * the match: the world point in the middle of the view stays in the middle of it, the zoom that the player chose is kept in the settings of the game and comes back where the new view
 //     offers it (it is one of the levels that the new view offers while it is away), and the simulation is the one that it would have been: the state hash after every tick is the one of a
 //     match that was never switched (the lock-step peers compare it, and a switched player must not drift);
 //   * the pages: the setup screen, the room, the loading screen, the quick help and the results are the 960 x 540 page, centred in the 16:10 and the 21:9 canvases with black around, and
-//     the whole canvas in 4:3 and 16:9; a match that starts after the switch is the new shape's;
+//     the whole canvas in 4:3 and 16:9 (every shape wider or taller than 16:9 is a centred page); a match that starts after the switch is the new shape's;
 //     (the pages are also compared with the 16:9 page, pixel for pixel; the quick help's button, the results and the pointer);
+//   * what a shape shows (the fairness numbers of docs/GAMEPLAY.md, "Picture shape"): the map view in tiles at the zoom 1 and the zoom-out limit of each shape, and that no shape changes anything but the view;
 //   * the guards: an application that was never started, and the shape it already has.
 // Usage: test_aspect_switch. Exit code 0 when every check passes.
 #include <SDL.h>
@@ -49,7 +50,8 @@ void group(const char* name, const char* what) {
     std::printf("[%s] %s\n", name, what);
 }
 
-constexpr Aspect kShapes4[] = {Aspect::Classic4x3, Aspect::Wide16x10, Aspect::Wide16x9, Aspect::Ultra21x9};
+/// Every shape of the table (the order of the page's dropdown)
+constexpr const auto& kShapes = kAllAspects;
 
 /// The map view that each shape's match screen has (wider and taller canvases show more map, as 16:9 shows more than 4:3 does)
 struct ViewSize {
@@ -62,6 +64,9 @@ ViewSize view_of(Aspect aspect) {
         case Aspect::Wide16x10: return {762, 560};
         case Aspect::Wide16x9: return {762, 500};
         case Aspect::Ultra21x9: return {1062, 500};
+        case Aspect::Wide3x2: return {762, 600};
+        case Aspect::Wide20x9: return {1002, 500};
+        case Aspect::Super32x9: return {1722, 500};
     }
     return {0, 0};
 }
@@ -170,8 +175,8 @@ void test_every_pair() {
     Application& app = rig.app;
     app.hud().dismiss_match_start_modal();
     int switches = 0;
-    for (const Aspect from : kShapes4) {
-        for (const Aspect to : kShapes4) {
+    for (const Aspect from : kShapes) {
+        for (const Aspect to : kShapes) {
             check(app.set_aspect(from), nm(from) + ": set_aspect says yes");
             check_shape(app, from, "(the start of the pair)");
             check(app.set_aspect(to), nm(from) + " to " + nm(to) + ": set_aspect says yes");
@@ -181,7 +186,7 @@ void test_every_pair() {
             ++switches;
         }
     }
-    check(switches == 16, "16 pairs were walked");
+    check(switches == 49, "49 pairs were walked");
     // the switch back to the first shape is what it was: the same layouts and the same picture, not just the same numbers
     check(app.set_aspect(Aspect::Wide16x9), "back to 16:9");
     check(app.layout() == ScreenLayout::with_size(960, 540) && same_rect(app.picture(), LayoutRect{0, 0, 960, 540}), "back at 16:9 the layout and the picture are the 16:9 ones exactly");
@@ -217,7 +222,7 @@ void test_camera_and_zoom() {
     middle_of(app, mx, my);
     const double start_x = mx;
     const double start_y = my;
-    for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10, Aspect::Classic4x3, Aspect::Wide16x9}) {
+    for (const Aspect to : kShapes) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes");
         middle_of(app, mx, my);
         const double tolerance = 1.0;                                                         // (a view of an odd width has its middle between two pixels; level 1 rounds the origin)
@@ -225,6 +230,7 @@ void test_camera_and_zoom() {
               nm(to) + ": the middle of the view is still the world point (" + std::to_string(mx) + ", " + std::to_string(my) + ") from (" + std::to_string(start_x) + ", " + std::to_string(start_y) + ")");
     }
     // the zoom: a level that 16:9 offers is chosen (the closest-in and the farthest-out one), the other shapes take the nearest level that their view offers, and 16:9 brings back the chosen one
+    check(app.set_aspect(Aspect::Wide16x9), "back to 16:9 (the levels are its view's)");
     const std::vector<float> levels = app.zoom_levels();
     check(levels.size() > 2, "the 16:9 view offers zoom levels");
     if (levels.size() <= 2) return;
@@ -234,7 +240,8 @@ void test_camera_and_zoom() {
         const LayoutRect view = app.layout().view();
         app.set_zoom(chosen, view.w / 2, view.h / 2);
         check(app.remembered_zoom() == chosen && app.zoom() == chosen, what + ": it is chosen, remembered and in use");
-        for (const Aspect to : {Aspect::Classic4x3, Aspect::Ultra21x9, Aspect::Wide16x10}) {
+        for (const Aspect to : kShapes) {
+            if (to == Aspect::Wide16x9) continue;
             check(app.set_aspect(to), what + ", " + nm(to) + ": set_aspect says yes (zoomed)");
             bool offered = false;
             for (const float l : app.zoom_levels()) offered = offered || l == app.zoom();
@@ -245,7 +252,7 @@ void test_camera_and_zoom() {
         check(app.zoom() == chosen && app.remembered_zoom() == chosen, what + ": back at 16:9 the chosen zoom is in use again (" + std::to_string(app.zoom()) + ")");
     }
     // the camera never shows beyond the map
-    for (const Aspect to : kShapes4) {
+    for (const Aspect to : kShapes) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (bounds)");
         const ViewportCamera& c = app.renderer().camera();
         const double vis_w = zoom::visible_exact(c.viewport_w, c.zoom);
@@ -262,7 +269,7 @@ void test_camera_and_zoom() {
 // The simulation does not see it
 // =====================================================================================================================================================
 
-/// The state hash after each of `ticks` ticks of a match; every `every` ticks (when it is more than 0) the shape changes to the next of the four
+/// The state hash after each of `ticks` ticks of a match; every `every` ticks (when it is more than 0) the shape changes to the next of the table
 std::vector<uint64_t> hashes_of_a_run(int ticks, int every) {
     std::vector<uint64_t> hashes;
     AppRig rig(Aspect::Wide16x9);
@@ -272,7 +279,7 @@ std::vector<uint64_t> hashes_of_a_run(int ticks, int every) {
     int next = 0;
     for (int tick = 0; tick < ticks; ++tick) {
         if (every > 0 && tick % every == 0) {
-            const Aspect to = kShapes4[next++ % 4];
+            const Aspect to = kShapes[static_cast<size_t>(next++) % kShapes.size()];
             if (!app.set_aspect(to)) return {};
             app.render_frame();                                                              // (the frame in the new shape: the drawing reads the world, it must not change it)
         }
@@ -304,7 +311,7 @@ std::vector<uint64_t> hashes_of_a_bot_run(int ticks, int every, bool with_bots) 
     int next = 0;
     for (int tick = 0; tick < ticks; ++tick) {
         if (every > 0 && tick % every == 0) {
-            const Aspect to = kShapes4[next++ % 4];
+            const Aspect to = kShapes[static_cast<size_t>(next++) % kShapes.size()];
             if (!app.set_aspect(to)) return {};
             app.render_frame();
         }
@@ -361,7 +368,7 @@ void test_pages() {
     park_pointer(app);
     const Picture reference = frame_of(app);                                                       // (the setup screen in 16:9: the page, which fills its canvas)
     check(reference.w == 960 && reference.h == 540 && lit_share(reference) > 0.2, "the setup screen of the 16:9 canvas is the 960 x 540 page, drawn");
-    for (const Aspect to : kShapes4) {
+    for (const Aspect to : kShapes) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (a page)");
         const CanvasLayout canvas = CanvasLayout::of(to);
         const LayoutRect page = canvas.page();
@@ -374,10 +381,10 @@ void test_pages() {
         const bool black_around = black_outside(p, page);
         check(black_around, nm(to) + ": nothing is drawn around the page");
         check(lit_share(p) > 0.2, nm(to) + ": the page is drawn");
-        if (to == Aspect::Wide16x10 || to == Aspect::Ultra21x9) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the page is the 16:9 page, pixel for pixel, at its place in the canvas");
+        if (!whole) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the page is the 16:9 page, pixel for pixel, at its place in the canvas");
     }
     // a match that starts after the switch has the shape's own screen
-    for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10}) {
+    for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10, Aspect::Wide3x2, Aspect::Wide20x9, Aspect::Super32x9}) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (before a match)");
         check(start_ticked_match(app, "GAUNTLET"), nm(to) + ": a match starts");
         check_shape(app, to, "in a match that started after the switch");
@@ -407,7 +414,7 @@ void test_other_pages_and_pointer() {
         park_pointer(app);
         const Picture reference = frame_of(app);
         check(lit_share(reference) > 0.2, "the quick help of the 16:9 canvas is drawn");
-        for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10, Aspect::Classic4x3, Aspect::Wide16x9}) {
+        for (const Aspect to : kShapes) {
             check(app.set_aspect(to), nm(to) + ": set_aspect says yes (quick help)");
             const bool wide = to != Aspect::Classic4x3;
             const QuickHelpLayout& q = QuickHelpLayout::of(wide);
@@ -418,7 +425,7 @@ void test_other_pages_and_pointer() {
             park_pointer(app);
             const Picture p = frame_of(app);
             check(lit_share(p) > 0.2 && black_outside(p, page), nm(to) + ": the quick help is drawn, with nothing around the page");
-            if (to == Aspect::Wide16x10 || to == Aspect::Ultra21x9) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the quick help is the 16:9 page, pixel for pixel, at its place in the canvas");
+            if (to != Aspect::Classic4x3 && to != Aspect::Wide16x9) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the quick help is the 16:9 page, pixel for pixel, at its place in the canvas");
         }
     }
     {
@@ -433,14 +440,14 @@ void test_other_pages_and_pointer() {
         park_pointer(app);
         const Picture reference = frame_of(app);
         check(lit_share(reference) > 0.2, "the results of the 16:9 canvas are drawn");
-        for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10, Aspect::Classic4x3, Aspect::Wide16x9}) {
+        for (const Aspect to : kShapes) {
             check(app.set_aspect(to), nm(to) + ": set_aspect says yes (results)");
             const LayoutRect page = CanvasLayout::of(to).page();
             check(same_rect(app.picture(), page) && app.scorecard().is_open(), nm(to) + ": the picture on screen is the page, the results stay up");
             park_pointer(app);
             const Picture p = frame_of(app);
             check(lit_share(p) > 0.2 && black_outside(p, page), nm(to) + ": the results are drawn, with nothing around the page");
-            if (to == Aspect::Wide16x10 || to == Aspect::Ultra21x9) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the results are the 16:9 page, pixel for pixel, at its place in the canvas");
+            if (to != Aspect::Classic4x3 && to != Aspect::Wide16x9) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the results are the 16:9 page, pixel for pixel, at its place in the canvas");
         }
     }
     // the pointer is a point of the picture on screen: it stays where it is on the canvas, and never outside the new picture (the nearest edge pixel)
@@ -462,6 +469,23 @@ void test_other_pages_and_pointer() {
         check(app.mouse_screen_x() == 639 && app.mouse_screen_y() == 479, "... it stays where it was");
         check(app.set_aspect(Aspect::Wide16x10), "21:9 to 16:10");
         check(app.mouse_screen_x() == 639 && app.mouse_screen_y() == 479, "... and on to 16:10: the same canvas point (inside it)");
+    }
+    {
+        AppRig rig(Aspect::Super32x9);
+        check(rig.ok, "a 32:9 match starts");
+        if (!rig.ok) return;
+        Application& app = rig.app;
+        app.hud().dismiss_match_start_modal();
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = 1900;
+        motion.y = 530;
+        app.handle_mouse_motion(motion);
+        check(app.mouse_screen_x() == 1900 && app.mouse_screen_y() == 530, "the pointer is at (1900, 530) of the 32:9 canvas, near its last pixel");
+        check(app.set_aspect(Aspect::Wide3x2), "32:9 to 3:2");
+        check(app.mouse_screen_x() == 959 && app.mouse_screen_y() == 530, "... the pointer is at the 3:2 picture's nearest edge pixel (959, 530), not outside it");
+        check(app.set_aspect(Aspect::Super32x9), "... and back to 32:9");
+        check(app.mouse_screen_x() == 959 && app.mouse_screen_y() == 530, "... it stays where it was");
     }
     {
         AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), false);                             // the setup screen: a page, whose pointer is the page's own
@@ -494,7 +518,7 @@ void test_dialogs_and_catch_up() {
     Application& app = rig.app;
     app.hud().start_match_modal(true);                                                              // ("Get ready to play!", until dismissed)
     check(app.hud().is_match_start_modal_active(), "the start dialog is up");
-    for (const Aspect to : {Aspect::Ultra21x9, Aspect::Classic4x3, Aspect::Wide16x10, Aspect::Wide16x9}) {
+    for (const Aspect to : kShapes) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (start dialog)");
         check(app.hud().is_match_start_modal_active(), nm(to) + ": the start dialog is still open");
         const Picture p = frame_of(app);
@@ -503,14 +527,14 @@ void test_dialogs_and_catch_up() {
     app.hud().dismiss_match_start_modal();
     app.hud().open_options();
     check(app.hud().is_options_open(), "the options window is open");
-    for (const Aspect to : {Aspect::Wide16x10, Aspect::Ultra21x9, Aspect::Classic4x3, Aspect::Wide16x9}) {
+    for (const Aspect to : kShapes) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (options)");
         check(app.hud().is_options_open(), nm(to) + ": the options window is still open");
         check(lit_share(frame_of(app)) > 0.4, nm(to) + ": a frame with the options window is drawn");
     }
     app.hud().close_options();
     app.hud().open_quit_dialog();
-    for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x9}) {
+    for (const Aspect to : kShapes) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (quit dialog)");
         check(app.hud().is_quit_dialog_open(), nm(to) + ": the quit dialog is still open");
         check(lit_share(frame_of(app)) > 0.4, nm(to) + ": a frame with the quit dialog is drawn");
@@ -518,13 +542,57 @@ void test_dialogs_and_catch_up() {
     app.hud().close_quit_dialog();
     // the loading screen of a machine that catches up to the server's log: drawn as a page (centred in the wide shapes), whatever the match's own picture is
     app.force_catch_up_screen_for_test(true);
-    for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10, Aspect::Classic4x3, Aspect::Wide16x9}) {
+    for (const Aspect to : kShapes) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (catch-up screen)");
         const Picture p = frame_of(app);
         check(lit_share(p) > 0.2, nm(to) + ": the catch-up screen is drawn");
         check(black_outside(p, CanvasLayout::of(to).page()), nm(to) + ": nothing is drawn around the catch-up page");
     }
     app.force_catch_up_screen_for_test(false);
+}
+
+// =====================================================================================================================================================
+// What a shape shows (fairness: docs/GAMEPLAY.md, "Picture shape")
+// =====================================================================================================================================================
+
+void test_what_a_shape_shows() {
+    group("shows", "a wider picture shows more of the map at the zoom 1 and less at the zoom-out limit; the shape changes the view and nothing else");
+    // The map view of each shape, the share of a 60 x 60 map (1920 world pixels a side: TREASURE's size) that it shows at the zoom 1 in tiles of 32 pixels, and the share of the map that it
+    // shows fully zoomed out (the limit is the map's: max(view_w / map_w, view_h / map_h), view_zoom.hpp). [shape, whole tenths of a tile wide at zoom 1, whole tenths high, per cent of the map at the limit, rounded]
+    struct Shows { Aspect aspect; int tiles_w10; int tiles_h10; int limit_percent; };
+    constexpr int64_t kMap = 1920;
+    int64_t area_of_16x9 = 0, area_of_32x9 = 0;
+    for (const Shows& want : {Shows{Aspect::Classic4x3, 138, 137, 100}, Shows{Aspect::Wide3x2, 238, 187, 79}, Shows{Aspect::Wide16x10, 238, 175, 73}, Shows{Aspect::Wide16x9, 238, 156, 66},
+                              Shows{Aspect::Wide20x9, 313, 156, 50}, Shows{Aspect::Ultra21x9, 331, 156, 47}, Shows{Aspect::Super32x9, 538, 156, 29}}) {
+        const ScreenLayout layout = ScreenLayout::with_size(canvas_width_of(want.aspect), canvas_height_of(want.aspect));
+        const LayoutRect view = layout.view();
+        check(view.w * 10 / TILE_SIZE == want.tiles_w10 && view.h * 10 / TILE_SIZE == want.tiles_h10,
+              nm(want.aspect) + ": the view shows " + std::to_string(want.tiles_w10 / 10.0) + " x " + std::to_string(want.tiles_h10 / 10.0) + " tiles at the zoom 1 (is " + std::to_string(view.w / static_cast<double>(TILE_SIZE)) + " x " +
+                  std::to_string(view.h / static_cast<double>(TILE_SIZE)) + ")");
+        const float z = zoom::floor_zoom(zoom::Fit{view.w, view.h, kMap, kMap, 0});
+        const double share = zoom::visible_exact(view.w, z) * zoom::visible_exact(view.h, z) / static_cast<double>(kMap * kMap);
+        check(static_cast<int>(share * 100.0 + 0.5) == want.limit_percent, nm(want.aspect) + ": fully zoomed out on a 60 x 60 map it shows " + std::to_string(want.limit_percent) + " per cent of the map (is " + std::to_string(share * 100.0) + ")");
+        if (want.aspect == Aspect::Wide16x9) area_of_16x9 = static_cast<int64_t>(view.w) * view.h;
+        if (want.aspect == Aspect::Super32x9) area_of_32x9 = static_cast<int64_t>(view.w) * view.h;
+    }
+    check(area_of_16x9 > 0 && area_of_32x9 * 100 / area_of_16x9 == 225, "32:9 shows 2.26 times the area of 16:9 at the zoom 1: the widest picture there is, and the most that a window can show at the zoom 1");
+    for (const Aspect each : kShapes) {
+        const LayoutRect view = ScreenLayout::with_size(canvas_width_of(each), canvas_height_of(each)).view();
+        check(static_cast<int64_t>(view.w) * view.h <= area_of_32x9, nm(each) + ": no shape shows more than 32:9 does at the zoom 1");
+    }
+    // the picture is the only thing that a shape changes: the canvas is the table's, the simulation's grid and the map are the same in every shape
+    AppRig rig(Aspect::Wide16x9);
+    check(rig.ok, "the match starts");
+    if (!rig.ok) return;
+    Application& app = rig.app;
+    app.hud().dismiss_match_start_modal();
+    const uint32_t grid_w = app.sim().grid().width();
+    const uint32_t grid_h = app.sim().grid().height();
+    const uint64_t hash = app.sim().state_hash().total;
+    for (const Aspect to : kShapes) {
+        check(app.set_aspect(to), nm(to) + ": set_aspect says yes (the world)");
+        check(app.sim().grid().width() == grid_w && app.sim().grid().height() == grid_h && app.sim().state_hash().total == hash, nm(to) + ": the map and the state hash are the ones of every other shape");
+    }
 }
 
 // =====================================================================================================================================================
@@ -571,6 +639,7 @@ int main(int argc, char* argv[]) {
     test_pages();
     test_other_pages_and_pointer();
     test_dialogs_and_catch_up();
+    test_what_a_shape_shows();
     test_guards();
     std::printf("\naspect switch: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

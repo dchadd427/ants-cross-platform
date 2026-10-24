@@ -17,9 +17,9 @@ The panel is a child of the stage (`#game-stage`), the element that goes fullscr
 
 - the game takes **no key, text, click, wheel or finger** (`Application::game_menu_takes`, told by `ants_menu_open`) and the map does not scroll at the edges; what a drag or a held button began before it opened is let go; the simulation, the sound and the network run on and nothing is sent;
 - closing takes effect after the events that were queued, so the Esc that closes it is not a second Esc for the game;
-- the page behind it is `inert`, Tab stays inside, the focus starts on Resume and goes back to the canvas when it closes, and the dialog is named (`role="dialog"`, `aria-modal`, the tabs a `tablist`, the sliders real `input type=range`);
+- the page behind it is `inert`, Tab stays inside, the focus starts on Resume and goes back to the canvas when it closes, and the dialog is named (`role="dialog"`, `aria-modal`, the tabs a `tablist`, the sliders real `input type=range`, the Picture shape a native `select`);
 - the **pointer lock is let go** (a locked pointer has no cursor) and asked for again when it closes, if it was held or the page is fullscreen; a lock that the page is given while the panel is up (fullscreen asks for one) is let go at once: the panel hears it on the window in the capture phase, because the page's own handler there stops the event before the document's, and the 250 ms poll catches the rest.
-- only the keys of the panel's own controls (Tab, Enter, Space, the arrows, Home, End and Esc) stop at the panel; every other key goes on to the page, which keeps the browser's reactions to Ctrl+S, F1 and the like off, and the game takes none while the panel is up. The focus goes back to the canvas when it closes, or to the Settings button when a key opened it.
+- only the keys of the panel's own controls (Tab, Enter, Space, the arrows, Home, End and Esc) stop at the panel; every other key goes on to the page, which keeps the browser's reactions to Ctrl+S, F1 and the like off, and the game takes none while the panel is up. The focus goes back to the canvas when it closes, or to the Settings button when a key opened it. **The Picture shape dropdown** (a native `select`, in the panel's focus order, so Tab wraps around it) takes the arrows, Home and End itself: each one changes the picture of the running game at once and the panel stays open; Esc on the closed dropdown closes the panel (Esc while its list is open belongs to the browser's list, which a headless browser cannot show: tried by hand).
 
 ## The rows
 
@@ -32,7 +32,7 @@ The rows are **one table in C++** (`include/ants_app/game_menu.hpp`, `src/ants_a
 | Sound | Sound effects volume | the original's `Sound Volume` | at the release, with the test voice |
 | Sound | **Mute everything** (new) | `mute=on` / `off` | at once; every slider stays where it is and a muted sound goes on playing |
 | Video | Fullscreen | the page | the page's own enter / leave (a real click: the browser's permission) |
-| Video | Picture shape | the page (`ants.aspect.v2`, the address) | the page's own selector button is clicked: one function for all of them; the row's words and range are made from the game's shape table (`kAspectTable`), the page's menu reads `web/shapes.js` |
+| Video | Picture shape | the page (`ants.aspect.v2`, the address) | a native dropdown that the panel fills from the page's table (`web/shapes.js`: the shape and its canvas, a quiet line under it names the shape that fills the screen); a choice calls the page's one function (the address and the stored choice follow); the row's range and words (their number) are made from the game's shape table (`kAspectTable`) |
 | Video | Fullscreen mouse | the page (`ants.pointerlock`) | Locked / Free; not on a touch screen |
 | Video | **Hit point numbers** (new: remembered) | `hp_numbers=` (Ctrl+L flips the same flag) | at once |
 | Video | Map scroll speed | the original's `Scroll Speed` | at the release |

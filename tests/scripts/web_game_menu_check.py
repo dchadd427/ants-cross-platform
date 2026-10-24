@@ -29,7 +29,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
-from web_aspect_check import Browser, NotReachable, Tab                      # noqa: E402
+from web_aspect_check import Browser, NotReachable, SHAPE_ENTRIES, Tab                # noqa: E402
 from web_hidden_check import find_browser                                    # noqa: E402
 
 LOCAL = "play.html?map=tiny&bots=easy,none,none"                             # a game for you and one computer player: Leave game is a forfeit
@@ -329,12 +329,41 @@ def computer(p, args, check):
     p.tab_to("video")
     tab.save_shot(args.shots, "menu-2-video")
     groups = json.loads(tab.ev("JSON.stringify([].map.call(document.querySelectorAll('.gm-seg'), function (g) { return [].map.call(g.children, function (b) { return b.textContent; }); }))"))
-    check(groups == [["Classic 4:3", "16:10", "16:9", "21:9"], ["Locked", "Free"], ["On", "Off"]], "the Video section has the picture's shapes, the mouse and the numbers (%s)" % groups)
-    p.click_text(".gm-seg .gm-opt", "21:9")
+    check(groups == [["Locked", "Free"], ["On", "Off"]], "the Video section has the mouse and the numbers as button pairs (%s)" % groups)
+    entries = json.loads(tab.ev("JSON.stringify([].map.call(document.querySelectorAll('.gm-panel select option'), function (o) { return [o.value, o.textContent]; }))"))
+    check(entries == SHAPE_ENTRIES, "...and the picture's shape is a dropdown with one entry for each shape of the table: the shape and its canvas (%s)" % entries)
+    check(tab.ev("document.querySelector('.gm-panel select').value") == "16:9" and tab.ev("document.querySelector('.gm-fits') ? document.querySelector('.gm-fits').textContent : ''").endswith(" fills your screen"), "...16:9 is chosen, and a quiet line under it names the shape that fills the screen")
+    tab.ev("document.querySelector('.gm-panel select').focus(); 1")
+    p.key("ArrowDown", "ArrowDown", 40)
     s = p.state()
-    check(s["aspect"] == "21:9" and s["shape"] == 3 and "aspect=21:9" in tab.ev("location.search"), "the shape is the selector's: the stage, the game's canvas and the address (%s, shape %s)" % (s["aspect"], s["shape"]))
-    check(tab.ev("document.getElementById('aspect-21-9').getAttribute('aria-checked')") == "true", "the selector under the picture follows")
-    p.click_text(".gm-seg .gm-opt", "16:9")
+    check(s["open"] and s["aspect"] == "20:9" and s["shape"] == 4 and tab.ev("Module._ants_probe(40)") == 1200, "ArrowDown on the dropdown changes the picture of the running game at once and the menu stays open (%s, shape %s)" % (s["aspect"], s["shape"]))
+    check(tab.ev("document.activeElement === document.querySelector('.gm-panel select')") and tab.ev("Module._ants_match_running()") == 1, "...the focus stays on the dropdown, the match goes on and the game did not take the arrow as a scroll")
+    p.key("ArrowDown", "ArrowDown", 40)
+    s = p.state()
+    check(s["aspect"] == "21:9" and s["shape"] == 5 and "aspect=21:9" in tab.ev("location.search"), "the shape is the page's own: the stage, the game's canvas and the address (%s, shape %s)" % (s["aspect"], s["shape"]))
+    check(tab.ev("document.getElementById('aspect-select').value") == "21:9" and tab.ev("localStorage.getItem('ants.aspect.v2')") == "21:9", "the dropdown under the picture follows, and the choice is remembered")
+    for _ in range(3):
+        p.key("ArrowDown", "ArrowDown", 40)
+    check(p.state()["aspect"] == "32:9" and p.state()["shape"] == 6, "the last entry is 32:9 (the game takes its number: %s)" % p.state()["shape"])
+    p.key("ArrowDown", "ArrowDown", 40)
+    check(p.state()["aspect"] == "32:9", "ArrowDown on the last entry stays there")
+    p.key("Tab", "Tab", 9)
+    check(p.state()["activeIn"] and tab.ev("document.activeElement !== document.querySelector('.gm-panel select')"), "Tab leaves the dropdown inside the panel (the page behind stays inert)")
+    for _ in range(40):                                                              # (Tab goes round: the focus returns to the dropdown and the panel never loses it)
+        if tab.ev("document.activeElement === document.querySelector('.gm-panel select')"):
+            break
+        p.key("Tab", "Tab", 9)
+    check(tab.ev("document.activeElement === document.querySelector('.gm-panel select')") and p.state()["activeIn"], "Tab wraps round the panel and reaches the dropdown again")
+    p.key("ArrowUp", "ArrowUp", 38)
+    p.key("ArrowUp", "ArrowUp", 38)
+    p.key("ArrowUp", "ArrowUp", 38)
+    p.key("ArrowUp", "ArrowUp", 38)
+    check(p.state()["aspect"] == "16:9" and p.state()["open"], "ArrowUp goes back to 16:9 (the menu stays open)")
+    p.esc()
+    check(not p.state()["open"], "Esc on the closed dropdown closes the menu")
+    p.esc()
+    check(bool(wait_for(lambda: p.state()["open"], 5, 0.05)), "(the panel again)")
+    p.tab_to("video")
     p.click_text(".gm-seg .gm-opt", "Off")
     s = p.state()
     check(s["hp"] == 0 and "hp_numbers=off\n" in s["settings"], "the hit point numbers go off and are remembered (hp %s)" % s["hp"])

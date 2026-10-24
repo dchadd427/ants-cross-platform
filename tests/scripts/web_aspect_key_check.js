@@ -1,9 +1,10 @@
 // Runs the pages' OWN code that decides the shape of the picture and remembers the player's choice, on a table of addresses and of what a browser had remembered
-// (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/lobby.html, the front page: its helpers, the table of the four shapes, the block of the picture's
+// (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/lobby.html, the front page: its helpers, the table of the shapes, the block of the picture's
 // shape, the selector's listener, and the functions that build the addresses of its hand-offs: the Rejoin / START address of a lobby (rejoinQuery) and the address of a game on this computer (localGameQuery)).
 // A first visit (nothing under the key `ants.aspect.v2` that names a shape, and no ?aspect= that does) starts in the shape NEAREST the player's screen (AntsShapes.firstVisit; 16:9 for a phone held upright
-// and for a screen that cannot be asked), the same on both pages and never stored: only the choice of the selector (the key) or ?aspect= in the address ends it (both pages have the same four shapes, 4:3, 16:10, 16:9 and
-// 21:9: the front page's match column has them as its "Picture" row "Classic 4:3", "16:10", "16:9" and "21:9", with the "fills your screen" tag under the one nearest to the computer's screen). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
+// and for a screen that cannot be asked), the same on both pages and never stored: only the choice of the selector (the key) or ?aspect= in the address ends it. Both pages have every shape of the
+// table (4:3, 3:2, 16:10, 16:9, 20:9, 21:9, 32:9) as a native dropdown that web/shapes.js fills (one entry for each row: the shape and its canvas), with the quiet line "16:10 fills your screen" under it for the shape
+// nearest to the computer's screen (within 8 per cent). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
 // starts with the first visit's shape once), and the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
 // stay): what it stores, tells the game (ants_set_aspect), puts in the address and shows is checked here on a page of fakes; "fills your screen" and the shapes' boxes too.
 // The front page's selector (the lobby is the page's only mode) keeps the match and the room, changes the shape of the page at once, remembers it, and the address of the hand-off to the game
@@ -83,25 +84,30 @@ function element(attributes) {
     return el;
 }
 
-// a group of radio buttons as a browser has them: checking one unchecks the others of the group (the page's own `checked = true` and the person's pick both go through this)
-function radioGroup(values) {
-    const group = {};
-    const state = {};
-    for (const value of values) {
-        const el = element();
-        state[value] = false;
-        Object.defineProperty(el, 'checked', { get() { return state[value]; }, set(on) { if (on) for (const other of values) state[other] = false; state[value] = !!on; } });
-        group[value] = el;
-    }
-    return group;
+// a dropdown (a <select>) as a browser has it for the page's code: the page fills it from the table (fillSelect makes the options with the document's createElement), its `value` is the chosen entry,
+// and the person's choice is a new value and a `change` event. Key events are listened to for the page's own reasons (the game's window listener must not see a dropdown's keys).
+function fakeSelect() {
+    const select = {
+        options: [],
+        listeners: {},
+        value: '',
+        appendChild(option) { select.options.push(option); return option; },
+        addEventListener(type, fn) { (select.listeners[type] = select.listeners[type] || []).push(fn); },
+        fire(type, event) { (select.listeners[type] || []).forEach((fn) => fn(event || {})); },
+    };
+    return select;
 }
-// the person picks a shape: the button is checked (the others are unchecked) and its change event comes
-function pick(r, shape) { r.radios[shape].checked = true; r.radios[shape].listeners.change(); }
-const shown = (r) => ['4:3', '16:10', '16:9', '21:9'].filter((shape) => r.radios[shape].checked).join('+');
+const fakeCreate = (tag) => { if (tag !== 'option') throw new Error('the page made a <' + tag + '>'); return {}; };
+// the person chooses another entry: the dropdown has the new value and says `change` (choosing the entry that is shown says nothing: no event)
+function choose(select, shape) { select.value = shape; select.fire('change'); }
+function pick(r, shape) { choose(r.select, shape); }
+const shown = (r) => r.select.value;
+// what a dropdown has after the page filled it: the shapes of the table, in its order, each as an entry with its words and its canvas
+const ENTRIES = AntsShapes.rows.map((row) => [row.name, row.label + ' \u00b7 ' + row.width + ' x ' + row.height]);
 
-const SHELL_SHAPES = ['4:3', '16:10', '16:9', '21:9'];                       // the game page's selector, left to right
+const SHELL_SHAPES = AntsShapes.names();                                         // the game page's dropdown, from the narrowest shape to the widest
 
-// web/shell.html: returns what the page decides and the buttons of its selector
+// web/shell.html: returns what the page decides and the dropdowns of its selector (the strip under the game and the replay's Picture window), with the quiet line under each
 function runShell(path, search, stored, options) {
     const text = fs.readFileSync(path, 'utf8');
     const page = between(text, 'ANTS_PAGE_BEGIN', 'ANTS_PAGE_END', path);
@@ -112,14 +118,9 @@ function runShell(path, search, stored, options) {
     const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner, options && options.framed);
     win.AntsReplay = { fileOf() { return 'ants-TEST-20260101-000000Z.antsrep'; }, liveIdOf() { return 'LIVE-1'; } };         // (replay_page.js: only a spectator's address asks for it)
     const stage = element({ 'data-aspect': '16:9' });
-    const buttons = SHELL_SHAPES.map((shape) => {
-        const button = element({ 'data-aspect': shape, 'aria-checked': shape === '16:9' ? 'true' : 'false' });
-        const tag = element();
-        tag.hidden = true;                                                           // (the markup hides every tag: the script shows one)
-        button.tag = tag;
-        button.parentNode = { querySelector(selectorText) { return selectorText === '.fit-tag' ? tag : null; } };
-        return button;
-    });
+    const selects = [fakeSelect(), fakeSelect()];                                   // (the strip under the game, the replay's Picture window)
+    const notes = [element(), element()];
+    notes.forEach((note) => { note.hidden = true; });                               // (the markup hides every line: the script shows them)
     const viewBar = element();
     viewBar.classes = [];
     viewBar.classList = { add(name) { viewBar.classes.push(name); }, contains(name) { return viewBar.classes.indexOf(name) !== -1; } };
@@ -127,7 +128,8 @@ function runShell(path, search, stored, options) {
     const doc = {
         body,
         getElementById(id) { if (id === 'game-stage') return stage; if (id === 'view-bar') return viewBar; throw new Error('the page asked for #' + id); },
-        querySelectorAll(selectorText) { if (selectorText === '.seg button[data-aspect]') return buttons; throw new Error('the page asked for ' + selectorText); },
+        createElement: fakeCreate,
+        querySelectorAll(selectorText) { if (selectorText === '.pick-select') return selects; if (selectorText === '.fit-note') return notes; throw new Error('the page asked for ' + selectorText); },
     };
     // the game that the page talks to: `ready` is the page's isReadyToPlay, `module` makes the Module of the program (given the window, so that it can look at where the page has gone by then, and
     // the events: what the page does, in order: the game's calls and the box's layout)
@@ -142,27 +144,29 @@ function runShell(path, search, stored, options) {
         + 'function relayout(force) { events.push("relayout"); relayoutCalls.push(force); }\n' + page + '\n' + selector
         + '\nvar postRunHook = ' + hook[1] + ';'
         + '\nreturn { aspect: ANTS_ASPECT, source: ANTS_ASPECT_SOURCE, args: ANTS_ARGS, key: ANTS_ASPECT_KEY, page: ANTS_PAGE, relayoutCalls: relayoutCalls, sync: antsSyncAspect, set: antsSetAspect,'
-        + ' postRun: postRunHook, ready: function () { return isReadyToPlay; }, setReady: function (on) { isReadyToPlay = on; }, now: function () { return ANTS_ASPECT; } };';
+        + ' postRun: postRunHook, ready: function () { return isReadyToPlay; }, setReady: function (on) { isReadyToPlay = on; }, now: function () { return ANTS_ASPECT; }, pick: antsPickShape };';
     const result = new Function('window', 'document', 'fakeModule', 'fakeHolds', 'fakeStage', 'events', code)(win, doc, fake, holdsFn, stage, events);
     result.storage = storage;
     result.win = win;
     result.holdsCalls = holdsCalls;
     result.stage = stage;
     result.body = body;
-    result.buttons = buttons;
+    result.selects = selects;
+    result.notes = notes;
     result.viewBar = viewBar;
     result.events = events;
-    // (read when asked: what the selector shows and where the tag stands change as the buttons are pressed)
-    Object.defineProperty(result, 'checked', { get() { return buttons.map((b) => b.attributes['data-aspect'] + '=' + b.attributes['aria-checked']).join(' '); } });
-    Object.defineProperty(result, 'tags', { get() { return buttons.filter((b) => !b.tag.hidden).map((b) => b.attributes['data-aspect']).join('+'); } });
+    result.press = (shape) => choose(selects[0], shape);                           // (the person chooses an entry of the strip's dropdown)
+    // (read when asked: what the dropdowns show and what the quiet line says change as they are used)
+    Object.defineProperty(result, 'checked', { get() { return selects.map((select) => select.value).join('+'); } });
+    Object.defineProperty(result, 'tags', { get() { const said = notes.map((note) => (note.hidden ? '' : note.textContent)); return said[0] === said[1] ? said[0].replace(/ fills your screen$/, '') : 'THE TWO LINES DIFFER: ' + said.join(' | '); } });
     return result;
 }
 // what the slot's CSS reads of each shape: its steps (the shape in the smallest whole numbers) and the widest the slot gets (the classic picture is not shown wider than 960 CSS pixels)
-const SLOT_VARS = {
-    '4:3': { '--ar-w': '4', '--ar-h': '3', '--stage-max': '960px' }, '16:10': { '--ar-w': '8', '--ar-h': '5', '--stage-max': '1280px' },
-    '16:9': { '--ar-w': '16', '--ar-h': '9', '--stage-max': '1280px' }, '21:9': { '--ar-w': '7', '--ar-h': '3', '--stage-max': '1280px' },
-};
-const checkedString = (shape) => SHELL_SHAPES.map((s) => s + '=' + (s === shape ? 'true' : 'false')).join(' ');
+const SLOT_VARS = Object.fromEntries(AntsShapes.rows.map((row) => [row.name, { '--ar-w': String(row.stepW), '--ar-h': String(row.stepH), '--stage-max': row.slot + 'px' }]));
+// ... which for the shapes of the table is: the classic picture is 960 CSS pixels wide at most, the others the page's 1280, and the widest canvas, 32:9, its own 1920 (a monitor shows it at 1x)
+const SLOT_RULE = { '4:3': ['4', '3', '960px'], '3:2': ['3', '2', '1280px'], '16:10': ['8', '5', '1280px'], '16:9': ['16', '9', '1280px'], '20:9': ['20', '9', '1280px'], '21:9': ['7', '3', '1280px'], '32:9': ['32', '9', '1920px'] };
+const checkedString = (shape) => shape + '+' + shape;                              // (the two dropdowns of the game page show the same shape)
+const tagOf = (shape) => (shape ? AntsShapes.rowOf(shape).label : '');             // (the quiet line says the shape's words: "Classic 4:3 fills your screen")
 
 // web/lobby.html.
 function runLobby(path, search, stored, options) {
@@ -178,21 +182,17 @@ function runLobby(path, search, stored, options) {
     const storage = makeStorage(stored);
     const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner, options && options.framed);
     if (options && options.noScreen) win.screen = undefined;                          // a window that has no screen to ask
-    const radios = radioGroup(['4:3', '16:10', '16:9', '21:9']);
+    const select = fakeSelect();
     const body = element();
-    // the Picture row: its tags (hidden until the page shows one) and the row, which gets the room for them
-    const tags = {};
-    for (const value of SHELL_SHAPES) { tags[value] = element(); tags[value].hidden = true; }
-    const bar = element();
-    bar.classes = [];
-    bar.classList = { add(name) { bar.classes.push(name); }, contains(name) { return bar.classes.indexOf(name) !== -1; } };
+    // the Picture row: its dropdown, and the quiet line under it (hidden until the page shows it)
+    const note = element();
+    note.hidden = true;
     const doc = {
         body,
+        createElement: fakeCreate,
         getElementById(id) {
-            const at = SHELL_SHAPES.map((value) => value.replace(':', '-'));
-            if (id.indexOf('aspect-') === 0 && at.indexOf(id.slice(7)) !== -1) return radios[SHELL_SHAPES[at.indexOf(id.slice(7))]];
-            if (id.indexOf('fit-') === 0 && at.indexOf(id.slice(4)) !== -1) return tags[SHELL_SHAPES[at.indexOf(id.slice(4))]];
-            if (id === 'shape-row') return bar;
+            if (id === 'aspect-select') return select;
+            if (id === 'fit-note') return note;
             throw new Error('the page asked for #' + id);
         },
     };
@@ -205,11 +205,11 @@ function runLobby(path, search, stored, options) {
     const result = new Function('window', 'document', 'Rules', code)(win, doc, rules);
     result.storage = storage;
     result.win = win;
-    result.radios = radios;
+    result.select = select;
+    result.note = note;
     result.body = body;
-    result.bar = bar;
-    // (read when asked) the tags that are shown, left to right
-    Object.defineProperty(result, 'tags', { get() { return SHELL_SHAPES.filter((value) => !tags[value].hidden).join('+'); } });
+    // (read when asked) the words of the quiet line under the dropdown, '' while it is hidden
+    Object.defineProperty(result, 'tags', { get() { return note.hidden ? '' : note.textContent.replace(/ fills your screen$/, ''); } });
     return result;
 }
 
@@ -229,13 +229,13 @@ const table = [
     ['the first of a repeated parameter wins', '?aspect=16:9&aspect=4:3', {}, '16:9', 'address'],
     ['a remembered value that is no shape', '', { [NEW_KEY]: 'junk' }, '16:9', 'default'],
     ['a remembered value with a blank behind it', '', { [NEW_KEY]: '4:3 ' }, '16:9', 'default'],
-    ['an address that is no shape is ignored', '?aspect=3:2', {}, '16:9', 'default'],
+    ['an address that is no shape is ignored', '?aspect=5:4', {}, '16:9', 'default'],
     ['an address that is no shape, a remembered 4:3', '?aspect=wide', { [NEW_KEY]: '4:3' }, '4:3', 'remembered'],
     ['a browser that refuses its storage (a private window)', '', THROWS, '16:9', 'default'],
     ['a browser that refuses its storage, the address asks for 4:3', '?aspect=4:3', THROWS, '4:3', 'address'],
 ];
 
-// the rows about 16:10 and 21:9 (both pages have all four shapes): [what it is, the address's query, what the browser had stored, the shape, where it came from]
+// the rows about the other shapes (both pages have every shape of the table): [what it is, the address's query, what the browser had stored, the shape, where it came from]
 const shellOnly = [
     ['the selector remembered 16:10', '', { [NEW_KEY]: '16:10' }, '16:10', 'remembered'],
     ['the selector remembered 21:9', '', { [NEW_KEY]: '21:9' }, '21:9', 'remembered'],
@@ -247,7 +247,17 @@ const shellOnly = [
     ['another parameter and ?aspect=16:10', '?x=1&aspect=16:10&y=2', {}, '16:10', 'address'],
     ['an address that is no shape, a remembered 21:9', '?aspect=wide', { [NEW_KEY]: '21:9' }, '21:9', 'remembered'],
     ['a remembered 16:10 with a blank behind it', '', { [NEW_KEY]: '16:10 ' }, '16:9', 'default'],
-    ['a remembered ratio that is no shape: 32:9', '', { [NEW_KEY]: '32:9' }, '16:9', 'default'],
+    ['the selector remembered 3:2', '', { [NEW_KEY]: '3:2' }, '3:2', 'remembered'],
+    ['the selector remembered 20:9', '', { [NEW_KEY]: '20:9' }, '20:9', 'remembered'],
+    ['the selector remembered 32:9', '', { [NEW_KEY]: '32:9' }, '32:9', 'remembered'],
+    ['the address asks for 3:2, nothing remembered', '?aspect=3:2', {}, '3:2', 'address'],
+    ['the address asks for 20:9 with the colon escaped', '?aspect=20%3A9', {}, '20:9', 'address'],
+    ['the address asks for 32:9 over a remembered 16:10', '?aspect=32:9', { [NEW_KEY]: '16:10' }, '32:9', 'address'],
+    ['the address asks for 16:9 over a remembered 32:9', '?aspect=16:9', { [NEW_KEY]: '32:9' }, '16:9', 'address'],
+    ['a remembered ratio that is no shape: 5:4', '', { [NEW_KEY]: '5:4' }, '16:9', 'default'],
+    ['a remembered ratio that is no shape: 19.5:9', '', { [NEW_KEY]: '19.5:9' }, '16:9', 'default'],
+    ['a remembered "fit" (the table has no such row yet)', '', { [NEW_KEY]: 'fit' }, '16:9', 'default'],
+    ['an address that is no shape: fit', '?aspect=fit', {}, '16:9', 'default'],
     ['a browser that refuses its storage, the address asks for 21:9', '?aspect=21:9', THROWS, '21:9', 'address'],
 ];
 
@@ -271,7 +281,9 @@ try {
         expect('shell.html, ' + label + ' (--aspect for the game)', r.args.slice(-2).join(' '), '--aspect ' + aspect);
         expect('shell.html, ' + label + ' (the stage)', r.stage.attributes['data-aspect'], aspect);
         expect('shell.html, ' + label + ' (the slot\'s custom properties)', JSON.stringify(r.body.style.props), JSON.stringify(SLOT_VARS[aspect]));
-        expect('shell.html, ' + label + ' (the selector shows it)', r.checked, checkedString(aspect));
+        expect('shell.html, ' + label + ' (... which are the rule: the shape\'s steps, and 960 / 1280 / its canvas\'s width as the widest slot)', Object.values(r.body.style.props).join(' '), SLOT_RULE[aspect].join(' '));
+        expect('shell.html, ' + label + ' (the dropdowns show it)', r.checked, checkedString(aspect));
+        expect('shell.html, ' + label + ' (both dropdowns have one entry for each row of the table, in its order, each with its canvas)', JSON.stringify(r.selects.map((select) => select.options.map((o) => [o.value, o.textContent]))), JSON.stringify([ENTRIES, ENTRIES]));
         expect('shell.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('shell.html, the key', r.key, NEW_KEY);
     }
@@ -292,11 +304,11 @@ try {
         expect('shell.html, ' + label + ' (where it came from)', r.source, source);
         expect('shell.html, ' + label + ' (--aspect for the game)', r.args.slice(-2).join(' '), '--aspect ' + aspect);
         expect('shell.html, ' + label + ' (the stage)', r.stage.attributes['data-aspect'], aspect);
-        expect('shell.html, ' + label + ' (the buttons show it)', r.checked, checkedString(aspect));
+        expect('shell.html, ' + label + ' (the dropdowns show it)', r.checked, checkedString(aspect));
     }
     {   // the spectator's pick is the player's: remembered under the same key and put in the address
         const r = runShell(shellPath, '?replay=a', {});
-        r.buttons[0].listeners.click();
+        r.press('4:3');
         expect('shell.html, a replay: a pick of 4:3 is remembered, shown and given to the stage', JSON.stringify(r.storage.writes) + ' ' + r.now() + ' ' + r.stage.attributes['data-aspect'], JSON.stringify([[NEW_KEY, '4:3']]) + ' 4:3 4:3');
     }
     // ?embed=1 is no frame of another page any more (the front page has no frames): the game page reads the remembered shape for it as for any address
@@ -313,50 +325,55 @@ try {
     // the page's own logic: the number that the game takes, the shape nearest to a screen, the box of each shape
     {
         const { page } = runShell(shellPath, '', {});
-        expect('shell.html, the shapes\' numbers (the selector\'s order, the game\'s kAllAspects)', SHELL_SHAPES.map((s) => page.shapeNumber(s)).join(','), '0,1,2,3');
-        expect('shell.html, a text that is no shape has no number', [page.shapeNumber('3:2'), page.shapeNumber(''), page.shapeNumber(null), page.shapeNumber(undefined), page.shapeNumber(16)].join(','), '-1,-1,-1,-1,-1');
+        expect('shell.html, the shapes\' numbers (the selector\'s order, the game\'s kAllAspects)', SHELL_SHAPES.map((s) => page.shapeNumber(s)).join(','), '0,1,2,3,4,5,6');
+        expect('shell.html, a text that is no shape has no number', [page.shapeNumber('5:4'), page.shapeNumber('fit'), page.shapeNumber(''), page.shapeNumber(null), page.shapeNumber(undefined), page.shapeNumber(16)].join(','), '-1,-1,-1,-1,-1,-1');
         // [the screen, its shape]: common screens (CSS pixels), then screens that no shape fills
         for (const [w, h, shape] of [[1920, 1080, '16:9'], [1366, 768, '16:9'], [2560, 1440, '16:9'], [3840, 2160, '16:9'], [1440, 900, '16:10'], [1680, 1050, '16:10'], [1920, 1200, '16:10'], [2560, 1600, '16:10'],
-                                      [3440, 1440, '21:9'], [2560, 1080, '21:9'], [3840, 1600, '21:9'], [1280, 1024, '4:3'], [1024, 768, '4:3'], [1600, 1200, '4:3'], [2256, 1504, '16:10'],
-                                      [5120, 1440, null], [1000, 1000, null], [768, 1024, null], [0, 0, null], [NaN, 600, null], [1920, -1, null], [Infinity, 1080, null]]) {
+                                      [3440, 1440, '21:9'], [2560, 1080, '21:9'], [3840, 1600, '21:9'], [1280, 1024, '4:3'], [1024, 768, '4:3'], [1600, 1200, '4:3'], [2256, 1504, '3:2'], [2736, 1824, '3:2'], [1500, 1000, '3:2'],
+                                      [3840, 1080, '32:9'], [5120, 1440, '32:9'], [915, 412, '20:9'], [2400, 1080, '20:9'], [7680, 1080, null], [1000, 1000, null], [768, 1024, null], [0, 0, null], [NaN, 600, null], [1920, -1, null], [Infinity, 1080, null]]) {
             expect('shell.html, the shape nearest to a ' + w + ' x ' + h + ' screen', page.shapeForScreen(w, h), shape);
         }
         // the box: the biggest whole number of steps of the shape's smallest whole numbers that fits, at least one; the canvas's scale is the same on both axes
         for (const [availW, availH, dpr, shape, bw, bh] of [[1280, 720, 1, '16:9', 1280, 720], [1280, 720, 1, '16:10', 1152, 720], [1280, 720, 1, '21:9', 1274, 546], [960, 720, 1, '4:3', 960, 720],
-                                                           [1280, 800, 2, '16:10', 2560, 1600], [1200, 700, 1.5, '21:9', 1799, 771], [10, 10, 1, '21:9', 7, 3], [10, 10, 1, '16:10', 8, 5], [0, 0, 1, '16:10', 8, 5]]) {
+                                                           [1280, 800, 2, '16:10', 2560, 1600], [1200, 700, 1.5, '21:9', 1799, 771], [10, 10, 1, '21:9', 7, 3], [10, 10, 1, '16:10', 8, 5], [0, 0, 1, '16:10', 8, 5],
+                                                           [1280, 720, 1, '3:2', 1080, 720], [1368, 912, 2, '3:2', 2736, 1824], [10, 10, 1, '3:2', 9, 6], [1280, 720, 1, '20:9', 1280, 576], [1200, 540, 2, '20:9', 2400, 1080], [10, 10, 1, '20:9', 20, 9],
+                                                           [1920, 540, 1, '32:9', 1920, 540], [1920, 540, 2, '32:9', 3840, 1080], [1280, 720, 1, '32:9', 1280, 360], [1700, 900, 1, '32:9', 1696, 477], [10, 10, 1, '32:9', 32, 9]]) {
             const fit = page.fitBox(availW, availH, dpr, shape);
-            const canvas = { '4:3': [640, 480], '16:10': [960, 600], '16:9': [960, 540], '21:9': [1260, 540] }[shape];
+            const canvas = { '4:3': [640, 480], '3:2': [960, 640], '16:10': [960, 600], '16:9': [960, 540], '20:9': [1200, 540], '21:9': [1260, 540], '32:9': [1920, 540] }[shape];
             expect('shell.html, the box of ' + shape + ' in ' + availW + ' x ' + availH + ' at ' + dpr, fit.bw + ' x ' + fit.bh, bw + ' x ' + bh);
             expect('shell.html, the box of ' + shape + ' in ' + availW + ' x ' + availH + ' at ' + dpr + ': the canvas fills it exactly (the same scale on both axes)', fit.bw * canvas[1] === fit.bh * canvas[0], true);
         }
         expect('shell.html, a box for a text that is no shape is the 16:9 one', JSON.stringify(page.fitBox(1280, 720, 1, 'wide')), JSON.stringify(page.fitBox(1280, 720, 1, '16:9')));
     }
 
-    // "fills your screen": under the shape nearest to the computer's screen, and nowhere else; the bar has room for it (a screen that no shape fills says nothing)
-    // (the shape that is checked on a first visit follows the screen: nearest, with no cutoff, so a screen with no tag still has a picture)
-    for (const [w, h, shape, first] of [[1920, 1080, '16:9', '16:9'], [1440, 900, '16:10', '16:10'], [3440, 1440, '21:9', '21:9'], [1280, 1024, '4:3', '4:3'], [5120, 1440, '', '21:9'], [1000, 1000, '', '4:3'], [1427, 1000, '4:3', '4:3'], [1467, 1000, '', '16:10']]) {
+    // "fills your screen": the quiet line under each dropdown names the shape nearest to the computer's screen when it is within 8 per cent of it, and there is no line when none is (the same line under both
+    // dropdowns); the bar has room for it
+    // (the shape that is shown on a first visit follows the screen: nearest, with no cutoff, so a screen with no line still has a picture)
+    for (const [w, h, shape, first] of [[1920, 1080, '16:9', '16:9'], [1440, 900, '16:10', '16:10'], [3440, 1440, '21:9', '21:9'], [1280, 1024, '4:3', '4:3'], [5120, 1440, '32:9', '32:9'], [2736, 1824, '3:2', '3:2'], [844, 390, '20:9', '20:9'],
+                                         [1000, 1000, '', '4:3'], [7680, 1080, '', '32:9'], [1427, 1000, '3:2', '3:2'], [1919, 1000, '16:9', '16:9'], [1921, 1000, '', '16:9'], [2036, 1000, '', '20:9'], [2800, 1000, '', '21:9']]) {
         const r = runShell(shellPath, '', {}, { screen: { width: w, height: h } });
-        expect('shell.html, the tag on a ' + w + ' x ' + h + ' screen', r.tags, shape);
-        expect('shell.html, the tag on a ' + w + ' x ' + h + ' screen: the bar makes room for it', r.viewBar.classes.join(' '), shape ? 'has-fit-tag' : '');
-        expect('shell.html, the tag on a ' + w + ' x ' + h + ' screen: the shape that is shown is the screen\'s nearest, with or without a tag', r.checked, checkedString(first));
+        expect('shell.html, the line on a ' + w + ' x ' + h + ' screen', r.tags, tagOf(shape));
+        expect('shell.html, the line on a ' + w + ' x ' + h + ' screen: the words', r.notes[0].hidden ? 'hidden' : r.notes[0].textContent, shape ? tagOf(shape) + ' fills your screen' : 'hidden');
+        expect('shell.html, the line on a ' + w + ' x ' + h + ' screen: the bar makes room for it', r.viewBar.classes.join(' '), shape ? 'has-fit-note' : '');
+        expect('shell.html, the line on a ' + w + ' x ' + h + ' screen: the shape that is shown is the screen\'s nearest, with or without a line', r.checked, checkedString(first));
     }
     {
         const r = runShell(shellPath, '?aspect=21:9', {}, { screen: { width: 1440, height: 900 } });
-        expect('shell.html, the tag stays under the screen\'s shape (16:10) while another is shown', r.tags, '16:10');
-        r.buttons[0].listeners.click();
+        expect('shell.html, the line stays under the screen\'s shape (16:10) while another is shown', r.tags, '16:10');
+        r.press('4:3');
         expect('shell.html, ... and when another shape is pressed', r.tags, '16:10');
     }
     {
         const r = runShell(shellPath, '', {}, { screen: { get width() { throw new Error('no screen'); }, height: 900 } });   // (a browser that refuses to say: no tag, the selector works)
-        expect('shell.html, a screen that cannot be asked: no tag, no breakage', r.tags + '|' + r.viewBar.classes.join(' '), '|');
-        r.buttons[1].listeners.click();
+        expect('shell.html, a screen that cannot be asked: no line, no breakage', r.tags + '|' + r.viewBar.classes.join(' ') + '|' + r.notes.map((n) => n.hidden).join(), '||true,true');
+        r.press('16:10');
         expect('shell.html, ... and the selector still works', r.aspect + ' ' + r.now(), '16:9 16:10');
     }
 
     // THE SELECTOR CHANGES THE PICTURE AT ONCE: no reload, no question, nothing to leave; it remembers, tells the game, sizes the box and puts the shape in the address
-    for (const [index, shape] of [[0, '4:3'], [1, '16:10'], [3, '21:9']]) {
+    for (const shape of ['4:3', '3:2', '16:10', '20:9', '21:9', '32:9']) {
         const r = runShell(shellPath, '', {});
-        r.buttons[index].listeners.click();
+        r.press(shape);
         const what = 'shell.html selector, ' + shape + ' pressed';
         expect(what + ': what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, shape]]));
         expect(what + ': the old key is untouched', Object.prototype.hasOwnProperty.call(r.storage.data, OLD_KEY), false);
@@ -364,6 +381,7 @@ try {
         expect(what + ': the picture is the new shape', r.now(), shape);
         expect(what + ': the stage names the shape (data-aspect: what the tests and the menu read; the CSS takes the custom properties below)', r.stage.attributes['data-aspect'], shape);
         expect(what + ': the slot\'s ratio and widest width, as custom properties of the table\'s rows (what the CSS reads)', JSON.stringify(r.body.style.props), JSON.stringify(SLOT_VARS[shape]));
+        expect(what + ': ... which are the rule', Object.values(r.body.style.props).join(' '), SLOT_RULE[shape].join(' '));
         expect(what + ': the selector shows it', r.checked, checkedString(shape));
         expect(what + ': a game that has not started starts with it (--aspect)', r.args.slice(-2).join(' '), '--aspect ' + shape);
         expect(what + ': the box is laid out again, and the game\'s window system told (a forced layout)', JSON.stringify(r.relayoutCalls), '[true]');
@@ -373,43 +391,44 @@ try {
     }
     {
         const r = runShell(shellPath, '', {});
-        r.buttons[2].listeners.click();                                              // 16:9 when it is 16:9: remembered, nothing to change
-        expect('shell.html selector, 16:9 pressed on 16:9: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
-        expect('shell.html selector, 16:9 pressed on 16:9: nothing moves', r.win.assigned.length + ' ' + r.relayoutCalls.length + ' ' + r.win.history.replaced.length + ' ' + r.events.length, '0 0 0 0');
+        r.press('16:9');                                              // 16:9 when it is 16:9 (a change event that names the shape that is shown): remembered, nothing to change
+        expect('shell.html selector, 16:9 chosen on 16:9: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
+        expect('shell.html selector, 16:9 chosen on 16:9: nothing moves', r.win.assigned.length + ' ' + r.relayoutCalls.length + ' ' + r.win.history.replaced.length + ' ' + r.events.length, '0 0 0 0');
     }
     {
-        // one shape after another: each press is its own change (16:9 to 21:9 to 4:3 to 16:10 and back), the last wins; every change tells the game and lays the box out, the game first
+        // one shape after another: each choice is its own change (16:9 to 32:9 to 3:2 to 20:9 to 21:9 to 4:3 to 16:10 and back), the last wins; every change tells the game (by the shape's place in the table) and lays the box out, the game first
         const calls = [];
+        const sequence = ['32:9', '3:2', '20:9', '21:9', '4:3', '16:10', '16:9'];
         const r = runShell(shellPath, '?join=/ws&room=abc&seat=1&name=Ann', {}, { ready: true, module: (win, events) => ({ _ants_set_aspect(n) { events.push('game:' + n); calls.push(n); return 1; }, _ants_leave_match() { win.left = true; } }) });
-        for (const index of [3, 0, 1, 2]) r.buttons[index].listeners.click();
-        expect('shell.html selector, four presses in a joined match: the game is told each shape\'s number, then the box is laid out, every time', r.events.join(' '), 'game:3 relayout game:0 relayout game:1 relayout game:2 relayout');
-        expect('shell.html selector, four presses in a joined match: the picture is the last', r.now() + ' ' + r.checked, '16:9 ' + checkedString('16:9'));
-        expect('shell.html selector, four presses in a joined match: no reload, no question, the game is not told to leave', r.win.assigned.length + ' ' + r.win.asked.length + ' ' + (r.win.left === true), '0 0 false');
-        expect('shell.html selector, four presses in a joined match: the room, the seat and the name stay in the address, the shape follows', r.win.history.replaced.map((u) => /[?&]join=(%2F|\/)ws/.test(u) && /[?&]room=abc(&|$)/.test(u) && /[?&]seat=1(&|$)/.test(u) && /[?&]name=Ann(&|$)/.test(u)).join(',') + ' ' + r.win.history.replaced.map((u) => (u.match(/aspect=([^&]*)/) || [])[1]).join(' '), 'true,true,true,true 21:9 4:3 16:10 16:9');
-        expect('shell.html selector, four presses in a joined match: the choice of each press is remembered', JSON.stringify(r.storage.writes), JSON.stringify(['21:9', '4:3', '16:10', '16:9'].map((v) => [NEW_KEY, v])));
+        for (const shape of sequence) r.press(shape);
+        expect('shell.html selector, seven choices in a joined match: the game is told each shape\'s number, then the box is laid out, every time', r.events.join(' '), 'game:6 relayout game:1 relayout game:4 relayout game:5 relayout game:0 relayout game:2 relayout game:3 relayout');
+        expect('shell.html selector, seven choices in a joined match: the picture is the last', r.now() + ' ' + r.checked, '16:9 ' + checkedString('16:9'));
+        expect('shell.html selector, seven choices in a joined match: no reload, no question, the game is not told to leave', r.win.assigned.length + ' ' + r.win.asked.length + ' ' + (r.win.left === true), '0 0 false');
+        expect('shell.html selector, seven choices in a joined match: the room, the seat and the name stay in the address, the shape follows', r.win.history.replaced.map((u) => /[?&]join=(%2F|\/)ws/.test(u) && /[?&]room=abc(&|$)/.test(u) && /[?&]seat=1(&|$)/.test(u) && /[?&]name=Ann(&|$)/.test(u)).join(',') + ' ' + r.win.history.replaced.map((u) => (u.match(/aspect=([^&]*)/) || [])[1]).join(' '), 'true,true,true,true,true,true,true ' + sequence.join(' '));
+        expect('shell.html selector, seven choices in a joined match: the choice of each press is remembered', JSON.stringify(r.storage.writes), JSON.stringify(sequence.map((v) => [NEW_KEY, v])));
     }
     // the same in a joined match of a browser that holds its seat's key and in one that does not (a waiting room): no question, no Leave (the seat is kept: the connection is never touched)
     for (const holds of [true, false]) {
         const r = runShell(shellPath, '?join=/ws&room=abc', {}, { ready: true, holds, module: (win) => ({ _ants_match_running() { return 1; }, _ants_set_aspect() { return 1; }, _ants_leave_match() { win.left = true; } }) });
-        r.buttons[3].listeners.click();
+        r.press('21:9');
         expect('shell.html selector, a room' + (holds ? ' with the key held' : ' still waiting') + ': no question, no Leave, no reload', r.win.asked.length + ' ' + (r.win.left === true) + ' ' + r.win.assigned.length, '0 false 0');
         expect('shell.html selector, a room' + (holds ? ' with the key held' : ' still waiting') + ': the picture changed, and the key lookup was not needed', r.now() + ' ' + r.holdsCalls.length, '21:9 0');
     }
     {
         const r = runShell(shellPath, '', {}, { ready: true, module: () => ({ _ants_match_running() { return 1; }, _ants_set_aspect() { return 1; } }) });
-        r.buttons[1].listeners.click();
+        r.press('16:10');
         expect('shell.html selector, a match of this computer: no question, no reload, the picture changed', r.win.asked.length + ' ' + r.win.assigned.length + ' ' + r.now(), '0 0 16:10');
     }
     // a game that is not up yet: nothing to tell; it starts with the shape (--aspect), and the postRun hook asks again for a game that began with the shape before
     {
         const calls = [];
         const r = runShell(shellPath, '', {}, { ready: false, module: () => ({ _ants_set_aspect(n) { calls.push(n); return 1; } }) });
-        r.buttons[3].listeners.click();
+        r.press('21:9');
         expect('shell.html selector, the game not ready yet: it is not told (an export called while the program compiles is undefined for good)', JSON.stringify(calls), '[]');
         expect('shell.html selector, the game not ready yet: the page changed all the same', r.now() + ' ' + r.args.slice(-2).join(' ') + ' ' + JSON.stringify(r.relayoutCalls), '21:9 --aspect 21:9 [true]');
         r.postRun();                                                                 // (the page's own hook, as it is written in shell.html: the game is up)
-        expect('shell.html, the postRun hook gives the game the shape that the page has now (it began with another)', r.ready() + ' ' + JSON.stringify(calls), 'true [3]');
-        expect('shell.html, ... and again: the same number, the game keeps it', r.sync() + ' ' + JSON.stringify(calls), '1 [3,3]');
+        expect('shell.html, the postRun hook gives the game the shape that the page has now (it began with another)', r.ready() + ' ' + JSON.stringify(calls), 'true [5]');
+        expect('shell.html, ... and again: the same number, the game keeps it', r.sync() + ' ' + JSON.stringify(calls), '1 [5,5]');
     }
     // a name that is "--aspect" (a hand-made address) is a value, not the option: the press changes the option's own value, and the name and the option stay as they were. The game's start puts the
     // program's name in front of the arguments (the same array: no place of the option can be kept), and the name gate adds a name at the end
@@ -417,46 +436,46 @@ try {
         const r = runShell(shellPath, '?join=/ws&room=abc&seat=1&name=--aspect', {}, { ready: false, module: () => ({ _ants_set_aspect() { return 1; } }) });
         const before = r.args.length;
         r.args.unshift('./this.program');
-        r.buttons[3].listeners.click();
+        r.press('21:9');
         const nameAt = r.args.indexOf('--name');
         expect('shell.html selector, a name that reads "--aspect" and the program name in front: the name and the option are as they were; the option has the new shape',
                JSON.stringify([r.args.length === before + 1, r.args[nameAt + 1], r.args.slice(-2), r.args.filter((a) => a === '--aspect').length]), '[true,"--aspect",["--aspect","21:9"],2]');
         const late = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: false, module: () => ({ _ants_set_aspect() { return 1; } }) });
         late.args.unshift('./this.program');
         late.args.push('--name', '--aspect');
-        late.buttons[1].listeners.click();
+        late.press('16:10');
         expect('shell.html selector, a name that reads "--aspect" added after the option: the option has the new shape, the name stays',
                JSON.stringify([late.args.slice(-4), late.args.filter((a) => a === '16:10').length]), '[["--aspect","16:10","--name","--aspect"],1]');
         const plain = runShell(shellPath, '', {}, { ready: false, module: () => ({ _ants_set_aspect() { return 1; } }) });
         plain.args.unshift('./this.program');
-        plain.buttons[0].listeners.click();
+        plain.press('4:3');
         expect('shell.html selector, the program name in front of the arguments: the option still gets the new shape', plain.args.join(' ').slice(-24), './this.program --aspect 4:3'.slice(-24));
     }
     for (const [what, module] of [['a game without the export', () => ({})], ['a game whose export throws', () => ({ _ants_set_aspect() { throw new Error('the game is gone'); } })], ['no Module at all', () => undefined]]) {
         const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, module });
-        r.buttons[1].listeners.click();
+        r.press('16:10');
         expect('shell.html selector with ' + what + ': the page changes all the same (box, stage, address), nothing reloads', r.now() + ' ' + JSON.stringify(r.relayoutCalls) + ' ' + r.win.assigned.length + ' ' + r.stage.attributes['data-aspect'], '16:10 [true] 0 16:10');
         expect('shell.html selector with ' + what + ': ... and the sync says that the game did not answer', r.sync(), -1);
     }
     {
         const r = runShell(shellPath, '', {}, { ready: true, module: () => ({ _ants_set_aspect() { return 0; } }) });
-        r.buttons[1].listeners.click();
+        r.press('16:10');
         expect('shell.html, a game that does not know the number: the sync returns what the game said', r.sync(), 0);
     }
     {
         const r = runShell(shellPath, '', THROWS);                                  // a private window: the click still changes the picture, nothing breaks
-        r.buttons[1].listeners.click();
+        r.press('16:10');
         expect('shell.html selector without storage: the picture changes (no reload)', r.now() + ' ' + r.win.assigned.length + ' ' + JSON.stringify(r.relayoutCalls), '16:10 0 [true]');
     }
     {
         const r = runShell(shellPath, '', {});                                       // an address that cannot be rewritten: the picture changes, the browser remembers
         r.win.history.replaceState = () => { throw new Error('a sandboxed frame'); };
-        r.buttons[3].listeners.click();
+        r.press('21:9');
         expect('shell.html selector, an address that cannot be rewritten: the picture changes all the same', r.now() + ' ' + JSON.stringify(r.storage.writes), '21:9 ' + JSON.stringify([[NEW_KEY, '21:9']]));
     }
     {
         const r = runShell(shellPath, '', {});
-        r.set('3:2');                                                                // a text that is no shape never changes anything
+        r.set('5:4');                                                                // a text that is no shape never changes anything
         r.set(null);
         r.set('16:9');
         expect('shell.html, antsSetAspect with a text that is no shape (or the shape it has) changes nothing', r.now() + ' ' + r.relayoutCalls.length + ' ' + r.win.history.replaced.length, '16:9 0 0');
@@ -467,7 +486,8 @@ try {
         const r = runLobby(lobbyPath, search, stored);
         expect('lobby.html, ' + label + ' (the shape)', r.aspect, aspect);
         expect('lobby.html, ' + label + ' (the body)', r.body.attributes['data-aspect'], aspect);
-        expect('lobby.html, ' + label + ' (the button that is checked)', shown(r), aspect);
+        expect('lobby.html, ' + label + ' (the entry that is chosen)', shown(r), aspect);
+        expect('lobby.html, ' + label + ' (the dropdown has one entry for each row of the table, in its order, each with its canvas)', JSON.stringify(r.select.options.map((o) => [o.value, o.textContent])), JSON.stringify(ENTRIES));
         expect('lobby.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('lobby.html, the key', r.key, NEW_KEY);
         // a pick (the address, a stored shape) goes into the hand-off; a first visit's shape does NOT: the game page works out its own, when it loads (a phone that opens the front page upright and is turned
@@ -476,29 +496,31 @@ try {
         expect('lobby.html, ' + label + ' (the START hand-off carries a pick, and only a pick)', r.handoff('k7m2xq', 1, 'Ann'), '?join=/ws&room=k7m2xq&seat=1&name=Ann' + named);
         expect('lobby.html, ' + label + ' (a game for one carries a pick, and only a pick)', r.solo('Ann').endsWith('&name=Ann' + named), true);
     }
-    // "fills your screen": the tag stands under the shape nearest to the computer's screen, and under none when no shape is within 8 per cent of it (the same rule as the game page's, on the same screens)
+    // "fills your screen": the quiet line under the dropdown names the shape nearest to the computer's screen, and there is none when no shape is within 8 per cent of it (the same rule as the game page's, on the same screens)
     for (const [label, screen, shape, first] of [
         ['a 1920 x 1080 monitor', { width: 1920, height: 1080 }, '16:9', '16:9'], ['a 1440 x 900 laptop', { width: 1440, height: 900 }, '16:10', '16:10'], ['a 3440 x 1440 ultrawide', { width: 3440, height: 1440 }, '21:9', '21:9'],
         ['a 1280 x 1024 monitor', { width: 1280, height: 1024 }, '4:3', '4:3'], ['a 2560 x 1080 ultrawide', { width: 2560, height: 1080 }, '21:9', '21:9'], ['a 1366 x 768 laptop', { width: 1366, height: 768 }, '16:9', '16:9'],
-        ['a 5120 x 1440 super ultrawide (32:9)', { width: 5120, height: 1440 }, '', '21:9'], ['a square screen', { width: 1000, height: 1000 }, '', '4:3'], ['a screen of no size', { width: 0, height: 0 }, '', '16:9'],
+        ['a 5120 x 1440 super ultrawide (32:9)', { width: 5120, height: 1440 }, '32:9', '32:9'], ['a 2736 x 1824 tablet (3:2)', { width: 2736, height: 1824 }, '3:2', '3:2'], ['a phone held sideways, 844 x 390', { width: 844, height: 390 }, '20:9', '20:9'],
+        ['a screen wider than 32:9 (7680 x 1080): nearest, no line', { width: 7680, height: 1080 }, '', '32:9'],
+        ['a square screen', { width: 1000, height: 1000 }, '', '4:3'], ['a screen of no size', { width: 0, height: 0 }, '', '16:9'],
         ['a screen that is not a number', { width: NaN, height: 1080 }, '', '16:9'], ['a phone held upright (390 x 844)', { width: 390, height: 844 }, '', '16:9'],
-        ['a screen 7 per cent off 4:3 (1427 x 1000): still near enough', { width: 1427, height: 1000 }, '4:3', '4:3'], ['a screen 10 per cent off 4:3 and 9 off 16:10 (1467 x 1000): too far from every shape', { width: 1467, height: 1000 }, '', '16:10'],
+        ['a screen 5 per cent off 3:2 (1427 x 1000): near enough', { width: 1427, height: 1000 }, '3:2', '3:2'], ['a screen 9 per cent off 16:9 (1940 x 1000): too far from every shape', { width: 1940, height: 1000 }, '', '16:9'],
     ]) {
         const r = runLobby(lobbyPath, '', {}, { screen });
-        expect('lobby.html, ' + label + ': the tag', r.tags, shape);
-        expect('lobby.html, ' + label + ': the Picture row has room for it only when there is one', r.bar.classes.join(' '), shape ? 'has-fit-tag' : '');
-        expect('lobby.html, ' + label + ': what is checked is the screen\'s nearest shape, with or without a tag (until the player picks)', shown(r) + ' ' + r.now(), first + ' ' + first);
+        expect('lobby.html, ' + label + ': the line', r.tags, tagOf(shape));
+        expect('lobby.html, ' + label + ': the words', r.note.hidden ? 'hidden' : r.note.textContent, shape ? tagOf(shape) + ' fills your screen' : 'hidden');
+        expect('lobby.html, ' + label + ': what is chosen is the screen\'s nearest shape, with or without a line (until the player picks)', shown(r) + ' ' + r.now(), first + ' ' + first);
         const shell = runShell(shellPath, '', {}, { screen });
-        expect('lobby.html, ' + label + ': the same shape as the game page tags', r.tags, shell.tags);
+        expect('lobby.html, ' + label + ': the same line as the game page\'s', r.tags, shell.tags);
     }
     {
         const r = runLobby(lobbyPath, '', {}, { noScreen: true });                       // a window with no screen to ask: no tag, no error, the page still has its shape
-        expect('lobby.html, a window with no screen to ask: no tag, no room for one, 16:9 checked', r.tags + '|' + r.bar.classes.join(' ') + '|' + shown(r), '||16:9');
-        expect('lobby.html, the default screen of the test (1920 x 1080) tags 16:9', runLobby(lobbyPath, '', {}).tags, '16:9');
+        expect('lobby.html, a window with no screen to ask: no line, 16:9 chosen', r.tags + '|' + r.note.hidden + '|' + shown(r), '|true|16:9');
+        expect('lobby.html, the default screen of the test (1920 x 1080) names 16:9', runLobby(lobbyPath, '', {}).tags, '16:9');
     }
     {
         const r = runLobby(lobbyPath, '', { [NEW_KEY]: '21:9' }, { screen: { width: 1440, height: 900 } });   // the tag follows the screen, the checked shape follows the choice: they are two things
-        expect('lobby.html, 21:9 remembered on a 1440 x 900 laptop: 21:9 is checked and the tag is under 16:10', shown(r) + ' ' + r.tags, '21:9 16:10');
+        expect('lobby.html, 21:9 remembered on a 1440 x 900 laptop: 21:9 is chosen and the line names 16:10', shown(r) + ' ' + r.tags, '21:9 16:10');
     }
 
     // THE LOBBY (the room view, the front page itself: the page's `room` is '' and no game of it sits in a frame): a pick changes the shape of the page AT ONCE, with no reload and no question, so that the
@@ -515,7 +537,7 @@ try {
         const again = runLobby(lobbyPath, '', r.storage.data);
         expect('lobby.html selector, the next visit', again.aspect + ' ' + shown(again), '4:3 4:3');
     }
-    for (const picked of ['16:10', '21:9']) {                                       // the two shapes that the front page learned: picked like the others
+    for (const picked of ['16:10', '3:2', '20:9', '21:9', '32:9']) {                  // the other shapes of the table: picked like the first
         const r = runLobby(lobbyPath, '', { [OLD_KEY]: '4:3' });
         pick(r, picked);
         expect('lobby.html selector, ' + picked + ' picked: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, picked]]));
@@ -542,7 +564,7 @@ try {
     }
     {
         const r = runLobby(lobbyPath, '', {});
-        r.radios['16:9'].listeners.change();                                         // the same picture again (a change event that names the shape that is already there): remembered, nothing to change
+        r.select.fire('change');                                                     // the same picture again (a change event that names the shape that is already there): remembered, nothing to change
         expect('lobby.html selector, 16:9 again: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
         expect('lobby.html selector, 16:9 again: no reload, nothing is asked, the shape is the same', r.win.assigned.length + ' ' + r.win.asked.length + ' ' + r.now() + ' ' + r.body.attributes['data-aspect'], '0 0 16:9 16:9');
     }
@@ -565,31 +587,35 @@ try {
 
     // ---- A FIRST VISIT: nothing stored that names a shape, no ?aspect= that does: the shape NEAREST the player's screen, the same on both pages, and never stored ----
     // [what it is, the device's screen (CSS pixels), the window's inner size (undefined: not asked), the shape]. Nearest by the ratio of ratios, no cutoff; ties and the middles between shapes are checked
-    // on both sides (the middle of 4:3 and 16:10 is 1.4606, of 16:10 and 16:9 1.6866, of 16:9 and 21:9 2.0367).
+    // on both sides (the middle of 4:3 and 3:2 is 1.4142, of 3:2 and 16:10 1.5492, of 16:10 and 16:9 1.6866, of 16:9 and 20:9 1.9876, of 20:9 and 21:9 2.2771, of 21:9 and 32:9 2.8802).
     for (const [label, [w, h], inner, shape, framed] of [
         ['a 1920 x 1080 monitor', [1920, 1080], undefined, '16:9'], ['a 1366 x 768 laptop', [1366, 768], undefined, '16:9'], ['a 3840 x 2160 monitor', [3840, 2160], undefined, '16:9'],
         ['a 1440 x 900 laptop', [1440, 900], undefined, '16:10'], ['a 2560 x 1600 laptop', [2560, 1600], undefined, '16:10'], ['a 1920 x 1200 monitor', [1920, 1200], undefined, '16:10'],
-        ['a 2256 x 1504 laptop (3:2: no shape of its own yet, 16:10 is the nearest)', [2256, 1504], undefined, '16:10'],
+        ['a 2256 x 1504 laptop (3:2)', [2256, 1504], undefined, '3:2'], ['a 2736 x 1824 tablet (3:2)', [2736, 1824], undefined, '3:2'], ['a 1500 x 1000 window-sized screen (3:2)', [1500, 1000], undefined, '3:2'],
         ['a 3440 x 1440 ultrawide', [3440, 1440], undefined, '21:9'], ['a 2560 x 1080 ultrawide', [2560, 1080], undefined, '21:9'],
-        ['a 5120 x 1440 super ultrawide: no cutoff, the widest shape', [5120, 1440], undefined, '21:9'], ['a 7680 x 1080 screen', [7680, 1080], undefined, '21:9'],
+        ['a 3840 x 1080 super ultrawide (32:9)', [3840, 1080], undefined, '32:9'], ['a 5120 x 1440 super ultrawide (32:9)', [5120, 1440], undefined, '32:9'], ['a 7680 x 1080 screen: no cutoff, the widest shape', [7680, 1080], undefined, '32:9'],
         ['a 1024 x 768 screen', [1024, 768], undefined, '4:3'], ['a 1600 x 1200 screen', [1600, 1200], undefined, '4:3'],
         ['a 1280 x 1024 (5:4) screen picks Classic 4:3', [1280, 1024], undefined, '4:3'], ['a square screen', [1000, 1000], undefined, '4:3'], ['a screen far narrower than 4:3 but sideways (1001 x 1000)', [1001, 1000], undefined, '4:3'],
-        ['1.46 just on the 4:3 side of the middle of 4:3 and 16:10', [1460, 1000], undefined, '4:3'], ['1.462 just on the 16:10 side', [1462, 1000], undefined, '16:10'],
+        ['1.414 just on the 4:3 side of the middle of 4:3 and 3:2', [1414, 1000], undefined, '4:3'], ['1.415 just on the 3:2 side', [1415, 1000], undefined, '3:2'],
+        ['1.549 just on the 3:2 side of the middle of 3:2 and 16:10', [1549, 1000], undefined, '3:2'], ['1.550 just on the 16:10 side', [1550, 1000], undefined, '16:10'],
         ['1.686 just on the 16:10 side of the middle of 16:10 and 16:9', [1686, 1000], undefined, '16:10'], ['1.688 just on the 16:9 side', [1688, 1000], undefined, '16:9'],
-        ['2.036 just on the 16:9 side of the middle of 16:9 and 21:9', [2036, 1000], undefined, '16:9'], ['2.038 just on the 21:9 side', [2038, 1000], undefined, '21:9'],
+        ['1.987 just on the 16:9 side of the middle of 16:9 and 20:9', [1987, 1000], undefined, '16:9'], ['1.988 just on the 20:9 side', [1988, 1000], undefined, '20:9'],
+        ['2.277 just on the 20:9 side of the middle of 20:9 and 21:9', [2277, 1000], undefined, '20:9'], ['2.278 just on the 21:9 side', [2278, 1000], undefined, '21:9'],
+        ['2.880 just on the 21:9 side of the middle of 21:9 and 32:9', [2880, 1000], undefined, '21:9'], ['2.881 just on the 32:9 side', [2881, 1000], undefined, '32:9'],
         // a phone held sideways picks by its landscape ratio
-        ['a phone held sideways, 844 x 390', [844, 390], undefined, '21:9'], ['a phone held sideways, 915 x 412', [915, 412], undefined, '21:9'], ['a phone held sideways, 800 x 360', [800, 360], undefined, '21:9'],
+        ['a phone held sideways, 844 x 390 (2.164: 20:9 is nearer than 21:9)', [844, 390], undefined, '20:9'], ['a phone held sideways, 915 x 412', [915, 412], undefined, '20:9'], ['a phone held sideways, 800 x 360', [800, 360], undefined, '20:9'],
+        ['a phone held sideways, 932 x 430 (2.167)', [932, 430], undefined, '20:9'], ['a phone held sideways, 2400 x 1080 (the pixels of a 20:9 phone)', [2400, 1080], undefined, '20:9'],
         ['a 16:9 phone held sideways, 640 x 360', [640, 360], undefined, '16:9'], ['a tablet held sideways, 1024 x 768', [1024, 768], undefined, '4:3'], ['a tablet held sideways, 1280 x 800', [1280, 800], undefined, '16:10'],
         // a device held upright is told to turn it and starts in 16:9, whatever its ratio (the picture is as wide as the screen)
         ['a phone held upright, 390 x 844', [390, 844], [390, 664], '16:9'], ['a phone held upright, 360 x 800', [360, 800], [360, 650], '16:9'],
         ['a tablet held upright, 768 x 1024 (not Classic 4:3)', [768, 1024], [768, 900], '16:9'], ['a portrait monitor, 1080 x 1920, in a portrait window', [1080, 1920], [1080, 1700], '16:9'],
-        ['a phone that reports an upright screen but has a sideways window (844 x 340): sideways, 21:9', [390, 844], [844, 340], '21:9'],
+        ['a phone that reports an upright screen but has a sideways window (844 x 340): sideways, 20:9', [390, 844], [844, 340], '20:9'],
         ['a tablet that reports an upright screen but has a sideways window: sideways, 4:3', [768, 1024], [1024, 700], '4:3'],
         // in a frame (the replay in a match page) the frame's own window says nothing: an upright device stays 16:9 even though its frame is wide
         ['an upright tablet with a wide frame of a match page (the frame is no sign that it is held sideways)', [768, 1024], [1024, 700], '16:9', true], ['an upright phone with a wide frame', [390, 844], [390, 245], '16:9', true],
         ['a landscape screen in a frame: the screen decides', [1440, 900], [800, 500], '16:10', true],
         // the screen, not the window: a narrow or tall window on a landscape screen changes nothing
-        ['a 1440 x 900 screen with a tall narrow window', [1440, 900], [500, 900], '16:10'], ['a 3440 x 1440 screen with a small window', [3440, 1440], [800, 500], '21:9'],
+        ['a 1440 x 900 screen with a tall narrow window', [1440, 900], [500, 900], '16:10'], ['a 3440 x 1440 screen with a small window', [3440, 1440], [800, 500], '21:9'], ['a 3840 x 1080 screen with a small window', [3840, 1080], [800, 500], '32:9'],
         // numbers that are none: no screen to ask
         ['a screen of no size', [0, 0], undefined, '16:9'], ['a negative height', [1920, -1], undefined, '16:9'], ['a width that is not a number', [NaN, 1080], undefined, '16:9'], ['an infinite width', [Infinity, 1080], undefined, '16:9'],
     ]) {
@@ -597,21 +623,21 @@ try {
         const shell = runShell(shellPath, '', {}, { screen, inner, framed });
         const lobby = runLobby(lobbyPath, '', {}, { screen, inner, framed });
         expect('first visit, shell.html, ' + label + ' (the shape)', shell.aspect + ' ' + shell.source, shape + ' default');
-        expect('first visit, shell.html, ' + label + ' (--aspect for the game, the stage, the selector)', shell.args.slice(-2).join(' ') + ' ' + shell.stage.attributes['data-aspect'] + ' ' + shell.checked, '--aspect ' + shape + ' ' + shape + ' ' + checkedString(shape));
+        expect('first visit, shell.html, ' + label + ' (--aspect for the game, the stage, the dropdowns)', shell.args.slice(-2).join(' ') + ' ' + shell.stage.attributes['data-aspect'] + ' ' + shell.checked, '--aspect ' + shape + ' ' + shape + ' ' + checkedString(shape));
         expect('first visit, shell.html, ' + label + ' (loading stores nothing)', JSON.stringify(shell.storage.writes) + JSON.stringify(shell.storage.data), '[]{}');
-        expect('first visit, lobby.html, ' + label + ' (the shape, the body, the checked button)', lobby.aspect + ' ' + lobby.body.attributes['data-aspect'] + ' ' + shown(lobby), shape + ' ' + shape + ' ' + shape);
+        expect('first visit, lobby.html, ' + label + ' (the shape, the body, the chosen entry)', lobby.aspect + ' ' + lobby.body.attributes['data-aspect'] + ' ' + shown(lobby), shape + ' ' + shape + ' ' + shape);
         expect('first visit, lobby.html, ' + label + ' (loading stores nothing)', JSON.stringify(lobby.storage.writes) + JSON.stringify(lobby.storage.data), '[]{}');
         expect('first visit, lobby.html, ' + label + ' (START and a game for one hand NO shape on: the game page decides when it loads)', lobby.handoff('k7m2xq', 1, 'Ann') + ' ' + /aspect/.test(lobby.solo('Ann')), '?join=/ws&room=k7m2xq&seat=1&name=Ann false');
         expect('first visit, ' + label + ': the two pages show the same shape and tag the same one', shell.aspect + ' ' + shell.tags, lobby.aspect + ' ' + lobby.tags);
     }
-    {   // the tag is where it was: under the shape within 8 per cent of the screen, and that is the shape that a first visit starts in whenever there is one
-        for (const [w, h] of [[1920, 1080], [1440, 900], [3440, 1440], [1280, 1024], [1024, 768], [1366, 768], [2560, 1080], [1680, 1050]]) {
+    {   // the line names the shape within 8 per cent of the screen, and that is the shape that a first visit starts in whenever there is one
+        for (const [w, h] of [[1920, 1080], [1440, 900], [3440, 1440], [1280, 1024], [1024, 768], [1366, 768], [2560, 1080], [1680, 1050], [2736, 1824], [3840, 1080], [915, 412]]) {
             const r = runShell(shellPath, '', {}, { screen: { width: w, height: h } });
-            expect('first visit, a ' + w + ' x ' + h + ' screen: the tag stands under the shape that is shown', r.tags, r.aspect);
+            expect('first visit, a ' + w + ' x ' + h + ' screen: the line names the shape that is shown', r.tags, tagOf(r.aspect));
         }
     }
     {   // devicePixelRatio and the browser's zoom scale both numbers of the screen: only the ratio counts
-        for (const [w, h, shape] of [[720, 450, '16:10'], [1440, 900, '16:10'], [2880, 1800, '16:10'], [4320, 2700, '16:10'], [960, 540, '16:9'], [2560, 1440, '16:9'], [1720, 720, '21:9'], [3440, 1440, '21:9']]) {
+        for (const [w, h, shape] of [[720, 450, '16:10'], [1440, 900, '16:10'], [2880, 1800, '16:10'], [4320, 2700, '16:10'], [960, 540, '16:9'], [2560, 1440, '16:9'], [1720, 720, '21:9'], [3440, 1440, '21:9'], [1368, 912, '3:2'], [2736, 1824, '3:2'], [1920, 540, '32:9'], [3840, 1080, '32:9']]) {
             expect('first visit, a ' + w + ' x ' + h + ' screen at any device pixel ratio', runShell(shellPath, '', {}, { screen: { width: w, height: h } }).aspect + ' ' + runLobby(lobbyPath, '', {}, { screen: { width: w, height: h } }).aspect, shape + ' ' + shape);
         }
     }
@@ -631,12 +657,14 @@ try {
             ['nothing stored', '', {}, '16:10', 'default'],
             ['16:9 stored (somebody who picked 16:9 keeps it: a stored 16:9 is not "nothing")', '', { [NEW_KEY]: '16:9' }, '16:9', 'remembered'],
             ['21:9 stored', '', { [NEW_KEY]: '21:9' }, '21:9', 'remembered'],
+            ['32:9 stored', '', { [NEW_KEY]: '32:9' }, '32:9', 'remembered'],
+            ['3:2 stored', '', { [NEW_KEY]: '3:2' }, '3:2', 'remembered'],
             ['4:3 stored', '', { [NEW_KEY]: '4:3' }, '4:3', 'remembered'],
             ['16:10 stored (the shape that is nearest anyway is still a pick)', '', { [NEW_KEY]: '16:10' }, '16:10', 'remembered'],
             ['the old key 4:3 (not read)', '', { [OLD_KEY]: '4:3' }, '16:10', 'default'],
             ['the old key 16:9 (not read)', '', { [OLD_KEY]: '16:9' }, '16:10', 'default'],
             ['junk stored (no shape: no pick)', '', { [NEW_KEY]: 'junk' }, '16:10', 'default'],
-            ['a shape that the table does not have stored (3:2)', '', { [NEW_KEY]: '3:2' }, '16:10', 'default'],
+            ['a shape that the table does not have stored (5:4)', '', { [NEW_KEY]: '5:4' }, '16:10', 'default'],
             ['an empty text stored', '', { [NEW_KEY]: '' }, '16:10', 'default'],
             ['the address asks for 16:9, nothing stored', '?aspect=16:9', {}, '16:9', 'address'],
             ['the address asks for 4:3 over a stored 21:9', '?aspect=4:3', { [NEW_KEY]: '21:9' }, '4:3', 'address'],
@@ -655,7 +683,7 @@ try {
         }
         for (const [label, search, stored, aspect] of [
             ['nothing stored', '', {}, '16:10'], ['16:9 stored', '', { [NEW_KEY]: '16:9' }, '16:9'], ['21:9 stored', '', { [NEW_KEY]: '21:9' }, '21:9'], ['the old key 4:3', '', { [OLD_KEY]: '4:3' }, '16:10'],
-            ['junk stored', '', { [NEW_KEY]: 'junk' }, '16:10'], ['3:2 stored', '', { [NEW_KEY]: '3:2' }, '16:10'], ['the address asks for 16:9', '?aspect=16:9', {}, '16:9'],
+            ['junk stored', '', { [NEW_KEY]: 'junk' }, '16:10'], ['5:4 stored (no row)', '', { [NEW_KEY]: '5:4' }, '16:10'], ['3:2 stored', '', { [NEW_KEY]: '3:2' }, '3:2'], ['32:9 stored', '', { [NEW_KEY]: '32:9' }, '32:9'], ['the address asks for 16:9', '?aspect=16:9', {}, '16:9'],
             ['the address asks for 4:3 over a stored 21:9', '?aspect=4:3', { [NEW_KEY]: '21:9' }, '4:3'], ['an address that is no shape', '?aspect=wide', {}, '16:10'], ['no storage', '', THROWS, '16:10'],
         ]) {
             const r = runLobby(lobbyPath, search, stored, laptop);
@@ -670,9 +698,9 @@ try {
             expect('a default is not stored, ' + name + ': the next visit follows the new screen', again.aspect, '16:9');
         }
     }
-    {   // pressing the shape that is already the default IS a pick: it is stored, and it ends the default
+    {   // a change event that names the shape that is already the default IS a pick: it is stored, and it ends the default (the dropdown itself says nothing when the shown entry is chosen again: below)
         const shell = runShell(shellPath, '', {}, { screen: { width: 1440, height: 900 } });
-        shell.buttons[1].listeners.click();                                              // 16:10, the shape that is shown
+        shell.press('16:10');                                              // 16:10, the shape that is shown
         expect('a pick of the shape that is the default, shell.html: stored', JSON.stringify(shell.storage.writes) + ' ' + shell.now(), JSON.stringify([[NEW_KEY, '16:10']]) + ' 16:10');
         const next = runShell(shellPath, '', shell.storage.data, { screen: { width: 1920, height: 1080 } });
         expect('a pick of the shape that is the default, shell.html: the next visit on another screen keeps it', next.aspect + ' ' + next.source, '16:10 remembered');
@@ -689,8 +717,16 @@ try {
         expect('hand-off, a phone upright on the front page: the page shows 16:9 and START hands no shape on', phone.aspect + ' ' + phone.handoff('k7m2xq', 1, 'Ann') + ' ' + phone.picked(), '16:9 ?join=/ws&room=k7m2xq&seat=1&name=Ann ');
         const laptop = runLobby(lobbyPath, '', {}, { screen: { width: 1440, height: 900 } });
         expect('hand-off, a laptop that has not picked: no shape', laptop.picked() + '|' + laptop.handoff('k7m2xq', 1, 'Ann').includes('aspect') + '|' + laptop.solo('Ann').includes('aspect'), '|false|false');
-        laptop.radios['16:10'].listeners.click();                                       // the shape that is shown is already checked: a real browser sends a click and no change event
-        expect('hand-off, the shown shape pressed: it is a pick and goes on', laptop.picked() + ' ' + laptop.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:10') + ' ' + laptop.solo('Ann').endsWith('&aspect=16:10'), '16:10 true true');
+        expect('hand-off, the shown entry chosen again says nothing (a dropdown sends no event; opening it is no pick either): the page listens to change and to nothing else', Object.keys(laptop.select.listeners).join(), 'change');
+        const shellPick = runShell(shellPath, '', {}, { screen: { width: 1440, height: 900 } });
+        expect('hand-off, the game page too: change is the pick, and its keys stay the dropdown\'s own (the game\'s window listener does not get them)', shellPick.selects.map((x) => Object.keys(x.listeners).sort().join()).join(' | '), 'change,keydown,keypress,keyup | change,keydown,keypress,keyup');
+        for (const type of ['keydown', 'keypress', 'keyup']) {
+            let stopped = 0;
+            shellPick.selects[0].fire(type, { stopPropagation() { stopped++; } });
+            expect('hand-off, the game page\'s dropdown stops a ' + type + ' before the game\'s window listener', stopped, 1);
+        }
+        laptop.select.fire('change');                                                   // (the value is the shape that is shown)
+        expect('hand-off, a change that names the shown shape: it is a pick and goes on', laptop.picked() + ' ' + laptop.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:10') + ' ' + laptop.solo('Ann').endsWith('&aspect=16:10'), '16:10 true true');
         expect('hand-off, ... and it is stored', JSON.stringify(laptop.storage.writes), JSON.stringify([[NEW_KEY, '16:10']]));
         const stored = runLobby(lobbyPath, '', { [NEW_KEY]: '16:9' }, { screen: { width: 1440, height: 900 } });
         expect('hand-off, a stored 16:9 on a 16:10 laptop: goes on', stored.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:9'), true);
@@ -700,7 +736,7 @@ try {
     {   // a pick of 16:9 on a screen whose nearest is another shape: kept (the old default is a choice like any other)
         const shell = runShell(shellPath, '', {}, { screen: { width: 3440, height: 1440 } });
         expect('16:9 on a 21:9 screen, shell.html: the first visit shows 21:9', shell.aspect, '21:9');
-        shell.buttons[2].listeners.click();
+        shell.press('16:9');
         const next = runShell(shellPath, '', shell.storage.data, { screen: { width: 3440, height: 1440 } });
         expect('16:9 picked on a 21:9 screen, shell.html: the next visit shows 16:9', next.aspect + ' ' + next.source, '16:9 remembered');
         const lobby = runLobby(lobbyPath, '', {}, { screen: { width: 3440, height: 1440 } });
@@ -728,15 +764,15 @@ try {
             return holder.exports;
         };
         const win = (w, h, iw, ih) => ({ screen: { width: w, height: h }, innerWidth: iw, innerHeight: ih });
-        const more = loadWith("{ name: '3:2', label: '3:2', width: 960, height: 640, slot: 1280 }, { name: '20:9', label: '20:9', width: 1200, height: 540, slot: 1280 }, { name: '32:9', label: '32:9', width: 1920, height: 540, slot: 1920 }", false);
-        expect('the table with three more rows still has its own four first', more.names().join(' '), '4:3 16:10 16:9 21:9 3:2 20:9 32:9');
-        for (const [label, w, h, shape] of [['2256 x 1504 is 3:2 now', 2256, 1504, '3:2'], ['a 20:9 phone sideways (915 x 412)', 915, 412, '20:9'], ['5120 x 1440 is 32:9 now', 5120, 1440, '32:9'], ['3840 x 1080 is 32:9 now', 3840, 1080, '32:9'],
-                                           ['1920 x 1080 is still 16:9', 1920, 1080, '16:9'], ['1440 x 900 is still 16:10', 1440, 900, '16:10'], ['3440 x 1440 is still 21:9', 3440, 1440, '21:9'], ['1024 x 768 is still Classic 4:3', 1024, 768, '4:3']]) {
+        const more = loadWith("{ name: '5:4', label: '5:4', width: 960, height: 768, slot: 1280 }, { name: '48:9', label: '48:9', width: 2880, height: 540, slot: 2880 }", false);
+        expect('the table with two more rows still has its own seven first', more.names().join(' '), '4:3 3:2 16:10 16:9 20:9 21:9 32:9 5:4 48:9');
+        for (const [label, w, h, shape] of [['1280 x 1024 is 5:4 now', 1280, 1024, '5:4'], ['7680 x 1440 (5.33) is 48:9 now', 7680, 1440, '48:9'], ['1920 x 1080 is still 16:9', 1920, 1080, '16:9'], ['1440 x 900 is still 16:10', 1440, 900, '16:10'],
+                                           ['3440 x 1440 is still 21:9', 3440, 1440, '21:9'], ['3840 x 1080 is still 32:9', 3840, 1080, '32:9'], ['1024 x 768 is still Classic 4:3', 1024, 768, '4:3'], ['2736 x 1824 is still 3:2', 2736, 1824, '3:2']]) {
             expect('a table with extra rows, first visit: ' + label, more.firstVisit(win(w, h)), shape);
         }
-        expect('a table with extra rows: the tag finds the new rows too (a 1440 x 960 screen is 3:2, 3840 x 1080 is 32:9)', more.forScreen(1440, 960) + ' ' + more.forScreen(3840, 1080), '3:2 32:9');
+        expect('a table with extra rows: the line finds the new rows too (a 1280 x 1024 screen is 5:4, 7680 x 1440 is 48:9)', more.fillsLine(1280, 1024) + ' ' + more.fillsLine(7680, 1440), '5:4 fills your screen 48:9 fills your screen');
         expect('a table with extra rows: a phone held upright is still 16:9, a screen that cannot be asked too', more.firstVisit(win(390, 844, 390, 664)) + ' ' + more.firstVisit({}) + ' ' + more.firstVisit(null), '16:9 16:9 16:9');
-        expect('the real table: 3840 x 1080 is 21:9 (no 32:9 row yet)', AntsShapes.firstVisit(win(3840, 1080)), '21:9');
+        expect('the real table: 7680 x 1440 is 32:9 (no 48:9 row)', AntsShapes.firstVisit(win(7680, 1440)), '32:9');
         // a tie goes to the first of the table (the narrower): 4:1 is as far from 2:1 as from 8:1
         const tie = loadWith("\n        { name: '2:1', label: '2:1', width: 200, height: 100, slot: 1280 },\n        { name: '8:1', label: '8:1', width: 800, height: 100, slot: 1280 }\n    ", true);
         expect('a tie between two rows goes to the narrower, the first of the table', tie.closest(4).row.name, '2:1');
@@ -747,5 +783,5 @@ try {
     failed++;
 }
 
-if (failed === 0) console.log('web aspect key: ' + (table.length + shellOnly.length) + ' rows x 2 pages (all four shapes on both), the "fills your screen" tags, the first visit\'s shape on a table of screens, and the selectors (the game page\'s and the lobby\'s), 0 failures');
+if (failed === 0) console.log('web aspect key: ' + (table.length + shellOnly.length) + ' rows x 2 pages (every shape of the table on both), the "fills your screen" lines, the first visit\'s shape on a table of screens, and the selectors (the game page\'s and the lobby\'s), 0 failures');
 process.exit(failed === 0 ? 0 : 1);
