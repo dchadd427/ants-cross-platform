@@ -7,6 +7,7 @@
 .pk-name { color: var(--gold); }
 .pk-rest { color: var(--cream); }
 .pk-said { margin: 0 0 8px; font-size: 13px; line-height: 1.35; color: var(--muted); }
+.pk-hint { color: var(--cream); }
 .pk-warn { margin: 0 0 8px; padding: 8px 10px; font-size: 14.5px; line-height: 1.35; color: #ffe4de; background: #3b0d10; border: 2px solid #e8776f; border-radius: 6px; }
 .pk-row { display: grid; gap: 8px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .pk-row + .pk-row { margin-top: 8px; }

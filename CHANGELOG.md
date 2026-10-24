@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.117 - 2026-10-23 - Map Maker: red drops go back, things may stand on water, flowers have stems
+
+**For players:**
+- **Map Maker (v1.5.5), Pick up: let go on a red place and the thing goes back.** Drag a hill, an ant, a pile or a plant, let go of the mouse, your finger or the pen where the copy is red, and it jumps back to where you picked it up. Nothing is written and nothing is left to Undo, and the bar says why for a moment ("Put back: the mushroom is in the way"). A lift on a free place still puts it down in one step, a plain click still only places the copy, and Done on a red place keeps the thing in your hand with the reason.
+- **Map Maker: hills, starting ants and food piles may be put on water.** Pick up used to refuse them, although many maps of the library have them there. The copy stays green and the bar adds one line about what to expect: an ant that cannot swim moves to land beside its marker, or drowns when there is none; ants that cannot swim reach a pile in the water only from the shore, while Swimmers swim to it or build a bridge; a hill whose way out is water may keep its ants in. The other tools never refused water.
+- **Map Maker: flowers are drawn whole, as in the game.** The flower with sunglasses and the other flowers showed only their heads; now the stems, the leaves and the shadow are there too (the same pixels as the game's).
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/14bbbfdb...fix/mapmaker-drop-water-flower)
+
 ## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
 
 **For players:**
@@ -599,18 +610,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1bf52364...198d2243), [the match pages and the replay pass](docs/REPLAYS.md)
 
-## v0.12.50 - 2026-10-15 - Chat in the lobby
+## Older versions (v0.12.50 and before)
 
-**For players:**
-- **The front page has a chat now.** A **Chat** box under the colors lets the people in a room talk before START: type a line (up to 100 letters, digits and signs) and press Enter or Send, and everybody in the room reads it in the color of the sender's seat. It is the chat of the game's own waiting room, so a player of the desktop game in the same room reads it too.
-- A small line tells who comes and goes ("Sam joined as Red."). A line that arrives while the box is out of view (below the window, or under START on a phone) also shows as a short message at the bottom of the page, at most one every 4 s (the box has every line).
-- The box keeps a little under the room's pace (four lines at once, then one every 1.25 s) and asks for a little slower when you are faster (your line stays in the field). If the room does not say a line back within 3 s, or the connection drops first, the box says "Your last line may not have arrived" and puts the text back in the field. What the game cannot show, an accent or a smiley, is left out as you type. On a phone the field is big enough to tap and the keyboard does not hide it behind START.
-- Nothing is saved: a reload starts an empty box, and when START takes everybody to the game the lines stay behind (they are not in the countdown's chat; that is a later change).
-
-**Rules / network:** none. The server already passed a page's chat line on; network protocol 21 is as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...97aea54a), [the notes](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
-
-## Older versions (v0.12.49 and before)
-
-Every release before v0.12.50, and the long notes of v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.51, and the long notes of v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

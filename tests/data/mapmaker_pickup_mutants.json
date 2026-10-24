@@ -163,13 +163,6 @@
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
-      "id": "water_not_a_blocker",
-      "file": "web/front/mapmaker_pickup.js",
-      "old": "Tiles.kindOf(Edit.tile(file, 1, idx)) === 'water'",
-      "new": "Tiles.kindOf(Edit.tile(file, 1, idx)) === 'mud'",
-      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
-    },
-    {
       "id": "solid_ground_not_a_blocker",
       "file": "web/front/mapmaker_pickup.js",
       "old": "if (kind === 'ant' && (Edit.flags(file, 1, idx) & 1) &&",
@@ -251,13 +244,6 @@
       "file": "web/front/mapmaker_pickup.js",
       "old": "if (kind === 'area' && mode !== 'copy') who = 'These ' + who;",
       "new": "",
-      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
-    },
-    {
-      "id": "water_words_hill",
-      "file": "web/front/mapmaker_pickup.js",
-      "old": "text = kindIt === 'hill' ? 'Part of its 4 x 4 square is water.' : 'That ground is water.';",
-      "new": "text = 'That ground is water.';",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -970,15 +956,15 @@
     {
       "id": "drop_lift_does_not_drop",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "if (d.moved && st.mode === 'moving') return off ? letGo() : done();",
+      "old": "if (d.moved && st.mode === 'moving') return off ? letGo() : lift();",
       "new": "if (d.moved && st.mode === 'moving') return render();",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
       "id": "drop_click_on_ghost_drops",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "if (d.moved && st.mode === 'moving') return off ? letGo() : done();",
-      "new": "if (st.mode === 'moving') return off ? letGo() : done();",
+      "old": "if (d.moved && st.mode === 'moving') return off ? letGo() : lift();",
+      "new": "if (st.mode === 'moving') return off ? letGo() : lift();",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -1026,14 +1012,14 @@
     {
       "id": "away_lift_puts_down",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "return off ? letGo() : done();",
+      "old": "return off ? letGo() : lift();",
       "new": "return done();",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
       "id": "away_lift_always_back",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "return off ? letGo() : done();",
+      "old": "return off ? letGo() : lift();",
       "new": "return letGo();",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
@@ -1084,6 +1070,153 @@
       "file": "web/front/mapmaker_tools.js",
       "old": "away: function (where) { if (mine() && mine().away) mine().away(where); },",
       "new": "away: function (where) { void where; },",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_refused_again",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "        if (kind === 'ant' && (Edit.flags(file, 1, idx) & 1) && !(mv.cells[idx] && Solid.sets(t2))) return { why: 'solid' };",
+      "new": "        if ((kind === 'hill' || kind === 'ant' || kind === 'pile') && Tiles.kindOf(Edit.tile(file, 1, idx)) === 'water') return { why: 'solid' };\n        if (kind === 'ant' && (Edit.flags(file, 1, idx) & 1) && !(mv.cells[idx] && Solid.sets(t2))) return { why: 'solid' };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_hill_first_cell_only",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "i < (k === 'pile' ? 1 : cells.length); i++)",
+      "new": "i < 1; i++)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_pile_any_cell",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "i < (k === 'pile' ? 1 : cells.length); i++)",
+      "new": "i < cells.length; i++)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_ants_missing",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "        ant: 'This is water: a starting ant",
+      "new": "        antx: 'This is water: a starting ant",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_for_plants",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "    var HINTS = {\n        pile:",
+      "new": "    var HINTS = {\n        plant: 'This is water: a plant.',\n        pile:",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_not_in_verdict",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return hints.length ? { ok: true, hint: hints.join(' ') } : { ok: true };",
+      "new": "return { ok: true };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_twice",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (hint && hints.indexOf(hint) < 0) hints.push(hint);",
+      "new": "if (hint) hints.push(hint);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_not_in_bar",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (ok && v.hint && !st.away) bar.appendChild(el('p', 'pk-said pk-hint', v.hint));",
+      "new": "if (false) bar.appendChild(el('p', 'pk-said pk-hint', v.hint));",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_shown_off_the_map",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (ok && v.hint && !st.away) bar.appendChild",
+      "new": "if (ok && v.hint) bar.appendChild",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_not_with_arrows",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "                else if (v.hint) bar.appendChild(el('p', 'pk-said pk-hint', v.hint));\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "water_hint_not_in_the_note",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "+ (hint ? ' ' + hint : '');",
+      "new": ";",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_lift_stays_held",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (v.ok || v.plain) return done();",
+      "new": "return done();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_lift_of_a_plain_verdict_goes_back",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (v.ok || v.plain) return done();",
+      "new": "if (v.ok) return done();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_lift_goes_to_the_end",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return off ? letGo() : lift();",
+      "new": "return off ? letGo() : done();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_lift_not_said",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "st.note = 'Put back: ' + (v.reason",
+      "new": "st.note = '' + (v.reason",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_lift_says_the_long_sentence",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "st.note = 'Put back: ' + (v.reason || v.text)",
+      "new": "st.note = 'Put back: ' + v.text",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_lift_keeps_the_capital",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return c.toLowerCase(); }); render(); tell(st.note);",
+      "new": "return c; }); render(); tell(st.note);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_lift_note_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "letGo(); st.note = 'Put back: ' + (v.reason || v.text).replace(/^./, function (c) { return c.toLowerCase(); }); render(); tell(st.note);",
+      "new": "st.note = 'Put back: ' + (v.reason || v.text).replace(/^./, function (c) { return c.toLowerCase(); }); letGo(); render(); tell(st.note);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_lift_bar_not_drawn",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "letGo(); st.note = 'Put back: ' + (v.reason || v.text).replace(/^./, function (c) { return c.toLowerCase(); }); render(); tell(st.note);",
+      "new": "letGo(); st.note = 'Put back: ' + (v.reason || v.text).replace(/^./, function (c) { return c.toLowerCase(); }); tell(st.note);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_reason_of_the_edge_missing",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return { ok: false, cells: [], reason: why, text:",
+      "new": "return { ok: false, cells: [], text:",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "red_reason_of_a_blocker_missing",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return { ok: false, cells: bad, reason: text, text:",
+      "new": "return { ok: false, cells: bad, text:",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     }
   ]
