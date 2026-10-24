@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.116 - 2026-10-23 - Test rooms work on every server
+## v0.12.117 - 2026-10-23 - Test rooms work on every server
 
 **For players:**
 - **Play this map > With other players now works on every server.** The Map Maker's test room used to need the map submissions to be switched on; where they were off (the beta) it showed a dimmed, empty lobby. It now sends your draft map to a small door of its own that is always on, so a room on your draft opens whether or not submissions are open.
