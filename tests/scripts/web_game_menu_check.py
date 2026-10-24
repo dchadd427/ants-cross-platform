@@ -282,14 +282,16 @@ def computer(p, args, check):
     check(p.state()["open"], "...and the next Esc opens it again")
 
     # ---- a pointer lock that comes while the panel is up (the page's own handler of the event stops it before the panel's: the panel lets it go itself)
+    tab.ev("window.__lockSeen = false; window.addEventListener('pointerlockchange', function () { if (document.pointerLockElement) window.__lockSeen = true; }, true); 1")      # (the check's own witness that the browser did grant the lock, however quickly the panel lets go of it)
     tab.call("Runtime.evaluate", {"expression": "document.getElementById('canvas').requestPointerLock(); 1", "userGesture": True, "returnByValue": True})
-    time.sleep(1.0)
+    engaged = wait_for(lambda: tab.ev("window.__lockSeen === true"), 5, 0.05)       # (granted a moment after the call: a state that is waited for, not a time that is slept)
+    released = wait_for(lambda: p.state()["locked"] is None, 5, 0.05)               # (...and let go of by the panel within its poll)
     s = p.state()
-    check(s["open"] and s["locked"] is None, "a lock that the page is given while the panel is up is let go (locked %s)" % s["locked"])
+    check(bool(engaged) and s["open"] and released and s["locked"] is None, "a lock that the page is given while the panel is up is let go (granted %s, locked %s)" % (bool(engaged), s["locked"]))
     p.click_element(".gm-resume")
-    check(not p.state()["open"], "...so the mouse still reaches the panel (a click on Resume closes it)")
+    check(bool(wait_for(lambda: not p.state()["open"], 5, 0.05)), "...so the mouse still reaches the panel (a click on Resume closes it)")
     p.esc()
-    check(p.state()["open"], "(the panel again)")
+    check(bool(wait_for(lambda: p.state()["open"], 5, 0.05)), "(the panel again)")
 
     # ---- the values
     p.tab_to("sound")
