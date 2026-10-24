@@ -82,7 +82,8 @@ static_assert(table_is_whole(), "kAspectTable: one row for every Aspect, none tw
 inline constexpr std::array<Aspect, kAspectTable.size()> kAllAspects = shape_table_detail::aspects_of_table();
 
 /// The aspect of a game that is started from the command line when neither `--aspect` nor the settings say: 16:9 on a desktop (requested 2026-10-02: the default should be
-/// 16x9) and in the web build (milestone M5: the page's game box is 16:9; the page passes the shape it shows as `--aspect`, `?aspect=4:3` on its address asks for the classic one).
+/// 16x9) and in the web build, where the page always passes the shape it shows as `--aspect` (the address, else the player's stored pick, else on a first visit the shape nearest the player's
+/// screen, web/shapes.js `firstVisit`), so this is only the fallback of a game that is started without one.
 /// `Application::parse_arguments` puts it into the config; an `ApplicationConfig` that is made by hand (the tests') stays at the original's 4:3. The two have names of their own so that a
 /// native test can pin the browser build's default too.
 inline constexpr Aspect kWebDefaultAspect = Aspect::Wide16x9;

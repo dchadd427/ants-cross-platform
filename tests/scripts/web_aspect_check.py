@@ -146,6 +146,16 @@ SHAPE_CANVAS = {"4:3": (640, 480), "16:10": (960, 600), "16:9": (960, 540), "21:
 SHAPE_ORDER = ["4:3", "16:10", "16:9", "21:9"]
 
 
+def first_visit_of(screen_w, screen_h, window_w, window_h):
+    """The shape that a first visit starts in, worked out here on its own (an oracle for AntsShapes.firstVisit, from SHAPE_STEPS): the device's screen taken long over short, the shape with the
+    smallest ratio of ratios (the narrower on a tie); a device held upright (screen and window both taller than wide) starts in 16:9."""
+    if not (screen_w >= screen_h or window_w > window_h):
+        return "16:9"
+    ratio = max(screen_w, screen_h) / min(screen_w, screen_h)
+    off = lambda shape: max(SHAPE_STEPS[shape][0] / SHAPE_STEPS[shape][1] / ratio, ratio * SHAPE_STEPS[shape][1] / SHAPE_STEPS[shape][0])
+    return min(SHAPE_ORDER, key=lambda shape: (off(shape), SHAPE_ORDER.index(shape)))
+
+
 def checked_of(shape):
     """What the selector's buttons say (the page lists them left to right) when `shape` is the picture."""
     return ["%s=%s" % (name, "true" if name == shape else "false") for name in SHAPE_ORDER]
@@ -172,7 +182,11 @@ PURE_CHECKS = r"""
   eq([[1920, 1080], [1440, 900], [3440, 1440], [1280, 1024], [5120, 1440], [0, 0]].map(function (s) { return P.shapeForScreen(s[0], s[1]); }), ['16:9', '16:10', '21:9', '4:3', null, null], 'the shape nearest to a screen');
   eq(P.resolveAspect(null, '4:3'), { aspect: '4:3', source: 'remembered' }, 'a remembered 4:3 wins over the default');
   eq(P.resolveAspect(null, 'junk'), { aspect: '16:9', source: 'default' }, 'a remembered value that is no shape is ignored: 16:9');
-  eq(P.resolveAspect(null, 'junk', true), { aspect: '16:9', source: 'default' }, 'a portrait phone (a third argument that the page does not know any more) gets 16:9 too');
+  eq(P.resolveAspect(null, 'junk', '16:10'), { aspect: '16:10', source: 'default' }, 'a stored value that is no shape is no pick: the first visit\'s shape');
+  eq(P.resolveAspect(null, null, '21:9'), { aspect: '21:9', source: 'default' }, 'nothing stored: the first visit\'s shape, and it is "default", not "remembered"');
+  eq(P.resolveAspect(null, '16:9', '21:9'), { aspect: '16:9', source: 'remembered' }, 'a stored 16:9 is a pick: it beats the first visit\'s shape');
+  eq(P.resolveAspect('4:3', null, '21:9'), { aspect: '4:3', source: 'address' }, 'the address beats the first visit\'s shape');
+  eq(P.resolveAspect(null, null, 'junk'), { aspect: '16:9', source: 'default' }, 'a first visit\'s shape that is no shape is 16:9');
   eq(P.resolveAspect('', null), { aspect: '16:9', source: 'default' }, 'the default is 16:9');
   eq(P.resolveAspect(undefined, undefined), { aspect: '16:9', source: 'default' }, 'nothing at all: 16:9');
   // the box: exact shape, the largest whole number of steps that fits, and a CSS size that the layout cannot round into a smaller canvas
@@ -1427,7 +1441,7 @@ def main():
             check(bx[0] >= -0.5 and bx[0] + bx[2] <= g["inner"][0] + 0.5, "%s: the box is inside the window's width" % label)
             check(g["scroll"][0] <= g["scroll"][1] + 1, "%s: no sideways scroll (%d of %d)" % (label, g["scroll"][0], g["scroll"][1]))
 
-        print("[web aspect] the page at several sizes (16:9 unless the address or the remembered choice says otherwise: a phone held upright gets 16:9 too)")
+        print("[web aspect] the page at several sizes (the shape nearest the screen unless the address or the remembered choice says otherwise: a phone held upright gets 16:9)")
         sizes = [("1280x720@1", 1280, 720, 1, False), ("phone portrait 390x844@3", 390, 844, 3, True), ("phone landscape 844x390@3", 844, 390, 3, True)]
         if not args.quick:
             sizes = [("1280x720@1", 1280, 720, 1, False), ("1280x720@2", 1280, 720, 2, False), ("1920x1080@1", 1920, 1080, 1, False), ("1920x1080@2", 1920, 1080, 2, False),
@@ -1440,12 +1454,15 @@ def main():
             tab.emulate(w, h, dpr, mobile)
             tab.open(web)
             g = tab.geometry()
-            layout_checks(label, g, "16:9")                          # (16:9 on every device, a phone held upright included)
+            want = first_visit_of(w, h, w, h)                       # (the emulated screen is the window: the shape nearest it, 16:9 for a device held upright)
+            check(g["aspect"] == want and g["args"][-2:] == ["--aspect", want] and g["checked"] == checked_of(want), "%s: a first visit starts in %s (%s, %s)" % (label, want, g["aspect"], g["checked"]))
+            check(tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s: the first visit's shape is not stored" % label)
+            layout_checks(label, g, want)
             tab.save_shot(args.shots, "page_" + label.replace(" ", "_").replace("(", "").replace(")", "").replace("@", "_dpr"))
 
         print("[web aspect] touch: a tap lands where it should (a phone, both shapes)")
         for label, w, h, query, shape in (("portrait phone, 16:9 picture", 390, 844, "", (960, 540)), ("portrait phone, classic picture asked for", 390, 844, "?aspect=4:3", (640, 480)),
-                                          ("landscape phone, 16:9 picture", 844, 390, "", (960, 540))):
+                                          ("landscape phone, 16:9 picture asked for", 844, 390, "?aspect=16:9", (960, 540))):
             tab.emulate(w, h, 3, True)
             tab.open(web + query, settle=2.5)
             g = tab.geometry()
@@ -1567,6 +1584,36 @@ def main():
         tag_tab.open(web)
         check(tag_tab.ev("Array.prototype.every.call(document.querySelectorAll('.fit-tag'), function (t) { return getComputedStyle(t).display === 'none'; })") is True, "a phone (no pointer that hovers): no tag is shown")
         tag_tab.close()
+        tab.emulate(1280, 720, 1)
+
+        # a first visit (nothing stored, no ?aspect=): both pages start in the shape nearest the screen, the same on both, nothing is stored by loading, and a press of the shape that is shown is a pick
+        print("[web aspect] a first visit starts in the shape nearest the screen, on the game page and on the front page")
+        for w, h, dpr, mobile in ((1440, 900, 1, False), (3440, 1440, 1, False), (1024, 768, 1, False), (1920, 1080, 1, False), (844, 390, 3, True), (390, 844, 3, True)):
+            want = first_visit_of(w, h, w, h)
+            label = "a %d x %d %s" % (w, h, "phone" if mobile else "screen")
+            tab.emulate(w, h, dpr, mobile)
+            tab.open(web, settle=0.5)
+            tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
+            tab.open(web, settle=1.0)
+            g = tab.geometry()
+            check(g["aspect"] == want and g["checked"] == checked_of(want) and tab.ev("Module._ants_probe(40)") == SHAPE_CANVAS[want][0], "%s, the game page: the first visit starts in %s (%s)" % (label, want, g["aspect"]))
+            check(tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s, the game page: nothing was stored by loading" % label)
+            tab.open(site, wait=False)                                                      # (the front page has no game: nothing to wait for)
+            time.sleep(2.0)
+            lobby = tab.ev("(document.querySelector('input[name=aspect]:checked') || {}).value")
+            check(lobby == want and tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s, the front page: the same shape (%s) and nothing stored" % (label, lobby))
+        tab.emulate(1440, 900, 1)
+        tab.open(web, settle=0.5)
+        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
+        tab.open(web, settle=1.0)
+        centre = button_centre(tab, "16:10")                                                   # (the shape that is shown: its press is still a pick)
+        tab.click(centre[0], centre[1])
+        time.sleep(0.8)
+        check(tab.ev("localStorage.getItem('ants.aspect.v2')") == "16:10", "a press of the shape that the first visit started in is stored")
+        tab.emulate(1920, 1080, 1)
+        tab.open(web, settle=1.0)
+        check(tab.geometry()["aspect"] == "16:10", "... and the next visit, on a 16:9 screen, keeps it: a pick ends the default")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
         tab.emulate(1280, 720, 1)
 
         # the selector in a running match: no question, no reload; the match goes on

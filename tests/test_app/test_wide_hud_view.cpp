@@ -968,7 +968,7 @@ void test_default_and_options() {
         for (std::string& s : storage) argv.push_back(s.data());
         return Application::parse_arguments(static_cast<int>(argv.size()), argv.data());
     };
-    check(kWebDefaultAspect == Aspect::Wide16x9, "the web build's default is 16:9 (its page gives the game --aspect: 16:9, or 4:3 for ?aspect=4:3)");
+    check(kWebDefaultAspect == Aspect::Wide16x9, "the web build's fallback default is 16:9 (its page always gives the game --aspect: the address, the stored pick or the shape nearest the screen)");
     check(kDesktopDefaultAspect == Aspect::Wide16x9, "a desktop's default is 16:9");
     check(kPlatformDefaultAspect == (
 #if defined(__EMSCRIPTEN__)

@@ -477,10 +477,11 @@
         }
         // LOBBY_END
 
-        // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Every hand-off to a game
+        // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else the shape nearest to the screen (16:9 when it has no say). Every hand-off to a game
         // (START, Rejoin, a game for one) carries it as ?aspect= in the game's address.
         // The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the selectors write it. The key of the first versions of the pages was 'ants.aspect': it is NOT
-        // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: every browser starts with 16:9 until its player picks another shape again.
+        // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: a browser with no choice starts with the shape nearest to its screen (AntsShapes.firstVisit, which the
+        // game page asks too; it is never stored) until its player picks a shape.
         // The footer tags "fills your screen" under the shape nearest to the computer's screen (the CSS shows the tag only where there is a mouse).
         // SHAPE_BEGIN
         var ASPECT_KEY = 'ants.aspect.v2';
@@ -491,6 +492,7 @@
             var remembered = recall(ASPECT_KEY);
             if (isShape(asked)) aspect = asked;
             else if (isShape(remembered)) aspect = remembered;
+            else aspect = AntsShapes.firstVisit(window);                          // (nothing chosen: the shape nearest to the screen, the game page's own answer; never stored)
             document.body.setAttribute('data-aspect', aspect);
             $('aspect-' + shapeId(aspect)).checked = true;
             var fits = null;

@@ -3,7 +3,7 @@
 
 The front page is the lobby (web/lobby.html, the approved pictures; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
 numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four color cards (Black top left, Green top right, Red bottom left, Blue bottom right; a color that nobody holds is open, a bot of a level or
-Nobody; players are dragged between colors), the map, the picture's shape (Picture: Classic 4:3, 16:10, 16:9, which is the default, or 21:9) and START! at its side, and the footer with the version and the links. A visitor who
+Nobody; players are dragged between colors), the map, the picture's shape (Picture: Classic 4:3, 16:10, 16:9 or 21:9, the one nearest the screen until a pick) and START! at its side, and the footer with the version and the links. A visitor who
 opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
 run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
