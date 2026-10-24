@@ -3,14 +3,14 @@
 // The canvas (widescreen work, milestone M2): the picture that the window shows, and how it sits in the window.
 //
 // The game draws into SDL's LOGICAL canvas (SDL_RenderSetLogicalSize): a size of its own that the picture's shape gives, 960 x 540 (16:9, the default of a game that is started from the command line), 960 x 600 (16:10, for
-// laptops and 16:10 monitors), 1260 x 540 (21:9, ultrawide monitors) or 640 x 480 (the original's, `--aspect 4:3`), which SDL scales into the window by the largest scale that fits, centred, with bars where the
-// shapes differ (nearest-neighbour filtering). The shape can be changed while a match runs (Application::set_aspect). The scale is a whole number when
+// laptops and 16:10 monitors), 960 x 640 (3:2), 1200 x 540 (20:9, phones held sideways), 1260 x 540 (21:9, ultrawide monitors), 1920 x 540 (32:9) or 640 x 480 (the original's, `--aspect 4:3`), which SDL scales into the window
+// by the largest scale that fits, centred, with bars where the shapes differ (nearest-neighbour filtering). The shape can be changed while a match runs (Application::set_aspect). The scale is a whole number when
 // the window is a multiple of the canvas (1920 x 1080 shows 960 x 540 at 2x, 3840 x 2160 at 4x) and fractional otherwise (2560 x 1440 at 2.667x, 1280 x 720 at 1.333x); a window of
 // another shape has bars (2880 x 1800 shows 960 x 540 at 3x with bars of 90 rows above and below). Everybody who asks for the same aspect sees exactly the same world area, so
-// no room has to cap it, and the wider shapes show more of the map, as 16:9 does against 4:3 (the map view is 442 x 440, 762 x 500, 762 x 560 and 1062 x 500). A CanvasLayout is any size, not only these four.
+// no room has to cap it, and the wider shapes show more of the map, as 16:9 does against 4:3 (the map views are in docs/VIEW_AND_HUD.md). A CanvasLayout is any size, not only these.
 //
 // THE SHAPE TABLE: `kAspectTable` below is the one list of the shapes (name, words, canvas). The game reads it everywhere (the canvas, `--aspect`, the settings key, the Esc menu's picture row, the
-// page's `ants_set_aspect`); the pages read the same four rows from web/shapes.js, and tests/scripts/test_web_shapes.py fails when the two tables differ.
+// page's `ants_set_aspect`); the pages read the same rows from web/shapes.js, and tests/scripts/test_web_shapes.py fails when the two tables differ.
 //
 // This header is pure (no SDL). `CanvasLayout::fit` is SDL's own arithmetic for a logical size (SDL_render.c, UpdateLogicalSize, the letterbox policy), so that the program can
 // say where the picture is in the window without asking SDL (the screenshot, the window's first size) and the tests can compare it with SDL itself.
@@ -25,30 +25,36 @@
 
 namespace ants::app {
 
-/// The shapes of picture that can be asked for (`--aspect`, the settings key `aspect`, the page's selector). The canvas of each is 60 steps of its shape (960 x 540, 960 x 600, 1260 x 540) except the original's own.
+/// The shapes of picture that can be asked for (`--aspect`, the settings key `aspect`, the page's selector). Every canvas but the original's is at least 960 x 540 (the pages exist only for 640 x 480 and 960 x 540 and more).
 enum class Aspect : uint8_t {
     Classic4x3,     // the original's 640 x 480 (`--aspect 4:3`; the aspect of a config that is made by hand, as the tests do: the default of a game is kPlatformDefaultAspect, 16:9)
     Wide16x9,       // 960 x 540
     Wide16x10,      // 960 x 600: the same width as 16:9 and 60 rows more, for a laptop or a 16:10 monitor
-    Ultra21x9       // 1260 x 540: the same height as 16:9 and 300 columns more, for an ultrawide monitor
+    Ultra21x9,      // 1260 x 540: the same height as 16:9 and 300 columns more, for an ultrawide monitor
+    Wide3x2,        // 960 x 640: the same width as 16:9 and 100 rows more, for tablets and Surface-style laptops
+    Wide20x9,       // 1200 x 540: the same height as 16:9 and 240 columns more, for a phone held sideways
+    Super32x9       // 1920 x 540: the same height as 16:9 and twice its width, for a super-ultrawide monitor
 };
 
 /// One row of the shape table: the shape, its text (`--aspect`, the settings key, the page's `?aspect=` and the key `ants.aspect.v2`), the words that a menu or a selector shows, and its canvas in pixels.
 struct AspectRow {
     Aspect aspect;
-    const char* name;      // "4:3", "16:10", "16:9", "21:9"
+    const char* name;      // "4:3", "3:2", "16:10", "16:9", "20:9", "21:9", "32:9"
     const char* label;     // the words of the selectors and of the Esc menu: "Classic 4:3" for the original's picture, else the name
     int32_t width;
     int32_t height;
 };
 
-/// THE TABLE of the shapes, from the narrowest to the widest (the order of the page's selector and the place that `ants_set_aspect` takes). The canvas of each is 60 steps of its shape (960 x 540,
-/// 960 x 600, 1260 x 540) except the original's own. A new shape is a row here, a value of Aspect, and a row of web/shapes.js (tests/scripts/test_web_shapes.py keeps the two tables equal).
-inline constexpr std::array<AspectRow, 4> kAspectTable = {{
+/// THE TABLE of the shapes, from the narrowest to the widest (the order of the page's selector and the place that `ants_set_aspect` takes). A canvas is 960 wide at least and 540 high at least, except the original's own.
+/// A new shape is a row here, a value of Aspect, and a row of web/shapes.js (tests/scripts/test_web_shapes.py keeps the two tables equal).
+inline constexpr std::array<AspectRow, 7> kAspectTable = {{
     {Aspect::Classic4x3, "4:3", "Classic 4:3", 640, 480},
+    {Aspect::Wide3x2, "3:2", "3:2", 960, 640},
     {Aspect::Wide16x10, "16:10", "16:10", 960, 600},
     {Aspect::Wide16x9, "16:9", "16:9", 960, 540},
+    {Aspect::Wide20x9, "20:9", "20:9", 1200, 540},
     {Aspect::Ultra21x9, "21:9", "21:9", 1260, 540},
+    {Aspect::Super32x9, "32:9", "32:9", 1920, 540},
 }};
 
 namespace shape_table_detail {
@@ -71,11 +77,12 @@ constexpr bool table_is_whole() noexcept {
         for (size_t j = i + 1; j < kAspectTable.size(); ++j) {
             if (kAspectTable[i].aspect == kAspectTable[j].aspect) return false;
         }
-        if (kAspectTable[i].width < 640 || kAspectTable[i].height < 480) return false;
+        const bool classic = kAspectTable[i].width == 640 && kAspectTable[i].height == 480;
+        if (!classic && (kAspectTable[i].width < 960 || kAspectTable[i].height < 540)) return false;      // (the pages exist for 640 x 480 and for 960 x 540 and more: CanvasLayout::page)
     }
     return true;
 }
-static_assert(table_is_whole(), "kAspectTable: one row for every Aspect, none twice, no canvas under 640 x 480");
+static_assert(table_is_whole(), "kAspectTable: one row for every Aspect, none twice, every canvas 640 x 480 or at least 960 x 540");
 }  // namespace shape_table_detail
 
 /// Every shape, from the narrowest to the widest (the order of the page's selector): the table's order
@@ -117,7 +124,7 @@ constexpr bool aspect_at_place(int place, Aspect& out) noexcept {
     return true;
 }
 
-/// The names of every shape in a sentence, in table order: "4:3, 16:10, 16:9 and 21:9" (`last` = " and ") or "4:3, 16:10, 16:9 or 21:9" (" or "), for the messages that refuse a text
+/// The names of every shape in a sentence, in table order: "4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9" (`last` = " and ") or "... or 32:9" (" or "), for the messages that refuse a text
 inline std::string aspect_names(const char* last) {
     std::string out;
     for (size_t i = 0; i < kAspectTable.size(); ++i) {

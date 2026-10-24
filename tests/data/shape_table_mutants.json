@@ -6,77 +6,77 @@
       "file": "include/ants_app/canvas_layout.hpp",
       "old": "{Aspect::Wide16x10, \"16:10\", \"16:10\", 960, 600},",
       "new": "{Aspect::Wide16x10, \"16:10\", \"16:10\", 960, 601},",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "cpp_row_width",
       "file": "include/ants_app/canvas_layout.hpp",
       "old": "{Aspect::Ultra21x9, \"21:9\", \"21:9\", 1260, 540},",
       "new": "{Aspect::Ultra21x9, \"21:9\", \"21:9\", 1261, 540},",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "cpp_row_words",
       "file": "include/ants_app/canvas_layout.hpp",
       "old": "\"Classic 4:3\", 640, 480}",
       "new": "\"Classic 4x3\", 640, 480}",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "cpp_row_name",
       "file": "include/ants_app/canvas_layout.hpp",
       "old": "{Aspect::Wide16x9, \"16:9\", \"16:9\", 960, 540},",
       "new": "{Aspect::Wide16x9, \"16x9\", \"16:9\", 960, 540},",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "cpp_rows_swapped",
       "file": "include/ants_app/canvas_layout.hpp",
       "old": "    {Aspect::Wide16x10, \"16:10\", \"16:10\", 960, 600},\n    {Aspect::Wide16x9, \"16:9\", \"16:9\", 960, 540},\n",
       "new": "    {Aspect::Wide16x9, \"16:9\", \"16:9\", 960, 540},\n    {Aspect::Wide16x10, \"16:10\", \"16:10\", 960, 600},\n",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "cpp_row_dropped",
       "file": "include/ants_app/canvas_layout.hpp",
       "old": "    {Aspect::Ultra21x9, \"21:9\", \"21:9\", 1260, 540},\n",
       "new": "",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "js_row_height",
       "file": "web/shapes.js",
       "old": "        { name: '16:10', label: '16:10', width: 960, height: 600, slot: 1280 },\n",
       "new": "        { name: '16:10', label: '16:10', width: 960, height: 601, slot: 1280 },\n",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "js_row_name",
       "file": "web/shapes.js",
       "old": "        { name: '16:9', label: '16:9', width: 960, height: 540, slot: 1280 },\n",
       "new": "        { name: '16x9', label: '16:9', width: 960, height: 540, slot: 1280 },\n",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "js_row_words",
       "file": "web/shapes.js",
       "old": "label: 'Classic 4:3'",
       "new": "label: 'Classic 4x3'",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "js_rows_swapped",
       "file": "web/shapes.js",
       "old": "        { name: '16:10', label: '16:10', width: 960, height: 600, slot: 1280 },\n        { name: '16:9', label: '16:9', width: 960, height: 540, slot: 1280 },\n",
       "new": "        { name: '16:9', label: '16:9', width: 960, height: 540, slot: 1280 },\n        { name: '16:10', label: '16:10', width: 960, height: 600, slot: 1280 },\n",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "js_extra_row",
       "file": "web/shapes.js",
-      "old": "        { name: '21:9', label: '21:9', width: 1260, height: 540, slot: 1280 }\n",
-      "new": "        { name: '21:9', label: '21:9', width: 1260, height: 540, slot: 1280 },\n        { name: '32:9', label: '32:9', width: 1920, height: 540, slot: 1920 }\n",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "old": "        { name: '32:9', label: '32:9', width: 1920, height: 540, slot: 1920 }\n",
+      "new": "        { name: '32:9', label: '32:9', width: 1920, height: 540, slot: 1920 },\n        { name: '48:9', label: '48:9', width: 2880, height: 540, slot: 2880 }\n",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "js_slot_classic_wide",
@@ -90,7 +90,7 @@
       "file": "web/shapes.js",
       "old": "return (typeof text === 'string' && Object.prototype.hasOwnProperty.call(BY_NAME, text)) ? BY_NAME[text] : null;",
       "new": "return (typeof text === 'string' && text in BY_NAME) ? BY_NAME[text] : null;",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "js_place_off_by_one",
@@ -104,13 +104,6 @@
       "file": "web/shapes.js",
       "old": "return b === 0 ? a : gcd(b, a % b);",
       "new": "return 1;",
-      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
-    },
-    {
-      "id": "js_id_keeps_colon",
-      "file": "web/shapes.js",
-      "old": "id: row.name.replace(':', '-')",
-      "new": "id: row.name",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
@@ -139,28 +132,28 @@
       "file": "web/lobby.html",
       "old": "function isShape(text) { return AntsShapes.parse(text) !== null; }",
       "new": "function isShape(text) { return ['4:3', '16:10', '16:9', '21:9'].indexOf(text) !== -1; }",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "page_copy_in_menu",
       "file": "web/game_menu.js",
-      "old": "var SHAPES = page.shapes.names();",
-      "new": "var SHAPES = ['4:3', '16:10', '16:9', '21:9'];",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "old": "            page.shapes.fillSelect(select, doc);\n",
+      "new": "            ['4:3', '3:2'].forEach(function (name) { var o = el('option', '', name); o.value = name; select.appendChild(o); });\n",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "page_rule_in_style",
       "file": "web/shell.html",
       "old": "        #game-stage {\n            position: relative;",
       "new": "        #game-stage[data-aspect=\"4:3\"] { --ar-w: 4; --ar-h: 3; }\n\n        #game-stage {\n            position: relative;",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "page_does_not_load_the_table",
       "file": "web/shell.html",
       "old": "<script src=\"shapes.js\"></script><script src=\"replay_page.js\">",
       "new": "<script src=\"replay_page.js\">",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "page_slot_not_set",
@@ -181,21 +174,21 @@
       "file": "Dockerfile",
       "old": "COPY web/shapes.js /usr/share/nginx/html/shapes.js\n",
       "new": "",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "game_export_ignores_table",
       "file": "src/ants_app/application.cpp",
       "old": "if (!aspect_at_place(shape, aspect)) return 0;",
       "new": "if (shape < 0 || shape > 3) return 0;",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "game_probe_ignores_table",
       "file": "src/ants_app/application.cpp",
       "old": "case 42: return aspect_place(g_web_app->aspect());",
       "new": "case 42: return static_cast<int>(g_web_app->aspect());",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "cpp_place_off_by_one",
@@ -260,18 +253,8 @@
     {
       "id": "menu_words_separator",
       "file": "src/ants_app/game_menu.cpp",
-      "old": "constexpr PictureText kPictureWords = picture_text(\"|\", \"|\", \"\");",
-      "new": "constexpr PictureText kPictureWords = picture_text(\"|\", \",\", \"\");",
-      "build": [
-        "test_game_menu"
-      ],
-      "test": "./build/tests/test_app/test_game_menu"
-    },
-    {
-      "id": "menu_hint_joiner",
-      "file": "src/ants_app/game_menu.cpp",
-      "old": "picture_text(\", \", \" or \", \"; the match goes on\")",
-      "new": "picture_text(\", \", \" and \", \"; the match goes on\")",
+      "old": "        if (i > 0) out.put(\"|\");",
+      "new": "        if (i > 0) out.put(\",\");",
       "build": [
         "test_game_menu"
       ],
@@ -447,7 +430,7 @@
     {
       "id": "page_lobby_press_is_no_pick",
       "file": "web/lobby.html",
-      "old": "                pickedShape = value;                                                              // (a press is a pick, the shape that is shown too)\n",
+      "old": "            pickedShape = value;                                                                  // (a choice is a pick, the shape that is shown too)\n",
       "new": "",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
@@ -466,11 +449,240 @@
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
-      "id": "page_lobby_shown_shape_press_unheard",
-      "file": "web/lobby.html",
-      "old": "            $('aspect-' + shapeId(shape)).addEventListener('click', press);\n",
+      "id": "cpp_row_3x2_height",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "{Aspect::Wide3x2, \"3:2\", \"3:2\", 960, 640},",
+      "new": "{Aspect::Wide3x2, \"3:2\", \"3:2\", 960, 641},",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "cpp_row_20x9_width",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "{Aspect::Wide20x9, \"20:9\", \"20:9\", 1200, 540},",
+      "new": "{Aspect::Wide20x9, \"20:9\", \"20:9\", 1201, 540},",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "cpp_row_32x9_width",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "{Aspect::Super32x9, \"32:9\", \"32:9\", 1920, 540},",
+      "new": "{Aspect::Super32x9, \"32:9\", \"32:9\", 1921, 540},",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "cpp_row_32x9_dropped",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "    {Aspect::Super32x9, \"32:9\", \"32:9\", 1920, 540},\n",
+      "new": "",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "js_row_32x9_slot_1280",
+      "file": "web/shapes.js",
+      "old": "width: 1920, height: 540, slot: 1920 }",
+      "new": "width: 1920, height: 540, slot: 1280 }",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree"
+    },
+    {
+      "id": "js_row_3x2_slot_960",
+      "file": "web/shapes.js",
+      "old": "{ name: '3:2', label: '3:2', width: 960, height: 640, slot: 1280 }",
+      "new": "{ name: '3:2', label: '3:2', width: 960, height: 640, slot: 960 }",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_row_20x9_height",
+      "file": "web/shapes.js",
+      "old": "{ name: '20:9', label: '20:9', width: 1200, height: 540, slot: 1280 }",
+      "new": "{ name: '20:9', label: '20:9', width: 1200, height: 541, slot: 1280 }",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "js_entry_text_without_canvas",
+      "file": "web/shapes.js",
+      "old": "text: row.label + ' \\u00b7 ' + row.width + ' x ' + row.height,",
+      "new": "text: row.label,",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "js_fill_select_stops_early",
+      "file": "web/shapes.js",
+      "old": "        ROWS.forEach(function (row) {\n            var option = doc.createElement('option');",
+      "new": "        ROWS.slice(0, 6).forEach(function (row) {\n            var option = doc.createElement('option');",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "js_fills_line_names_no_shape",
+      "file": "web/shapes.js",
+      "old": "return name ? rowOf(name).label + ' fills your screen' : '';",
+      "new": "return name ? 'fills your screen' : '';",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_stage_cap_fixed_at_1280",
+      "file": "web/shell.html",
+      "old": "            width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));\n            width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));\n            min-width",
+      "new": "            width: min(100%, 1280px, calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));\n            width: min(100%, 1280px, calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));\n            min-width",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "page_shell_dropdown_not_filled",
+      "file": "web/shell.html",
+      "old": "                AntsShapes.fillSelect(select, document);                 // (one entry for each row of the table; the shown shape is the chosen one)\n",
       "new": "",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_shell_change_not_heard",
+      "file": "web/shell.html",
+      "old": "                select.addEventListener('change', function () { antsPickShape(select.value); });\n",
+      "new": "",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_shell_dropdown_keys_reach_the_game",
+      "file": "web/shell.html",
+      "old": "                ['keydown', 'keypress', 'keyup'].forEach(function (name) { select.addEventListener(name, function (e) { e.stopPropagation(); }); });\n",
+      "new": "",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_shell_pick_not_remembered",
+      "file": "web/shell.html",
+      "old": "window.localStorage.setItem(ANTS_ASPECT_KEY, value); } catch (e) { /* private window: not remembered */ }\n            antsSetAspect(value);",
+      "new": "window.localStorage.setItem(ANTS_ASPECT_KEY + 'x', value); } catch (e) { /* private window: not remembered */ }\n            antsSetAspect(value);",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_shell_second_dropdown_not_followed",
+      "file": "web/shell.html",
+      "old": "            document.querySelectorAll('.pick-select').forEach(function (select) { select.value = shape; });\n            antsSyncAspect();",
+      "new": "            antsSyncAspect();",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_shell_line_not_on_every_screen",
+      "file": "web/shell.html",
+      "old": "document.getElementById('view-bar').classList.add('has-fit-note');",
+      "new": "document.getElementById('view-bar').classList.add('has-fit-tag');",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_click_is_a_pick",
+      "file": "web/lobby.html",
+      "old": "        // SELECTOR_END",
+      "new": "        $('aspect-select').addEventListener('click', function () { pickedShape = $('aspect-select').value; });\n        // SELECTOR_END",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_dropdown_not_filled",
+      "file": "web/lobby.html",
+      "old": "AntsShapes.fillSelect($('aspect-select'), document).value = aspect;",
+      "new": "$('aspect-select').value = aspect;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_change_not_stored",
+      "file": "web/lobby.html",
+      "old": "            remember(ASPECT_KEY, value);\n            if (value === aspect) return;",
+      "new": "            if (value === aspect) return;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "menu_pick_not_given_to_the_page",
+      "file": "web/game_menu.js",
+      "old": "write: function (name) { page.pickShape(name); }",
+      "new": "write: function (name) { }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_row_without_the_pages_function",
+      "file": "web/game_menu.js",
+      "old": "has: function () { return typeof page.pickShape === 'function'; },",
+      "new": "has: function () { return true; },",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_dropdown_not_filled_from_the_table",
+      "file": "web/game_menu.js",
+      "old": "            page.shapes.fillSelect(select, doc);\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_dropdown_follows_not",
+      "file": "web/game_menu.js",
+      "old": "own.write(select.value); mark(); });",
+      "new": "own.write(select.value); });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_fills_line_dropped",
+      "file": "web/game_menu.js",
+      "old": "            if (line) wrap.appendChild(el('div', 'gm-fits', line));\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_focus_list_without_select",
+      "file": "web/game_menu.js",
+      "old": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled])';",
+      "new": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_dropdown_keys_taken_by_the_panel",
+      "file": "web/game_menu.js",
+      "old": "var USED = /^(Tab|Enter| |Spacebar|Arrow(Left|Right|Up|Down)|Home|End)$/;",
+      "new": "var USED = /^(Tab|Enter| |Spacebar|Arrow(Left|Right)|Home|End)$/;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_hint_not_the_dropdowns",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "\"The shape of the picture; the match goes on\"",
+      "new": "\"The shape of the picture\"",
+      "test": "./build/tests/test_app/test_game_menu",
+      "build": [
+        "test_game_menu"
+      ]
+    },
+    {
+      "id": "cpp_default_not_16x9_place",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "aspect_place(kWebDefaultAspect), kShowWeb",
+      "new": "1, kShowWeb",
+      "test": "./build/tests/test_app/test_game_menu",
+      "build": [
+        "test_game_menu"
+      ]
+    },
+    {
+      "id": "cpp_set_aspect_new_shape_refused",
+      "file": "src/ants_app/application.cpp",
+      "old": "if (!aspect_at_place(shape, aspect)) return 0;",
+      "new": "if (!aspect_at_place(shape, aspect) || shape > 3) return 0;",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "cpp_canvas_height_is_width",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "constexpr int32_t canvas_height_of(Aspect aspect) noexcept { return shape_table_detail::row_of(aspect).height; }",
+      "new": "constexpr int32_t canvas_height_of(Aspect aspect) noexcept { return shape_table_detail::row_of(aspect).width; }",
+      "test": "./build/tests/test_app/test_canvas_layout",
+      "build": [
+        "test_canvas_layout"
+      ]
+    },
+    {
+      "id": "cpp_page_off_by_a_row",
+      "file": "include/ants_app/canvas_layout.hpp",
+      "old": "constexpr LayoutRect centred(int32_t w, int32_t h) const noexcept { return LayoutRect{(width - w) / 2, (height - h) / 2, w, h}; }",
+      "new": "constexpr LayoutRect centred(int32_t w, int32_t h) const noexcept { return LayoutRect{(width - w) / 2, (height - h) / 2 + 1, w, h}; }",
+      "test": "./build/tests/test_app/test_canvas_layout",
+      "build": [
+        "test_canvas_layout"
+      ]
     }
   ]
 }

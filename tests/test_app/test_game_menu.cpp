@@ -133,14 +133,11 @@ void test_table() {
     }
     {   // the picture row is made from the shape table (canvas_layout.hpp): a choice for each shape, in the table's order, with its words, and the web's default shape
         const gm::Row* picture = gm::find_row(gm::kPicture);
-        std::string words, hint;
-        for (size_t i = 0; i < kAspectTable.size(); ++i) {
-            words += (i > 0 ? "|" : "") + std::string(kAspectTable[i].label);
-            hint += (i == 0 ? "" : (i + 1 == kAspectTable.size() ? " or " : ", ")) + std::string(kAspectTable[i].label);
-        }
+        std::string words;
+        for (size_t i = 0; i < kAspectTable.size(); ++i) words += (i > 0 ? "|" : "") + std::string(kAspectTable[i].label);
         check(picture != nullptr && std::string(picture->words) == words && picture->min == 0 && picture->max == static_cast<int>(kAspectTable.size()) - 1 && picture->def == aspect_place(kWebDefaultAspect),
               "the picture row has one word for each row of the shape table, in its order, and the web's default shape as its default");
-        check(picture != nullptr && std::string(picture->hint) == hint + "; the match goes on", "the picture row's hint names the shapes of the table");
+        check(picture != nullptr && std::string(picture->hint) == "The shape of the picture; the match goes on", "the picture row's hint says what the dropdown does (the page lists the shapes, from its own copy of the table)");
     }
     check(gm::find_row(0) == nullptr && gm::find_row(15) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
     check(gm::find_row(gm::kMaster)->def == 100 && gm::find_row(gm::kMusic)->def == 65 && gm::find_row(gm::kEffects)->def == 100 && gm::find_row(gm::kScroll)->def == 50, "the defaults are the original's (Master 100: nothing changes)");

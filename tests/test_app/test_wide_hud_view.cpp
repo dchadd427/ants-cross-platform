@@ -720,6 +720,43 @@ void test_picture_per_screen() {
     }
 }
 
+/// A match, its results, the setup screen, the loading screen and the quick help at the canvas of every shape of the table (the pages exist for 640 x 480 and for 960 x 540: a bigger canvas shows the 960 x 540 page centred), with the
+/// pointer where the match puts it and the bars of a window that is not the picture's shape counted as the picture's edge
+void test_every_shape_screens() {
+    group("shapes", "every shape of the table: the match is the whole canvas, every other screen is the canvas's page (the 960 x 540 one, centred, where the canvas is bigger), the pointer starts in the middle of the match");
+    for (const Aspect aspect : kAllAspects) {
+        const std::string name = aspect_name(aspect);
+        const int32_t w = canvas_width_of(aspect), h = canvas_height_of(aspect);
+        const LayoutRect whole{0, 0, w, h};
+        const LayoutRect page = CanvasLayout::of(aspect).page();
+        AppFixture f(aspect, false, w, h);
+        check(f.ok, name + ": the application starts on its setup screen");
+        if (!f.ok) continue;
+        check(f.app.canvas() == CanvasLayout{w, h} && f.app.layout() == ScreenLayout::with_size(w, h) && f.app.hud().layout() == f.app.layout() && f.app.renderer().layout() == f.app.layout(), name + ": the canvas and the layout of the application, the HUD and the renderer are " + std::to_string(w) + " x " + std::to_string(h));
+        check_rect(f.app.picture(), page, name + ": the setup screen is the canvas's page");
+        check(f.app.start_game("Original-Ants/Maps/SMALL.LVL"), name + ": a match starts");
+        check_rect(f.app.picture(), whole, name + ": the match is the whole canvas");
+        check(f.app.mouse_screen_x() == w / 2 && f.app.mouse_screen_y() == h / 2 && !f.app.mouse_has_moved(), name + ": the pointer starts in the middle of the match's picture: (" + std::to_string(w / 2) + ", " + std::to_string(h / 2) + ")");
+        // the pointer over the last pixels is the edge of the picture: the corners and the sides of the canvas are reachable
+        f.app.note_pointer(w - 1, h - 1);
+        check(f.app.mouse_screen_x() == w - 1 && f.app.mouse_screen_y() == h - 1, name + ": the last pixel of the canvas is reachable");
+        f.app.hud().update(f.app.sim().get_world_state(), 100);
+        sim::MatchResult result;
+        result.is_over = true;
+        result.ally = {255, 255, 255, 255};
+        result.decide_winners();
+        f.app.scorecard().show(result, 0);
+        f.app.update_results(0.01f);
+        check(f.app.scorecard().is_open(), name + ": the results are open");
+        check_rect(f.app.picture(), page, name + ": the results are the canvas's page");
+        f.app.return_to_map_select();
+        check_rect(f.app.picture(), page, name + ": back on the setup screen: the canvas's page");
+        f.app.finish_loading();
+        check(f.app.state() == AppState::QuickHelp || f.app.state() == AppState::MapSelect, name + ": the loading screen ends in the quick help or the setup screen");
+        check_rect(f.app.picture(), page, name + ": the quick help (or the setup screen) is the canvas's page");
+    }
+}
+
 void test_small_levels_in_the_application() {
     group("small-levels", "whole application frames of matches on small levels cut from TINY.LVL: the black around the map stays black");
     // the review's 15 x 15 level (columns and rows 6 - 23 of TINY.LVL without 12 - 14: a gummy worm hung 65 px over its edge) and an 18 x 31 one that is only narrow: a whole application frame
@@ -983,7 +1020,7 @@ void test_default_and_options() {
     check(c.aspect == Aspect::Classic4x3 && c.aspect_given, "--aspect 4:3 gives the classic picture");
     c = parse({"ants", "--aspect", "16:9"});
     check(c.aspect == Aspect::Wide16x9 && c.aspect_given, "--aspect 16:9 gives the wide one");
-    c = parse({"ants", "--aspect", "3:2"});
+    c = parse({"ants", "--aspect", "5:4"});
     check(c.aspect == kPlatformDefaultAspect && !c.aspect_given && !c.startup_error.empty(), "a refused --aspect leaves the default and refuses the game");
     check(ApplicationConfig{}.aspect == Aspect::Classic4x3 && !ApplicationConfig{}.aspect_given, "a config that is made by hand (the tests') is the original's 4:3");
     // the application: nothing said, the command line's default, the settings key, the command line beats the settings
@@ -1013,11 +1050,15 @@ void test_default_and_options() {
     };
     check(aspect_of(parse({"ants"}), "").first == kPlatformDefaultAspect && aspect_of(parse({"ants"}), "").second == (kPlatformDefaultAspect == Aspect::Wide16x9 ? 960 : 640), "a game started with no option runs in the platform's default aspect, with its layout");
     check(aspect_of(parse({"ants", "--aspect", "4:3"}), "").second == 640, "--aspect 4:3: the classic layout");
+    check(aspect_of(parse({"ants", "--aspect", "3:2"}), "").second == 960 && aspect_of(parse({"ants", "--aspect", "20:9"}), "").second == 1200 && aspect_of(parse({"ants", "--aspect", "32:9"}), "").second == 1920,
+          "--aspect 3:2, 20:9 and 32:9: the layouts of their canvases (960, 1200 and 1920 wide)");
 #if !defined(__EMSCRIPTEN__)
     check(aspect_of(parse({"ants"}), "aspect=4:3\n").first == Aspect::Classic4x3, "the settings' key aspect=4:3 beats the default");
     check(aspect_of(parse({"ants"}), "aspect=16:9\n").first == Aspect::Wide16x9, "aspect=16:9 in the settings: 16:9");
     check(aspect_of(parse({"ants", "--aspect", "16:9"}), "aspect=4:3\n").first == Aspect::Wide16x9, "--aspect beats the settings' key");
-    check(aspect_of(parse({"ants"}), "aspect=3:2\n").first == kPlatformDefaultAspect, "a value that is no shape is ignored: the default");
+    check(aspect_of(parse({"ants"}), "aspect=3:2\n").first == Aspect::Wide3x2 && aspect_of(parse({"ants"}), "aspect=20:9\n").first == Aspect::Wide20x9 && aspect_of(parse({"ants"}), "aspect=32:9\n").first == Aspect::Super32x9,
+          "aspect=3:2, 20:9 and 32:9 in the settings: their shapes");
+    check(aspect_of(parse({"ants"}), "aspect=5:4\n").first == kPlatformDefaultAspect, "a value that is no shape is ignored: the default");
     check(aspect_of(ApplicationConfig{}, "").first == Aspect::Classic4x3, "a config made by hand is 4:3 whatever the platform's default");
 #endif
     // the four-window rig: a game that is started with --grid and no aspect (what start_game.sh does) takes its cell's largest rectangle of the default shape

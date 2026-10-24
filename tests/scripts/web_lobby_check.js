@@ -58,7 +58,7 @@ same('the page takes its default map and mapByKey from the rules script', aliase
 const lobbyBlock = between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath);
 const lobbyCode = [
     aliases.join('\n'),
-    between(lobbyText, 'SHAPES_BEGIN', 'SHAPES_END', lobbyPath),                 // (the table of the four shapes: localGameQuery names its shape through it)
+    between(lobbyText, 'SHAPES_BEGIN', 'SHAPES_END', lobbyPath),                 // (the table of the shapes: localGameQuery names its shape through it)
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     lobbyBlock,
     'return { DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, soloAddress: soloAddress, validFill: validFill };',
@@ -117,7 +117,7 @@ function loadShell() {
     const doc = {
         body: Object.assign(element(), { style: { setProperty() {} } }),       // (the page sets the slot's custom properties on it)
         getElementById(id) { if (id === 'game-stage') return stage; throw new Error('the page asked for #' + id); },
-        querySelectorAll(selectorText) { if (selectorText === '.seg button[data-aspect]') return []; throw new Error('the page asked for ' + selectorText); },
+        querySelectorAll(selectorText) { if (selectorText === '.pick-select' || selectorText === '.fit-note') return []; throw new Error('the page asked for ' + selectorText); },
     };
     return new Function('window', 'document', block + '\nreturn ANTS_PAGE;')(win, doc);
 }
@@ -148,8 +148,9 @@ try {
     same('localGameQuery: a key wins over a file name, a text that is no valid file name is no map (Treasure), an original\'s file is its key', [L.localGameQuery('tiny', '', 'Bob', '16:9'), L.localGameQuery('../x.lvl', '', 'Bob', '16:9'), L.localGameQuery('TINY.LVL', '', 'Bob', '16:9')],
          ['?map=tiny&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=tiny&name=Bob&aspect=16:9']);
     same('localGameQuery: an empty name is Player', [L.localGameQuery('tiny', '', '', '16:9'), L.localGameQuery('tiny', '', undefined, '16:9')], ['?map=tiny&name=Player&aspect=16:9', '?map=tiny&name=Player&aspect=16:9']);
-    same('localGameQuery: the shape is a pick of the four (4:3, 16:10, 16:9, 21:9) and nothing else: a text that names no shape (no pick yet) leaves &aspect= out', ['4:3', '16:10', '16:9', '21:9', undefined, null, '4:3&x=1', '16:10 ', 'wide', '3:2', '32:9', 42].map((shape) => L.localGameQuery('tiny', '', 'B', shape)),
-         ['4:3', '16:10', '16:9', '21:9', '', '', '', '', '', '', '', ''].map((shape) => '?map=tiny&name=B' + (shape ? '&aspect=' + shape : '')));
+    same('localGameQuery: the shape is a pick of the table (every row of it) and nothing else: a text that names no shape (no pick yet) leaves &aspect= out',
+         ['4:3', '3:2', '16:10', '16:9', '20:9', '21:9', '32:9', undefined, null, '4:3&x=1', '16:10 ', 'wide', '5:4', 'fit', '19.5:9', 42].map((shape) => L.localGameQuery('tiny', '', 'B', shape)),
+         ['4:3', '3:2', '16:10', '16:9', '20:9', '21:9', '32:9', '', '', '', '', '', '', '', '', ''].map((shape) => '?map=tiny&name=B' + (shape ? '&aspect=' + shape : '')));
     // START of a room with nobody else: the address that startAlone() hands to window.location (the function behind it, with a model as the lobby's rules script makes it)
     {
         const go = (model) => L.soloAddress(model, 'Bob', '16:9');

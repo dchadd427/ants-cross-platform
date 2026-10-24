@@ -63,7 +63,7 @@ PLAY_BUDGET, PLAY_GZIP_BUDGET = 30 * 1000, 9 * 1000        # bytes, raw and gzip
 GAME_MENU_FILES = ("game_menu.js", "game_menu.css")        # the game page's settings menu (docs/GAME_MENU.md): beside web/shell.html, not in web/front; its script and its style are fetched together once the game runs (web/shell.html, antsLoadGameMenu)
 GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 41 * 1000, 12 * 1000        # bytes, raw and gzipped, both files together (about 40,000 and 11,600; raised from 40,000 and 11,000 on purpose for the review's fixes: a question that never leaves by itself, the pointer lock heard on the window, the keys of the panel only, focus back to the button, the Controls grid): their own limits, not part of the folder's budget above or of the page's first load; a player who never opens the menu downloads them idle, after the game runs
 SHAPES_FILE = "shapes.js"        # the one table of the picture's shapes (docs/PLAY_IN_BROWSER.md): beside web/shell.html, not in web/front; both the game page and the front page load it before their own code
-SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 6 * 1000, 2500        # bytes, raw and gzipped (about 4,600 and 1,900): a table and five small functions, so a new shape's row does not need a bigger cap, and nothing else belongs in it
+SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 7.5 * 1000, 2900        # bytes, raw and gzipped (about 7,300 and 2,700; raised from 6,000 and 2,500 for the three rows of 3:2, 20:9 and 32:9 and the two functions of the dropdowns, fillSelect and fillsLine): a table and seven small functions, so a new shape's row does not need a bigger cap, and nothing else belongs in it
 GAME_SCRIPTS = ("test_game.js",)        # the game page's side of Play this map (web/shell.html loads it with the other scripts of this folder): not the lobby's, not the editor's
 GAME_BUDGET, GAME_GZIP_BUDGET = 14 * 1000, 5 * 1000        # bytes, raw and gzipped (about 10,700 and 4,100): its own limits, because it is neither the editor's nor the lobby's, and the game page downloads it for every visit
 SUBMIT_LAZY = ("mapmaker_submit.js",)        # the map maker's script that is loaded only when a player sends a map or looks at My submissions (web/front/mapmaker_app.js, withSubmit): not in the page's own list of scripts, so apart from the budget below
@@ -819,18 +819,16 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', self.page)
         self.assertRegex(self.page, r'@font-face \{ font-family: "Libre Franklin"; src: url\("front/LibreFranklin-Medium\.ttf"\) format\("truetype"\);')
 
-    def test_the_pictures_shape_buttons_are_radio_buttons_that_the_keyboard_reaches_and_shows(self):
+    def test_the_pictures_shapes_are_a_native_dropdown_that_the_keyboard_reaches_and_shows(self):
         sheet = Sheet(self.style)
-        self.assertEqual(sheet.value(".shape .seg input", "opacity"), "0")                   # hidden by being see-through: it keeps the focus, the arrows and Tab
-        for prop in ("display", "visibility", "pointer-events"):
-            self.assertIsNone(sheet.value(".shape .seg input", prop), prop)
-        for tag in re.findall(r'<input type="radio"[^>]*>', self.page):
-            self.assertNotRegex(tag, r"tabindex|hidden|disabled")
-            self.assertRegex(self.page, r'<label for="%s"[ >]' % re.search(r'id="([^"]+)"', tag).group(1))      # (each one has the label that is its button)
-        self.assertEqual(len(re.findall(r'<input type="radio" name="aspect"', self.page)), 4)             # (the four shapes of the game page's selector, in its order)
-        self.assertIn('<span class="seg" role="radiogroup" aria-labelledby="shape-label">', self.page)
-        self.assertEqual(sheet.value(".shape .seg input:focus-visible + label", "outline"), "3px solid var(--gold)")        # the focused button shows it
-        self.assertIsNotNone(sheet.value(".shape .seg input:checked + label", "background"))                                 # and so does the chosen one
+        for prop in ("appearance", "width", "min-height", "cursor"):
+            self.assertIsNotNone(sheet.value(".shape-select", prop), prop)                              # (the look of the game's teal buttons, as wide as the column)
+        self.assertIsNotNone(sheet.value(".shape-box::after", "border"))                                # (the chevron: it is the wrapper's, so that the face of the dropdown stays the buttons' own)
+        self.assertEqual(sheet.value(".shape-select", "width"), "100%")
+        self.assertEqual(sheet.value(".shape-select:focus-visible", "outline"), "3px solid var(--gold)")        # the focused dropdown shows it
+        self.assertEqual(len(re.findall(r'<select ', self.page.split('id="shape-row"')[1].split('class="go"')[0])), 1)      # (one native dropdown, no radio button: the entries are made by the script from web/shapes.js)
+        self.assertNotRegex(self.page, r'<input type="radio"')
+        self.assertIn('<label class="shape-label" id="shape-label" for="aspect-select">Picture</label>', self.page)         # (the label is the dropdown's: a tap on it focuses it)
 
     def test_the_picture_row_and_start_stack_at_the_top_of_the_match_column_between_721_and_1040_px(self):
         """The map's column spans three rows, the third takes the spare height, so the Picture row and START! sit under each other beside the top of the map (not spread over its height)."""
@@ -838,18 +836,14 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn("grid-template-rows: auto auto 1fr;", wide)
         self.assertIn(".side .maprow { grid-row: span 3; }", wide)
 
-    def test_the_picture_row_tags_the_shape_nearest_the_screen_only_for_a_mouse_and_leaves_room_for_the_tag(self):
-        """The picture draws "fills your screen" under one shape's button (the script un-hides one tag, and the Picture row gets the room for it); a phone or a tablet (no hover) shows no tag and no extra room."""
-        tags = re.findall(r'<span class="fit-tag" id="fit-([0-9-]+)" hidden>fills your screen</span>', self.page)
-        self.assertEqual(tags, ["4-3", "16-10", "16-9", "21-9"])                                         # every tag starts hidden, one per shape, left to right
-        self.assertEqual(self.style.count(".fit-tag[hidden] { display: none; }"), 1)
-        self.assertIn(".shape.has-fit-tag { padding-bottom: 22px; }", self.style)
-        self.assertRegex(self.style, r"@media \(hover: none\) \{ \.fit-tag \{ display: none; \} \.shape\.has-fit-tag \{ padding-bottom: 0; \} \}")
-        # the touch rule is the LATER one (same specificity as the 34 px rule it overrides), and the last button's tag ends with the button (a centred one sticks out of the column at the right)
-        self.assertGreater(self.style.index("@media (hover: none) { .fit-tag { display: none; }"), self.style.index(".shape.has-fit-tag { padding-bottom: 22px; }"))
-        self.assertIn(".shape .opt:last-child .fit-tag { left: auto; right: 0; transform: none; }", self.style)
-        self.assertNotIn("has-fit-tag", self.style.replace(".shape.has-fit-tag", ""))                     # (the footer's old room for the tag is gone: the row has its own)
-        self.assertEqual(Sheet(self.style).value(".shape", "flex-wrap"), "wrap")                         # a 320 px window: the label above the four buttons, nothing pushed past the edge
+    def test_the_picture_row_has_a_quiet_line_under_the_dropdown_for_the_shape_nearest_the_screen_on_every_screen(self):
+        """"fills your screen" is one line of text under the dropdown (the script writes it and shows it: "16:10 fills your screen"), in the row's own flow, so a narrow phone never clips it; it shows on a phone too."""
+        self.assertEqual(len(re.findall(r'<span class="fit-note" id="fit-note" hidden></span>', self.page)), 1)        # (hidden until the script has a shape that fills the screen)
+        self.assertEqual(self.style.count(".fit-note[hidden] { display: none; }"), 1)
+        self.assertNotIn("hover: none", self.style[self.style.index(".fit-note {"):self.style.index(".fit-note[hidden]")])       # (no rule that hides it where there is no mouse)
+        self.assertNotIn("has-fit", self.style + self.page)                                                    # (no room made for it: it is in the flow)
+        self.assertEqual(Sheet(self.style).value(".shape", "flex-direction"), "column")                        # the label, the dropdown, the line: one under the other, in the column
+        self.assertNotIn("fit-tag", self.page)
 
 
 class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
@@ -1011,9 +1005,9 @@ class TheColors(unittest.TestCase):
             ("gold title on the name step's teal banner", (".name-step-title", "color"), (".name-step-title", "background")),
             ("cream text on a teal button", (".btn", "color"), (".btn", "background")),
             ("cream text on a hovered button", (".btn", "color"), (".btn:hover", "background-color")),
-            ("cream text on a shape button", (".shape .seg label", "color"), (".shape .seg label", "background")),
-            ("cream text on a hovered shape button", (".shape .seg label", "color"), (".shape .seg label:hover", "background-color")),
-            ("the chosen shape button", (".shape .seg input:checked + label", "color"), (".shape .seg input:checked + label", "background")),
+            ("cream text on the picture's dropdown", (".shape-select", "color"), (".shape-select", "background")),
+            ("cream text on the hovered dropdown", (".shape-select", "color"), (".shape-select:hover", "background-color")),
+            ("cream text of an entry of the open list", (".shape-select option", "color"), (".shape-select option", "background")),
         ))
 
     def test_the_black_boxes_keep_their_text_readable(self):

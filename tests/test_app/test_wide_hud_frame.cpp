@@ -179,7 +179,7 @@ void test_anchoring(const assets::AssetArchive& arc) {
     check(moved_right == 11 && moved_down == 4, "eleven pieces are right anchored (the top bar, the bottom strip and the left strip are not), four go down");
 
     // other sizes follow the same rule: right anchored +dx, bottom anchored +dy, widened +dx, heightened +dy
-    const struct { int32_t w, h; } sizes[] = {{1280, 720}, {1920, 1080}, {700, 500}, {960, 480}, {640, 540}};
+    const struct { int32_t w, h; } sizes[] = {{1280, 720}, {1920, 1080}, {700, 500}, {960, 480}, {640, 540}, {960, 640}, {1200, 540}, {1260, 540}, {1920, 540}};          // (the last four are the shapes 3:2, 20:9, 21:9 and 32:9)
     for (const auto& sz : sizes) {
         const ScreenLayout l = ScreenLayout::with_size(sz.w, sz.h);
         const int32_t dx = l.dx(), dy = l.dy();
@@ -345,7 +345,7 @@ void test_cuts(const assets::AssetArchive& arc) {
 
 void test_composition(const assets::AssetArchive& arc) {
     group("compose", "the frame composed from the spans is the mock-up's one-line repeat, pixel for pixel, at every size; the original's picture is the plain 14 pieces");
-    const struct { int32_t w, h; } sizes[] = {{960, 540}, {1280, 720}, {1920, 1080}, {700, 500}, {960, 480}, {640, 540}, {640, 480}};
+    const struct { int32_t w, h; } sizes[] = {{960, 540}, {1280, 720}, {1920, 1080}, {700, 500}, {960, 480}, {640, 540}, {640, 480}, {960, 640}, {960, 600}, {1200, 540}, {1260, 540}, {1920, 540}};          // (every shape of the table)
     for (const auto& sz : sizes) {
         const Pic spans = compose_from_spans(arc, ScreenLayout::with_size(sz.w, sz.h));
         const Pic reference = compose_reference(arc, sz.w, sz.h);
@@ -444,7 +444,8 @@ void test_composition(const assets::AssetArchive& arc) {
 
 void test_renderer_draws_spans(const assets::AssetArchive& arc) {
     group("renderer", "the real renderer draws the frame's spans exactly: the repeated lines, the pieces, the origin of a window");
-    for (const auto& sz : {std::pair<int32_t, int32_t>{960, 540}, std::pair<int32_t, int32_t>{1280, 720}}) {
+    for (const auto& sz : {std::pair<int32_t, int32_t>{960, 540}, std::pair<int32_t, int32_t>{1280, 720}, std::pair<int32_t, int32_t>{960, 640}, std::pair<int32_t, int32_t>{960, 600}, std::pair<int32_t, int32_t>{1200, 540}, std::pair<int32_t, int32_t>{1260, 540},
+                           std::pair<int32_t, int32_t>{1920, 540}}) {
         RendererRig rig(arc, sz.first, sz.second);
         check(rig.ok, "the renderer rig " + std::to_string(sz.first) + " x " + std::to_string(sz.second) + " is up");
         if (!rig.ok) continue;
