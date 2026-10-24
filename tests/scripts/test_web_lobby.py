@@ -394,12 +394,12 @@ class TheFrontPageMarkup(PageCase):
         # START of the lobby: when the room heard that it starts, this page puts the entry of its seat where the game page looks, then goes to the game page in THIS tab (the game page asks no name, the seat's key is there)
         start = script[script.index("function onStarting() {"):script.index("function shownTeam(seat) {")]
         self.assertIn("try { window.localStorage.setItem(entry.name, entry.text); }", start)
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, picked), window.location.href).href);", start)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);", start)
         self.assertLess(start.index("window.localStorage.setItem(entry.name, entry.text)"), start.index("window.location.assign("))
         self.assertLess(start.index("forgetSession();"), start.index("window.location.assign("))                 # (Back from the match makes another room)
         self.assertIn("c.on('starting', mine(onStarting));", script)
         # the Rejoin button of the strip at the top does the same for a match that still runs
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', picked), window.location.href).href);", script)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);", script)
         # START with nobody else in the match: the game page's own single player, on this computer, in this tab (a room of the game server needs two); the room is let go of first
         self.assertIn("if (Rules.startsAlone(model)) { startAlone(); return; }", script)       # (a map of the players too: the game page fetches its file; no banner, no computer player needed)
         self.assertNotIn("needs a second player or a computer player", script)
@@ -691,7 +691,7 @@ class TheCheckIsNotVacuous(unittest.TestCase):
 
     def test_start_alone_uses_the_address_function(self):
         text = open(os.path.join(REPO, "web", "lobby.html"), encoding="utf-8").read()
-        self.assertIn("var address = soloAddress(model, myName(), picked);", text)
+        self.assertIn("var address = soloAddress(model, myName(), pickedShape);", text)
         self.assertRegex(text, r"if \(!address\) \{ say\([^\n]*\); return; \}\n\s+handing = true; client\.leave\(\);")   # refused BEFORE the room is let go of
         self.assertIn("window.location.assign(new URL(address, window.location.href).href);", text)
 

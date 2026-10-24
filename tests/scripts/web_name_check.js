@@ -1061,7 +1061,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     env.$('start').click();
     check('START asks the room (one StartRequest) and the page goes on waiting: nothing has moved yet', s.sent.length === 2 && s.sent[1][0] === NET0.MSG.StartRequest && env.assigned.length === 0 && Object.keys(env.storage.data).every((k) => k !== KEY_ENTRY + code + '.0'));
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
-    const want = 'https://play.test/?join=/ws&room=' + code + '&seat=0&name=Maya&aspect=16:9';
+    const want = 'https://play.test/?join=/ws&room=' + code + '&seat=0&name=Maya';
     same('the room says that START was pressed: this tab goes to the game page of the room (the plain code, the seat, the name, the picture\'s shape; no key, no create block)', env.assigned, [want]);
     const entry = JSON.parse(env.storage.data[KEY_ENTRY + code + '.0']);
     check('... the seat\'s key is in the browser\'s local storage as ants.rejoin.<room>.<seat> = {"k", "s", "t"}: the game page takes the seat from it', Object.keys(entry).sort().join() === 'k,s,t' && entry.k === hex(KEY) && entry.s === 'wss://play.test/ws' && Math.abs(entry.t - Date.now()) < 5000);
@@ -1083,7 +1083,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     const code = helloRoom(s.sent[0]);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7 }));
-    same('a player\'s page, when the room says START, goes to the game page with its own seat and name', env.assigned, ['https://play.test/?join=/ws&room=' + code + '&seat=1&name=Sam&aspect=16:9']);
+    same('a player\'s page, when the room says START, goes to the game page with its own seat and name', env.assigned, ['https://play.test/?join=/ws&room=' + code + '&seat=1&name=Sam']);
     check('... the entry is under that seat', !!env.storage.data['ants.rejoin.' + code + '.1'] && Object.keys(env.storage.data).filter((k) => k.indexOf('ants.rejoin.') === 0).length === 1);
     const shape = runLobby('?aspect=4:3', { 'ants.name': 'Maya' });
     const t = shape.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
@@ -1094,12 +1094,12 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const env = runLobby('', { 'ants.name': 'Maya' });
     const s = env.arrive({ key: KEY });
     env.$('start').click();
-    same('START with nobody else in the room plays a game on this computer: the game page\'s own single player, on the map of the room, under the name of the player', env.assigned, ['https://play.test/play.html?map=treasure&name=Maya&aspect=16:9']);
+    same('START with nobody else in the room plays a game on this computer: the game page\'s own single player, on the map of the room, under the name of the player', env.assigned, ['https://play.test/play.html?map=treasure&name=Maya']);
     check('... the room is let go of (a Leave, the socket closes), the tab forgets it, and no key is written for the game page', s.sent.length === 2 && s.sent[1][0] === NET0.MSG.Leave && s.closed && env.session.data['ants.lobby'] === undefined && Object.keys(env.storage.data).every((k) => k.indexOf('ants.rejoin.') !== 0));
     const evil = runLobby('', { 'ants.name': '<b>x</b>&y' });
     evil.arrive({ key: KEY, seats: [[C, '<b>x</b>&y'], [E, ''], [E, ''], [E, '']] });
     evil.$('start').click();
-    check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play.html?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y&aspect=16:9' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
+    check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play.html?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
 }
 
 // ---- 5.5c the rematch (front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the tab comes back from its match with the room's code and the key of its seat (the game page's hand-over in the
@@ -1150,7 +1150,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const env = runLobby('', { 'ants.name': 'Sam' });
     const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0, flags: 7 } });
     const code = helloRoom(s.sent[0]);
-    same('the first Room that a page hears already says START was pressed: the page goes to the game page of its seat, as if it had seen the change', env.assigned, ['https://play.test/?join=/ws&room=' + code + '&seat=1&name=Sam&aspect=16:9']);
+    same('the first Room that a page hears already says START was pressed: the page goes to the game page of its seat, as if it had seen the change', env.assigned, ['https://play.test/?join=/ws&room=' + code + '&seat=1&name=Sam']);
     check('... with its key in the browser\'s storage, and the room forgotten by the tab', !!env.storage.data['ants.rejoin.' + code + '.1'] && env.session.data['ants.lobby'] === undefined);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7 }));
     check('... once (a second Room of the same wait leads nowhere else)', env.assigned.length === 1);
@@ -1210,7 +1210,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
         check('... the lobby is there as ever (the strip is above it: the page still makes its room)', env.sockets.length === 1 && !env.$('lobby').hidden);
         check('... and the key is in no text or attribute of the page', env.dumpAll().indexOf(RKEY) === -1 && env.dumpAll().indexOf(RKEY.slice(0, 8)) === -1);
         env.$('rejoin-go').click();
-        same('pressing it takes THIS tab to the game page: the plain code, the seat, the (empty) name and the shape', env.assigned, ['https://play.test/?join=/ws&room=k7m2xq&seat=1&name=&aspect=16:9']);
+        same('pressing it takes THIS tab to the game page: the plain code, the seat, the (empty) name and the shape', env.assigned, ['https://play.test/?join=/ws&room=k7m2xq&seat=1&name=']);
         check('... with no key in the address, no create block (the seat is already in the room: the game finds its key by itself), nothing opened in another window, and nothing written to the storage', env.assigned[0].indexOf(RKEY) === -1 && noBlockOf(env, env.assigned[0]) && env.opened.length === 0 && env.storage.data['ants.rejoin.k7m2xq.1'] === stored['ants.rejoin.k7m2xq.1'] && Object.keys(env.storage.data).length === 1);
     }
     {
@@ -1226,10 +1226,10 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     {
         const env = runLobby('', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'Zoë' });
         env.$('rejoin-go').click();
-        check('a remembered name that the rules refuse is no name', env.assigned.length === 1 && env.param(env.assigned[0], 'name') === '' && /&name=&aspect=/.test(env.assigned[0]), env.assigned[0]);
+        check('a remembered name that the rules refuse is no name', env.assigned.length === 1 && env.param(env.assigned[0], 'name') === '' && /&name=$/.test(env.assigned[0]), env.assigned[0]);
         const evil = runLobby('', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'A&B <i>' });
         evil.$('rejoin-go').click();
-        check('a remembered name with < > & goes into the address encoded', evil.assigned[0] === 'https://play.test/?join=/ws&room=r-1&seat=0&name=A%26B%20%3Ci%3E&aspect=16:9', evil.assigned[0]);
+        check('a remembered name with < > & goes into the address encoded', evil.assigned[0] === 'https://play.test/?join=/ws&room=r-1&seat=0&name=A%26B%20%3Ci%3E', evil.assigned[0]);
     }
     {
         const env = runLobby('', { 'ants.rejoin.old-match.0': entry(4 * 3600 * 1000), 'ants.rejoin.mid-match.1': entry(2 * 3600 * 1000) });

@@ -139,7 +139,7 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertEqual(len(re.findall(r"addEventListener\('visibilitychange'", self.page)), 2)                        # (the client's wake and the line of numbers' own: tests/scripts/web_name_check.js counts them)
 
     def test_the_press_takes_this_tab_to_the_game_page_with_the_remembered_name_and_shape_and_no_key(self):
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', picked), window.location.href).href);", self.wiring)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);", self.wiring)
         self.assertIn("var remembered = nameCheck(recall(NAME_KEY));", self.wiring)
         self.assertNotIn("window.open", self.wiring)                                                                    # (no new tab: the other join links of the page stay in this one)
         self.assertNotIn("window.open(", self.page)                                                                      # (the page opens no window at all: the test room's "separate windows" went with "More ways to play")
@@ -167,7 +167,7 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertIn("try { window.localStorage.setItem(entry.name, entry.text); } catch (e) {", start)
         self.assertEqual(start.count("setItem("), 1)
         self.assertIn("forgetSession();", start)                                                                         # (Back from the match makes a room again: this one is the match's now)
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, picked), window.location.href).href);", start)    # (the Rejoin button's address: the plain code, the seat, the name, the shape)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);", start)    # (the Rejoin button's address: the plain code, the seat, the name, the shape)
         self.assertIn("$('rejoin').hidden = true;", start)
         self.assertNotRegex(start, r"\.leave\(|\.close\(|Leave")                                                       # (the seat is handed over, not given up: the game's own Hello takes it with the key)
         net = read("web", "front", "lobby_net.js")

@@ -201,7 +201,7 @@ function runLobby(path, search, stored, options) {
     const code = 'var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY; var mapByKey = Rules.mapByKey; var codeText = Rules.codeText;\n'
         + helpers + shapes + fill + lobby + shape + rejoin + selector
         + '\nreturn { aspect: aspect, key: ASPECT_KEY, now: function () { return aspect; },'
-        + ' handoff: function (code, seat, name) { return rejoinQuery({ room: code, seat: seat }, name, picked); }, solo: function (name) { return localGameQuery(DEFAULT_MAP_KEY, [], name, picked); }, picked: function () { return picked; } };';
+        + ' handoff: function (code, seat, name) { return rejoinQuery({ room: code, seat: seat }, name, pickedShape); }, solo: function (name) { return localGameQuery(DEFAULT_MAP_KEY, [], name, pickedShape); }, picked: function () { return pickedShape; } };';
     const result = new Function('window', 'document', 'Rules', code)(win, doc, rules);
     result.storage = storage;
     result.win = win;

@@ -210,24 +210,24 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
 
 
 class TheFrontPageHandsTheShapeOnToTheGame(unittest.TestCase):
-    """The front page passes the player's PICK on to every game it opens, as the variable `picked` AT THE MOMENT of the hand-off (not a copy made when the page loaded), so that a shape picked in the lobby,
+    """The front page passes the player's PICK on to every game it opens, as the variable `pickedShape` AT THE MOMENT of the hand-off (not a copy made when the page loaded), so that a shape picked in the lobby,
     which keeps the match and does not reload the page, is the shape of the game that START opens. A first visit's shape is not a pick and is not handed on: the game page works out its own when it
     loads (a phone that opens the front page upright and is turned sideways would otherwise carry its upright 16:9 into the game). The builders of the addresses are run with node
     (web_aspect_key_check.js: the START address, a game for one); that the call sites pass the variable is read here."""
 
     def test_the_start_the_rejoin_and_the_game_for_one_pass_the_live_shape(self):
         page = read(LOBBY)
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, picked), window.location.href).href);", page)                              # START (onStarting)
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', picked), window.location.href).href);", page)         # the Rejoin button
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);", page)                              # START (onStarting)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);", page)         # the Rejoin button
         self.assertIn("window.location.assign(new URL(address, window.location.href).href);", page)                               # START with nobody else (startAlone)
-        self.assertIn("var address = soloAddress(model, myName(), picked);", page)                                                  # (the game for one's address carries the live pick)
+        self.assertIn("var address = soloAddress(model, myName(), pickedShape);", page)                                                  # (the game for one's address carries the live pick)
         block = page[page.index("// SELECTOR_BEGIN"):page.index("// SELECTOR_END")]
         self.assertIn("aspect = value;", block)                                                                                            # (a pick in the lobby changes the live variable, which the calls above read)
-        self.assertIn("picked = value;", block)                                                                                            # (and it is a pick, the shown shape too)
+        self.assertIn("pickedShape = value;", block)                                                                                            # (and it is a pick, the shown shape too)
         shape_block = page[page.index("// SHAPE_BEGIN"):page.index("// SHAPE_END")]
-        self.assertIn("aspect = picked = asked;", shape_block)                                                                              # (the address and the stored pick are picks)
-        self.assertIn("aspect = picked = remembered;", shape_block)
-        self.assertNotRegex(shape_block, r"picked = AntsShapes\.firstVisit")                                                               # (the first visit's shape is not)
+        self.assertIn("aspect = pickedShape = asked;", shape_block)                                                                              # (the address and the stored pick are picks)
+        self.assertIn("aspect = pickedShape = remembered;", shape_block)
+        self.assertNotRegex(shape_block, r"pickedShape = AntsShapes\.firstVisit")                                                               # (the first visit's shape is not)
 
     def test_every_game_address_of_the_page_is_one_of_those_three_builders(self):
         page = read(LOBBY)

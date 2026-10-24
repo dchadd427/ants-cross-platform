@@ -328,14 +328,14 @@
     {
       "id": "js_first_visit_window_ignored",
       "file": "web/shapes.js",
-      "old": "var sideways = screenW >= screenH || win.innerWidth > win.innerHeight;",
+      "old": "var sideways = screenW >= screenH || (!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight);",
       "new": "var sideways = screenW >= screenH;",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "js_first_visit_sideways_window_only",
       "file": "web/shapes.js",
-      "old": "var sideways = screenW >= screenH || win.innerWidth > win.innerHeight;",
+      "old": "var sideways = screenW >= screenH || (!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight);",
       "new": "var sideways = win.innerWidth > win.innerHeight;",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
@@ -419,21 +419,21 @@
     {
       "id": "page_lobby_start_hands_on_the_shown_shape",
       "file": "web/lobby.html",
-      "old": "rejoinQuery({ room: code, seat: seat }, name, picked)",
+      "old": "rejoinQuery({ room: code, seat: seat }, name, pickedShape)",
       "new": "rejoinQuery({ room: code, seat: seat }, name, aspect)",
       "test": "python3 tests/scripts/test_web_aspect_default.py"
     },
     {
       "id": "page_lobby_solo_hands_on_the_shown_shape",
       "file": "web/lobby.html",
-      "old": "soloAddress(model, myName(), picked)",
+      "old": "soloAddress(model, myName(), pickedShape)",
       "new": "soloAddress(model, myName(), aspect)",
       "test": "python3 tests/scripts/test_web_aspect_default.py"
     },
     {
       "id": "page_lobby_rejoin_hands_on_the_shown_shape",
       "file": "web/lobby.html",
-      "old": "remembered.ok ? remembered.name : '', picked)",
+      "old": "remembered.ok ? remembered.name : '', pickedShape)",
       "new": "remembered.ok ? remembered.name : '', aspect)",
       "test": "python3 tests/scripts/test_web_aspect_default.py"
     },
@@ -447,14 +447,14 @@
     {
       "id": "page_lobby_press_is_no_pick",
       "file": "web/lobby.html",
-      "old": "                picked = value;                                                              // (a press is a pick, the shape that is shown too)\n",
+      "old": "                pickedShape = value;                                                              // (a press is a pick, the shape that is shown too)\n",
       "new": "",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "page_lobby_stored_pick_is_no_pick",
       "file": "web/lobby.html",
-      "old": "else if (isShape(remembered)) aspect = picked = remembered;",
+      "old": "else if (isShape(remembered)) aspect = pickedShape = remembered;",
       "new": "else if (isShape(remembered)) aspect = remembered;",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
