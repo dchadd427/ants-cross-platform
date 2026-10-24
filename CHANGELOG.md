@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.115 - 2026-10-23 - A settings menu on Esc and a Settings button
+## v0.12.114 - 2026-10-23 - A settings menu on Esc and a Settings button
 
 **For players:**
 - **A settings menu, on the Esc key or a Settings button.** In the browser, press Esc (with nothing selected and no dialog open) or click **Settings** to open a panel over your game with Sound, Video, Controls and Game, and **Resume** and **Leave game** at the bottom. **The game keeps running** while it is open, so settle your settings quickly in an online match. Esc still deselects first, as the original does; the next Esc opens the menu. A click on the dimmed area does not close it.
@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens, and Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/91a09a4b...55e8e0a4)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b29f40d8...4ee259b7)
 
 ## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
 
