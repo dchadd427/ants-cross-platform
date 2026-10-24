@@ -226,16 +226,28 @@
         list = ix.piles[idx]; for (i = 0; list && i < list.length; i++) if (!mv.piles[list[i]]) return { why: 'pile' };
         list = ix.ants[idx]; for (i = 0; list && i < list.length; i++) if (!mv.ants[list[i]]) return { why: kind === 'ant' ? 'ant' : 'ants' };
         if (kind !== 'ant' && kind !== 'pile') { list = ix.plants[idx]; for (i = 0; list && i < list.length; i++) if (!mv.plants[list[i]]) return { why: 'plant' }; }
-        if ((kind === 'hill' || kind === 'ant' || kind === 'pile') && Tiles.kindOf(Edit.tile(file, 1, idx)) === 'water') return { why: 'water' };
         if (kind === 'ant' && (Edit.flags(file, 1, idx) & 1) && !(mv.cells[idx] && Solid.sets(t2))) return { why: 'solid' };
         return null;
     }
     function kindOfItem(it) { return it.k === 'obj' ? (it.hill >= 0 ? 'hill' : 'obj') : it.k; }
     function blockerName(b) { return b.why === 'hill' ? 'the ' + lower(label(b.team)) + ' hill' : (b.why === 'obj' ? 'the ' + nameOf(b.tile) : (b.why === 'pile' ? 'the food pile' : 'the plant')); }
 
+    var TIE = 'Part of it is tied to another place on the map (the file is from an old map maker), and that tie could not stay the same there.';
+    // Water is a hint, never a refusal (the library has them there). A pile counts by its anchor cell, a hill by any of its 16.
+    var HINTS = {
+        pile: 'This is water: ants that cannot swim reach it only from the shore. Swimmers can swim to it or build a bridge.',
+        ant: 'This is water: a starting ant that cannot swim moves to land beside it, or drowns.',
+        hill: 'This is water: ants that cannot swim may not be able to leave this hill.'
+    };
+    function waterHint(file, it, cells) {
+        var k = kindOfItem(it), i;
+        for (i = 0; HINTS[k] && i < (k === 'pile' ? 1 : cells.length); i++) if (Tiles.kindOf(Edit.tile(file, 1, cells[i])) === 'water') return HINTS[k];
+        return '';
+    }
+
     // Whether the items can be shifted by (dr, dc) as a move or a copy: {ok: true} or {ok: false, text, cells (the cells that are in the way)}. The text is the sentence that the bar shows.
     function check(file, items, dr, dc, mode, kind) {
-        var ix = index(file), lay = ix.lay, mv = movingSets(mode === 'copy' ? [] : items), ties = footSet(items), i, k;
+        var ix = index(file), lay = ix.lay, mv = movingSets(mode === 'copy' ? [] : items), ties = footSet(items), i, k, hints = [];
         var who = mode === 'copy' ? (items.length > 1 ? 'The copies' : 'The copy') : cap(nameOfPick(file, items, kind));
         if (kind === 'area' && mode !== 'copy') who = 'These ' + who;
         if (mode === 'copy') {
@@ -245,26 +257,30 @@
         }
         for (i = 0; i < items.length; i++) {
             var it = items[i], cells = shifted(file, it, dr, dc), kindIt = kindOfItem(it), first = null, bad = [], n = 0;
-            if (cells.edge) return { ok: false, cells: [], text: who + ' cannot go here. ' + (cells.edge === 'limit' ? 'A Classic map keeps the place of an object in one number, so nothing can go past row 255 or column 255.' : (kindIt === 'hill' ? 'It needs a free 4 x 4 square inside the map.' : 'It would go off the edge of the map.')) + ' Move it a little.' };
+            if (cells.edge) {
+                var why = cells.edge === 'limit' ? 'A Classic map keeps the place of an object in one number, so nothing can go past row 255 or column 255.' : (kindIt === 'hill' ? 'It needs a free 4 x 4 square inside the map.' : 'It would go off the edge of the map.');
+                return { ok: false, cells: [], reason: why, text: who + ' cannot go here. ' + why + ' Move it a little.' };
+            }
             for (k = 0; k < cells.length; k++) {
                 var b = blockerAt(file, ix, it.k === 'pile' && k > 0 ? 'obj' : kindIt, cells[k], mv);
                 if (b && (!first || b.why === first.why)) { first = first || b; n++; bad.push(cells[k]); }
             }
             if (first) {
                 var text, w = first.why, name = blockerName(first), named = w === 'hill' || w === 'obj' || w === 'pile' || w === 'plant';
-                if (w === 'water') text = kindIt === 'hill' ? 'Part of its 4 x 4 square is water.' : 'That ground is water.';
-                else if (w === 'solid') text = 'That ground is solid, so an ant cannot start there.';
+                if (w === 'solid') text = 'That ground is solid, so an ant cannot start there.';
                 else if (w === 'ant') text = 'An ant is already there.';
                 else if (w === 'ants') text = 'Starting ants are in the way.';
                 else text = (kindIt === 'hill' ? 'It needs a free 4 x 4 square, and ' + name : cap(name)) + ' is in the way (' + plural(n, 'cell', 'cells') + ').';
-                return { ok: false, cells: bad, text: who + ' cannot go here. ' + text + ' Move it a little' + (named ? ', or move ' + name + ' first.' : '.') };
+                return { ok: false, cells: bad, reason: text, text: who + ' cannot go here. ' + text + ' Move it a little' + (named ? ', or move ' + name + ' first.' : '.') };
             }
+            var hint = waterHint(file, it, cells);
+            if (hint && hints.indexOf(hint) < 0) hints.push(hint);
             if (it.k === 'obj' || it.k === 'pile') {          // (a cell that is tied to another place of the map keeps its tie exactly, or the thing does not go)
                 var tied = shiftObject(file, it.k === 'pile' ? it.objs : it.fp, dr, dc, ties).filter(function (x) { return x.a === null; });
-                if (tied.length) return { ok: false, cells: tied.map(function (x) { return x.to; }), text: who + ' cannot go here. Part of it is tied to another place on the map (the file is from an old map maker), and that tie could not stay the same there. Move it a little, or leave it where it is.' };
+                if (tied.length) return { ok: false, cells: tied.map(function (x) { return x.to; }), reason: TIE, text: who + ' cannot go here. ' + TIE + ' Move it a little, or leave it where it is.' };
             }
         }
-        return { ok: true };
+        return hints.length ? { ok: true, hint: hints.join(' ') } : { ok: true };
     }
 
     // ---- the change ----
@@ -482,7 +498,7 @@
             if (st.mode !== 'moving' || !st.items.length) return;
             if (!st.copy && !st.dr && !st.dc) return pick(st.items, st.kind, st.group, st.cycle, st.box);
             if (!evaluate().ok) return render();
-            var change = build(f, st.items, st.dr, st.dc, how()), kind = st.kind, copy = st.copy, dr = st.dr, dc = st.dc, n = st.items.length, box = st.box;
+            var change = build(f, st.items, st.dr, st.dc, how()), kind = st.kind, copy = st.copy, dr = st.dr, dc = st.dc, n = st.items.length, box = st.box, hint = st.verdict.hint;
             if (!env.act(change)) return clear('Nothing changed.');
             var items = resolve(file(), change.landed), word = copy ? 'Copied' : 'Moved', moved = [];
             if (dc) moved.push(plural(Math.abs(dc), dc < 0 ? 'column left' : 'column right', dc < 0 ? 'columns left' : 'columns right'));
@@ -490,7 +506,7 @@
             if (!items.length) return clear(word + '.');
             pick(items, kind === 'area' ? 'area' : 'one', items.length === 1 && items[0].k === 'ant' ? antGroup(file(), items[0]) : [], null, kind === 'area' && box ? { r0: box.r0 + dr, c0: box.c0 + dc, r1: box.r1 + dr, c1: box.c1 + dc } : null);
             st.kind = kind === 'group' ? 'group' : st.kind;
-            st.note = word + ' ' + (n === 1 ? 'it' : plural(n, 'thing', 'things')) + (copy ? '' : ': ' + moved.join(', ')) + '. One Undo takes it back.';
+            st.note = word + ' ' + (n === 1 ? 'it' : plural(n, 'thing', 'things')) + (copy ? '' : ': ' + moved.join(', ')) + '. One Undo takes it back.' + (hint ? ' ' + hint : '');
             render(); tell(st.note);
         }
         function deleteNow(items) {
@@ -503,6 +519,12 @@
             var f = file(), items = st.box ? areaItems(f, st.box) : [], box = st.box;
             if (!items.length) { st.mode = 'boxing'; st.items = []; st.box = null; st.note = 'Nothing is inside that box. Drag a bigger box, or Cancel.'; return paint(); }
             pick(items, 'area', [], null, box);
+        }
+        // a lift on a red place puts the thing back where it was picked up and says why (Done on a red place keeps it in hand)
+        function lift() {
+            var v = evaluate();
+            if (v.ok || v.plain) return done();
+            letGo(); st.note = 'Put back: ' + (v.reason || v.text).replace(/^./, function (c) { return c.toLowerCase(); }); render(); tell(st.note);
         }
         function letGo() { st.drag = null; if (st.ask) { st.ask = ''; return render(); } if (st.mode === 'moving' && st.items.length) pick(st.items, st.kind, st.group, st.cycle, st.box); else clear(); }
 
@@ -603,6 +625,7 @@
                 if (st.note) side.appendChild(el('p', 'pk-said', st.note));
                 side.appendChild(go); side.appendChild(button('cancel', 'Cancel', '', letGo));
                 if (!ok && !v.plain) bar.appendChild(el('p', 'pk-warn', v.text));
+                else if (v.hint) bar.appendChild(el('p', 'pk-said pk-hint', v.hint));
                 padwrap.appendChild(pad); padwrap.appendChild(side); bar.appendChild(padwrap);
                 return;
             }
@@ -611,6 +634,7 @@
                 line.appendChild(el('span', 'pk-rest', ' ' + (st.away ? 'Let go here and it goes back where it was.' : v.plain ? v.text : (st.copy ? 'Tap where the copy goes' : 'Tap the new place') + ', or drag ' + them + '. It lands on row ' + land.row + ', column ' + land.column + '.')));
                 bar.appendChild(line);
             } else bar.appendChild(el('p', 'pk-warn', v.text));
+            if (ok && v.hint && !st.away) bar.appendChild(el('p', 'pk-said pk-hint', v.hint));
             if (st.note) bar.appendChild(el('p', 'pk-said', st.note));
             a.className = 'pk-row three';
             a.appendChild(go);
@@ -787,7 +811,7 @@
                 if (!d) return;
                 if (d.kind === 'box') return finishBox();
                 if (d.kind === 'item' && !d.moved) return tapSelect(d.from);
-                if (d.moved && st.mode === 'moving') return off ? letGo() : done();          // the lift puts it down where the ghost is (red: it stays, with the reason); off the map or over the bar it goes back
+                if (d.moved && st.mode === 'moving') return off ? letGo() : lift();          // the lift puts it down where the ghost is (red, off the map or over the bar: it goes back)
                 render();
             },
             // the pointer was lost (a cancelled touch, the window lost the focus): what was dragged goes back, like Escape
