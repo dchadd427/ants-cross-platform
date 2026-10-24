@@ -19,7 +19,7 @@ Ants is a C++17 remake of the 1998 RTS (SDL2; native on macOS, Linux and Windows
 8. **Times.** Every date and time written for the owner is Pacific time.
 9. **One home, delete what you replace.** Every topic has one home page, listed in the README; edit it in place and never describe the same thing in a second place. A change deletes what it replaces (code, tests, documents, switches) in the same pull request. A switch that is off by default gets an expiry: retire it or remove it within two releases.
 10. **Tests.** A test goes in the file of its topic; a test file over 2,500 lines is split (the ratchet tables in `tools/check_hygiene.py` enforce it).
-11. **Threads and branches.** After your pull request merges, restart your branch from `main` (a push recreates it); GitHub deletes merged branches by itself. A branch with no pull request for a week is reported by the coordinator and either gets a pull request or is archived. A branch with no pull request and no commit for 30 days is deleted by the weekly job (`docs/WORKFLOW.md`).
+11. **Threads and branches.** After your pull request merges, restart your branch from `main` (a push recreates it); GitHub deletes merged branches by itself. A branch with no pull request for a week is reported by the coordinator and either gets a pull request or is archived.
 
 ## How much checking
 - Every change: the quick tier. Every pull request: CI's five checks, and for code one independent review with every finding fixed.
