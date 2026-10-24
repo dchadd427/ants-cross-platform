@@ -6,6 +6,7 @@ script can say without a browser is checked here:
     so in the toast, calls it with the pieces of the page that it needs, and has no key handler of its own for Esc (the game asks, through window.antsGameMenuAsk, when Esc has nothing to cancel);
   - the script: puts every text in with textContent (no markup is ever written), reads and writes the game only through the five exports of src/ants_app/application_game_menu.cpp, uses the numbers of
     game_menu.hpp for rows, facts and acts, handles by name only rows that the C++ table has, listens to nothing outside the panel's life, and leaves the lifts of keys to the game;
+  - the style: the button over the picture in fullscreen is hidden for a mouse (a fine, hovering pointer) and kept for a touch screen;
   - the table: the two JSON files that the page's check draws from (tests/data/game_menu_*.json, kept equal to the game's own text by test_game_menu) name exactly the rows of the C++ table;
   - the exports: the five of them are in the game, the page's EM_JS call and the HUD's Esc hook are there;
   - the image: carries the script and the style (Dockerfile, build_web.sh, the CI's list of files);
@@ -79,7 +80,7 @@ class ThePage(unittest.TestCase):
 
     def test_the_help_text_says_what_esc_does(self):
         self.assertIn("with nothing to deselect open the settings menu", self.page)
-        self.assertIn("button over the picture opens the menu", self.page)
+        self.assertIn("a touch screen has the&#8197;<strong>Settings</strong>&#8197;button over the picture", self.page)
         self.assertIn("<kbd>Esc</kbd>&#8197;deselect, then the settings menu", self.page)
 
     def test_the_image_carries_the_script_and_the_style(self):
@@ -149,6 +150,21 @@ class TheScript(unittest.TestCase):
         self.assertIn("stage.appendChild(scrim);", self.script)
         self.assertIn("k.setAttribute('inert', '');", self.script)
         self.assertIn("behind[j].removeAttribute('inert');", self.script)
+
+
+class TheStyle(unittest.TestCase):
+    """Nothing is laid over the game's picture on a computer with a mouse (docs/GAME_MENU.md, "The Settings button"): the fullscreen button is hidden for a fine, hovering pointer and stays on a touch screen"""
+
+    def setUp(self):
+        self.css = read(STYLE)
+
+    def test_the_fullscreen_button_is_hidden_for_a_mouse(self):
+        rules = re.findall(r"@media \(hover: hover\) and \(pointer: fine\) \{([^{}]*\{[^{}]*\}[^{}]*)\}", self.css)
+        self.assertTrue(any(re.search(r"\.btn\.gm-fs \{ display: none !important; \}", r) for r in rules), "the button over the picture has no place on a computer with a mouse; !important beats the script's own display")
+
+    def test_a_touch_screen_keeps_it_over_the_picture(self):
+        self.assertRegex(self.css, r"\n\.btn\.gm-fs \{ position: absolute; top: [^}]*min-height: 44px;")
+        self.assertEqual(len(re.findall(r"\.gm-fs", self.css)), 3, "the base rule, the page's own fullscreen and the one for a mouse; nothing else shows or hides it")
 
 
 class TheTable(unittest.TestCase):

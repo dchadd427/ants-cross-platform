@@ -11,11 +11,12 @@ for tests/scripts/test_web_camera.sh) makes the parts that watch a replay run. N
     Tab stays inside it; a click on the dimmed area does nothing; a held Esc (a repeat) does not close it and the next Esc does, the focus is on the canvas; Esc with a hill selected only deselects and the
     next one opens it; Esc closes the quick help and asks for nothing; a slider moved with the arrow key is the game's value and the settings file's (master=); Mute and the hit point numbers are the game's
     and remembered (mute=, hp_numbers=); the picture's shape is the selector's (the stage, the game's canvas, the address); the Fullscreen row makes the stage fullscreen with the panel inside it, the pointer lock
-    is let go while it is up and asked for again by Resume; in fullscreen the Settings button is over the picture and opens it; a dialog that comes up (the quick help, from the panel's own act) closes it;
+    is let go while it is up and asked for again by Resume; in fullscreen the Settings button is NOT shown (nothing is over the picture) and Esc opens it; a dialog that comes up (the quick help, from the panel's own act) closes it;
     Leave game asks (a forfeit with one opponent left), Esc and Stay stay, Forfeit ends the match (the results); in a game for one it asks "Leave the game?" and leaves for the front page;
   * a phone, 390 x 844 with touch: the button is under the picture (44 px), a tap opens the panel inside a gutter of 16 px, every button and slider is at least 44 px high, the text is at least 16 px
     (hints 13), the page does not scroll sideways, the touch model sees nothing of what is tapped on the panel, the cross closes it, the Controls list is the touch list, the question of Leave game fits;
-    a phone on its side (844 x 390): the panel is the screen's height less the gutter and every button is on the screen;
+    a phone on its side (844 x 390): the panel is the screen's height less the gutter and every button is on the screen; in fullscreen on a touch screen the Settings button is over the picture (44 px)
+    and a tap opens the panel;
   * a recording (play.html?replay=...): the button is in the bar, Esc opens the panel with no Game section, the replay goes on meanwhile, "Back to the matches" asks nothing and leaves for the list; in the
     frame of a match page (embed=1) there is no panel, no button and no script.
 
@@ -338,7 +339,7 @@ def computer(p, args, check):
     s = p.state()
     check(not s["open"] and s["locked"] == "canvas", "Resume closes it and asks for the pointer lock again (open %s, locked %s)" % (s["open"], s["locked"]))
     b = p.buttons()
-    check(b["settings-btn-fs"]["shown"] and b["settings-btn-fs"]["y"] < 20 and b["settings-btn-fs"]["h"] >= 43.5, "in fullscreen the Settings button is over the picture, at the top, 44 px high (%s)" % {k: round(v) if isinstance(v, float) else v for k, v in b["settings-btn-fs"].items()})
+    check(not b["settings-btn-fs"]["shown"], "in fullscreen a computer with a mouse has nothing over the picture: the Settings button is not shown (%s)" % {k: v["shown"] for k, v in b.items()})
     p.esc()
     s = p.state()
     check(s["open"] and s["locked"] is None and s["fullscreen"] == "game-stage", "Esc in fullscreen with the mouse locked opens the panel and lets the lock go (open %s, locked %s)" % (s["open"], s["locked"]))
@@ -346,9 +347,9 @@ def computer(p, args, check):
     check(not p.state()["open"], "(Esc closes it)")
     tab.ev("document.exitPointerLock(); 1")
     time.sleep(0.6)
-    p.click_element("#settings-btn-fs")
+    p.esc()
     s = p.state()
-    check(s["open"] and s["parent"] == "game-stage" and s["fullscreen"] == "game-stage", "the fullscreen button opens the panel in fullscreen")
+    check(s["open"] and s["parent"] == "game-stage" and s["fullscreen"] == "game-stage", "Esc opens the panel in fullscreen with the mouse free as well")
     p.esc()
     tab.ev("document.exitFullscreen(); 1")
     wait_for(lambda: not p.state()["fullscreen"], 5, 0.2)
@@ -472,6 +473,20 @@ def phone(p, args, check):
     check(all(ok for _, ok in on_screen), "the cross, the sections, the note, Resume and Leave game are all on the screen (%s)" % [c for c, ok in on_screen if not ok])
     tab.save_shot(args.shots, "menu-phone-landscape")
     tab.emulate(390, 844, 1, mobile=True)
+    p.tap_element(".gm-x")
+
+    # ---- fullscreen on a touch screen: a phone has no Esc, so the page's own button stays over the picture (a computer with a mouse has none there)
+    tab.ev("enterFullscreen(); 1")
+    wait_for(lambda: p.state()["fullscreen"], 5, 0.2)
+    wait_for(lambda: p.buttons()["settings-btn-fs"]["shown"], 5, 0.5)
+    b = p.buttons()["settings-btn-fs"]
+    check(p.state()["fullscreen"] and b["shown"] and b["y"] < 20 and b["h"] >= 43.5, "in fullscreen on a touch screen the Settings button is over the picture, at the top, 44 px high (%s)" % {k: round(v) if isinstance(v, float) else v for k, v in b.items()})
+    p.tap_element("#settings-btn-fs")
+    s = p.state()
+    check(s["open"] and s["parent"] == "game-stage" and s["fullscreen"] == "game-stage", "a tap on it opens the panel in fullscreen")
+    p.tap_element(".gm-x")
+    tab.ev("document.exitFullscreen(); 1")
+    wait_for(lambda: not p.state()["fullscreen"], 5, 0.2)
 
 
 def recording(p, args, check):
