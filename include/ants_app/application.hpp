@@ -38,6 +38,7 @@
 #include "ants_app/canvas_layout.hpp"
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
+#include "ants_app/game_menu.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
@@ -356,6 +357,17 @@ public:
     /// The page's touchcancel (a call that comes from outside the event loop): the same, behind the events that SDL already holds. A finger that went down in the same frame begins and is
     /// cancelled in order, and the lift that SDL makes of a cancel finds it unknown (done at once, as cancel_touch(), when SDL has no event to give). Public for the web build's export and the tests.
     void cancel_touch_queued();
+    /// THE SETTINGS MENU (application_game_menu.cpp, game_menu.hpp): the page's panel reads and changes the game's settings through these (the exports ants_menu_*), and the HUD's Esc asks for it (request_game_menu)
+    /// when it has nothing to cancel. While the panel is up the game takes no key, text, click, wheel or finger (game_menu_takes) and no edge scrolls; closing takes effect after the events that are queued.
+    void request_game_menu();
+    void set_on_game_menu(std::function<void()> cb) { on_game_menu_ = std::move(cb); }     // a skin of the game's own (the browser's is the page's: ants_menu_open)
+    int game_menu_get(int what);
+    bool game_menu_set(int id, int value, bool save = true);     // save false: heard now and not yet written (a slider that is dragged: the release keeps it)
+    bool game_menu_do(int action);
+    void game_menu_set_open(bool open);
+    bool game_menu_is_open() const noexcept { return game_menu_open_; }
+    const std::string& game_menu_describe();
+    const game_menu::MenuSettings& menu_settings() const noexcept { return menu_settings_; }
     /// A PHONE'S KEYBOARD for the match's chat box (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a finger taps the box and hands the
     /// game what is typed, through these and the exports ants_chat_probe / ants_chat_do): the box takes text now (a match is on the screen, no recording, no catch-up screen, chat on, no dialog)
     bool web_chat_available() const noexcept;
@@ -675,6 +687,11 @@ private:
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::unique_ptr<replay::Recorder> recorder_;          // the recording of the match that is on (replay.hpp; empty: none is made, or the match has ended); the sinks below hold a reference to it
     bool replay_mode_{false};                             // --replay: the game shows a recording
+    game_menu::MenuSettings menu_settings_;               // Master volume, Mute and the hit point numbers (application_game_menu.cpp)
+    std::function<void()> on_game_menu_{nullptr};
+    std::string game_menu_json_;                          // what ants_menu_describe hands to the page (it stays until the next call)
+    bool game_menu_open_{false};                          // the page's settings panel is up: the game takes no input
+    bool game_menu_closing_{false};                       // ... and is closed: input comes back after this frame's events
     bool replay_live_{false};                             // --replay-live: it follows a recording that is still being made (until the file is complete or the page says LiveOver)
     std::unique_ptr<replay::Replay> replay_file_;         // its file (null: it could not be read)
     ants::assets::LevelData replay_level_;                // its map, as the file names it
@@ -782,6 +799,14 @@ private:
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes
     void note_seat();                                     // the seat that the room gave this machine, told once to on_seat_known_
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
+    void load_game_menu_settings();                       // the settings menu's new settings (game_menu::MenuSettings) from the settings file; the HUD's hit point numbers and the mixer take them
+    void sync_game_menu_settings();                       // Ctrl+L flipped the hit point numbers: remembered
+    int game_menu_where() const;                          // -1 no match screen, 0 a match, 1 a recording or a live match that is watched
+    bool game_menu_needs_answer() const;                  // a dialog, a vote or a lost link comes first
+    bool match_held() const;                              // a seat is missing, the countdown runs or the link is on its way back (confirm_quit and Leave game)
+    int game_menu_leave_kind() const;                     // game_menu::LeaveKind of Leave game now
+    bool game_menu_takes(const SDL_Event& event) const noexcept;   // the panel is up and the event is one that the game does not take (the keys, text, clicks and wheel)
+    void end_game_menu_frame();                           // the panel was closed: the game takes input again after the events of this frame
 
     // The desktop start menu (application_menu.cpp)
     void init_start_menu();                               // the menu's settings, server, clipboard and callbacks (when this run has a menu)

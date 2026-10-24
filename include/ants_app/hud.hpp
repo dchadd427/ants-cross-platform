@@ -355,6 +355,13 @@ public:
     /// The quit dialog alone, where render() draws it (nothing when it is not open): the catch-up screen of a way back has no match under it, and its Esc still asks
     void render_quit_dialog_alone(IRenderer& renderer, const assets::AssetArchive& assets);
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
+    /// Esc with nothing to cancel (nothing selected, no pedestal latched; a first press, not a held key): the settings menu is asked for (application_game_menu.cpp)
+    void set_on_menu_request(std::function<void()> cb) { on_menu_request_ = std::move(cb); }
+    /// What the settings menu's panel does to a setting of the options window: the value is taken, stored and applied as that window's callback does it (the same state: the two always agree)
+    void set_option(OptionSetting setting, int32_t value);
+    /// A drag or a held button that began before the settings menu opened is let go without its act
+    void release_input() noexcept { release_capture(); }
+    bool has_selection() const noexcept { return selected_ant_id_ != 0 || !selected_ant_ids_.empty() || selected_base_team_id_ >= 0; }
 
     /// The quick help (F1, the Help button; Ants.exe FUN_010145d2): it closes only by its Return button (the button class: captured at the press, acts at the release)
     /// or by the keys Enter, Esc, C and X (either case); a click anywhere else does nothing. (`M` would open the More Help dialog: not built, docs 5.52.)
@@ -395,6 +402,7 @@ public:
     /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position. A tweak of the original: ON by default
     /// (the original starts with it off); Ctrl+L toggles it as in the original.
     bool is_show_hp() const noexcept { return show_hp_; }
+    void set_show_hp(bool on) noexcept { show_hp_ = on; }
 
     /// The alliance dialogs (Ants.exe FUN_01015b65 invitation, FUN_010160e2 waiting, FUN_01016438 confirmation; docs 5.42). They follow from the state of the
     /// simulation, never from an event: the invitee sees the question while an offer to it is pending (Accept / Decline; keys A, D, Esc), the proposer sees the
@@ -647,6 +655,7 @@ private:
     UIButton yes_button_{};
     UIButton no_button_{};
     std::function<void()> on_quit_{nullptr};
+    std::function<void()> on_menu_request_{nullptr};
 
     AllianceDialog alliance_dialog_{AllianceDialog::None};
     uint8_t alliance_other_{255};

@@ -130,7 +130,7 @@ function runShell(path, search, stored, options) {
     const holdsCalls = [];
     const holdsFn = options && options.holds !== undefined ? function (search, args, storage, now) { holdsCalls.push([search, args.indexOf('--join-url') !== -1, storage === win.localStorage, typeof now]); return typeof options.holds === 'function' ? options.holds() : options.holds; } : undefined;
     // (relayout is the page's box: it is sized, and the game's window system told, by the script outside these blocks; here it is a record)
-    const code = 'var isReadyToPlay = ' + ready + '; var Module = fakeModule; var holdsThisSeat = fakeHolds; var stageElement = fakeStage; var relayoutCalls = []; var progressContainer = { style: {} }; function hideLoadingScreen() {}\n'
+    const code = 'var isReadyToPlay = ' + ready + '; var Module = fakeModule; var holdsThisSeat = fakeHolds; var stageElement = fakeStage; var relayoutCalls = []; var progressContainer = { style: {} }; function hideLoadingScreen() {} function antsLoadGameMenu() {}\n'
         + 'function relayout(force) { events.push("relayout"); relayoutCalls.push(force); }\n' + page + '\n' + selector
         + '\nvar postRunHook = ' + hook[1] + ';'
         + '\nreturn { aspect: ANTS_ASPECT, source: ANTS_ASPECT_SOURCE, args: ANTS_ARGS, key: ANTS_ASPECT_KEY, page: ANTS_PAGE, relayoutCalls: relayoutCalls, sync: antsSyncAspect, set: antsSetAspect,'

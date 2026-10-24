@@ -126,7 +126,7 @@ void Application::handle_camera_panning(float dt) {
     input_accumulator_ += dt;
     while (input_accumulator_ >= 0.050f) {
         input_accumulator_ -= 0.050f;
-        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_ || catch_up_screen_active()) continue;
+        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_ || catch_up_screen_active() || game_menu_open_) continue;
         if (mouse_screen_x_ < 0 || mouse_screen_x_ >= layout_.width || mouse_screen_y_ < 0 || mouse_screen_y_ >= layout_.height) continue;
         ViewportCamera& camera = renderer_->camera();
         const float was_x = camera.x;

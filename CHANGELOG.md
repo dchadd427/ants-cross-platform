@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.114 - 2026-10-23 - A settings menu on Esc and a Settings button
+
+**For players:**
+- **A settings menu, on the Esc key or a Settings button.** In the browser, press Esc (with nothing selected and no dialog open) or click **Settings** to open a panel over your game with Sound, Video, Controls and Game, and **Resume** and **Leave game** at the bottom. **The game keeps running** while it is open, so settle your settings quickly in an online match. Esc still deselects first, as the original does; the next Esc opens the menu. A click on the dimmed area does not close it.
+- **Where the button is:** in the page's header next to Menu, under the picture on a phone or a narrow window, over the picture (beside the cross that leaves fullscreen) while the page is fullscreen, and in the bar of a replay. Safari and Firefox keep Esc for themselves in fullscreen, and a phone has no Esc, so the button is the way in there.
+- **New: Master volume, Mute and remembered hit point numbers.** Master volume scales every sound and the music; Mute silences everything and keeps your sliders where they are; the white hit point numbers (Ctrl+L) now stay on or off from one game to the next. The menu also has the sound sliders, the picture shape, Fullscreen, the fullscreen mouse, the map scroll speed, chat, quick help and a list of the mouse, touch and keys. The original's Options window is unchanged.
+- **Leave game says what will happen** before it does it: with one opponent left it is a forfeit that ends the match for everybody and counts as a loss; with more it drops you out and the others play on; at home it ends the game. There is no separate Surrender button.
+- **Replays and live watching** have the same panel without the Game section ("Back to the matches" leaves, asking nothing); the frame of a match page has none.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens, and Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/14bbbfdb...feb90e21)
+
 ## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
 
 **For players:**
@@ -599,18 +612,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1bf52364...198d2243), [the match pages and the replay pass](docs/REPLAYS.md)
 
-## v0.12.50 - 2026-10-15 - Chat in the lobby
+## Older versions (v0.12.50 and before)
 
-**For players:**
-- **The front page has a chat now.** A **Chat** box under the colors lets the people in a room talk before START: type a line (up to 100 letters, digits and signs) and press Enter or Send, and everybody in the room reads it in the color of the sender's seat. It is the chat of the game's own waiting room, so a player of the desktop game in the same room reads it too.
-- A small line tells who comes and goes ("Sam joined as Red."). A line that arrives while the box is out of view (below the window, or under START on a phone) also shows as a short message at the bottom of the page, at most one every 4 s (the box has every line).
-- The box keeps a little under the room's pace (four lines at once, then one every 1.25 s) and asks for a little slower when you are faster (your line stays in the field). If the room does not say a line back within 3 s, or the connection drops first, the box says "Your last line may not have arrived" and puts the text back in the field. What the game cannot show, an accent or a smiley, is left out as you type. On a phone the field is big enough to tap and the keyboard does not hide it behind START.
-- Nothing is saved: a reload starts an empty box, and when START takes everybody to the game the lines stay behind (they are not in the countdown's chat; that is a later change).
-
-**Rules / network:** none. The server already passed a page's chat line on; network protocol 21 is as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...97aea54a), [the notes](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
-
-## Older versions (v0.12.49 and before)
-
-Every release before v0.12.50, and the long notes of v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.51, and the long notes of v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

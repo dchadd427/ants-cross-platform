@@ -57,6 +57,8 @@ PICKUP_LAZY = ("mapmaker_pickup.js", "mapmaker_pickup.css")        # the map mak
 PICKUP_BUDGET, PICKUP_GZIP_BUDGET = 74 * 1000, 20500        # bytes, raw and gzipped, both files together (about 70,500 and 19,400; raised from 66,000 and 18,500 on purpose for the review's fixes: a tie to an anchor is kept exactly, the ghost follows the mouse, Copy and Delete ask for a group, the compact bar of a short screen): their own limits, because the editor's eagerly loaded scripts are near their caps (about 391,900 of 400,000 and 109,500 of 111,000 gzipped), so all of this new code is lazy; a player who never uses the tool downloads none of it
 PLAY_LAZY = ("mapmaker_play.js", "mapmaker_play.css")        # the map maker's Play this map (docs/MAP_EDITOR.md): its script and its style are loaded together the first time the button is pressed (web/front/mapmaker_app.js, playMap)
 PLAY_BUDGET, PLAY_GZIP_BUDGET = 30 * 1000, 9 * 1000        # bytes, raw and gzipped, both files together (about 27,500 and 7,700): their own limits, because the editor's eagerly loaded scripts are at 92,400 of their 94,000 gzipped and every other new part had to be loaded on demand; a player who never tests a map downloads none of it
+GAME_MENU_FILES = ("game_menu.js", "game_menu.css")        # the game page's settings menu (docs/GAME_MENU.md): beside web/shell.html, not in web/front; its script and its style are fetched together once the game runs (web/shell.html, antsLoadGameMenu)
+GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 41 * 1000, 12 * 1000        # bytes, raw and gzipped, both files together (about 40,000 and 11,600; raised from 40,000 and 11,000 on purpose for the review's fixes: a question that never leaves by itself, the pointer lock heard on the window, the keys of the panel only, focus back to the button, the Controls grid): their own limits, not part of the folder's budget above or of the page's first load; a player who never opens the menu downloads them idle, after the game runs
 GAME_SCRIPTS = ("test_game.js",)        # the game page's side of Play this map (web/shell.html loads it with the other scripts of this folder): not the lobby's, not the editor's
 GAME_BUDGET, GAME_GZIP_BUDGET = 14 * 1000, 5 * 1000        # bytes, raw and gzipped (about 10,700 and 4,100): its own limits, because it is neither the editor's nor the lobby's, and the game page downloads it for every visit
 SUBMIT_LAZY = ("mapmaker_submit.js",)        # the map maker's script that is loaded only when a player sends a map or looks at My submissions (web/front/mapmaker_app.js, withSubmit): not in the page's own list of scripts, so apart from the budget below
@@ -314,6 +316,19 @@ class TheFolder(unittest.TestCase):
             self.assertLess(len(data), GAME_BUDGET, "%s is %d bytes" % (name, len(data)))
             self.assertLess(len(gzip.compress(data, 9)), GAME_GZIP_BUDGET, "%s gzipped" % name)
             self.assertIn('<script src="front/%s"></script>' % name, read("web", "shell.html"), "the game page loads it")
+
+    def test_the_settings_menu_is_loaded_on_demand_and_has_budgets_of_its_own(self):
+        import gzip
+        raw = zipped = 0
+        for name in GAME_MENU_FILES:
+            data = read_bytes("web", name)
+            raw += len(data)
+            zipped += len(gzip.compress(data, 9))
+            self.assertNotIn('src="%s' % name[:-3], read("web", "shell.html"), "a lazily loaded file has no tag in the page")
+        self.assertLess(raw, GAME_MENU_BUDGET, "the settings menu's script and style are %d bytes" % raw)
+        self.assertLess(zipped, GAME_MENU_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
+        for name in GAME_MENU_FILES:
+            self.assertNotIn(name, os.listdir(FRONT), "the menu is not in web/front, whose folder has its own cap")
 
     def test_the_font_is_a_byte_copy_of_the_games_own_with_its_licence_beside_it(self):
         for name in FONT_FILES:

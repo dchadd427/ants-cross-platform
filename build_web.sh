@@ -60,6 +60,7 @@ cp -f "${SCRIPT_DIR}/web/death_map.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/replay_stats.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/map_files.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers it shares with the game page
 cp -f "${SCRIPT_DIR}/web/countdown_button.js" "${DIST_DIR}/"                                                                                                                                             # ... and the countdown's Fullscreen button
+cp -f "${SCRIPT_DIR}/web/game_menu.js" "${SCRIPT_DIR}/web/game_menu.css" "${DIST_DIR}/"                                                                                  # ... the settings menu's panel (loaded by the game page once the game runs)
 cp -f "${BUILD_DIR}/lvl_core/lvl_core.js" "${BUILD_DIR}/lvl_core/lvl_core.wasm" "${DIST_DIR}/"                                                                                    # the map core for the browser (docs/MAP_FORMAT.md, "In the browser")
 cp -f "${SCRIPT_DIR}/web/lvl_core_api.js" "${DIST_DIR}/"
 MAPMAKER_VERSION="v$(head -n 1 "${SCRIPT_DIR}/web/MAPMAKER_VERSION" | tr -d '[:space:]')" && grep -q "id=\"mapmaker-version\">${MAPMAKER_VERSION}<" "${SCRIPT_DIR}/web/mapmaker.html"
