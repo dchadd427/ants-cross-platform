@@ -6,7 +6,7 @@ What you see in a match and how the game draws it: the 16:9 picture, the map vie
 
 ## 16:9 by default: a wider view with more of the map (desktop and web builds)
 
-The game opens in a 16:9 picture, a fixed canvas of 960 x 540. The original's own 640 x 480 picture is `--aspect 4:3` on the command line, `aspect=4:3` in the settings file, or, in the browser, `?aspect=4:3` on the page's address or the page's selector. Two more wide shapes are offered for other screens: `16:10` (960 x 600, laptops and 16:10 monitors) and `21:9` (1260 x 540, ultrawide monitors). The desktop window is created in the picture's shape from the first moment.
+The game opens in a 16:9 picture, a fixed canvas of 960 x 540. The original's own 640 x 480 picture is `--aspect 4:3` on the command line, `aspect=4:3` in the settings file, or, in the browser, `?aspect=4:3` on the page's address or the page's selector. Two more wide shapes are offered for other screens: `16:10` (960 x 600, laptops and 16:10 monitors) and `21:9` (1260 x 540, ultrawide monitors). The desktop window is created in the picture's shape from the first moment. In the browser, a first visit with nothing stored starts in the shape nearest the player's screen instead ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md), "Which shape").
 
 | | `--aspect 4:3` | 16:10 | 16:9 (the default) | 21:9 |
 |---|---|---|---|---|

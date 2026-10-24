@@ -402,10 +402,9 @@
         // SHAPES_BEGIN (tests/scripts/web_aspect_key_check.js, web_lobby_check.js and web_rejoin_block_check.js run this block, with the AntsShapes of web/shapes.js)
         // THE SHAPES of the picture come from web/shapes.js, the one table of the pages (the game page and the settings menu read it too; the game's own is kAspectTable in include/ants_app/canvas_layout.hpp):
         // their names, left to right as the Picture row shows them, the id that ends the ids of a button and its tag (aspect-16-10, fit-16-10) and the shape nearest to a screen (the footer tags
-        // it "fills your screen": AntsShapes.forScreen). isShape(text) says whether a text names one (an address, a remembered value), shapeOr169(text) is that shape or 16:9 (every link that the page
-        // makes carries one of them).
+        // it "fills your screen": AntsShapes.forScreen). isShape(text) says whether a text names one (an address, a remembered value), aspectQuery(shape) is the `&aspect=` part of a hand-off to the game (only a pick goes in it: see `pickedShape` below).
         function isShape(text) { return AntsShapes.parse(text) !== null; }
-        function shapeOr169(text) { return AntsShapes.parse(text) || '16:9'; }
+        function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }
         function shapeId(shape) { return AntsShapes.rowOf(shape).id; }
         // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
@@ -462,14 +461,14 @@
         // What the three levels are called in an address: the three words, none for none
         function soloSeatsText(levels) { return [0, 1, 2].map(function (i) { return validFill(levels[i]) || 'none'; }).join(','); }
         // The query of a game on this computer: ?map=<key> (or ?mapfile=<file name> for a map of the players, when `mapKey` is a valid file name)[&bots=<levels>]&name=<name>&aspect=<shape>. A key that is no map's is Treasure, an empty name is Player (the name is URL-encoded, never put into an
-        // address any other way), the shape is one of the four (shapeOr169). `levels`: one word (all three bases) or three (seats 1-3), a word that is no level is none.
+        // address any other way), the shape is a pick (aspectQuery: a text that names no shape leaves `&aspect=` out, and the game page decides). `levels`: one word (all three bases) or three (seats 1-3), a word that is no level is none.
         function localGameQuery(mapKey, levels, name, shape) {
             var known = mapByKey(mapKey) || Rules.mapOfFile(mapKey);                          // (an original by its key, or by its file)
             var file = !known && Rules.validMapFile(mapKey) ? mapKey : '';                    // (a map of the players is named by its file: the game page fetches it from the site)
             var map = file ? null : known || mapByKey(DEFAULT_MAP_KEY);
             var seats = Array.isArray(levels) ? [validFill(levels[0]), validFill(levels[1]), validFill(levels[2])] : [validFill(levels), validFill(levels), validFill(levels)];
             var bots = !(seats[0] || seats[1] || seats[2]) ? '' : (seats[0] === seats[1] && seats[1] === seats[2] ? seats[0] : soloSeatsText(seats));
-            return '?' + (file ? 'mapfile=' + encodeURIComponent(file) : 'map=' + map.key) + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + shapeOr169(shape);
+            return '?' + (file ? 'mapfile=' + encodeURIComponent(file) : 'map=' + map.key) + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + aspectQuery(shape);
         }
         // START of a room with nobody else: the game page's address with the room's map, or '' when the map is a text the game takes as no file name (localGameQuery would play Treasure under another map's name).
         function soloAddress(model, name, shape) {
@@ -477,20 +476,23 @@
         }
         // LOBBY_END
 
-        // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Every hand-off to a game
-        // (START, Rejoin, a game for one) carries it as ?aspect= in the game's address.
+        // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else the shape nearest to the screen (16:9 when it has no say). A hand-off to a game
+        // (START, Rejoin, a game for one) carries ?aspect= in the game's address only when the player picked (`pickedShape`): otherwise the game page works out the first visit's shape itself, when it loads.
         // The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the selectors write it. The key of the first versions of the pages was 'ants.aspect': it is NOT
-        // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: every browser starts with 16:9 until its player picks another shape again.
+        // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: a browser with no choice starts with the shape nearest to its screen (AntsShapes.firstVisit, which the
+        // game page asks too; it is never stored) until its player picks a shape.
         // The footer tags "fills your screen" under the shape nearest to the computer's screen (the CSS shows the tag only where there is a mouse).
         // SHAPE_BEGIN
         var ASPECT_KEY = 'ants.aspect.v2';
         var aspect = '16:9';
+        var pickedShape = '';                                                                 // (the shape that the player chose: the address, the stored pick or a press of the selector; '' while the page only shows the first visit's shape)
         (function () {
             var asked = null;
             try { asked = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             var remembered = recall(ASPECT_KEY);
-            if (isShape(asked)) aspect = asked;
-            else if (isShape(remembered)) aspect = remembered;
+            if (isShape(asked)) aspect = pickedShape = asked;
+            else if (isShape(remembered)) aspect = pickedShape = remembered;
+            else aspect = AntsShapes.firstVisit(window);                          // (nothing chosen: the shape nearest to the screen, the game page's own answer; never stored)
             document.body.setAttribute('data-aspect', aspect);
             $('aspect-' + shapeId(aspect)).checked = true;
             var fits = null;
@@ -564,7 +566,7 @@
         // The query of the game page that the button opens, as the page's other join links make it (the door /ws, the room, the name always present, empty or not: it was chosen on this page, and the
         // picture's shape) with the seat of the entry. No key: the game page looks it up.
         function rejoinQuery(offer, name, shape) {
-            return '?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + shapeOr169(shape);
+            return '?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + aspectQuery(shape);
         }
         // REJOIN_END
         // The strip is there only while an entry is offered; it is looked at again when another tab changes the storage (the match may have ended meanwhile). A page that comes back from the browser's
@@ -582,7 +584,7 @@
         $('rejoin-go').addEventListener('click', function () {
             if (!rejoinOffered) return;
             var remembered = nameCheck(recall(NAME_KEY));
-            window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);
+            window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);
         });
         window.addEventListener('storage', function () { showRejoin(); });
 
@@ -892,7 +894,7 @@
             try { window.localStorage.setItem(entry.name, entry.text); } catch (e) { /* the key is not kept: the game page can take the seat for this load only, and a reload of it cannot take the seat back */ }
             var seat = client.seat, code = client.code, name = client.name;
             forgetSession(); leaveBack();              // (Back from the match makes a room again: this one is the match's now)
-            window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);
+            window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);
         }
         function shownTeam(seat) {
             if (!model) return 0;
@@ -1076,7 +1078,7 @@
         });
         // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds a room again.
         function startAlone() {
-            var address = soloAddress(model, myName(), aspect); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
+            var address = soloAddress(model, myName(), pickedShape); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
             handing = true; client.leave(); forgetSession();
             window.location.assign(new URL(address, window.location.href).href);
         }
@@ -1364,15 +1366,19 @@
 
         // SELECTOR_BEGIN
         AntsShapes.names().forEach(function (shape) {
-            $('aspect-' + shapeId(shape)).addEventListener('change', function () {
-                // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape
+            // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape. A press on the shape that is
+            // already checked (the first visit's) sends a click and no change: both events are listened to, so that it is a pick too
+            var press = function () {
                 if (!$('aspect-' + shapeId(shape)).checked) return;
                 var value = shape;
+                pickedShape = value;                                                              // (a press is a pick, the shape that is shown too)
                 if (value === aspect) { remember(ASPECT_KEY, value); return; }
                 aspect = value;
                 remember(ASPECT_KEY, value);
                 document.body.setAttribute('data-aspect', value);
-            });
+            };
+            $('aspect-' + shapeId(shape)).addEventListener('change', press);
+            $('aspect-' + shapeId(shape)).addEventListener('click', press);
         });
         // SELECTOR_END
 

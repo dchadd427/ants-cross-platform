@@ -3,7 +3,7 @@
 
 The front page is the lobby (web/lobby.html, the approved pictures; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
 numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four color cards (Black top left, Green top right, Red bottom left, Blue bottom right; a color that nobody holds is open, a bot of a level or
-Nobody; players are dragged between colors), the map, the picture's shape (Picture: Classic 4:3, 16:10, 16:9, which is the default, or 21:9) and START! at its side, and the footer with the version and the links. A visitor who
+Nobody; players are dragged between colors), the map, the picture's shape (Picture: Classic 4:3, 16:10, 16:9 or 21:9, the one nearest the screen until a pick) and START! at its side, and the footer with the version and the links. A visitor who
 opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
 run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
@@ -12,7 +12,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
 
   * front    the page at "/" on a first visit (a room of its own: a new code of six letters and numbers from the alphabet without look-alikes, the link with it, Copy link and Have a code? (there is no other way to play on the page);
              the four cards in their places, the host's with You and the pencil, the others open with their drop-down; the map side with its picture, arrows and the Treasure default; START!; the footer's version, build, links
-             and notice; Picture (in the match column, under the map's line and above START!, not in the footer) with 16:9 the default and 4:3 remembered, a stale or bad value ignored); How it works; Have a code? with its lines for a bad, an own and a code that has no room; the name card of a link to
+             and notice; Picture (in the match column, under the map's line and above START!, not in the footer) with the shape nearest the screen (16:10 at 1440 x 900) checked on a first visit and 4:3 remembered, a stale or bad value ignored); How it works; Have a code? with its lines for a bad, an own and a code that has no room; the name card of a link to
              a room that is gone (which comes back with the line that says so, and the room of one's own that its button makes); 23 widths from 320 to 1600 px: no sideways scroll, two columns from 1041 px, the cards two by two above 720 px and one under another
              below it, nothing sticking out of a card, the grip's dots clear of the names, START! in view on a phone, the map's name not cut off; Share where the browser has it; the game server that cannot be reached (the gold
              strip, and the room made by itself when it is back); the contrast of all text and of the form controls (4.5:1) in each of these states, at 1440 and 390 px;
@@ -28,7 +28,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
              lists the three bots (Bot (Medium), seats 1 - 3) and the player, the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first and, with Yes, goes back to the front page
              in the same tab, which makes a room again for the same name;
   * solo     START with nobody else in the match (every other color Nobody) takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
-             with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs, at Green; Classic 4:3, chosen under Screen, reaches that game (and 16:9, the default, is what it gets when nothing is chosen);
+             with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs, at Green; Classic 4:3, chosen under Screen, reaches that game (and with nothing chosen the page hands on no shape at all: the game page picks its own, 16:10 at 1440 x 900);
   * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game button takes THIS tab back
              to the front page (no new tab); the same for a match in a room of the server (START with one Medium bot); the quit dialog's Yes with three opponents left (the quit ends a match only when one is left) takes the tab
              to the front page at once, and the server drops the seat now (a room with nobody left ends); the front page does not offer to rejoin a match that was left on purpose;
@@ -59,6 +59,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
 import web_rejoin_check as rejoin                                            # noqa: E402  (its Server: the site's game server of this tree; its Player: a person's own browser)
 from web_aspect_check import Browser, NotReachable, Tab                    # noqa: E402
+
+# The browsers of this check are a 1440 x 900 screen unless a part says otherwise: a first visit starts in the shape nearest to it (web/shapes.js, firstVisit; web_aspect_check.py's oracle),
+# and the front page hands a shape on to the game only when the player picked one.
+FIRST = aspect.first_visit_of(1440, 900, 1440, 900)
+FIRST_ID = FIRST.replace(":", "-")
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
@@ -724,8 +729,8 @@ def main():
                   "the line of numbers is either not there (a site with no /stats) or says what it counts: matches and players now, and, where the site counts them, the games played (%r; the dot between the two is drawn by the page's style)" % (stats["text"],))
             check(info["scrollW"] <= info["innerW"], "no horizontal scroll at 1440")
 
-            # the picture's shape: 16:9 is the default, 4:3 is chosen under Screen and remembered
-            check(info["aspect"] == [False, False, True, False, "16:9"], "Screen: 16:9 is chosen on a first visit, and the other three are not (%s)" % info["aspect"])
+            # the picture's shape: the one nearest the screen is checked on a first visit, 4:3 is chosen under Screen and remembered
+            check(info["aspect"] == [s == FIRST for s in aspect.SHAPE_ORDER] + [FIRST], "Screen: %s (nearest a 1440 x 900 screen) is chosen on a first visit, and the other three are not (%s)" % (FIRST, info["aspect"]))
             check(info["shapePlace"] == [True, True, False], "the Picture row is in the match column under the map's line and above START!, and the footer has no selector (%s)" % info["shapePlace"])
             check(info["shapeLabels"] == ["Classic 4:3", "16:10", "16:9", "21:9"], "Picture offers Classic 4:3, 16:10, 16:9 and 21:9, left to right (%s)" % info["shapeLabels"])
             # "fills your screen": under the shape nearest to this computer's screen (None when no shape is within 8 per cent), shown only where there is a mouse
@@ -748,11 +753,11 @@ def main():
             tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
             tab.open(web, wait=False)
             time.sleep(1.5)
-            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "a remembered value that is no shape is ignored: 16:9")
+            check(value("[document.getElementById('aspect-%s').checked, document.body.getAttribute('data-aspect')]" % FIRST_ID) == [True, FIRST], "a remembered value that is no shape is ignored: %s" % FIRST)
             tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.setItem('ants.aspect', '4:3'); 1")
             tab.open(web, wait=False)
             time.sleep(1.5)
-            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "a 4:3 that the old key 'ants.aspect' remembers is not read: 16:9 (every browser starts with 16:9)")
+            check(value("[document.getElementById('aspect-%s').checked, document.body.getAttribute('data-aspect')]" % FIRST_ID) == [True, FIRST], "a 4:3 that the old key 'ants.aspect' remembers is not read: %s (the first visit's shape)" % FIRST)
             tab.open(web + "?aspect=4:3", wait=False)
             time.sleep(1.5)
             check(value("[document.getElementById('aspect-4-3').checked, document.body.getAttribute('data-aspect')]") == [True, "4:3"], "?aspect=4:3 in the address chooses 4:3")
@@ -763,7 +768,7 @@ def main():
                 check(value("[document.getElementById('aspect-%s').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]" % dashed) == [True, False, asked], "?aspect=%s in the address chooses %s" % (asked, asked))
             tab.open(web + "?aspect=3:2", wait=False)
             time.sleep(1.5)
-            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "?aspect=3:2 is not a shape the page offers: ignored, 16:9")
+            check(value("[document.getElementById('aspect-%s').checked, document.body.getAttribute('data-aspect')]" % FIRST_ID) == [True, FIRST], "?aspect=3:2 is not a shape the page offers: ignored, %s" % FIRST)
             for picked in ("16:10", "21:9"):                        # the two shapes that were added: pressed, remembered, and the next visit starts with them (the game page reads the same key)
                 tab.open(web, wait=False)
                 time.sleep(1.5)
@@ -1283,8 +1288,8 @@ def main():
                 seat = seats[id(p)]
                 wait_for(lambda p=p, seat=seat: p.ev("location.search") == "?join=/ws&room=%s&aspect=16:9&seat=%d" % (code, seat), 20)
                 given = game_args(p)
-                check(given == ["./this.program", "--join-url", door, "--room", code, "--seat", str(seat), "--name", names[id(p)], "--aspect", "16:9"] and p.ev("location.search") == "?join=/ws&room=%s&aspect=16:9&seat=%d" % (code, seat),
-                      "%s's game page: the door, the room, seat %d, the name and the shape and nothing else (the server holds the plan); the address keeps the code and the shape, not the name (%s)" % (who, seat, p.ev("location.search")))
+                check(given == ["./this.program", "--join-url", door, "--room", code, "--seat", str(seat), "--name", names[id(p)], "--aspect", FIRST] and p.ev("location.search") == "?join=/ws&room=%s&seat=%d" % (code, seat),
+                      "%s's game page: the door, the room, seat %d, the name and the shape (the page's own first-visit shape: the lobby handed none on, nobody picked) and nothing else (the server holds the plan); the address keeps the code, not the name or the shape (%s)" % (who, seat, p.ev("location.search")))
                 check(stored_rejoin(p) == ["ants.rejoin.%s.%d" % (code, seat)] and not p.ev("!!document.getElementById('name-step') && !document.getElementById('name-step').hidden"),
                       "... the key of the seat is in the browser (%s) and the game does not ask for a name" % stored_rejoin(p))
             began = time.time()
@@ -1308,7 +1313,7 @@ def main():
             back = wait_for(lambda: quinn.ev("!!window.isReadyToPlay"), ready) and match_runs(quinn, 120)
             status = server.room(code) or {}
             again = {k: v for k, v in named(status).items() if k not in [b.get("seat") for b in status.get("bots") or []]}
-            check(bool(back) and quinn.ev("location.search") == "?join=/ws&room=%s&aspect=16:9&seat=2" % code and status.get("joined") == 4 and again == seated_people and stored_rejoin(quinn) == ["ants.rejoin.%s.2" % code],
+            check(bool(back) and quinn.ev("location.search") == "?join=/ws&room=%s&seat=2" % code and status.get("joined") == 4 and again == seated_people and stored_rejoin(quinn) == ["ants.rejoin.%s.2" % code],
                   "a game page that is reloaded takes its seat back with the key in the browser: the same address, the same seat, no second Quinn in the room (%s)" % again)
             # a link that is opened now (the match has started): a room of its own, with the strip that says so
             late = person("Late")
@@ -1353,10 +1358,10 @@ def main():
                 time.sleep(1.0)
                 check(pages() == before, "no new tab or window was opened (%d pages before and after)" % before)
                 given = game_args(tab)
-                check(given == ["./this.program", "--join-url", door, "--room", code, "--seat", "0", "--name", "Bob", "--aspect", "16:9"],
+                check(given == ["./this.program", "--join-url", door, "--room", code, "--seat", "0", "--name", "Bob", "--aspect", FIRST],
                       "the game's arguments: the site's door, the room (%s: the lobby's own, six letters and numbers), seat 0, the name and the shape, and nothing else (the server holds the plan: the map, the bots, the teams) (%s)" % (code, [x for x in given if x != "./this.program"]))
-                check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and tab.ev("location.search") == "?join=/ws&room=%s&aspect=16:9&seat=0" % code,
-                      "the address bar keeps the room's code and the shape and the seat that the room gave this window (the game tells the page: it stands at the end), but not the name (%s)" % tab.ev("location.search"))
+                check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and tab.ev("location.search") == "?join=/ws&room=%s&seat=0" % code,
+                      "the address bar keeps the room's code and the seat that the room gave this window (the game tells the page: it stands at the end), but not the name (%s)" % tab.ev("location.search"))
                 check(stored_rejoin(tab) == ["ants.rejoin.%s.0" % code], "the key of the seat is in the browser, for a reload of the game page (%s)" % stored_rejoin(tab))
                 check(not tab.ev("document.getElementById('name-step') && !document.getElementById('name-step').hidden"), "the game does not ask for a name (the front page chose it)")
                 began = time.time()
@@ -1421,14 +1426,14 @@ def main():
             real_click("#start")
             ok = wait_for(lambda: tab.ev("location.pathname") == "/play.html", 20)
             where = tab.ev("location.pathname + location.search") if ok else ""
-            check(ok and "map=treasure" in where and "bots=" not in where and "join=" not in where and "room=" not in where and "aspect=16:9" in where,
-                  "START takes this tab to /play.html with the map and the shape (16:9, the default): no bots, no room (the game page takes the name out of the address: it is in the game's arguments) (%s)" % where)
+            check(ok and "map=treasure" in where and "bots=" not in where and "join=" not in where and "room=" not in where and "aspect" not in where,
+                  "START takes this tab to /play.html with the map and no shape (nothing was picked: the game page picks its own): no bots, no room (the game page takes the name out of the address: it is in the game's arguments) (%s)" % where)
             if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
                 check(pages() == before, "no new tab or window was opened (%d pages before and after)" % before)
                 given = [x for x in game_args(tab) if x != "./this.program"]
                 check("--map" in given and "--play" in given and "--alone" in given and "--bot" not in given and "--join-url" not in given and "--room" not in given and "--teams" not in given and given[given.index("--name") + 1:][:1] == ["Bob"]
-                      and given[given.index("--aspect") + 1:][:1] == ["16:9"],
-                      "the game's arguments are a game for one on this computer: --map, --play, --alone, the name and the shape 16:9, no --bot, no room, no --teams (%s)" % given)
+                      and given[given.index("--aspect") + 1:][:1] == [FIRST],
+                      "the game's arguments are a game for one on this computer: --map, --play, --alone, the name and the shape %s (the game page's own), no --bot, no room, no --teams (%s)" % (FIRST, given))
                 check(not tab.ev("document.getElementById('name-step') && !document.getElementById('name-step').hidden"), "the game does not ask for a name (the front page chose it)")
                 started = start_by_enter()
                 check(started, "the match starts once the quick help is closed (Enter), with the \"Get ready\" dialog, which closes by itself")
@@ -1611,7 +1616,7 @@ def main():
                 check(all(ready), "... and both games are ready (%s)" % ready)
                 for who, p, seat in (("Host", host, 0), ("Pal", guest, 1)):
                     given = game_args(p)
-                    check(given == ["./this.program", "--join-url", door, "--room", room_code, "--seat", str(seat), "--name", who, "--aspect", "16:9"],
+                    check(given == ["./this.program", "--join-url", door, "--room", room_code, "--seat", str(seat), "--name", who, "--aspect", FIRST],
                           "%s's game: the door, the same room, seat %d, the name and the shape (%s)" % (who, seat, [x for x in given if x != "./this.program"]))
                 began = time.time()
                 started = None
@@ -1672,7 +1677,7 @@ def main():
             load(web + "play.html", ready=True, settle=1.0)
             info = json.loads(value("JSON.stringify({args: ANTS_ARGS})"))
             given = [a for a in info["args"] if a != "./this.program"]                             # (the runtime puts the program's own name in front)
-            check(given == ["--aspect", "16:9"], "/play.html with nothing is today's front page: no argument but the picture's shape (%s)" % given)
+            check(given == ["--aspect", FIRST], "/play.html with nothing is today's front page: no argument but the picture's shape (%s)" % given)
             shot("home_play_plain")
             for old in ("?map=small&players=1&fill=hard", "?map=tiny&players=2&play=here", "?embed=1&aspect=16:9"):
                 load(web + old, ready=False, settle=1.5)

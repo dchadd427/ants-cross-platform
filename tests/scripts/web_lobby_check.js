@@ -148,8 +148,8 @@ try {
     same('localGameQuery: a key wins over a file name, a text that is no valid file name is no map (Treasure), an original\'s file is its key', [L.localGameQuery('tiny', '', 'Bob', '16:9'), L.localGameQuery('../x.lvl', '', 'Bob', '16:9'), L.localGameQuery('TINY.LVL', '', 'Bob', '16:9')],
          ['?map=tiny&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=tiny&name=Bob&aspect=16:9']);
     same('localGameQuery: an empty name is Player', [L.localGameQuery('tiny', '', '', '16:9'), L.localGameQuery('tiny', '', undefined, '16:9')], ['?map=tiny&name=Player&aspect=16:9', '?map=tiny&name=Player&aspect=16:9']);
-    same('localGameQuery: the shape is one of the four (4:3, 16:10, 16:9, 21:9) and nothing else', ['4:3', '16:10', '16:9', '21:9', undefined, null, '4:3&x=1', '16:10 ', 'wide', '3:2', '32:9', 42].map((shape) => L.localGameQuery('tiny', '', 'B', shape)),
-         ['4:3', '16:10', '16:9', '21:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9'].map((shape) => '?map=tiny&name=B&aspect=' + shape));
+    same('localGameQuery: the shape is a pick of the four (4:3, 16:10, 16:9, 21:9) and nothing else: a text that names no shape (no pick yet) leaves &aspect= out', ['4:3', '16:10', '16:9', '21:9', undefined, null, '4:3&x=1', '16:10 ', 'wide', '3:2', '32:9', 42].map((shape) => L.localGameQuery('tiny', '', 'B', shape)),
+         ['4:3', '16:10', '16:9', '21:9', '', '', '', '', '', '', '', ''].map((shape) => '?map=tiny&name=B' + (shape ? '&aspect=' + shape : '')));
     // START of a room with nobody else: the address that startAlone() hands to window.location (the function behind it, with a model as the lobby's rules script makes it)
     {
         const go = (model) => L.soloAddress(model, 'Bob', '16:9');

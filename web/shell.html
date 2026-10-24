@@ -231,7 +231,7 @@
             box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow);
         }
 
-        /* The picture is 16:9 by default (the game's fixed canvas is 960 x 540; "Classic 4:3" is the original's 640 x 480 and is chosen with ?aspect=4:3 or the selector under
+        /* The picture starts in 16:9 here and the script picks the shape nearest to the screen on a first visit (the game's 16:9 canvas is 960 x 540; "Classic 4:3" is the original's 640 x 480 and is chosen with ?aspect=4:3 or the selector under
            the game). Two boxes: #game-stage is the SLOT, sized by CSS alone (width: the page's column, at most 1280 px, and what the height of the window leaves after the page's
            own header and bar, so the whole picture fits the window; --chrome is that height, measured by the script below, 180 px until then) and the element that goes
            fullscreen; #game-container is the picture's box inside it, sized by the script to the exact pixels of the picture (a whole number of 16 x 9 canvas pixels, so
@@ -1302,7 +1302,7 @@
                         <li><strong>Power-ups</strong>&#8197;dropped by special flowers give an ant a special power (see below); an ant holds one at a time.</li>
                         <li><strong>Opponents:</strong>&#8197;the Menu button starts a game on this computer against Easy, Medium or Hard bots, each base at its own level, with you and one bot as a team if you like, or alone as in the original; there you can also host or join a match on the game server to play against friends.</li>
                         <li><strong>Help:</strong>&#8197;<kbd>F1</kbd>&#8197;or the Help button shows the original's quick help.</li>
-                        <li><strong>Picture:</strong>&#8197;16:9 by default;&#8197;<em>Classic 4:3</em>&#8197;is the original's picture, and&#8197;<em>16:10</em>&#8197;and&#8197;<em>21:9</em>&#8197;suit laptop and ultrawide screens (a wider or taller picture shows more of the map). Press a shape under the game: the picture changes at once and the match goes on. Or add&#8197;<kbd>?aspect=4:3</kbd>,&#8197;<kbd>?aspect=16:10</kbd>,&#8197;<kbd>?aspect=16:9</kbd>&#8197;or&#8197;<kbd>?aspect=21:9</kbd>&#8197;to the address.&#8197;The Fullscreen button makes the picture as big as your screen allows.</li>
+                        <li><strong>Picture:</strong>&#8197;the first time, the shape nearest to your screen (16:9 on most);&#8197;<em>Classic 4:3</em>&#8197;is the original's picture, and&#8197;<em>16:10</em>&#8197;and&#8197;<em>21:9</em>&#8197;suit laptop and ultrawide screens (a wider or taller picture shows more of the map). Press a shape under the game: the picture changes at once and the match goes on. Or add&#8197;<kbd>?aspect=4:3</kbd>,&#8197;<kbd>?aspect=16:10</kbd>,&#8197;<kbd>?aspect=16:9</kbd>&#8197;or&#8197;<kbd>?aspect=21:9</kbd>&#8197;to the address.&#8197;The Fullscreen button makes the picture as big as your screen allows.</li>
                     </ul>
                 </div>
             </details>
@@ -1432,14 +1432,14 @@
             // the names, their order (the selector's, left to right, and the place that the game's ants_set_aspect takes), each shape's steps (the game's canvas is a whole number of them) and the
             // shape nearest to a screen (the selector's "fills your screen") all come from it, and the box and the slot below are worked out from its rows.
 
-            // Which shape the page shows: the address (?aspect=4:3, 16:10, 16:9 or 21:9; anything else is ignored), else the choice that the selector remembered (under ANTS_ASPECT_KEY below), else 16:9
-            // on every device (a phone held upright included: the picture is 16:9 as wide as the screen, and turning the phone sideways makes it bigger).
-            function resolveAspect(fromAddress, remembered) {
+            // Which shape the page shows: the address (?aspect=, a shape's name; anything else is ignored), else the choice that the selector remembered (ANTS_ASPECT_KEY below; a text that names no shape is no
+            // choice), else `firstVisit` (AntsShapes.firstVisit: the shape nearest the screen, never stored: only a press of the selector writes the choice).
+            function resolveAspect(fromAddress, remembered, firstVisit) {
                 var a = AntsShapes.parse(fromAddress);
                 if (a) return { aspect: a, source: 'address' };
                 a = AntsShapes.parse(remembered);
                 if (a) return { aspect: a, source: 'remembered' };
-                return { aspect: '16:9', source: 'default' };
+                return { aspect: AntsShapes.parse(firstVisit) || AntsShapes.FALLBACK, source: 'default' };
             }
 
             // What the CSS reads of a shape (body's custom properties, set by antsShowShape below: the slot, #game-stage, and the replay bar take their ratio and their widest width from them): the
@@ -1859,7 +1859,7 @@
         var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
         // Watching a replay: play.html?replay=<file>, or a match that is still being played: play.html?live=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
         // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live"; an address with both is a replay). The game gets nothing else from the address then (no room,
-        // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else 16:9) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
+        // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else the shape nearest to the screen) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
         var ANTS_REPLAY_MODE = /(^|[?&])(replay|live)=/.test(window.location.search);
         var ANTS_REPLAY_FILE = ANTS_REPLAY_MODE ? window.AntsReplay.fileOf(window.location.search) : null;
         var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);
@@ -1885,7 +1885,7 @@
         // The shape of this page's picture, passed on to the game as --aspect (the game validates it too); the selector changes it while the game runs (antsSetAspect below). The stage's data-aspect names the shape (tests and the settings menu read it), and the slot's CSS takes its ratio from custom properties of <body> (antsShowShape, from web/shapes.js's rows).
         // What the selector remembers lives under ANTS_ASPECT_KEY, and only the selector writes it (web/lobby.html reads and writes the same key). The key of the first versions of the page was
         // 'ants.aspect': it is NOT read any more, so that a Classic 4:3 that a browser once remembered (anybody who tried it stayed on 4:3 for good) is forgotten once: every browser starts
-        // with the 16:9 picture until its player picks another shape again. ?aspect=4:3 (16:10, 16:9, 21:9) in the address works as ever.
+        // with the first-visit picture until its player picks a shape again (the shape nearest to the screen, AntsShapes.firstVisit; never stored). ?aspect=4:3 (16:10, 16:9, 21:9) in the address works as ever.
         var ANTS_ASPECT_KEY = 'ants.aspect.v2';
         var ANTS_ASPECT = '16:9';
         var ANTS_ASPECT_SOURCE = 'default';
@@ -1894,7 +1894,7 @@
             var remembered = null;
             try { fromAddress = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             try { remembered = window.localStorage.getItem(ANTS_ASPECT_KEY); } catch (e) { /* private window: nothing was remembered */ }
-            var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered);
+            var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window));
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
             ANTS_ARGS.push('--aspect', ANTS_ASPECT);

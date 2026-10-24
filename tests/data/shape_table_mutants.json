@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the shape table for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the game's table (include/ants_app/canvas_layout.hpp kAspectTable and what reads it) and the pages' table (web/shapes.js and what reads it) against tests/scripts/test_web_shapes.py (the two tables agree, no page keeps a list of its own), tests/scripts/web_aspect_key_check.js (what the table's functions decide, run on the pages' own code), tests/test_app/test_canvas_layout.cpp and tests/test_app/test_game_menu.cpp. Run from the checkout: tools/mutate.py tests/data/shape_table_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_shapes.py runs the ones that name it on a copy of the files (the classes that read the files, not its own mutants class).",
+  "note": "Mutants of the shape table for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the game's table (include/ants_app/canvas_layout.hpp kAspectTable and what reads it) and the pages' table (web/shapes.js and what reads it) against tests/scripts/test_web_shapes.py (the two tables agree, no page keeps a list of its own), tests/scripts/web_aspect_key_check.js (what the table's functions decide, run on the pages' own code), tests/test_app/test_canvas_layout.cpp and tests/test_app/test_game_menu.cpp; the first-visit mutants (the nearest shape, upright and sideways, the default never stored) against web_aspect_key_check.js and tests/scripts/test_web_aspect_default.py. Run from the checkout: tools/mutate.py tests/data/shape_table_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_shapes.py runs the ones that name it on a copy of the files (the classes that read the files, not its own mutants class).",
   "mutants": [
     {
       "id": "cpp_row_height",
@@ -130,15 +130,15 @@
     {
       "id": "js_fills_ratio_not_symmetric",
       "file": "web/shapes.js",
-      "old": "var off = Math.max(ratio / screenRatio, screenRatio / ratio) - 1;",
-      "new": "var off = Math.min(ratio / screenRatio, screenRatio / ratio) - 1;",
+      "old": "var off = Math.max(shape / ratio, ratio / shape) - 1;",
+      "new": "var off = Math.min(shape / ratio, ratio / shape) - 1;",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "page_copy_in_lobby",
       "file": "web/lobby.html",
-      "old": "function shapeOr169(text) { return AntsShapes.parse(text) || '16:9'; }",
-      "new": "function shapeOr169(text) { return ['4:3', '16:10', '16:9', '21:9'].indexOf(text) !== -1 ? text : '16:9'; }",
+      "old": "function isShape(text) { return AntsShapes.parse(text) !== null; }",
+      "new": "function isShape(text) { return ['4:3', '16:10', '16:9', '21:9'].indexOf(text) !== -1; }",
       "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
@@ -296,6 +296,181 @@
         "test_game_menu"
       ],
       "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "js_first_visit_cutoff_reapplied",
+      "file": "web/shapes.js",
+      "old": "return closest(Math.max(screenW, screenH) / Math.min(screenW, screenH)).row.name;",
+      "new": "var found = closest(Math.max(screenW, screenH) / Math.min(screenW, screenH));\n            return found.off <= FILLS_WITHIN ? found.row.name : FALLBACK;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_ratio_inverted",
+      "file": "web/shapes.js",
+      "old": "return closest(Math.max(screenW, screenH) / Math.min(screenW, screenH)).row.name;",
+      "new": "return closest(Math.min(screenW, screenH) / Math.max(screenW, screenH)).row.name;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_not_long_over_short",
+      "file": "web/shapes.js",
+      "old": "return closest(Math.max(screenW, screenH) / Math.min(screenW, screenH)).row.name;",
+      "new": "return closest(screenW / screenH).row.name;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_upright_is_asked",
+      "file": "web/shapes.js",
+      "old": "if (!sideways) return FALLBACK;\n",
+      "new": "",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_window_ignored",
+      "file": "web/shapes.js",
+      "old": "var sideways = screenW >= screenH || (!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight);",
+      "new": "var sideways = screenW >= screenH;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_sideways_window_only",
+      "file": "web/shapes.js",
+      "old": "var sideways = screenW >= screenH || (!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight);",
+      "new": "var sideways = win.innerWidth > win.innerHeight;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_fallback_not_16_9",
+      "file": "web/shapes.js",
+      "old": "var FALLBACK = '16:9';",
+      "new": "var FALLBACK = '16:10';",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_closest_tie_goes_wider",
+      "file": "web/shapes.js",
+      "old": "if (off < bestOff) { bestOff = off; best = row; }",
+      "new": "if (off <= bestOff) { bestOff = off; best = row; }",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_closest_misses_later_rows",
+      "file": "web/shapes.js",
+      "old": "        ROWS.forEach(function (row) {\n            var shape = row.stepW / row.stepH;",
+      "new": "        ROWS.slice(0, 4).forEach(function (row) {\n            var shape = row.stepW / row.stepH;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_throw_not_caught",
+      "file": "web/shapes.js",
+      "old": "} catch (e) {\n            return FALLBACK;\n        }",
+      "new": "} catch (e) {\n            throw e;\n        }",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_zero_size_asked",
+      "file": "web/shapes.js",
+      "old": "            if (!isSize(screenW, screenH)) return FALLBACK;\n            var sideways",
+      "new": "            var sideways",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_shell_first_visit_ignores_the_screen",
+      "file": "web/shell.html",
+      "old": "ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window))",
+      "new": "ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.FALLBACK)",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_first_visit_ignores_the_screen",
+      "file": "web/lobby.html",
+      "old": "else aspect = AntsShapes.firstVisit(window);",
+      "new": "else aspect = '16:9';",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_shell_stores_the_default",
+      "file": "web/shell.html",
+      "old": "            ANTS_ASPECT_SOURCE = chosen.source;\n",
+      "new": "            ANTS_ASPECT_SOURCE = chosen.source;\n            if (chosen.source === 'default') { try { window.localStorage.setItem(ANTS_ASPECT_KEY, chosen.aspect); } catch (e) { /* not remembered */ } }\n",
+      "test": "python3 tests/scripts/test_web_aspect_default.py"
+    },
+    {
+      "id": "page_lobby_stores_the_default",
+      "file": "web/lobby.html",
+      "old": "else aspect = AntsShapes.firstVisit(window);",
+      "new": "else { aspect = AntsShapes.firstVisit(window); remember(ASPECT_KEY, aspect); }",
+      "test": "python3 tests/scripts/test_web_aspect_default.py"
+    },
+    {
+      "id": "page_stored_16_9_is_no_pick",
+      "file": "web/shell.html",
+      "old": "a = AntsShapes.parse(remembered);\n                if (a) return { aspect: a, source: 'remembered' };",
+      "new": "a = AntsShapes.parse(remembered);\n                if (a && a !== '16:9') return { aspect: a, source: 'remembered' };",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_default_beats_the_pick",
+      "file": "web/shell.html",
+      "old": "a = AntsShapes.parse(remembered);\n                if (a) return { aspect: a, source: 'remembered' };\n                return { aspect: AntsShapes.parse(firstVisit)",
+      "new": "a = AntsShapes.parse(remembered);\n                if (a && !AntsShapes.parse(firstVisit)) return { aspect: a, source: 'remembered' };\n                return { aspect: AntsShapes.parse(firstVisit)",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_start_hands_on_the_shown_shape",
+      "file": "web/lobby.html",
+      "old": "rejoinQuery({ room: code, seat: seat }, name, pickedShape)",
+      "new": "rejoinQuery({ room: code, seat: seat }, name, aspect)",
+      "test": "python3 tests/scripts/test_web_aspect_default.py"
+    },
+    {
+      "id": "page_lobby_solo_hands_on_the_shown_shape",
+      "file": "web/lobby.html",
+      "old": "soloAddress(model, myName(), pickedShape)",
+      "new": "soloAddress(model, myName(), aspect)",
+      "test": "python3 tests/scripts/test_web_aspect_default.py"
+    },
+    {
+      "id": "page_lobby_rejoin_hands_on_the_shown_shape",
+      "file": "web/lobby.html",
+      "old": "remembered.ok ? remembered.name : '', pickedShape)",
+      "new": "remembered.ok ? remembered.name : '', aspect)",
+      "test": "python3 tests/scripts/test_web_aspect_default.py"
+    },
+    {
+      "id": "page_lobby_no_pick_is_16_9",
+      "file": "web/lobby.html",
+      "old": "function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }",
+      "new": "function aspectQuery(shape) { return '&aspect=' + (isShape(shape) ? shape : '16:9'); }",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_press_is_no_pick",
+      "file": "web/lobby.html",
+      "old": "                pickedShape = value;                                                              // (a press is a pick, the shape that is shown too)\n",
+      "new": "",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_stored_pick_is_no_pick",
+      "file": "web/lobby.html",
+      "old": "else if (isShape(remembered)) aspect = pickedShape = remembered;",
+      "new": "else if (isShape(remembered)) aspect = remembered;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_frame_window_counts",
+      "file": "web/shapes.js",
+      "old": "(!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight)",
+      "new": "(win.innerWidth > win.innerHeight)",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_shown_shape_press_unheard",
+      "file": "web/lobby.html",
+      "old": "            $('aspect-' + shapeId(shape)).addEventListener('click', press);\n",
+      "new": "",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     }
   ]
 }

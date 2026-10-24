@@ -269,7 +269,7 @@ class TheLiveGlue(unittest.TestCase):
 
 
 class TheSpectatorsPicture(unittest.TestCase):
-    """A spectator (a replay, a live match) chooses the picture's shape as a player does: the same remembered choice and ?aspect= (16:9 without them), a Picture button in the replay bar that opens a small
+    """A spectator (a replay, a live match) chooses the picture's shape as a player does: the same remembered choice and ?aspect= (the shape nearest the screen without them), a Picture button in the replay bar that opens a small
     window with the four shapes, and the bar as wide as the picture in every shape. The node checks run the page's own code (web_aspect_key_check.js: the shape that a spectator gets;
     web_picture_popover_check.js: the button); tests/scripts/web_aspect_check.py and web_live_check.py look at the real layout."""
     page = read("web", "shell.html")
@@ -280,7 +280,7 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertNotRegex(self.page, r"if \(ANTS_REPLAY_MODE\)[^\n]*remembered = null")
         block = self.page[self.page.index("var ANTS_ASPECT_KEY"):self.page.index("// The game tells the page the seat")]
         self.assertNotIn("ANTS_REPLAY_MODE", block)                                                          # (the choice is the page's for every address)
-        self.assertIn("var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered);", block)
+        self.assertIn("var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window));", block)        # (the same first visit as a player: the shape nearest the screen)
 
     def test_the_picture_button_and_its_window_are_in_the_bar_with_the_four_shapes(self):
         bar = self.page[self.page.index('<div class="rbar rep-only" id="rbar">'):self.page.index('id="b-tab"')]
