@@ -671,7 +671,8 @@ int main() {
         const fs::path outside = dir.path / "outside.lvl";
         { std::ofstream(outside, std::ios::binary) << "keep me"; }
         for (const char* name : {"test-0a1b2c3d.lvl", "test-ffffffff.lvl", ".tmp-1234"}) { std::ofstream(folder / name, std::ios::binary) << "x"; }
-        for (const char* name : {"keep.txt", "test-0A1B2C3D.lvl", "test-0a1b2c3.lvl", "test-0a1b2c3dd.lvl", "test-0a1b2c3d.LVL", "other-0a1b2c3d.lvl"}) { std::ofstream(folder / name, std::ios::binary) << "x"; }
+        // (names that differ from a store file's by letter case only are made with other digits: on Windows and on a default macOS volume "test-0A1B2C3D.lvl" is the very file "test-0a1b2c3d.lvl", so the first test would wipe it)
+        for (const char* name : {"keep.txt", "test-0A1B2C3E.lvl", "test-0a1b2c3.lvl", "test-0a1b2c3dd.lvl", "test-0a1b2c3e.LVL", "other-0a1b2c3d.lvl"}) { std::ofstream(folder / name, std::ios::binary) << "x"; }
         fs::create_directories(folder / "test-aaaaaaaa.lvl.d");
         fs::create_directories(folder / "test-bbbbbbbb.lvl");                                          // (a folder with a store file's name)
         { std::ofstream(folder / "test-bbbbbbbb.lvl" / "inner.txt", std::ios::binary) << "x"; }
@@ -686,7 +687,7 @@ int main() {
         std::string why;
         ASSERT_TRUE(store.open(why));
         ASSERT_TRUE(!fs::exists(folder / "test-0a1b2c3d.lvl") && !fs::exists(folder / "test-ffffffff.lvl") && !fs::exists(folder / ".tmp-1234"));
-        for (const char* name : {"keep.txt", "test-0A1B2C3D.lvl", "test-0a1b2c3.lvl", "test-0a1b2c3dd.lvl", "test-0a1b2c3d.LVL", "other-0a1b2c3d.lvl", "test-aaaaaaaa.lvl.d"}) ASSERT_MSG(fs::exists(folder / name), name);
+        for (const char* name : {"keep.txt", "test-0A1B2C3E.lvl", "test-0a1b2c3.lvl", "test-0a1b2c3dd.lvl", "test-0a1b2c3e.LVL", "other-0a1b2c3d.lvl", "test-aaaaaaaa.lvl.d"}) ASSERT_MSG(fs::exists(folder / name), name);
         ASSERT_TRUE(fs::is_directory(folder / "test-bbbbbbbb.lvl") && fs::exists(folder / "test-bbbbbbbb.lvl" / "inner.txt"));
         ASSERT_EQ(read_file(outside.string()), std::string("keep me"));
 #ifndef _WIN32
