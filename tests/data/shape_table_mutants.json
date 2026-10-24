@@ -591,8 +591,8 @@
     {
       "id": "menu_pick_not_given_to_the_page",
       "file": "web/game_menu.js",
-      "old": "write: function (i) { page.pickShape(SHAPES[i]); }",
-      "new": "write: function (i) { }",
+      "old": "write: function (name) { page.pickShape(name); }",
+      "new": "write: function (name) { }",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -612,8 +612,8 @@
     {
       "id": "menu_dropdown_follows_not",
       "file": "web/game_menu.js",
-      "old": "own.write(at); mark(); });",
-      "new": "own.write(at); });",
+      "old": "own.write(select.value); mark(); });",
+      "new": "own.write(select.value); });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -628,7 +628,7 @@
       "file": "web/game_menu.js",
       "old": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled])';",
       "new": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';",
-      "test": "python3 tests/scripts/test_web_game_menu.py"
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "menu_dropdown_keys_taken_by_the_panel",

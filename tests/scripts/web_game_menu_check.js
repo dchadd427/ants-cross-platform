@@ -214,7 +214,7 @@ function makePage(opts) {
     stage.setAttribute('data-aspect', '16:9');
     const bar = make('div', 'view-bar'), label = make('span', 'view-bar-label', bar);
     const shapes = {};                                                                   // (what the page's own dropdown does with a pick: antsPickShape; the page's `pickShape` is that function)
-    const pickShape = opts.noPick ? undefined : (shape) => { shapes.clicked = (shapes.clicked || []).concat(shape); stage.setAttribute('data-aspect', shape); };
+    const pickShape = opts.noPick ? undefined : (shape) => { shapes.clicked = (shapes.clicked || []).concat(shape); if (!opts.keepShape) stage.setAttribute('data-aspect', shape); };
     win.screen = opts.screen || { width: 1440, height: 900 };
     const lockOn = make('button', opts.noLock ? 'lock-x' : 'lock-on', bar), lockOff = make('button', opts.noLock ? 'lock-y' : 'lock-off', bar);
     lockOn.setAttribute('aria-checked', 'true');
@@ -365,6 +365,15 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.open();
     p.tab('video');
     ok('a page without its own pick of the shape (no dropdown to follow) has no Picture shape row', p.rows().map((r) => r.name).indexOf('Picture shape') < 0 && !p.q('select'));
+}
+{
+    const p = makePage({ keepShape: true }).ready();                                     // (a page that did not take the pick: the game's picture stays as it was)
+    p.open();
+    p.tab('video');
+    const pick = p.q('.gm-pick select');
+    pick.value = '20:9';
+    pick.fire('change', {});
+    expect('a pick that the page did not take: the dropdown shows what the game has, not what was asked', [p.shapes.clicked, pick.value], [['20:9'], '16:9']);
 }
 {
     const p = makePage({ watch: true }).ready();
@@ -527,6 +536,14 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('ArrowUp is the same, Home and End too', !e.prevented && !e.reachedPage && !p.doc.key('Home').prevented && !p.doc.key('End').reachedPage);
     e = p.doc.key('Tab');
     ok('Tab on the dropdown goes on inside (the browser moves it): not prevented, not for the page', !e.prevented && !e.reachedPage);
+    // the dropdown is in the panel's own focus list (the wrap at the ends uses it): with every button and input turned off it is the only control, and Tab / Shift+Tab hold the focus on it
+    const others = p.qa('.gm-scrim button').concat(p.qa('.gm-scrim input')).filter((n) => !n.disabled);
+    others.forEach((n) => { n.disabled = true; });
+    pick.focus();
+    e = p.doc.key('Tab');
+    const eBack = p.doc.key('Tab', { shiftKey: true });
+    ok('the dropdown alone in the panel is both the first and the last control: Tab and Shift+Tab wrap onto it (the browser does not leave the panel)', e.prevented && eBack.prevented && p.doc.activeElement === pick);
+    others.forEach((n) => { n.disabled = false; });
     p.qa('[role=tab]')[0].focus();
     p.tab('sound');
     e = p.doc.key('ArrowDown');
