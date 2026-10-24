@@ -722,7 +722,7 @@
                 if (gi.k === 'ant') antMark(c, f, g[0], gi.team);
                 else if (sprites && sprites.ghost && c.s >= 10 && few) {
                     var o = gi.k === 'obj' && gi.entrance >= 0 ? Math.max(0, gi.fp.indexOf(gi.entrance)) : 0, gp = rc(f, g[o]);
-                    sprites.ghost(ctx, c.view, c.w, c.h, gi.tile, gp.r, gp.c);
+                    sprites.ghost(ctx, c.view, c.w, c.h, gi.tile, gp.r, gp.c, f, gi.k);
                 }
                 outline(c, f, g, good ? '#8be0b0' : '#f08a84', 3, null);
                 if (gi.k === 'obj' && gi.hill >= 0 && gi.entrance >= 0 && good) door(c, f, g[gi.fp.indexOf(gi.entrance)]);

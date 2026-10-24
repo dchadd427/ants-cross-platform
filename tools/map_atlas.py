@@ -11,8 +11,10 @@ them (the last stored part first: a flower is its head, its stems, its leaves an
 
   ground.png    the 239 ground tiles (ids 431 to 669, all 32 x 32, offset 0,0), 16 to a row, a 256-color PNG
   objects.png   the pictures of the objects that the editor offers (rocks, power-ups, bombs, hills, food, the bigger objects, the starting ant) and the commonest small ones, packed, 256 colors
-  atlas.json    the index: where each picture is in its sheet, its offset, its average color; and for every other object of the library the number of the sprite file (the page fetches
-                those few from /asset_catalog/sprites/ when a map shows them) with its offset and average color
+  atlas.json    the index: where each picture is in its sheet, its offset, its average color; for every other animation of one part the number of the sprite file (the page fetches
+                those from /asset_catalog/sprites/ when a map shows them) with its offset and average color; and `names`, the name of every animation by its number (1,344 of them): the page
+                resolves a tile of a map through the map's own dictionary the way the game does (Renderer::set_level: a dictionary entry that is not the name of the animation of its own number
+                is looked up by name), so any animation can be the picture of a tile, not only the ones whose number a library map uses
 
 It runs when the web image is built (Dockerfile, build_web.sh), so the repository keeps no generated picture. A palette of more than 255 colors in a sheet is an error, never a quiet loss.
 """
@@ -40,9 +42,9 @@ BIGGER = [1323, 1324, 1321, 1322, 1320, 1326, 301, 237, 1329, 1327, 242, 346, 32
 PARTED = [300, 328]      # the two other objects of a library map whose picture has several parts (medrock8, stick2a): fetched one by one they would show their first part only, so they are in the sheet
 COMMON_SMALL = [134, 317, 318, 294, 336, 344, 309, 341, 340, 302, 303, 305]      # small and in the most library maps (the power-ups and rocks above are the others)
 IN_THE_SHEET = sorted(set(list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + list(ANT_TYPES.values()) + FOOD_STAGES + PLANTS + BIGGER + COMMON_SMALL + PARTED))
-# every other object that a library map anchors on layer 2 and that is a thing on the ground (not a screen element of the menus): fetched one by one
-FAR_RANGES = [(34, 38), (133, 134), (236, 242), (245, 430), (1320, 1334)]
-FAR_NOT = {243, 244}                             # the mouse pictures of the menus
+# every other animation of one part (a sprite): fetched one by one when a map shows it. A tile of a map is the animation of its dictionary name (docs/MAP_EDITOR.md, "Sprites"), so any of the
+# 1,344 can be one, and the page cannot know which before it reads the map; an animation of several parts that the sheet does not hold (a menu screen, a piece of an ant) is left out
+FAR_RANGES = [(0, 1343)]
 MAX_COLORS = 255                                 # one palette entry is the transparent color
 
 
@@ -174,6 +176,19 @@ def read_parts(path):
     return table
 
 
+def read_names(path):
+    """[name of animation 0, name of animation 1, ...] from the viewer's data (the same `{ id: N, name: "..." ...` lines as read_parts); the table of the docs is held to it by tests/scripts/test_map_atlas.py."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    start = text.find("animations: [")
+    if start < 0:
+        raise SystemExit("%s has no animations" % path)
+    found = {int(m.group(1)): m.group(2) for m in re.finditer(r'\n\s*\{ id: (\d+), name: "([^"\\]*)", subitems: \[', text[start:])}
+    if sorted(found) != list(range(1344)):
+        raise SystemExit("%s: the animations 0 to 1343 were expected, found %d" % (path, len(found)))
+    return [found[i] for i in range(1344)]
+
+
 def read_catalog(path):
     """{animation number: (sprite number, dx, dy)} of frame 0 of the first sub-item of every animation of the viewer's data (see read_parts)."""
     return {ident: parts[0] for ident, parts in read_parts(path).items()}
@@ -267,11 +282,10 @@ def build(sprites, catalog_path, out):
     far = {}
     for lo, hi in FAR_RANGES:
         for ident in range(lo, hi + 1):
-            if ident in FAR_NOT or str(ident) in items or ident in IN_THE_SHEET:
+            if str(ident) in items or ident in IN_THE_SHEET or GROUND_FIRST <= ident <= GROUND_LAST or len(parts_table.get(ident, ())) != 1:
                 continue
             found = first_frame(table, ident)
-            if found:
-                far[str(ident)] = [found[0], found[1], found[2], average(sprite(found[0])[2])]
+            far[str(ident)] = [found[0], found[1], found[2], average(sprite(found[0])[2])]
 
     os.makedirs(out, exist_ok=True)
     w, h, pixels, palette = ground.indexed("the ground sheet")
@@ -284,6 +298,7 @@ def build(sprites, catalog_path, out):
         "ground": {"png": "ground.png", "first": GROUND_FIRST, "count": cells, "columns": GROUND_COLUMNS, "w": gw, "h": gh, "avg": "".join(averages)},
         "objects": {"png": "objects.png", "w": w, "h": h, "items": items},
         "far": far,
+        "names": read_names(catalog_path),
         "ant": ANT,
         "ants": ants,
         "antTypes": ant_types,
