@@ -76,6 +76,15 @@ class TheText(unittest.TestCase):
         for other in ("ants_submit_post", "ants_submit_read", "ants_admin_api"):
             self.assertNotIn("zone=" + other, block_of(CONF, "location = /test-maps "))
 
+    def test_main_wires_the_test_maps_through_the_two_functions_that_a_test_holds(self):
+        main = read("src", "ants_server", "main.cpp")
+        self.assertEqual(main.count("connect_test_maps("), 1)                                           # (test_test_maps TM3.1 holds what they do; main() must call them, once each)
+        self.assertEqual(main.count("upkeep_test_maps("), 1)
+        for line in ("set_in_use(", "set_on_changed(", "set_test_maps("):
+            self.assertNotIn(line, main, line)                                                          # (no wiring of its own in main(): that would not be held by a test)
+        self.assertLess(main.index("connect_test_maps("), main.index("while (!g_stop)"))               # (wired before the loop, upkept inside it)
+        self.assertGreater(main.index("upkeep_test_maps("), main.index("while (!g_stop)"))
+
     def test_the_stacks_and_the_image_start_the_door_and_the_documents_name_it(self):
         for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
             text = "\n".join(l for l in read(name).splitlines() if not l.lstrip().startswith("#"))

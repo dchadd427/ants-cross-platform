@@ -29,6 +29,9 @@ def read(*parts):
         return f.read()
 
 
+WATCHDOG_S = 120                                              # the check of a broken copy takes a third of a second; two minutes is a machine that is badly stuck
+
+
 def core_dir():
     for candidate in (os.environ.get("ANTS_LVL_CORE_DIR", ""), os.path.join(REPO, "build_web", "lvl_core")):
         if candidate and os.path.isfile(os.path.join(candidate, "lvl_core.js")) and os.path.isfile(os.path.join(candidate, "lvl_core.wasm")):
@@ -39,7 +42,10 @@ def core_dir():
 def run_check(front=None, module=None):
     # a folder of broken copies (front): the check must fail, and the run ends at the first line that says so (tests/scripts/web_mapmaker_bail.js)
     args = [NODE] + (["--require", os.path.join(REPO, "tests", "scripts", "web_mapmaker_bail.js")] if front else []) + [CHECK] + (["--front", front] if front else []) + (["--module", module] if module else [])
-    return subprocess.run(args, capture_output=True, text=True, timeout=600)
+    env = dict(os.environ)
+    if front:
+        env["ANTS_BAIL_WATCHDOG_S"] = str(WATCHDOG_S)         # (a run of a broken copy that is still alive after this long is killed by the preload, with a line that says so)
+    return subprocess.run(args, capture_output=True, text=True, timeout=600 if not front else 3 * WATCHDOG_S, env=env)
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -52,6 +58,25 @@ class ThePlayChecks(unittest.TestCase):
             self.assertIn("RUNNING: " + part, done.stdout)
         if core_dir():
             self.assertIn("library: 540 maps", done.stdout)
+
+    def test_the_watchdog_ends_a_run_that_does_not_end_and_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hang = os.path.join(tmp, "hang.js")
+            with open(hang, "w", encoding="utf-8") as f:
+                f.write("console.log('    FAILED: made up'); \n")                           # (the bail ends this one at once: the preload is in place)
+            with open(os.path.join(tmp, "stuck.js"), "w", encoding="utf-8") as f:
+                f.write("console.log('RUNNING: x'); setInterval(function () {}, 1000);\n")      # (a run that never ends by itself)
+            bail = os.path.join(REPO, "tests", "scripts", "web_mapmaker_bail.js")
+            env = dict(os.environ, ANTS_BAIL_WATCHDOG_S="1")
+            done = subprocess.run([NODE, "--require", bail, hang], capture_output=True, text=True, timeout=60, env=env)
+            self.assertEqual(done.returncode, 1)
+            self.assertIn("FAILED: made up", done.stdout)
+            done = subprocess.run([NODE, "--require", bail, os.path.join(tmp, "stuck.js")], capture_output=True, text=True, timeout=60, env=env)
+            self.assertNotEqual(done.returncode, 0)
+            self.assertIn("WATCHDOG: the run was still alive after 1 s", done.stderr)
+            self.assertIn("RUNNING: x", done.stdout)                                           # (what the run had written is kept)
+            done = subprocess.run([NODE, "--require", bail, hang], capture_output=True, text=True, timeout=60, env=dict(os.environ))
+            self.assertEqual(done.returncode, 1)                                               # (without the setting there is no watchdog and nothing changes)
 
     def test_the_checks_can_fail_on_the_broken_copies(self):
         """tests/data/mapmaker_play_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check named for it"""
@@ -77,7 +102,10 @@ class ThePlayChecks(unittest.TestCase):
                         done = run_check(tmp)
                     finally:
                         shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
-                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"] + "\n" + done.stdout[-600:] + done.stderr[-600:])
+                    # (a run that ended by its watchdog counts only when the check had said that it failed, a line of its own; one that ended by itself with a status counts as it always did, a crash at the load too)
+                    if "WATCHDOG:" in done.stderr:
+                        self.assertRegex(done.stdout, r"\b(FAILED|ERROR|CRASHED): ", "the run hung with no failing line of the check for " + m["id"] + " (" + done.stderr[-300:].strip() + ")")
 
     def test_every_mutant_of_the_glue_names_a_test_that_exists(self):
         with open(os.path.join(REPO, "tests", "data", "mapmaker_play_mutants.json"), encoding="utf-8") as f:

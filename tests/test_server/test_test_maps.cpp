@@ -629,9 +629,18 @@ int main() {
         ASSERT_EQ(files_in(t.config.dir), size_t{0});
         ASSERT_FALSE(t.store->upkeep(t.now + TestMapStore::kTestMapTtlS, 1000 + 2 * TestMapStore::kUpkeepEveryMs));          // (and it is told once)
         ASSERT_EQ(TestMapStore::kUpkeepEveryMs, uint32_t{60000});
-        ASSERT_TRUE(t.keep("198.51.100.1").ok);
-        ASSERT_TRUE(t.store->upkeep(t.now + TestMapStore::kTestMapTtlS, 4294967000u));                // (the steady clock wraps at 2^32: a minute later is still a minute)
-        ASSERT_EQ(files_in(t.config.dir), size_t{0});
+        {   // the steady clock wraps at 2^32 (49 days): a minute later is still a minute across the wrap
+            Door w;
+            ASSERT_TRUE(w.keep("198.51.100.1").ok);
+            w.store->take_changed();
+            const uint32_t base = 4294967000u;
+            ASSERT_FALSE(w.store->upkeep(w.now, base));                                              // (the first look, a little before the wrap)
+            ASSERT_FALSE(w.store->upkeep(w.now + TestMapStore::kTestMapTtlS, base + (TestMapStore::kUpkeepEveryMs - 1)));      // (59,999 ms on, past the wrap: not yet)
+            ASSERT_EQ(files_in(w.config.dir), size_t{1});
+            ASSERT_TRUE(base + TestMapStore::kUpkeepEveryMs < base);                                  // (the sum did wrap)
+            ASSERT_TRUE(w.store->upkeep(w.now + TestMapStore::kTestMapTtlS, base + TestMapStore::kUpkeepEveryMs));         // (60,000 ms on: looked at, the map is gone)
+            ASSERT_EQ(files_in(w.config.dir), size_t{0});
+        }
     } TEST_END();
 
     TEST_CASE("TM2.1 The door has ONE route: POST /test-maps. The submissions routes, the owner's API, a path below or beside it, the old test form and every other method on it get a 404 or a 405, and nothing is made") {

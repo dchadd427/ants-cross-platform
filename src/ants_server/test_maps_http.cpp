@@ -76,7 +76,7 @@ HttpResponse TestMapApi::submit(const HttpRequest& request, int64_t now_s, uint3
     const auto began = std::chrono::steady_clock::now();
     const TestMapOutcome out = store_.submit(in, now_s);
     window_.spent_ms += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
-    if (store_.take_changed() && on_changed_) on_changed_();          // (a refused upload may have dropped a map to make room: the lobby's list follows either way; only the test maps changed, the approved ones are not read again)
+    if (store_.take_changed() && on_changed_) on_changed_();          // (the store drops the maps that are six hours old before it judges an upload, so the set may have changed whatever this upload came to: the lobby's list follows either way; only the test maps changed, the approved ones are not read again)
     if (!out.ok) return failure_reply(out.fail);
     JsonValue tm = JsonValue::make_object();
     tm.set("file", JsonValue::make_string(out.map.name));
