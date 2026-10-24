@@ -1,0 +1,54 @@
+{
+  "note": "Mutants of the map maker's atlas tool (tools/map_atlas.py: a picture of several parts is put together as the game draws it) for tools/mutate.py (docs/TESTING.md, 'Mutation checks') against tests/scripts/test_map_atlas.py. Run from the checkout: tools/mutate.py tests/data/map_atlas_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_map_atlas.py checks that each 'old' text is in the tool exactly once.",
+  "mutants": [
+    {
+      "id": "atlas_parts_drawn_first_part_first",
+      "file": "tools/map_atlas.py",
+      "old": "for dx, dy, pw, ph, prgba in reversed(pics):",
+      "new": "for dx, dy, pw, ph, prgba in pics:",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_first_part_only",
+      "file": "tools/map_atlas.py",
+      "old": "        if len(parts) > 1:                       # a picture of several parts",
+      "new": "        if len(parts) > 100:                       # a picture of several parts",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_box_corner_of_the_first_part",
+      "file": "tools/map_atlas.py",
+      "old": "    x0, y0 = min(p[0] for p in pics), min(p[1] for p in pics)\n",
+      "new": "    x0, y0 = pics[0][0], pics[0][1]\n",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_box_height_of_the_first_part",
+      "file": "tools/map_atlas.py",
+      "old": "max(p[1] + p[3] for p in pics)\n    w, h,",
+      "new": "max(p[1] + p[3] for p in pics[:1])\n    w, h,",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_transparent_pixels_drawn",
+      "file": "tools/map_atlas.py",
+      "old": "if prgba[a + 3] >= 128:\n                    at =",
+      "new": "if prgba[a + 3] >= 0:\n                    at =",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_parted_objects_fetched_alone",
+      "file": "tools/map_atlas.py",
+      "old": "+ BIGGER + COMMON_SMALL + PARTED))",
+      "new": "+ BIGGER + COMMON_SMALL))",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_only_the_first_part_is_read",
+      "file": "tools/map_atlas.py",
+      "old": "parts = [(int(p.group(3)), int(p.group(1)), int(p.group(2))) for p in re.finditer(r\"\\{ dx: (-?\\d+), dy: (-?\\d+), sprite_id: (\\d+),\", frames.group(1))] if frames else []",
+      "new": "parts = [(int(p.group(3)), int(p.group(1)), int(p.group(2))) for p in re.finditer(r\"\\{ dx: (-?\\d+), dy: (-?\\d+), sprite_id: (\\d+),\", frames.group(1))][:1] if frames else []",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    }
+  ]
+}

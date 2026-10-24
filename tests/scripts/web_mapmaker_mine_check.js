@@ -59,7 +59,7 @@ function fakeIdb(opts) {
         }
     };
 }
-const later = () => new Promise((r) => setTimeout(r, 15));
+const later = require('./web_mapmaker_clock.js').settle;
 function opened(idb) { const store = Store.create({ idb, fetch: null }); return new Promise((res) => store.open(() => res(store))); }
 function rec(name, kind, saved, bytes) { return { key: name.toLowerCase(), name, kind, saved, bytes: bytes || new Uint8Array([kind === 'extended' ? 9 : 8, 1, 2]) }; }
 

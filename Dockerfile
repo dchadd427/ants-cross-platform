@@ -149,11 +149,18 @@ COPY web/death_map.css /usr/share/nginx/html/death_map.css
 COPY web/death_map.js /usr/share/nginx/html/death_map.js
 COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 
+# The shapes of the picture, one table for the game page, the front page and the settings menu (docs/PLAY_IN_BROWSER.md "Four shapes"; shapes.js)
+COPY web/shapes.js /usr/share/nginx/html/shapes.js
+
 # The players' maps (docs/PLAY_IN_BROWSER.md "Players' maps in the browser"): the game page fetches the map of a room or a recording from /maps/files/ (map_files.js)
 COPY web/map_files.js /usr/share/nginx/html/map_files.js
 
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
+
+# The settings menu (docs/GAME_MENU.md): the panel that Esc opens over the game, its script and its style, fetched by the game page once the game runs (game_menu.js, game_menu.css)
+COPY web/game_menu.js /usr/share/nginx/html/game_menu.js
+COPY web/game_menu.css /usr/share/nginx/html/game_menu.css
 
 # The map maker (docs/MAP_EDITOR.md): web/mapmaker.html with its scripts and style in web/front/ (copied above) and the map core's module (lvl_core.js, lvl_core.wasm and lvl_core_api.js, copied above)
 COPY web/mapmaker.html /usr/share/nginx/html/mapmaker.html

@@ -17,12 +17,14 @@
 //   I  hills (mapmaker_blocks.js): a whole hill for a team, moved, over other things, in version 8 and 9, the dictionary, undo and redo, byte for byte
 //   J  starting ants and food piles: the records of blocks 1 and 2, spliced exactly, everything else as it was; the eraser takes them away; one history with the strokes
 //   K  Hills, Ants and Food on a fake page: the team swatches, the steppers, the sheets of a phone, the letters H, A and F, a tap that puts, undo
+//   K2 Hills, Ants and Food put their thing on water (no tool refuses a place for its ground) and Fill with water takes none of them away
 //   L  the Bigger tool on a fake page: the letter K, the one button and its sheet of 29 named objects, a tap that puts one whole, a hill in the way, Erase and undo, and the solid bit of a rock
 //   M  the properties of the map (mapmaker_props.js) as ONE step of the history: splices of the header and the eggs, the layers that move when the description grows, undo and redo byte for byte
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
 const fs = require('fs');
+const Clock = require('./web_mapmaker_clock.js');       // (CPU time: a budget is held to the work, not to the wait for a core)
 const path = require('path');
 const crypto = require('crypto');
 
@@ -241,9 +243,9 @@ function caseC() {
     const t = eg.begin('objects', 302);
     check(t.fill(3, 3) === 0, 'fill on a hill does nothing');
     equal(cellOf(g, 2, 3, 3), [247, 1, 3 | (3 << 8)], 'and leaves the hill as it is');
-    const big = open(9, 512, 512), eb = Edit.create(big), t0 = Date.now(), sb = eb.begin('ground', 476);
+    const big = open(9, 512, 512), eb = Edit.create(big), t0 = Clock.now(), sb = eb.begin('ground', 476);
     check(sb.fill(0, 0) === 512 * 512, 'a fill of all of a 512 x 512 map');
-    const took = Date.now() - t0;
+    const took = Clock.now() - t0;
     check(took < 1500, 'takes ' + took + ' ms');
     const patch = sb.finish();
     check(patch.keys.length === 512 * 512 && patch.before.length === 3 * 512 * 512, 'its patch holds one record for each cell, three words before and three after');
@@ -1126,6 +1128,31 @@ function caseK() {
     check(p.host.hint.children[0].textContent.indexOf('team’s ants') > 0 && p.host.hint.children[1].textContent.length > 0, 'Erase says that it takes ants, hills and piles too');
 }
 
+// ---- K2: Hills, Ants and Food put their thing on water (no tool refuses a place for its ground; Pick up says what to expect, mapmaker_pickup.js) ----
+function caseK2() {
+    const f = File.parse(mapWith(8, 24, 24, 486, [], []));
+    for (let r = 0; r < 24; r++) for (let c = 0; c < 24; c++) put(f, 1, r, c, 476, 0, 0xCDCD);          // water everywhere
+    const p = toolsPage(f), pt = p.painter();
+    p.button('hills').click(); pt.begin({ row: 8, column: 8 });
+    check(p.said.length === 0 && hillFootprint(p.file(), 248).length === 16 && p.log.edits === 1, 'the Hills tool puts a hill on water: nothing is said, 16 cells are put');
+    p.button('ants').click(); pt.begin({ row: 3, column: 3 });
+    check(p.said.length === 0 && Blocks.layout(p.file()).records.length === p.tools.state().ants, 'the Ants tool puts its ants on water: nothing is said');
+    p.button('food').click(); pt.begin({ row: 18, column: 18 });
+    check(p.said.length === 0 && Blocks.layout(p.file()).piles.length === 1 && Blocks.layout(p.file()).piles[0].row === 18, 'the Food tool puts a pile on water: nothing is said');
+    check(Edit.tile(p.file(), 1, 18 * 24 + 18) === 476 && Edit.tile(p.file(), 1, 8 * 24 + 8) === 476, 'and the ground under them is still water');
+    // the other way round: Fill with water over a hill, ants and a pile that stand there takes none of them away
+    const q = toolsPage(File.parse(mapWith(8, 24, 24, 486, [], []))), qp = q.painter();
+    q.button('hills').click(); qp.begin({ row: 8, column: 8 });
+    q.button('ants').click(); qp.begin({ row: 3, column: 3 });
+    q.button('food').click(); qp.begin({ row: 18, column: 18 });
+    const stand = () => [hillFootprint(q.file(), 248).length, Blocks.layout(q.file()).records.length, Blocks.layout(q.file()).piles.length].join();
+    const before = stand(), steps = q.tools.state().history.strokes;
+    q.button('ground').click(); q.host.swatches.children[4].click(); q.host.fill.click();
+    q.painter().begin({ row: 0, column: 0 }); q.painter().end();
+    check(Edit.tile(q.file(), 1, 8 * 24 + 8) === 476 && Edit.tile(q.file(), 1, 18 * 24 + 18) === 476 && q.said.length === 0 && q.tools.state().history.strokes === steps + 1, 'Fill with water paints the whole map, in one step, and says nothing');
+    check(stand() === before && /^16,\d+,1$/.test(stand()), 'and the hill, the ants and the pile are all still there: ' + stand());
+}
+
 // ---- L: the Bigger tool on a fake page ----
 function caseL() {
     const EMPTY2 = 0x7FFE;
@@ -1400,7 +1427,7 @@ function caseN() {
     check(digest(ae3.file().bytes) === beforeAutoBytes && ae3.host.undo.disabled === true, 'one Undo restores the stroke, the auto-placed edge pieces and the dictionary byte for byte');
 }
 
-const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN]];
+const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['K2 Hills, Ants and Food on water', caseK2], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN]];
 for (const [name, fn] of cases) {
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

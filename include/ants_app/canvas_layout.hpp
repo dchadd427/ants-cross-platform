@@ -9,6 +9,9 @@
 // another shape has bars (2880 x 1800 shows 960 x 540 at 3x with bars of 90 rows above and below). Everybody who asks for the same aspect sees exactly the same world area, so
 // no room has to cap it, and the wider shapes show more of the map, as 16:9 does against 4:3 (the map view is 442 x 440, 762 x 500, 762 x 560 and 1062 x 500). A CanvasLayout is any size, not only these four.
 //
+// THE SHAPE TABLE: `kAspectTable` below is the one list of the shapes (name, words, canvas). The game reads it everywhere (the canvas, `--aspect`, the settings key, the Esc menu's picture row, the
+// page's `ants_set_aspect`); the pages read the same four rows from web/shapes.js, and tests/scripts/test_web_shapes.py fails when the two tables differ.
+//
 // This header is pure (no SDL). `CanvasLayout::fit` is SDL's own arithmetic for a logical size (SDL_render.c, UpdateLogicalSize, the letterbox policy), so that the program can
 // say where the picture is in the window without asking SDL (the screenshot, the window's first size) and the tests can compare it with SDL itself.
 
@@ -30,8 +33,53 @@ enum class Aspect : uint8_t {
     Ultra21x9       // 1260 x 540: the same height as 16:9 and 300 columns more, for an ultrawide monitor
 };
 
-/// Every shape, from the narrowest to the widest (the order of the page's selector)
-inline constexpr std::array<Aspect, 4> kAllAspects = {Aspect::Classic4x3, Aspect::Wide16x10, Aspect::Wide16x9, Aspect::Ultra21x9};
+/// One row of the shape table: the shape, its text (`--aspect`, the settings key, the page's `?aspect=` and the key `ants.aspect.v2`), the words that a menu or a selector shows, and its canvas in pixels.
+struct AspectRow {
+    Aspect aspect;
+    const char* name;      // "4:3", "16:10", "16:9", "21:9"
+    const char* label;     // the words of the selectors and of the Esc menu: "Classic 4:3" for the original's picture, else the name
+    int32_t width;
+    int32_t height;
+};
+
+/// THE TABLE of the shapes, from the narrowest to the widest (the order of the page's selector and the place that `ants_set_aspect` takes). The canvas of each is 60 steps of its shape (960 x 540,
+/// 960 x 600, 1260 x 540) except the original's own. A new shape is a row here, a value of Aspect, and a row of web/shapes.js (tests/scripts/test_web_shapes.py keeps the two tables equal).
+inline constexpr std::array<AspectRow, 4> kAspectTable = {{
+    {Aspect::Classic4x3, "4:3", "Classic 4:3", 640, 480},
+    {Aspect::Wide16x10, "16:10", "16:10", 960, 600},
+    {Aspect::Wide16x9, "16:9", "16:9", 960, 540},
+    {Aspect::Ultra21x9, "21:9", "21:9", 1260, 540},
+}};
+
+namespace shape_table_detail {
+/// The shape's own row (the original's, for a value that no row has)
+constexpr const AspectRow& row_of(Aspect aspect) noexcept {
+    for (const AspectRow& shape : kAspectTable) {
+        if (shape.aspect == aspect) return shape;
+    }
+    return kAspectTable[0];
+}
+constexpr std::array<Aspect, kAspectTable.size()> aspects_of_table() noexcept {
+    std::array<Aspect, kAspectTable.size()> out{};
+    for (size_t i = 0; i < kAspectTable.size(); ++i) out[i] = kAspectTable[i].aspect;
+    return out;
+}
+/// Every value of Aspect has exactly one row, and the enum counts from 0 without a gap (so a value that is added and has no row is caught by whatever uses it first)
+constexpr bool table_is_whole() noexcept {
+    for (size_t i = 0; i < kAspectTable.size(); ++i) {
+        if (static_cast<size_t>(kAspectTable[i].aspect) >= kAspectTable.size()) return false;
+        for (size_t j = i + 1; j < kAspectTable.size(); ++j) {
+            if (kAspectTable[i].aspect == kAspectTable[j].aspect) return false;
+        }
+        if (kAspectTable[i].width < 640 || kAspectTable[i].height < 480) return false;
+    }
+    return true;
+}
+static_assert(table_is_whole(), "kAspectTable: one row for every Aspect, none twice, no canvas under 640 x 480");
+}  // namespace shape_table_detail
+
+/// Every shape, from the narrowest to the widest (the order of the page's selector): the table's order
+inline constexpr std::array<Aspect, kAspectTable.size()> kAllAspects = shape_table_detail::aspects_of_table();
 
 /// The aspect of a game that is started from the command line when neither `--aspect` nor the settings say: 16:9 on a desktop (requested 2026-10-02: the default should be
 /// 16x9) and in the web build (milestone M5: the page's game box is 16:9; the page passes the shape it shows as `--aspect`, `?aspect=4:3` on its address asks for the classic one).
@@ -48,46 +96,45 @@ inline constexpr Aspect kPlatformDefaultAspect = kDesktopDefaultAspect;
 inline constexpr int32_t kWideCanvasWidth = 960;
 inline constexpr int32_t kWideCanvasHeight = 540;
 
-inline constexpr int32_t kLaptopCanvasHeight = 600;      // 16:10
-inline constexpr int32_t kUltrawideCanvasWidth = 1260;   // 21:9
+constexpr int32_t canvas_width_of(Aspect aspect) noexcept { return shape_table_detail::row_of(aspect).width; }
+constexpr int32_t canvas_height_of(Aspect aspect) noexcept { return shape_table_detail::row_of(aspect).height; }
+constexpr const char* aspect_name(Aspect aspect) noexcept { return shape_table_detail::row_of(aspect).name; }
+/// The words that a selector and the Esc menu show for a shape ("Classic 4:3", "16:10", ...)
+constexpr const char* aspect_label(Aspect aspect) noexcept { return shape_table_detail::row_of(aspect).label; }
 
-constexpr int32_t canvas_width_of(Aspect aspect) noexcept {
-    switch (aspect) {
-        case Aspect::Wide16x9:
-        case Aspect::Wide16x10: return kWideCanvasWidth;
-        case Aspect::Ultra21x9: return kUltrawideCanvasWidth;
-        case Aspect::Classic4x3: break;
+/// The place of a shape in the table, from 0 (the narrowest), -1 for a value that no row has: the number that the page's `ants_set_aspect` takes (a number, because the page's exports take only numbers)
+constexpr int aspect_place(Aspect aspect) noexcept {
+    for (size_t i = 0; i < kAspectTable.size(); ++i) {
+        if (kAspectTable[i].aspect == aspect) return static_cast<int>(i);
     }
-    return ScreenLayout::kClassicWidth;
+    return -1;
 }
-constexpr int32_t canvas_height_of(Aspect aspect) noexcept {
-    switch (aspect) {
-        case Aspect::Wide16x9:
-        case Aspect::Ultra21x9: return kWideCanvasHeight;
-        case Aspect::Wide16x10: return kLaptopCanvasHeight;
-        case Aspect::Classic4x3: break;
-    }
-    return ScreenLayout::kClassicHeight;
-}
-inline const char* aspect_name(Aspect aspect) noexcept {
-    switch (aspect) {
-        case Aspect::Wide16x9: return "16:9";
-        case Aspect::Wide16x10: return "16:10";
-        case Aspect::Ultra21x9: return "21:9";
-        case Aspect::Classic4x3: break;
-    }
-    return "4:3";
+/// The shape at a place of the table; false (and `out` untouched) for a number outside it
+constexpr bool aspect_at_place(int place, Aspect& out) noexcept {
+    if (place < 0 || static_cast<size_t>(place) >= kAspectTable.size()) return false;
+    out = kAspectTable[static_cast<size_t>(place)].aspect;
+    return true;
 }
 
-/// The text of `--aspect`, of the settings key and of the page's `?aspect=`: "4:3", "16:10", "16:9" or "21:9" and nothing else. False with a message that says so for anything else.
+/// The names of every shape in a sentence, in table order: "4:3, 16:10, 16:9 and 21:9" (`last` = " and ") or "4:3, 16:10, 16:9 or 21:9" (" or "), for the messages that refuse a text
+inline std::string aspect_names(const char* last) {
+    std::string out;
+    for (size_t i = 0; i < kAspectTable.size(); ++i) {
+        if (i > 0) out += (i + 1 == kAspectTable.size()) ? last : ", ";
+        out += kAspectTable[i].name;
+    }
+    return out;
+}
+
+/// The text of `--aspect`, of the settings key and of the page's `?aspect=`: the name of a row of kAspectTable and nothing else. False with a message that says so for anything else.
 inline bool parse_aspect(const std::string& text, Aspect& out, std::string& why) {
-    for (const Aspect aspect : kAllAspects) {
-        if (text == aspect_name(aspect)) {
-            out = aspect;
+    for (const AspectRow& shape : kAspectTable) {
+        if (text == shape.name) {
+            out = shape.aspect;
             return true;
         }
     }
-    why = "\"" + text + "\": only 4:3, 16:10, 16:9 and 21:9";
+    why = "\"" + text + "\": only " + aspect_names(" and ");
     return false;
 }
 

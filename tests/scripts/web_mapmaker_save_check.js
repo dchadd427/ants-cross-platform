@@ -57,7 +57,7 @@ function fakeIdb(opts) {
         }
     };
 }
-const later = () => new Promise((r) => setTimeout(r, 15));
+const later = require('./web_mapmaker_clock.js').settle;
 function opened(idb, fetchFn) { const store = Store.create({ idb, fetch: fetchFn || null }); return new Promise((res) => store.open(() => res(store))); }
 
 // ---- A ----
@@ -151,7 +151,7 @@ async function caseC() {
     const told = async (fetch, file) => {
         const s = await opened(fakeIdb(), fetch);
         const calls = [];
-        await new Promise((res) => { s.fetchMap(file || 'TREASURE.LVL', (err, b) => { calls.push([err, b]); res(); }); setTimeout(res, 300); });       // (a download that is never reported leaves calls empty)
+        s.fetchMap(file || 'TREASURE.LVL', (err, b) => { calls.push([err, b]); });       // (a download that is never reported leaves calls empty)
         await later();
         return calls;
     };

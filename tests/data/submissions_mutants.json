@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map submissions (src/ants_server/submissions.cpp, submissions_http.cpp, map_names.cpp, crypto.cpp, the submissions part of map_store.cpp and the door of src/ants_ctl/http.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/submissions_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md (the server's own check, the canonical file, a limit, a protected name, the token, the session cookie's time, CSRF, what a visitor is told, a text rule, the door's size and method rules). The test command runs the three suites of the store, the routes and the text rules, and the door cases of test_ctl. Not listed on purpose: a longer-than-45-characters address text (inet_pton refuses any such text anyway, so the cap is a second lock and the mutant is equivalent). The two mutants fits_not_required and canonical_not_rechecked are second locks behind check_map's own 'works' and the canonical rewrite: a map that works but does not fit the place cannot be built from the map maker's output, and the rewritten file is checked again only as defense in depth; they are expected to survive. short_secret_accepted is not listed either: the owner's API is off in two places (the constructor and owner_api_on(), both at 32 characters), so changing one of them changes nothing a caller can see; the tests of a 31-character secret hold the pair. The mutants of the accounts, the roles, the sign-in and the CSRF token are tests/data/admin_accounts_mutants.json.",
+ "note": "Mutants of the map submissions (src/ants_server/submissions.cpp, submissions_http.cpp, upload_common.cpp (the refusals, the findings, the address and the checking window that this door shares with the test-map door), map_names.cpp, crypto.cpp, the submissions part of map_store.cpp and the door of src/ants_ctl/http.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/submissions_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md (the server's own check, the canonical file, a limit, a protected name, the token, the session cookie's time, CSRF, what a visitor is told, a text rule, the door's size and method rules). The test command runs the three suites of the store, the routes and the text rules, and the door cases of test_ctl. Not listed on purpose: a longer-than-45-characters address text (inet_pton refuses any such text anyway, so the cap is a second lock and the mutant is equivalent). The two mutants fits_not_required and canonical_not_rechecked are second locks behind check_map's own 'works' and the canonical rewrite: a map that works but does not fit the place cannot be built from the map maker's output, and the rewritten file is checked again only as defense in depth; they are expected to survive. short_secret_accepted is not listed either: the owner's API is off in two places (the constructor and owner_api_on(), both at 32 characters), so changing one of them changes nothing a caller can see; the tests of a 31-character secret hold the pair. The mutants of the accounts, the roles, the sign-in and the CSRF token are tests/data/admin_accounts_mutants.json.",
  "defaults": {
   "build": "test_submissions test_submissions_api test_map_names test_ctl test_map_list",
   "test": "./build/tests/test_server/test_submissions && ./build/tests/test_server/test_submissions_api && ./build/tests/test_server/test_map_names && ./build/tests/test_ctl/test_ctl && ./build/tests/test_server/test_map_list"
@@ -7,7 +7,7 @@
  "mutants": [
   {
    "id": "kind_claim_believed",
-   "file": "src/ants_server/submissions.cpp",
+   "file": "src/ants_server/upload_common.cpp",
    "old": "    if (real_kind != claimed) {\n",
    "new": "    if (false && real_kind != claimed) {\n"
   },
@@ -31,7 +31,7 @@
   },
   {
    "id": "version_word_not_checked",
-   "file": "src/ants_server/submissions.cpp",
+   "file": "src/ants_server/upload_common.cpp",
    "old": "    if (version != 8 && version != 9) {\n        why = make_failure(400, \"not_a_map\"",
    "new": "    if (false) {\n        why = make_failure(400, \"not_a_map\""
   },
@@ -421,13 +421,13 @@
   },
   {
    "id": "visitors_header_believed_always",
-   "file": "src/ants_server/submissions_http.cpp",
+   "file": "src/ants_server/upload_common.cpp",
    "old": "    if (trust_header) {\n        const std::string* h = request.header(\"x-client-address\");",
    "new": "    if (true || trust_header) {\n        const std::string* h = request.header(\"x-client-address\");"
   },
   {
    "id": "ipv6_counted_whole",
-   "file": "src/ants_server/submissions_http.cpp",
+   "file": "src/ants_server/upload_common.cpp",
    "old": "std::string(reinterpret_cast<const char*>(b), 8)",
    "new": "std::string(reinterpret_cast<const char*>(b), 16)"
   },
@@ -445,13 +445,13 @@
   },
   {
    "id": "window_budget_ignored",
-   "file": "src/ants_server/submissions_http.cpp",
+   "file": "src/ants_server/upload_common.cpp",
    "old": "if (window.count >= per_window || window.spent_ms >= budget_ms) return false;",
    "new": "if (window.count >= per_window || (false && window.spent_ms >= budget_ms)) return false;"
   },
   {
    "id": "window_count_ignored",
-   "file": "src/ants_server/submissions_http.cpp",
+   "file": "src/ants_server/upload_common.cpp",
    "old": "if (window.count >= per_window || window.spent_ms >= budget_ms) return false;",
    "new": "if ((false && window.count >= per_window) || window.spent_ms >= budget_ms) return false;"
   },
@@ -547,7 +547,7 @@
   },
   {
    "id": "one_address_uses_the_whole_window",
-   "file": "src/ants_server/submissions_http.cpp",
+   "file": "src/ants_server/upload_common.cpp",
    "old": "    if (used != window.by_address.end() && used->second >= per_address) return false;",
    "new": "    if (false && used != window.by_address.end() && used->second >= per_address) return false;"
   },
@@ -565,9 +565,9 @@
   },
   {
    "id": "finding_message_not_shortened",
-   "file": "src/ants_server/submissions.cpp",
+   "file": "src/ants_server/upload_common.cpp",
    "old": "JsonValue::make_string(shortened(f.get(\"message\").str()))",
-   "new": "JsonValue::make_string(f.get(\"message\").str())"
+   "new": "JsonValue::make_string((shortened(std::string()), f.get(\"message\").str()))"
   },
   {
    "id": "admin_api_short_path_throws",

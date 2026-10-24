@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.116 - 2026-10-23 - A Buy me a coffee button at the bottom of the front page
+## v0.12.120 - 2026-10-23 - A Buy me a coffee button at the bottom of the front page
 
 **For players:**
 - **A "Buy me a coffee" button at the bottom of the front page.** If you enjoy the game you can support its owner: the yellow button, centered in the footer, opens the owner's Buy Me a Coffee page in a new tab. The repository has a Sponsor button for the same page.
@@ -31,7 +31,74 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the front page only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b29f40d8...1158f600)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e95da98a...1158f600)
+
+## v0.12.119 - 2026-10-23 - One table for the picture's shapes
+
+**For players:**
+- **Nothing changes on screen.** The four shapes (Classic 4:3, 16:10, 16:9 and 21:9), their sizes, the default (16:9), `?aspect=` in the address, the choice the browser remembers and the "fills your screen" tag work exactly as before.
+- Under the hood, the shapes were listed in six places (the game, the game page, the front page, the settings menu, the page's style and its checks). The game now has one table and the web pages have one table, and a test fails when the two differ, so a new shape is one row in each instead of a hunt through the code.
+
+**Rules / network:** none: network protocol 21, the simulation rules and every recording are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d01c8ec8...7812b621)
+
+## v0.12.118 - 2026-10-23 - No Settings button over the picture in fullscreen
+
+**For players:**
+- **Nothing is laid over the game's picture in fullscreen any more.** The Settings button that sat at the top of the picture is gone, on computers and phones alike. On a computer press **Esc** (with nothing selected and no dialog open) to open the settings menu, as before.
+- **A phone in fullscreen has no way to open the menu** (it has no Esc): leave fullscreen first, then use the **Settings** button under the picture or in the header. In Safari and Firefox on a computer, Esc belongs to the browser in fullscreen, so leave fullscreen first there too.
+
+**Rules / network:** none: the page only; network protocol 21 and the simulation rules are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c93ee3f5...26f6d531)
+
+## v0.12.117 - 2026-10-23 - Test rooms work on every server
+
+**For players:**
+- **Play this map > With other players now works on every server.** The Map Maker's test room used to need the map submissions to be switched on; where they were off (the beta) it showed a dimmed, empty lobby. It now sends your draft map to a small door of its own that is always on, so a room on your draft opens whether or not submissions are open.
+- **A test map is as private as before:** it is checked by the same checker as a submitted map, it is on no list, no match on it is recorded, and it is deleted after 6 hours or when the server restarts. A map too big for a room (over 65,536 cells) is still turned away with the same words.
+- **The page says why a test room cannot open** in plain words: test rooms switched off on the server, or a map too big to send.
+- **For server owners:** the door is port 4031 (`ANTS_TEST_MAP_PORT`, 0 turns test rooms off), on by default; it has no database and no accounts and takes nothing but test maps. The old `/submissions?test=1` form is gone.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9aa3e544...02eabd8e)
+
+## v0.12.116 - 2026-10-23 - Map Maker: red drops go back, things may stand on water, flowers have stems
+
+**For players:**
+- **Map Maker (v1.5.5), Pick up: let go on a red place and the thing goes back.** Drag a hill, an ant, a pile or a plant, let go of the mouse, your finger or the pen where the copy is red, and it jumps back to where you picked it up. Nothing is written and nothing is left to Undo, and the bar says why, and the line stays until your next move ("Put back: the mushroom is in the way"). A lift on a free place still puts it down in one step, a plain click still only places the copy, and Done on a red place keeps the thing in your hand with the reason.
+- **Map Maker: hills, starting ants and food piles may be put on water.** Pick up used to refuse them, although many maps of the library have them there. The copy stays green and the bar adds one line about what to expect: an ant that cannot swim moves to land beside its marker, or drowns when there is none; ants that cannot swim reach a pile in the water only from the shore, while Swimmers swim to it or build a bridge; a hill whose way out is water may keep its ants in. The other tools never refused water.
+- **Map Maker: flowers are drawn whole, as in the game.** The flower with sunglasses and the other flowers showed only their heads; now the stems, the leaves and the shadow are there too (the same pixels as the game's).
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56e02b48...81bd4d9d)
+
+## v0.12.115 - 2026-10-23 - Path finder: a wide search for very big maps (switched off for now)
+
+**For players:**
+- **Nothing changes in play yet.** The game now contains the groundwork for very long orders on very big maps (today an order of about 400 tiles or more, 286 on a diagonal, is refused with "Can't go there", and a group of ants sent far gets its paths slowly). It is the original's own search, with the same routes and tie-breaks, only without the width limits, and it is switched off: no map can ask for it yet, and every map of the library plays exactly as before (all 540 maps hash byte for byte the same, also when the new search is forced on for all of them).
+- Whatever the original can play, the new search plays the same, at the same speed: it keeps the original's 1,000 search steps every 50 ms until an order is past the original's limit, and only then goes faster on a big map.
+- The next release lets a new big map ask for it.
+
+**Rules / network:** none. Network protocol 21 and the replay rules numbers are unchanged. A new map rules word 2 exists inside the simulation only; the map readers and writers still refuse it, and the simulation itself plays a word of 2 as 1 outside the tests, so no map and no recording can use it.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/86afa1dc...1a1f55e3)
+
+## v0.12.114 - 2026-10-23 - A settings menu on Esc and a Settings button
+
+**For players:**
+- **A settings menu, on the Esc key or a Settings button.** In the browser, press Esc (with nothing selected and no dialog open) or click **Settings** to open a panel over your game with Sound, Video, Controls and Game, and **Resume** and **Leave game** at the bottom. **The game keeps running** while it is open, so settle your settings quickly in an online match. Esc still deselects first, as the original does; the next Esc opens the menu. A click on the dimmed area does not close it.
+- **Where the button is:** in the page's header next to Menu, under the picture on a phone or a narrow window, over the picture (beside the cross that leaves fullscreen) while the page is fullscreen, and in the bar of a replay. Safari and Firefox keep Esc for themselves in fullscreen, and a phone has no Esc, so the button is the way in there.
+- **New: Master volume, Mute and remembered hit point numbers.** Master volume scales every sound and the music; Mute silences everything and keeps your sliders where they are; the white hit point numbers (Ctrl+L) now stay on or off from one game to the next. The menu also has the sound sliders, the picture shape, Fullscreen, the fullscreen mouse, the map scroll speed, chat, quick help and a list of the mouse, touch and keys. The original's Options window is unchanged.
+- **Leave game says what will happen** before it does it: with one opponent left it is a forfeit that ends the match for everybody and counts as a loss; with more it drops you out and the others play on; at home it ends the game. There is no separate Surrender button.
+- **Replays and live watching** have the same panel without the Game section ("Back to the matches" leaves, asking nothing); the frame of a match page has none.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens, and Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/14bbbfdb...feb90e21)
 
 ## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
 
@@ -536,91 +603,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4fccf668...b44f54aa), [walled maps](docs/BOT_GATES.md)
 
-## v0.12.59 - 2026-10-16 - Walled maps: the bots leave the map's own bombs to their plan
+## Older versions (v0.12.59 and before)
 
-**For players:**
-- **On walled maps the computer players no longer waste their ants on the map's own bombs:** a Medium or Hard bot working its way to walled-off food (POPcOrN) leaves the map's bombs to its plan instead of sending ants to set them off or to defuse them one by one. Alone on POPcOrN a Hard bot now scores about 620 points a game instead of 415 (Medium 444 instead of 273); in a match on POPcOrN the bots still score nothing ([why](docs/BOT_GATES.md)).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/39cbcd11...21cd9a95), [walled maps](docs/BOT_GATES.md)
-
-## v0.12.58 - 2026-10-16 - Bots go for the contested food first
-
-**For players:**
-- **Medium and Hard computer players eat the food that other teams also reach before the food at their own base**, because what they leave there the others eat. With four bots on TREASURE they now start with the centre and keep most of the Cheerios next to their base for later. Food far across the map does not pull them away from their own, and an enemy at their own food makes them hurry to eat it. Easy is as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4ac5df8d...ecc3f933), [the food order](docs/BOT_FOOD.md)
-
-## v0.12.57 - 2026-10-16 - Under the hood: a map can be checked for the original game
-
-**For players:**
-- Under the hood: a map can now be checked for whether it works in the original game; nothing changes in the game.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3c5e7824...a92c2a3e)
-
-## v0.12.56 - 2026-10-16 - Rematch: back to the lobby with one button
-
-**For players:**
-- **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colors, bots, teams and map.
-- **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them; if nobody from the match is in the room for a minute, the room goes on without the waiting seats. Desktop and phone-app players join by the code.
-
-**Rules / network:** none.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...05109ff0)
-
-## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
-
-**For players:**
-- Under the hood: the map files can now be written, not only read; nothing changes in the game.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/469bd142...ee0d2604)
-
-## v0.12.53 - 2026-10-15 - Fewer lost points on walled-in maps
-
-**For players:**
-- **Ghetto and ANTS_PARTY:** a computer player whose worker starts beside the food harvests at once instead of waiting two minutes for a plan it does not need. Ghetto, one against one: Hard 2,291 -> 2,741, Medium 1,593 -> 2,240 (both seat pairs). ANTS_PARTY: Hard 26,952 -> 28,831, Medium about 6 percent less.
-- **!-Midz-!:** a Hard bot gives up a trip to a power-up only when an enemy really gets there first: 343 -> 645. Medium keeps its old rule; without it, it lost a quarter of its score on Ghetto.
-- **A bomb of the bot's own color that closes the way is now defused** instead of being ordered again for minutes.
-- **Dustbin and FKD Deathmatch** score a little less than before v0.12.49 (docs/BOTS.md); POPcOrN against one Hard opponent loses its rare 50 points.
-
-**Rules / network:** none.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f21844cc...8cc8d538)
-
-## v0.12.52 - 2026-10-15 - Lobby: far fewer renames, map changes and color moves lost to a slow moment
-
-**For players:**
-- **A rename, a new map or a color move in the lobby is far less likely to be lost to a slow moment.** The page asked for these at exactly the pace the server allows, and the server drops a request it handles a few milliseconds early without a word, so a change could vanish from the screen (a fourth rename in a few seconds, or holding the next-map arrow). The page now keeps a little under the limit, as the chat does: two renames or removals at once and then one every 1.25 seconds, five map changes or color moves at once and then about three a second. A hiccup of up to about a third of a second for a map change or a color move, and of up to one and a half seconds for a rename or a removal, no longer loses one; a longer hiccup still can.
-
-**Rules / network:** none. Network protocol 21 and the server are as before; only the pace of the page's requests changed.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60fb1ebc...44e5f759), [the page's pace](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
-
-## v0.12.51 - 2026-10-15 - Match stats: over time and activity
-
-**For players:**
-- **A match page tells the story of the match, not only its totals.** A band of highlights sits under the result (first blood, who led and when, the comeback, the busiest player). **Over time** charts the score and the kills of every seat (a point every 15 seconds), with a strip of who had the most points (a side of two is named), first blood marked, and the facts under them: the last kill, the changes of the lead, the best run of kills, a seat that ran out of ants. **Activity** shows every seat's orders in every minute as a strip of squares, the orders by kind and the busiest seat and minute.
-- The server counts these stats from the recording at the same time as the totals, and it counts them in the background for the matches of the last 30 days that were counted without them, one at a time. A match recorded by an older version, one whose recording was removed before it was counted, and a match that has just ended show their totals and one line that says why there is no more.
-- Who killed whom, damage, raids, power-ups, food and bombs are counted and kept for every match too; their sections of the page come next. The note of a recording from an older version now says that the **totals** are complete.
-
-**Rules / network:** none. The simulation, the hashes and network protocol 21 are as before; the stats are read from the recording while it plays, and the engine is not touched.
-
-**Fixes:**
-- A match on a player's map (a community map) had no record, as the server looked for its map in the official folder only; it is counted now.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1bf52364...198d2243), [the match pages and the replay pass](docs/REPLAYS.md)
-
-## v0.12.50 - 2026-10-15 - Chat in the lobby
-
-**For players:**
-- **The front page has a chat now.** A **Chat** box under the colors lets the people in a room talk before START: type a line (up to 100 letters, digits and signs) and press Enter or Send, and everybody in the room reads it in the color of the sender's seat. It is the chat of the game's own waiting room, so a player of the desktop game in the same room reads it too.
-- A small line tells who comes and goes ("Sam joined as Red."). A line that arrives while the box is out of view (below the window, or under START on a phone) also shows as a short message at the bottom of the page, at most one every 4 s (the box has every line).
-- The box keeps a little under the room's pace (four lines at once, then one every 1.25 s) and asks for a little slower when you are faster (your line stays in the field). If the room does not say a line back within 3 s, or the connection drops first, the box says "Your last line may not have arrived" and puts the text back in the field. What the game cannot show, an accent or a smiley, is left out as you type. On a phone the field is big enough to tap and the keyboard does not hide it behind START.
-- Nothing is saved: a reload starts an empty box, and when START takes everybody to the game the lines stay behind (they are not in the countdown's chat; that is a later change).
-
-**Rules / network:** none. The server already passed a page's chat line on; network protocol 21 is as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...97aea54a), [the notes](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
-
-## Older versions (v0.12.49 and before)
-
-Every release before v0.12.50, and the long notes of v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.60, and the long notes of v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

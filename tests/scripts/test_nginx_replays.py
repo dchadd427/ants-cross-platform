@@ -160,7 +160,7 @@ class TheLocations(unittest.TestCase):
             self.assertLessEqual(per_second, high, zone_name)                                 # ... and less than the game server's loop can serve
             self.assertIn("limit_req zone=%s burst=%d nodelay;" % (zone_name, burst), block, zone_name)
             self.assertIn("limit_req_status 503;", block, zone_name)
-        self.assertEqual(sorted(re.findall(r"limit_req_zone [^;]*\bzone=(\w+):", HEAD)), ["ants_admin_api", "ants_admin_login", "ants_busy", "ants_history", "ants_history_deaths", "ants_history_items", "ants_history_query", "ants_live", "ants_live_files", "ants_local", "ants_map_files", "ants_map_previews", "ants_maps", "ants_replay_files", "ants_replays", "ants_stats", "ants_submit_post", "ants_submit_read"])      # (a flood of one is not another's; the two of /live are tests/scripts/test_nginx_live.py's)
+        self.assertEqual(sorted(re.findall(r"limit_req_zone [^;]*\bzone=(\w+):", HEAD)), ["ants_admin_api", "ants_admin_login", "ants_busy", "ants_history", "ants_history_deaths", "ants_history_items", "ants_history_query", "ants_live", "ants_live_files", "ants_local", "ants_map_files", "ants_map_previews", "ants_maps", "ants_replay_files", "ants_replays", "ants_stats", "ants_submit_post", "ants_submit_read", "ants_test_maps"])      # (a flood of one is not another's; the two of /live are tests/scripts/test_nginx_live.py's)
         self.assertNotIn("zone=ants_replays ", FILES)
         self.assertNotIn("zone=ants_replay_files ", LIST)
 

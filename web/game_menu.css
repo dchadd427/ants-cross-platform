@@ -1,0 +1,129 @@
+/* The settings menu of the game page (web/game_menu.js, docs/GAME_MENU.md): the page's own look (the tokens and .btn of web/shell.html), 44 px high targets, a panel of 780 px that fills the screen on a phone. The panel
+   is a child of the stage and fixed over the whole window, so it is there in fullscreen too. */
+
+/* the Settings buttons: the page's .btn with a gear; hidden until the menu is ready */
+.gm-btn[hidden] { display: none !important; }
+.gm-btn::before { content: "\2699\FE0E"; font-size: 1.1em; line-height: 1; }
+.gm-btn:disabled { opacity: .55; cursor: default; }
+.view-bar .btn.gm-narrow { margin-right: 6px; min-height: 44px; }
+@media (max-width: 1139px) { .gm-wide { display: none !important; } }
+@media (min-width: 1140px) { .gm-narrow { display: none !important; } }
+
+/* the dimmed screen and the panel */
+.gm-scrim { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .64); cursor: default;
+            animation: gm-fade .12s ease-out; -webkit-user-select: none; user-select: none; touch-action: manipulation; overscroll-behavior: contain; }
+@keyframes gm-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .gm-scrim { animation: none; } }
+
+.gm-panel { position: relative; display: grid; grid-template-columns: 172px minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px 18px;
+            grid-template-areas: "head head head" "tabs pane pane" "note note btns";
+            width: min(780px, 100%); height: min(580px, 100%); padding: 20px 22px; color: var(--cream, #f4ece2); background: var(--inset, #070b0f);
+            border: 3px solid var(--frame, #2b6b4f); border-radius: 16px; box-shadow: 0 0 0 3px var(--edge, #050a08), 6px 8px 0 4px var(--shadow, #9d0d17); font-size: 16px; line-height: 1.35; }
+.gm-panel[data-asking] > :not(.gm-ask) { opacity: .35; pointer-events: none; }
+.gm-panel * { min-width: 0; }
+.gm-panel button:focus-visible, .gm-panel input:focus-visible { outline: 3px solid var(--gold, #f6d058); outline-offset: 3px; }
+.gm-panel .gm-resume:focus { outline: 3px solid var(--gold, #f6d058); outline-offset: 3px; }
+
+.gm-head { grid-area: head; display: flex; align-items: center; gap: 14px; }
+.gm-title.banner { display: inline-block; font-size: 28px; padding: 8px 24px; color: var(--gold, #f6d058); }
+.gm-tag { padding: 3px 10px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--cream, #f4ece2); border: 1px solid #5a6a72; border-radius: 6px; white-space: nowrap; }
+.gm-esc { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+.gm-kbd { display: inline-block; min-width: 26px; padding: 1px 8px; font: inherit; font-size: 14px; text-align: center; color: var(--cream, #f4ece2); background: #16222c; border: 1px solid #3c5262; border-radius: 6px; box-shadow: 0 2px 0 #000; }
+.gm-x { display: none; margin-left: auto; width: 44px; min-width: 44px; padding: 0; font-size: 28px; line-height: 1; }
+
+.gm-tabs { grid-area: tabs; display: flex; flex-direction: column; gap: 12px; align-content: start; }
+.gm-tab { justify-content: flex-start; padding: 8px 16px; font-size: 18px; }
+.gm-tab.on { color: #f6dc86; background: #102b25; transform: translate(1px, 2px); box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16, 1px 1px 0 var(--shadow, #9d0d17); cursor: default; }
+
+.gm-pane { grid-area: pane; overflow-y: auto; overscroll-behavior: contain; padding: 4px 16px; border: 2px solid var(--frame-lo, #13634b); border-radius: 10px; background: #05090c; }
+.gm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; padding: 8px 0; border-top: 1px solid #16242b; }
+.gm-row:first-child { border-top: 0; }
+.gm-name { font-size: 16.5px; }
+.gm-new { margin-left: 8px; padding: 1px 6px; font-size: 11px; font-weight: 700; letter-spacing: .05em; color: #1c1500; background: var(--gold, #f6d058); border-radius: 4px; vertical-align: 2px; }
+.gm-hint { font-size: 13.5px; line-height: 1.3; color: #b7c4c9; }
+.gm-ctl { justify-self: end; }
+.gm-info { color: var(--gold, #f6d058); }
+.gm-slide { display: flex; align-items: center; gap: 12px; width: 262px; }
+.gm-val { flex: 0 0 34px; text-align: right; color: var(--gold, #f6d058); font-size: 17px; font-variant-numeric: tabular-nums; }
+.gm-seg { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.gm-opt, .gm-act { min-height: 44px; padding: 6px 14px; font-size: 15px; }
+.gm-opt.on { color: #f6dc86; background: #102b25; transform: translate(1px, 2px); box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16, 1px 1px 0 var(--shadow, #9d0d17); cursor: default; }
+
+/* the sliders */
+.gm-slide input[type=range] { -webkit-appearance: none; appearance: none; flex: 1 1 auto; height: 44px; margin: 0; padding: 0; background: transparent; cursor: pointer; touch-action: pan-y; }
+.gm-slide input[type=range]::-webkit-slider-runnable-track { height: 14px; background: linear-gradient(90deg, #2f7d62 var(--f, 0%), #04070a var(--f, 0%)); border: 2px solid var(--frame, #2b6b4f); border-radius: 8px; }
+.gm-slide input[type=range]::-moz-range-track { height: 10px; background: #04070a; border: 2px solid var(--frame, #2b6b4f); border-radius: 8px; }
+.gm-slide input[type=range]::-moz-range-progress { height: 10px; background: #2f7d62; border-radius: 8px; }
+.gm-slide input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 32px; margin-top: -11px; background: var(--teal, #1f4f40) var(--sheen); border: 2px solid var(--edge, #050a08); border-radius: 6px;
+            box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow, #9d0d17); }
+.gm-slide input[type=range]::-moz-range-thumb { width: 22px; height: 28px; background: var(--teal, #1f4f40) var(--sheen); border: 2px solid var(--edge, #050a08); border-radius: 6px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow, #9d0d17); }
+
+/* the Controls list */
+@media (min-width: 701px) { .gm-kgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 30px; } }
+.gm-gh { margin: 12px 0 2px; font-size: 13px; font-weight: 600; letter-spacing: .1em; color: var(--gold, #f6d058); }
+.gm-krow { padding: 5px 0; }
+.gm-krow .gm-lab { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; white-space: nowrap; }
+.gm-krow .gm-kbd { min-width: 22px; padding: 1px 6px; font-size: 12.5px; }
+.gm-input { font-size: 14px; }
+.gm-plus { color: #b7c4c9; }
+.gm-what { text-align: right; font-size: 13.5px; }
+.gm-fine { margin: 12px 0 8px; font-size: 14px; color: #b7c4c9; }
+
+/* the foot: the note, Resume, Leave game (a deeper red) */
+.gm-note { grid-area: note; display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-size: 16px; background: #05090c; border: 1px solid #1d2a30; border-radius: 8px; }
+.gm-clock { position: relative; flex: 0 0 18px; width: 18px; height: 18px; border: 2px solid var(--gold, #f6d058); border-radius: 50%; }
+.gm-clock::before, .gm-clock::after { content: ""; position: absolute; left: 6px; top: 2px; width: 2px; height: 6px; background: var(--gold, #f6d058); transform-origin: 1px 6px; }
+.gm-clock::after { height: 5px; transform: rotate(90deg); }
+.gm-btns { grid-area: btns; display: flex; gap: 14px; }
+.gm-btns .btn { min-width: 150px; font-size: 18px; }
+.gm-leave { background: #9d0d17 var(--sheen); box-shadow: inset 1px 1px 0 #ffd4cf, inset 2px 2px 0 #e45a5a, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -3px -4px 2px #5e0a10, 3px 4px 0 #3b0d10; }
+.gm-back { background: var(--teal, #1f4f40) var(--sheen); box-shadow: var(--bevel), 3px 4px 0 var(--shadow, #9d0d17); }
+@media (hover: hover) { .gm-leave:not(.gm-back):hover { background-color: #b5222c; } }
+
+/* the question of Leave game: a card over the panel */
+.gm-ask { position: absolute; left: 50%; top: 50%; z-index: 2; width: min(500px, calc(100% - 32px)); transform: translate(-50%, -50%); padding: 18px 22px 22px; background: #05090c;
+          border: 3px solid #b3262e; border-radius: 12px; box-shadow: 0 0 0 3px var(--edge, #050a08), 6px 8px 0 4px #7a0b13; }
+.gm-ask-t { margin: 0 0 10px; font-size: 26px; font-weight: 500; color: #ff8d7f; }
+.gm-ask-b { margin: 0 0 14px; font-size: 17px; }
+.gm-ask-n { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; font-size: 14px; color: #b7c4c9; }
+.gm-ask-btns { display: flex; flex-wrap: wrap; gap: 14px; }
+.gm-ask-btns .btn { min-width: 150px; flex: 1 1 150px; font-size: 18px; }
+
+/* a computer has the Esc hint; a touch screen and a narrow window the cross */
+@media (hover: none), (max-width: 700px) { .gm-esc { display: none; } .gm-x { display: inline-flex; } }
+
+/* a phone held upright: the panel fills the screen with a gutter of 16 px, the sections are a row of chips, a row's control is under its words */
+@media (max-width: 700px) {
+    .gm-scrim { padding: 16px; }
+    .gm-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto; grid-template-areas: "head" "tabs" "pane" "note" "btns"; gap: 12px; width: 100%; height: 100%; padding: 14px; }
+    .gm-title.banner { font-size: 24px; padding: 6px 16px; }
+    .gm-tabs { flex-direction: row; gap: 8px; }
+    .gm-tab { flex: 1 1 0; justify-content: center; padding: 8px 4px; font-size: 16px; }
+    .gm-pane { padding: 2px 12px; }
+    .gm-row { grid-template-columns: minmax(0, 1fr); }
+    .gm-ctl { justify-self: stretch; }
+    .gm-seg { justify-content: flex-start; }
+    .gm-seg4 { display: grid; grid-template-columns: 1fr 1fr; }
+    .gm-k-fullscreen .gm-hint { display: none; }
+    .gm-btnrow, .gm-k-fullscreen { grid-template-columns: minmax(0, 1fr) auto; }
+    .gm-btnrow .gm-ctl, .gm-k-fullscreen .gm-ctl { justify-self: end; }
+    .gm-slide { width: auto; }
+    .gm-krow { grid-template-columns: minmax(0, 1fr) auto; }
+    .gm-krow .gm-ctl { justify-self: end; }
+    .gm-btns { display: grid; grid-template-columns: 1fr 1fr; }
+    .gm-btns .btn { min-width: 0; }
+    .gm-ask { width: calc(100% - 24px); padding: 14px 16px 18px; }
+    .gm-ask-btns { display: grid; grid-template-columns: minmax(0, 1fr); }
+}
+
+/* a phone on its side: the screen's height less the gutter, the sections at the left, the note beside the title */
+@media (min-width: 701px) and (max-height: 520px) {
+    .gm-scrim { padding: 8px; }
+    .gm-panel { grid-template-columns: 150px minmax(0, 1fr) auto; grid-template-areas: "head head note" "tabs pane pane" "tabs btns btns"; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px 14px; height: 100%; padding: 10px 14px; }
+    .gm-title.banner { font-size: 22px; padding: 4px 16px; }
+    .gm-note { padding: 4px 10px; font-size: 14px; }
+    .gm-tabs { gap: 8px; }
+    .gm-btns { justify-self: end; }
+    .gm-esc { display: none; }
+    .gm-x { display: inline-flex; margin-left: 0; }
+}

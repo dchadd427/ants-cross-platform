@@ -201,6 +201,10 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     }
 }
 
+void SimulationEngine::allow_rules_two_for_tests() {
+    impl_->grid_.allow_rules_two_for_tests();
+}
+
 void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms, uint16_t rules) {
     impl_->roster_mask_ = 0x0Fu;
     impl_->dropped_mask_ = 0;

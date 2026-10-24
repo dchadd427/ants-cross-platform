@@ -439,10 +439,10 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             }
         } else if (std::strcmp(argv[i], "--start-menu") == 0) {                // forces the start menu (also headless, with --screenshot: the tests and the screenshots)
             menu_forced = true;
-        } else if (std::strcmp(argv[i], "--aspect") == 0) {                      // --aspect 4:3 | 16:10 | 16:9 | 21:9 (nothing else exists yet)
+        } else if (std::strcmp(argv[i], "--aspect") == 0) {                      // --aspect NAME: a name of the shape table (canvas_layout.hpp kAspectTable)
             std::string why;
             if (i + 1 >= argc) {
-                if (cfg.startup_error.empty()) cfg.startup_error = "--aspect needs 4:3, 16:10, 16:9 or 21:9";
+                if (cfg.startup_error.empty()) cfg.startup_error = "--aspect needs " + aspect_names(" or ");
             } else if (parse_aspect(argv[++i], cfg.aspect, why)) {
                 cfg.aspect_given = true;
             } else if (cfg.startup_error.empty()) {
@@ -692,6 +692,7 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.init(0);
     hud_.options().load(config_store_);
     hud_.set_config_store(&config_store_);
+    load_game_menu_settings();                                        // (Master volume, Mute and the hit point numbers: application_game_menu.cpp)
     local_player_id_ = 0;
 
     scorecard_.set_on_replay([this]() {
@@ -724,6 +725,7 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_on_quit([this]() {
         confirm_quit();
     });
+    hud_.set_on_menu_request([this]() { request_game_menu(); });         // (Esc with nothing to cancel: the page's settings panel)
     hud_.set_on_fullscreen([this]() { toggle_fullscreen(); });          // (the countdown card's Fullscreen button, protocol 21: the native game's own; the page's button does it in the browser)
 
     hud_.set_on_sfx_volume([this](int32_t v) {
@@ -1741,13 +1743,14 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel() {
 }
 
 // For the page (web/shell.html): the selector of the picture under the game changes the shape of the picture while the game runs (Application::set_aspect: no reload, no new match, nothing of the
-// simulation is touched). `shape` is the place of the shape in the selector, left to right: 0 Classic 4:3, 1 16:10, 2 16:9, 3 21:9 (kAllAspects: a number, because the page's exports take only
-// numbers). Returns 1 when the game has that shape now (also when it had it already), 0 for a number that is no shape (nothing changes), -1 when the game is not up yet (the page asks again
+// simulation is touched). `shape` is the place of the shape in the shape table (aspect_place / aspect_at_place in canvas_layout.hpp: the selector's order, left to right; a number, because the page's exports
+// take only numbers). Returns 1 when the game has that shape now (also when it had it already), 0 for a number that is no shape (nothing changes), -1 when the game is not up yet (the page asks again
 // when it is: its postRun hook, and the arguments that it starts with name the shape that the page has now).
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_set_aspect(int shape) {
     if (g_web_app == nullptr) return -1;
-    if (shape < 0 || static_cast<size_t>(shape) >= kAllAspects.size()) return 0;
-    return g_web_app->set_aspect(kAllAspects[static_cast<size_t>(shape)]) ? 1 : -1;
+    Aspect aspect = Aspect::Classic4x3;
+    if (!aspect_at_place(shape, aspect)) return 0;
+    return g_web_app->set_aspect(aspect) ? 1 : -1;
 }
 
 // For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The Menu button and the footer's link ask the player first when this says 1
@@ -1778,8 +1781,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_replay_do(int what, int value) {
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
 // The seats of the match, for the page's browser check (tests/scripts/web_home_check.py): 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
 // 21 - 24: the ants of seat 0 - 3 that are alive now (-1 outside a match).
-// The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (its place in the selector, left to right: 0 4:3, 1 16:10, 2 16:9, 3 21:9: the
-// index in kAllAspects), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
+// The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (its place in the shape table, ants_set_aspect's number), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // The picking, for the page's browser check of a replay (tests/scripts/web_camera_check.py): 50: the ants that are picked, plus 1000 when a base is picked and 100000 when an ant is inspected (0: nothing is picked; -1 outside a match).
@@ -1836,12 +1838,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         }
         case 40: return g_web_app->canvas().width;
         case 41: return g_web_app->canvas().height;
-        case 42: {                                                       // the shape's place in the selector (ants_set_aspect's number)
-            for (size_t i = 0; i < kAllAspects.size(); ++i) {
-                if (kAllAspects[i] == g_web_app->aspect()) return static_cast<int>(i);
-            }
-            return -1;
-        }
+        case 42: return aspect_place(g_web_app->aspect());               // the shape's place in the shape table (ants_set_aspect's number)
         case 43: return g_web_app->picture().x;
         case 44: return g_web_app->picture().y;
         case 45: return g_web_app->picture().w;
@@ -1929,7 +1926,7 @@ void Application::handle_events() {
             if (!take_touch_event(event)) continue;          // (a pan, a zoom, the end of a press: done there; a mouse event is handled below like any that SDL sends)
         } else if (SDL_PollEvent(&event)) {
             if (event.type == SDL_FINGERDOWN || event.type == SDL_FINGERMOTION || event.type == SDL_FINGERUP) {
-                feed_touch(event.tfinger);                   // (what the model says is queued and comes first, before the next event of SDL's)
+                if (!game_menu_open_) feed_touch(event.tfinger);   // (what the model says is queued and comes first, before the next event of SDL's; no finger is the game's while the settings panel is up)
                 continue;
             }
             if (event.type == touch_cancel_event_type()) {   // (the page's touchcancel, behind the finger events that came before it: cancel_touch_queued)
@@ -2056,6 +2053,8 @@ void Application::handle_events() {
             continue;
         }
 
+        if (game_menu_takes(event)) continue;                // (the settings panel is up: its keys, text, clicks and wheel are the panel's)
+
         // Gameplay Event Dispatch
         switch (event.type) {
             case SDL_TEXTINPUT:
@@ -2082,6 +2081,7 @@ void Application::handle_events() {
     }
     watch_screen();
     if (pointer_gone) pointer_outside_ = true;
+    end_game_menu_frame();
 }
 
 // Is the position of a button event, as SDL delivered it (before the clamp), outside the window? Not merely outside the picture: the black bars are part of
@@ -2604,7 +2604,7 @@ void Application::confirm_quit() {
     }
     // A match that is held (a seat is missing, the countdown runs, this machine is on its way back) seals no turn, and no session plays in the lobby phases of a match that starts again after a BadRequest (the
     // catch-up screen is up): a Quit command would be lost and the player would stay. The player leaves for good instead (NetGame::leave: the key is let go of, the others are told when the link is up).
-    if (network_active() && (net_->paused() || catch_up_screen_active() || hud_.is_match_start_modal_active())) {      // (protocol 21: the countdown card has a Quit button, and the first turn is not sealed yet either)
+    if (match_held()) {      // (protocol 21: the countdown card has a Quit button, and the first turn is not sealed yet either)
         leave_game();
         return;
     }
@@ -3122,6 +3122,7 @@ void Application::render_frame() {
         sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
         const auto& world = view.get_world_state();
         renderer_->set_show_hp(hud_.is_show_hp());
+        sync_game_menu_settings();                           // (Ctrl+L flipped it: remembered)
         renderer_->render_world(world, view.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,

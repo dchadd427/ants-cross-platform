@@ -5,8 +5,9 @@ usage: map_atlas.py [--sprites DIR] [--catalog FILE] OUT_DIR
 
 Reads asset_catalog/sprites/sprite_NNNN.png (every sprite of ants.chd, decoded) and asset_catalog/catalog_data.js (the sprite viewer's data: every animation with its frames, the sprite of each and its
 x/y offset; it is the table of docs/chd_table4_animations.json, which the image's build does not carry, and tests/scripts/test_map_atlas.py holds the two equal), nothing else: never the original
-program (AGENTS.md rule 4). A tile id of the map IS the animation number; its picture is frame 0 of the animation's first sub-item, drawn with that frame's x/y offset
-from the top-left corner of the cell (docs/MAP_EDITOR.md, "Sprites"). Writes, with the Python standard library only (zlib, struct: the image build has no more than that):
+program (AGENTS.md rule 4). A tile id of the map IS the animation number; its picture is the animation's first sub-item with all its parts (frames) put together as the game draws
+them (the last stored part first: a flower is its head, its stems, its leaves and its shadow), drawn with the x/y offset of the box of the parts from the top-left corner of the cell
+(docs/MAP_EDITOR.md, "Sprites"). Writes, with the Python standard library only (zlib, struct: the image build has no more than that):
 
   ground.png    the 239 ground tiles (ids 431 to 669, all 32 x 32, offset 0,0), 16 to a row, a 256-color PNG
   objects.png   the pictures of the objects that the editor offers (rocks, power-ups, bombs, hills, food, the bigger objects, the starting ant) and the commonest small ones, packed, 256 colors
@@ -36,8 +37,9 @@ ANT_RAMPS = {                                    # the 14-step palette ramps (+0
 FOOD_STAGES = list(range(253, 287)) + list(range(340, 344)) + list(range(356, 377)) + list(range(378, 389)) + list(range(390, 404)) + list(range(1331, 1334))        # the stages of all 32 food items that the Food tool puts (mapmaker_blocks.js)
 PLANTS = [404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421]     # the 14 top-layer plants (clovers and flowers, walk-under canopy and power-up droppers)
 BIGGER = [1323, 1324, 1321, 1322, 1320, 1326, 301, 237, 1329, 1327, 242, 346, 329, 236, 238, 350, 326, 418, 417, 289, 325, 409, 324, 349, 315, 345, 292, 354, 352]      # mapmaker_palette.js BIGGER
+PARTED = [300, 328]      # the two other objects of a library map whose picture has several parts (medrock8, stick2a): fetched one by one they would show their first part only, so they are in the sheet
 COMMON_SMALL = [134, 317, 318, 294, 336, 344, 309, 341, 340, 302, 303, 305]      # small and in the most library maps (the power-ups and rocks above are the others)
-IN_THE_SHEET = sorted(set(list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + list(ANT_TYPES.values()) + FOOD_STAGES + PLANTS + BIGGER + COMMON_SMALL))
+IN_THE_SHEET = sorted(set(list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + list(ANT_TYPES.values()) + FOOD_STAGES + PLANTS + BIGGER + COMMON_SMALL + PARTED))
 # every other object that a library map anchors on layer 2 and that is a thing on the ground (not a screen element of the menus): fetched one by one
 FAR_RANGES = [(34, 38), (133, 134), (236, 242), (245, 430), (1320, 1334)]
 FAR_NOT = {243, 244}                             # the mouse pictures of the menus
@@ -151,8 +153,9 @@ def average(rgba):
     return 0x808080 if not n else ((r + n // 2) // n << 16) | ((g + n // 2) // n << 8) | ((b + n // 2) // n)
 
 
-def read_catalog(path):
-    """{animation number: (sprite number, dx, dy)} of frame 0 of the first sub-item of every animation of the viewer's data (a JavaScript file: `{ id: N, name: "...", subitems: [ { ... frames: [ { dx: X, dy: Y, sprite_id: S, ...`)."""
+def read_parts(path):
+    """{animation number: [(sprite number, dx, dy), ...]}: every part (frame) of the first sub-item of every animation of the viewer's data (a JavaScript file: `{ id: N, name: "...", subitems: [ { ... frames: [ { dx: X, dy: Y, sprite_id: S, ...
+    The game draws all the parts of a sub-item, the last stored one first and the first on top (Renderer::draw_frame_parts); a flower is its head, its stems, its leaves and its shadow."""
     with open(path, encoding="utf-8") as f:
         text = f.read()
     start = text.find("animations: [")
@@ -162,12 +165,18 @@ def read_catalog(path):
     table = {}
     for k, m in enumerate(found):
         block = text[start + m.end():start + (found[k + 1].start() if k + 1 < len(found) else len(text) - start)]
-        frame = re.search(r"frames: \[\s*\{ dx: (-?\d+), dy: (-?\d+), sprite_id: (\d+),", block)
-        if frame:
-            table[int(m.group(1))] = (int(frame.group(3)), int(frame.group(1)), int(frame.group(2)))
+        frames = re.search(r"frames: \[(.*?)\n\s*\] \}", block, re.S)
+        parts = [(int(p.group(3)), int(p.group(1)), int(p.group(2))) for p in re.finditer(r"\{ dx: (-?\d+), dy: (-?\d+), sprite_id: (\d+),", frames.group(1))] if frames else []
+        if parts:
+            table[int(m.group(1))] = parts
     if sorted(table) != list(range(1344)):
         raise SystemExit("%s: the animations 0 to 1343 were expected, found %d" % (path, len(table)))
     return table
+
+
+def read_catalog(path):
+    """{animation number: (sprite number, dx, dy)} of frame 0 of the first sub-item of every animation of the viewer's data (see read_parts)."""
+    return {ident: parts[0] for ident, parts in read_parts(path).items()}
 
 
 def first_frame(table, ident):
@@ -175,8 +184,26 @@ def first_frame(table, ident):
     return table.get(ident)
 
 
+def composite(parts, sprite):
+    """(width, height, rgba, dx, dy) of all the parts of a sub-item drawn as the game draws them (the last stored part first, the first one on top, a pixel that is drawn at alpha 128 or more
+    replaces what is under it) on one canvas that is the box of the parts; (dx, dy) is where that picture's corner lies from the cell's anchor."""
+    pics = [(dx, dy) + sprite(number) for number, dx, dy in parts]
+    x0, y0 = min(p[0] for p in pics), min(p[1] for p in pics)
+    x1, y1 = max(p[0] + p[2] for p in pics), max(p[1] + p[3] for p in pics)
+    w, h, rgba = x1 - x0, y1 - y0, bytearray(4 * (x1 - x0) * (y1 - y0))
+    for dx, dy, pw, ph, prgba in reversed(pics):
+        for y in range(ph):
+            for x in range(pw):
+                a = 4 * (y * pw + x)
+                if prgba[a + 3] >= 128:
+                    at = 4 * ((dy - y0 + y) * w + dx - x0 + x)
+                    rgba[at:at + 4] = prgba[a:a + 4]
+    return w, h, bytes(rgba), x0, y0
+
+
 def build(sprites, catalog_path, out):
-    table = read_catalog(catalog_path)
+    parts_table = read_parts(catalog_path)
+    table = {ident: parts[0] for ident, parts in parts_table.items()}
 
     def sprite(number):
         return read_png(os.path.join(sprites, "sprite_%04d.png" % number))
@@ -203,7 +230,12 @@ def build(sprites, catalog_path, out):
         found = first_frame(table, ident)
         if not found:
             raise SystemExit("object %d has no picture" % ident)
-        w, h, rgba = sprite(found[0])
+        parts = parts_table[ident]
+        if len(parts) > 1:                       # a picture of several parts (a flower: head, stems, leaves, shadow): all of them, as the game draws them
+            w, h, rgba, dx, dy = composite(parts, sprite)
+            found = (None, dx, dy)
+        else:
+            w, h, rgba = sprite(found[0])
         if ident == ANT or ident in ANT_TYPES.values():
             ant_rgbas[ident] = (w, h, rgba)
         order.append((h, w, ident, found, rgba))

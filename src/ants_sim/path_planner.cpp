@@ -117,9 +117,9 @@ int PathGridPool::free_count() const noexcept {
 // ============================================================================
 
 PathSearch::PathSearch(uint32_t ant_id, TileCoord start, TileCoord goal, uint16_t rows, uint16_t cols,
-                       PathGridPool& pool, bool wall_at_row_90)
+                       PathGridPool& pool, bool wall_at_row_90, bool wide)
     : ant_id_(ant_id), start_(start), goal_(goal), rows_(rows), cols_(cols), pool_(&pool),
-      sentinel_row_(wall_at_row_90 ? kSentinelRow : kNoSentinelRow) {
+      sentinel_row_(wall_at_row_90 ? kSentinelRow : kNoSentinelRow), wide_(wide) {
     init();  // the ctor runs Init immediately (0x101989e)
 }
 
@@ -138,7 +138,10 @@ PathSearch::PathSearch(const PathSearch& other, PathGridPool& pool)
       grid_(other.slot_ >= 0 ? pool.cells(other.slot_) : nullptr),
       heap_(other.heap_),
       finished_(other.finished_),
-      path_(other.path_) {}
+      path_(other.path_),
+      wide_(other.wide_),
+      beyond_(other.beyond_),
+      limit_hit_(other.limit_hit_) {}
 
 PathSearch::~PathSearch() {
     // 0x1019a39: only a request that holds a grid frees its slot.
@@ -154,6 +157,7 @@ uint32_t& PathSearch::cell(TileCoord t) noexcept {
 }
 
 uint32_t PathSearch::f_of(TileCoord t) const noexcept {
+    if (wide_) return (grid_[static_cast<size_t>(t.y) * cols_ + static_cast<size_t>(t.x)] & kWideGMask) + cheb16(t, goal_);  // wide: h is not stored
     return cell_f(grid_[static_cast<size_t>(t.y) * cols_ + static_cast<size_t>(t.x)]);
 }
 
@@ -169,6 +173,12 @@ void PathSearch::init() {
     if (!in_grid(start_)) return;  // remake guard: the original always starts on a map tile
 
     uint32_t& sc = cell(start_);
+    if (wide_) {  // g = 0, h is computed; a start that is already 8000 or more from the goal has passed the original's limit
+        sc |= kOpenedBit;
+        beyond_ = cheb16(start_, goal_) >= kFailF;
+        heap_push(start_);
+        return;
+    }
     sc |= kOpenedBit;                                                            // 0x1019995
     sc = (sc & kKeepNotH) | ((cheb16(start_, goal_) & kHMask) << kHShift);       // g stays 0
     heap_push(start_);
@@ -278,6 +288,7 @@ int PathSearch::step(uint16_t budget, const StepCostFn& cost) {
         if (slot_ < 0) return 0;  // still no grid
     }
     if (finished_) return 1;  // remake guard: the original never steps a finished request
+    if (wide_) return step_wide(budget, cost);
 
     uint16_t it = 0;
     if (!heap_.empty()) {
@@ -326,6 +337,73 @@ int PathSearch::step(uint16_t budget, const StepCostFn& cost) {
     return 1;
 }
 
+// The wide search (rules 2): PathRequest::Step with a g of 24 bits, an h that is computed (16 x Chebyshev, the value that the original stores), and the give-up rule described at
+// the top of path_planner.hpp. The order of the pops, the neighbours, the improvement test, the re-opening and the "pushed at most once" quirk are the original's.
+int PathSearch::step_wide(uint16_t budget, const StepCostFn& cost) {
+    uint16_t it = 0;
+    const uint16_t slice = limit_hit_ || budget < kDefaultBudget ? budget : kDefaultBudget;   // the original's 1,000 until a pop has passed its limit (decided at the start of the slice)
+    if (!heap_.empty()) {
+        while (it < slice) {
+            ++it;
+            const TileCoord cur = heap_pop();
+            uint32_t& cc = cell(cur);
+            if (!limit_hit_ && f_of(cur) >= kFailF) limit_hit_ = true;   // the original's f test: it would have given up at this pop
+            if ((cc & kWideTaintBit) != 0u) {  // reached over a blocked step: its f is 8000 or more, the original gives up here
+                if (!beyond_) {                // ... and so does this search, until a node has passed the limit
+                    path_.clear();
+                    finish();
+                    return 1;
+                }
+                // Past the limit: a blocked node is a dead end, dropped (not expanded, not closed). It stays opened, so a later cheaper step into the same tile (only a step that depends on where
+                // it comes from, a hill entered from its entrance, can be cheaper) updates its g and does not push it again: it is never expanded. This happens only at or after the pop at
+                // which the original would have given up, where the original has no behavior to keep (every search it finishes is pop for pop the same here), and it is rare: about 1 random
+                // order in 125,000 with hills and walls, where pushing the node again would have found a path that this search misses. Kept: "pushed at most once" is the original's rule.
+                if (heap_.empty()) break;
+                continue;
+            }
+            if (cur == goal_) {
+                build_path();
+                finish();
+                return 1;
+            }
+
+            std::array<TileCoord, 8> nb{};
+            neighbours(cur, nb);
+            for (const TileCoord& n : nb) {
+                if (n.y == sentinel_row_) continue;
+                if (!in_grid(n)) continue;
+
+                const uint32_t step = cost(cur, n);
+                const uint32_t newg = step + (cc & kWideGMask);
+                if (newg > kWideGMask || newg < step) continue;  // does not fit the 24 bits of g: the node is not reachable at this cost
+                uint32_t& nc = cell(n);
+                if ((nc & (kOpenedBit | kClosedBit)) != 0u && (nc & kWideGMask) <= newg) continue;
+
+                nc &= ~kClosedBit;                                                              // re-open
+                nc = (nc & ~kWideGMask) | newg;                                                 // g
+                nc = (nc & kKeepNotDir) | ((direction_from_to(n, cur) & 7u) << kDirShift);      // node -> parent
+                if (step >= kFailF) {
+                    nc |= kWideTaintBit;
+                } else {
+                    nc &= ~kWideTaintBit;
+                    if (newg + cheb16(n, goal_) >= kFailF) beyond_ = true;
+                }
+                if ((nc & kOpenedBit) == 0u) {  // pushed at most once: no decrease-key, no re-push
+                    nc |= kOpenedBit;
+                    heap_push(n);
+                }
+            }
+            cc |= kClosedBit;
+            if (heap_.empty()) break;
+        }
+    }
+    if (!heap_.empty()) return 1;  // budget used up; keep the heap for the next slice
+
+    path_.clear();  // open list exhausted: no path
+    finish();
+    return 1;
+}
+
 // ============================================================================
 // PathManager
 // ============================================================================
@@ -362,7 +440,7 @@ PathManager& PathManager::operator=(PathManager&& other) noexcept {
 }
 
 // PathMgr::Request (FUN_010246e8).
-void PathManager::request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols, bool wall_at_row_90) {
+void PathManager::request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols, bool wall_at_row_90, bool wide) {
     if (!pool_) pool_ = std::make_unique<PathGridPool>();  // moved-from manager
     // Remove the FIRST queued request of the same ant (0x10246f8-0x102473b); destroying it frees its slot.
     for (auto it = queue_.begin(); it != queue_.end(); ++it) {
@@ -372,11 +450,11 @@ void PathManager::request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_
         }
     }
     // Construct (runs Init) and append at the tail (0x1024769).
-    queue_.push_back(std::make_unique<PathSearch>(ant_id, from, to, rows, cols, *pool_, wall_at_row_90));
+    queue_.push_back(std::make_unique<PathSearch>(ant_id, from, to, rows, cols, *pool_, wall_at_row_90, wide));
 }
 
 // PathMgr::Run (0x1024786).
-std::optional<PathManager::Delivery> PathManager::run(const CostProvider& cost) {
+std::optional<PathManager::Delivery> PathManager::run(const CostProvider& cost, uint16_t budget) {
     if (queue_.empty()) return std::nullopt;
     // The original loops until one request runs a slice. A request fails to run only while all four grids
     // are held by other queued requests, and those do run, so a single pass over the queue always suffices;
@@ -388,7 +466,7 @@ std::optional<PathManager::Delivery> PathManager::run(const CostProvider& cost) 
         const PathSearch::StepCostFn step_cost = [&cost, ant_id](TileCoord from, TileCoord to) {
             return cost(ant_id, from, to);
         };
-        if (r->step(PathSearch::kDefaultBudget, step_cost) != 0) {
+        if (r->step(budget, step_cost) != 0) {
             if (r->finished()) {
                 // Delivered, then released: the request (and its grid slot) goes away.
                 return Delivery{ant_id, r->path()};

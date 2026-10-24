@@ -304,22 +304,15 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertNotRegex(self.page, r"(?m)^\s*\.seg \{[^}]*picpop")                                       # (no new style for the buttons: the page's .seg)
 
     def test_the_bar_is_as_wide_as_the_picture_in_every_shape(self):
+        """The bar reads the same custom properties as the stage (--ar-w, --ar-h, --stage-max: 16:9 until the script sets the shape's own from web/shapes.js, ANTS_PAGE.slotVars, which tests/scripts/web_aspect_key_check.js runs)."""
         rule = re.search(r"\n\s*\.rbar \{([^}]*)\}", self.page).group(1)
-        self.assertIn("--ar-w: 16; --ar-h: 9; --bar-max: 1280px;", rule)
-        self.assertIn("width: min(100%, var(--bar-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
-        self.assertIn("width: min(100%, var(--bar-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
-        self.assertNotRegex(rule, r"\* 16 / 9")                                                              # (not the 16:9 formula for every shape any more)
-        stage = {m[0]: m[1] for m in re.findall(r'#game-stage\[data-aspect="([^"]+)"\] \{([^}]*)\}', self.page)}
-        for shape, numbers in (("4:3", ("4", "3", "960px")), ("16:10", ("8", "5", None)), ("21:9", ("7", "3", None))):
-            bar = re.search(r'#game-stage\[data-aspect="%s"\] ~ \.rbar \{([^}]*)\}' % shape, self.page).group(1)
-            self.assertIn("--ar-w: %s; --ar-h: %s;" % numbers[:2], bar, shape)
-            self.assertIn("--ar-w: %s;" % numbers[0], stage[shape])                                           # (the same numbers as the stage's)
-            self.assertIn("--ar-h: %s;" % numbers[1], stage[shape])
-            if numbers[2]:
-                self.assertIn("--bar-max: %s;" % numbers[2], bar, shape)
-                self.assertIn("--stage-max: %s;" % numbers[2], stage[shape])
-            else:
-                self.assertNotIn("--bar-max", bar, shape)
+        self.assertNotIn("--ar-w:", rule)                                                                     # (the bar has no ratio of its own: it takes the page's)
+        self.assertIn("width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
+        self.assertIn("width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
+        self.assertNotRegex(rule, r"\* 16 / 9")                                                              # (not the 16:9 formula for every shape)
+        self.assertRegex(self.page, r":root \{\s*--chrome: 180px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # (16:9 until the script says otherwise)
+        self.assertNotIn("--bar-max", self.page)
+        self.assertNotIn('#game-stage[data-aspect=', self.page)                                                # (no rule for each shape: the table's rows give the numbers)
 
     def test_every_layout_of_the_bar_has_a_place_for_the_button(self):
         for areas in ('"play rew tl clock cam speed pic fsx"', '"tl tl tl tl" "play rew clock pic" "speed speed speed speed" "cam cam cam cam"', '"play tl clock live cam speed pic fsx"',
