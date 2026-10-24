@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the pages only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/36df6960...54f0b89a)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/36df6960...8bee7cc2)
 
 ## v0.12.121 - 2026-10-24 - A Discord button in the header
 
