@@ -149,6 +149,26 @@ function caseD() {
     check(kind() === 'full', 'a name written in the dictionary at the same time makes it a whole frame: other cells have that tile (' + canvas.attrs['data-paint'] + ')');
     api.markDirty([30 * f.columns + 30]);
     check(kind() === 'cells', 'and the next stroke is by cells again');
+    // a dictionary of 65,536 names (the reader takes that many; the game, 1,344): the table of the dictionary is asked for once for all the cells of a frame, not once for each (3,000 cells at most)
+    const raw = new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', 'TREASURE.LVL'))), names0 = (raw[40] | (raw[41] << 8)) + 1, old = 2 + 11 * names0;
+    const dict = new Uint8Array(2 + 11 * 65536);
+    dict.set(raw.subarray(40 + 2, 40 + old), 2); dict[0] = 255; dict[1] = 255;
+    for (let i = names0; i < 65536; i++) dict[2 + 11 * i] = 0x2E;
+    const bytes = new Uint8Array(40 + dict.length + raw.length - 40 - old);
+    bytes.set(raw.subarray(0, 40), 0); bytes.set(dict, 40); bytes.set(raw.subarray(40 + old), 40 + dict.length);
+    const big = File.parse(bytes);
+    check(big.ok && big.names === 65536 && big.rows === f.rows, 'a map with 65,536 names is read');
+    api.setFile(big);
+    const real = Tiles.tableOf, many = []; let asked = 0;
+    for (let i = 0; i < 2000; i++) many.push(i);
+    Tiles.tableOf = function (file) { asked++; return real(file); };
+    try {
+        api.markDirty(many);
+        check(kind() === 'cells' && asked <= 4, 'a stroke of 2,000 cells in rectangles asks for the table ' + asked + ' times (at most 4)');
+        api.state().view.scale = 3; api.markDirty([0]);
+        asked = 0; api.markDirty(many);
+        check(kind() === 'cells' && asked <= 4, 'and in pixels ' + asked + ' times (at most 4)');
+    } finally { Tiles.tableOf = real; }
 }
 
 function caseB() {

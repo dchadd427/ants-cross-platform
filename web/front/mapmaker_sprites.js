@@ -92,7 +92,7 @@
         }
 
         function groundCell(lctx, file, st, sheet, r, c) {
-            var b = file.bytes, id = b[file.layer1 + 6 * (r * file.columns + c)] | (b[file.layer1 + 6 * (r * file.columns + c) + 1] << 8), g = index.ground, a = Tiles.ground(st.tab, id), k = a - g.first;
+            var b = file.bytes, id = b[file.layer1 + 6 * (r * file.columns + c)] | (b[file.layer1 + 6 * (r * file.columns + c) + 1] << 8), g = index.ground, a = groundAnim(file, st.tab, r, c), k = a - g.first;
             var xa = st.ox + Math.round(c * st.S), xb = st.ox + Math.round((c + 1) * st.S), ya = st.oy + Math.round(r * st.S), yb = st.oy + Math.round((r + 1) * st.S);
             if (k >= 0 && k < g.count) {
                 if (sheet) { if (!sheet.done[k]) prepare(sheet, k); lctx.drawImage(sheet.canvas, (k % g.columns) * st.T, ((k / g.columns) | 0) * st.T, st.T, st.T, xa, ya, xb - xa, yb - ya); }
@@ -285,9 +285,9 @@
             load: load, FROM: FROM, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
             ready: function () { return ready; }, failed: function () { return failed; },
             // A ground tile's picture drawn s by s pixels at (x, y) of a canvas (the before and after of Fix edges: mapmaker_edges.js); false when there is none
-            // `file`: the map whose dictionary names the tile; `placing`: the tile is about to be put (Tiles.place), else it is a cell of the map (Tiles.ground)
-            ground: function (ctx, id, x, y, s, file, placing) {
-                var g = index && index.ground, tab = file && ready ? Tiles.tableOf(file) : null, a = placing ? Tiles.place(tab, id) : Tiles.ground(tab, id), k = g ? a - g.first : -1;
+            // `tab`: the table of the dictionary of the map that the tile is in (Tiles.tableOf(file), asked for once by the caller, not here for each tile); `placing`: the tile is about to be put (Tiles.place), else it is a cell of the map (Tiles.ground)
+            ground: function (ctx, id, x, y, s, tab, placing) {
+                var g = index && index.ground, a = placing ? Tiles.place(tab, id) : Tiles.ground(tab, id), k = g ? a - g.first : -1;
                 if (ready && tab && a < 0) { ctx.fillStyle = BACK; ctx.fillRect(x, y, s, s); return true; }
                 if (!ready || k < 0 || k >= g.count) return false;
                 ctx.drawImage(groundImg, (k % g.columns) * CELL, ((k / g.columns) | 0) * CELL, CELL, CELL, x, y, s, s);

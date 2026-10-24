@@ -82,11 +82,11 @@
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             var list = sameAsFull() && !View.useSprites(view, sprites) ? cellsToPaint(rect) : null;          // (pictures reach beyond their cells: the sprite frame is always a whole one)
             if (list && list.length <= MANY && (view.scale >= SMALL_TILE || scratch.keptImage)) {
-                var vis = View.visible(view, file, w, h), pixels = view.scale < SMALL_TILE, box = { x0: 1e9, y0: 1e9, x1: -1, y1: -1 };
+                var vis = View.visible(view, file, w, h), pixels = view.scale < SMALL_TILE, box = { x0: 1e9, y0: 1e9, x1: -1, y1: -1 }, tab = View.table(file);
                 for (var i = 0; i < list.length; i++) {
                     var r = (list[i] / file.columns) | 0, c = list[i] - r * file.columns;
                     if (!vis || r < vis.r0 || r > vis.r1 || c < vis.c0 || c > vis.c1) continue;
-                    if (pixels) View.redrawPixelCell(view, file, w, h, r, c, scratch, box); else View.redrawCell(ctx, view, file, w, h, r, c);
+                    if (pixels) View.redrawPixelCell(view, file, w, h, r, c, scratch, box, tab); else View.redrawCell(ctx, view, file, w, h, r, c, tab);
                     count++;
                 }
                 if (pixels) View.blitPixels(ctx, scratch, box);

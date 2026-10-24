@@ -171,10 +171,11 @@
     }
 
     // One tile again, where a stroke changed it (and no other): the tile's own rectangle, the two grid lines that belong to it and what is drawn over it. Only for tiles of 5 pixels or more.
-    function redrawCell(ctx, view, file, w, h, r, c) {
+    // (`tab`: the dictionary's table, asked for once by the canvas for all the cells)
+    function redrawCell(ctx, view, file, w, h, r, c, tab) {
         var s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s;
         var xa = Math.round(x0 + c * s), xb = Math.round(x0 + (c + 1) * s), ya = Math.round(y0 + r * s), yb = Math.round(y0 + (r + 1) * s);
-        ctx.fillStyle = Tiles.css(file.tile1(r, c), file.tile2(r, c), Tiles.tableOf(file));
+        ctx.fillStyle = Tiles.css(file.tile1(r, c), file.tile2(r, c), tab === undefined ? Tiles.tableOf(file) : tab);
         ctx.fillRect(xa, ya, xb - xa, yb - ya);
         if (s >= GRID_FROM) {
             ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 1; ctx.beginPath();
@@ -185,10 +186,10 @@
     }
 
     // The same for the pixel way (tiles under 5 pixels): the pixels of the tile in the picture that the last full frame kept (`scratch.keptImage`). False when there is no such picture.
-    function redrawPixelCell(view, file, w, h, r, c, scratch, box) {
+    function redrawPixelCell(view, file, w, h, r, c, scratch, box, tab) {
         var image = scratch && scratch.keptImage;
         if (!image) return false;
-        var t = Tiles.packedTables(Tiles.tableOf(file)), b = file.bytes, s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, cw = image.width, ch = image.height;
+        var t = Tiles.packedTables(tab === undefined ? Tiles.tableOf(file) : tab), b = file.bytes, s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, cw = image.width, ch = image.height;
         var px = new Uint32Array(image.data.buffer), at = 6 * (r * file.columns + c), o = t.objects[b[file.layer2 + at] | (b[file.layer2 + at + 1] << 8)];
         var color = o !== 0 ? o : t.ground[b[file.layer1 + at] | (b[file.layer1 + at + 1] << 8)];
         var xa = Math.max(0, Math.ceil(x0 + c * s - 0.5)), xb = Math.min(cw, Math.ceil(x0 + (c + 1) * s - 0.5)), ya = Math.max(0, Math.ceil(y0 + r * s - 0.5)), yb = Math.min(ch, Math.ceil(y0 + (r + 1) * s - 0.5));
@@ -208,6 +209,7 @@
 
     // The stamp of the open map's dictionary table (0 while there is none): a frame kept from before is out of date when it is not the one it was made with (mapmaker_canvas.js)
     function stamp(file) { var tab = Tiles.tableOf(file); return tab ? tab.stamp : 0; }
+    function table(file) { return Tiles.tableOf(file); }
 
     // Are the game's pictures drawn at this zoom (the atlas is loaded and a tile is at least 10 pixels: mapmaker_sprites.js)?
     function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= sprites.FROM; }
@@ -282,6 +284,6 @@
 
     return {
         MAX_SCALE: MAX_SCALE, create: create, clamp: clamp, fitScale: fitScale, minScale: minScale, isWhole: isWhole, toScreen: toScreen, cellAt: cellAt, zoomAt: zoomAt, panBy: panBy,
-        centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, useSprites: useSprites, cursorRect: cursorRect, drawCursor: drawCursor, redrawCell: redrawCell, redrawPixelCell: redrawPixelCell, blitPixels: blitPixels, stamp: stamp, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
+        centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, useSprites: useSprites, cursorRect: cursorRect, drawCursor: drawCursor, redrawCell: redrawCell, redrawPixelCell: redrawPixelCell, blitPixels: blitPixels, stamp: stamp, table: table, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
     };
 });

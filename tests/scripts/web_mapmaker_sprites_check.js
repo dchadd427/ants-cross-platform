@@ -493,14 +493,14 @@ async function caseI() {
     const cx = rig.env.makeCanvas().getContext('2d');
     rig.env.log.length = 0;
     setName(f, 500, '.');
-    check(rig.sprites.ground(cx, 500, 0, 0, 10, f, false) === true && rig.env.log.some((c) => c.op === 'fillRect' && c.fill === Tiles.BACK) && !rig.env.log.some((c) => c.op === 'drawImage'), 'a cell of the map whose entry is "." is black in the before picture');
+    check(rig.sprites.ground(cx, 500, 0, 0, 10, Tiles.tableOf(f), false) === true && rig.env.log.some((c) => c.op === 'fillRect' && c.fill === Tiles.BACK) && !rig.env.log.some((c) => c.op === 'drawImage'), 'a cell of the map whose entry is "." is black in the before picture');
     rig.env.log.length = 0;
-    check(rig.sprites.ground(cx, 500, 0, 0, 10, f, true) === true && rig.env.log.some((c) => c.op === 'drawImage'), 'and a tile that is put there takes the number\'s picture in the after picture (the tool names it)');
+    check(rig.sprites.ground(cx, 500, 0, 0, 10, Tiles.tableOf(f), true) === true && rig.env.log.some((c) => c.op === 'drawImage'), 'and a tile that is put there takes the number\'s picture in the after picture (the tool names it)');
     rig.env.log.length = 0;
     check(rig.sprites.ground(cx, 500, 0, 0, 10) === true && rig.env.log.some((c) => c.op === 'drawImage'), 'with no map the number is the picture');
     setName(f, 500, INDEX.names[501]);
     rig.env.log.length = 0;
-    rig.sprites.ground(cx, 500, 0, 0, 10, f, false);
+    rig.sprites.ground(cx, 500, 0, 0, 10, Tiles.tableOf(f), false);
     const g501 = rig.env.log.filter((c) => c.op === 'drawImage').pop();
     check(!!g501 && g501.a[0] === ((501 - 431) % 16) * 32 && g501.a[1] === Math.floor((501 - 431) / 16) * 32, 'a cell whose entry names another ground tile shows that tile');
 }

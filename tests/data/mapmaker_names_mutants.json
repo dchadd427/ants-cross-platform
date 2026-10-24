@@ -207,7 +207,7 @@
     {
       "id": "names_ground_picture_by_number",
       "file": "web/front/mapmaker_sprites.js",
-      "old": "a = Tiles.ground(st.tab, id), k = a - g.first;",
+      "old": "a = groundAnim(file, st.tab, r, c), k = a - g.first;",
       "new": "a = id, k = a - g.first;",
       "test": "node tests/scripts/web_mapmaker_sprites_check.js"
     },
@@ -319,14 +319,14 @@
     {
       "id": "names_one_cell_by_number",
       "file": "web/front/mapmaker_view.js",
-      "old": "file.tile2(r, c), Tiles.tableOf(file));\n        ctx.fillRect",
+      "old": "file.tile2(r, c), tab === undefined ? Tiles.tableOf(file) : tab);\n        ctx.fillRect",
       "new": "file.tile2(r, c));\n        ctx.fillRect",
       "test": "node tests/scripts/web_mapmaker_sprites_check.js"
     },
     {
       "id": "names_one_pixel_cell_by_number",
       "file": "web/front/mapmaker_view.js",
-      "old": "var t = Tiles.packedTables(Tiles.tableOf(file)), b = file.bytes, s = view.scale,",
+      "old": "var t = Tiles.packedTables(tab === undefined ? Tiles.tableOf(file) : tab), b = file.bytes, s = view.scale,",
       "new": "var t = Tiles.packedTables(), b = file.bytes, s = view.scale,",
       "test": "node tests/scripts/web_mapmaker_sprites_check.js"
     },
@@ -342,6 +342,20 @@
       "file": "web/front/mapmaker_view.js",
       "old": "function stamp(file) { var tab = Tiles.tableOf(file); return tab ? tab.stamp : 0; }",
       "new": "function stamp(file) { return 0; }",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_table_asked_for_each_cell_in_rectangles",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "else View.redrawCell(ctx, view, file, w, h, r, c, tab);",
+      "new": "else View.redrawCell(ctx, view, file, w, h, r, c);",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_table_asked_for_each_cell_in_pixels",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "View.redrawPixelCell(view, file, w, h, r, c, scratch, box, tab);",
+      "new": "View.redrawPixelCell(view, file, w, h, r, c, scratch, box);",
       "test": "node tests/scripts/web_mapmaker_names_check.js"
     }
   ]
