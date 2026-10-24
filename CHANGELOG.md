@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21, the simulation rules and the replay format (1) are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d157bf3...7c9973fe)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d157bf3...02c85e3d)
 
 ## v0.12.124 - 2026-10-24 - Three more picture shapes, and one dropdown to pick them
 
