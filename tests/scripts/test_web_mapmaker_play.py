@@ -37,7 +37,8 @@ def core_dir():
 
 
 def run_check(front=None, module=None):
-    args = [NODE, CHECK] + (["--front", front] if front else []) + (["--module", module] if module else [])
+    # a folder of broken copies (front): the check must fail, and the run ends at the first line that says so (tests/scripts/web_mapmaker_bail.js)
+    args = [NODE] + (["--require", os.path.join(REPO, "tests", "scripts", "web_mapmaker_bail.js")] if front else []) + [CHECK] + (["--front", front] if front else []) + (["--module", module] if module else [])
     return subprocess.run(args, capture_output=True, text=True, timeout=600)
 
 

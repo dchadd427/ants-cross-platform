@@ -22,6 +22,7 @@
 'use strict';
 
 const fs = require('fs');
+const Clock = require('./web_mapmaker_clock.js');       // (CPU time: a budget is held to the work, not to the wait for a core)
 const path = require('path');
 const crypto = require('crypto');
 
@@ -319,7 +320,7 @@ function randomChecks() {
 function speedChecks() {
     const n = 512, cells = [];
     for (let r = 0; r < n; r++) { const row = []; for (let c = 0; c < n; c++) row.push(((r >> 3) + (c >> 3)) % 3 === 0 ? 485 : 439); cells.push(row); }
-    const f = { rows: n, columns: n, tile1: (r, c) => (r < 0 || c < 0 || r >= n || c >= n ? 485 : cells[r][c]) }, t0 = Date.now(), made = Edges.plan(f, null, Ground), took = Date.now() - t0;
+    const f = { rows: n, columns: n, tile1: (r, c) => (r < 0 || c < 0 || r >= n || c >= n ? 485 : cells[r][c]) }, t0 = Clock.now(), made = Edges.plan(f, null, Ground), took = Clock.now() - t0;
     check(made.count > 30000 && took < 3000, 'a 512 x 512 map is planned in under 3 seconds (' + took + ' ms, ' + made.count + ' cells)');
 }
 
@@ -551,16 +552,17 @@ function strokePlanChecks() {
     check(spOver.cells.some(([idx, t]) => idx === 2 * 7 + 1 && Ground.info(t).kind === 'gravel' && Ground.info(t).other === 'dirt'), 'painting over the hand-placed cell replaces it and sets its edge piece');
 }
 
+// (the long ones are the last, the sweep of the library at the very end: a broken copy that a short part refuses is refused at once, tests/scripts/web_mapmaker_bail.js)
 shapeChecks();
 ruleChecks();
 goldChecks();
-libraryChecks();
-randomChecks();
 lowerChecks();
+strokePlanChecks();
+dialogChecks();
+randomChecks();
 strokeChecks();
 speedChecks();
 bytesChecks();
-dialogChecks();
-strokePlanChecks();
+libraryChecks();
 console.log(failures ? failures + ' of ' + checks + ' checks FAILED' : 'edges check: ' + checks + ' checks passed');
 process.exit(failures ? 1 : 0);

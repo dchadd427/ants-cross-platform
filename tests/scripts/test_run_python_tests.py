@@ -5,6 +5,8 @@ It runs on made-up test folders (tmp/tests/scripts/test_*.py) and checks: the re
 others still run), the classes run at the same time (two tests that wait for each other pass only when they overlap), a file that cannot be imported fails and says why, and
 on the REAL tests/scripts the classes that it runs are exactly the classes that unittest's own loader finds (so that no test is left out).
 """
+import contextlib
+import io
 import os
 import subprocess
 import sys
@@ -103,6 +105,31 @@ class Wrapper(unittest.TestCase):
         self.assertEqual(self.run_tool().returncode, 2)
         self.assertEqual(self.run_tool("--jobs", "0").returncode, 2)
 
+    def test_the_long_ones_start_first_and_the_output_keeps_the_order_of_the_files(self):
+        mark = "import os, time, unittest\nclass %s(unittest.TestCase):\n    def test_x(self):\n        with open(os.path.join(os.environ['MARK_DIR'], '%s'), 'w') as f:\n            f.write(str(time.monotonic_ns()))\n"
+        for name, cls in (("test_a.py", "First"), ("test_b.py", "Second"), ("test_c.py", "Long")):
+            self.add(name, mark % (cls, name))
+        saved = dict(rpt.COSTS)
+        os.environ["MARK_DIR"] = self.marks
+        out = io.StringIO()
+        try:
+            rpt.COSTS.clear()
+            rpt.COSTS["test_c.Long"] = 50
+            with contextlib.redirect_stdout(out):
+                status = rpt.main(["run_python_tests.py", "--dir", self.scripts, "--jobs", "1"])
+        finally:
+            rpt.COSTS.clear()
+            rpt.COSTS.update(saved)
+            del os.environ["MARK_DIR"]
+        self.assertEqual(status, 0, out.getvalue())
+        began = {}
+        for name in ("test_a.py", "test_b.py", "test_c.py"):
+            with open(os.path.join(self.marks, name)) as f:
+                began[name] = int(f.read())
+        self.assertLess(began["test_c.py"], began["test_a.py"], "the group with a cost starts first")
+        self.assertLess(began["test_a.py"], began["test_b.py"], "the others keep the order of the files")
+        self.assertEqual([line.split()[0] for line in out.getvalue().splitlines() if line.startswith("test_")], ["test_a.First", "test_b.Second", "test_c.Long"])
+
 
 class TheRealTests(unittest.TestCase):
     def test_the_groups_are_the_classes_that_the_loader_finds(self):
@@ -124,6 +151,11 @@ class TheRealTests(unittest.TestCase):
         self.assertEqual(grouped - found, set(), "the runner would run a group that unittest does not find")
         # a class with tests that is only in the loader's list would be left out by the runner
         self.assertEqual(found - grouped, set(), "the runner would leave these classes out: " + ", ".join(sorted(found - grouped)))
+
+    def test_the_costs_name_classes_that_exist_and_the_long_ones_start_first(self):
+        grouped = {label for label, _ in rpt.units(HERE, "tests.scripts")}
+        self.assertEqual(set(rpt.COSTS) - grouped, set(), "a cost for a class that is not there")
+        self.assertTrue(all(isinstance(v, int) and v >= 1 for v in rpt.COSTS.values()))
 
     def test_the_real_files_are_named_as_the_runner_expects(self):
         names = [f for f in os.listdir(HERE) if f.startswith("test_") and f.endswith(".py")]
