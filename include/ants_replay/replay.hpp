@@ -15,8 +15,10 @@
 //   ENDS  := u32 total_turns, u8 flags (bit 0: the engine's rules ended the match), u64 state hash after the last turn; the last chunk, nothing follows it
 //   live  := u32 turns       (optional, lower case: an older reader skips it) only in an incomplete file, the snapshot of a match that is still being played (encode_snapshot): the turns it had run when the
 //            snapshot was made, which can be more than the last command and the last hash say
+//   tmap  := the bytes of the map file, exactly (optional, lower case: an older reader skips it, and the format number stays 1) for a match on a map that the server keeps only for a while (a test map): written
+//            right after HEAD, so that a copy that was cut still has it; at most kMaxEmbeddedMapBytes, at most one, and its FNV-1a 64 (net::hash_bytes) must be the head's map_hash. Never in a snapshot.
 //
-// Order: HEAD, then CMDS and hash chunks (the commands in turn order), then live (snapshots only) or ENDS. A file without ENDS is incomplete (a copy that was cut short: the game writes a file whole, when the match is
+// Order: HEAD, then tmap (when there is one), then CMDS and hash chunks (the commands in turn order), then live (snapshots only) or ENDS. A file without ENDS is incomplete (a copy that was cut short: the game writes a file whole, when the match is
 // over or left; or a snapshot of a match that still runs, which says so with its live chunk): it plays to its last full chunk, and a snapshot to its live turns. Turn t is the t-th call of the engine's tick(): the commands of turn t are applied, in the order they stand, and then the tick runs; commands at turn total_turns come after the
 // last tick (a Quit that ends a match). `engine_rules` is net::kProtocolVersion of the recorder: by the repository's own rule that number moves with every change of what a state hash can be,
 // so it IS the version of the rules, and a replay is played only by a build that has the same number (an older or newer file still has a readable header).
@@ -39,7 +41,12 @@ namespace ants::replay {
 
 inline constexpr uint16_t kFormatVersion = 1;
 inline constexpr uint32_t kHashPeriodTurns = 100;      // the state hash is kept after every 100th turn (5 s of play)
-inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half hour of four people is under 200 KiB
+inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half hour of four people is under 200 KiB. It is the size of the MATCH: a file that holds a map (tmap) may be that much longer than the map's chunk (max_file_bytes)
+inline constexpr size_t kChunkFrameBytes = 4 + 4 + 4;  // a chunk's tag, length and checksum
+inline constexpr size_t kMaxEmbeddedMapBytes = 1u << 20;   // 1 MiB: a map of 65,536 cells (the most that a room plays) is about 0.8 MB, a Classic map at most 512 KB
+inline constexpr size_t kMaxFileBytesWithMap = kMaxFileBytes + kMaxEmbeddedMapBytes + kChunkFrameBytes;   // the longest file there can be: 2 MiB and the frame of the map's chunk (a reader refuses more before it reads a byte)
+/// The longest file that holds `embedded_map_bytes` bytes of map (0: no tmap chunk): the match's kMaxFileBytes plus the map's whole chunk
+constexpr size_t max_file_bytes(size_t embedded_map_bytes) noexcept { return kMaxFileBytes + (embedded_map_bytes == 0 ? size_t{0} : embedded_map_bytes + kChunkFrameBytes); }
 inline constexpr uint32_t kMaxTurns = 1u << 21;        // 29 hours of play: more is not a match
 inline constexpr size_t kMaxHeadBytes = 4096;
 inline constexpr size_t kMaxTextBytes = 64;            // a text field of the head (a player's name is at most 32)
@@ -96,6 +103,7 @@ struct TimedCommand {
 
 struct Replay {
     Header head;
+    std::vector<uint8_t> embedded_map;                 // the bytes of the map file (the tmap chunk), or empty: the writer puts it in a complete file only (encode_file), never in a snapshot; the reader has checked its hash against head.map_hash
     std::vector<TimedCommand> commands;                // in the order they were applied
     std::vector<uint32_t> hashes;                      // hashes[i]: low 32 bits of the state hash after (i + 1) * head.hash_period turns
     bool complete{false};                              // the ENDS chunk was there
@@ -116,16 +124,18 @@ std::string played_rules_text();
 uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc = 0) noexcept;
 
 /// The bytes of the file. Empty with `error` set when the replay cannot be written: a command that the wire form cannot hold, a turn out of order or past the end, a text that is
-/// not printable, a file that would pass kMaxFileBytes.
+/// not printable, a file whose match would pass kMaxFileBytes, an embedded map that is longer than kMaxEmbeddedMapBytes or whose hash is not the head's map_hash.
 std::vector<uint8_t> encode(const Replay& replay, std::string& error);
 
 /// The bytes of a snapshot of a match that still runs: an INCOMPLETE replay (no ENDS; `replay.complete` must be false, the other end fields are not looked at) with the optional chunk `live` that says `turns`, the
 /// ticks the match had run when it was taken. `turns` must be at least the turn of the last command and at least hashes * period, and at most kMaxTurns (decode() refuses the file otherwise); empty with `error` set
-/// when that is not so, the replay is complete, or the file would be longer than kMaxFileBytes. decode() of it gives complete = false and total_turns = max(last command turn, hashes * period, turns).
+/// when that is not so, the replay is complete, or the file would be longer than kMaxFileBytes. `replay.embedded_map` is left out. decode() of it gives complete = false and total_turns = max(last command turn, hashes * period, turns).
 std::vector<uint8_t> encode_snapshot(const Replay& replay, uint32_t turns, std::string& error);
 
 /// Reads a file. True: `out` holds it (check `out.complete`: a file without ENDS is a replay that stops where it was cut). False: it is damaged, foreign, or made by a newer format, and `error`
-/// says what and in which chunk. Nothing of `out` is meaningful then.
+/// says what and in which chunk. Nothing of `out` is meaningful then. A file longer than kMaxFileBytesWithMap, a match part (the file without its tmap chunk) longer than kMaxFileBytes, a second tmap chunk, a tmap
+/// chunk that claims more than kMaxEmbeddedMapBytes (refused from its length, before its bytes are looked at), an empty one, or one whose hash is not head.map_hash is refused. A file that was cut inside its tmap chunk is
+/// cut like any other: it plays, with no embedded map.
 bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error);
 
 }  // namespace ants::replay

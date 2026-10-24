@@ -407,13 +407,13 @@ struct Viewer {
     Application app;
     bool ok{false};
     fs::path path;
-    explicit Viewer(const std::vector<uint8_t>& bytes, const std::string& name = "match.antsrep", bool live = false) {
+    explicit Viewer(const std::vector<uint8_t>& bytes, const std::string& name = "match.antsrep", bool live = false, const std::string& maps = std::string()) {
         path = root.path() / name;
         put(bytes);
         ApplicationConfig cfg;
         cfg.headless = true;
         cfg.lan_port = 0;
-        cfg.maps_dir = maps_dir();
+        cfg.maps_dir = maps.empty() ? maps_dir() : maps;
         cfg.replay_path = path.string();
         cfg.replay_live = live;
         ok = app.init(cfg);
@@ -430,6 +430,25 @@ struct Viewer {
     uint32_t turn() const { return static_cast<uint32_t>(app.replay_value(ReplayValue::Turn)); }
     ReplayState state() const { return app.replay_state(); }
 };
+
+std::vector<uint8_t> file_bytes(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+// The file with a skipped chunk of `filler` zero bytes right after its head (a lower case chunk that a reader skips): a file that is as long as a match and its map can be
+std::vector<uint8_t> with_filler(const std::vector<uint8_t>& file, size_t filler) {
+    const size_t head_end = 8 + 12 + (static_cast<size_t>(file[12]) | (static_cast<size_t>(file[13]) << 8) | (static_cast<size_t>(file[14]) << 16) | (static_cast<size_t>(file[15]) << 24));
+    std::vector<uint8_t> chunk = {'p', 'a', 'd', 'd'};
+    for (int shift = 0; shift < 32; shift += 8) chunk.push_back(static_cast<uint8_t>((filler >> shift) & 0xFFu));
+    chunk.insert(chunk.end(), filler, 0);
+    const uint32_t crc = replay::crc32(chunk.data() + 8, filler, replay::crc32(chunk.data(), 4));
+    for (int shift = 0; shift < 32; shift += 8) chunk.push_back(static_cast<uint8_t>((crc >> shift) & 0xFFu));
+    std::vector<uint8_t> out(file.begin(), file.begin() + static_cast<std::ptrdiff_t>(head_end));
+    out.insert(out.end(), chunk.begin(), chunk.end());
+    out.insert(out.end(), file.begin() + static_cast<std::ptrdiff_t>(head_end), file.end());
+    return out;
+}
 
 }  // namespace
 
@@ -1311,6 +1330,63 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(!plain.replay_mode() && plain.replay_state() == ReplayState::None);
         plain.replay_control(ReplayControl::Seek, 5);
         plain.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA7.9 A recording that carries its map (the chunk tmap) is watched with no map of that name in the maps folder, or another file of that name there; one past 1 MiB is read whole; the same file without its map still needs the folder's") {
+        const Handmade made = make_handmade(700, true);
+        ASSERT_FALSE(made.bytes.empty());
+        const std::vector<uint8_t> tiny = file_bytes(maps_dir() + "/TINY.LVL");
+        ASSERT_FALSE(tiny.empty());
+        replay::Replay carrying = made.file;
+        carrying.embedded_map = tiny;
+        std::string error;
+        const std::vector<uint8_t> bytes = replay::encode(carrying, error);
+        ASSERT_FALSE(bytes.empty());
+        ScratchRoot empty;                                                                  // (a maps folder that holds a map, SMALL, and not the one of the match: the application needs one to start)
+        fs::copy_file(maps_dir() + "/SMALL.LVL", empty.path() / "SMALL.LVL");
+        {
+            Viewer v(bytes, "carrying.antsrep", false, empty.path().string());
+            ASSERT_TRUE(v.ok && v.app.replay_mode() && v.app.replay_failure() == ReplayFailure::None);
+            v.frames(2000);
+            ASSERT_TRUE(v.state() == ReplayState::Ended && v.turn() == 700u);
+            ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);               // (the recorded match, on the map that the file carried)
+            v.app.shutdown();
+        }
+        ASSERT_TRUE(std::distance(fs::directory_iterator(empty.path()), fs::directory_iterator()) == 1);        // (nothing was written into the maps folder)
+        {   // the folder has a file of that name that is another file: the file's own map is the map
+            ScratchRoot other;
+            fs::copy_file(maps_dir() + "/SMALL.LVL", other.path() / "SMALL.LVL");
+            {
+                std::ofstream f(other.path() / "TINY.LVL", std::ios::binary);
+                f << "this is not the map";
+            }
+            Viewer v(bytes, "carrying.antsrep", false, other.path().string());
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::None);
+            v.frames(2000);
+            ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);
+            v.app.shutdown();
+        }
+        {   // no map of its own and no map in the folder: the old refusal
+            Viewer v(made.bytes, "bare.antsrep", false, empty.path().string());
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::NoMap);
+            v.app.shutdown();
+        }
+        {   // past 1 MiB (a match of 1 MiB at the most and the map beside it)
+            const size_t match_part = bytes.size() - (tiny.size() + 12);                        // (the file without its map's chunk)
+            const std::vector<uint8_t> big = with_filler(bytes, replay::kMaxFileBytes - 100 - match_part - 12);       // (a match of 100 bytes under the limit)
+            ASSERT_TRUE(big.size() > replay::kMaxFileBytes && big.size() < replay::kMaxFileBytesWithMap);
+            Viewer v(big, "big.antsrep", false, empty.path().string());
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::None);
+            v.frames(2000);
+            ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);
+            v.app.shutdown();
+        }
+        {   // a match over 1 MiB is no replay, whatever the map beside it
+            const std::vector<uint8_t> too_long = with_filler(bytes, replay::kMaxFileBytes);
+            Viewer v(too_long, "long.antsrep", false, empty.path().string());
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::Unreadable);
+            v.app.shutdown();
+        }
     } TEST_END();
 
     TEST_CASE("RA7.6 Quit and Leave Game leave the viewer (back to the page's list): the dialog's Yes does not quit a match, it ends the viewing") {

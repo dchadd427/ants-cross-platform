@@ -34,7 +34,7 @@ void Recorder::on_command(const sim::Command& command) {
         fail("a command that has no ant list names ants");
         return;
     }
-    bytes_ += 1 + sim::encoded_size(command);                   // (the gap is a byte or two: the count is about what the commands take in the file; encode() makes the final check)
+    bytes_ += 1 + sim::encoded_size(command);                   // (the gap is a byte or two: the count is about what the commands take in the file; encode() makes the final check. The embedded map is not counted: kMaxFileBytes is the match's, see max_file_bytes)
     if (bytes_ > kMaxFileBytes) {
         fail("the match is too long to keep as a replay");
         return;
@@ -64,6 +64,12 @@ void Recorder::on_turn(const net::TurnMsg& turn, const sim::SimulationEngine& en
     }
     for (const sim::Command& c : turn.commands) on_command(c);
     on_tick(engine);
+}
+
+bool Recorder::set_embedded_map(const std::vector<uint8_t>& bytes) {
+    if (finished_ || bytes.empty() || bytes.size() > kMaxEmbeddedMapBytes || net::hash_bytes(bytes.data(), bytes.size()) != replay_.head.map_hash) return false;
+    replay_.embedded_map = bytes;
+    return true;
 }
 
 std::vector<uint8_t> Recorder::finish(const sim::SimulationEngine& engine, std::string& error) {

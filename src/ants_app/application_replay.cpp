@@ -227,7 +227,7 @@ void Application::prepare_replay() {
         std::ifstream in(config_.replay_path, std::ios::binary);
         if (in) {
             bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-            if (bytes.size() > replay::kMaxFileBytes) bytes.clear();
+            if (bytes.size() > replay::kMaxFileBytesWithMap) bytes.clear();
         }
     }
     auto replay = std::make_unique<replay::Replay>();
@@ -245,7 +245,7 @@ void Application::prepare_replay() {
         replay_file_ = std::move(replay);                                  // (its head is shown: the page says who recorded it)
         return;
     }
-    if (!replay::load_map(replay->head, config_.maps_dir, replay_level_, why)) {
+    if (!replay::load_map_or_embedded(*replay, std::vector<std::string>{config_.maps_dir}, replay_level_, why)) {       // (the maps folder, else the map that the file carries: a match on a test map)
         replay_failure_ = ReplayFailure::NoMap;
         replay_failure_text_ = why;
         replay_file_ = std::move(replay);
@@ -400,7 +400,7 @@ void Application::replay_extend() {
         std::ifstream in(config_.replay_path, std::ios::binary);
         if (in) {
             bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-            if (bytes.size() > replay::kMaxFileBytes) bytes.clear();
+            if (bytes.size() > replay::kMaxFileBytesWithMap) bytes.clear();
         }
     }
     auto later = std::make_unique<replay::Replay>();

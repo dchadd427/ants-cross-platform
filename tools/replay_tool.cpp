@@ -1,13 +1,14 @@
 // replay_tool: reads a replay file (docs/REPLAYS.md), checks that it plays out the same here, and lists every order of the match with its time, seat, place and ant type.
 //
-//   replay_tool info FILE                              what the file says about the match (no map needed)
+//   replay_tool info FILE                              what the file says about the match (no map needed; says when the file carries its map)
+//   replay_tool map FILE OUT                           writes the map that the file carries (a match on a test map has it inside) to the new file OUT; never into the map library, never over a file
 //   replay_tool verify FILE [--maps-dir DIR]           plays it on the engine and compares every hash it holds and the final state
 //   replay_tool orders FILE [--maps-dir DIR] [--seat N] [--type ANT] [--csv]
 //                                                      plays it and lists every order: time, turn, seat, order, place, the ants by type, where the first stood, what the engine said
 //       --seat N     only the orders of seat N (0 green, 1 red, 2 blue, 3 black)
 //       --type ANT   only the orders that name an ant of that type (worker, bomber, fire, thief, combat, swimmer)
 //       --csv        one comma separated line for each order (every text quoted) instead of the table
-//   --maps-dir DIR   where the maps are looked for by the name that the file holds (default: the shipped maps of this checkout)
+//   --maps-dir DIR   where the maps are looked for by the name that the file holds (default: the shipped maps of this checkout); a map that is not there, or another file of that name, is the file's own map when it carries one
 //   replay_tool --selftest                             checks the tool itself (the command line, the three commands and their exit codes, damaged files) on a match that it makes
 //
 // Exit status: 0 the file was read (and, for verify and orders, played to the end with every hash right); 1 the file is refused, its map is not found, or it does not play out the same;
@@ -31,6 +32,7 @@
 #include "ants_replay/recorder.hpp"
 #include "ants_replay/replay.hpp"
 #include "ants_test_paths.hpp"
+#include "library_guard.hpp"
 
 using namespace ants;
 using namespace ants::replay;
@@ -41,10 +43,12 @@ namespace fs = std::filesystem;
 
 void usage(std::ostream& out) {
     out << "usage: replay_tool info FILE\n"
+           "       replay_tool map FILE OUT\n"
            "       replay_tool verify FILE [--maps-dir DIR]\n"
            "       replay_tool orders FILE [--maps-dir DIR] [--seat N] [--type ANT] [--csv]\n"
            "       replay_tool --selftest\n"
            "  info    what the file says about the match (no map needed)\n"
+           "  map     writes the map that the file carries to the new file OUT (never into the map library, never over a file that exists)\n"
            "  verify  plays the match on the engine and compares every hash that the file holds and the final state\n"
            "  orders  plays it and lists every order: time, turn, seat, order, place, the ants by type, where the first stood, what the engine said\n"
            "  --seat N      only the orders of seat N (0 green, 1 red, 2 blue, 3 black)\n"
@@ -65,7 +69,7 @@ std::string hex64(uint64_t v) {
     return out.str();
 }
 
-/// The bytes of a file; false (and a reason) when it cannot be read or is longer than a replay can be
+/// The bytes of a file; false (and a reason) when it cannot be read or is longer than a replay can be (a match and its map)
 bool read_file(const std::string& path, std::vector<uint8_t>& bytes, std::string& why) {
     std::ifstream in(path, std::ios::binary | std::ios::ate);
     if (!in) {
@@ -73,8 +77,8 @@ bool read_file(const std::string& path, std::vector<uint8_t>& bytes, std::string
         return false;
     }
     const std::streamoff size = in.tellg();
-    if (size < 0 || static_cast<uint64_t>(size) > kMaxFileBytes) {
-        why = path + " is larger than a replay file can be (" + std::to_string(kMaxFileBytes / 1024) + " KiB)";
+    if (size < 0 || static_cast<uint64_t>(size) > kMaxFileBytesWithMap) {
+        why = path + " is larger than a replay file can be (" + std::to_string(kMaxFileBytesWithMap / 1024) + " KiB)";
         return false;
     }
     bytes.resize(static_cast<size_t>(size));
@@ -120,6 +124,7 @@ void print_info(std::ostream& out, const Replay& r, size_t file_bytes, const std
     out << "Length:    " << r.total_turns << " turns (" << format_time(r.total_turns) << ")" << (r.complete ? "" : ", INCOMPLETE: the recording stops here") << "\n";
     out << "Commands:  " << with_commas(r.commands.size()) << "\n";
     out << "Hashes:    " << r.hashes.size() << " (one every " << h.hash_period << " turns)\n";
+    if (!r.embedded_map.empty()) out << "embedded map: " << r.embedded_map.size() << " bytes\n";
     if (r.complete) out << "End:       " << (r.match_over ? "the rules ended the match" : "the match was not over") << ", final state hash " << hex64(r.final_hash) << "\n";
 }
 
@@ -127,6 +132,7 @@ struct Options {
     std::string command;
     std::string file;
     std::string maps_dir;
+    std::string map_out;                                       // `map`: the file to write
     int seat{-1};
     bool has_type{false};
     sim::AntType type{sim::AntType::Worker};
@@ -148,8 +154,13 @@ bool parse_type(const std::string& text, sim::AntType& out) {
 bool parse_args(const std::vector<std::string>& args, Options& o) {
     if (args.size() < 2) return false;
     o.command = args[0];
-    if (o.command != "info" && o.command != "verify" && o.command != "orders") return false;
+    if (o.command != "info" && o.command != "verify" && o.command != "orders" && o.command != "map") return false;
     o.file = args[1];
+    if (o.command == "map") {
+        if (args.size() != 3 || args[2].empty()) return false;
+        o.map_out = args[2];
+        return true;
+    }
     for (size_t i = 2; i < args.size(); ++i) {
         const std::string& arg = args[i];
         const auto value = [&](std::string& out) {
@@ -262,6 +273,37 @@ void print_orders(std::ostream& out, const Options& o, const Replay& replay, con
     }
 }
 
+/// `replay_tool map FILE OUT`: the bytes of the file's tmap chunk (decode() has checked them against the head's hash) go to the NEW file OUT. The tool only reads the library: a path in the map library
+/// (library_guard.hpp), the file that is read, a file with two names and any file that exists are refused, so nothing is written over anything.
+int write_embedded_map(const Options& o, const Replay& replay, std::ostream& out, std::ostream& err) {
+    if (replay.embedded_map.empty()) {
+        err << "replay_tool: " << o.file << " carries no map (it holds only the name and the hash of " << replay.head.map_name << ")\n";
+        return 1;
+    }
+    const std::string refusal = library_guard::write_refusal(o.map_out, {o.file});
+    if (!refusal.empty()) {
+        err << "replay_tool: " << refusal << "\n";
+        return 2;
+    }
+    std::error_code ec;
+    if (fs::exists(fs::symlink_status(o.map_out, ec))) {
+        err << "replay_tool: " << o.map_out << " exists already: the map is written to a new file only\n";
+        return 2;
+    }
+    {
+        std::ofstream file(o.map_out, std::ios::binary | std::ios::trunc);
+        file.write(reinterpret_cast<const char*>(replay.embedded_map.data()), static_cast<std::streamsize>(replay.embedded_map.size()));
+        file.close();
+        if (!file) {
+            err << "replay_tool: cannot write " << o.map_out << "\n";
+            fs::remove(o.map_out, ec);
+            return 2;
+        }
+    }
+    out << "wrote " << replay.embedded_map.size() << " bytes (" << replay.head.map_name << ", hash " << hex64(replay.head.map_hash) << ") to " << o.map_out << "\n";
+    return 0;
+}
+
 /// The tool: `args` are the words after its name; the output goes to `out`, the complaints to `err`; the result is the exit status
 int run_tool(const std::vector<std::string>& args, std::ostream& out, std::ostream& err) {
     if (args.size() == 1 && (args[0] == "--help" || args[0] == "-h")) {
@@ -288,9 +330,10 @@ int run_tool(const std::vector<std::string>& args, std::ostream& out, std::ostre
         print_info(out, replay, bytes.size(), o.file);
         return 0;
     }
+    if (o.command == "map") return write_embedded_map(o, replay, out, err);
     const std::string maps_dir = !o.maps_dir.empty() ? o.maps_dir : std::string(ORIGINAL_ASSETS_DIR) + "/Maps";
     assets::LevelData level;
-    if (!load_map(replay.head, maps_dir, level, why)) {
+    if (!load_map_or_embedded(replay, std::vector<std::string>{maps_dir}, level, why)) {
         err << "replay_tool: " << why << "\n";
         return 1;
     }
@@ -530,7 +573,11 @@ int selftest() {
                                                                                           {"info", file, "--csv"},
                                                                                           {"info", file, "--maps-dir", maps},
                                                                                           {"verify", file, "--seat", "1"},
-                                                                                          {"verify", file, "--csv"}}) {
+                                                                                          {"verify", file, "--csv"},
+                                                                                          {"map", file},
+                                                                                          {"map", file, "a.lvl", "b.lvl"},
+                                                                                          {"map", file, ""},
+                                                                                          {"map", file, "--maps-dir", maps}}) {
             const Run r = run_words(bad);
             t.check(r.status == 2 && r.out.empty() && has(r.err, "usage: replay_tool"), "a wrong command line (" + (bad.size() > 1 ? bad[0] + " ... " + bad.back() : std::string("short")) + ") is exit 2 with the usage");
         }
@@ -713,6 +760,65 @@ int selftest() {
         const Run bad = run_words({"verify", dir.file("changed.antsrep")});
         t.check(bad.status == 1 && bad.out.empty() && !bad.err.empty(), "verify of a match that does not play out the same is exit 1 and says what differs");
         t.check(run_words({"orders", dir.file("changed.antsrep")}).status == 1, "so is orders");
+    }
+
+    // a match that carries its map (the tmap chunk): played with no maps folder entry for it, listed, written out; never written into the library, never over a file
+    {
+        std::vector<uint8_t> map_bytes;
+        {
+            std::ifstream in(tiny, std::ios::binary);
+            map_bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        Replay carrying = sample;
+        carrying.embedded_map = map_bytes;
+        std::string error;
+        const std::vector<uint8_t> with_map = encode(carrying, error);
+        t.check(!with_map.empty() && write_bytes(dir.file("carrying.antsrep"), with_map), "a file that carries its map is written: " + error);
+        const Run info = run_words({"info", dir.file("carrying.antsrep")});
+        t.check(info.status == 0 && has(info.out, "\nembedded map: " + std::to_string(map_bytes.size()) + " bytes\n") && !has(run_words({"info", file}).out, "embedded map"), "info says how many bytes of map the file carries, and says nothing for a file that has none");
+        fs::create_directories(dir.path / "emptymaps");
+        const Run verify = run_words({"verify", dir.file("carrying.antsrep"), "--maps-dir", dir.file("emptymaps")});
+        t.check(verify.status == 0 && verify.err.empty() && has(verify.out, "OK: 450 turns (0:22.5), 4 hashes and the final state match"), "verify plays it with no file of that name in the maps folder: the map is its own");
+        t.check(run_words({"orders", dir.file("carrying.antsrep"), "--maps-dir", dir.file("emptymaps")}).status == 0, "so does orders");
+        const Run without = run_words({"verify", file, "--maps-dir", dir.file("emptymaps")});
+        t.check(without.status == 1 && has(without.err, "not in"), "a file that carries no map still needs the folder's");
+        fs::create_directories(dir.path / "othermaps");
+        {
+            std::vector<uint8_t> other_file = map_bytes;
+            other_file.push_back(0);                                                                  // (another file under the name: the hash says so)
+            t.check(write_bytes((dir.path / "othermaps" / "TINY.LVL").string(), other_file), "a map of the same name that is another file is written");
+        }
+        t.check(run_words({"verify", dir.file("carrying.antsrep"), "--maps-dir", dir.file("othermaps")}).status == 0, "a map of that name in the folder that is another file gives way to the file's own");
+        t.check(run_words({"verify", file, "--maps-dir", dir.file("othermaps")}).status == 1, "and without a map of its own it is refused, as it was");
+
+        const std::string out_file = dir.file("extracted.lvl");
+        const Run extract = run_words({"map", dir.file("carrying.antsrep"), out_file});
+        std::vector<uint8_t> written;
+        {
+            std::ifstream in(out_file, std::ios::binary);
+            written.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        t.check(extract.status == 0 && extract.err.empty() && written == map_bytes && has(extract.out, "wrote " + std::to_string(map_bytes.size()) + " bytes (TINY.LVL, hash " + hex64(map_hash) + ")"), "map writes exactly the bytes of the map");
+        const Run again = run_words({"map", dir.file("carrying.antsrep"), out_file});
+        t.check(again.status == 2 && has(again.err, "exists already"), "map never writes over a file that exists");
+        const Run none = run_words({"map", file, dir.file("none.lvl")});
+        t.check(none.status == 1 && has(none.err, "carries no map") && !fs::exists(dir.path / "none.lvl"), "map of a file that carries no map is exit 1 and writes nothing");
+        const Run over_input = run_words({"map", dir.file("carrying.antsrep"), dir.file("carrying.antsrep")});
+        t.check(over_input.status == 2 && fs::file_size(dir.path / "carrying.antsrep") == with_map.size(), "map never writes over the file it reads");
+        const std::vector<fs::path> library = library_guard::checkout_library();
+        const Run into_library = run_words({"map", dir.file("carrying.antsrep"), (library[1] / "never-written.lvl").string()});
+        const Run into_originals = run_words({"map", dir.file("carrying.antsrep"), (library[0] / "Maps" / "NEVER.LVL").string()});
+        t.check(into_library.status == 2 && has(into_library.err, "map library") && !fs::exists(library[1] / "never-written.lvl") && into_originals.status == 2 && !fs::exists(library[0] / "Maps" / "NEVER.LVL"), "map never writes into the map library");
+        const Run damaged = run_words({"map", dir.file("flipped.antsrep"), dir.file("from-damaged.lvl")});
+        t.check(damaged.status == 1 && !fs::exists(dir.path / "from-damaged.lvl"), "map of a damaged file is refused and writes nothing");
+
+        // the map in the file is the file that the head names, or the file is not read: a map of another hash, a second map, one that is too long
+        Replay wrong = carrying;
+        wrong.embedded_map.push_back(0);
+        t.check(encode(wrong, error).empty() && has(error, "map hash"), "the writer refuses a map that is not the head's file");
+        Replay huge = carrying;
+        huge.embedded_map.assign(kMaxEmbeddedMapBytes + 1, 0x41);
+        t.check(encode(huge, error).empty() && has(error, "embedded map"), "and one that is longer than a map can be");
     }
 
     std::cout << "replay_tool --selftest: " << t.checks << " checks, " << t.failures << " failures\n";

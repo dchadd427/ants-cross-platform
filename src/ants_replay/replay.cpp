@@ -8,7 +8,6 @@ namespace ants::replay {
 namespace {
 
 constexpr std::array<uint8_t, 8> kMagic = {0x89, 'A', 'R', 'P', 'L', 0x0D, 0x0A, 0x1A};
-constexpr size_t kChunkOverhead = 4 + 4 + 4;           // tag, length, checksum
 constexpr size_t kEndsBytes = 4 + 1 + 8;
 constexpr size_t kMinCommandBytes = 1 + sim::kCommandHeaderBytes;   // a gap of one byte and a command without ants
 
@@ -412,6 +411,18 @@ std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, st
         return {};
     }
     put_chunk(out, "HEAD", head);
+    const bool with_map = live_turns == nullptr && !r.embedded_map.empty();     // (a snapshot goes to every viewer every few seconds and never holds the map)
+    if (with_map) {
+        if (r.embedded_map.size() > kMaxEmbeddedMapBytes) {
+            error = "the embedded map is longer than " + std::to_string(kMaxEmbeddedMapBytes / 1024) + " KiB";
+            return {};
+        }
+        if (net::hash_bytes(r.embedded_map.data(), r.embedded_map.size()) != r.head.map_hash) {
+            error = "the embedded map is not the file that the head's map hash names";
+            return {};
+        }
+        put_chunk(out, "tmap", r.embedded_map);
+    }
 
     std::vector<uint8_t> chunk;
     uint32_t first = 0;
@@ -458,7 +469,7 @@ std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, st
         put_u64(payload, r.final_hash);
         put_chunk(out, "ENDS", payload);
     }
-    if (out.size() > kMaxFileBytes) {
+    if (out.size() > max_file_bytes(with_map ? r.embedded_map.size() : 0)) {                  // (the match; the map has its own limit above)
         error = "the replay is longer than " + std::to_string(kMaxFileBytes / 1024) + " KiB";
         return {};
     }
@@ -483,8 +494,8 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
         error = "not a replay file (the first bytes are not those of one)";
         return false;
     }
-    if (size > kMaxFileBytes) {
-        error = "the file is larger than " + std::to_string(kMaxFileBytes / 1024) + " KiB";
+    if (size > kMaxFileBytesWithMap) {                                     // (before anything is read: a file with a map may be longer than a match; the match's own limit is checked when the map's chunk is known)
+        error = "the file is larger than " + std::to_string(kMaxFileBytesWithMap / 1024) + " KiB";
         return false;
     }
     Replay r;
@@ -492,6 +503,7 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
     bool have_hashes = false;
     bool have_ends = false;
     bool have_live = false;
+    bool have_map = false;
     uint32_t live_turns = 0;
     uint32_t last_turn = 0;
     size_t pos = kMagic.size();
@@ -501,7 +513,7 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
             return false;
         }
         const size_t at = pos;
-        if (size - pos < kChunkOverhead) {                                 // the file is cut inside a chunk header
+        if (size - pos < kChunkFrameBytes) {                                 // the file is cut inside a chunk header
             if (!have_head) {
                 error = "the file is cut before its HEAD chunk is complete";
                 return false;
@@ -520,7 +532,11 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
             }
         }
         const std::string name = tag_text(tag);
-        if (length > size - pos - kChunkOverhead) {                        // its length runs past the end of the file: the file was cut here
+        if (name == "tmap" && length > kMaxEmbeddedMapBytes) {             // (the claim is refused as it stands: nothing is allocated for it, and a cut file does not make it smaller)
+            error = "tmap: the map is longer than " + std::to_string(kMaxEmbeddedMapBytes / 1024) + " KiB";
+            return false;
+        }
+        if (length > size - pos - kChunkFrameBytes) {                        // its length runs past the end of the file: the file was cut here
             if (!have_head) {
                 error = "chunk " + name + ": its length runs past the end of the file";
                 return false;
@@ -535,7 +551,7 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
             error = "chunk " + name + " at byte " + std::to_string(at) + ": the checksum is wrong (the file is damaged)";
             return false;
         }
-        pos += kChunkOverhead + length;
+        pos += kChunkFrameBytes + length;
 
         if (name == "HEAD") {
             if (have_head || at != kMagic.size()) {
@@ -622,6 +638,17 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
                 return false;
             }
             have_live = true;
+        } else if (name == "tmap") {
+            if (have_map) {
+                error = "tmap: two tmap chunks";
+                return false;
+            }
+            if (length == 0 || net::hash_bytes(payload, length) != r.head.map_hash) {
+                error = "tmap: the map is empty or is not the file that the head's map hash names";
+                return false;
+            }
+            r.embedded_map.assign(payload, payload + length);              // (length is at most kMaxEmbeddedMapBytes and inside the file; its checksum is right)
+            have_map = true;
         } else if (name == "ENDS") {
             Cursor c{payload, length};
             uint8_t flags = 0;
@@ -642,6 +669,10 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
     }
     if (have_live && have_ends) {
         error = "live: a live chunk in a file that has its ENDS chunk (a snapshot has no end)";
+        return false;
+    }
+    if (size > max_file_bytes(r.embedded_map.size())) {                    // (the match is what kMaxFileBytes limits: the file without its map's chunk)
+        error = "the file is larger than " + std::to_string(kMaxFileBytes / 1024) + " KiB (not counting its map)";
         return false;
     }
     if (have_ends) {
