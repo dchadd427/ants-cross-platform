@@ -81,14 +81,14 @@
     }
 
     // The shape a first visit (nothing stored, no ?aspect=) starts in, for the page's `win`: the closest shape to the device's own screen (window.screen, CSS pixels: only the ratio counts), long
-    // over short, no cutoff. An upright device (screen and window both taller than wide), a screen that cannot be asked and a size that is none give FALLBACK. Never stored: only a selector's
+    // over short, no cutoff. An upright device (screen and window both taller than wide; a frame's own window says nothing), a screen that cannot be asked and a size that is none give FALLBACK. Never stored: only a selector's
     // press stores a shape (docs/PLAY_IN_BROWSER.md, "Which shape").
     function firstVisit(win) {
         try {
             var screenW = win.screen.width;
             var screenH = win.screen.height;
             if (!isSize(screenW, screenH)) return FALLBACK;
-            var sideways = screenW >= screenH || win.innerWidth > win.innerHeight;
+            var sideways = screenW >= screenH || (!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight);
             if (!sideways) return FALLBACK;
             return closest(Math.max(screenW, screenH) / Math.min(screenW, screenH)).row.name;
         } catch (e) {

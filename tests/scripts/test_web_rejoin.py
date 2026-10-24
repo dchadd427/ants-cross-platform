@@ -139,7 +139,7 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertEqual(len(re.findall(r"addEventListener\('visibilitychange'", self.page)), 2)                        # (the client's wake and the line of numbers' own: tests/scripts/web_name_check.js counts them)
 
     def test_the_press_takes_this_tab_to_the_game_page_with_the_remembered_name_and_shape_and_no_key(self):
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);", self.wiring)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', picked), window.location.href).href);", self.wiring)
         self.assertIn("var remembered = nameCheck(recall(NAME_KEY));", self.wiring)
         self.assertNotIn("window.open", self.wiring)                                                                    # (no new tab: the other join links of the page stay in this one)
         self.assertNotIn("window.open(", self.page)                                                                      # (the page opens no window at all: the test room's "separate windows" went with "More ways to play")
@@ -156,7 +156,7 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertEqual(self.page.count("var codeText = Rules.codeText;"), 1)                                           # (the rules script's, defined once, outside the blocks: the check hands it to the block)
         self.assertNotIn("var codeText", self.block + self.keys)
         self.assertNotIn("Rejoin your match", self.page)                                                                 # (the older button, which named the room)
-        self.assertIn("'?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + shapeOr169(shape)", self.block)       # (the address keeps the plain code and has no create block: the room is there)
+        self.assertIn("'?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + aspectQuery(shape)", self.block)       # (the address keeps the plain code and has no create block: the room is there)
         self.assertNotIn("roomBlockQuery", self.block)
 
     def test_start_hands_the_seat_over_with_the_key_in_the_storage_and_the_lobby_never_leaves_at_start(self):
@@ -167,7 +167,7 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertIn("try { window.localStorage.setItem(entry.name, entry.text); } catch (e) {", start)
         self.assertEqual(start.count("setItem("), 1)
         self.assertIn("forgetSession();", start)                                                                         # (Back from the match makes a room again: this one is the match's now)
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);", start)    # (the Rejoin button's address: the plain code, the seat, the name, the shape)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, picked), window.location.href).href);", start)    # (the Rejoin button's address: the plain code, the seat, the name, the shape)
         self.assertIn("$('rejoin').hidden = true;", start)
         self.assertNotRegex(start, r"\.leave\(|\.close\(|Leave")                                                       # (the seat is handed over, not given up: the game's own Hello takes it with the key)
         net = read("web", "front", "lobby_net.js")

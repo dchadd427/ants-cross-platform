@@ -10,7 +10,7 @@ a visitor who never pressed one follows the screen at every visit and anyone who
     the page at once and the hand-off address to the game carries the shape (the page has no game open, so a pick never asks and never reloads);
   - what needs no browser is read from the files: the key is the one constant of each page and no call reads or writes the old key; the one place that stores a pick is the selectors' own handler; both
     pages ask `AntsShapes.firstVisit(window)` and nothing else for the third answer; the markup of both pages starts in the 16:9 picture until that script runs (the game page's box, its selector and
-    the front page's "Picture" row in the match column); the front page's hand-offs to the game (START, Rejoin, a game for one) pass the page's live shape on; the nearest shape computed here, from
+    the front page's "Picture" row in the match column); the front page's hand-offs to the game (START, Rejoin, a game for one) pass the player's pick on (and nothing before a pick); the nearest shape computed here, from
     the game's own table (kAspectTable) and by the rule in the docs, is the one the page's code gives.
 The same cases in a real browser: tests/scripts/web_aspect_check.py (opt-in, against a running page).
 """
@@ -210,27 +210,35 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
 
 
 class TheFrontPageHandsTheShapeOnToTheGame(unittest.TestCase):
-    """The front page passes the shape that is shown on to every game it opens, as the variable `aspect` AT THE MOMENT of the hand-off (not a copy made when the page loaded), so that a shape picked
-    in the lobby, which keeps the match and does not reload the page, is the shape of the game that START opens. The builders of the addresses are run with node (web_aspect_key_check.js: the
-    START address, a game for one); that the call sites pass the variable is read here."""
+    """The front page passes the player's PICK on to every game it opens, as the variable `picked` AT THE MOMENT of the hand-off (not a copy made when the page loaded), so that a shape picked in the lobby,
+    which keeps the match and does not reload the page, is the shape of the game that START opens. A first visit's shape is not a pick and is not handed on: the game page works out its own when it
+    loads (a phone that opens the front page upright and is turned sideways would otherwise carry its upright 16:9 into the game). The builders of the addresses are run with node
+    (web_aspect_key_check.js: the START address, a game for one); that the call sites pass the variable is read here."""
 
     def test_the_start_the_rejoin_and_the_game_for_one_pass_the_live_shape(self):
         page = read(LOBBY)
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);", page)                              # START (onStarting)
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);", page)         # the Rejoin button
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, picked), window.location.href).href);", page)                              # START (onStarting)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', picked), window.location.href).href);", page)         # the Rejoin button
         self.assertIn("window.location.assign(new URL(address, window.location.href).href);", page)                               # START with nobody else (startAlone)
-        self.assertIn("var address = soloAddress(model, myName(), aspect);", page)                                                  # (the game for one's address carries the live shape)
+        self.assertIn("var address = soloAddress(model, myName(), picked);", page)                                                  # (the game for one's address carries the live pick)
         block = page[page.index("// SELECTOR_BEGIN"):page.index("// SELECTOR_END")]
         self.assertIn("aspect = value;", block)                                                                                            # (a pick in the lobby changes the live variable, which the calls above read)
+        self.assertIn("picked = value;", block)                                                                                            # (and it is a pick, the shown shape too)
+        shape_block = page[page.index("// SHAPE_BEGIN"):page.index("// SHAPE_END")]
+        self.assertIn("aspect = picked = asked;", shape_block)                                                                              # (the address and the stored pick are picks)
+        self.assertIn("aspect = picked = remembered;", shape_block)
+        self.assertNotRegex(shape_block, r"picked = AntsShapes\.firstVisit")                                                               # (the first visit's shape is not)
 
     def test_every_game_address_of_the_page_is_one_of_those_three_builders(self):
         page = read(LOBBY)
         self.assertNotIn("aspectFromAddress", page)                                                                                          # (the links for other players that carried the shape only when the address named it were the test room's)
-        self.assertEqual(len(re.findall(r"'&aspect=' \+", page)), 2)                                                                          # (rejoinQuery and localGameQuery: START's hand-off is rejoinQuery)
+        self.assertEqual(len(re.findall(r"'&aspect=' \+", page)), 1)                                                                          # (aspectQuery is the one place that writes it; rejoinQuery and localGameQuery call it, START's hand-off is rejoinQuery)
 
-    def test_the_two_builders_name_one_of_the_four_shapes_only(self):
+    def test_the_two_builders_name_a_picked_shape_and_nothing_else(self):
         page = read(LOBBY)
-        self.assertEqual(page.count("'&aspect=' + shapeOr169(shape)"), 2)                                                                   # (rejoinQuery and localGameQuery)
+        self.assertIn("function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }", page)                           # (a text that names no shape leaves it out: the game page decides)
+        self.assertEqual(page.count("+ aspectQuery(shape);"), 2)                                                                            # (rejoinQuery and localGameQuery)
+        self.assertNotIn("shapeOr169", page)
         self.assertNotIn("(shape === '4:3' ? '4:3' : '16:9')", page)                                                                          # (no builder is left that knows two shapes)
 
 

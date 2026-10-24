@@ -7,7 +7,7 @@ else (the DevTools protocol is spoken with the WebSocket client of web_hidden_ch
 profile, its own port; nothing of yours is touched) and looks at what only a browser can show:
 
   * the page's own logic that needs no layout (`ANTS_PAGE` in web/shell.html): the address's `aspect` (only 4:3, 16:10, 16:9 and 21:9 count, anything else is ignored), the order address >
-    remembered choice > default (16:9 on every device, a phone held upright included), the box that is the largest whole number of canvas steps for a given area and device ratio and whose CSS size makes the browser's
+    remembered choice > the first visit's shape (nearest the screen, 16:9 for a phone held upright), the box that is the largest whole number of canvas steps for a given area and device ratio and whose CSS size makes the browser's
     canvas exactly that many pixels even after the layout's rounding, where the box must stand so that the game's pointer is exact (`snapOffset`), the frame cap (60, 75 and 90 Hz
     are not touched, a jittery 60 Hz display is not capped, 120 / 144 / 165 / 240 Hz are held to 60 a second, decided by the median of the last 24 gaps: slow frames at the start do
     not decide, and a window that moves to a display of another rate is measured again), the arguments of the address (`joinArguments`: the door of a game server on this site only,
@@ -16,7 +16,7 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
     makes has EXACTLY the shape of the picture (16:9, 4:3 for the classic picture, 16:10 or 21:9), fills the game's box, the box fits the window (no scrolling to see the whole picture and the bar
     under it) and is the largest that fits, the page has no sideways scroll;
   * the address and the selector: `?aspect=4:3`, `?aspect=16:10`, `?aspect=16:9`, `?aspect=21:9`, a bad value, the selector's press (it changes the picture AT ONCE, with no reload: remembered under `ants.aspect.v2`, put in the address, the game's canvas and picture probes follow, the page centred with black around it in 16:10 and 21:9), the tag "fills your screen" under the shape nearest to the screen, a portrait phone gets the 16:9 picture like every other device (and a remembered 4:3 still wins there);
-    a Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is not read any more (every browser starts 16:9 once), on the game page and on web/lobby.html (the pages' own code
+    a Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is not read any more (every browser starts with the first visit's shape once), on the game page and on web/lobby.html (the pages' own code
     runs on a table of such values without a browser in tests/scripts/web_aspect_key_check.js, which ./run_tests.sh --fast runs);
   * the picture follows the window when it is resized, and fullscreen (the browser's, and the page's own where there is no Fullscreen API: an iPhone) enters and leaves with the
     canvas the right shape;

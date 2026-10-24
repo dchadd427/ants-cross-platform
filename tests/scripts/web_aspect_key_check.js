@@ -4,7 +4,7 @@
 // A first visit (nothing under the key `ants.aspect.v2` that names a shape, and no ?aspect= that does) starts in the shape NEAREST the player's screen (AntsShapes.firstVisit; 16:9 for a phone held upright
 // and for a screen that cannot be asked), the same on both pages and never stored: only the choice of the selector (the key) or ?aspect= in the address ends it (both pages have the same four shapes, 4:3, 16:10, 16:9 and
 // 21:9: the front page's match column has them as its "Picture" row "Classic 4:3", "16:10", "16:9" and "21:9", with the "fills your screen" tag under the one nearest to the computer's screen). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
-// starts 16:9 once), and the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
+// starts with the first visit's shape once), and the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
 // stay): what it stores, tells the game (ants_set_aspect), puts in the address and shows is checked here on a page of fakes; "fills your screen" and the shapes' boxes too.
 // The front page's selector (the lobby is the page's only mode) keeps the match and the room, changes the shape of the page at once, remembers it, and the address of the hand-off to the game
 // (START, Rejoin, a game for one) carries it (`aspect=`).
@@ -45,7 +45,7 @@ function makeStorage(initial) {
     };
 }
 
-function makeWindow(search, storage, answerToConfirm, screen, inner) {
+function makeWindow(search, storage, answerToConfirm, screen, inner, framed) {
     const win = {
         assigned: [],
         asked: [],
@@ -62,6 +62,7 @@ function makeWindow(search, storage, answerToConfirm, screen, inner) {
         screen: screen || { width: 1920, height: 1080 },
         innerWidth: inner ? inner[0] : undefined,                                   // (the window's own size: only the upright / sideways question reads it)
         innerHeight: inner ? inner[1] : undefined,
+        parent: framed ? {} : undefined,                                            // (a page in a frame has another window above it)
         localStorage: storage,
         confirm(question) { win.asked.push(question); return answerToConfirm; },
     };
@@ -108,7 +109,7 @@ function runShell(path, search, stored, options) {
     const hook = text.match(/postRun: \[(function\(\) \{[\s\S]*?\n {12}\})\]/);                  // (the page's own postRun hook: run as it is written, not a copy of it)
     if (!hook) throw new Error(path + ': the postRun hook of the Module was not found');
     const storage = makeStorage(stored);
-    const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner);
+    const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner, options && options.framed);
     win.AntsReplay = { fileOf() { return 'ants-TEST-20260101-000000Z.antsrep'; }, liveIdOf() { return 'LIVE-1'; } };         // (replay_page.js: only a spectator's address asks for it)
     const stage = element({ 'data-aspect': '16:9' });
     const buttons = SHELL_SHAPES.map((shape) => {
@@ -175,7 +176,7 @@ function runLobby(path, search, stored, options) {
     const selector = between(text, 'SELECTOR_BEGIN', 'SELECTOR_END', path);
     const rules = require(nodePath.resolve(nodePath.dirname(path), 'front', 'lobby_rules.js'));       // (what the page reads its maps, its default map and codeText from)
     const storage = makeStorage(stored);
-    const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner);
+    const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner, options && options.framed);
     if (options && options.noScreen) win.screen = undefined;                          // a window that has no screen to ask
     const radios = radioGroup(['4:3', '16:10', '16:9', '21:9']);
     const body = element();
@@ -200,7 +201,7 @@ function runLobby(path, search, stored, options) {
     const code = 'var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY; var mapByKey = Rules.mapByKey; var codeText = Rules.codeText;\n'
         + helpers + shapes + fill + lobby + shape + rejoin + selector
         + '\nreturn { aspect: aspect, key: ASPECT_KEY, now: function () { return aspect; },'
-        + ' handoff: function (code, seat, name) { return rejoinQuery({ room: code, seat: seat }, name, aspect); }, solo: function (name) { return localGameQuery(DEFAULT_MAP_KEY, [], name, aspect); } };';
+        + ' handoff: function (code, seat, name) { return rejoinQuery({ room: code, seat: seat }, name, picked); }, solo: function (name) { return localGameQuery(DEFAULT_MAP_KEY, [], name, picked); }, picked: function () { return picked; } };';
     const result = new Function('window', 'document', 'Rules', code)(win, doc, rules);
     result.storage = storage;
     result.win = win;
@@ -469,8 +470,11 @@ try {
         expect('lobby.html, ' + label + ' (the button that is checked)', shown(r), aspect);
         expect('lobby.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('lobby.html, the key', r.key, NEW_KEY);
-        expect('lobby.html, ' + label + ' (the START hand-off names it)', r.handoff('k7m2xq', 1, 'Ann'), '?join=/ws&room=k7m2xq&seat=1&name=Ann&aspect=' + aspect);
-        expect('lobby.html, ' + label + ' (a game for one names it)', r.solo('Ann').endsWith('&aspect=' + aspect), true);
+        // a pick (the address, a stored shape) goes into the hand-off; a first visit's shape does NOT: the game page works out its own, when it loads (a phone that opens the front page upright and is turned
+        // sideways must not hand its upright 16:9 on)
+        const named = source === 'default' ? '' : '&aspect=' + aspect;
+        expect('lobby.html, ' + label + ' (the START hand-off carries a pick, and only a pick)', r.handoff('k7m2xq', 1, 'Ann'), '?join=/ws&room=k7m2xq&seat=1&name=Ann' + named);
+        expect('lobby.html, ' + label + ' (a game for one carries a pick, and only a pick)', r.solo('Ann').endsWith('&name=Ann' + named), true);
     }
     // "fills your screen": the tag stands under the shape nearest to the computer's screen, and under none when no shape is within 8 per cent of it (the same rule as the game page's, on the same screens)
     for (const [label, screen, shape, first] of [
@@ -562,7 +566,7 @@ try {
     // ---- A FIRST VISIT: nothing stored that names a shape, no ?aspect= that does: the shape NEAREST the player's screen, the same on both pages, and never stored ----
     // [what it is, the device's screen (CSS pixels), the window's inner size (undefined: not asked), the shape]. Nearest by the ratio of ratios, no cutoff; ties and the middles between shapes are checked
     // on both sides (the middle of 4:3 and 16:10 is 1.4606, of 16:10 and 16:9 1.6866, of 16:9 and 21:9 2.0367).
-    for (const [label, [w, h], inner, shape] of [
+    for (const [label, [w, h], inner, shape, framed] of [
         ['a 1920 x 1080 monitor', [1920, 1080], undefined, '16:9'], ['a 1366 x 768 laptop', [1366, 768], undefined, '16:9'], ['a 3840 x 2160 monitor', [3840, 2160], undefined, '16:9'],
         ['a 1440 x 900 laptop', [1440, 900], undefined, '16:10'], ['a 2560 x 1600 laptop', [2560, 1600], undefined, '16:10'], ['a 1920 x 1200 monitor', [1920, 1200], undefined, '16:10'],
         ['a 2256 x 1504 laptop (3:2: no shape of its own yet, 16:10 is the nearest)', [2256, 1504], undefined, '16:10'],
@@ -581,20 +585,23 @@ try {
         ['a tablet held upright, 768 x 1024 (not Classic 4:3)', [768, 1024], [768, 900], '16:9'], ['a portrait monitor, 1080 x 1920, in a portrait window', [1080, 1920], [1080, 1700], '16:9'],
         ['a phone that reports an upright screen but has a sideways window (844 x 340): sideways, 21:9', [390, 844], [844, 340], '21:9'],
         ['a tablet that reports an upright screen but has a sideways window: sideways, 4:3', [768, 1024], [1024, 700], '4:3'],
+        // in a frame (the replay in a match page) the frame's own window says nothing: an upright device stays 16:9 even though its frame is wide
+        ['an upright tablet with a wide frame of a match page (the frame is no sign that it is held sideways)', [768, 1024], [1024, 700], '16:9', true], ['an upright phone with a wide frame', [390, 844], [390, 245], '16:9', true],
+        ['a landscape screen in a frame: the screen decides', [1440, 900], [800, 500], '16:10', true],
         // the screen, not the window: a narrow or tall window on a landscape screen changes nothing
         ['a 1440 x 900 screen with a tall narrow window', [1440, 900], [500, 900], '16:10'], ['a 3440 x 1440 screen with a small window', [3440, 1440], [800, 500], '21:9'],
         // numbers that are none: no screen to ask
         ['a screen of no size', [0, 0], undefined, '16:9'], ['a negative height', [1920, -1], undefined, '16:9'], ['a width that is not a number', [NaN, 1080], undefined, '16:9'], ['an infinite width', [Infinity, 1080], undefined, '16:9'],
     ]) {
         const screen = { width: w, height: h };
-        const shell = runShell(shellPath, '', {}, { screen, inner });
-        const lobby = runLobby(lobbyPath, '', {}, { screen, inner });
+        const shell = runShell(shellPath, '', {}, { screen, inner, framed });
+        const lobby = runLobby(lobbyPath, '', {}, { screen, inner, framed });
         expect('first visit, shell.html, ' + label + ' (the shape)', shell.aspect + ' ' + shell.source, shape + ' default');
         expect('first visit, shell.html, ' + label + ' (--aspect for the game, the stage, the selector)', shell.args.slice(-2).join(' ') + ' ' + shell.stage.attributes['data-aspect'] + ' ' + shell.checked, '--aspect ' + shape + ' ' + shape + ' ' + checkedString(shape));
         expect('first visit, shell.html, ' + label + ' (loading stores nothing)', JSON.stringify(shell.storage.writes) + JSON.stringify(shell.storage.data), '[]{}');
         expect('first visit, lobby.html, ' + label + ' (the shape, the body, the checked button)', lobby.aspect + ' ' + lobby.body.attributes['data-aspect'] + ' ' + shown(lobby), shape + ' ' + shape + ' ' + shape);
         expect('first visit, lobby.html, ' + label + ' (loading stores nothing)', JSON.stringify(lobby.storage.writes) + JSON.stringify(lobby.storage.data), '[]{}');
-        expect('first visit, lobby.html, ' + label + ' (START and a game for one hand the same shape on, and the game page opens in it)', lobby.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=' + shape) + ' ' + lobby.solo('Ann').endsWith('&aspect=' + shape), 'true true');
+        expect('first visit, lobby.html, ' + label + ' (START and a game for one hand NO shape on: the game page decides when it loads)', lobby.handoff('k7m2xq', 1, 'Ann') + ' ' + /aspect/.test(lobby.solo('Ann')), '?join=/ws&room=k7m2xq&seat=1&name=Ann false');
         expect('first visit, ' + label + ': the two pages show the same shape and tag the same one', shell.aspect + ' ' + shell.tags, lobby.aspect + ' ' + lobby.tags);
     }
     {   // the tag is where it was: under the shape within 8 per cent of the screen, and that is the shape that a first visit starts in whenever there is one
@@ -676,6 +683,18 @@ try {
         expect('a pick of the shape that is the default, lobby.html: the next visit on another screen keeps it', lobbyNext.aspect, '16:10');
         const game = runShell(shellPath, '', lobby.storage.data, { screen: { width: 3440, height: 1440 } });
         expect('a pick of the shape that is the default, lobby.html: the game page reads it', game.aspect + ' ' + game.source, '16:10 remembered');
+    }
+    {   // the hand-off to the game: nothing before a pick, the shape after any press (the shown shape too), and a phone that opens the front page upright is not frozen into 16:9
+        const phone = runLobby(lobbyPath, '', {}, { screen: { width: 390, height: 844 }, inner: [390, 664] });
+        expect('hand-off, a phone upright on the front page: the page shows 16:9 and START hands no shape on', phone.aspect + ' ' + phone.handoff('k7m2xq', 1, 'Ann') + ' ' + phone.picked(), '16:9 ?join=/ws&room=k7m2xq&seat=1&name=Ann ');
+        const laptop = runLobby(lobbyPath, '', {}, { screen: { width: 1440, height: 900 } });
+        expect('hand-off, a laptop that has not picked: no shape', laptop.picked() + '|' + laptop.handoff('k7m2xq', 1, 'Ann').includes('aspect') + '|' + laptop.solo('Ann').includes('aspect'), '|false|false');
+        pick(laptop, '16:10');                                                           // the shape that is shown: a pick all the same
+        expect('hand-off, the shown shape pressed: it is a pick and goes on', laptop.picked() + ' ' + laptop.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:10') + ' ' + laptop.solo('Ann').endsWith('&aspect=16:10'), '16:10 true true');
+        const stored = runLobby(lobbyPath, '', { [NEW_KEY]: '16:9' }, { screen: { width: 1440, height: 900 } });
+        expect('hand-off, a stored 16:9 on a 16:10 laptop: goes on', stored.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:9'), true);
+        const asked = runLobby(lobbyPath, '?aspect=21:9', {}, { screen: { width: 1440, height: 900 } });
+        expect('hand-off, the front page\'s own address asks for 21:9: goes on, and stores nothing', asked.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=21:9') + ' ' + JSON.stringify(asked.storage.writes), 'true []');
     }
     {   // a pick of 16:9 on a screen whose nearest is another shape: kept (the old default is a choice like any other)
         const shell = runShell(shellPath, '', {}, { screen: { width: 3440, height: 1440 } });

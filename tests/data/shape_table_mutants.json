@@ -137,8 +137,8 @@
     {
       "id": "page_copy_in_lobby",
       "file": "web/lobby.html",
-      "old": "function shapeOr169(text) { return AntsShapes.parse(text) || '16:9'; }",
-      "new": "function shapeOr169(text) { return ['4:3', '16:10', '16:9', '21:9'].indexOf(text) !== -1 ? text : '16:9'; }",
+      "old": "function isShape(text) { return AntsShapes.parse(text) !== null; }",
+      "new": "function isShape(text) { return ['4:3', '16:10', '16:9', '21:9'].indexOf(text) !== -1; }",
       "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheSelectorsMarkupIsTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
@@ -414,6 +414,55 @@
       "file": "web/shell.html",
       "old": "a = AntsShapes.parse(remembered);\n                if (a) return { aspect: a, source: 'remembered' };\n                return { aspect: AntsShapes.parse(firstVisit)",
       "new": "a = AntsShapes.parse(remembered);\n                if (a && !AntsShapes.parse(firstVisit)) return { aspect: a, source: 'remembered' };\n                return { aspect: AntsShapes.parse(firstVisit)",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_start_hands_on_the_shown_shape",
+      "file": "web/lobby.html",
+      "old": "rejoinQuery({ room: code, seat: seat }, name, picked)",
+      "new": "rejoinQuery({ room: code, seat: seat }, name, aspect)",
+      "test": "python3 tests/scripts/test_web_aspect_default.py"
+    },
+    {
+      "id": "page_lobby_solo_hands_on_the_shown_shape",
+      "file": "web/lobby.html",
+      "old": "soloAddress(model, myName(), picked)",
+      "new": "soloAddress(model, myName(), aspect)",
+      "test": "python3 tests/scripts/test_web_aspect_default.py"
+    },
+    {
+      "id": "page_lobby_rejoin_hands_on_the_shown_shape",
+      "file": "web/lobby.html",
+      "old": "remembered.ok ? remembered.name : '', picked)",
+      "new": "remembered.ok ? remembered.name : '', aspect)",
+      "test": "python3 tests/scripts/test_web_aspect_default.py"
+    },
+    {
+      "id": "page_lobby_no_pick_is_16_9",
+      "file": "web/lobby.html",
+      "old": "function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }",
+      "new": "function aspectQuery(shape) { return '&aspect=' + (isShape(shape) ? shape : '16:9'); }",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_press_is_no_pick",
+      "file": "web/lobby.html",
+      "old": "                picked = value;                                                              // (a press is a pick, the shape that is shown too)\n",
+      "new": "",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_stored_pick_is_no_pick",
+      "file": "web/lobby.html",
+      "old": "else if (isShape(remembered)) aspect = picked = remembered;",
+      "new": "else if (isShape(remembered)) aspect = remembered;",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "js_first_visit_frame_window_counts",
+      "file": "web/shapes.js",
+      "old": "(!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight)",
+      "new": "(win.innerWidth > win.innerHeight)",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     }
   ]
