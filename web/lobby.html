@@ -264,7 +264,7 @@
     /* the line of numbers flows as one text, as the phone picture draws it ("... 5 players online · 31 games / played (5 today)"): the dot that joins the two parts keeps a no-break space before it (a line never begins with it) and a space after it */
     #stats-played::before { content: "\00a0\00b7\0020"; }
     #stats-played:empty { display: none; }
-    .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; }                      /* the recording notice, for a visitor who is not asked for a name */
+    .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; } .bar .coffee { margin: 6px 0 0; text-align: center; } .bar .coffee a { display: inline-block; padding: 0; } .bar .coffee img { display: block; width: 217px; max-width: 100%; height: auto; border-radius: 6px; }                      /* the recording notice, for a visitor who is not asked for a name */
     .name-step-notice { margin-top: 8px; }
     .shape .seg { position: relative; display: inline-flex; gap: 8px; }                     /* the picture's four shapes: radio buttons that look like the game's two-state buttons */
     .shape .opt { position: relative; display: inline-flex; }                               /* a shape's button with its "fills your screen" tag */
@@ -339,7 +339,7 @@
     <p class="notice" id="footer-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>
     <div class="bar-row"><span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
     <nav aria-label="Footer links"><button class="lnk" type="button" id="how-open">How it works</button><a href="/matches.html" id="watch-link">Matches</a><a href="/live.html">Live now</a><a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a><a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a><a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a><a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a></nav></div>
-</div></footer>
+<p class="coffee"><a href="https://www.buymeacoffee.com/dchadd" target="_blank" rel="noopener noreferrer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous"></a></p></div></footer>
 </div>
 
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
@@ -373,7 +373,7 @@
 <script src="front/lobby_net.js"></script>
 <script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>
 <script src="front/map_picker.js"></script>
-<script src="map_files.js"></script>
+<script src="shapes.js"></script><script src="map_files.js"></script>
 <script>
     (function () {
         'use strict';
@@ -399,29 +399,14 @@
         function remember(key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
         function recall(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
         // HELPERS_END
-        // SHAPES_BEGIN (tests/scripts/web_aspect_key_check.js, web_lobby_check.js and web_rejoin_block_check.js run this block; web/shell.html's ANTS_PAGE has the same table and the same rule)
-        // THE FOUR SHAPES of the picture, left to right as the Picture row shows them, each in the smallest whole numbers (the game page's own four: 640 x 480 is 160 steps of 4 x 3, 960 x 600 is
-        // 120 of 8 x 5, 960 x 540 is 60 of 16 x 9, 1260 x 540 is 180 of 7 x 3). isShape(text) says whether a text names one (an address, a remembered value), shapeOr169(text) is that shape or 16:9
-        // (every link that the page makes carries one of the four), shapeId(shape) is the end of the ids of its button and its tag (aspect-16-10, fit-16-10), and shapeForScreen(w, h) the shape
-        // nearest to a screen of w x h (the footer tags it "fills your screen"): the one whose width over height is the closest to the screen's, as a ratio of ratios (a 1440 x 900 screen is 16:10,
-        // a 1920 x 1080 one 16:9, a 3440 x 1440 one 21:9, a 1280 x 1024 one 4:3), or null when no shape is within 8 per cent of the screen's (a 32:9 screen, a square one, a number that is none).
-        var SHAPE_ORDER = ['4:3', '16:10', '16:9', '21:9'];
-        var SHAPES = { '4:3': { w: 4, h: 3 }, '16:10': { w: 8, h: 5 }, '16:9': { w: 16, h: 9 }, '21:9': { w: 7, h: 3 } };
-        function isShape(text) { return typeof text === 'string' && Object.prototype.hasOwnProperty.call(SHAPES, text); }
-        function shapeOr169(text) { return isShape(text) ? text : '16:9'; }
-        function shapeId(shape) { return shape.replace(':', '-'); }
-        function shapeForScreen(screenW, screenH) {
-            if (!(screenW > 0 && screenH > 0 && isFinite(screenW) && isFinite(screenH))) return null;
-            var screenRatio = screenW / screenH;
-            var best = null;
-            var bestOff = Infinity;
-            SHAPE_ORDER.forEach(function (name) {
-                var ratio = SHAPES[name].w / SHAPES[name].h;
-                var off = Math.max(ratio / screenRatio, screenRatio / ratio) - 1;
-                if (off < bestOff) { bestOff = off; best = name; }
-            });
-            return bestOff <= 0.08 ? best : null;
-        }
+        // SHAPES_BEGIN (tests/scripts/web_aspect_key_check.js, web_lobby_check.js and web_rejoin_block_check.js run this block, with the AntsShapes of web/shapes.js)
+        // THE SHAPES of the picture come from web/shapes.js, the one table of the pages (the game page and the settings menu read it too; the game's own is kAspectTable in include/ants_app/canvas_layout.hpp):
+        // their names, left to right as the Picture row shows them, the id that ends the ids of a button and its tag (aspect-16-10, fit-16-10) and the shape nearest to a screen (the footer tags
+        // it "fills your screen": AntsShapes.forScreen). isShape(text) says whether a text names one (an address, a remembered value), shapeOr169(text) is that shape or 16:9 (every link that the page
+        // makes carries one of them).
+        function isShape(text) { return AntsShapes.parse(text) !== null; }
+        function shapeOr169(text) { return AntsShapes.parse(text) || '16:9'; }
+        function shapeId(shape) { return AntsShapes.rowOf(shape).id; }
         // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
@@ -509,7 +494,7 @@
             document.body.setAttribute('data-aspect', aspect);
             $('aspect-' + shapeId(aspect)).checked = true;
             var fits = null;
-            try { fits = shapeForScreen(window.screen.width, window.screen.height); } catch (e) { /* no screen to ask */ }
+            try { fits = AntsShapes.forScreen(window.screen.width, window.screen.height); } catch (e) { /* no screen to ask */ }
             if (fits) {
                 $('fit-' + shapeId(fits)).hidden = false;
                 $('shape-row').classList.add('has-fit-tag');
@@ -1378,7 +1363,7 @@
         }
 
         // SELECTOR_BEGIN
-        SHAPE_ORDER.forEach(function (shape) {
+        AntsShapes.names().forEach(function (shape) {
             $('aspect-' + shapeId(shape)).addEventListener('change', function () {
                 // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape
                 if (!$('aspect-' + shapeId(shape)).checked) return;

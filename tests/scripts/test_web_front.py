@@ -45,6 +45,8 @@ PICTURES = {
 DISCORD_LINK = "https://discord.gg/WaWrXQnKPj"              # the project's Discord invite: the header's button, a plain link (nothing of Discord is loaded)
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
+COFFEE_LINK = "https://www.buymeacoffee.com/dchadd"              # the owner's Buy Me a Coffee page and its button picture: the one thing on the front page that comes from another site
+COFFEE_IMAGE = "https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
 SCRIPT_FILES = ("map_maker_link.js", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py), the rematch's strip (tests/scripts/test_web_rematch.py; the game page loads it too) the game type's rows and control (tests/scripts/test_web_game_type.py) and the map list: scripts, not pictures
 MAPMAKER_FILES = ("mapmaker.css", "mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_palette.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")      # the map maker page's own style and scripts (web/mapmaker.html; tests/scripts/test_web_mapmaker.py): not the lobby's, not pictures
 LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py), the chat box's and the rematch's (the game page links it too)
@@ -60,6 +62,8 @@ PLAY_LAZY = ("mapmaker_play.js", "mapmaker_play.css")        # the map maker's P
 PLAY_BUDGET, PLAY_GZIP_BUDGET = 30 * 1000, 9 * 1000        # bytes, raw and gzipped, both files together (about 27,500 and 7,700): their own limits, because the editor's eagerly loaded scripts are at 92,400 of their 94,000 gzipped and every other new part had to be loaded on demand; a player who never tests a map downloads none of it
 GAME_MENU_FILES = ("game_menu.js", "game_menu.css")        # the game page's settings menu (docs/GAME_MENU.md): beside web/shell.html, not in web/front; its script and its style are fetched together once the game runs (web/shell.html, antsLoadGameMenu)
 GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 41 * 1000, 12 * 1000        # bytes, raw and gzipped, both files together (about 40,000 and 11,600; raised from 40,000 and 11,000 on purpose for the review's fixes: a question that never leaves by itself, the pointer lock heard on the window, the keys of the panel only, focus back to the button, the Controls grid): their own limits, not part of the folder's budget above or of the page's first load; a player who never opens the menu downloads them idle, after the game runs
+SHAPES_FILE = "shapes.js"        # the one table of the picture's shapes (docs/PLAY_IN_BROWSER.md): beside web/shell.html, not in web/front; both the game page and the front page load it before their own code
+SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 6 * 1000, 2500        # bytes, raw and gzipped (about 4,600 and 1,900): a table and five small functions, so a new shape's row does not need a bigger cap, and nothing else belongs in it
 GAME_SCRIPTS = ("test_game.js",)        # the game page's side of Play this map (web/shell.html loads it with the other scripts of this folder): not the lobby's, not the editor's
 GAME_BUDGET, GAME_GZIP_BUDGET = 14 * 1000, 5 * 1000        # bytes, raw and gzipped (about 10,700 and 4,100): its own limits, because it is neither the editor's nor the lobby's, and the game page downloads it for every visit
 SUBMIT_LAZY = ("mapmaker_submit.js",)        # the map maker's script that is loaded only when a player sends a map or looks at My submissions (web/front/mapmaker_app.js, withSubmit): not in the page's own list of scripts, so apart from the budget below
@@ -330,6 +334,15 @@ class TheFolder(unittest.TestCase):
         self.assertLess(zipped, GAME_MENU_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
         for name in GAME_MENU_FILES:
             self.assertNotIn(name, os.listdir(FRONT), "the menu is not in web/front, whose folder has its own cap")
+
+    def test_the_shape_table_is_one_small_script_with_a_cap_of_its_own(self):
+        import gzip
+        data = read_bytes("web", SHAPES_FILE)
+        self.assertLess(len(data), SHAPES_BUDGET, "the shape table's script is %d bytes" % len(data))
+        self.assertLess(len(gzip.compress(data, 9)), SHAPES_GZIP_BUDGET, "and %d bytes gzipped" % len(gzip.compress(data, 9)))
+        self.assertNotIn(SHAPES_FILE, os.listdir(FRONT), "the table is not in web/front, whose folder has its own cap")
+        for page in ("shell.html", "lobby.html"):
+            self.assertIn('<script src="%s"></script>' % SHAPES_FILE, read("web", page), "both pages load it, as a script of their own")
 
     def test_the_font_is_a_byte_copy_of_the_games_own_with_its_licence_beside_it(self):
         for name in FONT_FILES:
@@ -727,7 +740,7 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)
 
     def test_every_img_has_the_size_of_its_file(self):
-        tags = re.findall(r"<img [^>]*>", self.page)
+        tags = [tag for tag in re.findall(r"<img [^>]*>", self.page) if COFFEE_IMAGE not in tag]               # (the pictures of web/front/; the coffee button is checked with the links that leave the page)
         sources = sorted(re.search(r'src="front/([^"?]+)', tag).group(1) for tag in tags)
         self.assertEqual(sources, ["logo.png", "preview_treasure.png", "qh_power.png", "qh_quickhelp.png"])      # (the logo, the map's picture and the two help sheets; the ants are not <img>: the style draws them from ants.png, TheRosterAnts)
         for tag in tags:
@@ -747,7 +760,7 @@ class ThePageUsesTheArt(unittest.TestCase):
 
     def test_nothing_is_loaded_from_another_site(self):
         scripts = re.findall(r'<script[^>]*\bsrc="([^"]*)"', self.page)
-        self.assertEqual(scripts, ["front/" + name for name in SCRIPT_FILES] + ["map_files.js"])      # (the folder's scripts, in this order, then the game page's file-fetching script (web/map_files.js, warm()), and no other)
+        self.assertEqual(scripts, ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js"])      # (the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
         self.assertEqual(len(re.findall(r"<script\b", self.page)), len(scripts) + 1)       # (and the one inline script that is the page's)
         self.assertNotRegex(self.page, r'<script[^>]*type="module"')
         for name in SCRIPT_FILES:
@@ -758,11 +771,15 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertNotRegex(self.page, r'<link[^>]*href="(?:https?:)?//')
         self.assertNotRegex(self.page, r"url\(\s*[\"']?(?:https?:)?//")
         self.assertNotIn("@import", self.page)
-        self.assertNotRegex(self.page, r"<(?:img|iframe|video|audio|source)[^>]*src=\"(?:https?:)?//")
+        self.assertNotRegex(self.page, r"<(?:iframe|video|audio|source)[^>]*src=\"(?:https?:)?//")
+        outside = re.findall(r"<img[^>]*src=\"((?:https?:)?//[^\"]*)\"[^>]*>", self.page)               # (the one picture from another site: the owner's Buy Me a Coffee button, with the attribute that the page's COEP needs; docs/PLAY_IN_BROWSER.md, web/legal.html)
+        self.assertEqual(outside, [COFFEE_IMAGE])
+        self.assertRegex(self.page, r'<img[^>]*src="' + re.escape(COFFEE_IMAGE) + r'"[^>]*crossorigin="anonymous"')
         for target in re.findall(r"url\(\s*[\"']?([^\"')]+)", self.style):                  # (the style's addresses: a file of this folder, its address may end in ?v=, or the select's own arrow, drawn in the page)
             self.assertTrue(target.startswith("data:image/svg+xml,") or (target.startswith("front/") and target[len("front/"):].split("?")[0] in os.listdir(FRONT)), target)
         for url in set(re.findall(r'href="(https?://[^"]+)"', self.page)):                  # (the links that leave the page are the repository's)
-            self.assertTrue(url.startswith("https://github.com/dchadd427/ants-cross-platform") or url == DISCORD_LINK, url)
+            self.assertTrue(url.startswith("https://github.com/dchadd427/ants-cross-platform") or url in (COFFEE_LINK, DISCORD_LINK), url)
+        self.assertIn('<a href="' + COFFEE_LINK + '" target="_blank" rel="noopener noreferrer"><img src="' + COFFEE_IMAGE + '"', self.page)
 
     def test_the_map_info_lines_are_the_ones_of_the_level_files(self):
         maps = self.maps()
@@ -789,7 +806,7 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn('<img id="preview" src="front/preview_%s.png" alt="The map: %s"' % (default, default.capitalize()), self.page)       # (the picture that the page opens with is the default map's)
 
     def test_the_pictures_that_are_not_seen_at_once_load_lazily_and_the_ones_that_are_do_not(self):
-        tags = re.findall(r"<img [^>]*>", self.page)
+        tags = [tag for tag in re.findall(r"<img [^>]*>", self.page) if COFFEE_IMAGE not in tag]               # (the pictures of web/front/; the coffee button is checked with the links that leave the page)
         lazy = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' in t)
         at_once = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' not in t)
         self.assertEqual(lazy, {"qh_quickhelp.png", "qh_power.png"})                       # the two help sheets (behind "How it works")

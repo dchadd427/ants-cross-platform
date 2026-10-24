@@ -15,7 +15,6 @@
     'use strict';
 
     var POLL_MS = 250;
-    var SHAPES = ['4:3', '16:10', '16:9', '21:9']; // the places of the picture's choices (game_menu.hpp kPicture: the words of the row, in this order)
     var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
     var CSS_FILE = 'game_menu.css';
     var USED = /^(Tab|Enter| |Spacebar|Arrow(Left|Right|Up|Down)|Home|End)$/; // the keys of the panel's own controls (Esc is handled before)
@@ -35,6 +34,7 @@
 
     function forPage(page) {
         var doc = page.doc, win = page.win || (doc && doc.defaultView) || {}, stage = page.stage, canvas = page.canvas;
+        var SHAPES = page.shapes.names(); // the places of the picture's choices: the page's one table of shapes (web/shapes.js; game_menu.hpp's kPicture row is made from the game's, in the same order)
         var info = null; // the game's table, once read
         var scrim = null, panel = null, ask = null, state = null;
         var dimmed = [], opener = null, opening = false, styleReady = false, styleFailed = 0, wasLocked = false, behind = [], removers = [], shown = { askKind: -1 };
@@ -102,15 +102,13 @@
             }
             if (menu && menu.parentNode) insertAfter(makeButton('gm-wide', 'settings-btn'), menu);
             if (bar) bar.insertBefore(makeButton('gm-narrow', 'settings-btn-narrow'), bar.firstChild);
-            var fs = makeButton('gm-fs', 'settings-btn-fs');
-            stage.appendChild(fs);
         }
 
         function refresh() {
-            var up = available(), fs = !!page.isFullscreen && page.isFullscreen();
+            var up = available();
             for (var i = 0; i < buttons.length; i++) {
-                var b = buttons[i], mine = b.className.indexOf('gm-fs') >= 0;
-                show(b, styleReady && ready() && !(mine && !fs));
+                var b = buttons[i];
+                show(b, styleReady && ready());
                 b.disabled = !up;
                 b.title = up ? 'Settings: sound, picture, controls and Leave game' : 'Not now';
             }
@@ -468,5 +466,5 @@
         return { open: open, close: close, isOpen: function () { return !!state; }, refresh: refresh, buttons: buttons, onKey: onKey, setStyleReady: function (v) { styleReady = v; refresh(); } };
     }
 
-    return { forPage: forPage, POLL_MS: POLL_MS, SHAPES: SHAPES, CONTROLS: CONTROLS };
+    return { forPage: forPage, POLL_MS: POLL_MS, CONTROLS: CONTROLS };
 });

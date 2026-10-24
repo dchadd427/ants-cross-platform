@@ -13,6 +13,9 @@
 const fs = require('fs');
 const nodePath = require('path');
 
+// the pages load web/shapes.js, the one table of the shapes, before their own code: it is the global AntsShapes of the code that is run here (a function made by `new Function` reads the globals)
+globalThis.AntsShapes = require(nodePath.resolve(__dirname, '..', '..', 'web', 'shapes.js'));
+
 const NEW_KEY = 'ants.aspect.v2';
 const OLD_KEY = 'ants.aspect';
 
@@ -71,6 +74,7 @@ function element(attributes) {
         setAttribute(name, value) { el.attributes[name] = String(value); },
         addEventListener(type, fn) { el.listeners[type] = fn; },
         classList: { add() {}, contains() { return false; } },
+        style: { props: {}, setProperty(name, value) { this.props[name] = value; } },
     };
     return el;
 }
@@ -140,6 +144,7 @@ function runShell(path, search, stored, options) {
     result.win = win;
     result.holdsCalls = holdsCalls;
     result.stage = stage;
+    result.body = body;
     result.buttons = buttons;
     result.viewBar = viewBar;
     result.events = events;
@@ -148,6 +153,11 @@ function runShell(path, search, stored, options) {
     Object.defineProperty(result, 'tags', { get() { return buttons.filter((b) => !b.tag.hidden).map((b) => b.attributes['data-aspect']).join('+'); } });
     return result;
 }
+// what the slot's CSS reads of each shape: its steps (the shape in the smallest whole numbers) and the widest the slot gets (the classic picture is not shown wider than 960 CSS pixels)
+const SLOT_VARS = {
+    '4:3': { '--ar-w': '4', '--ar-h': '3', '--stage-max': '960px' }, '16:10': { '--ar-w': '8', '--ar-h': '5', '--stage-max': '1280px' },
+    '16:9': { '--ar-w': '16', '--ar-h': '9', '--stage-max': '1280px' }, '21:9': { '--ar-w': '7', '--ar-h': '3', '--stage-max': '1280px' },
+};
 const checkedString = (shape) => SHELL_SHAPES.map((s) => s + '=' + (s === shape ? 'true' : 'false')).join(' ');
 
 // web/lobby.html.
@@ -256,6 +266,7 @@ try {
         expect('shell.html, ' + label + ' (where it came from)', r.source, source);
         expect('shell.html, ' + label + ' (--aspect for the game)', r.args.slice(-2).join(' '), '--aspect ' + aspect);
         expect('shell.html, ' + label + ' (the stage)', r.stage.attributes['data-aspect'], aspect);
+        expect('shell.html, ' + label + ' (the slot\'s custom properties)', JSON.stringify(r.body.style.props), JSON.stringify(SLOT_VARS[aspect]));
         expect('shell.html, ' + label + ' (the selector shows it)', r.checked, checkedString(aspect));
         expect('shell.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('shell.html, the key', r.key, NEW_KEY);
@@ -346,7 +357,8 @@ try {
         expect(what + ': the old key is untouched', Object.prototype.hasOwnProperty.call(r.storage.data, OLD_KEY), false);
         expect(what + ': the page does not reload, nothing is asked', r.win.assigned.length + ' ' + r.win.asked.length, '0 0');
         expect(what + ': the picture is the new shape', r.now(), shape);
-        expect(what + ': the stage has the shape (the box\'s shape in CSS)', r.stage.attributes['data-aspect'], shape);
+        expect(what + ': the stage names the shape (data-aspect: what the tests and the menu read; the CSS takes the custom properties below)', r.stage.attributes['data-aspect'], shape);
+        expect(what + ': the slot\'s ratio and widest width, as custom properties of the table\'s rows (what the CSS reads)', JSON.stringify(r.body.style.props), JSON.stringify(SLOT_VARS[shape]));
         expect(what + ': the selector shows it', r.checked, checkedString(shape));
         expect(what + ': a game that has not started starts with it (--aspect)', r.args.slice(-2).join(' '), '--aspect ' + shape);
         expect(what + ': the box is laid out again, and the game\'s window system told (a forced layout)', JSON.stringify(r.relayoutCalls), '[true]');

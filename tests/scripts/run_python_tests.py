@@ -14,8 +14,11 @@ import concurrent.futures
 import glob
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -48,9 +51,30 @@ def start_order(work):
     return sorted(range(len(work)), key=lambda i: -COSTS.get(work[i][0], 0))
 
 
-def run_unit(label, dotted, root):
+def node_shim(folder):
+    """Makes the `node` that the tests find first on the PATH: the node of this machine, started with --single-threaded. Returns the folder, or None (no node, or Windows, where the suites do not run).
+
+    Why: a node 24 (V8 13.6; the one that macOS CI has) that EXITS (process.exit, or an uncaught exception) while one of V8's background threads is compiling with Maglev can hang forever: the main thread
+    waits in node::Environment::Exit (DisposePlatform, uv_thread_join) for the worker threads, and a worker waits in Heap::AllocateRaw (CollectionBarrier::AwaitCollectionBackground) for a garbage collection
+    that only the main thread can run. It happens to a run that fails early and quickly, which is what the checks of the broken copies do (hundreds of them), on 1 in 10 of some of them, and no
+    timeout inside the process can help (the exit has stopped its JavaScript, and its watchdog thread with it). With --single-threaded V8 starts no background task, so no worker can wait for the main thread.
+    The flag cannot go in NODE_OPTIONS (V8 options are refused there), so the tests get a `node` that adds it.
+    """
+    real = shutil.which("node")
+    if not real or os.name == "nt":
+        return None
+    path = os.path.join(folder, "node")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write('#!/bin/sh\nexec %s --single-threaded "$@"\n' % shlex.quote(real))
+    os.chmod(path, 0o755)
+    return folder
+
+
+def run_unit(label, dotted, root, shim=None):
     started = time.monotonic()
     env = dict(os.environ)
+    if shim:
+        env["PATH"] = shim + os.pathsep + env.get("PATH", "")
     env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
     done = subprocess.run([sys.executable, "-m", "unittest", dotted], capture_output=True, text=True, cwd=root, env=env)
     text = done.stdout + done.stderr
@@ -77,8 +101,9 @@ def main(argv):
         return 0
     started = time.monotonic()
     order = start_order(work)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(args.jobs, len(work))) as pool:
-        done = list(pool.map(lambda i: run_unit(work[i][0], work[i][1], root), order))
+    with tempfile.TemporaryDirectory() as shim_folder, concurrent.futures.ThreadPoolExecutor(max_workers=min(args.jobs, len(work))) as pool:
+        shim = node_shim(shim_folder)
+        done = list(pool.map(lambda i: run_unit(work[i][0], work[i][1], root, shim), order))
     results = [None] * len(work)
     for i, r in zip(order, done):
         results[i] = r
