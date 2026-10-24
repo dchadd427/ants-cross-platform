@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.124 - 2026-10-24 - Three more picture shapes, and one dropdown to pick them
+
+**For players:**
+- **Three more picture shapes:** 3:2 (960 x 640, tablets and Surface-style laptops), 20:9 (1200 x 540, phones held sideways) and 32:9 (1920 x 540, super-ultrawide monitors). The list is now Classic 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9. A wider picture shows more of the map at the first zoom (32:9 shows about 2.3 times what 16:9 does) and less when zoomed all the way out; everybody picks their own shape and zooming out is free, so no match changes.
+- **One dropdown instead of the buttons:** the Picture control under the game, in the front page's Picture row, in the settings menu (Esc: the arrow keys change the picture of the running game at once and the menu stays open) and in a recording's bar is a dropdown that lists each shape with its size. A quiet line under it, "16:10 fills your screen", names the shape closest to your screen. On an upright phone the dropdown has a line of its own and the page no longer scrolls sideways.
+- **The first visit** counts the new shapes too: a 3:2 tablet starts in 3:2, a 3840 x 1080 monitor in 32:9, a phone held sideways in 20:9. Anything you picked, and `?aspect=` in the address (which also takes `3:2`, `20:9` and `32:9`), still wins.
+- On a wide monitor the 32:9 picture is shown at its real size: the page's game area is no longer cut at 1280 pixels for it.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (what a player sees, not what the match is: nobody's shape is sent to the server or to the other players).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/8bee7cc2...CODE_COMMIT)
+
 ## v0.12.123 - 2026-10-24 - The Map Maker draws each tile the way the game does
 
 **For players:**
@@ -579,27 +591,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/28773bfd...366d3ab8), [the checker per kind](docs/MAP_FORMAT.md#the-checker-per-kind)
 
-## v0.12.67 - 2026-10-16 - 187 mode: the out-of-ants line, the start line and the results page on screen
+## Older versions (v0.12.67 and before)
 
-**For players:**
-- **187 on screen.** In a 187 game (food-free, kills decide; the room leader picks it under Game type) the chat log begins with "Game started! Most kills wins." and says "<Name> (<Color>) is out of ants!" once, to every player, when a team has no ant, egg or hatch left. The results page has its own look: the headings Kills, Ants lost and Ants left, and a line at the top that says how the match ended ("<Name> is the last colony standing!", "Time is up. The most kills wins!" or "Nobody is left. The most kills wins!"), also on the 4:3 page, where it takes two lines. Games of the original's rules look as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1a5da9ba...348e8741), [187 in the rules](docs/GAMEPLAY.md)
-
-## v0.12.66 - 2026-10-16 - Lobby: the leader can pick the game type (187)
-
-**For players:**
-- **The lobby has a Game type control.** The leader picks the game type from a list under the map (a drop-down on a computer, a bottom sheet on a phone): Highest score, the original game, or 187, a fight with no food where the most kills wins. The room shows a 187 tag by its name, and the other players see a read-only "Game type" line that changes as soon as the leader picks. A new room starts with the leader's last choice in that browser.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a011f5d6...cb6892ad), [Game type in the lobby](docs/PLAY_IN_BROWSER.md#game-type)
-
-## v0.12.65 - 2026-10-16 - Extended maps: the map file version 9 in the core
-
-**For players:**
-- Under the hood: the map code and the map tool now know a second kind of map, the Extended map (a new map file version for bigger and taller maps), and can convert a map between the two kinds; nothing changes in the game or on the site, and the game still reads the classic maps only.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c7c46030...895da29b), [the Extended map](docs/MAP_FORMAT.md#version-9-the-extended-map)
-
-## Older versions (v0.12.64 and before)
-
-Every release before v0.12.65, and the long notes of v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.68, and the long notes of v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
