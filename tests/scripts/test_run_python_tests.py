@@ -8,6 +8,7 @@ on the REAL tests/scripts the classes that it runs are exactly the classes that 
 import contextlib
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -129,6 +130,22 @@ class Wrapper(unittest.TestCase):
         self.assertLess(began["test_c.py"], began["test_a.py"], "the group with a cost starts first")
         self.assertLess(began["test_a.py"], began["test_b.py"], "the others keep the order of the files")
         self.assertEqual([line.split()[0] for line in out.getvalue().splitlines() if line.startswith("test_")], ["test_a.First", "test_b.Second", "test_c.Long"])
+
+    @unittest.skipUnless(shutil.which("node") and os.name != "nt", "node is not installed (or this is Windows, where the suites do not run)")
+    def test_the_node_of_the_tests_is_started_single_threaded(self):
+        """a node 24 that exits while a background thread compiles with Maglev can hang for ever (see node_shim in run_python_tests.py): the tests get a node that starts with --single-threaded, so that V8 has no background thread to wait for the main one"""
+        self.add("test_node.py", "import json, shutil, subprocess, unittest\nclass Node(unittest.TestCase):\n    def test_flag(self):\n"
+                 "        out = subprocess.run([shutil.which('node'), '-p', 'JSON.stringify(process.execArgv)'], capture_output=True, text=True).stdout\n"
+                 "        self.assertIn('--single-threaded', json.loads(out))\n")
+        result = self.run_tool()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(shutil.which("node") and os.name != "nt", "node is not installed (or this is Windows)")
+    def test_the_shim_runs_the_real_node_with_every_argument(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(rpt.node_shim(folder), folder)
+            done = subprocess.run([os.path.join(folder, "node"), "-p", "process.execArgv.includes('--single-threaded') + '|' + process.argv.slice(1).join()", "x y", "z"], capture_output=True, text=True)
+            self.assertEqual(done.stdout.strip(), "true|x y,z", done.stderr)
 
 
 class TheRealTests(unittest.TestCase):
