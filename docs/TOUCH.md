@@ -54,7 +54,7 @@ player's cannot bring it back), so the page only keeps the browser out of the wa
 - `navigator.vibrate` is feature-detected and never required (Android's Chrome buzzes only after the page has had a first tap; iOS has none);
 - the Fullscreen button is as before: the browser's fullscreen where there is the API, the page's own (with a button to leave it) where there is none (Safari on an iPhone).
 
-**Settings.** A phone has no Esc: the **Settings** button under the picture opens the [settings menu](GAME_MENU.md) (sound, picture, controls, Leave game) over the game. While it is up no finger is the game's (the game cancels the touch when it opens and ignores fingers until it closes), and every button of it is 44 px high.
+**Settings.** A phone has no Esc: the **Settings** button under the picture (there is none in fullscreen: leave it first) opens the [settings menu](GAME_MENU.md) (sound, picture, controls, Leave game) over the game. While it is up no finger is the game's (the game cancels the touch when it opens and ignores fingers until it closes), and every button of it is 44 px high.
 
 Never relied on: an edge swipe (the system's back gesture on Android and iOS).
 

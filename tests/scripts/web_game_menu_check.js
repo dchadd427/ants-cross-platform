@@ -4,7 +4,7 @@
 //   * the rows: every row of the table is drawn once, in its section, with its label, its hint and its NEW tag, and a row that is not in the table is not drawn; a recording has no Game section; the Controls list
 //     is the view-only list of a computer or of a touch screen; the page's own rows (Fullscreen, Picture shape, Fullscreen mouse) use the page's functions and buttons;
 //   * the values: a slider shows the game's value and changes it (Master volume while it is dragged, the others at the release), a switch and a choice change it, a button does its act, and a change is read back;
-//   * the way in and out: the buttons (header, under the picture, over the picture in fullscreen, the replay's bar) show only when the game runs and the style is there and are off when a dialog needs its answer;
+//   * the way in and out: the buttons (header, under the picture, the replay's bar; none over the picture in fullscreen) show only when the game runs and the style is there and are off when a dialog needs its answer;
 //     Esc's request opens it; it opens inside the stage, the page behind it is inert, the focus goes to Resume, Tab stays inside, Esc closes it (once: a held key does nothing), a click on the dimmed area does not,
 //     the focus goes back to the canvas, the game is told (and the keys never reach the page's other listeners); the pointer lock is let go and asked for again; a dialog that needs its answer closes it;
 //   * Leave game: asks in the words of what it will do (a drop out, a forfeit, the end of a game), Esc and Stay stay, only a recording asks nothing, "Back to the matches" in a recording;
@@ -257,19 +257,18 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('the script defines the function that the game calls for Esc', typeof p.win.antsGameMenuAsk === 'function');
     ok('the style is fetched with the script (one link)', p.doc.links.length === 1 && p.doc.links[0].rel === 'stylesheet' && p.doc.links[0].href === 'game_menu.css?v=7');
     const all = p.qa('.gm-btn');
-    expect('a button in the header, one over the picture for fullscreen (in the stage), one under it', all.map((b) => b.id), ['settings-btn', 'settings-btn-fs', 'settings-btn-narrow']);
+    expect('a button in the header, one under the picture, none over it', all.map((b) => b.id), ['settings-btn', 'settings-btn-narrow']);
     expect('the header button stands right after Menu', p.header.children.map((c) => c.id), ['menu-btn', 'settings-btn']);
     expect('the narrow one is the first thing of the bar under the picture', p.bar.children[0].id, 'settings-btn-narrow');
-    ok('the fullscreen one is a child of the stage (it goes fullscreen with it)', p.stage.contains(p.q('#settings-btn-fs')) && p.q('#settings-btn-fs').parentNode === p.stage);
+    ok('none is in the stage, the element that goes fullscreen: nothing is laid over the game\'s picture', all.every((b) => !p.stage.contains(b)) && !p.q('#settings-btn-fs'));
     ok('all hide until the style is there', all.every((b) => b.hidden && b.style.display === 'none'));
     ok('every one is a real button with the page\'s look and the word Settings', all.every((b) => b.tagName === 'button' && b.type === 'button' && /(^| )btn( |$)/.test(b.className) && b.textContent === 'Settings' && b.getAttribute('aria-haspopup') === 'dialog'));
     p.styleLoaded();
     p.poll();
     expect('with the style and a running game the header and the narrow button show', [p.q('#settings-btn').hidden, p.q('#settings-btn-narrow').hidden], [false, false]);
-    ok('the fullscreen one stays hidden outside fullscreen', p.q('#settings-btn-fs').hidden && p.q('#settings-btn-fs').style.display === 'none');
     p.state.fullscreen = true;
     p.poll();
-    ok('...and shows in fullscreen', !p.q('#settings-btn-fs').hidden && p.q('#settings-btn-fs').style.display === '');
+    ok('fullscreen makes no button over the picture', !p.q('#settings-btn-fs') && all.every((b) => !p.stage.contains(b)));
     p.state.fullscreen = false;
     p.state.ready = false;
     p.poll();
