@@ -31,6 +31,8 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - On a short screen the Hide button sits on the line of the words, so the bar is lower; a map under 300 pixels high shows the smaller map of the whole map, without its caption, so that it never reaches into the bar.
 
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9ebb43d9...a5c4e8c8)
+
 ## v0.12.125 - 2026-10-24 - Replays can carry their map
 
 **For players:**
