@@ -219,6 +219,7 @@ def computer(p, args, check):
     tab = p.tab
     p.open_game(LOCAL, 1280, 800)
     check(p.start_match(), "a match is running (the quick help's Enter and the setup screen's Enter)")
+    tab.ev("window.__lockSeen = false; window.addEventListener('pointerlockchange', function () { if (document.pointerLockElement) window.__lockSeen = true; }, true); 1")      # (the check's own witness that the browser grants a lock, however quickly the panel lets go of it: it is put in before the panel's own listener, which is made when it opens)
     wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown") and not p.buttons()["settings-btn"]["disabled"], 10)       # (the page polls the game every quarter second: shown and on are two moments)
     b = p.buttons()
     check(b.get("settings-btn", {}).get("shown") and not b["settings-btn"]["disabled"] and not b["settings-btn-narrow"]["shown"] and not b["settings-btn-fs"]["shown"],
@@ -282,9 +283,13 @@ def computer(p, args, check):
     check(p.state()["open"], "...and the next Esc opens it again")
 
     # ---- a pointer lock that comes while the panel is up (the page's own handler of the event stops it before the panel's: the panel lets it go itself)
-    tab.ev("window.__lockSeen = false; window.addEventListener('pointerlockchange', function () { if (document.pointerLockElement) window.__lockSeen = true; }, true); 1")      # (the check's own witness that the browser did grant the lock, however quickly the panel lets go of it)
-    tab.call("Runtime.evaluate", {"expression": "document.getElementById('canvas').requestPointerLock(); 1", "userGesture": True, "returnByValue": True})
-    engaged = wait_for(lambda: tab.ev("window.__lockSeen === true"), 5, 0.05)       # (granted a moment after the call: a state that is waited for, not a time that is slept)
+    tab.ev("window.__lockSeen = false; 1")
+    engaged = None
+    for _ in range(10):                                                              # (the browser refuses a lock that is asked for just after one was let go: it is asked for again, with a gesture, until it is granted)
+        tab.call("Runtime.evaluate", {"expression": "document.getElementById('canvas').requestPointerLock(); 1", "userGesture": True, "returnByValue": True})
+        engaged = wait_for(lambda: tab.ev("window.__lockSeen === true"), 0.7, 0.05)    # (granted a moment after the call: a state that is waited for, not a time that is slept)
+        if engaged:
+            break
     released = wait_for(lambda: p.state()["locked"] is None, 5, 0.05)               # (...and let go of by the panel within its poll)
     s = p.state()
     check(bool(engaged) and s["open"] and released and s["locked"] is None, "a lock that the page is given while the panel is up is let go (granted %s, locked %s)" % (bool(engaged), s["locked"]))
