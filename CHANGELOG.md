@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.124 - 2026-10-24 - The Map Maker draws each tile the way the game does
+## v0.12.123 - 2026-10-24 - The Map Maker draws each tile the way the game does
 
 **For players:**
 - **The Map Maker now draws each tile the way the game does.** A map keeps a list of names for its tiles, and the game draws the picture that the name says; the editor used to draw the picture of the tile's number. So a pile of jacks showed as a pink eraser and a purple ring as a yellow one on EatClanMap, and the same shift is in 121 library maps. They now look as they do in the game.
