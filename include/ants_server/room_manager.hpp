@@ -207,7 +207,7 @@ public:
 
     const MapStore& store() const noexcept { return store_; }
     MapStore& mutable_store() noexcept { return store_; }      // (the main loop gives it the approved maps of the players when they change: docs/MAP_SUBMISSIONS.md)
-    /// Whether a room has the map of this file name as its map or as its plan's map (a test map that a room has is kept: SubmissionStore::set_test_map_in_use)
+    /// Whether a room has the map of this file name as its map or as its plan's map (a test map that a room has is kept: TestMapStore::set_in_use)
     bool map_in_use(const std::string& file_name) const;
     /// What a lobby room asks of this server (room.hpp: LobbyServices): choosing a map by name (every map of the store: the maps folder and the community folder; the --demo-maps and --demo-map keep their
     /// spelling), loading a map, a place for a match. Public for the tests (tests/test_server/test_map_list.cpp).

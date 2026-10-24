@@ -1,0 +1,341 @@
+{
+ "note": "Mutants of the test maps of the Map Maker's 'With other players' (src/ants_server/test_maps.cpp, test_maps_http.cpp and their headers; the refusals, the findings, the address and the checking window that the door shares with the real submissions door are upload_common.cpp, whose mutants are tests/data/submissions_mutants.json) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/test_maps_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by test_test_maps: each breaks one rule of docs/MAP_SUBMISSIONS.md ('Test maps'): the canonical file, the limits (an hour for an address and for all, the checking window and its time, the count, the held bytes, the maps of one address, what a room has, six hours), the one route and its method, the body limit, the folder's modes and what the start wipes, the name that is made of a typed one, the size limit of a room. Not listed on purpose: the draw of an id that is held already (it is random, so no test can make it happen: a second lock against a write over a held file), the allowance of nginx (tests/scripts/test_nginx_test_maps.py holds the text and runs the blocks), and the page (tests/data/rematch_mutants.json). The room that keeps no replay on a test map has two locks that each make the other equivalent (RoomManager::create_room and Room::replay_begin): test_room_records_a_test_match breaks the name test they share (test_server S3.163b).",
+ "defaults": {
+  "build": "test_test_maps",
+  "test": "./build/tests/test_server/test_test_maps"
+ },
+ "mutants": [
+  {
+   "id": "test_map_kept_as_sent",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    const std::string& canonical = rewritten.payload;\n    const auto* kept =",
+   "new": "    const std::string& canonical = in.bytes;\n    const auto* kept ="
+  },
+  {
+   "id": "test_map_online_limit_not_asked",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (!OnlineLimits::allows(static_cast<uint64_t>(rows * columns))) {",
+   "new": "    if (false) {"
+  },
+  {
+   "id": "test_map_one_team_accepted",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (players < 2) {\n        out.fail = make_failure(422, \"map_fails_checks\", \"This map does not pass the checks, so it cannot be played.\");",
+   "new": "    if (players < 0) {\n        out.fail = make_failure(422, \"map_fails_checks\", \"This map does not pass the checks, so it cannot be played.\");"
+  },
+  {
+   "id": "test_map_per_address_cap_removed",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    while (!in.address.empty() && mine >= kMaxTestPerAddress) {",
+   "new": "    while (false && mine >= kMaxTestPerAddress) {"
+  },
+  {
+   "id": "test_map_tilde_allowed_in_name",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "c == '!' || c == '&' || c == '(' || c == ')' || c == ',';",
+   "new": "c == '!' || c == '&' || c == '(' || c == ')' || c == ',' || c == '~';"
+  },
+  {
+   "id": "test_map_title_not_cut",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (filtered.size() > kMaxTestStemChars) filtered.resize(kMaxTestStemChars);\n",
+   "new": ""
+  },
+  {
+   "id": "test_map_dropped_though_new",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "        if (now - it->created_at < kTestMinKeepS) continue;\n",
+   "new": "        if (false && now - it->created_at < kTestMinKeepS) continue;\n"
+  },
+  {
+   "id": "test_map_dropped_of_another_address",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "        if (!only_owner.empty() && it->owner != only_owner) continue;\n",
+   "new": "        if (false && !only_owner.empty() && it->owner != only_owner) continue;\n"
+  },
+  {
+   "id": "test_map_ttl_never_ends",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "if (now - it->created_at >= kTestMapTtlS) {",
+   "new": "if (now - it->created_at >= kTestMapTtlS * 1000) {"
+  },
+  {
+   "id": "test_map_folder_world_readable",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    fs::permissions(test_dir, fs::perms::owner_all, fs::perm_options::replace, ec);\n",
+   "new": ""
+  },
+  {
+   "id": "test_map_file_world_readable",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    fs::permissions(path, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, ec);          // (0600)\n",
+   "new": ""
+  },
+  {
+   "id": "test_map_storage_not_asked",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return refuse(503, \"storage_full\", \"The server has no room for more maps right now. Please try again later.\");\n\n    std::string real_kind;",
+   "new": "    if (false && (ec || space.available < config_.min_free_bytes + in.bytes.size())) return refuse(503, \"storage_full\", \"The server has no room for more maps right now. Please try again later.\");\n\n    std::string real_kind;"
+  },
+  {
+   "id": "test_map_kind_claim_believed",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    std::string real_kind;\n    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n\n    // What is kept",
+   "new": "    std::string real_kind = in.kind;\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n\n    // What is kept"
+  },
+  {
+   "id": "test_map_check_window_ignored",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n\n    // What is kept",
+   "new": "    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;\n\n    // What is kept"
+  },
+  {
+   "id": "test_map_size_not_capped",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, \"too_large\", \"This map file is bigger than a map of this kind may be.\");\n    std::error_code ec;",
+   "new": "    std::error_code ec;"
+  },
+  {
+   "id": "test_map_title_cap_46",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "constexpr size_t kMaxTestStemChars = 45;",
+   "new": "constexpr size_t kMaxTestStemChars = 46;"
+  },
+  {
+   "id": "test_map_count_cap_removed",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "while (kept_.size() >= kMaxTestMaps ||",
+   "new": "while (kept_.size() >= kMaxTestMaps * 1000 ||"
+  },
+  {
+   "id": "test_map_held_bytes_cap_removed",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": " || held_bytes() + canonical.size() > config_.max_held_bytes) {",
+   "new": " || false) {"
+  },
+  {
+   "id": "test_map_held_bytes_cap_is_as_much_as",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "held_bytes() + canonical.size() > config_.max_held_bytes",
+   "new": "held_bytes() + canonical.size() >= config_.max_held_bytes"
+  },
+  {
+   "id": "test_map_held_bytes_count_nothing",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    for (const Kept& m : kept_) total += m.map.size;",
+   "new": "    for (const Kept& m : kept_) total += 0 * m.map.size;"
+  },
+  {
+   "id": "test_map_held_bytes_default_ten_times_more",
+   "file": "include/ants_server/test_maps.hpp",
+   "old": "uint64_t max_held_bytes{64ull << 20};",
+   "new": "uint64_t max_held_bytes{640ull << 20};"
+  },
+  {
+   "id": "test_map_dropped_though_a_room_has_it",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "        if (in_use_ && in_use_(it->map.name)) continue;\n",
+   "new": ""
+  },
+  {
+   "id": "test_map_start_folder_not_tightened",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    fs::permissions(config_.dir, fs::perms::owner_all, fs::perm_options::replace, ec);          // (0700",
+   "new": "    // fs::permissions(config_.dir, fs::perms::owner_all, fs::perm_options::replace, ec);          // (0700"
+  },
+  {
+   "id": "test_map_closed_store_takes_maps",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (!open_) return refuse(503, \"test_maps_off\"",
+   "new": "    if (false) return refuse(503, \"test_maps_off\""
+  },
+  {
+   "id": "test_map_unknown_kind_taken",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (in.kind != \"classic\" && in.kind != \"extended\") return refuse(400, \"bad_kind\"",
+   "new": "    if (false) return refuse(400, \"bad_kind\""
+  },
+  {
+   "id": "test_map_empty_body_taken",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "    if (in.bytes.empty()) return refuse(400, \"not_a_map\"",
+   "new": "    if (false) return refuse(400, \"not_a_map\""
+  },
+  {
+   "id": "test_map_name_in_the_file_name",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "(\"test-\" + id8 + \".lvl\")).string();",
+   "new": "(stem + \"-\" + id8 + \".lvl\")).string();"
+  },
+  {
+   "id": "test_map_slash_allowed_in_name",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "c == '!' || c == '&' || c == '(' || c == ')' || c == ',';",
+   "new": "c == '!' || c == '&' || c == '(' || c == ')' || c == ',' || c == '/';"
+  },
+  {
+   "id": "test_map_wipe_takes_every_file",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "        if (!(is_store_file_name(name) || name.compare(0, 5, \".tmp-\") == 0)) continue;\n",
+   "new": ""
+  },
+  {
+   "id": "test_map_wipe_takes_links_and_folders",
+   "file": "src/ants_server/test_maps.cpp",
+   "old": "        if (fs::symlink_status(it->path(), status_ec).type() != fs::file_type::regular) continue;\n",
+   "new": ""
+  },
+  {
+   "id": "test_map_classic_limit_is_the_doors",
+   "file": "include/ants_server/test_maps.hpp",
+   "old": "kClassicBytes = 512u * 1024u;",
+   "new": "kClassicBytes = 2u * 1024u * 1024u;"
+  },
+  {
+   "id": "test_door_body_limit_is_4_mib",
+   "file": "include/ants_server/test_maps.hpp",
+   "old": "kMaxBodyBytes = 2u * 1024u * 1024u;",
+   "new": "kMaxBodyBytes = 4u * 1024u * 1024u;"
+  },
+  {
+   "id": "test_door_body_limit_for_every_path",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (head.method == \"POST\" && head.path == kRoute) return TestMapStore::kMaxBodyBytes;\n    return kSmallBody;",
+   "new": "    return TestMapStore::kMaxBodyBytes;"
+  },
+  {
+   "id": "test_door_body_limit_for_a_get",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "if (head.method == \"POST\" && head.path == kRoute) return",
+   "new": "if (head.path == kRoute) return"
+  },
+  {
+   "id": "test_door_other_paths_get_the_big_limit",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    return kSmallBody;\n",
+   "new": "    return TestMapStore::kMaxBodyBytes;\n"
+  },
+  {
+   "id": "test_door_any_path_is_the_route",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (request.path != kRoute) return not_found();",
+   "new": "    if (false) return not_found();"
+  },
+  {
+   "id": "test_door_any_path_with_the_prefix_is_the_route",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (request.path != kRoute) return not_found();",
+   "new": "    if (request.path.compare(0, 6, \"/test-\") != 0) return not_found();"
+  },
+  {
+   "id": "test_door_the_route_ignores_case",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (request.path != kRoute) return not_found();",
+   "new": "    if (request.path.size() != 10 || strncasecmp(request.path.c_str(), kRoute, 10) != 0) return not_found();"
+  },
+  {
+   "id": "test_door_any_method_is_a_send",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (request.method != \"POST\") return error_reply(405,",
+   "new": "    if (false) return error_reply(405,"
+  },
+  {
+   "id": "test_door_cross_site_allowed",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (cross_site(request)) return error_reply(403,",
+   "new": "    if (false && cross_site(request)) return error_reply(403,"
+  },
+  {
+   "id": "test_door_any_content_type_allowed",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (!content_type_is(request, \"application/octet-stream\")) return error_reply(415,",
+   "new": "    if (false) return error_reply(415,"
+  },
+  {
+   "id": "test_door_no_address_allowed",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (identity.empty()) return error_reply(400, \"no_address\"",
+   "new": "    if (false) return error_reply(400, \"no_address\""
+  },
+  {
+   "id": "test_door_long_query_allowed",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (request.query.size() > 4096) return error_reply(414,",
+   "new": "    if (request.query.size() > 4096000) return error_reply(414,"
+  },
+  {
+   "id": "test_door_header_believed_never",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "client_identity(request, config_.trust_client_header);",
+   "new": "client_identity(request, false);"
+  },
+  {
+   "id": "test_hour_of_an_address_not_limited",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (times.size() >= config_.attempts_per_hour) return false;",
+   "new": ""
+  },
+  {
+   "id": "test_hour_of_all_not_limited",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    if (all_.size() >= config_.total_per_hour) return false;",
+   "new": ""
+  },
+  {
+   "id": "test_hour_of_an_address_one_more",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "if (times.size() >= config_.attempts_per_hour) return false;",
+   "new": "if (times.size() > config_.attempts_per_hour) return false;"
+  },
+  {
+   "id": "test_hour_of_all_one_more",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "if (all_.size() >= config_.total_per_hour) return false;",
+   "new": "if (all_.size() > config_.total_per_hour) return false;"
+  },
+  {
+   "id": "test_hour_defaults_of_an_address_larger",
+   "file": "include/ants_server/test_maps_http.hpp",
+   "old": "size_t attempts_per_hour{30};",
+   "new": "size_t attempts_per_hour{300};"
+  },
+  {
+   "id": "test_hour_defaults_of_all_larger",
+   "file": "include/ants_server/test_maps_http.hpp",
+   "old": "size_t total_per_hour{120};",
+   "new": "size_t total_per_hour{1200};"
+  },
+  {
+   "id": "test_checks_not_timed",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "    window_.spent_ms += static_cast<uint32_t>(",
+   "new": "    window_.spent_ms += 0 * static_cast<uint32_t>("
+  },
+  {
+   "id": "test_checks_window_never_opens_for_the_address",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "config_.checks_per_window, config_.checks_per_address_window, config_.check_budget_ms); };",
+   "new": "config_.checks_per_window, 1000, config_.check_budget_ms); };"
+  },
+  {
+   "id": "test_checks_budget_defaults_larger",
+   "file": "include/ants_server/test_maps_http.hpp",
+   "old": "uint32_t check_budget_ms{600};",
+   "new": "uint32_t check_budget_ms{6000};"
+  },
+  {
+   "id": "test_upload_does_not_tell_the_lobby",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "if (store_.take_changed() && on_changed_) on_changed_();",
+   "new": "if (false && store_.take_changed() && on_changed_) on_changed_();"
+  },
+  {
+   "id": "test_room_records_a_test_match",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "    return true;\n}\n\nvoid MapStore::set_test_maps(",
+   "new": "    return false;\n}\n\nvoid MapStore::set_test_maps(",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.163b timeout 900 ./build/tests/test_server/test_server"
+  }
+ ]
+}

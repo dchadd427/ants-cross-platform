@@ -94,6 +94,14 @@
 //                      how many maps may wait for the owner (default 200) and how many one address may send in a UTC day (default 3)
 //   --submit-ignore-client-header
 //                      count an address by the connection's own address instead of the X-Client-Address that the site's nginx sets (for a door that no proxy stands in front of)
+//   --test-map-port N  the door of the TEST MAPS of the Map Maker's "With other players" (docs/MAP_SUBMISSIONS.md, "Test maps"): one route, POST /test-maps. 0 = off, the default (the stack files turn it on at 4031).
+//                      This machine only; the site's nginx passes the path to it and sets the real client address. It needs a folder for the maps, no database, no account and not the submissions door
+//   --test-map-any-interface
+//                      the test-map door listens on every interface (for a container only)
+//   --test-maps-dir DIR
+//                      where the test maps are kept (wiped when the server starts). Default: the folder "test-maps" in --results-dir
+//   --test-map-ignore-client-header
+//                      count an address by the connection's own address instead of the X-Client-Address that the site's nginx sets
 //   The owner's page needs one setting in the environment (never on the command line): ANTS_ADMIN_SESSION_SECRET (32 or more characters; it signs the sign-in cookie). Without it, every /admin/api
 //   path answers 404. ANTS_ADMIN_ALLOW_HTTP=1 drops the Secure flag of the cookie, for a trial over plain http on this machine only.
 //   --admin-create NAME   makes the first Admin account (3 to 32 letters, digits, dot, dash, underscore), prints its random starting password ONCE on standard output and stops. It refuses when an Admin exists.
@@ -141,6 +149,8 @@
 #include "ants_server/site_stats.hpp"
 #include "ants_server/submissions.hpp"
 #include "ants_server/submissions_http.hpp"
+#include "ants_server/test_maps.hpp"
+#include "ants_server/test_maps_http.hpp"
 
 namespace {
 
@@ -195,6 +205,10 @@ struct Options {
     size_t submit_max_waiting{200};
     size_t submit_per_address{3};
     bool submit_ignore_client_header{false};
+    uint16_t test_map_port{0};                 // --test-map-port: the door of the test maps (0: none)
+    bool test_map_any_interface{false};
+    std::string test_maps_dir;                 // --test-maps-dir (empty: the folder "test-maps" in the results folder)
+    bool test_map_ignore_client_header{false};
     std::string admin_create, admin_reset;     // --admin-create, --admin-reset: the account commands
 };
 
@@ -209,6 +223,7 @@ void usage(FILE* to) {
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
+                 "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
                  "       ants_server (--admin-create NAME | --admin-reset NAME) (--db FILE | --results-dir DIR)\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
@@ -274,6 +289,21 @@ int main(int argc, char** argv) {
         } else if (a == "--submit-port") {
             if (!parse_port(value("--submit-port"), o.submit_port)) {
                 std::fprintf(stderr, "--submit-port takes a port number (0 - 65535)\n");
+                return 2;
+            }
+        } else if (a == "--test-map-port") {
+            if (!parse_port(value("--test-map-port"), o.test_map_port)) {
+                std::fprintf(stderr, "--test-map-port takes a port number (0 - 65535)\n");
+                return 2;
+            }
+        } else if (a == "--test-map-any-interface") {
+            o.test_map_any_interface = true;
+        } else if (a == "--test-map-ignore-client-header") {
+            o.test_map_ignore_client_header = true;
+        } else if (a == "--test-maps-dir") {
+            o.test_maps_dir = value("--test-maps-dir");
+            if (o.test_maps_dir.empty()) {
+                std::fprintf(stderr, "--test-maps-dir takes a folder\n");
                 return 2;
             }
         } else if (a == "--admin-create" || a == "--admin-reset") {
@@ -491,6 +521,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<ants::ctl::HttpServer> http;
     std::unique_ptr<ants::ctl::HttpServer> replay_http;           // the public, read-only door of the replays (--replay-port)
     std::unique_ptr<ants::ctl::HttpServer> submit_http;           // the door of the map submissions (--submit-port)
+    std::unique_ptr<ants::ctl::HttpServer> test_map_http;         // the door of the test maps (--test-map-port)
     if (o.port != 0) {
         tcp = ants::net::TcpListener::listen(o.port, !o.is_public);
         if (!tcp) {
@@ -529,6 +560,14 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "cannot listen on submission port %u\n", static_cast<unsigned>(o.submit_port));
             return 1;
         }
+    }
+    if (o.test_map_port != 0) {                                    // (a door that cannot listen does not stop the game: the stack turns it on by default, so a taken port only switches test rooms off, with a line in the log)
+        ants::ctl::DoorOptions door;
+        door.max_body_bytes = ants::server::TestMapApi::max_body();
+        door.request_timeout_ms = 30000;                           // (up to 2 MiB from a slow line, and only four such bodies are read at once)
+        door.body_limit = [](const ants::ctl::HttpRequest& head) { return ants::server::TestMapApi::body_limit(head); };
+        test_map_http = ants::ctl::HttpServer::listen_door(o.test_map_port, door, !o.test_map_any_interface);
+        if (!test_map_http) std::fprintf(stderr, "[ants_server] test rooms are off: cannot listen on test-map port %u\n", static_cast<unsigned>(o.test_map_port));
     }
     if (!tcp && !ws) {
         std::fprintf(stderr, "no game port: give --port or --ws-port\n");
@@ -770,22 +809,46 @@ int main(int argc, char** argv) {
         ac.cookie_secure = !(plain_http != nullptr && std::string(plain_http) == "1");
         ac.trust_client_header = !o.submit_ignore_client_header;
         submit_api = std::make_unique<ants::server::SubmissionApi>(*submissions, *accounts, ac);
-        submissions->set_test_map_in_use([&rooms](const std::string& file) { return rooms.map_in_use(file); });          // (a test map that a room has is not dropped to make room for another)
-        auto refresh_tests = [&rooms, &submissions]() { rooms.mutable_store().set_test_maps(submissions->test_maps(static_cast<int64_t>(std::time(nullptr)))); };
-        auto refresh = [&rooms, &submissions, refresh_tests]() {
-            rooms.mutable_store().set_approved(submissions->approved_maps());
-            refresh_tests();
-        };
+        auto refresh = [&rooms, &submissions]() { rooms.mutable_store().set_approved(submissions->approved_maps()); };
         refresh();
         submissions->take_approved_changed();
-        submissions->take_test_changed();
         submit_api->set_on_approved_changed(refresh);
-        submit_api->set_on_test_changed(refresh_tests);                 // (a test upload does not read every approved map again)
         log("map submissions on: files in " + sc.dir + ", at most " + std::to_string(sc.max_waiting) + " waiting and " + std::to_string(sc.per_address_per_day) + " a day from one address; " +
             (submit_api->owner_api_on() ? "the owner's review page is on" + std::string(ac.cookie_secure ? "" : " (ANTS_ADMIN_ALLOW_HTTP: the cookie is not marked Secure)") : "the owner's review page is OFF (ANTS_ADMIN_SESSION_SECRET, 32 characters or more, is needed)") +
             "; " + std::to_string(submissions->approved_maps().size()) + " approved maps in the lobby's list");
         for (const std::string& line : submissions->take_notices()) log(line);
         for (const std::string& line : accounts->take_notices()) log(line);
+    }
+    // The test maps (test_maps.hpp, docs/MAP_SUBMISSIONS.md "Test maps"): a folder and a list in memory, no database and nothing of the submissions above, so they work on a server whose submissions door is off.
+    // What is missing switches the door off with a line in the log; the game goes on.
+    std::unique_ptr<ants::server::TestMapStore> test_store;
+    std::unique_ptr<ants::server::TestMapApi> test_api;
+    if (test_map_http) {
+        ants::server::TestMapConfig tc;
+        tc.dir = !o.test_maps_dir.empty() ? o.test_maps_dir : o.results_dir.empty() ? std::string() : (std::filesystem::path(o.results_dir) / "test-maps").string();
+        std::string why;
+        if (tc.dir.empty()) {
+            log("test rooms are off: no --results-dir or --test-maps-dir to keep the maps in");
+        } else {
+            test_store = std::make_unique<ants::server::TestMapStore>(tc);
+            if (!test_store->open(why)) {
+                log("test rooms are off: " + why);
+                test_store.reset();
+            }
+        }
+        if (!test_store) {
+            test_map_http.reset();
+        } else {
+            ants::server::TestMapApiConfig tac;
+            tac.trust_client_header = !o.test_map_ignore_client_header;
+            test_api = std::make_unique<ants::server::TestMapApi>(*test_store, tac);
+            test_store->set_in_use([&rooms](const std::string& file) { return rooms.map_in_use(file); });          // (a test map that a room has is not dropped to make room for another)
+            test_api->set_on_changed([&rooms, &test_store]() { rooms.mutable_store().set_test_maps(test_store->maps(static_cast<int64_t>(std::time(nullptr)))); });          // (a test upload does not read every approved map again)
+            rooms.mutable_store().set_test_maps(test_store->maps(static_cast<int64_t>(std::time(nullptr))));
+            test_store->take_changed();
+            log("test rooms on: maps in " + tc.dir + ", at most " + std::to_string(ants::server::TestMapStore::kMaxTestMaps) + " held and " + std::to_string(ants::server::TestMapStore::kMaxTestPerAddress) + " for one address" +
+                (o.replay_port != 0 ? std::string() : std::string("; the replay port is off, so a guest cannot download a test map")));
+        }
     }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
@@ -799,6 +862,7 @@ int main(int argc, char** argv) {
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));
     if (submit_http) log("map submissions on port " + std::to_string(submit_http->port()) + (o.submit_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") + ": POST /submissions, GET /submissions, GET /submissions/<id>, POST /submissions/<id>/withdraw and /admin/api/..., no secret");
+    if (test_map_http) log("test maps on port " + std::to_string(test_map_http->port()) + (o.test_map_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") + ": POST /test-maps and nothing else, no secret, no database");
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
     if (replay_http) {
         log("public replays on port " + std::to_string(replay_http->port()) + (o.replay_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
@@ -818,6 +882,7 @@ int main(int argc, char** argv) {
         for (const std::string& line : rooms.take_notices()) log(line);
     }
     uint32_t last_submission_upkeep_ms = now_ms();
+    uint32_t last_test_upkeep_ms = now_ms();
     while (!g_stop) {
         const uint32_t now = now_ms();
         if (tcp) {
@@ -844,13 +909,20 @@ int main(int argc, char** argv) {
                 last_submission_upkeep_ms = now;
                 submissions->maintenance(static_cast<int64_t>(std::time(nullptr)));
                 if (submissions->take_approved_changed()) rooms.mutable_store().set_approved(submissions->approved_maps());
-                if (submissions->take_test_changed()) rooms.mutable_store().set_test_maps(submissions->test_maps(static_cast<int64_t>(std::time(nullptr))));
                 if (accounts) {
                     accounts->maintenance(static_cast<int64_t>(std::time(nullptr)));
                     for (const std::string& line : accounts->take_notices()) log(line);          // (a refused write of the accounts: never a password, a name or an address)
                 }
             }
             for (const std::string& line : submissions->take_notices()) log(line);
+        }
+        if (test_map_http && test_api) {
+            test_map_http->update(now, [&](const ants::ctl::HttpRequest& request) { return test_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });
+            if (static_cast<uint32_t>(now - last_test_upkeep_ms) >= 3600u * 1000u) {                       // (once an hour: the maps that are six hours old)
+                last_test_upkeep_ms = now;
+                test_store->maintenance(static_cast<int64_t>(std::time(nullptr)));
+                if (test_store->take_changed()) rooms.mutable_store().set_test_maps(test_store->maps(static_cast<int64_t>(std::time(nullptr))));
+            }
         }
         if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {

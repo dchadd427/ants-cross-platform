@@ -286,10 +286,12 @@
     var GO_BACK = ' Go back to the editor.';
     var TAB_CLOSED = 'The editor tab was closed. Go back to the editor and press Play this map again.';
     var TEST_NOTICE = 'This room plays a test map from the Map Maker. The match is not recorded, and no result or name is kept.';
+    function hasSentence(body) { return !!body && typeof body.message === 'string' && body.message.length > 0; }
     function failWords(status, body) {
         var code = body && typeof body.error === 'string' ? body.error : '';
-        if (code === 'submissions_off') return 'Sending maps is not switched on on this server right now.' + GO_BACK;
-        if ((status === 429 && code !== 'too_many_tests' && code !== 'test_limit') || code === 'busy' || (status === 503 && !body)) return 'Too many test maps just now. Wait a minute and press Play this map again in the editor.';       // (an answer that is no JSON: the site's own limit on how fast maps may come; the game server's limits of an hour or of held maps say their own words below)
+        if (code === 'test_maps_off') return 'Test rooms are not switched on on this server right now.' + GO_BACK;
+        if (status === 413 && !hasSentence(body)) return 'This map is too big to send as a test room.' + GO_BACK;       // (the site's own limit on the size of a map: an answer that is no JSON)
+        if ((status === 429 && code !== 'too_many_tests' && code !== 'test_limit') || code === 'busy' || (status === 503 && !body)) return 'Too many test maps just now. Wait a minute and press Play this map again in the editor.';       // (an answer that is no JSON: the site's own limit on how fast maps may come; the test-map door's limits of an hour or of held maps say their own words below)
         var said = body && typeof body.message === 'string' ? body.message.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
         return (said || 'The server could not prepare this test map' + (status > 0 ? ' (answer ' + status + ').' : '.')) + GO_BACK;
     }
@@ -436,7 +438,7 @@
                 var bytes = new Uint8Array(rec.bytes), title = cleanTitle(rec.name), kind = bytes[0] === 9 ? 'extended' : 'classic';
                 paintTestBar('Test room', title + ' \u00b7 Preparing unlisted room\u2026', '', true, false);
                 try {
-                    env.fetch('/submissions?kind=' + kind + '&test=1&name=' + encodeURIComponent(title), {
+                    env.fetch('/test-maps?kind=' + kind + '&name=' + encodeURIComponent(title), {
                         method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: bytes, cache: 'no-store', credentials: 'same-origin'
                     }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }, function () { return { status: r.status, body: null }; }); }).then(function (res) {
                         var tm = res && res.status === 201 && res.body && res.body.test_map;

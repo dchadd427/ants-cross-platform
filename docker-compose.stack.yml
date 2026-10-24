@@ -37,6 +37,10 @@
 #   ANTS_SUBMIT_PORT=0                              the port, inside the container, of the map submissions' door (docs/MAP_SUBMISSIONS.md): 0 = OFF, the default. Set 4030, the one that docker/nginx.conf
 #                                                   passes /submissions and /admin/api to, to switch it on; it needs the database. Not published on the host. The maps wait in the folder submissions of the volume
 #                                                   ants-server-results, and the database ants.db there grows to schema version 6 (a program of an older version refuses that file: keep a copy of ants.db before the first start)
+#   ANTS_TEST_MAP_PORT=4031                         the port, inside the container, of the TEST-MAP door (docs/MAP_SUBMISSIONS.md, "Test maps"): ON by default. The Map Maker's "With other players" sends its draft map
+#                                                   to POST /test-maps, which docker/nginx.conf passes here; it works with the submissions door OFF (it has no database, no accounts and no other route). Leave it at
+#                                                   4031, the one that nginx passes to, or set 0, which switches test rooms off (the site then says so). Not published on the host. The maps live in the folder test-maps of the
+#                                                   volume ants-server-results (at most 64 MiB, 6 hours each) and are wiped at every start.
 #   ANTS_ADMIN_SESSION_SECRET=<32+ characters>      the secret that signs the sign-in cookie of the owner's page (a long random text: openssl rand -hex 32). Without it every /admin/api path answers 404.
 #                                                   The accounts are made on the server, not here: docs/MAP_SUBMISSIONS.md, "Deploying" (docker exec -it ants-server ants_server --admin-create <username> --db /results/ants.db)
 #
@@ -86,7 +90,7 @@ services:
     # matches of the demo rooms too (the front page's games). --replay-port opens the PUBLIC, read-only door of the list and the files (GET /replays, GET /replays/<file>; the site's nginx passes both to it
     # over the network below): ON here, with the port that docker/nginx.conf uses; ANTS_REPLAY_PORT=0 switches it off. The program's own default is off.
     # The files and the list hold the names that the players typed (a player with no name shows as a color), so those names are public here; no address, room code or chat is in them.
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
       # the owner's page (docs/MAP_SUBMISSIONS.md): the secret that signs the sign-in cookie; without it every /admin/api path answers 404

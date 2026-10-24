@@ -335,6 +335,56 @@ void run_replay_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("S3.163b A Room On An Unlisted Test Map Of The Map Maker Keeps No Replay Though The Server Keeps Them (No File, Not On The Live Board, The Status Says Why), While A Room On A Library Map Beside It Is Kept") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-testmap", &clock), false, why));
+        // a test map as the test-map store hands it over: a canonical file of its own folder, and a name with " ~test-<8 hex>.lvl"; the players' machines read the same file from their own folder
+        const fs::path folder = fs::path(temp_dir_for("replay-testmap-maps")) / "draft";
+        fs::create_directories(folder);
+        ApprovedMap m;
+        m.name = "Draft Map ~test-0badf00d.lvl";
+        m.path = (folder / m.name).string();
+        fs::copy_file(fs::path(maps_dir()) / "TINY.LVL", m.path);
+        ASSERT_TRUE(MapStore::is_test_map_name(m.name) && net::hash_file(m.path, m.hash));
+        assets::LevelData tiny;
+        ASSERT_TRUE(tiny.load_from_file(m.path));
+        m.size = fs::file_size(m.path);
+        m.width = tiny.width();
+        m.height = tiny.height();
+        m.players = 4;
+        m.kind = "classic";
+        w.mgr.mutable_store().set_test_maps({m});
+        ASSERT_TRUE(w.mgr.create_room(spec_of("TESTMAP-1", 2, m.name.c_str()), w.now).ok);
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LIBRARY-1", 2), w.now).ok);
+        ASSERT_EQ(w.status("TESTMAP-1").replay_note, std::string("unlisted test map"));
+        ASSERT_TRUE(w.status("LIBRARY-1").replay_note.empty());                                           // (the same server records the other room: the difference is the map)
+        w.next_map_folder = folder.string();
+        w.connect("Ann", "TESTMAP-1");
+        w.connect("Bob", "TESTMAP-1");
+        w.next_map_folder.clear();
+        w.connect("Cat", "LIBRARY-1");
+        w.connect("Dan", "LIBRARY-1");
+        w.run(1500 + kPre + 40000);
+        ASSERT_TRUE(w.status("TESTMAP-1").state == RoomState::Running && w.status("TESTMAP-1").turns >= 600);
+        ASSERT_TRUE(w.status("LIBRARY-1").state == RoomState::Running && w.status("LIBRARY-1").turns >= 600);
+        ASSERT_EQ(w.status("TESTMAP-1").map, m.name);
+        const ctl::JsonValue live = replay_json_of(public_call(w.mgr, "GET", "/live"));
+        ASSERT_TRUE(live.get("live").size() == 1 && live.get("live").at(0).get("map").str() == "TINY.LVL");        // (only the library room is on the board: a test match is never shown)
+        ASSERT_EQ(public_call(w.mgr, "GET", "/live").body.find("~test-"), std::string::npos);
+        ASSERT_TRUE(w.mgr.close_room("TESTMAP-1", w.now));
+        ASSERT_TRUE(w.mgr.close_room("LIBRARY-1", w.now));
+        const RoomStatus t = w.status("TESTMAP-1");
+        ASSERT_TRUE(!t.replay_kept && t.replay_file.empty() && t.replay_note == "unlisted test map");
+        ASSERT_MSG(w.status("LIBRARY-1").replay_kept, "note: " + w.status("LIBRARY-1").replay_note + " state " + std::to_string(static_cast<int>(w.status("LIBRARY-1").state)));
+        ASSERT_EQ(w.mgr.replay_store()->count(), size_t{1});                                              // (one file, the library room's)
+        for (const ReplayEntry& e : w.mgr.replay_store()->list()) ASSERT_TRUE(e.map == "TINY.LVL" && e.file.find("test") == std::string::npos);
+        const std::string listed = public_call(w.mgr, "GET", "/replays").body + replay_call(w.mgr, "GET", "/replays").body + public_call(w.mgr, "GET", "/history").body;
+        ASSERT_EQ(listed.find("~test-"), std::string::npos);                                              // (no list of the public door names it)
+        ASSERT_EQ(listed.find("Draft Map"), std::string::npos);
+    } TEST_END();
+
     TEST_CASE("S3.164 The Rooms That A Visitor's Create Block Makes (The Games Of The Front Page: The Demo Rooms) Are Kept Only When The Server Is Started With --replay-demo; The Rooms Of The Control Interface Are Kept Either Way, Whatever Their Code Begins With") {
         ReplayClock clock;
         ServerLimits limits;
