@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the map maker's atlas tool (tools/map_atlas.py: a picture of several parts is put together as the game draws it) for tools/mutate.py (docs/TESTING.md, 'Mutation checks') against tests/scripts/test_map_atlas.py. Run from the checkout: tools/mutate.py tests/data/map_atlas_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_map_atlas.py checks that each 'old' text is in the tool exactly once.",
+  "note": "Mutants of the map maker's atlas tool (tools/map_atlas.py: a picture of several parts is put together as the game draws it, the names of the animations, the pictures that a name can ask for) for tools/mutate.py (docs/TESTING.md, 'Mutation checks') against tests/scripts/test_map_atlas.py. Run from the checkout: tools/mutate.py tests/data/map_atlas_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_map_atlas.py checks that each 'old' text is in the tool exactly once.",
   "mutants": [
     {
       "id": "atlas_parts_drawn_first_part_first",
@@ -48,6 +48,41 @@
       "file": "tools/map_atlas.py",
       "old": "parts = [(int(p.group(3)), int(p.group(1)), int(p.group(2))) for p in re.finditer(r\"\\{ dx: (-?\\d+), dy: (-?\\d+), sprite_id: (\\d+),\", frames.group(1))] if frames else []",
       "new": "parts = [(int(p.group(3)), int(p.group(1)), int(p.group(2))) for p in re.finditer(r\"\\{ dx: (-?\\d+), dy: (-?\\d+), sprite_id: (\\d+),\", frames.group(1))][:1] if frames else []",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_names_left_out_of_the_index",
+      "file": "tools/map_atlas.py",
+      "old": "        \"names\": read_names(catalog_path),\n",
+      "new": "        \"names\": [],\n",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_names_shifted_by_one",
+      "file": "tools/map_atlas.py",
+      "old": "    return [found[i] for i in range(1344)]",
+      "new": "    return [found[(i + 1) % 1344] for i in range(1344)]",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_far_only_the_old_ranges",
+      "file": "tools/map_atlas.py",
+      "old": "FAR_RANGES = [(0, 1343)]",
+      "new": "FAR_RANGES = [(34, 38), (133, 134), (236, 242), (245, 430), (1320, 1334)]",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_far_takes_the_pieces_of_several_parts",
+      "file": "tools/map_atlas.py",
+      "old": " or GROUND_FIRST <= ident <= GROUND_LAST or len(parts_table.get(ident, ())) != 1:",
+      "new": " or GROUND_FIRST <= ident <= GROUND_LAST:",
+      "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_far_takes_the_ground_tiles",
+      "file": "tools/map_atlas.py",
+      "old": " or GROUND_FIRST <= ident <= GROUND_LAST or len(parts_table.get(ident, ())) != 1:",
+      "new": " or len(parts_table.get(ident, ())) != 1:",
       "test": "python3 tests/scripts/test_map_atlas.py"
     }
   ]

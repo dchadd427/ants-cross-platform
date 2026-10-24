@@ -5,7 +5,8 @@ made from the public decoded sprites and the animation table of the sprite viewe
   - the atlas is built here (standard library only, as the image's build does it) and read back with a PNG reader of this file: every one of the 239 ground tiles (ids 431 to 669) has its picture, pixel for
     pixel the sprite of frame 0 of its animation; every object that the editor offers (rocks, power-ups, bombs, hills, the food piles' stages, the 29 bigger objects, the starting ant) is in the sheet with the
     offset of that frame and its own size, none overlaps another, and a picture the sheet does not hold is in the index with its sprite number (the page fetches it from /asset_catalog/sprites/);
-  - the index: the average colors, the numbers that the page reads, the sizes of the files (small), the same bytes every time, a palette of more than 255 colors refused;
+  - the index: the average colors, the numbers that the page reads, the names of the 1,344 animations (the page resolves a tile through the open map's dictionary as the game does), a picture for every
+    animation of one part, the sizes of the files (small), the same bytes every time, a palette of more than 255 colors refused;
   - what the library of maps puts on layer 2: every anchored tile has a picture (the sheet or the index) but the ones of the menus and the stray ground tiles, which the page draws nothing for;
   - the places: the Dockerfile makes the atlas after the compile layers and copies it, .dockerignore lets the animation table in, the local web build makes it, nginx revalidates it, the CI's check of the
     image lists it, THIRD_PARTY_NOTICES.md names it, and the tool reads nothing but the two public inputs (never the original program).
@@ -28,8 +29,9 @@ SPRITES = os.path.join(REPO, "asset_catalog", "sprites")
 TABLE = os.path.join(REPO, "docs", "chd_table4_animations.json")                     # the table as the docs keep it: the truth that the tool's own input (the viewer's data) is held to
 CATALOG = os.path.join(REPO, "asset_catalog", "catalog_data.js")
 EMPTY2 = 0x7FFE
-# the ids that the library anchors on layer 2 and the page draws nothing for: elements of the game's menus and screens (ids below 34 and a few others), a cursor, two ground ids that stray onto layer 2
-NOT_DRAWN = {0, 1, 46, 47, 48, 55, 59, 60, 61, 69, 70, 80, 88, 97, 98, 135, 154, 164, 227, 243, 244, 476, 485}
+# the ids that the library anchors on layer 2 and the page draws nothing for: animations of several parts that no sheet holds (two menu screens, the ears of the menus' dog) and two ground ids that stray
+# onto layer 2 (every other animation of one part has its picture: the page can show any tile that a map's dictionary names)
+NOT_DRAWN = {0, 1, 59, 60, 61, 476, 485}
 
 
 def read(*parts):
@@ -162,6 +164,24 @@ class TheAtlas(unittest.TestCase):
         parts = map_atlas.read_parts(CATALOG)
         for ident in range(1344):
             self.assertEqual(parts[ident], self.parts(ident), "every part of tile %d (%s), in the stored order" % (ident, self.table[ident]["name"]))
+        self.assertEqual(map_atlas.read_names(CATALOG), [e["name"] for e in self.table], "the names of the 1,344 animations, by number, as the docs' table has them")
+
+    def test_the_index_names_every_animation_and_has_a_picture_for_every_one_of_one_part(self):
+        """the game draws the animation that a dictionary NAME gives (Renderer::set_level), so any of the 1,344 can be a tile of a map: the index has all the names, and every animation of one part has a picture
+        (the ground sheet, the objects sheet, or its sprite fetched alone); the ones of several parts that are not in the sheet (menu screens, pieces of ants) are the only ones left out"""
+        self.assertEqual(self.index["names"], [e["name"] for e in self.table])
+        self.assertEqual(len(set(self.index["names"])), 1344, "no two animations have the same name (the page's lookup by name has nothing to choose between)")
+        items, far = self.index["objects"]["items"], self.index["far"]
+        left_out = []
+        for ident in range(1344):
+            frames = self.table[ident]["subitems"][0]["frames"] if self.table[ident]["subitems"] else []
+            there = str(ident) in items or str(ident) in far or 431 <= ident <= 669
+            if not there:
+                left_out.append(ident)
+                self.assertNotEqual(len(frames), 1, "tile %d (%s) is of one part and has no picture in the atlas" % (ident, self.table[ident]["name"]))
+        self.assertLess(len(left_out), 300, "only the animations of several parts are left out")
+        for ident in (339, 340, 281, 282, 335, 346, 243, 244):         # (named by a library map: jacks4, the pink eraser, the two rings, the bear, the menus' mice)
+            self.assertTrue(str(ident) in items or str(ident) in far, "tile %d (%s): its picture is there" % (ident, self.table[ident]["name"]))
 
     def test_every_ground_tile_has_its_picture_pixel_for_pixel(self):
         g = self.index["ground"]
@@ -286,7 +306,7 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
         anchored = library_anchors()
         drawable = set(map(int, self.index["objects"]["items"])) | set(map(int, self.index["far"]))
         missing = {t for t in anchored if t not in drawable}
-        self.assertEqual(missing, {t for t in anchored if t in NOT_DRAWN} & missing, "an id of a library map has no picture and is not one that the page leaves undrawn: %s" % sorted(missing - NOT_DRAWN))
+        self.assertEqual(missing, NOT_DRAWN & set(anchored), "an id of a library map has no picture and is not one that the page leaves undrawn: %s" % sorted(missing - NOT_DRAWN))
         self.assertGreater(len(drawable & set(anchored)), 150, "the pictures cover the objects of the library")
         weight = sum(n for t, n in anchored.items() if t in drawable)
         self.assertGreater(weight / sum(anchored.values()), 0.99, "and 99% of the anchored cells")
@@ -299,8 +319,8 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
     def test_the_files_are_small_and_the_same_every_time(self):
         self.assertLess(self.sizes["ground.png"], 40000, "ground.png (about 35 KB)")
         self.assertLess(self.sizes["objects.png"], 305000, "objects.png (about 298 KB: the plants with all their parts are bigger than their heads)")
-        self.assertLess(self.sizes["atlas.json"], 12000, "atlas.json (about 9 KB)")
-        self.assertLess(sum(self.sizes.values()), 350000, "the whole atlas (about 343 KB: the page fetches all of it at start)")
+        self.assertLess(self.sizes["atlas.json"], 41000, "atlas.json (about 39 KB: 9 KB of the sheet's index, 13 KB of the 1,344 animation names, 17 KB for the 654 sprites that are fetched alone, one for every animation of one part)")
+        self.assertLess(sum(self.sizes.values()), 375000, "the whole atlas (about 372 KB: the page fetches all of it at start)")
         with tempfile.TemporaryDirectory() as again:
             map_atlas.build(SPRITES, CATALOG, again)
             for name in ("ground.png", "objects.png", "atlas.json"):

@@ -80,13 +80,13 @@
     }
 
     // The tiles of the map as the first of the two ways: a rectangle for each tile that can be seen. Returns the number of rectangles drawn.
-    function drawRects(ctx, view, file, w, h, vis) {
+    function drawRects(ctx, view, file, w, h, vis, tab) {
         var s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, count = 0, r, c;
         for (r = vis.r0; r <= vis.r1; r++) {
             var ya = Math.round(y0 + r * s), yb = Math.round(y0 + (r + 1) * s);
             for (c = vis.c0; c <= vis.c1; c++) {
                 var xa = Math.round(x0 + c * s), xb = Math.round(x0 + (c + 1) * s);
-                ctx.fillStyle = Tiles.css(file.tile1(r, c), file.tile2(r, c));
+                ctx.fillStyle = Tiles.css(file.tile1(r, c), file.tile2(r, c), tab);
                 ctx.fillRect(xa, ya, xb - xa, yb - ya);
                 count++;
             }
@@ -101,8 +101,8 @@
     }
 
     // The second way (tiles smaller than 5 pixels): one lookup for each pixel of the canvas, put on the canvas as one picture. `scratch` is a canvas that the caller keeps between frames.
-    function drawPixels(ctx, view, file, w, h, scratch) {
-        var t = Tiles.packedTables(), b = file.bytes, l1 = file.layer1, l2 = file.layer2, s = view.scale;
+    function drawPixels(ctx, view, file, w, h, scratch, tab) {
+        var t = Tiles.packedTables(tab), b = file.bytes, l1 = file.layer1, l2 = file.layer2, s = view.scale;
         var cw = Math.max(1, Math.ceil(w)), ch = Math.max(1, Math.ceil(h));
         if (scratch.width !== cw || scratch.height !== ch) { scratch.width = cw; scratch.height = ch; }
         var sctx = scratch.getContext('2d'), image = scratch.keptImage;
@@ -110,7 +110,7 @@
         var px = new Uint32Array(image.data.buffer);
         var x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, columns = new Int32Array(cw), x, y;
         for (x = 0; x < cw; x++) { var c = Math.floor((x + 0.5 - x0) / s); columns[x] = c < 0 || c >= file.columns ? -1 : c; }
-        var back = Tiles.hexToPacked('#0b1612');
+        var back = Tiles.hexToPacked(Tiles.BACK);
         for (y = 0; y < ch; y++) {
             var r = Math.floor((y + 0.5 - y0) / s), row = y * cw;
             if (r < 0 || r >= file.rows) { for (x = 0; x < cw; x++) px[row + x] = back; continue; }
@@ -174,7 +174,7 @@
     function redrawCell(ctx, view, file, w, h, r, c) {
         var s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s;
         var xa = Math.round(x0 + c * s), xb = Math.round(x0 + (c + 1) * s), ya = Math.round(y0 + r * s), yb = Math.round(y0 + (r + 1) * s);
-        ctx.fillStyle = Tiles.css(file.tile1(r, c), file.tile2(r, c));
+        ctx.fillStyle = Tiles.css(file.tile1(r, c), file.tile2(r, c), Tiles.tableOf(file));
         ctx.fillRect(xa, ya, xb - xa, yb - ya);
         if (s >= GRID_FROM) {
             ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 1; ctx.beginPath();
@@ -188,7 +188,7 @@
     function redrawPixelCell(view, file, w, h, r, c, scratch, box) {
         var image = scratch && scratch.keptImage;
         if (!image) return false;
-        var t = Tiles.packedTables(), b = file.bytes, s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, cw = image.width, ch = image.height;
+        var t = Tiles.packedTables(Tiles.tableOf(file)), b = file.bytes, s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, cw = image.width, ch = image.height;
         var px = new Uint32Array(image.data.buffer), at = 6 * (r * file.columns + c), o = t.objects[b[file.layer2 + at] | (b[file.layer2 + at + 1] << 8)];
         var color = o !== 0 ? o : t.ground[b[file.layer1 + at] | (b[file.layer1 + at + 1] << 8)];
         var xa = Math.max(0, Math.ceil(x0 + c * s - 0.5)), xb = Math.min(cw, Math.ceil(x0 + (c + 1) * s - 0.5)), ya = Math.max(0, Math.ceil(y0 + r * s - 0.5)), yb = Math.min(ch, Math.ceil(y0 + (r + 1) * s - 0.5));
@@ -206,6 +206,9 @@
         ctx.drawImage(scratch, x, y, bw, bh, x, y, bw, bh);
     }
 
+    // The stamp of the open map's dictionary table (0 while there is none): a frame kept from before is out of date when it is not the one it was made with (mapmaker_canvas.js)
+    function stamp(file) { var tab = Tiles.tableOf(file); return tab ? tab.stamp : 0; }
+
     // Are the game's pictures drawn at this zoom (the atlas is loaded and a tile is at least 10 pixels: mapmaker_sprites.js)?
     function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= sprites.FROM; }
 
@@ -221,9 +224,9 @@
             if (view.scale < opts.sprites.ANT_FROM) drawMarks(ctx, view, file, w, h, vis, true);
             done.sprites = 1;
         } else if (view.scale >= RECTS_FROM) {
-            done.rects = drawRects(ctx, view, file, w, h, vis);
+            done.rects = drawRects(ctx, view, file, w, h, vis, Tiles.tableOf(file));
             if (view.scale >= 6) drawMarks(ctx, view, file, w, h, vis);
-        } else done.pixels = drawPixels(ctx, view, file, w, h, opts.scratch || document.createElement('canvas'));
+        } else done.pixels = drawPixels(ctx, view, file, w, h, opts.scratch || document.createElement('canvas'), Tiles.tableOf(file));
         if (opts.cursor) drawCursor(ctx, view, file, w, h, opts.cursor, opts.brush, opts.door, opts.shape);
         return done;
     }
@@ -279,6 +282,6 @@
 
     return {
         MAX_SCALE: MAX_SCALE, create: create, clamp: clamp, fitScale: fitScale, minScale: minScale, isWhole: isWhole, toScreen: toScreen, cellAt: cellAt, zoomAt: zoomAt, panBy: panBy,
-        centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, useSprites: useSprites, cursorRect: cursorRect, drawCursor: drawCursor, redrawCell: redrawCell, redrawPixelCell: redrawPixelCell, blitPixels: blitPixels, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
+        centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, useSprites: useSprites, cursorRect: cursorRect, drawCursor: drawCursor, redrawCell: redrawCell, redrawPixelCell: redrawPixelCell, blitPixels: blitPixels, stamp: stamp, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
     };
 });

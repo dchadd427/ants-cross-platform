@@ -1,6 +1,6 @@
 // The game's own pictures on the map maker's canvas (docs/MAP_EDITOR.md, "Sprites"). The atlas (mapmaker_atlas/: ground.png, objects.png and atlas.json, made by tools/map_atlas.py when the
 // web image is built from the public decoded sprites and the animation table) is fetched when the editor opens; this script loads it, draws with it, and says when it is ready. A cell is a
-// 32 pixel picture: the picture of a tile id is frame 0 of its animation drawn at the cell's top-left corner plus the frame's own x/y offset. The ground is drawn first, from a layer kept
+// 32 pixel picture: the picture of a tile is frame 0 of its animation drawn at the cell's top-left corner plus the frame's own x/y offset, and the animation is the one that the OPEN MAP'S DICTIONARY names for the cell's number, as in the game (mapmaker_tiles.js: tableOf, ground, object, stage; docs/MAP_EDITOR.md, "Sprites"). The ground is drawn first, from a layer kept
 // between frames with the objects on it (a pan moves it and paints only the strip that came into view; a stroke repaints only the part round its cells; one scaled copy of the 239 tiles
 // for each zoom); the objects are drawn only from their anchor cells (the flagged ones), in row order, as the game draws them; then, over the layer, the starting ants. From 10 pixels a cell up the pictures are drawn; below that the canvas keeps its
 // flat colors (mapmaker_view.js), which are the pictures' average colors once the atlas is in (mapmaker_tiles.js). A few big toys are not in the sheet: each is fetched alone from
@@ -13,6 +13,29 @@
     'use strict';
 
     var CELL = 32, EMPTY2 = 0x7FFE, FROM = 10, ANT_FROM = 12, REACH = 8, BACK = '#0b1612', MAX_CACHED = 3, MAX_DIRTY = 60000, SETTLE = 140;
+
+    // The tile of the stage that each food pile of block 2 shows, by the index of its anchor cell (the last stage whose units are not below the pile's own: mapmaker_file.js reads the same list)
+    function foodTiles(file) {
+        var b = file.bytes, a = file.blocksAt, n, i, m, s, food = {};
+        function u(o) { return b[o] | (b[o + 1] << 8); }
+        if ((a += 2 + 6 * u(a)) + 2 <= b.length) for (n = u(a), a += 2, i = 0; i < n && (m = u(a + 8)) && a + 10 + 4 * m <= b.length; i++, a += 10 + 4 * m)
+            for (s = 0; s < m; s++) if (u(a + 4) <= u(a + 10 + 4 * s)) food[u(a) * file.columns + u(a + 2)] = u(a + 12 + 4 * s);
+        return food;
+    }
+
+    // The animation that the anchored object (or pile) at a cell is drawn as, or -1 when there is none: a pile's stage tile on an empty anchor, else the cell's own tile when it is flagged as an
+    // anchor, each through the map's dictionary (`tab`: Tiles.tableOf(file), null for the numbers themselves; `food`: foodTiles(file))
+    function objectAnim(file, tab, food, r, c) {
+        var b = file.bytes, at = file.layer2 + 6 * (r * file.columns + c), id = b[at] | (b[at + 1] << 8), ft = food[r * file.columns + c];
+        if (id === EMPTY2) return ft ? Tiles.stage(tab, ft) : -1;
+        return b[at + 2] & 1 ? Tiles.object(tab, id) : -1;
+    }
+
+    // The animation of a ground cell (layer 1): -1 draws nothing (black)
+    function groundAnim(file, tab, r, c) {
+        var b = file.bytes, at = file.layer1 + 6 * (r * file.columns + c);
+        return Tiles.ground(tab, b[at] | (b[at + 1] << 8));
+    }
 
     // env: {doc, win, base ('mapmaker_atlas/'), far ('/asset_catalog/sprites/'), onChange() (a picture arrived: draw again), onReady(), onFail()}
     function create(env) {
@@ -30,7 +53,7 @@
             return img;
         }
 
-        function fail() { if (failed) return; failed = true; ready = false; if (env.onFail) env.onFail(); }
+        function fail() { if (failed) return; failed = true; ready = false; Tiles.setAnimations(null); if (env.onFail) env.onFail(); }
 
         // Fetch the index and the two sheets; the average colors replace the flat ones when all three are in
         function load() {
@@ -38,7 +61,7 @@
             win.fetch(base + 'atlas.json').then(function (r) { if (!r.ok) throw new Error('atlas'); return r.json(); }).then(function (json) {
                 if (!json || json.v !== 1 || !json.ground || !json.objects) throw new Error('atlas');
                 var waiting = 2;
-                function one() { if (--waiting) return; index = json; objectsAvg(); ready = true; everything = true; if (env.onReady) env.onReady(); }
+                function one() { if (--waiting) return; index = json; Tiles.setAnimations(json.names); objectsAvg(); ready = true; everything = true; if (env.onReady) env.onReady(); }
                 groundImg = image(base + json.ground.png, one, fail);
                 objectsImg = image(base + json.objects.png, one, fail);
             }).then(null, fail);
@@ -69,11 +92,15 @@
         }
 
         function groundCell(lctx, file, st, sheet, r, c) {
-            var b = file.bytes, id = b[file.layer1 + 6 * (r * file.columns + c)] | (b[file.layer1 + 6 * (r * file.columns + c) + 1] << 8), g = index.ground, k = id - g.first;
+            var b = file.bytes, id = b[file.layer1 + 6 * (r * file.columns + c)] | (b[file.layer1 + 6 * (r * file.columns + c) + 1] << 8), g = index.ground, a = Tiles.ground(st.tab, id), k = a - g.first;
             var xa = st.ox + Math.round(c * st.S), xb = st.ox + Math.round((c + 1) * st.S), ya = st.oy + Math.round(r * st.S), yb = st.oy + Math.round((r + 1) * st.S);
             if (k >= 0 && k < g.count) {
                 if (sheet) { if (!sheet.done[k]) prepare(sheet, k); lctx.drawImage(sheet.canvas, (k % g.columns) * st.T, ((k / g.columns) | 0) * st.T, st.T, st.T, xa, ya, xb - xa, yb - ya); }
                 else lctx.drawImage(groundImg, (k % g.columns) * CELL, ((k / g.columns) | 0) * CELL, CELL, CELL, xa, ya, xb - xa, yb - ya);
+            } else if (st.tab) {          // (the dictionary draws nothing here, or a picture that is not a ground tile: over the black that the game leaves)
+                lctx.fillStyle = BACK; lctx.fillRect(xa, ya, xb - xa, yb - ya);
+                var p = a >= 0 ? pictureOf(a) : null, kk = st.S / CELL;
+                if (p) lctx.drawImage(scaledPicture(p.key, p.img, p.sx, p.sy, p.sw, p.sh, Math.max(1, Math.round(p.sw * kk)), Math.max(1, Math.round(p.sh * kk))), Math.round(st.ox + c * st.S + p.ox * kk), Math.round(st.oy + r * st.S + p.oy * kk));
             } else { lctx.fillStyle = Tiles.css(id, EMPTY2); lctx.fillRect(xa, ya, xb - xa, yb - ya); }
         }
 
@@ -102,9 +129,9 @@
         }
 
         // Bring the layer up to date for this view: whole when the map, the zoom or the size changed (or it is the first time), else moved and mended
-        function groundLayer(file, view, w, h, dpr, vis) {
+        function groundLayer(file, tab, view, w, h, dpr, vis) {
             var lw = Math.max(1, Math.round(w * dpr)), lh = Math.max(1, Math.round(h * dpr)), S = view.scale * dpr, T = Math.max(1, Math.round(S));
-            var st = { file: file, S: S, T: T, lw: lw, lh: lh, ox: Math.round((w / 2 - view.cx * view.scale) * dpr), oy: Math.round((h / 2 - view.cy * view.scale) * dpr) };
+            var st = { file: file, tab: tab, stamp: tab ? tab.stamp : 0, S: S, T: T, lw: lw, lh: lh, ox: Math.round((w / 2 - view.cx * view.scale) * dpr), oy: Math.round((h / 2 - view.cy * view.scale) * dpr) };
             if (!layer) layer = el('canvas');
             if (state && state.S !== S) { pics = {}; picCount = 0; }
             if (layer.width !== lw || layer.height !== lh) { layer.width = lw; layer.height = lh; state = null; }
@@ -136,6 +163,14 @@
             return null;
         }
 
+        // The picture of animation `a`: {img, sx, sy, sw, sh, ox, oy, key} (ox, oy: from the cell's corner), or null when the sheet has none and the sprite is not fetched yet (it is asked for, and the page draws again)
+        function pictureOf(a) {
+            var it = index.objects.items[a], f;
+            if (it) return { img: objectsImg, sx: it[0], sy: it[1], sw: it[2], sh: it[3], ox: it[4], oy: it[5], key: a };
+            if (!index.far[a] || !(f = farImage(a))) return null;
+            return { img: f, sx: 0, sy: 0, sw: f.width, sh: f.height, ox: index.far[a][1], oy: index.far[a][2], key: 'f' + a };
+        }
+
         // A picture scaled once to iw x ih pixels (kept until the zoom changes): drawn after that without scaling, so where it lands changes none of its pixels
         function scaledPicture(key, img, sx, sy, sw, sh, iw, ih) {
             var id = key + ':' + iw + 'x' + ih, c = pics[id];
@@ -150,26 +185,17 @@
 
         // The anchored objects whose pictures reach into the pixel rectangle (x, y, w, h) of the layer, in row order: from the cells of the rectangle and a margin round them (a picture reaches beyond its cell)
         function objects(lctx, file, st, x, y, w, h) {
-            function u(o) { return b[o] | (b[o + 1] << 8); }
-            var S = st.S, k = S / CELL, b = file.bytes, items = index.objects.items, far = index.far, food = {}, a = file.blocksAt, n, i, m, s;
+            var S = st.S, k = S / CELL, items = index.objects.items, food = foodTiles(file), tab = st.tab, i, iw, ih, dx, dy;
             var r0 = Math.max(0, Math.floor((y - st.oy) / S) - REACH), r1 = Math.min(file.rows - 1, Math.ceil((y + h - st.oy) / S) + REACH);
             var c0 = Math.max(0, Math.floor((x - st.ox) / S) - REACH), c1 = Math.min(file.columns - 1, Math.ceil((x + w - st.ox) / S) + REACH);
-            if ((a += 2 + 6 * u(a)) + 2 <= b.length) for (n = u(a), a += 2, i = 0; i < n && (m = u(a + 8)) && a + 10 + 4 * m <= b.length; i++, a += 10 + 4 * m)
-                for (s = 0; s < m; s++) if (u(a + 4) <= u(a + 10 + 4 * s)) food[u(a) * file.columns + u(a + 2)] = u(a + 12 + 4 * s);
             lctx.save(); lctx.beginPath(); lctx.rect(x, y, w, h); lctx.clip(); lctx.imageSmoothingEnabled = true; lctx.imageSmoothingQuality = 'medium';
             for (var r = r0; r <= r1; r++) {
-                var at = file.layer2 + 6 * (r * file.columns + c0);
-                for (var c = c0; c <= c1; c++, at += 6) {
-                    var id = u(at), ft = food[r * file.columns + c];
-                    if (id === EMPTY2 && ft) id = ft; else if (!(b[at + 2] & 1)) continue;
-                    if (id === EMPTY2) continue;
-                    var it = items[id], dx, dy, iw, ih, img, sx = 0, sy = 0, sw, sh;
-                    if (it) { img = objectsImg; sx = it[0]; sy = it[1]; sw = it[2]; sh = it[3]; dx = st.ox + c * S + it[4] * k; dy = st.oy + r * S + it[5] * k; }
-                    else if (far[id]) { img = farImage(id); if (!img) continue; sw = img.width; sh = img.height; dx = st.ox + c * S + far[id][1] * k; dy = st.oy + r * S + far[id][2] * k; }
-                    else continue;
-                    iw = Math.max(1, Math.round(sw * k)); ih = Math.max(1, Math.round(sh * k)); dx = Math.round(dx); dy = Math.round(dy);
+                for (var c = c0; c <= c1; c++) {
+                    var a = objectAnim(file, tab, food, r, c), pic = a >= 0 ? pictureOf(a) : null;
+                    if (!pic) continue;
+                    iw = Math.max(1, Math.round(pic.sw * k)); ih = Math.max(1, Math.round(pic.sh * k)); dx = Math.round(st.ox + c * S + pic.ox * k); dy = Math.round(st.oy + r * S + pic.oy * k);
                     if (dx > x + w || dy > y + h || dx + iw < x || dy + ih < y) continue;
-                    lctx.drawImage(scaledPicture(it ? id : 'f' + id, img, sx, sy, sw, sh, iw, ih), dx, dy);          // (a picture of whole pixels at whole pixels: moved by whole pixels it is the same picture, so the kept layer equals a frame made from nothing)
+                    lctx.drawImage(scaledPicture(pic.key, pic.img, pic.sx, pic.sy, pic.sw, pic.sh, iw, ih), dx, dy);          // (a picture of whole pixels at whole pixels: moved by whole pixels it is the same picture, so the kept layer equals a frame made from nothing)
                 }
             }
             if (file.plants) for (i = 0; i < file.plants.length; i++) {
@@ -183,9 +209,13 @@
             lctx.restore();
         }
 
-        // One object's picture at a cell, see-through (the ghost of a bigger object or plant that follows the pointer)
-        function ghost(ctx, view, w, h, id, row, column) {
-            var it = index.objects.items[id], s = view.scale, k = s / CELL, half = (id >= 404 && id <= 421 && id !== 409 && id !== 417 && id !== 418) ? 0.5 : 0; if (!it) return;
+        // One object's picture at a cell, see-through (the ghost of a bigger object or plant that follows the pointer). It is the picture that the open map `file` would show for the tile: a plant is
+        // its number (the game draws plants by number); a pile is its stage tile ('pile'); a thing picked up and put down again keeps its dictionary entry ('obj'); a tile that is about to be put
+        // is named by the tool when its entry is "." or missing, so its picture is the number's then (Tiles.place)
+        function ghost(ctx, view, w, h, id, row, column, file, kind) {
+            var half = (id >= 404 && id <= 421 && id !== 409 && id !== 417 && id !== 418) ? 0.5 : 0, tab = file ? Tiles.tableOf(file) : null;
+            var a = kind === 'plant' || (!kind && half) ? id : kind === 'pile' ? Tiles.stage(tab, id) : kind === 'obj' ? Tiles.object(tab, id) : Tiles.place(tab, id);
+            var it = a >= 0 ? index.objects.items[a] : null, s = view.scale, k = s / CELL; if (!it) return;
 
             ctx.save(); ctx.globalAlpha = 0.62; ctx.imageSmoothingEnabled = true;
             ctx.drawImage(objectsImg, it[0], it[1], it[2], it[3], w / 2 + (column + half - view.cx) * s + it[4] * k, h / 2 + (row + half - view.cy) * s + it[5] * k, it[2] * k, it[3] * k);
@@ -213,7 +243,8 @@
 
         // One frame of the map's tiles in sprite mode (the caller has painted the background and draws the cursor over it). opts: {dpr, ghost: {id, row, column} or null}
         function draw(ctx, view, file, w, h, vis, opts) {
-            var dpr = opts.dpr || 1, now = win.performance ? win.performance.now() : 0, f = state ? view.scale * dpr / state.S : 1;
+            var dpr = opts.dpr || 1, now = win.performance ? win.performance.now() : 0, f = state ? view.scale * dpr / state.S : 1, tab = Tiles.tableOf(file);
+            if (state && state.stamp !== (tab ? tab.stamp : 0)) everything = true;          // (a name of the dictionary changed: every cell may be another picture)
             ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
             if (state && state.file === file && !everything && !pending.length && f !== 1 && f > 0.75 && f < 1.33 && now - state.at < SETTLE && layer.width === Math.round(w * dpr) && layer.height === Math.round(h * dpr)) {
                 // while the zoom keeps changing the last whole picture of the ground and objects is stretched (a frame that is cheap), and a crisp one is made when it rests
@@ -221,12 +252,12 @@
                 ctx.drawImage(layer, 0, 0, layer.width, layer.height, Math.round((w / 2 - view.cx * view.scale) * dpr) - state.ox * f, Math.round((h / 2 - view.cy * view.scale) * dpr) - state.oy * f, layer.width * f, layer.height * f);
                 if (!later) later = win.setTimeout(function () { later = 0; if (env.onChange) env.onChange(); }, SETTLE + 10);
             } else {
-                groundLayer(file, view, w, h, dpr, vis);
+                groundLayer(file, tab, view, w, h, dpr, vis);
                 ctx.drawImage(layer, 0, 0);
             }
             ctx.restore();
             if (view.scale >= ANT_FROM) ants(ctx, view, file, w, h, vis);
-            if (opts.ghost) ghost(ctx, view, w, h, opts.ghost.id, opts.ghost.row, opts.ghost.column);
+            if (opts.ghost) ghost(ctx, view, w, h, opts.ghost.id, opts.ghost.row, opts.ghost.column, file);
         }
 
         // A picture in a chip: a canvas of px x px (CSS pixels) put in `node`, the tile's picture scaled to fit (layer 1: a ground tile, layer 2: an object of the sheet). False when there is none.
@@ -254,8 +285,10 @@
             load: load, FROM: FROM, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
             ready: function () { return ready; }, failed: function () { return failed; },
             // A ground tile's picture drawn s by s pixels at (x, y) of a canvas (the before and after of Fix edges: mapmaker_edges.js); false when there is none
-            ground: function (ctx, id, x, y, s) {
-                var g = index && index.ground, k = g ? id - g.first : -1;
+            // `file`: the map whose dictionary names the tile; `placing`: the tile is about to be put (Tiles.place), else it is a cell of the map (Tiles.ground)
+            ground: function (ctx, id, x, y, s, file, placing) {
+                var g = index && index.ground, tab = file && ready ? Tiles.tableOf(file) : null, a = placing ? Tiles.place(tab, id) : Tiles.ground(tab, id), k = g ? a - g.first : -1;
+                if (ready && tab && a < 0) { ctx.fillStyle = BACK; ctx.fillRect(x, y, s, s); return true; }
                 if (!ready || k < 0 || k >= g.count) return false;
                 ctx.drawImage(groundImg, (k % g.columns) * CELL, ((k / g.columns) | 0) * CELL, CELL, CELL, x, y, s, s);
                 return true;
@@ -267,5 +300,5 @@
         };
     }
 
-    return { create: create, FROM: FROM, ANT_FROM: ANT_FROM };
+    return { create: create, FROM: FROM, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
 });
