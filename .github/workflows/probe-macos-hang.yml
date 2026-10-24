@@ -1,0 +1,41 @@
+# Throwaway diagnostic (branch probe/macos-hang only; never merged).
+name: probe-macos-hang
+on:
+  push:
+    branches: [probe/macos-hang]
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  probe:
+    name: probe ${{ matrix.mode }}
+    runs-on: macos-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mode: alone, workers: 3, load: 0 }
+          - { mode: suite-load, workers: 3, load: 1 }
+          - { mode: oversub, workers: 10, load: 1 }
+    steps:
+      - uses: actions/checkout@v7
+      - name: loop the broken-copy checks
+        env:
+          PROBE_WORKERS: ${{ matrix.workers }}
+          PROBE_MINUTES: "20"
+          PROBE_LIMIT: "60"
+          PYTHONDONTWRITEBYTECODE: "1"
+          PROBE_SHIM: "1"
+        run: |
+          if [ "${{ matrix.load }}" = 1 ]; then
+            ( while true; do python3 tests/scripts/run_python_tests.py > "$RUNNER_TEMP/suite.log" 2>&1; echo "suite pass done rc=$? $(date)"; done ) &
+          fi
+          python3 .github/probe/probe_hang.py
+          tail -n 30 "$RUNNER_TEMP/suite.log" 2>/dev/null || true
+          rc=$?
+          kill %1 2>/dev/null || true
+          exit 0
