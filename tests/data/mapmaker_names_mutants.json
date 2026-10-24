@@ -1,0 +1,362 @@
+{
+  "note": "Mutants of the map maker's way from a tile to its picture for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the open map's dictionary decides which animation a tile is, as in the game's renderer (the rule in web/front/mapmaker_tiles.js, its use in web/front/mapmaker_sprites.js, web/front/mapmaker_view.js and web/front/mapmaker_canvas.js) against tests/scripts/web_mapmaker_names_check.js (the rule, the table, the colors, a kept frame, and every cell of the 540 maps against an oracle of the renderer) and tests/scripts/web_mapmaker_sprites_check.js (the pictures, the layer, the ghosts, the edges). Run from the checkout: tools/mutate.py tests/data/mapmaker_names_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+  "mutants": [
+    {
+      "id": "names_ignored_every_entry_is_its_number",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "else anim[i] = findAnimation(name);",
+      "new": "else anim[i] = i;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_own_number_compared_with_case",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "lowerAscii(animNames[i]) === lowerAscii(name)",
+      "new": "animNames[i] === name",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_exact_lookup_keeps_the_first_of_equal_names",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "animExact[names[i]] = i;                                         // (the last of two equal names wins, as in the game's table)",
+      "new": "if (!(names[i] in animExact)) animExact[names[i]] = i;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_lower_lookup_keeps_the_last",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "if (!(low in animLower)) animLower[low] = i;                     // (the first, here)",
+      "new": "animLower[low] = i;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_lower_lookup_forgotten",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "return low in animLower ? animLower[low] : -1;",
+      "new": "return -1;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_start_markers_are_drawn",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "if (blank[i] || (i >= 152 && i <= 155)) anim[i] = -1;",
+      "new": "if (blank[i]) anim[i] = -1;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_powerups_follow_the_dictionary",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "(id >= 62 && id <= 66) || (id >= 129",
+      "new": "(id >= 129",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_bombs_follow_the_dictionary",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "|| (id >= 129 && id <= 132) ||",
+      "new": "||",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_fire_wall_follows_the_dictionary",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "|| id === 134 ||",
+      "new": "||",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_hills_follow_the_dictionary",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "|| (id >= 245 && id <= 248) ||",
+      "new": "||",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_bridges_follow_the_dictionary",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "|| (id >= 34 && id <= 38); }",
+      "new": "; }",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_pu_entry_is_a_static_object",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "pu[i] = lowerAscii(name).indexOf('pu') === 0 ? 1 : 0;",
+      "new": "pu[i] = 0;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_object_outside_the_dictionary_is_its_number",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "id >= tab.n || tab.blank[id] || tab.pu[id]) return -1;\n        return tab.anim[id];",
+      "new": "tab.blank[id] || tab.pu[id]) return -1;\n        return id >= tab.n ? id : tab.anim[id];",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_ground_outside_the_dictionary_is_its_number",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "return tab ? (id < tab.n ? tab.anim[id] : -1) : id; }",
+      "new": "return tab ? (id < tab.n ? tab.anim[id] : id) : id; }",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_stage_has_no_fallback",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "return a >= 0 ? a : (id < animNames.length ? id : -1);",
+      "new": "return a;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_stage_falls_back_beyond_the_table",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "(id < animNames.length ? id : -1)",
+      "new": "id",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_put_tile_with_a_dot_stays_nothing",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "function place(tab, id) { return !tab || id >= tab.n || tab.blank[id] ? id : object(tab, id); }",
+      "new": "function place(tab, id) { return !tab ? id : object(tab, id); }",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_put_tile_beyond_the_dictionary_is_nothing",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "return !tab || id >= tab.n || tab.blank[id] ? id : object(tab, id); }",
+      "new": "return !tab || tab.blank[id] ? id : object(tab, id); }",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_table_never_made_again",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "if (k === 11 * n) return made;",
+      "new": "return made;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_table_is_the_first_n_bytes_only",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "for (k = 0; k < 11 * n && made.raw[k] === b[at + k]; k++);",
+      "new": "for (k = 0; k < 11 && made.raw[k] === b[at + k]; k++);\n            if (k === 11) k = 11 * n;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_stamp_does_not_move",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "made = { n: n, raw: raw, anim: anim, blank: blank, pu: pu, stamp: ++stamps };",
+      "new": "made = { n: n, raw: raw, anim: anim, blank: blank, pu: pu, stamp: 1 };",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_flat_color_by_number",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "if (!tab) return t2 !== EMPTY2 && css2[t2] ? css2[t2] : css1[t1 & 0xFFFF];\n        var a = t2",
+      "new": "if (true) return t2 !== EMPTY2 && css2[t2] ? css2[t2] : css1[t1 & 0xFFFF];\n        var a = t2",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_flat_color_of_nothing_is_the_ground",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "return a < 0 ? BACK : groundCss(a);",
+      "new": "return a < 0 ? css1[t1 & 0xFFFF] : groundCss(a);",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_packed_colors_by_number",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "if (!tab) return { ground: packed1, objects: packed2 };",
+      "new": "if (true) return { ground: packed1, objects: packed2 };",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_packed_nothing_is_the_ground",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "g[j] = a1 < 0 ? back : hexToPacked(groundCss(a1));",
+      "new": "g[j] = a1 < 0 ? packed1[j] : hexToPacked(groundCss(a1));",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_new_colors_do_not_reach_the_table",
+      "file": "web/front/mapmaker_tiles.js",
+      "old": "packed1 = packed2 = null; made = null; stamps++;",
+      "new": "packed1 = packed2 = null;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_object_cell_by_number",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "return b[at + 2] & 1 ? Tiles.object(tab, id) : -1;",
+      "new": "return b[at + 2] & 1 ? id : -1;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_pile_stage_by_number",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "return ft ? Tiles.stage(tab, ft) : -1;",
+      "new": "return ft ? ft : -1;",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_ground_cell_by_number",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "return Tiles.ground(tab, b[at] | (b[at + 1] << 8));",
+      "new": "return b[at] | (b[at + 1] << 8);",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_ground_picture_by_number",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "a = groundAnim(file, st.tab, r, c), k = a - g.first;",
+      "new": "a = id, k = a - g.first;",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_ground_nothing_is_not_black",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "lctx.fillStyle = BACK; lctx.fillRect(xa, ya, xb - xa, yb - ya);\n                var p",
+      "new": "lctx.fillStyle = Tiles.css(id, EMPTY2); lctx.fillRect(xa, ya, xb - xa, yb - ya);\n                var p",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_ground_other_picture_not_drawn",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "if (p) lctx.drawImage(scaledPicture(p.key, p.img, p.sx, p.sy, p.sw, p.sh, Math.max(1, Math.round(p.sw * kk))",
+      "new": "if (false) lctx.drawImage(scaledPicture(p.key, p.img, p.sx, p.sy, p.sw, p.sh, Math.max(1, Math.round(p.sw * kk))",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_layer_kept_when_a_name_changes",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "if (state && state.stamp !== (tab ? tab.stamp : 0)) everything = true;",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_object_picture_by_number",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "var a = objectAnim(file, tab, food, r, c), pic = a >= 0 ? pictureOf(a) : null;",
+      "new": "var a = objectAnim(file, null, food, r, c), pic = a >= 0 ? pictureOf(a) : null;",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_ghost_of_a_plant_by_name",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "var a = kind === 'plant' || (!kind && half) ? id :",
+      "new": "var a = (!kind && half) ? id :",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_ghost_of_a_plant_put_by_name",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "var a = kind === 'plant' || (!kind && half) ? id :",
+      "new": "var a = kind === 'plant' ? id :",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_ghost_picked_up_is_named_by_the_tool",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "kind === 'obj' ? Tiles.object(tab, id) : Tiles.place(tab, id);",
+      "new": "Tiles.place(tab, id);",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_ghost_of_a_pile_is_a_put_tile",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "kind === 'pile' ? Tiles.stage(tab, id) : kind === 'obj'",
+      "new": "kind === 'obj'",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_ghost_by_number",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "var it = a >= 0 ? index.objects.items[a] : null,",
+      "new": "var it = index.objects.items[id],",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_ghost_ignores_the_file",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "tab = file ? Tiles.tableOf(file) : null;",
+      "new": "tab = null;",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_edges_after_is_the_cell_not_the_tile",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "a = placing ? Tiles.place(tab, id) : Tiles.ground(tab, id)",
+      "new": "a = Tiles.ground(tab, id)",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_edges_before_is_a_put_tile",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "a = placing ? Tiles.place(tab, id) : Tiles.ground(tab, id)",
+      "new": "a = Tiles.place(tab, id)",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_edges_black_forgotten",
+      "file": "web/front/mapmaker_sprites.js",
+      "old": "if (ready && tab && a < 0) {",
+      "new": "if (false) {",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_rects_by_number",
+      "file": "web/front/mapmaker_view.js",
+      "old": "file.tile2(r, c), tab);\n                ctx.fillRect",
+      "new": "file.tile2(r, c));\n                ctx.fillRect",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_pixels_by_number",
+      "file": "web/front/mapmaker_view.js",
+      "old": "var t = Tiles.packedTables(tab), b = file.bytes, l1",
+      "new": "var t = Tiles.packedTables(), b = file.bytes, l1",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_one_cell_by_number",
+      "file": "web/front/mapmaker_view.js",
+      "old": "file.tile2(r, c), tab === undefined ? Tiles.tableOf(file) : tab);\n        ctx.fillRect",
+      "new": "file.tile2(r, c));\n        ctx.fillRect",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_one_pixel_cell_by_number",
+      "file": "web/front/mapmaker_view.js",
+      "old": "var t = Tiles.packedTables(tab === undefined ? Tiles.tableOf(file) : tab), b = file.bytes, s = view.scale,",
+      "new": "var t = Tiles.packedTables(), b = file.bytes, s = view.scale,",
+      "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+    },
+    {
+      "id": "names_kept_frame_ignores_the_dictionary",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "full.stamp === View.stamp(file) && ",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_stamp_of_nothing_never_moves",
+      "file": "web/front/mapmaker_view.js",
+      "old": "function stamp(file) { var tab = Tiles.tableOf(file); return tab ? tab.stamp : 0; }",
+      "new": "function stamp(file) { return 0; }",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_table_asked_for_each_cell_in_rectangles",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "else View.redrawCell(ctx, view, file, w, h, r, c, tab);",
+      "new": "else View.redrawCell(ctx, view, file, w, h, r, c);",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    },
+    {
+      "id": "names_table_asked_for_each_cell_in_pixels",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "View.redrawPixelCell(view, file, w, h, r, c, scratch, box, tab);",
+      "new": "View.redrawPixelCell(view, file, w, h, r, c, scratch, box);",
+      "test": "node tests/scripts/web_mapmaker_names_check.js"
+    }
+  ]
+}

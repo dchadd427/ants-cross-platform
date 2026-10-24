@@ -151,8 +151,8 @@
   {
    "id": "tiles_averages_leave_the_packed_tables",
    "file": "web/front/mapmaker_tiles.js",
-   "old": "packed1 = packed2 = null;\n    }",
-   "new": "}",
+   "old": "packed1 = packed2 = null; made = null; stamps++;\n    }",
+   "new": "made = null; stamps++;\n    }",
    "test": "node tests/scripts/web_mapmaker_ground_check.js"
   },
   {
@@ -256,22 +256,22 @@
   {
    "id": "sprites_every_cell_is_an_anchor",
    "file": "web/front/mapmaker_sprites.js",
-   "old": "if (!(b[at + 2] & 1)) continue;",
-   "new": "",
+   "old": "return b[at + 2] & 1 ? Tiles.object(tab, id) : -1;",
+   "new": "return Tiles.object(tab, id);",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   },
   {
    "id": "sprites_rows_in_reverse",
    "file": "web/front/mapmaker_sprites.js",
-   "old": "for (var r = r0; r <= r1; r++) {\n                var at = file.layer2",
-   "new": "for (var r = r1; r >= r0; r--) {\n                var at = file.layer2",
+   "old": "for (var r = r0; r <= r1; r++) {\n                for (var c = c0;",
+   "new": "for (var r = r1; r >= r0; r--) {\n                for (var c = c0;",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   },
   {
    "id": "sprites_offsets_swapped",
    "file": "web/front/mapmaker_sprites.js",
-   "old": "dx = st.ox + c * S + it[4] * k; dy = st.oy + r * S + it[5] * k;",
-   "new": "dx = st.ox + c * S + it[5] * k; dy = st.oy + r * S + it[4] * k;",
+   "old": "dx = Math.round(st.ox + c * S + pic.ox * k); dy = Math.round(st.oy + r * S + pic.oy * k);",
+   "new": "dx = Math.round(st.ox + c * S + pic.oy * k); dy = Math.round(st.oy + r * S + pic.ox * k);",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   },
   {
@@ -452,8 +452,8 @@
   {
    "id": "sprites_food_pile_without_layer2_not_drawn",
    "file": "web/front/mapmaker_sprites.js",
-   "old": "if (id === EMPTY2 && ft) id = ft;",
-   "new": "if (false) id = ft;",
+   "old": "if (id === EMPTY2) return ft ? Tiles.stage(tab, ft) : -1;",
+   "new": "if (id === EMPTY2) return -1;",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   },
   {
@@ -487,8 +487,8 @@
   {
    "id": "sprites_pictures_scaled_where_they_land",
    "file": "web/front/mapmaker_sprites.js",
-   "old": "lctx.drawImage(scaledPicture(it ? id : 'f' + id, img, sx, sy, sw, sh, iw, ih), dx, dy);",
-   "new": "lctx.imageSmoothingQuality = 'low'; lctx.drawImage(img, sx, sy, sw, sh, dx + 0.4, dy + 0.4, iw, ih);",
+   "old": "lctx.drawImage(scaledPicture(pic.key, pic.img, pic.sx, pic.sy, pic.sw, pic.sh, iw, ih), dx, dy);",
+   "new": "lctx.imageSmoothingQuality = 'low'; lctx.drawImage(pic.img, pic.sx, pic.sy, pic.sw, pic.sh, dx + 0.4, dy + 0.4, iw, ih);",
    "test": "python3 tests/scripts/web_mapmaker_browser.py --web \"$ANTS_WEB_URL\" --only layer"
   },
   {
