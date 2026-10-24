@@ -1691,8 +1691,8 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(load_map_or_embedded(r, std::vector<std::string>{folder.path.string()}, level, error) && error.empty());
         ASSERT_EQ(read_bytes(folder.path / "tiny.lvl").size(), std::string("this is not the map").size());       // (and the folder's file is as it was)
         // the right file in the folder: the folder's (the same bytes)
+        fs::remove(folder.path / "tiny.lvl");                                      // (first: on a file system that folds case it is the same name as TINY.LVL)
         fs::copy_file(tiny.path, folder.path / "TINY.LVL");
-        fs::remove(folder.path / "tiny.lvl");
         ASSERT_TRUE(load_map_or_embedded(r, std::vector<std::string>{folder.path.string()}, level, error) && error.empty());
         // a folder that holds the right file is preferred to whatever the file carries (a replay made by hand, with a map that is not the head's: the folder's file is used)
         Replay forged_too = r;
