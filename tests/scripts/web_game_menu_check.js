@@ -446,6 +446,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     expect('...and as many as the game\'s own row has words (the table of the game is the one that counts)', pick.children.length, JSON.parse(MATCH).rows.filter((r) => r.key === 'picture')[0].words.length);
     expect('...the shape that the page has is the chosen one', pick.value, '16:9');
     expect('...and a quiet line under it names the shape that fills the screen (a 1440 x 900 laptop)', p.qa('.gm-fits').map((n) => n.textContent), ['16:10 fills your screen']);
+    ok('...which the dropdown is described by (aria-describedby names the line)', !!p.q('.gm-fits').id && pick.getAttribute('aria-describedby') === p.q('.gm-fits').id);
     pick.value = '21:9';
     pick.fire('change', {});
     expect('a choice is the page\'s own function, called (the selector, the address and the stored choice stay one function)', [p.shapes.clicked, p.stage.getAttribute('data-aspect'), p.game.calls.length], [['21:9'], '21:9', 0]);

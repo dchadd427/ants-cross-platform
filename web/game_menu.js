@@ -174,7 +174,7 @@
             mark();
             wrap.appendChild(el('span', 'pick')).appendChild(select);                      // (the page's .pick: the chevron of its dropdowns)
             try { line = page.shapes.fillsLine(win.screen.width, win.screen.height); } catch (e) { /* no screen to ask */ }
-            if (line) wrap.appendChild(el('div', 'gm-fits', line));
+            if (line) { var fits = wrap.appendChild(el('div', 'gm-fits', line)); fits.id = labelId + '-fits'; select.setAttribute('aria-describedby', fits.id); }
             return wrap;
         }
 

@@ -1043,6 +1043,48 @@
       "old": "            function mark() { select.value = own.read(); }",
       "new": "            function mark() { select.value = 'x'; }",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_not_in_focus_list",
+      "file": "web/game_menu.js",
+      "old": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled])';",
+      "new": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_no_change_handler",
+      "file": "web/game_menu.js",
+      "old": "select.addEventListener('change', function () { own.write(select.value); mark(); });",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_not_marked_after_write",
+      "file": "web/game_menu.js",
+      "old": "own.write(select.value); mark(); });",
+      "new": "own.write(select.value); });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_no_fits_line",
+      "file": "web/game_menu.js",
+      "old": "if (line) {",
+      "new": "if (false) {",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_not_named_by_its_row",
+      "file": "web/game_menu.js",
+      "old": "select.setAttribute('aria-labelledby', labelId);",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_not_described_by_its_line",
+      "file": "web/game_menu.js",
+      "old": "select.setAttribute('aria-describedby', fits.id);",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
   ]
 }

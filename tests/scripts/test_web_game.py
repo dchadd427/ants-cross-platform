@@ -58,10 +58,10 @@ def rule(style, selector, nth=0):
 FAMILY_CLASSES = ("btn", "banner", "startbtn", "sit", "sort-btn", "copy-btn", "ctrl-btn", "stage-pill-btn", "stage-mini-btn", "view-toggle-btn", "filter-chip", "sound-quick-play", "anim-link-chip", "step-link-btn", "tab-btn")
 FAMILY = re.compile(r"(?<![\w-])\.(?:%s)(?![\w-])|\.pair label|\.seg button" % "|".join(FAMILY_CLASSES))
 # The front page (the lobby) is drawn as the approved pictures draw it and names its pieces differently: its `.banner` is the picture's message strip, a black box with a frame (not a teal
-# face, not a button: it is not in the family), its teal heading banner is `.name-step-title`, and its two-state buttons are the labels of the footer's radio buttons
-# (`.shape .seg label`, the chosen one is `.shape .seg input:checked + label`). (`.pair label` stays in both patterns, so that the old front page's pair cannot come back unchecked.)
+# face, not a button: it is not in the family) and its teal heading banner is `.name-step-title`. (`.pair label` stays in both patterns, so that the old front page's pair cannot come
+# back unchecked.)
 LOBBY_FAMILY_CLASSES = tuple(name for name in FAMILY_CLASSES if name != "banner") + ("name-step-title",)
-LOBBY_FAMILY = re.compile(r"(?<![\w-])\.(?:%s)(?![\w-])|\.pair label|\.seg button|\.shape \.seg [^,{]*label" % "|".join(LOBBY_FAMILY_CLASSES))
+LOBBY_FAMILY = re.compile(r"(?<![\w-])\.(?:%s)(?![\w-])|\.pair label|\.seg button" % "|".join(LOBBY_FAMILY_CLASSES))
 
 
 def png_size(path):
