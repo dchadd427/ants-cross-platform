@@ -135,7 +135,8 @@ JSON.stringify((function () {
            fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement), pseudo: stage.classList.contains('pseudo-fullscreen'),
            stage: r(stage), box: r(box), canvas: r(cv), bar: r(bar), backing: [cv.width, cv.height], ready: !!window.isReadyToPlay,
            scroll: [de.scrollWidth, de.clientWidth, de.scrollHeight, de.clientHeight],
-           checked: document.getElementById('aspect-select').value, entries: Array.prototype.map.call(document.getElementById('aspect-select').options, function (o) { return [o.value, o.textContent]; }) };
+           checked: (document.querySelector('#aspect-select-list [aria-selected=true]') || document.body).getAttribute('data-shape'), shown: document.getElementById('aspect-select').textContent,
+           entries: Array.prototype.map.call(document.querySelectorAll('#aspect-select-list [role=option]'), function (o) { return [o.getAttribute('data-shape'), o.textContent]; }) };
 })())
 """
 
@@ -430,14 +431,29 @@ def quick_help_start(shape):
 
 
 def choose_shape(tab, shape, select="aspect-select"):
-    """Choose a shape in a dropdown of the page as a person does it with the keyboard: the dropdown is focused, ArrowDown or ArrowUp is pressed (a real key of the browser) until the entry is the
-    chosen one, and the browser sends its `change` with every press (a native popup cannot be photographed or clicked in a headless browser; the keys are what a native select takes)."""
-    now = tab.ev("document.getElementById('%s').selectedIndex" % select)
+    """Choose a shape in a dropdown of the page as a person does it with the keyboard: the dropdown's button is focused, Enter opens its list (a real key of the browser), ArrowDown or ArrowUp moves the mark
+    until it is on the shape, and Enter chooses it (the picture changes at once). The pointer's way is click_shape."""
+    now = tab.ev("[].findIndex.call(document.querySelectorAll('#%s-list [role=option]'), function (o) { return o.getAttribute('aria-selected') === 'true'; })" % select)
     want = SHAPE_ORDER.index(shape)
     tab.ev("document.getElementById('%s').focus(); 1" % select)
+    tab.key("Enter")
+    time.sleep(0.15)
     for _ in range(abs(want - now)):
         tab.key("ArrowDown" if want > now else "ArrowUp")
-        time.sleep(0.15)
+        time.sleep(0.1)
+    tab.key("Enter")
+    time.sleep(0.15)
+
+
+def click_shape(tab, shape, select="aspect-select"):
+    """Choose a shape with the mouse: a click on the dropdown's button opens the list, a click on the row of the shape chooses it (real presses of the browser at the middle of each)"""
+    spot = lambda element_id: json.loads(tab.ev("JSON.stringify((function () { var r = document.getElementById('%s').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })())" % element_id))
+    x, y = spot(select)
+    tab.click(x, y)
+    time.sleep(0.2)
+    x, y = spot("%s-o%d" % (select, SHAPE_ORDER.index(shape)))
+    tab.click(x, y)
+    time.sleep(0.2)
 
 
 def pixel_at(shot, g, fx, fy):
@@ -593,7 +609,7 @@ class Tab:
 
     def key(self, name):
         """A real key of the browser (down and up) to the focused element"""
-        codes = {"ArrowDown": 40, "ArrowUp": 38, "Escape": 27, "Tab": 9, "Home": 36, "End": 35}
+        codes = {"ArrowDown": 40, "ArrowUp": 38, "Escape": 27, "Tab": 9, "Home": 36, "End": 35, "Enter": 13, " ": 32}
         params = {"key": name, "code": name, "windowsVirtualKeyCode": codes[name], "nativeVirtualKeyCode": codes[name]}
         self.call("Input.dispatchKeyEvent", dict(params, type="rawKeyDown"))
         self.call("Input.dispatchKeyEvent", dict(params, type="keyUp"))
@@ -1560,6 +1576,22 @@ def main():
                 check(bar == (0, 0, 0), "%s: black around the centred page (%s)" % (label, bar))
             check(pixel_at(shot, g, 0.5, 0.5) != (0, 0, 0), "%s: the page is drawn (the middle of the picture is not black)" % label)
             tab.save_shot(args.shots, "selector_" + shape.replace(":", "x"))
+        # the mouse does the same: a click opens the list (under the button, inside the window), a click on a row chooses it, a click elsewhere closes it, and none of it needs a native popup
+        for shape in ("16:10", "4:3", "20:9", "16:9"):
+            click_shape(tab, shape)
+            time.sleep(1.0)
+            g = tab.geometry()
+            check(g["aspect"] == shape and g["checked"] == shape and g["shown"] == dict(SHAPE_ENTRIES)[shape], "the mouse's choice of %s: the picture and the dropdown show it (%s, %s)" % (shape, g["aspect"], g["shown"]))
+            check(tab.ev("document.getElementById('aspect-select-list').hidden") is True and tab.ev("document.activeElement.id") == "aspect-select" and tab.ev("localStorage.getItem('ants.aspect.v2')") == shape,
+                  "the mouse's choice of %s: the list is shut, the focus is the button's and the choice is remembered" % shape)
+        x0, y0 = json.loads(tab.ev("JSON.stringify((function () { var r = document.getElementById('aspect-select').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })())"))
+        tab.click(x0, y0)
+        time.sleep(0.2)
+        box = json.loads(tab.ev("JSON.stringify((function () { var l = document.getElementById('aspect-select-list').getBoundingClientRect(), b = document.getElementById('aspect-select').getBoundingClientRect(); return [l.top >= b.bottom || l.bottom <= b.top, l.left >= 0, l.right <= window.innerWidth, l.top >= 0, l.bottom <= window.innerHeight, document.getElementById('aspect-select-list').hidden]; })())"))
+        check(box == [True, True, True, True, True, False], "the open list lies beside its button (never over it), inside the window (%s)" % box)
+        tab.click(20, 20)
+        time.sleep(0.2)
+        check(tab.ev("document.getElementById('aspect-select-list').hidden") is True and tab.geometry()["aspect"] == "16:9", "a click elsewhere closes the list and chooses nothing")
         tab.ev("localStorage.setItem('ants.aspect.v2', '21:9'); 1")
         tab.open(web)                                                 # no parameter: the remembered choice
         g = tab.geometry()

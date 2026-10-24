@@ -411,15 +411,16 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* The picture's dropdown (a native select that the script fills from web/shapes.js's table, in the strip under the game and in a recording's Picture window) and the quiet line under it that names the
-           shape that fills the computer's screen (the script shows it): the bar makes room for the line under it. Under 560 px the dropdown has a line of its own. */
+        /* The picture's dropdown (web/shape_picker.js: a button and a list of the table's rows, made by the script, so that it works in fullscreen and under a locked mouse; in the strip under the game, in a recording's Picture window and in the
+           settings menu) and the quiet line under it that names the shape that fills the computer's screen (the script shows it): the bar makes room for the line under it. Under 560 px the dropdown has a line of its own. */
         .pick { position: relative; display: inline-flex; min-width: 0; }
         .pick::after { content: ""; position: absolute; right: 16px; top: calc(50% - 6px); width: 7px; height: 7px; border: solid var(--cream); border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
         .pick-select {
-            appearance: none; -webkit-appearance: none; width: min(370px, 100%); min-width: 0; min-height: 38px; padding: 6px 40px 6px 14px; font: inherit; font-size: 15px; line-height: 1.1; color: var(--cream);
+            appearance: none; -webkit-appearance: none; width: min(370px, 100%); min-width: 0; min-height: 38px; padding: 6px 40px 6px 14px; font: inherit; font-size: 15px; line-height: 1.1; color: var(--cream); text-align: left; white-space: nowrap; overflow: hidden;
             background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); cursor: pointer; text-overflow: ellipsis; touch-action: manipulation;
         }
-        .pick-select option { color: var(--cream); background: #102b25; }
+        .pick-list { position: fixed; left: 0; top: 0; z-index: 80; box-sizing: border-box; margin: 0; padding: 4px 0; list-style: none; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; font-size: 15px; line-height: 1.1; color: var(--cream); background: #102b25; border: 2px solid var(--edge); border-radius: 8px; box-shadow: 0 8px 20px rgba(0, 0, 0, .55), 2px 3px 0 var(--shadow); }
+        .pick-opt { display: flex; align-items: center; min-height: 38px; padding: 6px 14px; white-space: nowrap; cursor: pointer; touch-action: manipulation; } .pick-opt.act { background: var(--teal) var(--sheen); } .pick-opt[aria-selected="true"] { color: #f6dc86; } .pick-opt[aria-selected="true"]::after { content: "\2713"; margin-left: auto; padding-left: 14px; } @media (pointer: coarse) { .pick-opt { min-height: 44px; } }
         .fit-note { position: absolute; left: 4px; top: 100%; margin-top: 6px; white-space: nowrap; font-size: 13px; line-height: 1.2; color: var(--ink); pointer-events: none; }
         .fit-note[hidden] { display: none; }
         .view-bar.has-fit-note { margin-bottom: 28px; }
@@ -1233,8 +1234,8 @@
 
     <section class="rematch" id="rematch" aria-label="The match is over" hidden></section>
     <div class="view-bar" id="view-bar">
-        <label id="view-bar-label" for="aspect-select">Picture</label>
-        <span class="pick"><select class="pick-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture; the match goes on"></select><span class="fit-note" id="fit-note" hidden></span></span>
+        <span id="view-bar-label">Picture</span>
+        <span class="pick" id="aspect-pick"><span class="fit-note" id="fit-note" hidden></span></span>
         <span id="lock-bar-label" class="lock-part">Fullscreen mouse</span>
         <div class="seg lock-part" role="radiogroup" aria-labelledby="lock-bar-label">
             <button type="button" role="radio" id="lock-on" data-lock="on" aria-checked="true" title="Fullscreen holds the mouse inside the game: your cursor cannot leave the picture, and on a Mac the Dock and the menu bar stay away. In Chrome and Edge Esc goes to the game (hold it to leave fullscreen); in other browsers Esc gives the mouse back first.">Locked</button>
@@ -1250,7 +1251,7 @@
         <button class="btn sm camb" type="button" id="b-cam" data-mode="auto" aria-label="Auto camera" aria-pressed="true" title="Auto camera: the picture follows the action. Press for Manual camera: the picture stays where you put it."><svg class="ic-auto" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.6"/></svg><svg class="ic-man" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="lbl" id="cam-lbl">Auto camera</span></button>
         <div class="livebox" id="livebox"><span class="livenow" id="livenow" hidden>Live</span><button class="btn sm jtl" type="button" id="b-live" hidden>Jump to live</button></div>
         <div class="seg speed" role="radiogroup" aria-label="Speed" id="speed"><button type="button" role="radio" data-s="0.5" aria-checked="false">&frac12;&times;</button><button type="button" role="radio" data-s="1" aria-checked="true">1&times;</button><button type="button" role="radio" data-s="2" aria-checked="false">2&times;</button><button type="button" role="radio" data-s="4" aria-checked="false">4&times;</button><button type="button" role="radio" data-s="8" aria-checked="false">8&times;</button></div>
-        <div class="picwrap" id="picwrap"><button class="btn sm" type="button" id="picbtn" aria-haspopup="true" aria-expanded="false" aria-controls="picpop" title="The shape of the picture">Picture &#9652;</button><div class="picpop" id="picpop" role="group" aria-labelledby="picpop-h" hidden><h3 id="picpop-h">Picture</h3><span class="pick"><select class="pick-select" id="pic-select" aria-labelledby="picpop-h" aria-describedby="pic-note" title="The shape of the picture"></select><span class="fit-note" id="pic-note" hidden></span></span></div></div>
+        <div class="picwrap" id="picwrap"><button class="btn sm" type="button" id="picbtn" aria-haspopup="true" aria-expanded="false" aria-controls="picpop" title="The shape of the picture">Picture &#9652;</button><div class="picpop" id="picpop" role="group" aria-labelledby="picpop-h" hidden><h3 id="picpop-h">Picture</h3><span class="pick" id="pic-pick"><span class="fit-note" id="pic-note" hidden></span></span></div></div>
         <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
         <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" title="Hide the bar (swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
     </div>
@@ -1372,7 +1373,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="shapes.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1873,10 +1874,6 @@
             ANTS_ASPECT_SOURCE = chosen.source;
             ANTS_ARGS.push('--aspect', ANTS_ASPECT);
             antsShowShape(document.getElementById('game-stage'), ANTS_ASPECT);
-            document.querySelectorAll('.pick-select').forEach(function (select) {
-                AntsShapes.fillSelect(select, document);                 // (one entry for each row of the table; the shown shape is the chosen one)
-                select.value = ANTS_ASPECT;
-            });
         })();
         // The game tells the page the seat that the room gave this window (after the Welcome, and again if it changes: Application's on_seat_known): the address of a game of a server's room then carries it
         // (withSeat), so that a reload of THIS window takes this seat and its key. Never for a game on this computer.
@@ -2758,7 +2755,7 @@
             var at = antsAspectOption();
             if (at !== -1) ANTS_ARGS[at + 1] = shape;
             antsShowShape(stageElement, shape);
-            document.querySelectorAll('.pick-select').forEach(function (select) { select.value = shape; });
+            antsPickers.forEach(function (picker) { picker.set(shape); });
             antsSyncAspect();
             relayout(true);
             try {
@@ -2768,6 +2765,7 @@
                 window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
             } catch (e) { /* the address stays as it is: the browser remembers the choice */ }
         }
+        var antsPickers = [];               // (the page's dropdowns, made below: each shows the shape that the picture has)
         // A pick of the dropdowns (and of the settings menu's, which calls this): remembered, then the change itself
         function antsPickShape(value) {
             if (!ANTS_PAGE.parseAspect(value)) return;
@@ -2782,10 +2780,10 @@
                 document.querySelectorAll('.fit-note').forEach(function (note) { note.textContent = line; note.hidden = false; });
                 document.getElementById('view-bar').classList.add('has-fit-note');
             }
-            document.querySelectorAll('.pick-select').forEach(function (select) {
-                select.addEventListener('change', function () { antsPickShape(select.value); });
-                // the keys of a dropdown are its own: the game's window listener would take the arrows as the map's scroll keys and keep them from the dropdown
-                ['keydown', 'keypress', 'keyup'].forEach(function (name) { select.addEventListener(name, function (e) { e.stopPropagation(); }); });
+            // the dropdowns: the strip under the game and the recording's Picture window (the settings menu makes its own); each is a picker (web/shape_picker.js) with one entry for each row of the table
+            [['aspect-pick', 'view-bar-label', 'fit-note', 'aspect-select', 'The shape of the picture; the match goes on'], ['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']].forEach(function (c) {
+                var host = document.getElementById(c[0]);
+                if (host) antsPickers.push(AntsShapePicker.create(AntsShapes, { doc: document, host: host, id: c[3], labelledBy: c[1], describedBy: c[2], title: c[4], value: ANTS_ASPECT, onPick: antsPickShape }));
             });
         })();
         // ANTS_SELECTOR_END
@@ -3133,7 +3131,7 @@
         function antsLoadGameMenu(again) {
             var script = document.createElement('script'), toast = document.getElementById('toast');
             script.src = 'game_menu.js?v=' + ANTS_BUILD_VER;
-            script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, pickShape: antsPickShape, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock }); };
+            script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }, pickShape: antsPickShape, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock }); };
             script.onerror = function () { script.remove(); if (again) { toast.textContent = 'The settings menu could not load. Press Reset to try again.'; toast.hidden = false; } else setTimeout(function () { antsLoadGameMenu(true); }, 2500); };
             document.head.appendChild(script);
         }
@@ -3537,7 +3535,8 @@
             $('b-fsx').addEventListener('click', function () { $('fullscreen-btn').click(); });
             // PICTURE_POPOVER_BEGIN (tests/scripts/web_picture_popover_check.js runs this block on a page of fakes)
             // The Picture button: the small window with the dropdown of the shapes opens above the bar and closes with a second press, a click elsewhere, Esc (focus goes back to the button) or the focus leaving it. The
-            // dropdown in it is the page's own selector (.pick-select: antsPickShape remembers the choice and puts it in the address); the bar of a fullscreen page stays while the window is open.
+            // dropdown in it is the page's own picker (web/shape_picker.js: antsPickShape remembers the choice and puts it in the address); Esc with its list open closes the list alone (the picker takes the key first, in the capture
+            // phase, as this window's listener is added later); the bar of a fullscreen page stays while the window is open.
             var picWrap = $('picwrap'), picBtn = $('picbtn'), picPop = $('picpop');
             function picOpen() { return !picPop.hidden; }
             function picShow(open, focusBack) {

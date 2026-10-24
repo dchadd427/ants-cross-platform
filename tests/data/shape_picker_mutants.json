@@ -1,0 +1,1041 @@
+{
+  "note": "Mutants of the picture's picker for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/shape_picker.js against tests/scripts/web_shape_picker_check.js (node, on a fake of the DOM). Run from the checkout: tools/mutate.py tests/data/shape_picker_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_shapes.py runs them on a copy of the script.",
+  "mutants": [
+    {
+      "id": "button_not_a_combobox",
+      "file": "web/shape_picker.js",
+      "old": "button.setAttribute('role', 'combobox');",
+      "new": "button.setAttribute('role', 'button');",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_does_not_say_listbox",
+      "file": "web/shape_picker.js",
+      "old": "button.setAttribute('aria-haspopup', 'listbox');",
+      "new": "button.setAttribute('aria-haspopup', 'true');",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_starts_expanded",
+      "file": "web/shape_picker.js",
+      "old": "button.setAttribute('aria-expanded', 'false');\n        button.setAttribute('aria-controls'",
+      "new": "button.setAttribute('aria-expanded', 'true');\n        button.setAttribute('aria-controls'",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_controls_nothing",
+      "file": "web/shape_picker.js",
+      "old": "button.setAttribute('aria-controls', id + '-list');",
+      "new": "button.setAttribute('aria-controls', id);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_not_named",
+      "file": "web/shape_picker.js",
+      "old": "if (opts.labelledBy) button.setAttribute('aria-labelledby', opts.labelledBy);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_not_named",
+      "file": "web/shape_picker.js",
+      "old": "if (opts.labelledBy) list.setAttribute('aria-labelledby', opts.labelledBy);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_not_described",
+      "file": "web/shape_picker.js",
+      "old": "if (opts.describedBy) button.setAttribute('aria-describedby', opts.describedBy);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_without_title",
+      "file": "web/shape_picker.js",
+      "old": "if (opts.title) button.title = opts.title;",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_has_no_id",
+      "file": "web/shape_picker.js",
+      "old": "button.id = id;",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_without_the_dropdowns_look",
+      "file": "web/shape_picker.js",
+      "old": "button.className = 'pick-select' + (opts.className ? ' ' + opts.className : '');",
+      "new": "button.className = 'pick-select';",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_starts_open",
+      "file": "web/shape_picker.js",
+      "old": "list.hidden = true;\n        ROWS.forEach",
+      "new": "list.hidden = false;\n        ROWS.forEach",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_is_not_a_listbox",
+      "file": "web/shape_picker.js",
+      "old": "list.setAttribute('role', 'listbox');",
+      "new": "list.setAttribute('role', 'menu');",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "rows_are_not_options",
+      "file": "web/shape_picker.js",
+      "old": "item.setAttribute('role', 'option');",
+      "new": "item.setAttribute('role', 'listitem');",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "rows_say_the_shape_without_its_canvas",
+      "file": "web/shape_picker.js",
+      "old": "item.textContent = row.text;",
+      "new": "item.textContent = row.label;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "row_ids_are_shifted",
+      "file": "web/shape_picker.js",
+      "old": "item.id = id + '-o' + row.place;",
+      "new": "item.id = id + '-o' + (row.place + 1);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "rows_do_not_name_their_shape",
+      "file": "web/shape_picker.js",
+      "old": "item.setAttribute('data-shape', row.name);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_before_button",
+      "file": "web/shape_picker.js",
+      "old": "host.insertBefore(list, button.nextSibling);",
+      "new": "host.insertBefore(list, host.firstChild);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_always_shows_the_first_shape",
+      "file": "web/shape_picker.js",
+      "old": "button.textContent = current < 0 ? '' : ROWS[current].text;",
+      "new": "button.textContent = ROWS[0].text;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "selected_row_never_marked",
+      "file": "web/shape_picker.js",
+      "old": "item.setAttribute('aria-selected', i === current ? 'true' : 'false');",
+      "new": "item.setAttribute('aria-selected', 'false');",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_not_scrolled_up_to_the_mark",
+      "file": "web/shape_picker.js",
+      "old": "if (top < list.scrollTop) list.scrollTop = top;",
+      "new": "if (false) list.scrollTop = top;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_not_scrolled_down_to_the_mark",
+      "file": "web/shape_picker.js",
+      "old": "else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_scrolled_too_far_down",
+      "file": "web/shape_picker.js",
+      "old": "list.scrollTop = bottom - list.clientHeight;",
+      "new": "list.scrollTop = bottom;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "old_mark_stays",
+      "file": "web/shape_picker.js",
+      "old": "if (mark >= 0) options[mark].classList.remove('act');",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "mark_not_taken_off_the_button",
+      "file": "web/shape_picker.js",
+      "old": "if (i < 0) { button.removeAttribute('aria-activedescendant'); return; }",
+      "new": "if (i < 0) return;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "button_does_not_name_the_marked_row",
+      "file": "web/shape_picker.js",
+      "old": "button.setAttribute('aria-activedescendant', options[i].id);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_forgets_the_frame_of_a_fixed_box",
+      "file": "web/shape_picker.js",
+      "old": "list.style.left = (left - origin.left) + 'px';",
+      "new": "list.style.left = left + 'px';",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_forgets_the_frame_top",
+      "file": "web/shape_picker.js",
+      "old": "list.style.top = (top - origin.top) + 'px';",
+      "new": "list.style.top = top + 'px';",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_opens_up_without_room_over",
+      "file": "web/shape_picker.js",
+      "old": "var up = full > below && above > below;",
+      "new": "var up = full > below;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_never_opens_up",
+      "file": "web/shape_picker.js",
+      "old": "var up = full > below && above > below;",
+      "new": "var up = false;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_leaves_the_edge",
+      "file": "web/shape_picker.js",
+      "old": "var left = Math.max(EDGE, Math.min(at.left, wide - EDGE - across));",
+      "new": "var left = at.left;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_left_edge_lost",
+      "file": "web/shape_picker.js",
+      "old": "var left = Math.max(EDGE, Math.min(at.left, wide - EDGE - across));",
+      "new": "var left = Math.min(at.left, wide - EDGE - across);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_not_as_tall_as_the_room",
+      "file": "web/shape_picker.js",
+      "old": "var height = Math.max(Math.min(full, up ? above : below), 0);",
+      "new": "var height = full;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_room_taken_from_the_wrong_side",
+      "file": "web/shape_picker.js",
+      "old": "var height = Math.max(Math.min(full, up ? above : below), 0);",
+      "new": "var height = Math.max(Math.min(full, up ? below : above), 0);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_gap_is_six",
+      "file": "web/shape_picker.js",
+      "old": "var GAP = 4; ",
+      "new": "var GAP = 6; ",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_edge_is_zero",
+      "file": "web/shape_picker.js",
+      "old": "var EDGE = 8; ",
+      "new": "var EDGE = 0; ",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_narrower_than_its_button",
+      "file": "web/shape_picker.js",
+      "old": "list.style.minWidth = at.width + 'px';",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "place_height_not_limited",
+      "file": "web/shape_picker.js",
+      "old": "list.style.maxHeight = height + 'px';",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "outside_click_takes_the_button_too",
+      "file": "web/shape_picker.js",
+      "old": "function away(e) { if (!inside(e.target, button) && !inside(e.target, list)) close(false); }",
+      "new": "function away(e) { if (!inside(e.target, list)) close(false); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "outside_click_takes_the_list_too",
+      "file": "web/shape_picker.js",
+      "old": "function away(e) { if (!inside(e.target, button) && !inside(e.target, list)) close(false); }",
+      "new": "function away(e) { if (!inside(e.target, button)) close(false); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "every_press_is_a_touch",
+      "file": "web/shape_picker.js",
+      "old": "function awayTouch(e) { if (e.pointerType === 'touch') away(e); }",
+      "new": "function awayTouch(e) { away(e); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "no_touch_is_a_touch",
+      "file": "web/shape_picker.js",
+      "old": "function awayTouch(e) { if (e.pointerType === 'touch') away(e); }",
+      "new": "function awayTouch(e) { }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "scroll_of_the_list_closes_it",
+      "file": "web/shape_picker.js",
+      "old": "function leave(e) { if (!e.target || !inside(e.target, list)) close(false); }",
+      "new": "function leave(e) { close(false); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "scroll_elsewhere_keeps_it",
+      "file": "web/shape_picker.js",
+      "old": "function leave(e) { if (!e.target || !inside(e.target, list)) close(false); }",
+      "new": "function leave(e) { }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "outside_click_not_heard",
+      "file": "web/shape_picker.js",
+      "old": "doc[call]('click', away, true);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "outside_click_heard_in_the_bubble_phase",
+      "file": "web/shape_picker.js",
+      "old": "doc[call]('click', away, true);",
+      "new": "doc[call]('click', away, false);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "outside_touch_not_heard",
+      "file": "web/shape_picker.js",
+      "old": "doc[call]('pointerdown', awayTouch, true);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "resize_closes_the_list",
+      "file": "web/shape_picker.js",
+      "old": "win[call]('resize', place, false);",
+      "new": "win[call]('resize', leave, false);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "resize_not_heard",
+      "file": "web/shape_picker.js",
+      "old": "win[call]('resize', place, false);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "scroll_not_heard",
+      "file": "web/shape_picker.js",
+      "old": "win[call]('scroll', leave, true);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "listeners_never_taken_off",
+      "file": "web/shape_picker.js",
+      "old": "var call = on ? 'addEventListener' : 'removeEventListener';",
+      "new": "var call = 'addEventListener';",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "open_says_nothing",
+      "file": "web/shape_picker.js",
+      "old": "button.setAttribute('aria-expanded', 'true');",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "open_not_placed",
+      "file": "web/shape_picker.js",
+      "old": "            place();\n            setMark(current >= 0 ? current : 0);",
+      "new": "            setMark(current >= 0 ? current : 0);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "open_marks_the_first_row",
+      "file": "web/shape_picker.js",
+      "old": "setMark(current >= 0 ? current : 0);",
+      "new": "setMark(0);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "open_marks_nothing",
+      "file": "web/shape_picker.js",
+      "old": "setMark(current >= 0 ? current : 0);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "open_not_listening",
+      "file": "web/shape_picker.js",
+      "old": "            listen(true);\n        }\n        function close",
+      "new": "        }\n        function close",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "open_twice_marks_again",
+      "file": "web/shape_picker.js",
+      "old": "function open() {\n            if (shown) return;",
+      "new": "function open() {",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "close_not_said",
+      "file": "web/shape_picker.js",
+      "old": "button.setAttribute('aria-expanded', 'false');\n            setMark(-1);",
+      "new": "setMark(-1);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "close_keeps_the_mark",
+      "file": "web/shape_picker.js",
+      "old": "            setMark(-1);\n            typed = '';",
+      "new": "            typed = '';",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "close_not_listening_any_more",
+      "file": "web/shape_picker.js",
+      "old": "            listen(false);\n            if (refocus)",
+      "new": "            if (refocus)",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "close_never_gives_the_focus_back",
+      "file": "web/shape_picker.js",
+      "old": "if (refocus) button.focus();",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "close_always_gives_the_focus_back",
+      "file": "web/shape_picker.js",
+      "old": "if (refocus) button.focus();",
+      "new": "button.focus();",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "close_of_a_shut_list_acts",
+      "file": "web/shape_picker.js",
+      "old": "function close(refocus) {\n            if (!shown) return;",
+      "new": "function close(refocus) {",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "close_forgets_what_was_typed",
+      "file": "web/shape_picker.js",
+      "old": "setMark(-1);\n            typed = '';",
+      "new": "setMark(-1);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "choice_does_not_close",
+      "file": "web/shape_picker.js",
+      "old": "function choose(i) {\n            close(true);",
+      "new": "function choose(i) {",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "choice_does_not_give_the_focus_back",
+      "file": "web/shape_picker.js",
+      "old": "function choose(i) {\n            close(true);",
+      "new": "function choose(i) {\n            close(false);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "choice_of_the_shown_shape_is_a_pick",
+      "file": "web/shape_picker.js",
+      "old": "if (i !== current && opts.onPick) opts.onPick(ROWS[i].name);",
+      "new": "if (opts.onPick) opts.onPick(ROWS[i].name);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "choice_never_a_pick",
+      "file": "web/shape_picker.js",
+      "old": "if (i !== current && opts.onPick) opts.onPick(ROWS[i].name);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "choice_is_the_wrong_row",
+      "file": "web/shape_picker.js",
+      "old": "opts.onPick(ROWS[i].name);",
+      "new": "opts.onPick(ROWS[Math.min(i + 1, ROWS.length - 1)].name);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_never_restarts",
+      "file": "web/shape_picker.js",
+      "old": "typed = at - typedAt > TYPE_MS ? letter : typed + letter;",
+      "new": "typed = typed + letter;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_always_restarts",
+      "file": "web/shape_picker.js",
+      "old": "typed = at - typedAt > TYPE_MS ? letter : typed + letter;",
+      "new": "typed = letter;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_time_not_kept",
+      "file": "web/shape_picker.js",
+      "old": "typedAt = at;",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_same_letter_not_a_word",
+      "file": "web/shape_picker.js",
+      "old": "same = typed.split(letter).join('') === ''",
+      "new": "same = false",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_same_letter_starts_at_the_mark",
+      "file": "web/shape_picker.js",
+      "old": "start = same ? mark + 1 : Math.max(mark, 0);",
+      "new": "start = Math.max(mark, 0);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_words_start_after_the_mark",
+      "file": "web/shape_picker.js",
+      "old": "start = same ? mark + 1 : Math.max(mark, 0);",
+      "new": "start = same ? mark + 1 : mark + 1;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_no_wrap",
+      "file": "web/shape_picker.js",
+      "old": "var i = (start + k) % ROWS.length;",
+      "new": "var i = start + k; if (i >= ROWS.length) return -1;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_anywhere_in_the_words",
+      "file": "web/shape_picker.js",
+      "old": "if (ROWS[i].text.toLowerCase().indexOf(word) === 0) return i;",
+      "new": "if (ROWS[i].text.toLowerCase().indexOf(word) >= 0) return i;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "typeahead_case_matters",
+      "file": "web/shape_picker.js",
+      "old": "if (ROWS[i].text.toLowerCase().indexOf(word) === 0) return i;",
+      "new": "if (ROWS[i].text.indexOf(word) === 0) return i;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keys_of_any_element",
+      "file": "web/shape_picker.js",
+      "old": "if (e.target !== button) return;\n            var key",
+      "new": "var key",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "modified_keys_count",
+      "file": "web/shape_picker.js",
+      "old": "var key = e.key, plain = !e.ctrlKey && !e.altKey && !e.metaKey, took = false;",
+      "new": "var key = e.key, plain = true, took = false;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "lift_not_taken",
+      "file": "web/shape_picker.js",
+      "old": "if (taken[key]) { delete taken[key]; e.preventDefault(); e.stopImmediatePropagation(); }",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "lift_taken_for_ever",
+      "file": "web/shape_picker.js",
+      "old": "if (taken[key]) { delete taken[key]; e.preventDefault(); e.stopImmediatePropagation(); }",
+      "new": "if (taken[key]) { e.preventDefault(); e.stopImmediatePropagation(); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "lift_of_any_key_taken",
+      "file": "web/shape_picker.js",
+      "old": "if (taken[key]) { delete taken[key]; e.preventDefault(); e.stopImmediatePropagation(); }",
+      "new": "{ delete taken[key]; e.preventDefault(); e.stopImmediatePropagation(); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "held_key_acts_again",
+      "file": "web/shape_picker.js",
+      "old": "if (press && e.repeat) took = taken[key] === true;",
+      "new": "if (false) took = false;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "held_key_taken_when_not_taken_before",
+      "file": "web/shape_picker.js",
+      "old": "if (press && e.repeat) took = taken[key] === true;",
+      "new": "if (press && e.repeat) took = true;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "held_arrow_does_nothing",
+      "file": "web/shape_picker.js",
+      "old": "var press = key === 'Enter' || key === ' ' || key === 'Escape';",
+      "new": "var press = key === 'Enter' || key === ' ' || key === 'Escape' || key.indexOf('Arrow') === 0;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "enter_does_not_open",
+      "file": "web/shape_picker.js",
+      "old": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "new": "if ((plain && (key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "space_does_not_open",
+      "file": "web/shape_picker.js",
+      "old": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "new": "if ((plain && (key === 'Enter' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "arrow_down_does_not_open",
+      "file": "web/shape_picker.js",
+      "old": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "new": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowUp'))",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "arrow_up_does_not_open",
+      "file": "web/shape_picker.js",
+      "old": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "new": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown'))",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "closed_home_opens",
+      "file": "web/shape_picker.js",
+      "old": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "new": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp' || key === 'Home'))",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "closed_arrow_changes_the_picture",
+      "file": "web/shape_picker.js",
+      "old": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "new": "if (plain && key === 'ArrowDown' && opts.onPick) { opts.onPick(ROWS[Math.min(current + 1, ROWS.length - 1)].name); took = true; } else if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "modified_enter_opens",
+      "file": "web/shape_picker.js",
+      "old": "if ((plain && (key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "new": "if (((key === 'Enter' || key === ' ' || key === 'ArrowDown' || key === 'ArrowUp'))",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "escape_does_not_close",
+      "file": "web/shape_picker.js",
+      "old": "} else if (key === 'Escape') { close(true); took = true; }",
+      "new": "} else if (key === 'Escape') { took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "escape_not_taken",
+      "file": "web/shape_picker.js",
+      "old": "} else if (key === 'Escape') { close(true); took = true; }",
+      "new": "} else if (key === 'Escape') { close(true); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "escape_does_not_give_the_focus_back",
+      "file": "web/shape_picker.js",
+      "old": "} else if (key === 'Escape') { close(true); took = true; }",
+      "new": "} else if (key === 'Escape') { close(false); took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "tab_does_not_close",
+      "file": "web/shape_picker.js",
+      "old": "else if (key === 'Tab') close(false);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "tab_is_taken",
+      "file": "web/shape_picker.js",
+      "old": "else if (key === 'Tab') close(false);",
+      "new": "else if (key === 'Tab') { close(false); took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "arrow_down_has_no_end",
+      "file": "web/shape_picker.js",
+      "old": "setMark(Math.min(mark + 1, ROWS.length - 1)); took = true;",
+      "new": "setMark(mark + 1); took = true;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "arrow_down_wraps",
+      "file": "web/shape_picker.js",
+      "old": "setMark(Math.min(mark + 1, ROWS.length - 1)); took = true;",
+      "new": "setMark((mark + 1) % ROWS.length); took = true;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "arrow_up_has_no_end",
+      "file": "web/shape_picker.js",
+      "old": "setMark(Math.max(mark - 1, 0)); took = true;",
+      "new": "setMark(mark - 1); took = true;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "arrow_down_not_taken",
+      "file": "web/shape_picker.js",
+      "old": "setMark(Math.min(mark + 1, ROWS.length - 1)); took = true;",
+      "new": "setMark(Math.min(mark + 1, ROWS.length - 1));",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "arrow_up_goes_down",
+      "file": "web/shape_picker.js",
+      "old": "setMark(Math.max(mark - 1, 0)); took = true;",
+      "new": "setMark(Math.min(mark + 1, ROWS.length - 1)); took = true;",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "home_goes_to_the_second",
+      "file": "web/shape_picker.js",
+      "old": "else if (plain && key === 'Home') { setMark(0); took = true; }",
+      "new": "else if (plain && key === 'Home') { setMark(1); took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "end_goes_to_the_last_but_one",
+      "file": "web/shape_picker.js",
+      "old": "else if (plain && key === 'End') { setMark(ROWS.length - 1); took = true; }",
+      "new": "else if (plain && key === 'End') { setMark(ROWS.length - 2); took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "enter_chooses_the_shown_row",
+      "file": "web/shape_picker.js",
+      "old": "else if (plain && (key === 'Enter' || key === ' ')) { choose(mark); took = true; }",
+      "new": "else if (plain && (key === 'Enter' || key === ' ')) { choose(current); took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "space_does_not_choose",
+      "file": "web/shape_picker.js",
+      "old": "else if (plain && (key === 'Enter' || key === ' ')) { choose(mark); took = true; }",
+      "new": "else if (plain && key === 'Enter') { choose(mark); took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "enter_not_taken_in_the_list",
+      "file": "web/shape_picker.js",
+      "old": "else if (plain && (key === 'Enter' || key === ' ')) { choose(mark); took = true; }",
+      "new": "else if (plain && (key === 'Enter' || key === ' ')) { choose(mark); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "a_letter_is_not_a_key_of_the_list",
+      "file": "web/shape_picker.js",
+      "old": "else if (plain && key.length === 1) { var next = typeahead(key, clock()); if (next >= 0) setMark(next); took = true; }",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "a_letter_with_no_match_leaks_to_the_game",
+      "file": "web/shape_picker.js",
+      "old": "if (next >= 0) setMark(next); took = true; }",
+      "new": "if (next >= 0) { setMark(next); took = true; } }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "a_letter_does_not_move_the_mark",
+      "file": "web/shape_picker.js",
+      "old": "if (next >= 0) setMark(next); took = true; }",
+      "new": "took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keys_taken_without_prevent_default",
+      "file": "web/shape_picker.js",
+      "old": "if (took) { taken[key] = true; e.preventDefault(); e.stopImmediatePropagation(); }",
+      "new": "if (took) { taken[key] = true; e.stopImmediatePropagation(); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keys_taken_but_still_seen",
+      "file": "web/shape_picker.js",
+      "old": "if (took) { taken[key] = true; e.preventDefault(); e.stopImmediatePropagation(); }",
+      "new": "if (took) { taken[key] = true; e.preventDefault(); e.stopPropagation(); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keys_not_remembered_for_the_lift",
+      "file": "web/shape_picker.js",
+      "old": "if (took) { taken[key] = true; e.preventDefault(); e.stopImmediatePropagation(); }",
+      "new": "if (took) { e.preventDefault(); e.stopImmediatePropagation(); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keydown_not_heard_by_the_window",
+      "file": "web/shape_picker.js",
+      "old": "win.addEventListener('keydown', onKey, true);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keydown_heard_after_the_page",
+      "file": "web/shape_picker.js",
+      "old": "win.addEventListener('keydown', onKey, true);",
+      "new": "win.addEventListener('keydown', onKey, false);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keyup_not_heard_by_the_window",
+      "file": "web/shape_picker.js",
+      "old": "win.addEventListener('keyup', onKey, true);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keys_reach_the_game_keypress",
+      "file": "web/shape_picker.js",
+      "old": "['keydown', 'keypress', 'keyup'].forEach(function (name) { button.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "new": "['keydown', 'keyup'].forEach(function (name) { button.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keys_reach_the_game_keyup",
+      "file": "web/shape_picker.js",
+      "old": "['keydown', 'keypress', 'keyup'].forEach(function (name) { button.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "new": "['keydown', 'keypress'].forEach(function (name) { button.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keys_reach_the_game_keydown",
+      "file": "web/shape_picker.js",
+      "old": "['keydown', 'keypress', 'keyup'].forEach(function (name) { button.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "new": "['keypress', 'keyup'].forEach(function (name) { button.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "press_does_not_open",
+      "file": "web/shape_picker.js",
+      "old": "button.addEventListener('click', function () { if (shown) close(false); else { open(); button.focus(); } });",
+      "new": "button.addEventListener('click', function () { if (!shown) { open(); button.focus(); } });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "press_does_not_close",
+      "file": "web/shape_picker.js",
+      "old": "button.addEventListener('click', function () { if (shown) close(false); else { open(); button.focus(); } });",
+      "new": "button.addEventListener('click', function () { if (!shown) { open(); button.focus(); } else {} });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "press_does_not_focus",
+      "file": "web/shape_picker.js",
+      "old": "else { open(); button.focus(); } });",
+      "new": "else { open(); } });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "press_not_heard",
+      "file": "web/shape_picker.js",
+      "old": "button.addEventListener('click', function () { if (shown) close(false); else { open(); button.focus(); } });",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "blur_does_not_close",
+      "file": "web/shape_picker.js",
+      "old": "button.addEventListener('blur', function (e) { if (shown && !(e.relatedTarget && inside(e.relatedTarget, list))) close(false); });",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "blur_to_a_row_closes",
+      "file": "web/shape_picker.js",
+      "old": "button.addEventListener('blur', function (e) { if (shown && !(e.relatedTarget && inside(e.relatedTarget, list))) close(false); });",
+      "new": "button.addEventListener('blur', function (e) { if (shown) close(false); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "row_press_takes_the_focus",
+      "file": "web/shape_picker.js",
+      "old": "list.addEventListener('mousedown', function (e) { e.preventDefault(); });",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_press_reaches_the_bar",
+      "file": "web/shape_picker.js",
+      "old": "['pointerdown', 'pointerup'].forEach(function (name) { list.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_press_down_reaches_the_bar",
+      "file": "web/shape_picker.js",
+      "old": "['pointerdown', 'pointerup'].forEach(function (name) { list.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "new": "['pointerup'].forEach(function (name) { list.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_press_up_reaches_the_bar",
+      "file": "web/shape_picker.js",
+      "old": "['pointerdown', 'pointerup'].forEach(function (name) { list.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "new": "['pointerdown'].forEach(function (name) { list.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "pointer_does_not_mark",
+      "file": "web/shape_picker.js",
+      "old": "list.addEventListener('pointermove', function (e) { var i = options.indexOf(e.target); if (i >= 0 && i !== mark) setMark(i); });",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "pointer_marks_the_wrong_row",
+      "file": "web/shape_picker.js",
+      "old": "if (i >= 0 && i !== mark) setMark(i); });",
+      "new": "if (i >= 0 && i !== mark) setMark(0); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "pointer_over_the_list_marks_row_zero",
+      "file": "web/shape_picker.js",
+      "old": "if (i >= 0 && i !== mark) setMark(i); });",
+      "new": "if (i !== mark) setMark(Math.max(i, 0)); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "row_click_not_heard",
+      "file": "web/shape_picker.js",
+      "old": "list.addEventListener('click', function (e) { var i = options.indexOf(e.target); if (i >= 0) choose(i); });",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "list_click_chooses_the_first",
+      "file": "web/shape_picker.js",
+      "old": "if (i >= 0) choose(i); });",
+      "new": "choose(Math.max(i, 0)); });",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "destroy_leaves_the_list_open",
+      "file": "web/shape_picker.js",
+      "old": "function destroy() {\n            close(false);",
+      "new": "function destroy() {",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "destroy_leaves_keydown",
+      "file": "web/shape_picker.js",
+      "old": "win.removeEventListener('keydown', onKey, true);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "destroy_leaves_keyup",
+      "file": "web/shape_picker.js",
+      "old": "win.removeEventListener('keyup', onKey, true);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "destroy_leaves_the_button",
+      "file": "web/shape_picker.js",
+      "old": "if (button.parentNode) button.parentNode.removeChild(button);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "destroy_leaves_the_list",
+      "file": "web/shape_picker.js",
+      "old": "if (list.parentNode) list.parentNode.removeChild(list);",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "start_shows_nothing",
+      "file": "web/shape_picker.js",
+      "old": "set(opts.value);\n        return",
+      "new": "return",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "api_has_no_shape",
+      "file": "web/shape_picker.js",
+      "old": "shape: function () { return current < 0 ? null : ROWS[current].name; }, ",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "api_is_open_wrong",
+      "file": "web/shape_picker.js",
+      "old": "isOpen: function () { return shown; }",
+      "new": "isOpen: function () { return !shown; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "api_open_is_close",
+      "file": "web/shape_picker.js",
+      "old": "open: open, close: close,",
+      "new": "open: close, close: open,",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "keyboard_clock_not_the_option",
+      "file": "web/shape_picker.js",
+      "old": "clock = opts.now || function () { return Date.now(); }",
+      "new": "clock = function () { return Date.now(); }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "alt_arrow_down_does_not_open",
+      "file": "web/shape_picker.js",
+      "old": " || (key === 'ArrowDown' && e.altKey && !e.ctrlKey && !e.metaKey)) { open(); took = true; }",
+      "new": ") { open(); took = true; }",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "alt_arrow_down_with_ctrl_opens",
+      "file": "web/shape_picker.js",
+      "old": "(key === 'ArrowDown' && e.altKey && !e.ctrlKey && !e.metaKey)",
+      "new": "(key === 'ArrowDown' && e.altKey && !e.metaKey)",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "alt_arrow_down_with_meta_opens",
+      "file": "web/shape_picker.js",
+      "old": "(key === 'ArrowDown' && e.altKey && !e.ctrlKey && !e.metaKey)",
+      "new": "(key === 'ArrowDown' && e.altKey && !e.ctrlKey)",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "alt_arrow_up_opens",
+      "file": "web/shape_picker.js",
+      "old": "(key === 'ArrowDown' && e.altKey && !e.ctrlKey && !e.metaKey)",
+      "new": "((key === 'ArrowDown' || key === 'ArrowUp') && e.altKey && !e.ctrlKey && !e.metaKey)",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    }
+  ]
+}

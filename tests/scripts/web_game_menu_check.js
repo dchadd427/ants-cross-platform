@@ -30,6 +30,7 @@ const modulePath = process.argv[2], dataDir = process.argv[3];
 if (!modulePath || !dataDir) { console.log('usage: web_game_menu_check.js game_menu.js data-folder'); process.exit(2); }
 const Menu = require(path.resolve(modulePath));
 const AntsShapes = require(path.resolve(__dirname, '..', '..', 'web', 'shapes.js'));       // (the page's one table of shapes: the page hands it to the menu as `shapes`)
+const AntsShapePicker = require(path.resolve(__dirname, '..', '..', 'web', 'shape_picker.js'));       // (the page's picker of the shape: the page hands the menu a function that makes one)
 const MATCH = fs.readFileSync(path.join(dataDir, 'game_menu_match.json'), 'utf8').trim();
 const WATCH = fs.readFileSync(path.join(dataDir, 'game_menu_watch.json'), 'utf8').trim();
 
@@ -87,7 +88,14 @@ function makeDocument() {
             this.title = '';
             this.hidden = false;
             this.disabled = false;
+            this.scrollTop = 0;
+            this.offsetTop = 0;
+            this.offsetHeight = 0;
+            this.offsetWidth = 0;
+            this.clientHeight = 0;
         }
+        get nextSibling() { const kids = this.parentNode ? this.parentNode.children : []; return kids[kids.indexOf(this) + 1] || null; }
+        getBoundingClientRect() { return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; }
         appendChild(c) { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = this; this.children.push(c); return c; }
         insertBefore(c, ref) {
             if (c.parentNode) c.parentNode.removeChild(c);
@@ -170,8 +178,9 @@ function makeDocument() {
     doc.count = (type) => (doc.listeners[type] || []).length;
     // a key goes to the document's capture listeners (the panel listens there), and to the active element's own only when no capture listener stopped it
     doc.key = (key, extra) => {
-        const e = Object.assign({ type: 'keydown', key, shiftKey: false, repeat: false, target: doc.active, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }, extra || {});
-        for (const l of (doc.listeners[e.type] || []).filter((x) => x.capture).slice()) l.fn(e);
+        const e = Object.assign({ type: 'keydown', key, shiftKey: false, repeat: false, target: doc.active, prevented: false, stopped: false, immediate: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; }, stopImmediatePropagation() { this.stopped = true; this.immediate = true; } }, extra || {});
+        for (const l of (doc.win && doc.win.listeners[e.type] || []).filter((x) => x.capture).slice()) { if (e.immediate) break; l.fn(e); }       // (the window's capture phase comes first: the page's own keys, the picker's)
+        if (!e.stopped) for (const l of (doc.listeners[e.type] || []).filter((x) => x.capture).slice()) l.fn(e);
         e.reachedPage = !e.stopped;
         return e;
     };
@@ -206,6 +215,7 @@ function makePage(opts) {
     win.removeEventListener = (type, fn, capture) => { win.listeners[type] = (win.listeners[type] || []).filter((l) => !(l.fn === fn && l.capture === !!capture)); };
     win.count = (type) => (win.listeners[type] || []).length;
     win.emit = (type) => { for (const l of (win.listeners[type] || []).filter((x) => x.capture).slice()) l.fn({ type, stopPropagation() {} }); };
+    doc.win = win;
     const game = makeGame(opts.watch ? WATCH : MATCH);
     if (opts.watch) { game.where = 1; game.leave = 4; }
     const make = (tag, id, parent, cls) => { const n = doc.createElement(tag); if (id) n.setAttribute('id', id); if (cls) n.className = cls; (parent || doc.body).appendChild(n); return n; };
@@ -216,6 +226,8 @@ function makePage(opts) {
     const shapes = {};                                                                   // (what the page's own dropdown does with a pick: antsPickShape; the page's `pickShape` is that function)
     const pickShape = opts.noPick ? undefined : (shape) => { shapes.clicked = (shapes.clicked || []).concat(shape); if (!opts.keepShape) stage.setAttribute('data-aspect', shape); };
     win.screen = opts.screen || { width: 1440, height: 900 };
+    win.innerWidth = 1440;
+    win.innerHeight = 900;
     const lockOn = make('button', opts.noLock ? 'lock-x' : 'lock-on', bar), lockOff = make('button', opts.noLock ? 'lock-y' : 'lock-off', bar);
     lockOn.setAttribute('aria-checked', 'true');
     lockOff.setAttribute('aria-checked', 'false');
@@ -226,7 +238,7 @@ function makePage(opts) {
     toast.hidden = true;
     const intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
     const page = {
-        doc, win, shapes: AntsShapes, pickShape, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
+        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
         isFullscreen: () => state.fullscreen, enter: () => { state.enters++; state.fullscreen = true; }, leave: () => { state.leaves++; state.fullscreen = false; },
         isLocked: () => state.locked, releaseLock: () => { state.locks.push('release'); state.locked = false; }, requestLock: () => { state.locks.push('request'); state.locked = true; },
         every: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
@@ -364,16 +376,16 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     const p = makePage({ noPick: true }).ready();
     p.open();
     p.tab('video');
-    ok('a page without its own pick of the shape (no dropdown to follow) has no Picture shape row', p.rows().map((r) => r.name).indexOf('Picture shape') < 0 && !p.q('select'));
+    ok('a page without its own pick of the shape (no dropdown to follow) has no Picture shape row', p.rows().map((r) => r.name).indexOf('Picture shape') < 0 && !p.q('.pick-select'));
 }
 {
     const p = makePage({ keepShape: true }).ready();                                     // (a page that did not take the pick: the game's picture stays as it was)
     p.open();
     p.tab('video');
-    const pick = p.q('.gm-pick select');
-    pick.value = '20:9';
-    pick.fire('change', {});
-    expect('a pick that the page did not take: the dropdown shows what the game has, not what was asked', [p.shapes.clicked, pick.value], [['20:9'], '16:9']);
+    const pick = p.q('.gm-pick .pick-select');
+    pick.click();
+    p.q('#gm-picture-o4').click();
+    expect('a pick that the page did not take: the dropdown shows what the game has, not what was asked', [p.shapes.clicked, pick.textContent], [['20:9'], '16:9 \u00b7 960 x 540']);
 }
 {
     const p = makePage({ watch: true }).ready();
@@ -438,22 +450,28 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.tab('video');
     const video = p.qa('[role=radiogroup]');
     expect('the Video section: the mouse and the numbers are button pairs (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['On', 'Off']]);
-    const dropdown = p.qa('select');
-    expect('one dropdown in the panel: the picture\'s shape, a native select, in the row of its own', [dropdown.length, dropdown[0].parentNode.className + '/' + dropdown[0].parentNode.parentNode.className, dropdown[0].parentNode.parentNode.parentNode.querySelector('.gm-name').textContent], [1, 'pick/gm-ctl gm-pick', 'Picture shape']);
+    const dropdown = p.qa('.pick-select');
+    expect('one dropdown in the panel: the picture\'s shape, the page\'s picker (a button), in the row of its own', [dropdown.length, dropdown[0].tagName, dropdown[0].parentNode.className + '/' + dropdown[0].parentNode.parentNode.className, dropdown[0].parentNode.parentNode.parentNode.querySelector('.gm-name').textContent], [1, 'button', 'pick/gm-ctl gm-pick', 'Picture shape']);
+    ok('...no native select is in the panel', !p.q('select') && p.qa('option').length === 0);
     const pick = dropdown[0];
+    ok('...with the page\'s look and the menu\'s own size (the classes pick-select and gm-select)', pick.className === 'pick-select gm-select');
     ok('...named by its row', pick.getAttribute('aria-labelledby') === pick.parentNode.parentNode.parentNode.querySelector('.gm-name').id);
-    expect('...with one entry for each row of the page\'s table (web/shapes.js), in its order: the shape and its canvas', pick.children.map((o) => [o.value, o.textContent]), AntsShapes.rows.map((r) => [r.name, r.label + ' \u00b7 ' + r.width + ' x ' + r.height]));
-    expect('...and as many as the game\'s own row has words (the table of the game is the one that counts)', pick.children.length, JSON.parse(MATCH).rows.filter((r) => r.key === 'picture')[0].words.length);
-    expect('...the shape that the page has is the chosen one', pick.value, '16:9');
+    const rows = p.qa('.gm-pick [role=option]');
+    expect('...with one entry for each row of the page\'s table (web/shapes.js), in its order: the shape and its canvas', rows.map((o) => o.textContent), AntsShapes.rows.map((r) => r.label + ' \u00b7 ' + r.width + ' x ' + r.height));
+    expect('...and as many as the game\'s own row has words (the table of the game is the one that counts)', rows.length, JSON.parse(MATCH).rows.filter((r) => r.key === 'picture')[0].words.length);
+    expect('...the shape that the page has is the shown one', [pick.textContent, rows.map((o) => o.getAttribute('aria-selected')).indexOf('true')], ['16:9 \u00b7 960 x 540', 3]);
     expect('...and a quiet line under it names the shape that fills the screen (a 1440 x 900 laptop)', p.qa('.gm-fits').map((n) => n.textContent), ['16:10 fills your screen']);
     ok('...which the dropdown is described by (aria-describedby names the line)', !!p.q('.gm-fits').id && pick.getAttribute('aria-describedby') === p.q('.gm-fits').id);
-    pick.value = '21:9';
-    pick.fire('change', {});
-    expect('a choice is the page\'s own function, called (the selector, the address and the stored choice stay one function)', [p.shapes.clicked, p.stage.getAttribute('data-aspect'), p.game.calls.length], [['21:9'], '21:9', 0]);
-    expect('...and the dropdown follows the page (what the page has now)', pick.value, '21:9');
-    pick.value = '32:9';
-    pick.fire('change', {});
-    expect('...every shape of the table can be chosen (32:9 is the last)', [p.shapes.clicked, p.stage.getAttribute('data-aspect'), pick.value], [['21:9', '32:9'], '32:9', '32:9']);
+    ok('...the list is shut, in the panel (the stage goes fullscreen with it), and a press on the button opens it', p.q('.gm-pick [role=listbox]').hidden === true && p.q('.gm-scrim').contains(p.q('.gm-pick [role=listbox]')) && (pick.click(), p.q('.gm-pick [role=listbox]').hidden === false));
+    p.q('#gm-picture-o5').click();
+    expect('a choice is the page\'s own function, called (the selector, the address and the stored choice stay one function)', [p.shapes.clicked, p.stage.getAttribute('data-aspect'), p.game.calls.length, p.q('.gm-pick [role=listbox]').hidden], [['21:9'], '21:9', 0, true]);
+    expect('...and the dropdown follows the page (what the page has now)', pick.textContent, '21:9 \u00b7 1260 x 540');
+    pick.click();
+    p.q('#gm-picture-o6').click();
+    expect('...every shape of the table can be chosen (32:9 is the last)', [p.shapes.clicked, p.stage.getAttribute('data-aspect'), pick.textContent], [['21:9', '32:9'], '32:9', '32:9 \u00b7 1920 x 540']);
+    pick.click();
+    p.q('#gm-picture-o6').click();
+    expect('the shape that is shown, chosen again, is no choice: the page is not called', p.shapes.clicked, ['21:9', '32:9']);
     ok('the dropdown is in the panel\'s own focus order and no button of a shape is there', !p.qa('.gm-panel button').some((b) => /^\d+:\d+$/.test(b.textContent)) && pick.getAttribute('disabled') === null);
     expect('the mouse starts Locked', video[0].children.map((b) => b.getAttribute('aria-checked')), ['true', 'false']);
     video[0].children[1].click();
@@ -496,7 +514,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
 {
     const p = makePage().ready();
     p.state.locked = true;
-    const scrim = p.open();
+    let scrim = p.open();
     expect('the game is told, and the pointer lock is let go', [p.game.calls[0], p.state.locks], [['open', 1], ['release']]);
     expect('the page behind it is inert: the header, the bar, the picture\'s box, the toast', [p.header.hasAttribute('inert'), p.bar.hasAttribute('inert'), p.box.hasAttribute('inert'), p.rbar.hasAttribute('inert'), p.toast.hasAttribute('inert')], [true, true, true, true, true]);
     ok('the stage is not inert (the panel is in it) and the panel is not', !p.stage.hasAttribute('inert') && !scrim.hasAttribute('inert'));
@@ -524,26 +542,44 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('...and F1', e.reachedPage);
     e = p.doc.key('Enter');
     ok('Enter and Space are the panel\'s own', !e.reachedPage && !p.doc.key(' ').reachedPage);
-    // the Picture shape's dropdown (a native select): its keys are the browser's own, the game is not told
+    // the Picture shape's dropdown (the page's picker): its keys are its own (taken in the window's capture phase, ahead of the panel's), the game is not told
     p.tab('video');
-    const pick = p.q('.gm-pick select');
+    const pick = p.q('.gm-pick .pick-select'), list = p.q('.gm-pick [role=listbox]');
     pick.focus();
     e = p.doc.key('ArrowDown');
-    ok('ArrowDown on the dropdown: the panel does not take it (the browser moves the choice) and the page behind does not get it (the game would scroll the map)', !e.prevented && !e.reachedPage && p.doc.activeElement === pick);
-    pick.value = '20:9';                                                                 // (what the browser does with that key: the next entry is chosen, and `change` comes at once)
-    pick.fire('change', {});
-    expect('...the choice is made in the running game at once (the page\'s function), and the panel stays open', [p.shapes.clicked, p.menu.isOpen(), p.doc.activeElement === pick], [['20:9'], true, true]);
-    e = p.doc.key('ArrowUp');
-    ok('ArrowUp is the same, Home and End too', !e.prevented && !e.reachedPage && !p.doc.key('Home').prevented && !p.doc.key('End').reachedPage);
+    ok('ArrowDown on the closed dropdown opens the list: taken (not the panel\'s section keys, and the page behind does not get it: the game would scroll the map), the picture is not changed', e.prevented && !e.reachedPage && p.doc.activeElement === pick && !list.hidden && !p.shapes.clicked);
+    e = p.doc.key('ArrowDown');
+    ok('ArrowDown in the open list moves the mark (taken the same way), and chooses nothing', e.prevented && !e.reachedPage && pick.getAttribute('aria-activedescendant') === 'gm-picture-o4' && !p.shapes.clicked);
+    e = p.doc.key('Enter');
+    expect('Enter chooses the marked row: the picture of the running game is changed at once (the page\'s function), the list closes, the panel stays open and the focus stays on the dropdown', [p.shapes.clicked, list.hidden, p.menu.isOpen(), p.doc.activeElement === pick, e.prevented], [['20:9'], true, true, true, true]);
+    p.doc.key('ArrowUp');
+    e = p.doc.key('Escape');
+    expect('Esc with the list open closes the list ALONE: the panel stays open, the key is taken (it is not the panel\'s Esc, which would close it), the focus is on the dropdown', [list.hidden, p.menu.isOpen(), e.prevented, e.reachedPage, p.doc.activeElement === pick, p.game.opened], [true, true, true, false, true, true]);
+    e = p.doc.key('Escape');
+    expect('...and the next Esc, with the list shut, is the panel\'s: it closes', [p.menu.isOpen(), e.prevented], [false, true]);
+    p.open();
+    p.tab('video');
+    const again = p.q('.gm-pick .pick-select');
+    again.focus();
+    p.doc.key('Enter');
     e = p.doc.key('Tab');
-    ok('Tab on the dropdown goes on inside (the browser moves it): not prevented, not for the page', !e.prevented && !e.reachedPage);
+    ok('Tab on the open list closes it and goes on inside (the browser moves it): not prevented, not for the page', !e.prevented && !e.reachedPage);
+    ok('...and the list is shut', p.q('.gm-pick [role=listbox]').hidden);
+    ok('the window has no listener of the picker once the panel is closed (it goes with the panel)', (p.menu.close(), p.win.count('keydown') === 0 && p.win.count('keyup') === 0));
+    scrim = p.open();                                                                    // (the panel again: a new one)
+    p.tab('video');
+    const held = p.win.count('keydown');
+    p.tab('sound');
+    ok('a section that leaves the Video one takes the dropdown\'s window listeners with it (and its list, if it was open)', held === 1 && p.win.count('keydown') === 0 && p.win.count('keyup') === 0);
+    p.tab('video');
     // the dropdown is in the panel's own focus list (the wrap at the ends uses it): with every button and input turned off it is the only control, and Tab / Shift+Tab hold the focus on it
-    const others = p.qa('.gm-scrim button').concat(p.qa('.gm-scrim input')).filter((n) => !n.disabled);
+    const others = p.qa('.gm-scrim button').concat(p.qa('.gm-scrim input')).filter((n) => !n.disabled && n.className.indexOf('pick-select') < 0);
     others.forEach((n) => { n.disabled = true; });
-    pick.focus();
+    const alone = p.q('.gm-pick .pick-select');
+    alone.focus();
     e = p.doc.key('Tab');
     const eBack = p.doc.key('Tab', { shiftKey: true });
-    ok('the dropdown alone in the panel is both the first and the last control: Tab and Shift+Tab wrap onto it (the browser does not leave the panel)', e.prevented && eBack.prevented && p.doc.activeElement === pick);
+    ok('the dropdown alone in the panel is both the first and the last control: Tab and Shift+Tab wrap onto it (the browser does not leave the panel)', e.prevented && eBack.prevented && p.doc.activeElement === alone);
     others.forEach((n) => { n.disabled = false; });
     p.qa('[role=tab]')[0].focus();
     p.tab('sound');
