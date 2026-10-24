@@ -85,7 +85,7 @@
    "id": "no_line_after_stop",
    "file": "src/ants_app/hud_input.cpp",
    "old": "    if (result.left_out != 0) post_click_limit(own.size() - result.left_out);\n",
-   "new": "",
+   "new": "    (void)result;\n",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },

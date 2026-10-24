@@ -226,6 +226,17 @@ void test_big_selection() {
         f.hud.order_selected(f.sim, TileCoord{41, 41}, false, false);
         check(sink.log.size() == 48 && ants_in(sink.log) == 1536 && f.hud.status_line().text().find("Only") == std::string::npos, "1,536 ants: 48 commands, nothing left out, no line about a limit");
     }
+    // a click that no ant needs (every command says so) still tells that ants were left out: 1,600 bombers, the sink answers "none needs an order"
+    {
+        Fixture f;
+        spawn_own(f, 1600, AntType::Bomber);
+        ScriptedSink sink;
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.sounds.clear();
+        f.hud.order_selected(f.sim, TileCoord{30, 30}, false, false);
+        check(sink.log.size() == 48 && f.sounds.empty() && f.hud.status_line().text() == "Only 1536 ants ordered.", "nothing needed an order: no voice, no sound, and the line says that 1,536 were ordered");
+    }
     // the feedback follows the click as a whole, not its first command: answers are scripted (65 bombers: commands of 32, 32 and 1 ants)
     {
         Fixture f;
