@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the test maps of the Map Maker's 'With other players' (src/ants_server/test_maps.cpp, test_maps_http.cpp and their headers; the refusals, the findings, the address and the checking window that the door shares with the real submissions door are upload_common.cpp, whose mutants are tests/data/submissions_mutants.json) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/test_maps_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by test_test_maps: each breaks one rule of docs/MAP_SUBMISSIONS.md ('Test maps'): the canonical file, the limits (an hour for an address and for all, the checking window and its time, the count, the held bytes, the maps of one address, what a room has, six hours), the one route and its method, the body limit, the folder's modes and what the start wipes, the name that is made of a typed one, the size limit of a room. Not listed on purpose: the draw of an id that is held already (it is random, so no test can make it happen: a second lock against a write over a held file), the allowance of nginx (tests/scripts/test_nginx_test_maps.py holds the text and runs the blocks), and the page (tests/data/rematch_mutants.json). The room that keeps no replay on a test map has two locks that each make the other equivalent (RoomManager::create_room and Room::replay_begin): test_room_records_a_test_match breaks the name test they share (test_server S3.163b).",
+ "note": "Mutants of the test maps of the Map Maker's 'With other players' (src/ants_server/test_maps.cpp, test_maps_http.cpp and their headers; the refusals, the findings, the address and the checking window that the door shares with the real submissions door are upload_common.cpp, whose mutants are tests/data/submissions_mutants.json) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/test_maps_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by test_test_maps: each breaks one rule of docs/MAP_SUBMISSIONS.md ('Test maps'): the canonical file, the limits (an hour for an address and for all, the checking window and its time, the count, the held bytes, the maps of one address, what a room has, six hours), the one route and its method, the body limit, the folder's modes and what the start wipes, the name that is made of a typed one, the size limit of a room. Not listed on purpose: a '/' allowed by the name's first filter (clean_map_name refuses it behind it, so no test can see the mutant: a second lock), the draw of an id that is held already (it is random, so no test can make it happen: a second lock against a write over a held file), the allowance of nginx (tests/scripts/test_nginx_test_maps.py holds the text and runs the blocks), and the page (tests/data/rematch_mutants.json). The room that keeps no replay on a test map has two locks that each make the other equivalent (RoomManager::create_room and Room::replay_begin): test_room_records_a_test_match breaks the name test they share (test_server S3.163b).",
  "defaults": {
   "build": "test_test_maps",
   "test": "./build/tests/test_server/test_test_maps"
@@ -168,16 +168,10 @@
    "new": "(stem + \"-\" + id8 + \".lvl\")).string();"
   },
   {
-   "id": "test_map_slash_allowed_in_name",
-   "file": "src/ants_server/test_maps.cpp",
-   "old": "c == '!' || c == '&' || c == '(' || c == ')' || c == ',';",
-   "new": "c == '!' || c == '&' || c == '(' || c == ')' || c == ',' || c == '/';"
-  },
-  {
    "id": "test_map_wipe_takes_every_file",
    "file": "src/ants_server/test_maps.cpp",
    "old": "        if (!(is_store_file_name(name) || name.compare(0, 5, \".tmp-\") == 0)) continue;\n",
-   "new": ""
+   "new": "        if (false && !(is_store_file_name(name) || name.compare(0, 5, \".tmp-\") == 0)) continue;\n"
   },
   {
    "id": "test_map_wipe_takes_links_and_folders",
@@ -201,7 +195,7 @@
    "id": "test_door_body_limit_for_every_path",
    "file": "src/ants_server/test_maps_http.cpp",
    "old": "    if (head.method == \"POST\" && head.path == kRoute) return TestMapStore::kMaxBodyBytes;\n    return kSmallBody;",
-   "new": "    return TestMapStore::kMaxBodyBytes;"
+   "new": "    (void)head;\n    return TestMapStore::kMaxBodyBytes;"
   },
   {
    "id": "test_door_body_limit_for_a_get",
@@ -231,7 +225,7 @@
    "id": "test_door_the_route_ignores_case",
    "file": "src/ants_server/test_maps_http.cpp",
    "old": "    if (request.path != kRoute) return not_found();",
-   "new": "    if (request.path.size() != 10 || strncasecmp(request.path.c_str(), kRoute, 10) != 0) return not_found();"
+   "new": "    if (request.path != kRoute && request.path != \"/TEST-MAPS\") return not_found();"
   },
   {
    "id": "test_door_any_method_is_a_send",
@@ -328,6 +322,12 @@
    "file": "src/ants_server/test_maps_http.cpp",
    "old": "if (store_.take_changed() && on_changed_) on_changed_();",
    "new": "if (false && store_.take_changed() && on_changed_) on_changed_();"
+  },
+  {
+   "id": "test_refused_upload_does_not_tell_the_lobby",
+   "file": "src/ants_server/test_maps_http.cpp",
+   "old": "if (store_.take_changed() && on_changed_) on_changed_();",
+   "new": "if (out.ok && store_.take_changed() && on_changed_) on_changed_();"
   },
   {
    "id": "test_room_records_a_test_match",

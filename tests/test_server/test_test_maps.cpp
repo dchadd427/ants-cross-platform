@@ -203,6 +203,15 @@ int main() {
         ASSERT_EQ(static_cast<unsigned>(static_cast<unsigned char>(stored[0])), 8u);
     } TEST_END();
 
+    TEST_CASE("TM1.3a The numbers that the server runs with are the owner's: 30 an hour for an address and 120 for all, 2 checks in a window of 10 s with 1 for an address and 600 ms of checking time, 64 maps, 4 for an address, 64 MiB, 6 hours, 2 minutes, 2 MiB of body and 512 KB for a Classic file") {
+        const TestMapApiConfig c;
+        ASSERT_TRUE(c.trust_client_header && c.attempts_per_hour == 30 && c.total_per_hour == 120 && c.checks_per_window == 2 && c.checks_per_address_window == 1 && c.check_window_ms == 10000 && c.check_budget_ms == 600);
+        const TestMapConfig s;
+        ASSERT_TRUE(s.max_held_bytes == (uint64_t{64} << 20) && s.min_free_bytes == (uint64_t{256} << 20));
+        ASSERT_TRUE(TestMapStore::kMaxTestMaps == 64 && TestMapStore::kMaxTestPerAddress == 4 && TestMapStore::kTestMapTtlS == 6 * 3600 && TestMapStore::kTestMinKeepS == 120);
+        ASSERT_TRUE(TestMapStore::kMaxBodyBytes == 2u * 1024u * 1024u && TestMapStore::kClassicBytes == 512u * 1024u);
+    } TEST_END();
+
     TEST_CASE("TM1.3 The door's limits: an address may send so many an hour and all addresses together so many (whatever came of the tries), and the checks have a window of their own") {
         {   // the hour of one address: 6 test maps (spaced so that the store keeps them), the 7th is refused; a try that fails counts too
             Door t([](TestMapApiConfig& c) { c.attempts_per_hour = 6; });
@@ -285,6 +294,7 @@ int main() {
         expect(t.upload(tiny(), "Popcorn", "203.0.113.20", "weird"), 400, "bad_kind", "an unknown kind");
         step();
         expect(t.upload(std::string()), 400, "not_a_map", "no body");
+        ASSERT_TRUE(parse_text(t.upload(std::string()).body).get("message").str().find("No map file") != std::string::npos);          // (the empty body has its own sentence)
         step();
         expect(t.upload(tiny_with_teams(0x01)), 422, "map_fails_checks", "a map of one team");
         step();
@@ -555,6 +565,25 @@ int main() {
             MapStore ms("", "");
             ms.set_test_maps(t.store->maps(t.now));
             ASSERT_TRUE(ms.test_map(files[0]) == nullptr && ms.test_map(files[1]) != nullptr && ms.test_map(files[3]) != nullptr);
+        }
+        {   // a refused upload that dropped a map of the address first still tells the lobby: its test list must not name a file that is gone
+            Door t(nullptr, [&](TestMapConfig& c) { c.max_held_bytes = one * 4 + 1; });
+            std::vector<std::string> files;
+            for (int i = 0; i < 4; ++i) {
+                const TestMapOutcome o = t.keep("198.51.100.1", 180);
+                ASSERT_TRUE(o.ok);
+                files.push_back(o.map.name);
+            }
+            std::set<std::string> in_use(files.begin() + 1, files.end());                          // (the other three have a room)
+            t.store->set_in_use([&](const std::string& file) { return in_use.count(file) != 0; });
+            t.store->take_changed();
+            t.now_ms += 20000;
+            const HttpResponse r = t.upload(grown_tiny(64, 64), "Big", "198.51.100.1", "extended");       // (the address holds its four: its oldest goes, and the rest of the room is still not enough)
+            ASSERT_MSG(r.status == 503 && parse_text(r.body).get("error").str() == "test_full", std::to_string(r.status) + " " + r.body.substr(0, 120));
+            ASSERT_EQ(t.refreshed, 1);
+            MapStore ms("", "");
+            ms.set_test_maps(t.store->maps(t.now));
+            ASSERT_TRUE(ms.test_map(files[0]) == nullptr && ms.test_map(files[1]) != nullptr && t.store->maps(t.now).size() == 3);
         }
         {   // a cap smaller than one map: nothing is ever kept
             Door t(nullptr, [&](TestMapConfig& c) { c.max_held_bytes = one - 1; });

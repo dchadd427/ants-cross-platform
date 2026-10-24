@@ -567,7 +567,7 @@
    "id": "finding_message_not_shortened",
    "file": "src/ants_server/upload_common.cpp",
    "old": "JsonValue::make_string(shortened(f.get(\"message\").str()))",
-   "new": "JsonValue::make_string(f.get(\"message\").str())"
+   "new": "JsonValue::make_string((shortened(std::string()), f.get(\"message\").str()))"
   },
   {
    "id": "admin_api_short_path_throws",
