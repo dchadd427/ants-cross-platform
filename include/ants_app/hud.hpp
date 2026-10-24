@@ -695,7 +695,7 @@ private:
     };
     /// Sends the first `limit` of `ants` (at most kMaxAntsPerClick) in the selection order as commands of `proto` (its type, issuer and tile) of at most sim::kMaxCommandAnts ants each
     ChunkedResult submit_in_chunks(sim::SimulationEngine& sim, sim::Command proto, const std::vector<uint32_t>& ants, size_t limit);
-    /// The status line of a click that left ants out: "Only 81 ants fit here." for a move (kMaxAntsPerMove), else "Only N ants ordered." (kMaxAntsPerClick)
+    /// The status line of a click that left ants out: "Up to 81 walk here." for a move (kMaxAntsPerMove), else "Only N ants ordered." (kMaxAntsPerClick)
     void post_click_limit(const ChunkedResult& result, size_t ordered);
 
     bool show_quick_help_{false};

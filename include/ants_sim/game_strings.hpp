@@ -89,7 +89,7 @@ inline constexpr uint16_t kGetReady = 105;            // "Get ready to play!  Yo
 inline constexpr uint16_t kWaitingForScores = 111;    // "Waiting for scores..."
 // The remake's own lines: not in the original's table, so their ids start where its ids end (above 200)
 inline constexpr uint16_t kOutOfAnts = 200;           // "%s (%s) is out of ants!" (chat log news flash, 187 only: the team has no ant, no egg and no hatch left)
-inline constexpr uint16_t kMoveLimit = 202;           // "Only 81 ants fit here." (status line: a move click names at most 81 ants, HUD::kMaxAntsPerMove)
+inline constexpr uint16_t kMoveLimit = 202;           // "Up to 81 walk here." (status line: a move click names at most 81 ants, HUD::kMaxAntsPerMove)
 inline constexpr uint16_t kClickLimit = 201;          // "Only %s ants ordered." (status line: a click named more ants than one click may order)
 
 /// The text of an original string id (with its `%s` markers), nullptr for an id that the table does not hold.

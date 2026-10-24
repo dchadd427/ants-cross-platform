@@ -1175,7 +1175,7 @@ void run_sequencer_tests() {
         ASSERT_EQ(small.seal().commands.size(), 3u);
     } TEST_END();
 
-    TEST_CASE("N2.5b Sequencer: Commands Beyond The Turn's Quota Are Carried Into The Next Turns In The Order They Came (A Stuck Uplink That Is Let Go Delivers 76 Orders At Once: They Are Not A Flood), Nobody Else's Quota Is Touched, Only More Than Four Turns' Worth Waiting Is Refused") {
+    TEST_CASE("N2.5b Sequencer: Commands Beyond The Turn's Quota Are Carried Into The Next Turns In The Order They Came (A Stuck Uplink That Is Let Go Delivers 76 Orders At Once: They Are Not A Flood), Nobody Else's Quota Is Touched, Only More Than Sixteen Turns' Worth Waiting Is Refused") {
         Sequencer seq;                                                 // the defaults: 64 per turn, 1,024 waiting
         seq.set_active(0, true);
         seq.set_active(1, true);

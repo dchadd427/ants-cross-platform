@@ -27,7 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Ctrl+A or a drag over more than 32 ants no longer orders only the first 32.** A click or Stop on a bigger selection is sent as several orders of 32 ants each, in the order you selected them, together in that click. A click on 32 ants or fewer works exactly as before.
-- **A move now names up to 81 ants:** the game gives a free tile within four tiles of the clicked spot to 81 ants at the most, so the first 81 of a bigger selection walk there; the rest are left alone and keep what they were doing, and the status line says "Only 81 ants fit here." A wider search is planned for the next rules release.
+- **A move now names up to 81 ants:** the game gives a free tile within four tiles of the clicked spot to 81 ants at the most (fewer near walls or water), so the first 81 of a bigger selection walk there; the rest are left alone and keep what they were doing, and the status line says "Up to 81 walk here." Thieves sent to an enemy hill are not limited. A wider search is planned for the next rules release.
 - Attack, special and Stop orders reach up to 1,536 ants in one click ("Only 1536 ants ordered." beyond that). A held Stop key (S) now stops once, not twenty times a second.
 - A big click adds to a recording (a move about 350 bytes, a Stop of 1,500 ants about 6 KB), so a very long match on a big map can pass the size a recording may have and then keeps none.
 

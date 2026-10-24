@@ -108,24 +108,24 @@ sim::CommandResult answer(uint32_t needing, uint32_t ack) {
 void test_big_selection() {
     g_group = "big selection";
     std::printf("[pointer] a click or Stop on more ants than a command holds goes out as several commands in the selection order, up to the click's budget; a click of at most 32 ants sends what it always sent\n");
-    // 100 thieves, Ctrl+A, a special click on the enemy hill: four commands of 32, 32, 32 and 4 ants, and every thief has the raid order (a raid takes no tile of its own: the probe of
-    // tests/test_app/test_pointer_model_big.cpp, and of the HUD's budget, is that a special or attack order has no limit but the 48 commands)
+    // 200 thieves, Ctrl+A, a plain move on the enemy hill (a right click on the minimap, or on a hill in the fog: the pointer over it is the plain move there, not a special target): a move that the engine turns into a raid, which has no goal search and no limit of 81: seven commands name all 200 ants, and every thief raids
     {
         Fixture f;
         f.sim.grid_mut().set_anthill(1, TileCoord{40, 40});
-        const std::vector<uint32_t> ids = spawn_own(f, 100, AntType::Thief);
+        const std::vector<uint32_t> ids = spawn_own(f, 200, AntType::Thief);
         RecordingSink sink(f.sim);
         f.hud.set_command_sink(&sink);
         select_all(f);
-        check(f.hud.get_selected_ant_ids() == ids, "Ctrl+A selects all 100 own ants in the order of the world");
+        check(f.hud.get_selected_ant_ids() == ids, "Ctrl+A selects all 200 own ants in the order of the world");
         f.sounds.clear();
-        f.hud.order_selected(f.sim, TileCoord{41, 41}, true, false);
-        check(shaped(sink.log, sim::CommandType::GroupSpecial, 100), "100 ants: four special orders, 32 ants but the last (4)");
+        f.hud.order_selected(f.sim, TileCoord{41, 41}, false, false);
+        check(shaped(sink.log, sim::CommandType::GroupMove, 200), "200 ants: seven group moves, 32 ants but the last (8)");
         check(!sink.log.empty() && sink.log[0].tile_x == 41 && sink.log[0].tile_y == 41, "of the clicked tile");
         check(ants_sent(sink.log) == ids, "together they name every selected ant once, in the selection order");
         size_t raiding = 0;
         for (uint32_t id : ids) raiding += f.unit(id).orig_order == sim::AntUnit::kOrderRaid ? size_t{1} : size_t{0};
-        check(raiding == 100, "every one of the 100 ants carries the order (" + std::to_string(raiding) + ")");
+        check(raiding == 200, "every one of the 200 ants raids (" + std::to_string(raiding) + ")");
+        check(f.hud.status_line().text().find("Up to 81") == std::string::npos, "and the line does not speak of a limit of 81");
         // the feedback is the click's, once: the sounds of a click on 30 ants
         const size_t big = f.sounds.size();
         Fixture g;
@@ -133,8 +133,41 @@ void test_big_selection() {
         spawn_own(g, 30, AntType::Thief);
         select_all(g);
         g.sounds.clear();
-        g.hud.order_selected(g.sim, TileCoord{41, 41}, true, false);
+        g.hud.order_selected(g.sim, TileCoord{41, 41}, false, false);
         check(big != 0 && big == g.sounds.size(), "the voice and the click sound are heard once, as for 30 ants (" + std::to_string(big) + " and " + std::to_string(g.sounds.size()) + " sounds)");
+    }
+    // 40 walking workers and then 200 thieves, a plain click on the enemy hill: the thieves all raid; of the workers (the click would only stop them) the first 32 are named as before and the other 8 are
+    // not named and keep walking
+    {
+        Fixture f;
+        f.sim.grid_mut().set_anthill(1, TileCoord{40, 40});
+        const std::vector<uint32_t> workers = spawn_own(f, 40, AntType::Worker);
+        std::vector<uint32_t> ids = workers;
+        for (int32_t tx = 5; tx < 45; ++tx) for (int32_t ty = 20; ty < 25; ++ty) ids.push_back(f.spawn(0, AntType::Thief, tx, ty));
+        f.settle();
+        make_walk(f, workers);
+        std::vector<TileCoord> goal;
+        for (uint32_t id : workers) goal.push_back(f.unit(id).orig_order_tile);
+        RecordingSink sink(f.sim);
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.hud.order_selected(f.sim, TileCoord{41, 41}, false, false);
+        size_t raiding = 0, kept = 0;
+        for (size_t i = 40; i < ids.size(); ++i) raiding += f.unit(ids[i]).orig_order == sim::AntUnit::kOrderRaid ? size_t{1} : size_t{0};
+        for (size_t i = 32; i < 40; ++i) kept += f.unit(workers[i]).orig_order == sim::AntUnit::kOrderMove && f.unit(workers[i]).orig_order_tile == goal[i] ? size_t{1} : size_t{0};
+        check(raiding == 200 && kept == 8 && ants_in(sink.log) == 232, "200 thieves raid (" + std::to_string(raiding) + "), 8 workers beyond the first 32 are not named and walk on (" + std::to_string(kept) + "), 232 named");
+    }
+    // a click on the player's own hill is a goal search (the entrance): 200 walking workers, 81 named
+    {
+        Fixture f;
+        f.sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const std::vector<uint32_t> ids = spawn_own(f, 200, AntType::Worker);
+        make_walk(f, ids);
+        RecordingSink sink(f.sim);
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.hud.order_selected(f.sim, TileCoord{21, 21}, false, false);
+        check(shaped(sink.log, sim::CommandType::GroupMove, 81) && f.hud.status_line().text() == "Up to 81 walk here.", "own hill: 81 named, and the line says so");
     }
     // 80 workers and a move click (the right button, by the cursor): three commands and every ant has the order
     {
@@ -172,7 +205,7 @@ void test_big_selection() {
         }
         check(new_goal == 81, "the 81 take a tile around the click (" + std::to_string(new_goal) + ")");
         check(kept == 19, "the 19 that were not named keep walking to their own goals (" + std::to_string(kept) + ")");
-        check(f.hud.status_line().text() == "Only 81 ants fit here.", "the status line says why: '" + f.hud.status_line().text() + "'");
+        check(f.hud.status_line().text() == "Up to 81 walk here.", "the status line says why: '" + f.hud.status_line().text() + "'");
         // an attack order and Stop have no such limit: 100 walking combat ants all take the attack on an enemy worker
         Fixture g;
         const std::vector<uint32_t> fighters = spawn_own(g, 100, AntType::Combat);
@@ -253,7 +286,7 @@ void test_big_selection() {
         check(ordered == 1536 && prefix, "the first 1,536 ants carry the order and no other (" + std::to_string(ordered) + ")");
         const std::string said = f.hud.status_line().text();
         check(said == "Only 1536 ants ordered.", "the status line says how many were ordered: '" + said + "'");
-        check(fits_status_box(said) && fits_status_box("Only 81 ants fit here."), "and both lines fit the status box (139 px: the box clips at 139 px, the shipped font needs about 112 for this one)");
+        check(fits_status_box(said) && fits_status_box("Up to 81 walk here."), "and both lines fit the status box (139 px: the box clips at 139 px, the shipped font needs about 112 for this one)");
         sink.log.clear();
         press_stop(f);
         check(sink.log.size() == 48 && ants_in(sink.log) == 1536 && f.hud.status_line().text() == "Only 1536 ants ordered.", "Stop: 48 commands, 1,536 ants and the same line");
@@ -289,7 +322,7 @@ void test_big_selection() {
         select_all(f);
         f.sounds.clear();
         f.hud.order_selected(f.sim, TileCoord{30, 30}, false, false);
-        check(shaped(sink.log, sim::CommandType::GroupMove, 81) && f.sounds.empty() && f.hud.status_line().text() == "Only 81 ants fit here.", "a move of 100 ants: 81 named in three commands, and the line says that only 81 fit");
+        check(shaped(sink.log, sim::CommandType::GroupMove, 81) && f.sounds.empty() && f.hud.status_line().text() == "Up to 81 walk here.", "a move of 100 ants: 81 named in three commands, and the line says that only 81 fit");
     }
     // a held Stop key is not a stream of orders: the repeats of the key do nothing (a Stop of 1,500 ants is 47 commands, and 20 a second of them would fill the sequencer's carry and cost the player its seat)
     {

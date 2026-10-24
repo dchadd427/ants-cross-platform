@@ -52,7 +52,7 @@
   {
    "id": "no_line_when_nothing_needed_an_order",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "        if (result.left_out != 0) post_click_limit(result, targets.size() - result.left_out);\n        return 0;",
+   "old": "        if (result.left_out != 0) post_click_limit(result, named->size() - result.left_out);\n        return 0;",
    "new": "        return 0;",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
@@ -60,7 +60,7 @@
   {
    "id": "no_line_after_an_order",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "    if (result.left_out != 0) post_click_limit(result, targets.size() - result.left_out);       // (after the voice's text: the line says what the click did not do)\n",
+   "old": "    if (result.left_out != 0) post_click_limit(result, named->size() - result.left_out);       // (after the voice's text: the line says what the click did not do)\n",
    "new": "",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
@@ -68,8 +68,8 @@
   {
    "id": "line_counts_the_selection_not_the_ordered",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "post_click_limit(result, targets.size() - result.left_out);       // (after",
-   "new": "post_click_limit(result, targets.size());       // (after",
+   "old": "post_click_limit(result, named->size() - result.left_out);       // (after",
+   "new": "post_click_limit(result, named->size());       // (after",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
@@ -216,6 +216,22 @@
    "new": "uint32_t max_carried_commands = 4 * 64;",
    "build": "test_lockstep",
    "test": "timeout 900 env ANTS_TEST_FILTER=N2.5d ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "raid_click_is_capped",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "            limit = kMaxAntsPerClick;\n            std::unordered_map",
+   "new": "            limit = kMaxAntsPerMove;\n            std::unordered_map",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "every_ant_named_on_a_hill_click",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "if (i < sim::kMaxCommandAnts || (it != raw.end() && it->second == sim::AntType::Thief)) raiders.push_back(targets[i]);",
+   "new": "raiders.push_back(targets[i]); (void)it;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   }
  ]
 }

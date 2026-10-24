@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <string>
+#include <unordered_map>
 
 #include "ants_net/sequencer.hpp"
 #include "ants_sim/game_strings.hpp"
@@ -328,14 +329,34 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
     cmd.issuer = local_player_id_;
     cmd.tile_x = static_cast<int16_t>(tile.x);
     cmd.tile_y = static_cast<int16_t>(tile.y);
-    const ChunkedResult result = submit_in_chunks(sim, cmd, targets, attack || special ? kMaxAntsPerClick : kMaxAntsPerMove);
+    // A move's goal goes through the goal search, which serves 81 ants at the most (kMaxAntsPerMove), except where the engine does not search: a click on a hill that is not the player's own
+    // (SimulationEngineImpl::go_to): a thief (its OWN type, raw_type) raids, with no tile of its own, and any other ant is stopped by the click (the original does that to the ants it names).
+    // For that click every thief is named up to the budget, and an ant that is not a thief only as far as it was named before this limit existed (the first kMaxCommandAnts of the selection),
+    // so that no ant is stopped that was not before.
+    size_t limit = attack || special ? kMaxAntsPerClick : kMaxAntsPerMove;
+    std::vector<uint32_t> raiders;
+    const std::vector<uint32_t>* named = &targets;
+    if (!attack && !special) {
+        const assets::AnthillSpawn* hill = hill_at(sim.get_world_state(), tile.x, tile.y);
+        if (hill != nullptr && hill->team_id != local_player_id_) {
+            limit = kMaxAntsPerClick;
+            std::unordered_map<uint32_t, sim::AntType> raw;
+            for (const auto& a : sim.get_world_state().ants) raw.emplace(a.id, a.raw_type);
+            for (size_t i = 0; i < targets.size(); ++i) {
+                const auto it = raw.find(targets[i]);
+                if (i < sim::kMaxCommandAnts || (it != raw.end() && it->second == sim::AntType::Thief)) raiders.push_back(targets[i]);
+            }
+            named = &raiders;
+        }
+    }
+    const ChunkedResult result = submit_in_chunks(sim, cmd, *named, limit);
     const uint32_t ack = result.ack_ant;
     // FUN_010287b5 (0x1028929 .. 0x1028a07): nothing happens when every ant already carries out this click; otherwise the closest ant's GoTo decides the voice (a refusal is
     // silent, the others' answers do not count), a special order speaks only when exactly one ant needed it (none for more, not even the go voice), and the function returns 1
     // whatever the GoTos answered, which is what the pedestal feedback follows. A selection of several commands is one click: its ants that needed an order are counted together
     // and the first command that had any gives the voice.
     if (result.needing_order == 0) {
-        if (result.left_out != 0) post_click_limit(result, targets.size() - result.left_out);
+        if (result.left_out != 0) post_click_limit(result, named->size() - result.left_out);
         return 0;
     }
     if (ack != 0) {
@@ -345,7 +366,7 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
         else voice_go(voice_type);
     }
     order_feedback(special, attack);
-    if (result.left_out != 0) post_click_limit(result, targets.size() - result.left_out);       // (after the voice's text: the line says what the click did not do)
+    if (result.left_out != 0) post_click_limit(result, named->size() - result.left_out);       // (after the voice's text: the line says what the click did not do)
     return ack;
 }
 
