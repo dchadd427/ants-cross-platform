@@ -11,7 +11,7 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     width_ = level.width;
     height_ = level.height;
     if (width_ == 0 || height_ == 0) return false;
-    rules_ = level.rules;
+    rules_ = rules_word_played(level.rules);   // (a word of 2 plays as 1 unless the test hook was set: grid.hpp)
 
     // A level load starts from empty cells: nothing of a previously loaded map may survive (an engine that plays a second map must equal a
     // fresh engine, which the lock-step state hash relies on)

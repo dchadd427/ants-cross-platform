@@ -203,9 +203,37 @@ void the_rules_word_is_in_the_hash(uint32_t ticks) {
     rules_two.rules = 2;
     ants::sim::SimulationEngine e1;
     ants::sim::SimulationEngine e2;
+    e2.allow_rules_two_for_tests();                                           // (the test hook of rules 2: Grid::allow_rules_two_for_tests)
     e1.init(rules_one, ants_test::kLibrarySeed, 0x0F);
     e2.init(rules_two, ants_test::kLibrarySeed, 0x0F);
-    check(e1.state_hash().grid != e2.state_hash().grid, "a rules word of 2 hashes otherwise than a rules word of 1");
+    check(e1.state_hash().grid != e2.state_hash().grid && e2.grid().rules() == 2, "a rules word of 2 hashes otherwise than a rules word of 1");
+    // rules 2 is switched off in the simulation too: without the hook a level that carries 2 (or any higher word) is played as rules 1, from a level and from a world made by hand
+    for (const uint16_t word : {uint16_t{2}, uint16_t{3}, uint16_t{200}, uint16_t{0xFFFF}}) {
+        LevelData asked = up.level;
+        asked.rules = word;
+        ants::sim::SimulationEngine plain;
+        plain.init(asked, ants_test::kLibrarySeed, 0x0F);
+        check(plain.grid().rules() == 1 && plain.state_hash().grid == e1.state_hash().grid, "a level with the rules word " + std::to_string(word) + " is played as rules 1 (rules 2 is switched off)");
+        ants::sim::SimulationEngine by_hand;
+        by_hand.init_test_world(20, 20, 7, 600000, word);
+        check(by_hand.grid().rules() == 1, "a world made by hand with the rules word " + std::to_string(word) + " is rules 1 (rules 2 is switched off)");
+    }
+    {
+        ants::sim::SimulationEngine hooked;
+        hooked.allow_rules_two_for_tests();
+        hooked.init_test_world(20, 20, 7, 600000, 2);
+        check(hooked.grid().rules() == 2, "with the test hook a world made by hand keeps the rules word 2");
+        hooked.init_test_world(20, 20, 7, 600000, 3);
+        check(hooked.grid().rules() == 1, "the hook lets 2 through and nothing else: a word of 3 is rules 1");
+        hooked.init_test_world(20, 20, 7, 600000, 1);
+        check(hooked.grid().rules() == 1, "the hook changes nothing for the rules word 1");
+        ants::sim::SimulationEngine copy(hooked);
+        copy.init_test_world(20, 20, 7, 600000, 2);
+        check(copy.grid().rules() == 2, "a copy of an engine keeps the hook");
+        ants::sim::SimulationEngine fresh;
+        fresh.init_test_world(20, 20, 7, 600000, 2);
+        check(fresh.grid().rules() == 1, "an engine that was not told has no hook, whatever another engine did");
+    }
     // an ant ordered to (120, 90) hashes otherwise than an ant with no order tile (-1, -1)
     ants::sim::SimulationEngine eo;
     eo.init_test_world(130, 100, 7, 600000, 1);
@@ -221,6 +249,7 @@ void the_rules_word_is_in_the_hash(uint32_t ticks) {
 // both. `ants_hash` is the hash of the ants of a 130 x 100 test world (91+ rows, 121+ columns) with one ant that holds `tile` as its order tile.
 uint64_t ants_hash_with_order_tile(uint16_t rules, ants::sim::TileCoord tile) {
     ants::sim::SimulationEngine e;
+    if (rules == 2) e.allow_rules_two_for_tests();
     e.init_test_world(130, 100, 7, 600000, rules);
     const uint32_t id = e.spawn_unit(0, ants::sim::AntType::Worker, ants::sim::TileCoord{5, 5});
     e.get_unit(id).orig_order_tile = tile;
