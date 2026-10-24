@@ -1,6 +1,6 @@
-// The title of a draft map that the Map Maker's "With other players" sends (web/front/rematch.js, cleanTitle, through frontStrip().begin()): what the page puts in `name=` of POST /submissions?test=1 is the
+// The title of a draft map that the Map Maker's "With other players" sends (web/front/rematch.js, cleanTitle, through frontStrip().begin()): what the page puts in `name=` of POST /test-maps is the
 // name of the draft cleaned of its control characters and white space and cut at 45 characters, and "Test Map" when nothing is left; the kind is read from the version word of the bytes. The server cuts and cleans
-// the name again (tests/test_server test_submissions_api API2.11); this holds the page's own cut, which a page that forgot it would hide. A name is only ever set as text.
+// the name again (tests/test_server test_test_maps TM1.6); this holds the page's own cut, which a page that forgot it would hide. A name is only ever set as text.
 // usage: node web_rematch_title_check.js web/front/rematch.js     (exit 0: every check holds; every failure is printed)
 'use strict';
 const path = require('path');
@@ -60,7 +60,7 @@ async function uploadFor(name, firstByte) {
 }
 
 async function main() {
-    const wanted = (stem, kind) => '/submissions?kind=' + (kind || 'classic') + '&test=1&name=' + encodeURIComponent(stem);
+    const wanted = (stem, kind) => '/test-maps?kind=' + (kind || 'classic') + '&name=' + encodeURIComponent(stem);
     check('a short name goes as it is', await uploadFor('Popcorn Remix') === wanted('Popcorn Remix'));
     check('45 characters stay', await uploadFor('B'.repeat(45)) === wanted('B'.repeat(45)));
     check('46 characters are cut to 45', await uploadFor('B'.repeat(46)) === wanted('B'.repeat(45)));

@@ -31,7 +31,19 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: the page only; network protocol 21 and the simulation rules are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9aa3e544...26f6d531)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c93ee3f5...26f6d531)
+
+## v0.12.117 - 2026-10-23 - Test rooms work on every server
+
+**For players:**
+- **Play this map > With other players now works on every server.** The Map Maker's test room used to need the map submissions to be switched on; where they were off (the beta) it showed a dimmed, empty lobby. It now sends your draft map to a small door of its own that is always on, so a room on your draft opens whether or not submissions are open.
+- **A test map is as private as before:** it is checked by the same checker as a submitted map, it is on no list, no match on it is recorded, and it is deleted after 6 hours or when the server restarts. A map too big for a room (over 65,536 cells) is still turned away with the same words.
+- **The page says why a test room cannot open** in plain words: test rooms switched off on the server, or a map too big to send.
+- **For server owners:** the door is port 4031 (`ANTS_TEST_MAP_PORT`, 0 turns test rooms off), on by default; it has no database and no accounts and takes nothing but test maps. The old `/submissions?test=1` form is gone.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9aa3e544...02eabd8e)
 
 ## v0.12.116 - 2026-10-23 - Map Maker: red drops go back, things may stand on water, flowers have stems
 
@@ -592,23 +604,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3c5e7824...a92c2a3e)
 
-## v0.12.56 - 2026-10-16 - Rematch: back to the lobby with one button
+## Older versions (v0.12.56 and before)
 
-**For players:**
-- **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colors, bots, teams and map.
-- **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them; if nobody from the match is in the room for a minute, the room goes on without the waiting seats. Desktop and phone-app players join by the code.
-
-**Rules / network:** none.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...05109ff0)
-
-## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
-
-**For players:**
-- Under the hood: the map files can now be written, not only read; nothing changes in the game.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/469bd142...ee0d2604)
-
-## Older versions (v0.12.54 and before)
-
-Every release before v0.12.55, and the long notes of v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.57, and the long notes of v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
