@@ -1,0 +1,1041 @@
+{
+  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants on a copy of the files.",
+  "mutants": [
+    {
+      "id": "held_esc_closes",
+      "file": "web/game_menu.js",
+      "old": "                if (e.repeat) return; // (a held Esc is not a second press)\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "esc_in_question_closes_panel",
+      "file": "web/game_menu.js",
+      "old": "if (ask) hideAsk(); else close();",
+      "new": "close();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "page_not_inert",
+      "file": "web/game_menu.js",
+      "old": "                    k.setAttribute('inert', '');\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "page_stays_inert",
+      "file": "web/game_menu.js",
+      "old": "for (var j = 0; j < behind.length; j++) behind[j].removeAttribute('inert');",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "inert_stops_at_stage",
+      "file": "web/game_menu.js",
+      "old": "for (var node = scrim; node && node.parentNode && node !== doc.body; node = node.parentNode) {",
+      "new": "for (var node = scrim; node && node.parentNode && node !== stage; node = node.parentNode) {",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "relock_always",
+      "file": "web/game_menu.js",
+      "old": "(wasLocked || (page.isFullscreen && page.isFullscreen()))) page.requestLock();",
+      "new": "true) page.requestLock();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "relock_never",
+      "file": "web/game_menu.js",
+      "old": "if (again && page.requestLock && (wasLocked",
+      "new": "if (false && again && page.requestLock && (wasLocked",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "relock_on_fullscreen_dropped",
+      "file": "web/game_menu.js",
+      "old": "(wasLocked || (page.isFullscreen && page.isFullscreen()))) page.requestLock();",
+      "new": "wasLocked) page.requestLock();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lock_not_released",
+      "file": "web/game_menu.js",
+      "old": "                if (page.releaseLock) page.releaseLock();\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "leave_asks_the_lock_back",
+      "file": "web/game_menu.js",
+      "old": "function leaveNow() { close({ relock: false }); call('_ants_menu_do', 1); }",
+      "new": "function leaveNow() { close(); call('_ants_menu_do', 1); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lock_listener_dropped",
+      "file": "web/game_menu.js",
+      "old": "if (win.addEventListener) listen(win, name, keepPointerFree, true);",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "fullscreen_listener_keeps_lock",
+      "file": "web/game_menu.js",
+      "old": "listen(doc, name, function () { refresh(); }, false);",
+      "new": "listen(doc, name, function () { }, false);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "dialog_does_not_close",
+      "file": "web/game_menu.js",
+      "old": "if (state && (where() < 0 || !answered())) close({ relock: false });",
+      "new": "if (state && (where() < 0)) close({ relock: false });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "results_do_not_close",
+      "file": "web/game_menu.js",
+      "old": "if (state && (where() < 0 || !answered())) close({ relock: false });",
+      "new": "if (state && (!answered())) close({ relock: false });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "dialog_closes_with_lock_back",
+      "file": "web/game_menu.js",
+      "old": "if (state && (where() < 0 || !answered())) close({ relock: false });",
+      "new": "if (state && (where() < 0 || !answered())) close();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "leave_never_asks",
+      "file": "web/game_menu.js",
+      "old": "state.leave.addEventListener('click', function () { showAsk(true); });",
+      "new": "state.leave.addEventListener('click', leaveNow);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "question_for_every_kind_the_first",
+      "file": "web/game_menu.js",
+      "old": "if (a.kind === kind) found = a;",
+      "new": "if (a.kind === 0) found = a;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "stay_not_default",
+      "file": "web/game_menu.js",
+      "old": "            stay.focus();\n",
+      "new": "            go.focus();\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "resume_not_default",
+      "file": "web/game_menu.js",
+      "old": "                state.resume.focus();\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "stay_loses_focus",
+      "file": "web/game_menu.js",
+      "old": "            if (!quiet) state.leave.focus();\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "question_does_not_follow",
+      "file": "web/game_menu.js",
+      "old": "if (ask && get(102) !== shown.askKind) showAsk(false);",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "master_acts_at_release_only",
+      "file": "web/game_menu.js",
+      "old": "if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10), 0);",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "every_slider_acts_while_dragged",
+      "file": "web/game_menu.js",
+      "old": "if (row.live) call('_ants_menu_set', row.id, parseInt(input.value, 10), 0);",
+      "new": "call('_ants_menu_set', row.id, parseInt(input.value, 10), 0);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "slider_release_does_nothing",
+      "file": "web/game_menu.js",
+      "old": "call('_ants_menu_set', row.id, parseInt(input.value, 10), 1); });",
+      "new": "});",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "slider_value_not_held_to_range",
+      "file": "web/game_menu.js",
+      "old": "var now = Math.max(row.min, Math.min(row.max, get(row.id)));",
+      "new": "var now = get(row.id);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "switch_values_swapped",
+      "file": "web/game_menu.js",
+      "old": "function (v) { call('_ants_menu_set', row.id, v, 1); }, [1, 0]);",
+      "new": "function (v) { call('_ants_menu_set', row.id, v, 1); }, [0, 1]);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "quick_help_and_options_swapped",
+      "file": "web/game_menu.js",
+      "old": "row.key === 'quickhelp' ? 2 : 3",
+      "new": "row.key === 'quickhelp' ? 3 : 2",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "act_before_close",
+      "file": "web/game_menu.js",
+      "old": "close({ relock: false }); call('_ants_menu_do', which);",
+      "new": "call('_ants_menu_do', which); close({ relock: false });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "keys_reach_the_page",
+      "file": "web/game_menu.js",
+      "old": "if (USED.test(key)) e.stopPropagation();",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "keyups_swallowed",
+      "file": "web/game_menu.js",
+      "old": "                listen(doc, 'keydown', onKey, true);\n",
+      "new": "                listen(doc, 'keydown', onKey, true);\n                listen(doc, 'keyup', function (e) { e.stopPropagation(); }, true);\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "tab_does_not_wrap_back",
+      "file": "web/game_menu.js",
+      "old": "else if (!e.shiftKey && (doc.activeElement === last || !root.contains(doc.activeElement))) { e.preventDefault(); first.focus(); }",
+      "new": "else if (!e.shiftKey && (doc.activeElement === last || !root.contains(doc.activeElement))) { first.focus(); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "shift_tab_does_not_wrap",
+      "file": "web/game_menu.js",
+      "old": "if (e.shiftKey && (doc.activeElement === first || !root.contains(doc.activeElement))) { e.preventDefault(); last.focus(); }",
+      "new": "if (e.shiftKey && (doc.activeElement === first || !root.contains(doc.activeElement))) { last.focus(); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "arrows_do_not_wrap",
+      "file": "web/game_menu.js",
+      "old": "(at + step + n) % n",
+      "new": "Math.min(n - 1, Math.max(0, at + step))",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "dimmed_area_closes",
+      "file": "web/game_menu.js",
+      "old": "            scrim.appendChild(panel);\n            selectTab(",
+      "new": "            scrim.appendChild(panel);\n            scrim.addEventListener('click', function (e) { if (e && e.target === scrim) close(); });\n            selectTab(",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "panel_not_in_the_stage",
+      "file": "web/game_menu.js",
+      "old": "stage.appendChild(scrim);",
+      "new": "doc.body.appendChild(scrim);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "focus_not_back_on_canvas",
+      "file": "web/game_menu.js",
+      "old": "if (back && back.focus) back.focus();",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "game_not_told_open",
+      "file": "web/game_menu.js",
+      "old": "                call('_ants_menu_open', 1);\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "game_not_told_closed",
+      "file": "web/game_menu.js",
+      "old": "            call('_ants_menu_open', 0);\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "listeners_stay",
+      "file": "web/game_menu.js",
+      "old": "for (var i = 0; i < removers.length; i++) removers[i]();",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "fullscreen_button_always",
+      "file": "web/game_menu.js",
+      "old": "show(b, styleReady && ready() && !(mine && !fs));",
+      "new": "show(b, styleReady && ready());",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "buttons_never_off",
+      "file": "web/game_menu.js",
+      "old": "b.disabled = !up;",
+      "new": "b.disabled = false;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "buttons_before_style",
+      "file": "web/game_menu.js",
+      "old": "function available() { return ready() && styleReady && where() >= 0 && answered(); }",
+      "new": "function available() { return ready() && where() >= 0 && answered(); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "buttons_before_game",
+      "file": "web/game_menu.js",
+      "old": "function available() { return ready() && styleReady && where() >= 0 && answered(); }",
+      "new": "function available() { return styleReady && where() >= 0 && answered(); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "opens_over_a_dialog",
+      "file": "web/game_menu.js",
+      "old": "function available() { return ready() && styleReady && where() >= 0 && answered(); }",
+      "new": "function available() { return ready() && styleReady && where() >= 0; }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "mouse_row_on_a_phone",
+      "file": "web/game_menu.js",
+      "old": "has: function () { return !!lockButton(true) && !touchy(); },",
+      "new": "has: function () { return !!lockButton(true); },",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "shapes_misplaced",
+      "file": "web/game_menu.js",
+      "old": "var SHAPES = ['4:3', '16:10', '16:9', '21:9'];",
+      "new": "var SHAPES = ['4:3', '16:9', '16:10', '21:9'];",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "replay_not_detected",
+      "file": "web/game_menu.js",
+      "old": "var w = info.words, watching = where() === 1;",
+      "new": "var w = info.words, watching = false;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "live_and_replay_tags_swapped",
+      "file": "web/game_menu.js",
+      "old": "page.live ? w.tagLive : w.tagReplay",
+      "new": "page.live ? w.tagReplay : w.tagLive",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "back_to_matches_missing",
+      "file": "web/game_menu.js",
+      "old": "watching ? w.back : w.leave",
+      "new": "w.leave",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "replay_note_missing",
+      "file": "web/game_menu.js",
+      "old": "watching ? (page.live ? w.noteLive : w.noteReplay) : w.note",
+      "new": "w.note",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "text_as_markup",
+      "file": "web/game_menu.js",
+      "old": "var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n;",
+      "new": "var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.innerHTML = text; return n;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "touch_list_for_a_mouse",
+      "file": "web/game_menu.js",
+      "old": "if (touch) group('TOUCH'",
+      "new": "if (!touch) group('TOUCH'",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "recording_lists_a_seats_keys",
+      "file": "web/game_menu.js",
+      "old": "if (watching && item[2] === 'watch') return;",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "new_tag_missing",
+      "file": "web/game_menu.js",
+      "old": "if (row.new) lab.appendChild(el('span', 'gm-new', 'NEW'));",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "hint_missing",
+      "file": "web/game_menu.js",
+      "old": "if (row.hint) lab.appendChild(el('div', 'gm-hint', row.hint));",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "row_of_the_page_drawn_when_missing",
+      "file": "web/game_menu.js",
+      "old": "if (own && !own.has()) return null;",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "header_button_before_menu",
+      "file": "web/game_menu.js",
+      "old": "if (menu && menu.parentNode) insertAfter(makeButton('gm-wide', 'settings-btn'), menu);",
+      "new": "if (menu && menu.parentNode) menu.parentNode.insertBefore(makeButton('gm-wide', 'settings-btn'), menu);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "replay_button_after_picture",
+      "file": "web/game_menu.js",
+      "old": "picwrap.parentNode.insertBefore(makeButton('gm-bar', 'settings-btn-bar'), picwrap);",
+      "new": "picwrap.parentNode.insertBefore(makeButton('gm-bar', 'settings-btn-bar'), null);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "poll_slow",
+      "file": "web/game_menu.js",
+      "old": "var POLL_MS = 250;",
+      "new": "var POLL_MS = 2500;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "fullscreen_word_stuck",
+      "file": "web/game_menu.js",
+      "old": "if (state && state.fsButton) state.fsButton.textContent = state.fsWords[page.isFullscreen && page.isFullscreen() ? 1 : 0];",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "fullscreen_row_never_leaves",
+      "file": "web/game_menu.js",
+      "old": "b.addEventListener('click', function () { if (page.isFullscreen()) page.leave(); else page.enter(); });",
+      "new": "b.addEventListener('click', function () { page.enter(); });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "style_failure_not_retried",
+      "file": "web/game_menu.js",
+      "old": "if (++styleFailed < 2) setTimeout(loadStyle, 2000);",
+      "new": "if (++styleFailed < 1) setTimeout(loadStyle, 2000);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "style_failure_not_said",
+      "file": "web/game_menu.js",
+      "old": "else say('The settings menu could not load its style. Press Reset to try again.');",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "style_without_cache_key",
+      "file": "web/game_menu.js",
+      "old": "link.href = CSS_FILE + (page.query || '');",
+      "new": "link.href = CSS_FILE;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "esc_function_missing",
+      "file": "web/game_menu.js",
+      "old": "win.antsGameMenuAsk = function () { open(null); };",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "opens_twice",
+      "file": "web/game_menu.js",
+      "old": "if (state || opening) return false;",
+      "new": "if (opening) return false;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "controls_gap_wrong_in_chord",
+      "file": "web/game_menu.js",
+      "old": "part.charAt(0) === '~' ? el('span', 'gm-plus', part.slice(1)) : el('kbd', 'gm-kbd', part)",
+      "new": "el('kbd', 'gm-kbd', part)",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "question_not_modal",
+      "file": "web/game_menu.js",
+      "old": "ask.setAttribute('aria-modal', 'true');",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "leave_forfeit_with_two",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "if (match_running && other_sides == 1) return LeaveKind::Forfeit;",
+      "new": "if (match_running && other_sides == 2) return LeaveKind::Forfeit;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "leave_forfeit_when_over",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "if (match_running && other_sides == 1) return LeaveKind::Forfeit;",
+      "new": "if ((match_running || true) && other_sides == 1) return LeaveKind::Forfeit;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "leave_drop_out_needs_three",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "if (networked && other_sides >= 2) return LeaveKind::DropOut;",
+      "new": "if (networked && other_sides >= 3) return LeaveKind::DropOut;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "leave_drop_out_at_home",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "if (networked && other_sides >= 2) return LeaveKind::DropOut;",
+      "new": "if ((networked || true) && other_sides >= 2) return LeaveKind::DropOut;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "leave_watch_first_lost",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "    if (watching) return LeaveKind::Watch;\n",
+      "new": "    if (watching && false) return LeaveKind::Watch;\n",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "leave_held_lost",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "    if (held) return LeaveKind::Held;\n",
+      "new": "    if (held && false) return LeaveKind::Held;\n",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "held_asks_nothing",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return kind != LeaveKind::Watch;",
+      "new": "return kind != LeaveKind::Held && kind != LeaveKind::Watch;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "gain_ignores_mute",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "    if (mute) return 0.0f;\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "gain_over_100",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "std::clamp<int32_t>(master, 0, 99)) / 99.0f",
+      "new": "std::clamp<int32_t>(master, 0, 99)) / 100.0f",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "master_101_valid",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "store.get_int(key(kMaster), 100, 0, kMasterMax + 1)",
+      "new": "store.get_int(key(kMaster), 100, 0, kMasterMax + 2)",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "mute_default_on",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "store.get_string(key(kMute), \"off\", 8) == \"on\"",
+      "new": "store.get_string(key(kMute), \"off\", 8) != \"off\"",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "numbers_default_off",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "store.get_string(key(kHpNumbers), \"on\", 8) != \"off\"",
+      "new": "store.get_string(key(kHpNumbers), \"on\", 8) == \"on\"",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "mute_not_written",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "case kMute:      store.set_string(key(kMute), mute ? \"on\" : \"off\"); break;",
+      "new": "case kMute:      break;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "table_new_tag_lost",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "{kMute, \"mute\", Section::Sound, Kind::Switch, 0, 1, 0, kBoth | kShowWatch | kShowNew,",
+      "new": "{kMute, \"mute\", Section::Sound, Kind::Switch, 0, 1, 0, kBoth | kShowWatch,",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "table_game_section_in_recordings",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "{Section::Game, \"game\", \"Game\", false},",
+      "new": "{Section::Game, \"game\", \"Game\", true},",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "table_master_not_live",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "kBoth | kShowWatch | kShowLive | kShowNew, \"Master volume\"",
+      "new": "kBoth | kShowWatch | kShowNew, \"Master volume\"",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "esc_asks_with_a_repeat",
+      "file": "src/ants_app/hud.cpp",
+      "old": "if (nothing_to_cancel && !repeat && on_menu_request_) on_menu_request_();",
+      "new": "if (nothing_to_cancel && on_menu_request_) on_menu_request_();",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "esc_asks_with_a_selection",
+      "file": "src/ants_app/hud.cpp",
+      "old": "const bool nothing_to_cancel = !has_selection() && !slot_latched_[0] && !slot_latched_[1];",
+      "new": "const bool nothing_to_cancel = true;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "esc_asks_with_a_latched_pedestal",
+      "file": "src/ants_app/hud.cpp",
+      "old": "const bool nothing_to_cancel = !has_selection() && !slot_latched_[0] && !slot_latched_[1];",
+      "new": "const bool nothing_to_cancel = !has_selection();",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "input_taken_while_open",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "    if (!game_menu_open_) return false;\n    switch (event.type) {",
+      "new": "    if (true) return false;\n    switch (event.type) {",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "text_taken_while_open",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        case SDL_TEXTINPUT:\n        case SDL_TEXTEDITING:",
+      "new": "        case SDL_TEXTEDITING:",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "close_at_once",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        game_menu_closing_ = true;                                // the events",
+      "new": "        game_menu_open_ = false;                                // the events",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "open_keeps_the_press",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        hud_.release_input();                                     // (a drag",
+      "new": "        // (a drag",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "menu_over_a_vote",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "(networked && (vote_open || reconnecting))",
+      "new": "(networked && (reconnecting || (vote_open && false)))",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "menu_over_a_dialog",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return modal_open || catch_up ||",
+      "new": "return (modal_open && false) || catch_up ||",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "menu_over_the_results",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "if (state_ != AppState::Playing || scorecard_.is_open()) return -1;",
+      "new": "if (state_ != AppState::Playing) return -1;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "leave_kind_forgets_held",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return networked && (paused || catch_up || start_modal);",
+      "new": "return networked && (paused || catch_up || (start_modal && false));",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "mute_applied_to_nothing",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "            menu_settings_.mute = value != 0;\n            menu_settings_.write(config_store_, id);\n            audio_mixer_.set_output_gain(menu_settings_.gain());",
+      "new": "            menu_settings_.mute = value != 0;\n            menu_settings_.write(config_store_, id);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "master_not_clamped",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "std::clamp(value, 0, gm::MenuSettings::kMasterMax)",
+      "new": "value",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "numbers_not_remembered",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "    menu_settings_.hp_numbers = hud_.is_show_hp();\n    menu_settings_.write(config_store_, game_menu::kHpNumbers);",
+      "new": "    menu_settings_.hp_numbers = hud_.is_show_hp();",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "numbers_not_loaded",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "    hud_.set_show_hp(menu_settings_.hp_numbers);\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "leave_not_the_quit_dialogs_yes",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        confirm_quit();\n        return true;",
+      "new": "        leave_game();\n        return true;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "options_window_over_a_dialog",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "if (game_menu_needs_answer() || replay_mode_) return false;",
+      "new": "if (replay_mode_) return false;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "edge_scroll_while_open",
+      "file": "src/ants_app/application_view.cpp",
+      "old": "catch_up_screen_active() || game_menu_open_) continue;",
+      "new": "catch_up_screen_active()) continue;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "fingers_while_open",
+      "file": "src/ants_app/application.cpp",
+      "old": "if (!game_menu_open_) feed_touch(event.tfinger);",
+      "new": "feed_touch(event.tfinger);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "gating_removed",
+      "file": "src/ants_app/application.cpp",
+      "old": "        if (game_menu_takes(event)) continue;",
+      "new": "        if (false) continue;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "frame_never_ends_the_close",
+      "file": "src/ants_app/application.cpp",
+      "old": "    end_game_menu_frame();\n}",
+      "new": "}",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "option_scroll_not_taken",
+      "file": "src/ants_app/hud.cpp",
+      "old": "case OptionSetting::ScrollSpeed: state.scroll_speed = std::clamp<int32_t>(value, 0, 99); break;",
+      "new": "case OptionSetting::ScrollSpeed: break;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "option_not_applied",
+      "file": "src/ants_app/hud.cpp",
+      "old": "        default: return;\n    }\n    apply_option(setting);",
+      "new": "        default: return;\n    }",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "gain_not_applied",
+      "file": "src/ants_app/audio_mixer.cpp",
+      "old": "        mix_l *= output_gain_now_;\n        mix_r *= output_gain_now_;",
+      "new": "",
+      "build": [
+        "test_app_integration"
+      ],
+      "test": "ANTS_TEST_FILTER=4.5 ./build/tests/test_app/test_app_integration"
+    },
+    {
+      "id": "gain_without_a_ramp",
+      "file": "src/ants_app/audio_mixer.cpp",
+      "old": "output_gain_now_ += std::clamp(output_gain_target_ - output_gain_now_, -ramp_step, ramp_step);",
+      "new": "output_gain_now_ = output_gain_target_;",
+      "build": [
+        "test_app_integration"
+      ],
+      "test": "ANTS_TEST_FILTER=4.5 ./build/tests/test_app/test_app_integration"
+    },
+    {
+      "id": "muted_sounds_freeze",
+      "file": "src/ants_app/audio_mixer.cpp",
+      "old": "if (sfx_gain > 0.0001f) {",
+      "new": "if (sfx_gain > 0.0001f && output_gain_target_ > 0.0001f) {",
+      "build": [
+        "test_app_integration"
+      ],
+      "test": "ANTS_TEST_FILTER=4.5 ./build/tests/test_app/test_app_integration"
+    },
+    {
+      "id": "slider_green_not_drawn",
+      "file": "web/game_menu.js",
+      "old": "            fill();\n            input.addEventListener('input', function () {\n                fill();\n",
+      "new": "            input.addEventListener('input', function () {\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "held_without_the_net",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return networked && (paused || catch_up || start_modal);",
+      "new": "return (networked || true) && (paused || catch_up || start_modal);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "catch_up_needs_no_answer",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "return modal_open || catch_up || (networked",
+      "new": "return modal_open || (catch_up && false) || (networked",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "poll_leaves_by_itself",
+      "file": "web/game_menu.js",
+      "old": "if (!found || !found.asks) { if (clicked) leaveNow(); return; }",
+      "new": "if (!found || !found.asks) { leaveNow(); return; }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "kind_without_asks_asks",
+      "file": "web/game_menu.js",
+      "old": "if (!found || !found.asks) {",
+      "new": "if (!found) {",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "poll_leaves_pointer_locked",
+      "file": "web/game_menu.js",
+      "old": "                keepPointerFree(); // (a lock that came",
+      "new": "                // (a lock that came",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "pointer_lock_on_the_document",
+      "file": "web/game_menu.js",
+      "old": "listen(win, name, keepPointerFree, true)",
+      "new": "listen(doc, name, keepPointerFree, false)",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "every_key_stopped",
+      "file": "web/game_menu.js",
+      "old": "if (USED.test(key)) e.stopPropagation();",
+      "new": "e.stopPropagation();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "master_saved_while_dragged",
+      "file": "web/game_menu.js",
+      "old": "row.id, parseInt(input.value, 10), 0);",
+      "new": "row.id, parseInt(input.value, 10), 1);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "release_does_not_save",
+      "file": "web/game_menu.js",
+      "old": "row.id, parseInt(input.value, 10), 1); });",
+      "new": "row.id, parseInt(input.value, 10), 0); });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "focus_not_given_back",
+      "file": "web/game_menu.js",
+      "old": "open(e && e.detail === 0 ? b : null);",
+      "new": "open(null);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "question_leaves_panel_live",
+      "file": "web/game_menu.js",
+      "old": "{ panel.children[c].setAttribute('inert', ''); dimmed.push(panel.children[c]); }",
+      "new": "{ dimmed.push(panel.children[c]); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "open_keeps_the_finger",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        cancel_touch_queued();\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "wheel_reaches_the_map",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        case SDL_MOUSEWHEEL:\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "scroll_not_held",
+      "file": "src/ants_app/hud.cpp",
+      "old": "state.scroll_speed = std::clamp<int32_t>(value, 0, 99);",
+      "new": "state.scroll_speed = std::clamp<int32_t>(value, 0, 255);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "drag_saves",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "if (save) menu_settings_.write(config_store_, id);",
+      "new": "if (save || true) menu_settings_.write(config_store_, id);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "everything_asks",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "(leave_needs_confirm(kind) ? \"1\" : \"0\")",
+      "new": "\"1\"",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    }
+  ]
+}

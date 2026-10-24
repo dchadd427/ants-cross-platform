@@ -63,6 +63,8 @@ add_library(ants_app STATIC
     host_lookup.cpp
     application.cpp
     application_menu.cpp
+    application_game_menu.cpp
+    game_menu.cpp
     application_replay.cpp
     auto_camera.cpp
     application_maps.cpp
@@ -149,6 +151,6 @@ if(EMSCRIPTEN)
     set_target_properties(ants PROPERTIES
         OUTPUT_NAME "index"
         SUFFIX ".html"
-        LINK_FLAGS "-sUSE_SDL=2 -sUSE_SDL_TTF=2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=536870912 -sWASM=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=['FS'] --preload-file ${CMAKE_SOURCE_DIR}/Original-Ants@Original-Ants --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html"
+        LINK_FLAGS "-sUSE_SDL=2 -sUSE_SDL_TTF=2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=536870912 -sWASM=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=['FS','UTF8ToString'] --preload-file ${CMAKE_SOURCE_DIR}/Original-Ants@Original-Ants --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html"
     )
 endif()

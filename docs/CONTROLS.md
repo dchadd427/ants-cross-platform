@@ -165,6 +165,7 @@ Every save writes the whole file beside it and then gives it its name (a replace
 | `host_fill` | The Host panel's bots for the seats after yours at START: four words by seat as in `--fill-bots` (the first, your own seat, is always `none`), or the one word of an earlier version (`none`, `easy`, `medium` or `hard`) for every seat. Anything else is `none`. |
 | `host_teams` | The Host panel's Teams row: `ffa`, or two seat numbers such as `0+1`, as `--teams`. A choice that the number of players does not offer, and anything else, is free for all. |
 | `server` | `host[:port]`: the game server of the start menu. Written by hand: the menu shows it and never changes it. `--server` beats it, and a value that is not an address is the default server. |
+| `master`, `mute`, `hp_numbers` | The [settings menu](GAME_MENU.md)'s new settings: Master volume 0 - 100 (100 and the absent key: every sound and the music as they are), `mute` as `on` or `off`, and the hit point numbers `on` (the default) or `off`. Written at every change, read at the start; a value that is none of these is the default. |
 
 Two more files lie in the same places. `rejoin.txt` beside the settings file holds the keys of the seats that the first panel's "Rejoin your match (CODE)" may offer again. `chat.txt` is the transcript of the chat log that the original writes when the program ends after a match; the game writes it into the per-user folder (not the folder of `--settings FILE`). The web build and headless runs write nothing. The folder `replays` beside the settings file holds the recordings of the matches that were played ([`REPLAYS.md`](REPLAYS.md)); the web build records nothing.
 
@@ -247,14 +248,14 @@ The original's keys (`Ants.exe` `FUN_0102609a`, [`GAME_REVERSE_ENGINEERING.md`](
 | **Typing** | The chat box is always active (while "Participate In Chat" is on): printable keys and Backspace go into it, **`Enter`** sends the text (to your team when you have an ally, else to everybody); the **[All]** / **[Team]** buttons send it to everybody / your team. |
 | **`F9` - `F12`** | Send the four quick chat texts (fresh key presses only, chat on). |
 | **`F1`** | Quick help (closes with `C`, `X`, `Enter` or `Esc`, or with its Return button at the release; a click elsewhere does nothing). The quick help at the start of the program (when "Show Quick Help at Startup" is on) has the same keys and a START! button. |
-| **`Esc`** | Deselect everything (there is no quit dialog on Esc). The one exception is the remake's: while this machine's own connection is lost or the match is being caught up, Esc opens the quit question (a held Esc asks once). |
+| **`Esc`** | Closes or cancels what is open first (a dialog's own Esc; the original's options window ignores it), then deselects everything as the original does (there is no quit dialog on Esc), and with nothing to cancel opens the [settings menu](GAME_MENU.md) (a first press only; the browser game: a held Esc does not). While this machine's own connection is lost or the match is being caught up, Esc opens the quit question (a held Esc asks once). |
 | **`F2` / `F3`** | The remake's network layer: while a vote is open (another player of a server's room lost the connection) keep waiting / go on without that player; a fresh press of the other key changes the vote. The original has no such keys ([`NETWORK_PORT.md`](NETWORK_PORT.md) "Reconnect (protocol 10): a player whose connection is lost can come back"). |
 | **`Ctrl + A`** | Select all your ants (panel 3 for one, 4 for several, the voice of the first). |
 | **`Ctrl + H`** | Select your home anthill (no hatching, no scrolling). |
 | **`Ctrl + N` / `Ctrl + P`** | Select the next / previous ant (from the lowest selected one) and scroll just far enough to show it. |
 | **`Ctrl + S`** | Stop the selected ants (no flash, no lock, no deselect). |
 | **`Ctrl + O` / `Ctrl + Q`** | Options / quit dialog (quit dialog: `Y` yes, `N` or `Esc` no). |
-| **`Ctrl + L`** | Show / hide every ant's hit points as white numbers. The numbers are **on by default**, a deliberate difference from the original, which starts with them off ([`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md#differences-made-on-purpose)). |
+| **`Ctrl + L`** | Show / hide every ant's hit points as white numbers. The numbers are **on by default** and the choice is remembered (`hp_numbers`), a deliberate difference from the original, which starts with them off and forgets ([`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md#differences-made-on-purpose)). |
 | *In a team dialog* | The offer to team up (section 5.42): `A` accepts, `D` / `Esc` declines; while you wait for the answer: `W` / `Esc` withdraws the offer; "Doing this will break your team": `Y` yes, `N` / `Esc` no. A dialog takes every key and click until it is answered ([`VIEW_AND_HUD.md`](VIEW_AND_HUD.md#alliance-texts--chat-log) has the texts). |
 
 The mouse wheel, by device:

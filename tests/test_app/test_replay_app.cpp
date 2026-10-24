@@ -2001,6 +2001,34 @@ int main(int argc, char* argv[]) {
         v.app.shutdown();
     } TEST_END();
 
+    TEST_CASE("RA10.1 The settings menu in a recording: it is a screen that is watched (no Game section), Esc with nothing to cancel asks for it, Leave game asks nothing and goes back to the list, and the panel takes the input") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        Application& app = v.app;
+        v.frames(10);
+        ASSERT_EQ(app.game_menu_get(game_menu::kFactWhere), 1);
+        ASSERT_EQ(app.game_menu_get(game_menu::kFactNeedsAnswer), 0);
+        ASSERT_EQ(app.game_menu_get(game_menu::kFactLeave), static_cast<int>(game_menu::LeaveKind::Watch));
+        const std::string json = app.game_menu_describe();
+        ASSERT_TRUE(json.find("\"key\":\"master\"") != std::string::npos);
+        ASSERT_TRUE(json.find("\"key\":\"chat\"") == std::string::npos);
+        ASSERT_TRUE(json.find("\"id\":\"game\"") == std::string::npos);
+        int asked = 0;
+        app.set_on_game_menu([&]() { ++asked; });
+        press(app, SDLK_ESCAPE);
+        ASSERT_EQ(asked, 1);
+        ASSERT_FALSE(app.game_menu_do(game_menu::kActQuickHelp));                       // (the original's windows are a seat's: none in a recording)
+        ASSERT_FALSE(app.hud().is_quick_help_open());
+        app.game_menu_set_open(true);
+        ASSERT_TRUE(app.game_menu_is_open());
+        ASSERT_TRUE(app.game_menu_set(game_menu::kMaster, 55));                         // (the sound rows are the same in a recording)
+        ASSERT_EQ(app.game_menu_get(game_menu::kMaster), 55);
+        ASSERT_TRUE(app.game_menu_do(game_menu::kActLeave));
+        ASSERT_FALSE(app.is_running());                                                 // (a native game ends; the page goes to the list of matches)
+        v.app.shutdown();
+    } TEST_END();
+
     std::cout << "\nreplay application tests: " << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";
     return g_test_failures == 0 ? 0 : 1;
 }

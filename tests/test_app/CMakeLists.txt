@@ -1120,6 +1120,40 @@ target_link_libraries(test_web_chat PRIVATE ants_test_paths)
 add_test(NAME test_web_chat COMMAND test_web_chat)
 set_tests_properties(test_web_chat PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The settings menu that Esc opens: the one table of rows, what Leave game does, the new settings, Esc's rule, the input that the game does not take while the panel is up, and the acts of the panel
+add_executable(test_game_menu
+    test_game_menu.cpp
+)
+
+target_include_directories(test_game_menu PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_game_menu PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_game_menu PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_game_menu PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_game_menu PRIVATE ants_test_paths)
+
+add_test(NAME test_game_menu COMMAND test_game_menu)
+set_tests_properties(test_game_menu PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # Replays in the application: a headless application plays a game on this computer and a match of the network (the other machine is a bare NetGame over loopback sockets); the file that it keeps
 # of each is played again by the replay player on the engine alone and must reach the state in which the match ended
 add_executable(test_replay_app
