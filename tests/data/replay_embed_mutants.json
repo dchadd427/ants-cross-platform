@@ -237,8 +237,8 @@
   {
    "id": "map_writes_over_a_file",
    "file": "tools/replay_tool.cpp",
-   "old": "std::fopen(o.map_out.c_str(), \"wbx\")",
-   "new": "std::fopen(o.map_out.c_str(), \"wb\")",
+   "old": "std::fopen(path.c_str(), \"wbx\")",
+   "new": "std::fopen(path.c_str(), \"wb\")",
    "build": "replay_tool",
    "test": "timeout 300 ./build/replay_tool --selftest"
   },

@@ -29,6 +29,16 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 #include "ants_net/netgame.hpp"
 #include "ants_replay/player.hpp"
 #include "ants_replay/recorder.hpp"
@@ -275,6 +285,46 @@ void print_orders(std::ostream& out, const Options& o, const Replay& replay, con
     }
 }
 
+/// Makes the NEW file `path` with `bytes` in it by one call that fails when the name is taken, so nothing is checked and then opened: a file or a link (a dangling one too) that appears at `path` after the
+/// library guard is never followed, truncated or written over. fopen's "x" is O_CREAT | O_EXCL (a link is never followed); on Windows CreateFile with CREATE_NEW and FILE_FLAG_OPEN_REPARSE_POINT (the C
+/// library's "x" follows a dangling link there and makes its target). False: nothing was kept, `taken` says whether the name was there. Only a file that this call made is removed, after a failed write.
+bool make_new_file(const std::string& path, const std::vector<uint8_t>& bytes, bool& taken) {
+    taken = false;
+#ifdef _WIN32
+    const fs::path native(path);
+    const HANDLE file = CreateFileW(native.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        const DWORD why = GetLastError();
+        taken = why == ERROR_FILE_EXISTS || why == ERROR_ALREADY_EXISTS;
+        return false;
+    }
+    DWORD put = 0;
+    const bool wrote = WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &put, nullptr) != 0 && put == bytes.size();
+    const bool closed = CloseHandle(file) != 0;
+    if (!wrote || !closed) {
+        std::error_code ec;
+        fs::remove(native, ec);
+        return false;
+    }
+    return true;
+#else
+    errno = 0;
+    std::FILE* file = std::fopen(path.c_str(), "wbx");
+    if (file == nullptr) {
+        taken = errno == EEXIST;
+        return false;
+    }
+    const size_t put = std::fwrite(bytes.data(), 1, bytes.size(), file);
+    const bool closed = std::fclose(file) == 0;
+    if (put != bytes.size() || !closed) {
+        std::error_code ec;
+        fs::remove(path, ec);
+        return false;
+    }
+    return true;
+#endif
+}
+
 /// `replay_tool map FILE OUT`: the bytes of the file's tmap chunk (decode() has checked them against the head's hash) go to the NEW file OUT. The tool only reads the library: a path in the map library
 /// (library_guard.hpp), the file that is read, a file with two names and any file that exists are refused, so nothing is written over anything.
 int write_embedded_map(const Options& o, const Replay& replay, std::ostream& out, std::ostream& err) {
@@ -287,24 +337,9 @@ int write_embedded_map(const Options& o, const Replay& replay, std::ostream& out
         err << "replay_tool: " << refusal << "\n";
         return 2;
     }
-    // The file is made by one call that fails when the name is taken ("x": O_CREAT | O_EXCL, _O_EXCL on Windows), so nothing is checked and then opened: a file or a link (a dangling one too) that
-    // appears at OUT after the library guard is never followed, truncated or written over. The tool removes only what it made itself, here, after a failed write.
-    errno = 0;
-    std::FILE* file = std::fopen(o.map_out.c_str(), "wbx");
-    if (file == nullptr) {
-        if (errno == EEXIST) {
-            err << "replay_tool: " << o.map_out << " exists already: the map is written to a new file only\n";
-        } else {
-            err << "replay_tool: cannot make " << o.map_out << "\n";
-        }
-        return 2;
-    }
-    const size_t written = std::fwrite(replay.embedded_map.data(), 1, replay.embedded_map.size(), file);
-    const bool closed = std::fclose(file) == 0;
-    if (written != replay.embedded_map.size() || !closed) {
-        err << "replay_tool: cannot write " << o.map_out << "\n";
-        std::error_code ec;
-        fs::remove(o.map_out, ec);                                                                 // (the file that this call made)
+    bool taken = false;
+    if (!make_new_file(o.map_out, replay.embedded_map, taken)) {
+        err << "replay_tool: " << (taken ? o.map_out + " exists already: the map is written to a new file only" : "cannot make or write " + o.map_out) << "\n";
         return 2;
     }
     out << "wrote " << replay.embedded_map.size() << " bytes (" << replay.head.map_name << ", hash " << hex64(replay.head.map_hash) << ") to " << o.map_out << "\n";
