@@ -257,6 +257,7 @@ set_tests_properties(test_input_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOUR
 # Pointer model: hit boxes, cursor decision table, clicks by cursor mode, rubber band, right button, pedestals (Ants.exe INPUT task)
 add_executable(test_pointer_model
     test_pointer_model.cpp
+    test_pointer_model_big.cpp
 )
 
 target_include_directories(test_pointer_model PRIVATE

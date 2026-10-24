@@ -1233,6 +1233,44 @@ void run_sequencer_tests() {
         ASSERT_EQ(moved.carried(1), 0u);
     } TEST_END();
 
+    TEST_CASE("N2.5c Sequencer: A Big Selection Is One Click Of Up To 48 Commands Of 32 Ants (The HUD's Budget, 1,536 Ants): They Reach One Turn In The Order They Were Sent, Beside The Player's Other Commands, Nothing Is Carried, And The Turn Goes Over The Wire Whole") {
+        Sequencer seq;                                                 // the defaults: 64 per turn
+        seq.set_active(0, true);
+        seq.set_active(1, true);
+        ASSERT_TRUE(seq.submit(1, cmd(CommandType::Hatch, 1)));        // a command of the player's before the click
+        ASSERT_TRUE(seq.submit(0, cmd(CommandType::Hatch, 0)));        // and one of another player in the middle of it
+        for (uint32_t i = 0; i < 48; ++i) {
+            std::vector<uint32_t> ants;
+            for (uint32_t k = 0; k < sim::kMaxCommandAnts; ++k) ants.push_back(1 + i * 32 + k);
+            ASSERT_TRUE(seq.submit(1, cmd(CommandType::GroupMove, 1, 255, 20, 30, ants)));
+            if (i == 20) ASSERT_TRUE(seq.submit(0, cmd(CommandType::Stop, 0, 255, 0, 0, {7})));
+        }
+        for (int i = 0; i < 15; ++i) ASSERT_TRUE(seq.submit(1, cmd(CommandType::Hatch, 1)));      // 1 + 48 + 15 = 64: the turn is full and nothing waits
+        ASSERT_EQ(seq.carried(1), 0u);
+        const TurnMsg turn = seq.seal();
+        ASSERT_EQ(turn.commands.size(), size_t{2 + 1 + 48 + 15});
+        ASSERT_EQ(turn.commands[0].issuer, 0);                         // (canonical order: the lower issuer first, each issuer's commands as they came)
+        ASSERT_EQ(turn.commands[1].issuer, 0);
+        ASSERT_EQ(turn.commands[2].type, CommandType::Hatch);
+        for (uint32_t i = 0; i < 48; ++i) {
+            const Command& c = turn.commands[3 + i];
+            ASSERT_TRUE(c.issuer == 1 && c.type == CommandType::GroupMove && c.ants.size() == sim::kMaxCommandAnts && c.ants.front() == 1 + i * 32);
+        }
+        TurnMsg decoded;
+        ASSERT_TRUE(decode(encode(turn), decoded));
+        ASSERT_TRUE(decoded.commands == turn.commands);
+        // one more command than the quota carries into the next turn, behind the others (a click that came on top of a full turn is not lost)
+        Sequencer full;
+        full.set_active(1, true);
+        for (int i = 0; i < 16; ++i) ASSERT_TRUE(full.submit(1, cmd(CommandType::Hatch, 1)));
+        for (uint32_t i = 0; i < 48; ++i) ASSERT_TRUE(full.submit(1, cmd(CommandType::GroupMove, 1, 255, 20, 30, {i + 1})));
+        for (int i = 0; i < 16; ++i) ASSERT_TRUE(full.submit(1, cmd(CommandType::Hatch, 1)));
+        ASSERT_EQ(full.carried(1), 16u);
+        ASSERT_EQ(full.seal().commands.size(), 64u);
+        const TurnMsg next = full.seal();
+        ASSERT_TRUE(next.commands.size() == 16 && next.commands[0].type == CommandType::Hatch);
+    } TEST_END();
+
     TEST_CASE("N2.6 Sequencer: Flow Control Stalls Sealing While A Peer Lags, Acks Only Move Forward, Reports Are Pruned") {
         Sequencer::Config cfg;
         cfg.max_lag_turns = 5;

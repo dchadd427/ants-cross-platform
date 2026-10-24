@@ -317,6 +317,11 @@ public:
     }
     void unlatch_pedestals() noexcept { slot_latched_[0] = false; slot_latched_[1] = false; }
 
+    /// The most commands that one click or Stop sends: a selection of more than sim::kMaxCommandAnts ants goes out as several commands in one go. The sequencer takes 64 commands
+    /// from a player in a turn (net::Sequencer::Config::max_commands_per_turn), shared with the player's other commands of that turn; a click stays well below it. Ants beyond
+    /// kMaxAntsPerClick are not ordered, and the status line says so.
+    static constexpr size_t kMaxCommandsPerClick = 48;
+    static constexpr size_t kMaxAntsPerClick = kMaxCommandsPerClick * sim::kMaxCommandAnts;
     /// The group order of the original (FUN_010287b5) for the selected own ants: `special` and `attack` are its two flags. Returns the ant that
     /// acknowledged (0 = none).
     uint32_t order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack);
@@ -675,6 +680,18 @@ private:
     uint8_t suppressed_invite_from_{255};        // an offer that was just answered: its question does not come back until the simulation has cleared it
     uint8_t suppressed_wait_for_{255};           // the same for the waiting dialog of an offer that was just withdrawn
     uint32_t issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack, const std::vector<uint32_t>& targets);
+    /// What the commands of one click came to (submit_in_chunks): the ants that needed an order (the sum of the commands'), the ack ant of the first command that had any
+    /// (0 when its ant refused), and how many of the named ants were left out for the click's budget
+    struct ChunkedResult {
+        uint32_t needing_order{0};
+        uint32_t ack_ant{0};
+        bool voiced{false};
+        size_t left_out{0};
+    };
+    /// Sends `ants` in the selection order as commands of `proto` (its type, issuer and tile) of at most sim::kMaxCommandAnts ants each, no more than kMaxCommandsPerClick of them
+    ChunkedResult submit_in_chunks(sim::SimulationEngine& sim, sim::Command proto, const std::vector<uint32_t>& ants);
+    /// The status line of a click that left ants out: "Only N ants ordered."
+    void post_click_limit(size_t ordered);
 
     bool show_quick_help_{false};
     ScreenButton quick_help_return_{ButtonRect{529, 437, 98, 26}, ButtonRect{527, 437, 97, 24}};      // the pictures qh_return1 / 2 and qh_return3 (the hit test is the rectangle of the picture that shows)
