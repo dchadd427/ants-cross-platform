@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.122 - 2026-10-24 - The picture starts in the shape nearest your screen
+
+**For players:**
+- **The picture now starts in the shape nearest your screen.** The first time you open the game page or the front page, and for as long as you have not picked a shape yourself, it starts in Classic 4:3, 16:10, 16:9 or 21:9, whichever is closest to your screen: a 1440 x 900 laptop gets 16:10, a 3440 x 1440 ultrawide gets 21:9, a 4:3 or 5:4 screen gets Classic 4:3. Before, everyone started in 16:9.
+- A phone held upright still starts in 16:9 and is still told to turn it sideways; a phone held sideways picks by the shape of its screen.
+- Nothing you chose changes: a shape you pressed in the selector (16:9 too) is remembered as before, and `?aspect=` in the address still wins. The starting shape is not remembered, so it follows your screen until you press a shape.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the pages only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bc44d6e2...81fb3ec7)
+
 ## v0.12.120 - 2026-10-23 - A Buy me a coffee button at the bottom of the front page
 
 **For players:**
@@ -596,13 +607,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2fae1de9...86c50d1b)
 
-## v0.12.60 - 2026-10-16 - Walled maps: the bots open a pile behind a bomb field
+## Older versions (v0.12.60 and before)
 
-**For players:**
-- **On walled maps the computer players now get food out of piles that lie behind a bomb field:** a Medium or Hard bot on POPcOrN and maps like it sends one ant through the bombs, the fire wall and the water to open the pile, and then carries the food home. Alone on POPcOrN a Hard bot scores about 2,300 points a game instead of 580, and it now scores in matches there too (about 1,140 points a seat one against one, 570 with four bots; before, nothing). Other maps of this kind score more too; maps without such a pile play as before ([why and how](docs/BOT_GATES.md)).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4fccf668...b44f54aa), [walled maps](docs/BOT_GATES.md)
-
-## Older versions (v0.12.59 and before)
-
-Every release before v0.12.60, and the long notes of v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.61, and the long notes of v0.12.60, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
