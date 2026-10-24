@@ -504,6 +504,7 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
     bool have_ends = false;
     bool have_live = false;
     bool have_map = false;
+    size_t map_chunk_bytes = 0;                                            // what the file holds of the tmap chunk, whole or cut (not the match's)
     uint32_t live_turns = 0;
     uint32_t last_turn = 0;
     size_t pos = kMagic.size();
@@ -541,6 +542,7 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
                 error = "chunk " + name + ": its length runs past the end of the file";
                 return false;
             }
+            if (name == "tmap") map_chunk_bytes += size - at;                // (a map that was cut is still the map's part of the file, not the match's)
             break;
         }
         const uint8_t* payload = data + pos + 8;
@@ -648,6 +650,7 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
                 return false;
             }
             r.embedded_map.assign(payload, payload + length);              // (length is at most kMaxEmbeddedMapBytes and inside the file; its checksum is right)
+            map_chunk_bytes += length + kChunkFrameBytes;
             have_map = true;
         } else if (name == "ENDS") {
             Cursor c{payload, length};
@@ -671,7 +674,7 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
         error = "live: a live chunk in a file that has its ENDS chunk (a snapshot has no end)";
         return false;
     }
-    if (size > max_file_bytes(r.embedded_map.size())) {                    // (the match is what kMaxFileBytes limits: the file without its map's chunk)
+    if (size - map_chunk_bytes > kMaxFileBytes) {                          // (the match is what kMaxFileBytes limits: the file without its map's chunk, a cut one too)
         error = "the file is larger than " + std::to_string(kMaxFileBytes / 1024) + " KiB (not counting its map)";
         return false;
     }

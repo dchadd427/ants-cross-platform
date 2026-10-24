@@ -1766,6 +1766,33 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(last, hex);
     } TEST_END();
 
+    TEST_CASE("RP9.10 A Map Chunk That Was Cut Is The Map's Part Of The File And Not The Match's: A 1 MiB Map Cut Near Its End Is A Cut File With No Map (As A Shorter One Is), While A Match Over 1 MiB In Front Of A Cut Map Is Refused") {
+        Replay r = synthetic_small();
+        r.embedded_map.assign(kMaxEmbeddedMapBytes, 0x6B);
+        r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+        const std::vector<uint8_t> whole = encoded(r);
+        const size_t map_at = 8 + chunks_of(whole)[0].payload.size() + kChunkFrameBytes;       // where the tmap chunk starts
+        ASSERT_TRUE(whole.size() > kMaxFileBytes);
+        for (const size_t keep : {size_t{100}, kMaxEmbeddedMapBytes / 2, kMaxEmbeddedMapBytes - 1000, kMaxEmbeddedMapBytes + 2}) {      // (the last: cut inside its checksum)
+            const std::vector<uint8_t> piece(whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(map_at + 8 + keep));
+            const Decoded d = decoded(piece);
+            ASSERT_TRUE(d.ok && !d.replay.complete && d.replay.embedded_map.empty() && d.replay.commands.empty());
+        }
+        const std::vector<uint8_t> nearly(whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(whole.size() - 1));
+        ASSERT_TRUE(decoded(nearly).ok);                                              // (cut in the last chunk, which is after the map: the map is whole and the file is read)
+        ASSERT_TRUE(decoded(nearly).replay.embedded_map == r.embedded_map);
+        // a match of more than 1 MiB in front of a cut map is refused: the map's cut part does not hide it
+        std::vector<Chunk> chunks = chunks_of(whole);
+        Chunk filler;
+        filler.tag = "padd";
+        filler.payload.assign(kMaxFileBytes, 0);
+        chunks.insert(chunks.begin() + 1, filler);
+        std::vector<uint8_t> big = file_of(chunks);
+        big.resize(big.size() - 1000);                                                 // (cut inside the map's chunk)
+        const Decoded refused = decoded(big);
+        ASSERT_TRUE(!refused.ok && contains(refused.error, "KiB"));
+    } TEST_END();
+
     // ---- the rules number of the simulation (kSimRules) ---------------------------------------------------------------------------
 
     TEST_CASE("RP7.1 The Head Says The Rules Number Of The Simulation, As An Optional Field: Written Always, Read Back; A File Without It Is Judged By The Table Of Protocol Numbers (15 And 16 Are The Same Simulation, Any Other Is Unknown)") {

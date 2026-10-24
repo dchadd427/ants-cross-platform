@@ -16,7 +16,9 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cerrno>
 #include <chrono>
+#include <cstdio>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -285,20 +287,25 @@ int write_embedded_map(const Options& o, const Replay& replay, std::ostream& out
         err << "replay_tool: " << refusal << "\n";
         return 2;
     }
-    std::error_code ec;
-    if (fs::exists(fs::symlink_status(o.map_out, ec))) {
-        err << "replay_tool: " << o.map_out << " exists already: the map is written to a new file only\n";
+    // The file is made by one call that fails when the name is taken ("x": O_CREAT | O_EXCL, _O_EXCL on Windows), so nothing is checked and then opened: a file or a link (a dangling one too) that
+    // appears at OUT after the library guard is never followed, truncated or written over. The tool removes only what it made itself, here, after a failed write.
+    errno = 0;
+    std::FILE* file = std::fopen(o.map_out.c_str(), "wbx");
+    if (file == nullptr) {
+        if (errno == EEXIST) {
+            err << "replay_tool: " << o.map_out << " exists already: the map is written to a new file only\n";
+        } else {
+            err << "replay_tool: cannot make " << o.map_out << "\n";
+        }
         return 2;
     }
-    {
-        std::ofstream file(o.map_out, std::ios::binary | std::ios::trunc);
-        file.write(reinterpret_cast<const char*>(replay.embedded_map.data()), static_cast<std::streamsize>(replay.embedded_map.size()));
-        file.close();
-        if (!file) {
-            err << "replay_tool: cannot write " << o.map_out << "\n";
-            fs::remove(o.map_out, ec);
-            return 2;
-        }
+    const size_t written = std::fwrite(replay.embedded_map.data(), 1, replay.embedded_map.size(), file);
+    const bool closed = std::fclose(file) == 0;
+    if (written != replay.embedded_map.size() || !closed) {
+        err << "replay_tool: cannot write " << o.map_out << "\n";
+        std::error_code ec;
+        fs::remove(o.map_out, ec);                                                                 // (the file that this call made)
+        return 2;
     }
     out << "wrote " << replay.embedded_map.size() << " bytes (" << replay.head.map_name << ", hash " << hex64(replay.head.map_hash) << ") to " << o.map_out << "\n";
     return 0;
@@ -809,6 +816,23 @@ int selftest() {
         const Run into_library = run_words({"map", dir.file("carrying.antsrep"), (library[1] / "never-written.lvl").string()});
         const Run into_originals = run_words({"map", dir.file("carrying.antsrep"), (library[0] / "Maps" / "NEVER.LVL").string()});
         t.check(into_library.status == 2 && has(into_library.err, "map library") && !fs::exists(library[1] / "never-written.lvl") && into_originals.status == 2 && !fs::exists(library[0] / "Maps" / "NEVER.LVL"), "map never writes into the map library");
+        {   // a link at OUT is never followed (the name is taken: the file is made by one exclusive call), a dangling one too; a folder that is a link to the library is the library; the library's names are folded
+            std::error_code ec;
+            fs::create_symlink(dir.path / "target-of-link.lvl", dir.path / "dangling.lvl", ec);
+            if (!ec) {                                                                                // (a system that lets this process make links: Windows may not)
+                const Run linked = run_words({"map", dir.file("carrying.antsrep"), dir.file("dangling.lvl")});
+                t.check(linked.status == 2 && has(linked.err, "exists already") && !fs::exists(dir.path / "target-of-link.lvl") && fs::is_symlink(dir.path / "dangling.lvl"), "map does not follow a dangling link at OUT: nothing is made, the link stays");
+            }
+            fs::create_directory_symlink(library[1], dir.path / "libary-link", ec);
+            if (!ec) {
+                const Run through = run_words({"map", dir.file("carrying.antsrep"), (dir.path / "libary-link" / "never-through-link.lvl").string()});
+                t.check(through.status == 2 && has(through.err, "map library") && !fs::exists(library[1] / "never-through-link.lvl"), "map does not write through a link to the library");
+            }
+            const Run folded = run_words({"map", dir.file("carrying.antsrep"), (dir.path / "COMMUNITY-MAPS" / "x.lvl").string()});
+            t.check(folded.status == 2 && has(folded.err, "map library") && !fs::exists(dir.path / "COMMUNITY-MAPS"), "map refuses the library's names in any case");
+            const Run taken = run_words({"map", dir.file("carrying.antsrep"), out_file});
+            t.check(taken.status == 2 && has(taken.err, "exists already") && fs::file_size(out_file) == map_bytes.size(), "map leaves a file that exists as it is (the exclusive create)");
+        }
         const Run damaged = run_words({"map", dir.file("flipped.antsrep"), dir.file("from-damaged.lvl")});
         t.check(damaged.status == 1 && !fs::exists(dir.path / "from-damaged.lvl"), "map of a damaged file is refused and writes nothing");
 

@@ -53,7 +53,7 @@
   {
    "id": "a_match_over_1_mib_is_read_for_its_map",
    "file": "src/ants_replay/replay.cpp",
-   "old": "if (size > max_file_bytes(r.embedded_map.size())) {",
+   "old": "if (size - map_chunk_bytes > kMaxFileBytes) {",
    "new": "if (false) {",
    "build": "test_replay",
    "test": "timeout 300 ./build/tests/test_replay/test_replay"
@@ -237,8 +237,8 @@
   {
    "id": "map_writes_over_a_file",
    "file": "tools/replay_tool.cpp",
-   "old": "if (fs::exists(fs::symlink_status(o.map_out, ec))) {",
-   "new": "if (false) {",
+   "old": "std::fopen(o.map_out.c_str(), \"wbx\")",
+   "new": "std::fopen(o.map_out.c_str(), \"wb\")",
    "build": "replay_tool",
    "test": "timeout 300 ./build/replay_tool --selftest"
   },
@@ -305,6 +305,22 @@
    "new": "replay::load_map(replay->head, config_.maps_dir, replay_level_, why)",
    "build": "test_replay_app",
    "test": "timeout 600 env ANTS_TEST_FILTER=RA7.9 ./build/tests/test_app/test_replay_app"
+  },
+  {
+   "id": "a_cut_map_counts_as_match",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "            if (name == \"tmap\") map_chunk_bytes += size - at;",
+   "new": "            if (name == \"tmap\") map_chunk_bytes += 0;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "a_whole_map_counts_as_match",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "            map_chunk_bytes += length + kChunkFrameBytes;",
+   "new": "            map_chunk_bytes += 0;",
+   "build": "test_replay",
+   "test": "timeout 300 ./build/tests/test_replay/test_replay"
   }
  ]
 }

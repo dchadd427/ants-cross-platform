@@ -135,7 +135,7 @@ std::vector<uint8_t> encode_snapshot(const Replay& replay, uint32_t turns, std::
 /// Reads a file. True: `out` holds it (check `out.complete`: a file without ENDS is a replay that stops where it was cut). False: it is damaged, foreign, or made by a newer format, and `error`
 /// says what and in which chunk. Nothing of `out` is meaningful then. A file longer than kMaxFileBytesWithMap, a match part (the file without its tmap chunk) longer than kMaxFileBytes, a second tmap chunk, a tmap
 /// chunk that claims more than kMaxEmbeddedMapBytes (refused from its length, before its bytes are looked at), an empty one, or one whose hash is not head.map_hash is refused. A file that was cut inside its tmap chunk is
-/// cut like any other: it plays, with no embedded map.
+/// cut like any other: it plays, with no embedded map (what is left of the chunk counts as the map's part of the file, not the match's, at any length).
 bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error);
 
 }  // namespace ants::replay
