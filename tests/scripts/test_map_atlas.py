@@ -131,12 +131,37 @@ class TheAtlas(unittest.TestCase):
         frame = entry["subitems"][0]["frames"][0]
         return frame["sprite_index"], frame["dx"], frame["dy"]
 
+    def parts(self, ident):
+        """[(sprite, dx, dy)] of every part of the first sub-item of a tile, from the docs' table"""
+        return [(f["sprite_index"], f["dx"], f["dy"]) for f in self.table[ident]["subitems"][0]["frames"]]
+
+    def picture(self, ident):
+        """(width, height, rows of pixels, dx, dy) of the tile as the game draws it: all the parts of its first sub-item, the LAST stored part first and the first on top (painter's algorithm
+        on a dict of pixels, written apart from the tool)"""
+        placed = []
+        for number, dx, dy in self.parts(ident):
+            sw, sh, pixels = sprite_pixels(number)
+            placed.append((dx, dy, sw, sh, pixels))
+        x0, y0 = min(p[0] for p in placed), min(p[1] for p in placed)
+        x1, y1 = max(p[0] + p[2] for p in placed), max(p[1] + p[3] for p in placed)
+        canvas = {}
+        for dx, dy, sw, sh, pixels in reversed(placed):
+            for y in range(sh):
+                for x in range(sw):
+                    if pixels[y][x][3] >= 128:
+                        canvas[(dy + y - y0, dx + x - x0)] = pixels[y][x]
+        rows = [[canvas.get((y, x), (0, 0, 0, 0)) for x in range(x1 - x0)] for y in range(y1 - y0)]
+        return x1 - x0, y1 - y0, rows, x0, y0
+
     def test_the_viewers_table_is_the_animation_table_of_the_docs(self):
         """the image's build has no docs/, so the tool reads the animation table from asset_catalog/catalog_data.js: for all 1,344 tiles it gives the sprite and the offset of frame 0 that the docs' table gives"""
         found = map_atlas.read_catalog(CATALOG)
         self.assertEqual(sorted(found), list(range(1344)))
         for ident in range(1344):
             self.assertEqual(found[ident], self.frame0(ident), "tile %d (%s)" % (ident, self.table[ident]["name"]))
+        parts = map_atlas.read_parts(CATALOG)
+        for ident in range(1344):
+            self.assertEqual(parts[ident], self.parts(ident), "every part of tile %d (%s), in the stored order" % (ident, self.table[ident]["name"]))
 
     def test_every_ground_tile_has_its_picture_pixel_for_pixel(self):
         g = self.index["ground"]
@@ -163,7 +188,7 @@ class TheAtlas(unittest.TestCase):
             at = (ident - 431) * 6
             self.assertEqual(self.index["ground"]["avg"][at:at + 6], "%02x%02x%02x" % tuple(mean), "tile %d" % ident)
 
-    def test_every_object_that_the_editor_offers_is_in_the_sheet_with_the_offset_of_its_frame(self):
+    def test_every_object_that_the_editor_offers_is_in_the_sheet_with_its_picture_and_offset(self):
         script = r"""
 const P = require(%r), B = require(%r), pick = (l) => (l || []).map((r) => r[0]);
 console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), bigger: pick(P.BIGGER), hills: B.TEAMS.map((t) => t.hill), food: Object.keys(B.FOOD_NAMES).map(Number), stages: [].concat.apply([], Object.keys(B.FOOD).map((n) => B.FOOD[n].stages.map((s) => s[1]))).filter((t) => t !== 0x7FFE) }));
@@ -185,9 +210,8 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
         self.assertEqual((self.index["objects"]["w"], self.index["objects"]["h"]), (w, h))
         boxes = []
         for key, (x, y, iw, ih, dx, dy, avg) in items.items():
-            number, fdx, fdy = self.frame0(int(key))
-            sw, sh, pixels = sprite_pixels(number)
-            self.assertEqual((iw, ih, dx, dy), (sw, sh, fdx, fdy), "tile %s: the size and the offset are those of frame 0" % key)
+            sw, sh, pixels, fdx, fdy = self.picture(int(key))
+            self.assertEqual((iw, ih, dx, dy), (sw, sh, fdx, fdy), "tile %s: the size and the offset are those of all its parts put together" % key)
             self.assertTrue(x >= 1 and y >= 1 and x + iw + 1 <= w and y + ih + 1 <= h, "tile %s is inside the sheet with a margin of a pixel" % key)
             for row in range(ih):
                 for col in range(iw):
@@ -218,6 +242,37 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
             for b in boxes[i + 1:]:
                 self.assertTrue(a[3] + 1 <= b[1] or b[3] + 1 <= a[1] or a[4] + 1 <= b[2] or b[4] + 1 <= a[2], "pictures %s and %s are a pixel apart at least" % (a[0], b[0]))
 
+    def test_a_plant_is_drawn_with_all_its_parts_as_the_game_draws_them(self):
+        """flower1 (421) is a head, two stems, leaves and a shadow, not its head alone (the owner's report); the 14 plants of the editor and every other tile of several parts are put together, the last part first"""
+        items, w, rows = self.index["objects"]["items"], self.objects[0], self.objects[2]
+        self.assertEqual([len(self.parts(i)) for i in (404, 408, 410, 416, 420, 421)], [1, 1, 2, 2, 5, 5])
+        self.assertEqual([s for s, _dx, _dy in self.parts(421)], [600, 591, 592, 596, 580], "flower1: head, top stem, leaves, bottom stem, shadow")
+        head_w, head_h, _p = sprite_pixels(600)
+        pw, ph, pic, dx, dy = self.picture(421)
+        self.assertEqual(items["421"][2:6], [pw, ph, dx, dy], "the sheet holds the box of all five parts")
+        self.assertGreater(ph, head_h, "taller than its head: the stems reach the ground")
+        self.assertEqual((dx, dy), (-54, -170), "the box begins at the head's corner")
+        # the order counts: the stem and the leaves overlap the head's neighbors, so drawing the first part first would give other pixels
+        wrong = {}
+        for number, pdx, pdy in self.parts(421):
+            sw, sh, pixels = sprite_pixels(number)
+            for y in range(sh):
+                for x in range(sw):
+                    if pixels[y][x][3] >= 128:
+                        wrong[(pdy + y - dy, pdx + x - dx)] = pixels[y][x]
+        differs = [k for k, v in wrong.items() if pic[k[0]][k[1]][:3] != v[:3]]
+        self.assertGreater(len(differs), 0, "the parts overlap: the stored order is a choice the picture shows")
+        x0, y0 = items["421"][0], items["421"][1]
+        for y in range(ph):
+            for x in range(pw):
+                self.assertEqual(rows[y0 + y][x0 + x][:3] if pic[y][x][3] else None, pic[y][x][:3] if pic[y][x][3] else None, "flower1 pixel %d,%d" % (y, x))
+        for ident in (410, 411, 412, 413, 414, 415, 416, 420, 421, 358, 359, 360, 300, 328):
+            self.assertIn(str(ident), items, "tile %d (%s) has several parts, so it is in the sheet, never fetched as one sprite" % (ident, self.table[ident]["name"]))
+
+    def test_no_object_that_is_fetched_alone_has_more_than_one_part(self):
+        for key in self.index["far"]:
+            self.assertEqual(len(self.parts(int(key))), 1, "tile %s is fetched as one sprite, so it has one part" % key)
+
     def test_the_other_objects_of_the_library_are_in_the_index_by_their_sprite_number(self):
         far, items = self.index["far"], self.index["objects"]["items"]
         for key, (number, dx, dy, avg) in far.items():
@@ -243,9 +298,9 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
 
     def test_the_files_are_small_and_the_same_every_time(self):
         self.assertLess(self.sizes["ground.png"], 40000, "ground.png (about 35 KB)")
-        self.assertLess(self.sizes["objects.png"], 295000, "objects.png (about 285 KB)")
+        self.assertLess(self.sizes["objects.png"], 305000, "objects.png (about 298 KB: the plants with all their parts are bigger than their heads)")
         self.assertLess(self.sizes["atlas.json"], 12000, "atlas.json (about 9 KB)")
-        self.assertLess(sum(self.sizes.values()), 340000, "the whole atlas (about 330 KB: the page fetches all of it at start)")
+        self.assertLess(sum(self.sizes.values()), 350000, "the whole atlas (about 343 KB: the page fetches all of it at start)")
         with tempfile.TemporaryDirectory() as again:
             map_atlas.build(SPRITES, CATALOG, again)
             for name in ("ground.png", "objects.png", "atlas.json"):
@@ -261,6 +316,19 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
         with self.assertRaises(SystemExit) as stopped:
             sheet.indexed("a test sheet")
         self.assertIn("more than 255 colors", str(stopped.exception))
+
+    def test_the_broken_copies_of_the_tool_are_in_it_exactly_once(self):
+        """tests/data/map_atlas_mutants.json is run by tools/mutate.py (`--keep-going --jobs 1`, every one must be caught): its texts must be in the tool, once each"""
+        with open(os.path.join(REPO, "tests", "data", "map_atlas_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        text = read("tools", "map_atlas.py")
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        self.assertGreaterEqual(len(ids), 7)
+        for m in spec["mutants"]:
+            self.assertEqual(m["file"], "tools/map_atlas.py")
+            self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in the tool exactly once" % m["id"])
+            self.assertNotEqual(m["old"], m["new"], m["id"])
 
     def test_the_tool_reads_the_two_public_inputs_and_nothing_else(self):
         text = read("tools", "map_atlas.py")

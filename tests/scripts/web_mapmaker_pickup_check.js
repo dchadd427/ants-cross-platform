@@ -12,7 +12,8 @@
 //
 //   A  what stands on a cell, and what a pick is called: a hill (its 16 cells and its door), a food pile with its stage object, a plant with its dropper, ants and a stack of them, what is under what
 //   B  an ant's group (the ants of its team that touch), and an area (whole objects only), with the words of the bar
-//   C  where a thing cannot go and why, in plain words: the edge, water, a hill, an object, ants, a pile, a plant, solid ground, a Classic map's one byte; and what a copy cannot be
+//   C  where a thing cannot go and why, in plain words: the edge, a hill, an object, ants, a pile, a plant, solid ground, a Classic map's one byte; and what a copy cannot be
+//   W  water is no refusal: a hill, a starting ant and a food pile may stand on it (a hint in the bar says what to expect, never a warning; blockers still refuse), moves, copies, areas, Done, Undo
 //   D  the change of a move, in version 8 and 9: the cells and their anchors (a cell's tie to another place of the map is kept exactly or the move is refused), the solid bits, a bomb's owner word, a pile's bites and points, a plant's dropper, an ant's own type; ONE step of the history
 //   E  copy, delete and the move of a whole area: each one Undo, byte for byte, with Redo
 //   F  the lists and their limits: 65,535 records, a stack of ants, ants on the move together
@@ -23,7 +24,7 @@
 //   K  the library: every kind of thing of every map picked, moved to a free place and back (undo and redo byte for byte, only what was named changed, the old place empty, the anchors right)
 //   L  with a built core: the check of the map says the same after a move, a copy and a delete as it said before (no new finding), on the library
 //   M  big maps (512 x 512) stay fast: a pick, the verdict of a ghost and the area of the whole map are measured
-//   N  a drag is put down where the ghost is when the mouse or the finger is let go (one change, one Undo; red: stays, with the reason; Escape, a cancelled or lost pointer, a second lift, Done while held; a copy, an area, a group)
+//   N  a drag is put down where the ghost is when the mouse or the finger is let go (one change, one Undo; red: the thing goes back to where it was picked up, nothing written, "Put back: ..." says why; Escape, a cancelled or lost pointer, a second lift, Done while held; Done on a red place keeps it in hand; a copy, an area, a group)
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -49,6 +50,9 @@ function equal(a, b, what) { check(JSON.stringify(a) === JSON.stringify(b), what
 function same(a, b) { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const EMPTY2 = 0x7FFE;
+// the hints for water (what the test matches showed: tools/map_sweep and a probe of the real engine, see the pull request): never a refusal
+const HINT_HILL = 'This is water: ants that cannot swim may not be able to leave this hill.', HINT_ANT = 'This is water: a starting ant that cannot swim moves to land beside it, or drowns.';
+const HINT_PILE = 'This is water: ants that cannot swim reach it only from the shore. Swimmers can swim to it or build a bridge.';
 
 // ---- made-up maps ----
 function makeMap(version, rows, columns, names) {
@@ -280,7 +284,8 @@ function caseC() {
         v = cur([red], 0, 28);
         check(v.ok === false && /the blue hill is in the way \(16 cells\)/.test(v.text), 'a hill onto the blue hill names it: ' + v.text + tag);
         v = cur([red], 33, 8);
-        check(v.ok === false && /Part of its 4 x 4 square is water\./.test(v.text), 'a hill with water under it: ' + v.text + tag);
+        check(v.ok === true && v.hint === HINT_HILL && v.cells === undefined, 'a hill with water under it may go there, with the hint: ' + JSON.stringify(v) + tag);
+        check(cur([red], 32, 8).ok === true && cur([red], 32, 8).hint === undefined, 'a square that is dry has no hint, one row on water has it' + tag);
         v = cur([red], 18, 18);
         check(v.ok === false && /Starting ants are in the way/.test(v.text), 'a hill onto ants' + tag);
         v = cur([red], 23, 22);
@@ -307,7 +312,8 @@ function caseC() {
         // ants
         const ant = items(f, 20, 20)[0];
         v = cur([ant], 18, -8);
-        check(!v.ok && /^The red ant cannot go here\. That ground is water\. Move it a little\.$/.test(v.text), 'an ant on water: ' + v.text + tag);
+        check(v.ok === true && v.hint === HINT_ANT, 'an ant on water may go there, with the hint: ' + JSON.stringify(v) + tag);
+        check(cur([ant], 18, -8, 'copy').ok === true && cur([ant], 18, -8, 'copy').hint === HINT_ANT, 'so may the copy of an ant' + tag);
         v = cur([ant], 10, 10);
         check(!v.ok && /An ant is already there/.test(v.text), 'an ant onto another ant' + tag);
         v = cur([ant], 2, 2);
@@ -326,7 +332,7 @@ function caseC() {
         v = cur([pile], 5, 5);
         check(!v.ok && /Starting ants are in the way/.test(v.text), 'a pile onto ants' + tag);
         v = cur([pile], 13, -13);
-        check(!v.ok && /water/.test(v.text), 'a pile on water' + tag);
+        check(v.ok === true && v.hint === HINT_PILE, 'a pile on water may go there, with the hint: ' + JSON.stringify(v) + tag);
         v = cur([pile], -15, -11);
         check(!v.ok && /mushroom/.test(v.text), 'a pile onto the mushroom' + tag);
         check(cur([pile], 1, 1).ok, 'a pile on free ground' + tag);
@@ -335,7 +341,8 @@ function caseC() {
         v = cur([plant], -13, -13);
         check(!v.ok && /Starting ants/.test(v.text), 'a plant onto ants' + tag);
         check(cur([plant], 3, 3).ok, 'a plant on free ground' + tag);
-        check(cur([plant], 5, -21).ok && Edit.tile(f, 1, 38 * 40 + 12) === 476, 'a plant may stand on water, like a rock (only hills, ants and piles may not)' + tag);
+        check(cur([plant], 5, -21).ok && cur([plant], 5, -21).hint === undefined && Edit.tile(f, 1, 38 * 40 + 12) === 476, 'a plant may stand on water, like a rock, and says nothing about it' + tag);
+        check(cur([rock], 2, 8).hint === undefined, 'nor does a rock' + tag);
         // a copy
         v = cur([rock], 0, 0, 'copy');
         check(!v.ok && v.plain === undefined && /The copy cannot go here\. The rock is in the way \(1 cell\)/.test(v.text), 'a copy cannot land on its own original: ' + v.text + tag);
@@ -365,6 +372,58 @@ function caseC() {
     putObject(full, ROCK, 5, 5, [[0, 0]]);
     const rk = items(full, 5, 5)[0];
     check(Pick.check(full, [rk], 84, 114, 'move', 'one').ok && !Pick.check(full, [rk], 85, 114, 'move', 'one').ok && !Pick.check(full, [rk], 84, 115, 'move', 'one').ok, 'the far corner of a 90 x 120 map is the last place, one more cell is off the map');
+}
+
+// ================= W =================
+// water is no refusal: a hill, a starting ant and a food pile may stand on it, and the bar says (in words that the test matches showed) what to expect
+function caseW() {
+    for (const version of [8, 9]) {
+        const tag = ' (version ' + version + ')';
+        const f = File.parse(mapWith(version, 30, 30, [[155, 5, 5], [153, 6, 5], [153, 6, 6], [405, 8, 25]], [{ row: 5, column: 20, units: 10, points: 30, stages: [[10, 280], [0, EMPTY2]] }, { row: 15, column: 15, units: 20, points: 25, stages: [[20, 1331], [0, EMPTY2]] }], []));
+        putHill(f, 2, 10, RED_HILL);
+        for (let r = 20; r < 30; r++) for (let c = 0; c < 30; c++) put(f, 1, r, c, 476, 0, 0xCDCD);
+        putObject(f, ROCK, 27, 12, [[0, 0]]);
+        putObject(f, 1331, 15, 15, [[0, 0], [0, 1], [1, 0], [1, 1]]);
+        const red = items(f, 3, 11)[0], ant = items(f, 5, 5)[0], ant2 = items(f, 6, 5)[0], pile = items(f, 5, 20)[0], plant = items(f, 8, 25)[0];
+        const cur = (picked, dr, dc, mode, kind) => Pick.check(f, picked, dr, dc, mode || 'move', kind || 'one');
+        equal(cur([red], 20, 0), { ok: true, hint: HINT_HILL }, 'a hill on water: ok, with the hint' + tag);
+        equal(cur([ant], 20, 0), { ok: true, hint: HINT_ANT }, 'an ant on water' + tag);
+        equal(cur([pile], 20, 0), { ok: true, hint: HINT_PILE }, 'a pile on water' + tag);
+        equal(cur([plant], 20, 0), { ok: true }, 'a plant on water: no hint' + tag);
+        // a pile counts by its anchor cell: the cells of its picture that reach water do not give the hint, a dry anchor does not either
+        const big = items(f, 15, 15)[0];
+        check(big.k === 'pile' && big.fp.length === 4, 'the pile with a stage object of 2 x 2 cells is one thing of 4 cells' + tag);
+        equal(cur([big], 4, 0), { ok: true }, 'its anchor is dry, its lower row is on water: no hint' + tag);
+        equal(cur([big], 10, 0), { ok: true, hint: HINT_PILE }, 'its anchor on water: the hint' + tag);
+        equal(cur([ant], -1, 0), { ok: true }, 'dry ground: no hint' + tag);
+        equal(cur([red, ant, pile], 20, 0, 'move', 'area'), { ok: true, hint: [HINT_HILL, HINT_ANT, HINT_PILE].join(' ') }, 'an area with all three: the three hints, once each, in the order of the things' + tag);
+        equal(cur([ant, ant2, plant], 20, 0, 'move', 'area').hint, HINT_ANT, 'two ants on water: one hint' + tag);
+        equal(cur([red, ant], 20, 0, 'copy', 'area').ok, false, 'a copy of an area that holds the hill is still refused (a team has one hill)' + tag);
+        equal(cur([ant, pile], 20, 0, 'copy', 'area'), { ok: true, hint: HINT_ANT + ' ' + HINT_PILE }, 'a copy to water is allowed, with the hints' + tag);
+        const rocky = cur([red], 22, 2);
+        check(rocky.ok === false && /the rock is in the way/.test(rocky.text) && rocky.hint === undefined, 'what is in the way still refuses on water, and no hint is given: ' + rocky.text + tag);
+        // the page: the hint is in the bar, the ghost is green, Done works, the note after it keeps the hint, one Undo
+        const q = page(f, {}), was = Uint8Array.from(f.bytes);
+        q.tap(3, 11); q.press('move'); q.tap(24, 11);
+        check(q.state().mode === 'moving' && q.warn() === '' && !q.off('done') && q.text().indexOf(HINT_HILL) >= 0 && q.state().verdict.ok === true, 'the bar shows the hint for a hill on water, not a warning, and Done is on: ' + q.text() + tag);
+        q.press('nudge');
+        check(q.text().indexOf(HINT_HILL) >= 0 && q.warn() === '', 'the hint is also there with the nudge arrows' + tag);
+        q.press('done');
+        check(q.log.acts === 1 && q.ed().history.size().strokes === 1 && q.state().mode === 'picked' && Edit.tile(q.file(), 2, 23 * 30 + 11) === RED_HILL && Edit.tile(q.file(), 2, 3 * 30 + 11) === EMPTY2, 'Done puts the hill on water: one change' + tag);
+        check(/One Undo takes it back\./.test(q.text()) && q.text().indexOf(HINT_HILL) >= 0, 'and the note after it keeps the hint: ' + q.text() + tag);
+        q.undo(); check(same(q.file().bytes, was), 'one Undo takes it back, byte for byte' + tag);
+        // off the map the ghost is gone and the bar says that a lift takes it back, without the hint
+        const off = page(File.parse(Uint8Array.from(was)), {});
+        off.p.begin({ row: 5, column: 5 }); off.p.extend({ row: 5, column: 5 }, { row: 24, column: 5 });
+        check(off.text().indexOf(HINT_ANT) >= 0, 'while the ghost is on water the bar has the hint' + tag);
+        off.p.away({ outside: true, x: 900, y: 100 });
+        check(off.text().indexOf(HINT_ANT) < 0 && /goes back where it was/.test(off.text()), 'while the pointer is off the map the bar says a lift takes it back, and has no hint: ' + off.text() + tag);
+        off.p.end();
+        // a lift on water puts it down in one step
+        const w = page(File.parse(Uint8Array.from(was)), {});
+        w.p.begin({ row: 5, column: 5 }); w.p.extend({ row: 5, column: 5 }, { row: 24, column: 5 }); w.p.end();
+        check(w.log.acts === 1 && w.state().mode === 'picked' && /moves to land beside it/.test(w.text()), 'a lift of an ant on water puts it down, and the note says what to expect: ' + w.text() + tag);
+    }
 }
 
 // ================= D =================
@@ -1306,16 +1365,42 @@ function caseN() {
         q = page(File.parse(Uint8Array.from(bytes)));
         q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 }); q.p.end(); q.p.end(); q.p.cancel(); q.p.abandon();
         check(q.log.acts === 1 && q.ed().history.size().strokes === 1, 'a second lift, a cancel or a lost pointer after the drop does nothing more' + tag);
-        // a blocked place: the thing stays picked, the ghost is red with the reason, nothing is written
+        // a red place: the lift puts the thing BACK where it was picked up (nothing is written, no Undo step) and the bar says why
         q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
-        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 10, column: 26 }); q.p.end();
-        check(q.log.acts === 0 && same(q.file().bytes, was) && q.state().mode === 'moving' && q.off('done') && /the mushroom is in the way/.test(q.warn()), 'let go on the mushroom: nothing is written, the thing is still picked, the ghost is red and says why: ' + q.warn() + tag);
-        q.p.begin({ row: 10, column: 26 }); q.p.extend({ row: 10, column: 26 }, { row: 30, column: 20 }); q.p.end();
-        check(q.log.acts === 1 && q.state().mode === 'picked' && Edit.tile(q.file(), 2, 29 * 40 + 19) === RED_HILL, 'a drag of the red ghost to a free place puts it down' + tag);
-        // off the map: the same
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 10, column: 26 });
+        check(q.state().mode === 'moving' && q.off('done') && /the mushroom is in the way/.test(q.warn()), 'while the button is down on the mushroom the ghost is red and says why: ' + q.warn() + tag);
+        q.p.end();
+        check(q.log.acts === 0 && q.log.refused === 0 && same(q.file().bytes, was) && q.ed().history.size().strokes === 0 && q.state().mode === 'picked' && q.state().dr === 0 && q.state().dc === 0 && q.state().items[0].fp[0] === 2 * 40 + 2, 'let go on the mushroom: nothing is written, no Undo step, the hill is picked where it was' + tag);
+        check(/Put back: it needs a free 4 x 4 square, and the mushroom is in the way \(\d+ cells\)\./.test(q.text()) && q.warn() === '' && q.has('move') && !q.has('done'), 'and the bar says "Put back" with the reason: ' + q.text() + tag);
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 30, column: 20 }); q.p.end();
+        check(q.log.acts === 1 && q.state().mode === 'picked' && Edit.tile(q.file(), 2, 29 * 40 + 19) === RED_HILL && q.text().indexOf('Put back') < 0, 'the next drag, to a free place, puts it down in one step, and the old note is gone' + tag);
+        // off the edge of the map (a red place on the map: the pointer is still over it): the same
         q = page(File.parse(Uint8Array.from(bytes)));
         q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 0, column: 0 }); q.p.end();
-        check(q.log.acts === 0 && q.state().mode === 'moving' && /inside the map/.test(q.warn()), 'let go past the edge of the map: red, with the reason, nothing written' + tag);
+        check(q.log.acts === 0 && q.state().mode === 'picked' && q.state().dr === 0 && q.text().indexOf('Put back: it needs a free 4 x 4 square inside the map.') >= 0, 'let go past the edge of the map: put back, with the reason: ' + q.text() + tag);
+        // the other reasons: ants, a rock, a pile, solid ground (an ant)
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 21, column: 11 }); q.p.end();
+        check(q.log.acts === 0 && q.state().mode === 'picked' && q.text().indexOf('Put back: it needs a free 4 x 4 square, and starting ants are in the way') < 0 && /Put back: starting ants are in the way\./.test(q.text()), 'a lift onto ants: put back, "starting ants are in the way": ' + q.text() + tag);
+        // a copy, an area and a group are put back the same way
+        q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
+        q.tap(30, 30); q.press('copy'); q.p.begin({ row: 30, column: 30 }); q.p.extend({ row: 30, column: 30 }, { row: 21, column: 10 }); q.p.end();
+        check(q.log.acts === 0 && same(q.file().bytes, was) && q.state().mode === 'picked' && q.state().copy === false && /Put back: an ant is already there\./.test(q.text()), 'a dragged copy on a red place is put back: nothing is copied: ' + q.text() + tag);
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.tap(30, 30); q.press('copy'); q.p.begin({ row: 30, column: 30 }); q.p.extend({ row: 30, column: 30 }, { row: 33, column: 33 }); q.p.extend({ row: 30, column: 30 }, { row: 30, column: 30 }); q.p.end();
+        check(q.log.acts === 0 && q.state().mode === 'moving' && q.state().copy === true && q.text().indexOf('Put back') < 0 && /Tap where the copy goes/.test(q.text()), 'a copy dragged back onto its original is no red place: it waits for a place, nothing put back' + tag);
+        // a press that does not move, and a tap, still only place the ghost: red stays red, held, with Done off
+        q = page(File.parse(Uint8Array.from(bytes)));
+        q.tap(3, 3); q.press('move'); q.tap(10, 26);
+        check(q.state().mode === 'moving' && q.off('done') && /the mushroom is in the way/.test(q.warn()), 'a tap on a red place only places the red ghost' + tag);
+        q.p.begin({ row: 10, column: 26 }); q.p.end();
+        check(q.state().mode === 'moving' && q.log.acts === 0 && q.off('done') && q.text().indexOf('Put back') < 0, 'a click on the red ghost does not put it back either' + tag);
+        // Done and Enter on a red place keep the thing in hand with the reason, as before
+        q.press('done');
+        check(q.state().mode === 'moving' && q.log.acts === 0 && q.off('done') && /the mushroom is in the way/.test(q.warn()), 'Done on a red place keeps the thing in hand, with the reason' + tag);
+        check(q.key('Enter') === true && q.state().mode === 'moving' && q.log.acts === 0 && /the mushroom is in the way/.test(q.warn()), 'so does Enter' + tag);
+        q.p.begin({ row: 10, column: 26 }); q.p.extend({ row: 10, column: 26 }, { row: 30, column: 20 }); q.p.end();
+        check(q.log.acts === 1 && q.state().mode === 'picked' && Edit.tile(q.file(), 2, 29 * 40 + 19) === RED_HILL, 'a drag of the red ghost to a free place puts it down in one step' + tag);
         // Escape while the button is down: the thing goes back, and the lift that follows does nothing
         q = page(File.parse(Uint8Array.from(bytes))); was = Uint8Array.from(q.file().bytes);
         q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 12, column: 20 });
@@ -1409,13 +1494,13 @@ function caseN() {
         check(q.state().mode === 'moving' && q.log.acts === 0 && !/goes back/.test(q.text()), 'a press that never moved, let go off the map, leaves the ghost where it is and the bar as it was' + tag);
         q.p.begin({ row: 25, column: 30 }); q.p.extend({ row: 25, column: 30 }, { row: 26, column: 31 }); q.p.end();
         check(q.log.acts === 1, 'and the next drag is put down' + tag);
-        // the arrows and Enter still work after a blocked drop
+        // the hover, the arrows and Enter still work with a red ghost that was placed by a tap
         q = page(File.parse(Uint8Array.from(bytes)));
-        q.p.begin({ row: 3, column: 3 }); q.p.extend({ row: 3, column: 3 }, { row: 10, column: 26 }); q.p.end();
+        q.tap(3, 3); q.press('move'); q.tap(10, 26);
         q.p.hover({ row: 30, column: 20 }); q.p.hover(null);
         q.key('ArrowLeft');
         q.p.begin({ row: 10, column: 25 }); q.p.extend({ row: 10, column: 25 }, { row: 30, column: 20 }); q.p.end();
-        check(q.log.acts === 1 && q.state().mode === 'picked', 'a red drop can be dragged on to a free place' + tag);
+        check(q.log.acts === 1 && q.state().mode === 'picked', 'a red ghost that a tap placed can be dragged on to a free place' + tag);
     }
     // a copy: dragging the ghost of a copy and letting go puts the copy down
     let c = page(File.parse(sceneBytes(9)));
@@ -1451,7 +1536,7 @@ async function caseL() {
 
 module.exports = { page, sceneBytes, mapWith, putHill, putObject, items, lay, File, Edit, Blocks, Pick };
 // (the sweep of the library, the long one, is the last: a broken copy that a short case refuses is refused at once, tests/scripts/web_mapmaker_bail.js)
-const CASES = [['A what stands on a cell', caseA], ['B a group and an area', caseB], ['C where a thing cannot go', caseC], ['D the change of a move', caseD], ['E copy, delete and an area', caseE], ['F lists, limits, crowds', caseF],
+const CASES = [['A what stands on a cell', caseA], ['B a group and an area', caseB], ['C where a thing cannot go', caseC], ['W water is a hint, not a refusal', caseW], ['D the change of a move', caseD], ['E copy, delete and an area', caseE], ['F lists, limits, crowds', caseF],
     ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['M big maps', caseM], ['N a drag is put down when the button is let go', caseN], ['K the library', () => caseK(null)]];
 async function run(cases) {
     for (const [name, fn] of cases) {
