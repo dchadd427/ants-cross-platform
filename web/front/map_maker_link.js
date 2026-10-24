@@ -17,10 +17,14 @@
     style.textContent =
         '.mast #mapmaker-top { margin-left: auto; margin-right: -12px; flex: 0 0 auto; position: relative; }' +
         '.mast #mapmaker-top + #watch-top { margin-left: 0; }' +
+        '.mast #discord-top { margin-left: -12px; flex: 0 0 auto; position: relative; display: inline-flex; align-items: center; gap: 7px; }' +
+        '.mast #discord-top::before { content: ""; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }' +
         '.mast #mapmaker-top::before { content: ""; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }' +
         '.mast #mapmaker-top:focus-visible { outline: 3px solid var(--gold, #f2c14e); outline-offset: 3px; }' +
         '@media (max-width: 720px) {' +
-        '.mast { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "logo . map btn" "text text text text"; column-gap: 10px; }' +
+        '.mast { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "logo . map btn" "text text text disc"; column-gap: 10px; }' +
+        '.mast #discord-top { grid-area: disc; justify-self: end; align-self: start; margin-left: 0; min-width: 44px; justify-content: center; padding: 6px 11px; }' +
+        '.mast #discord-top .dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }' +
         '.mast #mapmaker-top { grid-area: map; justify-self: end; margin-right: 0; }' +
         '}' +
         '@media (max-width: 389px) {' +

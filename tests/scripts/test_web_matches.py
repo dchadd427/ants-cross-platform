@@ -77,7 +77,7 @@ class TheCommonFiles(unittest.TestCase):
             page = read("web", name)
             for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
                 self.assertEqual(page.count(placeholder), 1, name + " " + placeholder)
-            self.assertNotRegex(page, r'(?:src|href)="https?://(?!github\.com/dchadd427/)', name)
+            self.assertNotRegex(page, r'(?:src|href)="https?://(?!github\.com/dchadd427/|discord\.gg/WaWrXQnKPj")', name)
             self.assertIn('<link rel="stylesheet" href="matches.css">', page, name)
             self.assertIn('<script src="replay_page.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="history_page.js"></script>', page, name)    # (the helpers before the page's own script)
             self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', page, name)
@@ -102,6 +102,24 @@ class TheCommonFiles(unittest.TestCase):
                 self.assertIn("credentials: 'omit'", call, name + ": " + call)
                 self.assertIn("cache: 'no-store'", call, name + ": " + call)
         self.assertIn("fetch('/maps/all', { credentials: 'same-origin' })", read("web", "history_page.js").replace("fetcher(", "fetch("))      # (the list of the maps is the site's own and cached by it)
+
+    def test_every_page_ends_its_header_buttons_with_the_front_pages_discord_link(self):
+        lobby = read("web", "lobby.html")
+        link = re.search(r'<a class="btn sm discord".*?</a>', lobby).group(0)                              # (the same markup as the front page's header: its mark, its words, its new tab)
+        self.assertIn('href="https://discord.gg/WaWrXQnKPj" id="discord-top" target="_blank" rel="noopener noreferrer"', link)
+        for name in PAGES:
+            page = read("web", name)
+            acts = re.search(r'<div class="acts">(.*?)</div>', page, re.S).group(1)
+            self.assertTrue(acts.endswith(link), name + ": the last button of the header's row")
+            self.assertEqual(page.count("discord.gg"), 1, name)
+            self.assertEqual(len(re.findall(r"<img", re.search(r"<header.*?</header>", page, re.S).group(0))), 1, name + ": the logo is the header's only picture")
+        css = read("web", "matches.css")
+        phone = css[css.index(".mast .acts .btn.hide-s { display: none; }"):]                           # (the phone's rules that come after the hide-s rule, inside the 720 px block that holds it)
+        self.assertIn(".discord::before { content: \"\"; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }", css)      # (the 44 px target)
+        self.assertRegex(phone, r"\.discord \.dt \{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect\(0 0 0 0\); \}")     # (a phone: the mark alone, the word stays for a screen reader)
+        self.assertIn(".discord { min-width: 44px;", phone)
+        self.assertIn("@media (max-width: 389px)", css)
+        self.assertRegex(css[css.index("@media (max-width: 389px)"):], r"\.mast \.acts \{[^}]*flex-wrap: wrap;")       # (with a match running there are three buttons: they never cover the logo)
 
     def test_the_one_stylesheet_is_the_pages_and_the_colors_are_the_front_pages(self):
         css = read("web", "matches.css")

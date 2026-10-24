@@ -42,6 +42,7 @@ PICTURES = {
     "preview_gauntlet.png": (300, 300), "preview_treasure.png": (300, 300), "preview_islands.png": (300, 300),
     "qh_quickhelp.png": (257, 453), "qh_power.png": (362, 455),
 }
+DISCORD_LINK = "https://discord.gg/WaWrXQnKPj"              # the project's Discord invite: the header's button, a plain link (nothing of Discord is loaded)
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
 SCRIPT_FILES = ("map_maker_link.js", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py), the rematch's strip (tests/scripts/test_web_rematch.py; the game page loads it too) the game type's rows and control (tests/scripts/test_web_game_type.py) and the map list: scripts, not pictures
@@ -50,7 +51,7 @@ LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.cs
 MAPMAKER_LAZY = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js")      # the three scripts that the map maker loads after its page is up (mapmaker_app.js, loadParts): the sheets of the kinds of ground, the game's pictures and Fix edges; measured apart (LAZY_BUDGET), not part of the editor's own budget
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
-BUDGET = 1430 * 1000        # bytes: the whole folder (about 1.41 MB: some 427 KB of pictures, the font, the lobby's scripts and the map maker's); a picture that grows past this is a decision, not an accident (raised from 1,360,000 on purpose for the Pick up tool: the folder was at 1,347,000 and its script and style are about 61,000)
+BUDGET = 1432 * 1000        # bytes: the whole folder (raised from 1,430,000 on purpose for the header's Discord link: its layout rules are in map_maker_link.js, because web/lobby.html is at its line limit; about 1.41 MB: some 427 KB of pictures, the font, the lobby's scripts and the map maker's); a picture that grows past this is a decision, not an accident (raised from 1,360,000 on purpose for the Pick up tool: the folder was at 1,347,000 and its script and style are about 61,000)
 ANTS_LAZY = ("mapmaker_ants.js", "mapmaker_ants.css")        # the map maker's Ants tool box (docs/MAP_EDITOR.md, "Ants: one at a time, group, mix"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadAnts)
 ANTS_BUDGET, ANTS_GZIP_BUDGET = 44 * 1000, 13 * 1000        # bytes, raw and gzipped, both files together: their own limits, because the editor's eagerly loaded scripts are at 93,320 of their 94,000 gzipped, so all of this new code (about 39,600 bytes, 12,100 gzipped) is lazy; a player who never uses the Ants tool downloads none of it
 PICKUP_LAZY = ("mapmaker_pickup.js", "mapmaker_pickup.css")        # the map maker's Pick up tool (docs/MAP_EDITOR.md, "Pick up"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadPick)
@@ -761,7 +762,7 @@ class ThePageUsesTheArt(unittest.TestCase):
         for target in re.findall(r"url\(\s*[\"']?([^\"')]+)", self.style):                  # (the style's addresses: a file of this folder, its address may end in ?v=, or the select's own arrow, drawn in the page)
             self.assertTrue(target.startswith("data:image/svg+xml,") or (target.startswith("front/") and target[len("front/"):].split("?")[0] in os.listdir(FRONT)), target)
         for url in set(re.findall(r'href="(https?://[^"]+)"', self.page)):                  # (the links that leave the page are the repository's)
-            self.assertTrue(url.startswith("https://github.com/dchadd427/ants-cross-platform"), url)
+            self.assertTrue(url.startswith("https://github.com/dchadd427/ants-cross-platform") or url == DISCORD_LINK, url)
 
     def test_the_map_info_lines_are_the_ones_of_the_level_files(self):
         maps = self.maps()
