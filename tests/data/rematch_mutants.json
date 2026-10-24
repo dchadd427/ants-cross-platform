@@ -734,15 +734,43 @@
   {
    "id": "test_room_words_door_off",
    "file": "web/front/rematch.js",
-   "old": "if (code === 'submissions_off') return",
-   "new": "if (code === 'submissions_off_') return",
+   "old": "if (code === 'test_maps_off') return",
+   "new": "if (code === 'test_maps_off_') return",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   },
   {
    "id": "test_room_words_door_off_text",
    "file": "web/front/rematch.js",
-   "old": "'Sending maps is not switched on on this server right now.'",
-   "new": "'Sending maps is not switched on right now.'",
+   "old": "'Test rooms are not switched on on this server right now.'",
+   "new": "'Test rooms are not switched on right now.'",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_too_big_413_is_no_special_case",
+   "file": "web/front/rematch.js",
+   "old": "if (status === 413 && !hasSentence(body)) return",
+   "new": "if (false && status === 413 && !hasSentence(body)) return",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_too_big_413_text",
+   "file": "web/front/rematch.js",
+   "old": "'This map is too big to send as a test room.'",
+   "new": "'Too big.'",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_words_413_with_a_sentence_loses_it",
+   "file": "web/front/rematch.js",
+   "old": "status === 413 && !hasSentence(body)",
+   "new": "status === 413",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "test_room_uploads_to_the_old_door",
+   "file": "web/front/rematch.js",
+   "old": "env.fetch('/test-maps?kind=' + kind + '&name='",
+   "new": "env.fetch('/submissions?kind=' + kind + '&test=1&name='",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   },
   {

@@ -16,7 +16,6 @@
 #include "ants_server/map_names.hpp"
 #include "ants_server/map_preview.hpp"
 #include "ants_server/map_store.hpp"
-#include "ants_server/online_limits.hpp"
 #include "ants_server/secret.hpp"
 
 namespace fs = std::filesystem;
@@ -31,21 +30,11 @@ namespace core = ants::assets::lvl_core;
 constexpr size_t kClassicUploadBytes = 512u * 1024u;               // LevelLimits::for_new_maps(): the file that is read as it is
 constexpr size_t kExtendedUploadBytes = 4u * 1024u * 1024u;        // LevelLimits::for_extended_maps()
 constexpr size_t kListLimit = 500;                                 // rows of one list of the owner page
-constexpr size_t kMaxFindingsKept = 20;
 constexpr int kOrphanDays = 30;                     // files in submissions/orphans/ are deleted after this many days
-constexpr size_t kMaxFindingChars = 240;           // one finding's message at most (a map full of hills would name every one of them: the answer stays small)
 constexpr int64_t kDay = 86400;
 
 const char* const kColumns =
     "id, state, kind, name, final_name, maker, note, owner_message, description, hash, file, findings, renamed, file_kept, width, height, minutes, players, size, created_at, decided_at, decided_by";
-
-Failure make_failure(int status, const char* code, const char* message) {
-    Failure f;
-    f.status = status;
-    f.code = code;
-    f.message = message;
-    return f;
-}
 
 bool valid_token_text(const std::string& token) {
     std::string raw;
@@ -57,27 +46,6 @@ bool valid_id_text(const std::string& id) {
 }
 
 std::string token_hash(const std::string& token) { return hex_encode(sha256(token)); }
-
-uint32_t version_word(const std::string& bytes) {
-    if (bytes.size() < 4) return 0;
-    const auto b = [&](size_t i) { return static_cast<uint32_t>(static_cast<unsigned char>(bytes[i])); };
-    return b(0) | (b(1) << 8) | (b(2) << 16) | (b(3) << 24);
-}
-
-// The cheap refusals that a real submission and a test map share: the file is a map of version 8 (Classic) or 9 (Extended), and it is the kind that the request says
-bool kind_of_file(const std::string& claimed, const std::string& bytes, std::string& real_kind, Failure& why) {
-    const uint32_t version = version_word(bytes);
-    if (version != 8 && version != 9) {
-        why = make_failure(400, "not_a_map", "This file is not an Ants map.");
-        return false;
-    }
-    real_kind = version == 9 ? "extended" : "classic";
-    if (real_kind != claimed) {
-        why = make_failure(400, "kind_mismatch", "The file is not the kind of map that the request says.");
-        return false;
-    }
-    return true;
-}
 
 Submission read_row(db::Statement& st) {
     Submission s;
@@ -104,36 +72,6 @@ Submission read_row(db::Statement& st) {
     s.decided_at = st.column_is_null(20) ? 0 : st.column_int64(20);
     s.decided_by = st.column_text(21);
     return s;
-}
-
-// A message cut to kMaxFindingChars bytes, never inside a UTF-8 sequence, with "..." at the cut
-std::string shortened(const std::string& text) {
-    if (text.size() <= kMaxFindingChars) return text;
-    size_t cut = kMaxFindingChars - 3;
-    while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;
-    return text.substr(0, cut) + "...";
-}
-
-// The warnings of a check, as the owner's page shows them (the notes are not kept)
-JsonValue kept_findings(const JsonValue& report) {
-    JsonValue out = JsonValue::make_array();
-    const JsonValue& findings = report.get("findings");
-    for (size_t i = 0; i < findings.size() && out.size() < kMaxFindingsKept; ++i) {
-        const JsonValue& f = findings.at(i);
-        if (f.get("severity").str() == "note") continue;
-        JsonValue o = JsonValue::make_object();
-        o.set("severity", JsonValue::make_string(f.get("severity").str()));
-        o.set("message", JsonValue::make_string(shortened(f.get("message").str())));
-        out.push_back(std::move(o));
-    }
-    return out;
-}
-
-bool parse_big_json(const std::string& text, JsonValue& out) {
-    ctl::JsonLimits limits;
-    limits.max_bytes = 8u * 1024u * 1024u;
-    limits.max_elements = 200000;
-    return ctl::parse_json(text, out, nullptr, limits);
 }
 
 std::string path_of(const SubmissionConfig& c, const std::string& file) { return (fs::path(c.dir) / "files" / file).string(); }
@@ -165,12 +103,6 @@ bool SubmissionStore::open(int64_t now, std::string& why) {
     for (fs::directory_iterator it(fs::path(config_.dir) / "files", ec), end; !ec && it != end; it.increment(ec)) {        // (the leftovers of a crash while a file was written)
         if (it->path().filename().string().compare(0, 5, ".tmp-") == 0) remove_quietly(it->path().string());
     }
-    ec.clear();
-    fs::create_directories(fs::path(config_.dir) / "test", ec);
-    fs::permissions(fs::path(config_.dir) / "test", fs::perms::owner_all, fs::perm_options::replace, ec);          // (0700: the test maps are for the server's user only; a folder that was made by an earlier version is tightened too)
-    ec.clear();
-    for (fs::directory_iterator it(fs::path(config_.dir) / "test", ec), end; !ec && it != end; it.increment(ec)) remove_quietly(it->path().string());
-    test_maps_.clear();
     db::Statement st;
     if (!db_.prepare(st, "SELECT value FROM meta WHERE key = 'submission_salt'").ok()) {
         why = "the database has no meta table";
@@ -784,204 +716,6 @@ void SubmissionStore::maintenance(int64_t now) {
     }
     db::Statement days;
     if (db_.prepare(days, "DELETE FROM submission_limits WHERE day < ?").ok() && days.bind_int64(1, now / kDay - 2).ok()) days.step();
-    prune_test_maps(now);
-}
-
-void SubmissionStore::prune_test_maps(int64_t now) {
-    for (auto it = test_maps_.begin(); it != test_maps_.end();) {
-        if (now - it->created_at >= kTestMapTtlS) {
-            remove_quietly(it->map.path);
-            it = test_maps_.erase(it);
-            test_changed_ = true;
-        } else {
-            ++it;
-        }
-    }
-}
-
-std::vector<ApprovedMap> SubmissionStore::test_maps(int64_t now) {
-    prune_test_maps(now);
-    std::vector<ApprovedMap> out;
-    out.reserve(test_maps_.size());
-    for (const KeptTestMap& m : test_maps_) out.push_back(m.map);
-    return out;
-}
-
-bool SubmissionStore::take_test_changed() {
-    const bool changed = test_changed_;
-    test_changed_ = false;
-    return changed;
-}
-
-// Drops the oldest test map that may go: one that has been kept for kTestMinKeepS and that no room uses (of `only_owner` when that is not empty). False when there is none.
-bool SubmissionStore::drop_oldest_test_map(int64_t now, const std::string& only_owner) {
-    for (auto it = test_maps_.begin(); it != test_maps_.end(); ++it) {
-        if (!only_owner.empty() && it->owner != only_owner) continue;
-        if (now - it->created_at < kTestMinKeepS) continue;
-        if (test_in_use_ && test_in_use_(it->map.name)) continue;
-        remove_quietly(it->map.path);
-        test_maps_.erase(it);
-        test_changed_ = true;
-        return true;
-    }
-    return false;
-}
-
-TestSubmitOutcome SubmissionStore::submit_test(const SubmitInput& in, int64_t now) {
-    TestSubmitOutcome out;
-    const auto refuse = [&](int status, const char* code, const char* message) {
-        out.fail = make_failure(status, code, message);
-        return out;
-    };
-    if (!open_) return refuse(503, "submissions_off", "Sending maps is not switched on right now.");
-    if (in.kind != "classic" && in.kind != "extended") return refuse(400, "bad_kind", "Say whether the map is a Classic map or an Extended map.");
-    if (in.bytes.empty()) return refuse(400, "not_a_map", "No map file came with the request.");
-    if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, "too_large", "This map file is bigger than a map of this kind may be.");
-    std::error_code ec;
-    const fs::space_info space = fs::space(fs::path(config_.dir), ec);
-    if (ec || space.available < config_.min_free_bytes + in.bytes.size()) return refuse(503, "storage_full", "The server has no room for more maps right now. Please try again later.");
-
-    std::string real_kind;
-    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;
-    if (in.allow_check && !in.allow_check()) return refuse(503, "busy", "The server is busy checking other maps. Please try again in a minute.");
-
-    // What is kept is the CANONICAL file, as for a real submission: the core's rewrite of the map, checked again, never the bytes that came (trailing bytes, unknown blocks, anything the rewrite drops, are gone)
-    const auto* data = reinterpret_cast<const uint8_t*>(in.bytes.data());
-    const auto size_fits = [&](int64_t rows, int64_t columns) {
-        return real_kind == "extended" ? (rows >= 1 && columns >= 1 && rows <= 1024 && columns <= 1024 && rows * columns <= 262144) : (rows >= 1 && columns >= 1 && rows <= 90 && columns <= 256);
-    };
-    const core::Result rewritten = core::rewrite(data, in.bytes.size(), core::Profile::Extended);
-    if (rewritten.status != 0 || rewritten.payload.empty()) {          // (the core writes no map that is bigger than its kind: say so, as the check does, when that is the reason)
-        const core::Result first = core::read_report(data, in.bytes.size(), core::Profile::Extended);
-        JsonValue first_meta;
-        if (first.status == 0 && parse_big_json(first.payload, first_meta) && first_meta.get("loaded").as_bool_or(false) && !size_fits(first_meta.get("rows").as_int_or(0), first_meta.get("columns").as_int_or(0))) {
-            return refuse(422, "map_too_big", "This map is bigger than a map of this kind may be.");
-        }
-        return refuse(400, "not_a_map", "This file could not be read as an Ants map.");
-    }
-    const std::string& canonical = rewritten.payload;
-    const auto* kept = reinterpret_cast<const uint8_t*>(canonical.data());
-    const core::Result checked = core::check_map(kept, canonical.size(), core::Profile::Extended);
-    const core::Result info = core::read_report(kept, canonical.size(), core::Profile::Extended);
-    JsonValue report;
-    JsonValue meta;
-    if (checked.status != 0 || info.status != 0 || !parse_big_json(checked.payload, report) || !parse_big_json(info.payload, meta) ||
-        !report.get("judged").as_bool_or(false) || !meta.get("loaded").as_bool_or(false)) {
-        return refuse(400, "not_a_map", "This file could not be read as an Ants map.");
-    }
-    const int64_t rows = meta.get("rows").as_int_or(0);
-    const int64_t columns = meta.get("columns").as_int_or(0);
-    if (!size_fits(rows, columns)) {
-        out.fail = make_failure(422, "map_too_big", "This map is bigger than a map of this kind may be.");
-        out.fail.extra = JsonValue::make_object();
-        out.fail.extra.set("findings", kept_findings(report));
-        return out;
-    }
-    if (!OnlineLimits::allows(static_cast<uint64_t>(rows * columns))) {          // (it is a good map: it can be played here against bots, not by a room)
-        return refuse(422, "map_too_big_online", "This map is too big to play online yet (65,536 cells at most, like 256 x 256). You can still play it against bots on this computer.");
-    }
-    const JsonValue& findings = report.get("findings");
-    bool team_bad[4] = {false, false, false, false};
-    for (size_t i = 0; i < findings.size(); ++i) {
-        const JsonValue& f = findings.at(i);
-        const std::string& sev = f.get("severity").str();
-        const int64_t team = f.get("team").as_int_or(-1);
-        const std::string& code = f.get("code").str();
-        if (sev == "fatal" && !(team >= 0 && team < 4)) {
-            out.fail = make_failure(422, "map_fails_checks", "This map does not pass the checks, so it cannot be played.");
-            out.fail.extra = JsonValue::make_object();
-            out.fail.extra.set("findings", kept_findings(report));
-            return out;
-        }
-        if (team >= 0 && team < 4 && (sev == "fatal" || code == "hill_missing" || code == "hill_without_entrance" || code == "hills_several" || code == "starting_ants_missing")) {
-            team_bad[team] = true;
-        }
-    }
-    int64_t players = 0;
-    const JsonValue& teams = meta.get("teams");
-    for (size_t s = 0; s < 4 && s < teams.size(); ++s) {
-        const JsonValue& t = teams.at(s);
-        const bool ok_team = !team_bad[s] && t.get("start_markers").as_int_or(0) > 0 && t.get("hill_cells").as_int_or(0) > 0;
-        out.usable[s] = ok_team;
-        if (ok_team) ++players;
-    }
-    if (players < 2) {
-        out.fail = make_failure(422, "map_fails_checks", "This map does not pass the checks, so it cannot be played.");
-        out.fail.extra = JsonValue::make_object();
-        out.fail.extra.set("findings", kept_findings(report));
-        return out;
-    }
-
-    constexpr size_t kMaxTestStemChars = 45;
-    std::string candidate = in.name;
-    if (candidate.size() > 4 && (candidate.compare(candidate.size() - 4, 4, ".lvl") == 0 || candidate.compare(candidate.size() - 4, 4, ".LVL") == 0)) candidate.resize(candidate.size() - 4);
-    std::string filtered;
-    for (char c : candidate) {
-        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-                        c == ' ' || c == '\'' || c == '-' || c == '_' || c == '.' || c == '!' || c == '&' || c == '(' || c == ')' || c == ',';
-        filtered.push_back(ok ? c : ' ');
-    }
-    while (!filtered.empty() && !((filtered.front() >= 'a' && filtered.front() <= 'z') || (filtered.front() >= 'A' && filtered.front() <= 'Z') || (filtered.front() >= '0' && filtered.front() <= '9'))) {
-        filtered.erase(filtered.begin());
-    }
-    if (filtered.size() > kMaxTestStemChars) filtered.resize(kMaxTestStemChars);
-    while (!filtered.empty() && (filtered.back() == ' ' || filtered.back() == '.')) filtered.pop_back();
-    const names::Cleaned cleaned = names::clean_map_name(filtered);
-    const std::string stem = cleaned.ok && cleaned.text.size() <= kMaxTestStemChars ? cleaned.text : std::string("Test Map");
-
-    // Room for it: the maps that are too old go; then an address that holds its share drops its own oldest, and a full store drops the oldest of all. A map that a room uses, or that is new, never goes: when nothing can,
-    // the upload is refused (so a burst of uploads cannot push out the map of a room that has not pressed START yet).
-    prune_test_maps(now);
-    size_t mine = 0;
-    for (const KeptTestMap& m : test_maps_) mine += m.owner == in.address ? 1u : 0u;
-    while (!in.address.empty() && mine >= kMaxTestPerAddress) {
-        if (!drop_oldest_test_map(now, in.address)) return refuse(429, "test_limit", "You have as many test maps open as you may. Please try again in a few minutes.");
-        --mine;
-    }
-    while (test_maps_.size() >= kMaxTestMaps) {
-        if (!drop_oldest_test_map(now, std::string())) return refuse(503, "test_full", "The server holds as many test maps as it can right now. Please try again in a few minutes.");
-    }
-    uint8_t id_raw[4];
-    if (!random_bytes(id_raw, sizeof id_raw)) return refuse(503, "storage_error", "The server could not save this just now. Please try again later.");
-    const std::string id8 = hex_encode(std::string(reinterpret_cast<const char*>(id_raw), sizeof id_raw));
-    const fs::path test_dir = fs::path(config_.dir) / "test";
-    fs::create_directories(test_dir, ec);
-    fs::permissions(test_dir, fs::perms::owner_all, fs::perm_options::replace, ec);
-    const std::string path = (test_dir / ("test-" + id8 + ".lvl")).string();
-    {
-        std::ofstream file(path, std::ios::binary | std::ios::trunc);
-        file.write(canonical.data(), static_cast<std::streamsize>(canonical.size()));
-        file.flush();
-        if (!file) {
-            file.close();
-            remove_quietly(path);
-            return refuse(503, "storage_full", "The server has no room for more maps right now. Please try again later.");
-        }
-    }
-    fs::permissions(path, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, ec);          // (0600)
-    uint64_t hash = 0;
-    if (!net::hash_file(path, hash)) {
-        remove_quietly(path);
-        return refuse(503, "storage_error", "The server could not save this just now. Please try again later.");
-    }
-    ApprovedMap m;
-    m.name = stem + " ~test-" + id8 + ".lvl";
-    m.path = path;
-    m.hash = hash;
-    m.size = canonical.size();
-    m.width = static_cast<uint32_t>(columns);
-    m.height = static_cast<uint32_t>(rows);
-    m.minutes = static_cast<uint32_t>(meta.get("minutes").as_int_or(0));
-    m.players = static_cast<uint32_t>(players);
-    m.description = names::clean_description(meta.get("description").str());
-    m.kind = real_kind;
-    test_maps_.push_back(KeptTestMap{m, now, in.address});
-    test_changed_ = true;
-    out.ok = true;
-    out.map = std::move(m);
-    out.clean_name = stem;
-    out.hash_text = map_hash_text(hash);
-    return out;
 }
 
 std::vector<std::string> SubmissionStore::take_notices() {

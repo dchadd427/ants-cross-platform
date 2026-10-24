@@ -10,15 +10,6 @@
 #include "ants_server/map_names.hpp"
 #include "ants_server/secret.hpp"
 
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#endif
-
 namespace ants::server {
 
 namespace {
@@ -34,62 +25,6 @@ constexpr int64_t kSessionSlackS = 60;                    // a cookie that claim
 constexpr const char* kCookieName = "ants_admin";
 constexpr const char* kCookiePrefix = "v2.";
 
-HttpResponse json_reply(int status, const JsonValue& v) {
-    HttpResponse r;
-    r.status = status;
-    r.content_type = "application/json";
-    r.body = ctl::to_json(v);
-    return r;
-}
-
-HttpResponse error_reply(int status, const char* code, const char* message) {
-    JsonValue o = JsonValue::make_object();
-    o.set("error", JsonValue::make_string(code));
-    if (message != nullptr && message[0] != '\0') o.set("message", JsonValue::make_string(message));
-    return json_reply(status, o);
-}
-
-// The path of a call that does not exist, and the answer to anything of the owner's that a visitor must not learn about
-HttpResponse not_found() { return error_reply(404, "not_found", "Not found."); }
-
-HttpResponse failure_reply(const Failure& f) {
-    JsonValue o = JsonValue::make_object();
-    o.set("error", JsonValue::make_string(f.code));
-    o.set("message", JsonValue::make_string(f.message));
-    if (f.extra.is_object()) {
-        for (size_t i = 0; i < f.extra.size(); ++i) o.set(f.extra.key_at(i), f.extra.at(i));
-    }
-    return json_reply(f.status, o);
-}
-
-int hex_value(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
-}  // namespace
-
-bool percent_decode_text(const std::string& in, std::string& out) {
-    out.clear();
-    for (size_t i = 0; i < in.size(); ++i) {
-        if (in[i] != '%') {
-            out.push_back(in[i]);
-            continue;
-        }
-        if (i + 2 >= in.size()) return false;
-        const int hi = hex_value(in[i + 1]);
-        const int lo = hex_value(in[i + 2]);
-        if (hi < 0 || lo < 0) return false;
-        out.push_back(static_cast<char>(hi * 16 + lo));
-        i += 2;
-    }
-    return true;
-}
-
-namespace {
-
 // The bearer token of a request, or ""
 std::string bearer_of(const HttpRequest& r) {
     const std::string* h = r.header("authorization");
@@ -99,76 +34,7 @@ std::string bearer_of(const HttpRequest& r) {
     return scheme == "bearer " ? h->substr(7) : std::string();
 }
 
-bool cross_site(const HttpRequest& r) {
-    const std::string* site = r.header("sec-fetch-site");
-    return site != nullptr && *site != "same-origin" && *site != "none";
-}
-
-// "application/json" or "application/octet-stream", with parameters allowed (charset)
-bool content_type_is(const HttpRequest& r, const char* type) {
-    const std::string* h = r.header("content-type");
-    if (h == nullptr) return false;
-    std::string v = h->substr(0, h->find(';'));
-    while (!v.empty() && v.back() == ' ') v.pop_back();
-    for (char& c : v) c = static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
-    return v == type;
-}
-
 }  // namespace
-
-// ------------------------------------------------------------------------------------------------ small public helpers
-
-bool query_value(const std::string& query, const std::string& name, std::string& out) {
-    size_t pos = 0;
-    while (pos <= query.size()) {
-        const size_t amp = query.find('&', pos);
-        const std::string part = query.substr(pos, amp == std::string::npos ? std::string::npos : amp - pos);
-        const size_t eq = part.find('=');
-        const std::string key = part.substr(0, eq);
-        if (key == name) return eq != std::string::npos && percent_decode_text(part.substr(eq + 1), out);
-        if (amp == std::string::npos) break;
-        pos = amp + 1;
-    }
-    return false;
-}
-
-namespace {
-
-// The identity of one address text, "" when it is none: an IPv4 address as it is, an IPv4-mapped IPv6 address as its IPv4 address, any other IPv6 address as its /64
-std::string identity_of(const std::string& text) {
-    if (text.empty() || text.size() > 45) return std::string();
-    in6_addr v6;
-    in_addr v4;
-    if (inet_pton(AF_INET, text.c_str(), &v4) == 1) {
-        char buf[INET_ADDRSTRLEN];
-        return inet_ntop(AF_INET, &v4, buf, sizeof buf) != nullptr ? std::string(buf) : std::string();
-    }
-    if (inet_pton(AF_INET6, text.c_str(), &v6) == 1) {
-        const auto* b = reinterpret_cast<const unsigned char*>(&v6);
-        static const unsigned char kMapped[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF};
-        if (std::memcmp(b, kMapped, 12) == 0) {
-            char buf[INET_ADDRSTRLEN];
-            in_addr mapped;
-            std::memcpy(&mapped, b + 12, 4);
-            return inet_ntop(AF_INET, &mapped, buf, sizeof buf) != nullptr ? std::string(buf) : std::string();
-        }
-        return "v6:" + hex_encode(std::string(reinterpret_cast<const char*>(b), 8));
-    }
-    return std::string();        // (anything else a visitor could put in a header is no address)
-}
-
-}  // namespace
-
-std::string client_identity(const HttpRequest& request, bool trust_header) {
-    if (trust_header) {
-        const std::string* h = request.header("x-client-address");
-        if (h != nullptr) {
-            const std::string id = identity_of(*h);
-            if (!id.empty()) return id;
-        }
-    }
-    return identity_of(request.peer);
-}
 
 // ------------------------------------------------------------------------------------------------
 
@@ -202,43 +68,6 @@ bool SubmissionApi::address_allowed(const std::string& identity, int64_t now_s) 
     return true;
 }
 
-// The test maps of the Map Maker (docs/MAP_SUBMISSIONS.md, "Test maps"): an address may send config_.test_attempts_per_hour an hour and all addresses together config_.test_total_per_hour, whatever came of them
-bool SubmissionApi::test_allowed(const std::string& identity, int64_t now_s) {
-    const auto old = [&](int64_t t) { return t <= now_s - kAttemptWindowS; };
-    test_all_.erase(std::remove_if(test_all_.begin(), test_all_.end(), old), test_all_.end());
-    if (test_all_.size() >= config_.test_total_per_hour) return false;
-    if (test_attempts_.size() >= kMaxAddressesKept) {
-        for (auto it = test_attempts_.begin(); it != test_attempts_.end();) {
-            auto& times = it->second;
-            times.erase(std::remove_if(times.begin(), times.end(), old), times.end());
-            it = times.empty() ? test_attempts_.erase(it) : std::next(it);
-        }
-        if (test_attempts_.size() >= kMaxAddressesKept) return false;
-    }
-    std::vector<int64_t>& times = test_attempts_[identity];
-    times.erase(std::remove_if(times.begin(), times.end(), old), times.end());
-    if (times.size() >= config_.test_attempts_per_hour) return false;
-    times.push_back(now_s);
-    test_all_.push_back(now_s);
-    return true;
-}
-
-bool SubmissionApi::check_window_open(CheckWindow& window, uint32_t now_ms, const std::string& identity, size_t per_window, size_t per_address, uint32_t budget_ms) {
-    if (!window.started || static_cast<uint32_t>(now_ms - window.start_ms) >= config_.check_window_ms) {
-        window.started = true;
-        window.start_ms = now_ms;
-        window.count = 0;
-        window.spent_ms = 0;
-        window.by_address.clear();
-    }
-    const auto used = window.by_address.find(identity);
-    if (used != window.by_address.end() && used->second >= per_address) return false;          // (this address has had its share: it cannot use up the window of the others)
-    if (window.count >= per_window || window.spent_ms >= budget_ms) return false;
-    ++window.count;
-    ++window.by_address[identity];
-    return true;
-}
-
 HttpResponse SubmissionApi::handle(const HttpRequest& request, int64_t now_s, uint32_t now_ms) {
     const std::string& path = request.path;
     if (path == "/admin/api" || path.compare(0, 11, "/admin/api/") == 0) return admin_routes(request, now_s, now_ms);
@@ -255,8 +84,6 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
     const std::string identity = client_identity(request, config_.trust_client_header);
     if (identity.empty()) return error_reply(400, "no_address", "The server cannot tell where this request came from.");
     if (request.query.size() > 4096) return error_reply(414, "query_too_long", "The request is too long.");          // (before anything is decoded)
-    std::string test_flag;
-    if (query_value(request.query, "test", test_flag) && test_flag == "1") return submit_test(request, identity, now_s, now_ms);       // (its own limits: a test map never uses the allowance of the real submissions)
     if (!address_allowed(identity, now_s)) return error_reply(429, "too_many_requests", "Too many tries from this address. Please try again in an hour.");
     SubmitInput in;
     if (!query_value(request.query, "kind", in.kind)) in.kind.clear();
@@ -266,7 +93,7 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
     in.bytes = request.body;
     in.address = identity;
     in.token = bearer_of(request);
-    in.allow_check = [this, now_ms, identity]() { return check_window_open(window_, now_ms, identity, config_.checks_per_window, config_.checks_per_address_window, config_.check_budget_ms); };            // (asked only when a map is really going to be checked, after every refusal that costs nothing: those use none of the window)
+    in.allow_check = [this, now_ms, identity]() { return check_window_open(window_, config_.check_window_ms, now_ms, identity, config_.checks_per_window, config_.checks_per_address_window, config_.check_budget_ms); };            // (asked only when a map is really going to be checked, after every refusal that costs nothing: those use none of the window)
     const auto began = std::chrono::steady_clock::now();
     const SubmitOutcome out = store_.submit(in, now_s);
     window_.spent_ms += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
@@ -276,38 +103,6 @@ HttpResponse SubmissionApi::submit(const HttpRequest& request, int64_t now_s, ui
     o.set("name_taken", JsonValue::make_bool(out.name_taken));
     o.set("token_is_new", JsonValue::make_bool(out.token_is_new));
     if (out.token_is_new) o.set("token", JsonValue::make_string(out.token));
-    return json_reply(201, o);
-}
-
-// POST /submissions?test=1: a draft map for an unlisted test room of the Map Maker. Nothing is queued, nothing reaches the owner, no database row is made; the limits are its own (SubmissionApiConfig::test_*)
-HttpResponse SubmissionApi::submit_test(const HttpRequest& request, const std::string& identity, int64_t now_s, uint32_t now_ms) {
-    if (!test_allowed(identity, now_s)) return error_reply(429, "too_many_tests", "Too many test maps came in from this address or from everybody in the last hour. Please try again later.");
-    SubmitInput in;
-    if (!query_value(request.query, "kind", in.kind)) in.kind.clear();
-    if (!query_value(request.query, "name", in.name)) in.name.clear();
-    in.bytes = request.body;
-    in.address = identity;
-    in.allow_check = [this, now_ms, identity]() { return check_window_open(test_window_, now_ms, identity, config_.test_checks_per_window, config_.test_checks_per_address_window, config_.test_check_budget_ms); };
-    const auto began = std::chrono::steady_clock::now();
-    const TestSubmitOutcome test_out = store_.submit_test(in, now_s);
-    test_window_.spent_ms += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
-    if (!test_out.ok) return failure_reply(test_out.fail);
-    if (store_.take_test_changed() && on_test_changed_) on_test_changed_();          // (only the test maps changed: the approved ones are not read again)
-    JsonValue tm = JsonValue::make_object();
-    tm.set("file", JsonValue::make_string(test_out.map.name));
-    tm.set("name", JsonValue::make_string(test_out.clean_name));
-    tm.set("kind", JsonValue::make_string(test_out.map.kind));
-    tm.set("width", JsonValue::make_int(test_out.map.width));
-    tm.set("height", JsonValue::make_int(test_out.map.height));
-    tm.set("minutes", JsonValue::make_int(test_out.map.minutes));
-    tm.set("players", JsonValue::make_int(test_out.map.players));
-    tm.set("size", JsonValue::make_int(static_cast<int64_t>(test_out.map.size)));
-    tm.set("hash", JsonValue::make_string(test_out.hash_text));
-    JsonValue usable = JsonValue::make_array();
-    for (size_t s = 0; s < 4; ++s) usable.push_back(JsonValue::make_bool(test_out.usable[s]));
-    tm.set("usable", std::move(usable));
-    JsonValue o = JsonValue::make_object();
-    o.set("test_map", std::move(tm));
     return json_reply(201, o);
 }
 

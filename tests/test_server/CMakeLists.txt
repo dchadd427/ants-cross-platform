@@ -282,6 +282,24 @@ target_include_directories(test_submissions_api PRIVATE
 add_test(NAME test_submissions_api COMMAND test_submissions_api)
 set_tests_properties(test_submissions_api PROPERTIES COST 8)
 
+# The test maps of the Map Maker (ants_server/test_maps.hpp, test_maps_http.hpp): the one route of the test-map door, the canonical file, the limits by address and for all, the store's caps, the names, the 65,536-cell
+# limit, and that the same bytes get the same verdict as at the real submissions door. A folder and a checker: no database, no network
+add_executable(test_test_maps
+    test_test_maps.cpp
+)
+
+target_link_libraries(test_test_maps PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_test_maps PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_test_maps COMMAND test_test_maps)
+set_tests_properties(test_test_maps PROPERTIES COST 8)
+
 # The accounts of the owner's page (ants_server/admin_accounts.hpp, admin_cli.hpp): PBKDF2 against published vectors, the hash and its upgrade, the random password, the limits on guessing, the generation of the sessions,
 # the last Admin, the log, the migration of a copy of a version 5 database, and the command line of the first account. No network
 add_executable(test_admin_accounts

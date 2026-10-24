@@ -516,7 +516,7 @@ async function main() {
         });
         check('begin detects ?testroom=<id> and uploads the draft map', tStrip.begin(() => { readyCalls++; }) === true);
         await flush(); await flush();
-        same('POSTs to /submissions?kind=classic&test=1&name=Popcorn%20Remix and calls onReady', [tFetched, readyCalls], [[['/submissions?kind=classic&test=1&name=Popcorn%20Remix', 'POST']], 1]);
+        same('POSTs to /test-maps?kind=classic&name=Popcorn%20Remix and calls onReady', [tFetched, readyCalls], [[['/test-maps?kind=classic&name=Popcorn%20Remix', 'POST']], 1]);
         same('info returns the title, details and preview of the unlisted test map', tStrip.info('Popcorn Remix ~test-a1b2c3d4.lvl'), {
             name: 'Popcorn Remix', info: 'Classic \u00b7 31 \u00d7 31 \u00b7 Unlisted test map from Map Maker', thumb: '/maps/previews/Popcorn%20Remix%20~test-a1b2c3d4.png'
         });
@@ -546,7 +546,8 @@ async function main() {
         same('when Green is not usable, sync moves the host to the first usable seat (Red = 1)', rbPlans, [{ file: 'Red vs Blue ~test-11223344.lvl', kinds: [4, 0, 4, 0], moveTo: 1 }]);
 
         // A test room whose map did not reach the server must never turn into an ordinary room (Treasure) by itself, and the strip says why in words, with the way back to the editor. No new buttons: only the strip's own Back to editor.
-        const SEND_OFF = 'Sending maps is not switched on on this server right now. Go back to the editor.';
+        const TESTS_OFF = 'Test rooms are not switched on on this server right now. Go back to the editor.';
+        const TOO_BIG = 'This map is too big to send as a test room. Go back to the editor.';
         const TOO_MANY = 'Too many test maps just now. Wait a minute and press Play this map again in the editor.';
         const TAB_GONE = 'The editor tab was closed. Go back to the editor and press Play this map again.';
         const handoff = (name) => ({ closed: false, antsTestGameHandoff: () => ({ name, bytes: new Uint8Array([8, 0, 0, 0, 1, 2]) }), antsTestGameBack: () => {} });
@@ -565,9 +566,16 @@ async function main() {
         const buttonsOf = (body) => all(body, (x) => x.tag === 'button').map((b) => b.textContent);
         // (1) each way the upload can fail: no room is made, the strip is a warning with exactly these words, and the only button is the strip's Back to editor
         const refusals = [
-            ['the submissions door is off (503 submissions_off)', { status: 503, json: () => Promise.resolve({ error: 'submissions_off', message: 'Sending maps is not switched on right now.' }) }, SEND_OFF],
+            ['the test-map door is off (503 test_maps_off)', { status: 503, json: () => Promise.resolve({ error: 'test_maps_off', message: 'Test rooms are not switched on right now.' }) }, TESTS_OFF],
+            ['the test-map door is off, nginx\'s own answer is the same JSON (503 test_maps_off, no message)', { status: 503, json: () => Promise.resolve({ error: 'test_maps_off' }) }, TESTS_OFF],
             ['the server is busy (503 busy)', { status: 503, json: () => Promise.resolve({ error: 'busy', message: 'The server is busy checking other maps. Please try again in a minute.' }) }, TOO_MANY],
-            ['too many tries from this address (429)', { status: 429, json: () => Promise.resolve({ error: 'address_limit', message: 'This address has sent as many maps as it may today.' }) }, TOO_MANY],
+            ['a limit that answers 429 with some other code', { status: 429, json: () => Promise.resolve({ error: 'rate_limited', message: 'Slow down.' }) }, TOO_MANY],
+            ['too many tries in an hour (429 too_many_tests, the door\'s own sentence)', { status: 429, json: () => Promise.resolve({ error: 'too_many_tests', message: 'Too many test maps came in from this address or from everybody in the last hour. Please try again later.' }) }, 'Too many test maps came in from this address or from everybody in the last hour. Please try again later. Go back to the editor.'],
+            ['one address holds as many test maps as it may (429 test_limit)', { status: 429, json: () => Promise.resolve({ error: 'test_limit', message: 'You have as many test maps open as you may. Please try again in a few minutes.' }) }, 'You have as many test maps open as you may. Please try again in a few minutes. Go back to the editor.'],
+            ['the store is full (503 test_full)', { status: 503, json: () => Promise.resolve({ error: 'test_full', message: 'The server holds as many test maps as it can right now. Please try again in a few minutes.' }) }, 'The server holds as many test maps as it can right now. Please try again in a few minutes. Go back to the editor.'],
+            ['the map is over the size of a room (422 map_too_big_online)', { status: 422, json: () => Promise.resolve({ error: 'map_too_big_online', message: 'This map is too big to play online yet (65,536 cells at most, like 256 x 256). You can still play it against bots on this computer.' }) }, 'This map is too big to play online yet (65,536 cells at most, like 256 x 256). You can still play it against bots on this computer. Go back to the editor.'],
+            ['the site\'s own limit on the size of a map (413, not JSON)', { status: 413, json: () => Promise.reject(new Error('not json')) }, TOO_BIG],
+            ['the door\'s own refusal of a body that is too large (413 too_large)', { status: 413, json: () => Promise.resolve({ error: 'too_large', message: 'This map file is bigger than a map of this kind may be.' }) }, 'This map file is bigger than a map of this kind may be. Go back to the editor.'],
             ['the site\'s own page for a limit (503, not JSON)', { status: 503, json: () => Promise.reject(new Error('not json')) }, TOO_MANY],
             ['the check refuses the map (422, the server\'s own sentence)', { status: 422, json: () => Promise.resolve({ error: 'map_refused', message: 'This map has no hill.' }) }, 'This map has no hill. Go back to the editor.'],
             ['an error with no sentence (500)', { status: 500, json: () => Promise.resolve({ error: 'internal error' }) }, 'The server could not prepare this test map (answer 500). Go back to the editor.'],
@@ -587,8 +595,9 @@ async function main() {
             x.s.sync(null); x.s.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, () => { throw new Error('nothing is sent to a room that was not made'); });
             check(label + ': the warning survives sync()', !byClass(x.body, 'testbar').hidden && /warn/.test(byClass(x.body, 'testbar').className));
         }
-        same('failWords gives the words for each reason', [R.failWords(503, { error: 'submissions_off' }), R.failWords(429, { error: 'day_limit' }), R.failWords(503, { error: 'busy' }), R.failWords(503, null), R.failWords(0, null), R.failWords(404, { message: '  Not\n here ' })],
-            [SEND_OFF, TOO_MANY, TOO_MANY, TOO_MANY, 'The server could not prepare this test map. Go back to the editor.', 'Not here Go back to the editor.']);
+        same('failWords gives the words for each reason', [R.failWords(503, { error: 'test_maps_off' }), R.failWords(429, null), R.failWords(503, { error: 'busy' }), R.failWords(503, null), R.failWords(413, null), R.failWords(0, null), R.failWords(404, { message: '  Not\n here ' })],
+            [TESTS_OFF, TOO_MANY, TOO_MANY, TOO_MANY, TOO_BIG, 'The server could not prepare this test map. Go back to the editor.', 'Not here Go back to the editor.']);
+        check('the old door\'s words are gone: submissions_off says nothing special any more', R.failWords(503, { error: 'submissions_off' }) === 'The server could not prepare this test map (answer 503). Go back to the editor.');
         same('the game server\'s limits of an hour and of held maps say their own words (not "wait a minute")', [R.failWords(429, { error: 'too_many_tests', message: 'Too many test maps came in the last hour. Please try again later.' }), R.failWords(429, { error: 'test_limit', message: 'You have as many test maps open as you may. Please try again in a few minutes.' })],
             ['Too many test maps came in the last hour. Please try again later. Go back to the editor.', 'You have as many test maps open as you may. Please try again in a few minutes. Go back to the editor.']);
         check('a very long sentence from the server is cut', R.failWords(422, { message: 'x'.repeat(900) }).length < 260);
