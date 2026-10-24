@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21, the simulation rules and every recording are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9aa3e544...f2f4ee46)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d01c8ec8...7812b621)
 
 ## v0.12.118 - 2026-10-23 - No Settings button over the picture in fullscreen
 
