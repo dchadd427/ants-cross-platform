@@ -16,7 +16,7 @@ console.log = function (...args) {
 
 // A watchdog for a run that must not take long (ANTS_BAIL_WATCHDOG_S = seconds, set by test_web_mapmaker_play.py: the check of a broken copy takes a third of a second, and on a macOS runner of CI a few runs of it
 // were once found still alive after 600 s, with no way to tell where). A thread of its own, so that it still runs when the main thread is stuck (in the exit, or anywhere else): after the time it writes one line
-// to standard error and kills the process, and the test then has the output that the run had made (the failing line, when it got that far) and the line, in about two minutes and not ten.
+// to standard error and kills the process, and the test then has the output that the run had made (the failing line, when it got that far) and the line, in about a minute and not ten.
 const watch = Number(process.env.ANTS_BAIL_WATCHDOG_S || 0);
 if (watch > 0) {
     const { Worker } = require('worker_threads');

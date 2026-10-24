@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -29,7 +30,7 @@ def read(*parts):
         return f.read()
 
 
-WATCHDOG_S = 120                                              # the check of a broken copy takes a third of a second; two minutes is a machine that is badly stuck
+WATCHDOG_S = 60                                               # the check of a broken copy takes a third of a second; a minute is a machine that is badly stuck
 
 
 def core_dir():
@@ -106,6 +107,7 @@ class ThePlayChecks(unittest.TestCase):
                     # (a run that ended by its watchdog counts only when the check had said that it failed, a line of its own; one that ended by itself with a status counts as it always did, a crash at the load too)
                     if "WATCHDOG:" in done.stderr:
                         self.assertRegex(done.stdout, r"\b(FAILED|ERROR|CRASHED): ", "the run hung with no failing line of the check for " + m["id"] + " (" + done.stderr[-300:].strip() + ")")
+                        print("NOTE: the run of the broken copy %s said that the check failed and then did not end by itself (killed by its watchdog after %d s): %s" % (m["id"], WATCHDOG_S, done.stderr.strip()[-200:]), file=sys.stderr)
 
     def test_every_mutant_of_the_glue_names_a_test_that_exists(self):
         with open(os.path.join(REPO, "tests", "data", "mapmaker_play_mutants.json"), encoding="utf-8") as f:
