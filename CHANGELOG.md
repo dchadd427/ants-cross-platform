@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the game sends several ordinary orders; recordings and the network need nothing new).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...LASTCODE)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...30e058a6)
 
 ## v0.12.122 - 2026-10-24 - The picture starts in the shape nearest your screen
 
