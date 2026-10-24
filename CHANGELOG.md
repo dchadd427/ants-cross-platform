@@ -26,13 +26,13 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.122 - 2026-10-24 - The picture starts in the shape nearest your screen
 
 **For players:**
-- **The picture now starts in the shape nearest your screen.** The first time you open the game page or the front page, and for as long as you have not picked a shape yourself, it starts in Classic 4:3, 16:10, 16:9 or 21:9, whichever is closest to your screen: a 1440 x 900 laptop gets 16:10, a 3440 x 1440 ultrawide gets 21:9, a 4:3 or 5:4 screen gets Classic 4:3. Before, everyone started in 16:9.
-- A phone held upright still starts in 16:9 and is still told to turn it sideways; a phone held sideways picks by the shape of its screen.
-- Nothing you chose changes: a shape you pressed in the selector (16:9 too) is remembered as before, and `?aspect=` in the address still wins. The starting shape is not remembered, so it follows your screen until you press a shape.
+- **The picture now starts in the shape nearest your screen.** The first time you open the game page or the front page, and until you pick a shape yourself, it starts in Classic 4:3, 16:10, 16:9 or 21:9, whichever is closest to your screen: a 1440 x 900 laptop gets 16:10, a 3440 x 1440 ultrawide gets 21:9, a 4:3 or 5:4 screen gets Classic 4:3. Before, everyone started in 16:9.
+- A phone held upright still starts in 16:9 and is still told to turn it sideways; a phone held sideways picks by the shape of its screen, also when it opened the front page upright (the front page passes the game only a shape you picked).
+- Nothing you chose changes: a shape you pressed (16:9 too) is remembered as before, and `?aspect=` in the address still wins. The starting shape is not remembered, so it follows your screen until you press a shape.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the pages only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/36df6960...81fb3ec7)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/36df6960...54f0b89a)
 
 ## v0.12.121 - 2026-10-24 - A Discord button in the header
 
