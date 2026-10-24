@@ -1,7 +1,8 @@
 // The colors that stand for the tiles on the map maker's canvas (docs/MAP_EDITOR.md): one color for a kind of ground and a few for the kinds of object. They are what the canvas shows while the
 // game's pictures are not loaded (the atlas, mapmaker_sprites.js) and, once they are, the average color of each picture for tiles smaller than 10 pixels (setAverages). The kinds follow the tile
 // ids of docs/MAP_FORMAT.md and the names of Table 4 of ants.chd: layer 1 ids 431 to 669 are ground, and the first letter of a tile's name is its kind: g Gravel, d Dirt, s Slate, m and M Mud,
-// w Water (mapmaker_ground.js lists every tile); layer 2 holds the objects. A plain ES5 script that a page and node can load.
+// w Water (mapmaker_ground.js lists every tile); layer 2 holds the objects. It also holds the game's own way from a tile of a map to its picture (the animation: tableOf and the rules below,
+// docs/MAP_EDITOR.md, "Sprites"): the map's dictionary decides, as in the game's renderer. A plain ES5 script that a page and node can load.
 (function (root, factory) {
     'use strict';
     if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -9,7 +10,7 @@
 })(this, function () {
     'use strict';
 
-    var EMPTY2 = 0x7FFE;
+    var EMPTY2 = 0x7FFE, BACK = '#0b1612';
     var GROUND = {                 // the five kinds of ground: a few shades each (the average colors of the plain tiles), so that a field is not one flat color
         gravel: ['#8d7871', '#85706a', '#957f78'], dirt: ['#d6cac1', '#cfc2b8', '#ddd1c9'], slate: ['#9493aa', '#8c8ba2', '#9c9bb2'],
         mud: ['#4b4b4b', '#444444', '#525252'], water: ['#1d3d71', '#1a386a', '#214378']
@@ -74,19 +75,113 @@
         var i, hex = function (n) { return '#' + ('00000' + n.toString(16)).slice(-6); };
         for (i = 0; i * 6 < ground.length; i++) css1[GROUND_IDS[0][0] + i] = '#' + ground.substr(i * 6, 6);
         for (var id in objects) if (objects.hasOwnProperty(id)) css2[+id] = hex(objects[id]);
-        packed1 = packed2 = null;
+        packed1 = packed2 = null; made = null; stamps++;
     }
 
-    // the color of a cell (the object when there is one, else the ground) as a CSS color
-    function css(t1, t2) { return t2 !== EMPTY2 && css2[t2] ? css2[t2] : css1[t1 & 0xFFFF]; }
+    // ---- from a tile of a map to its picture: the game's own rule (src/ants_app/renderer.cpp, Renderer::set_level and its three users) ----
+    // A cell holds a number, and the map's dictionary has a name at that place (11 bytes a name). The game draws the animation that the NAME gives: when the entry is the name of the animation of
+    // that same number (compared without regard to case) the animation is the number; an entry of "." or no letter draws nothing; any other name is looked up (the exact name, the last of two
+    // equal names first, then the name in lower case, the first of them): the number that the name has in the animation table, or nothing when no animation has it. The start markers (152 to 155) are never
+    // drawn. So a map whose dictionary is shifted (a pile of jacks that the table calls a pink eraser) shows what its names say, not what its numbers say. `animations` is the table's names by number
+    // (the atlas's `names`); without it a tile is its number, as the pictures were drawn before the table came.
+    var animNames = null, animExact = null, animLower = null, made = null, stamps = 0;
 
-    // the same as packed colors for the pixel loop (a Uint32 for every tile id of each layer, made on first use)
-    function packedTables() {
+    function lowerAscii(s) { return s.replace(/[A-Z]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) + 32); }); }
+
+    function setAnimations(names) {
+        made = null; stamps++;
+        if (!names || !names.length) { animNames = animExact = animLower = null; return; }
+        animNames = names; animExact = Object.create(null); animLower = Object.create(null);
+        for (var i = 0; i < names.length; i++) {
+            animExact[names[i]] = i;                                         // (the last of two equal names wins, as in the game's table)
+            var low = lowerAscii(names[i]);
+            if (!(low in animLower)) animLower[low] = i;                     // (the first, here)
+        }
+    }
+
+    function findAnimation(name) {
+        if (name in animExact) return animExact[name];
+        var low = lowerAscii(name);
+        return low in animLower ? animLower[low] : -1;
+    }
+
+    // The table of one map's dictionary: {n: how many names, anim[i]: the animation of entry i or -1, blank[i]: the entry is "." or empty, pu[i]: the name begins with "pu", stamp: changes when
+    // the dictionary does}, or null while there is no animation table. One table is kept (the map that is open); the dictionary's bytes are compared each time, so a name written in place changes it.
+    function tableOf(file) {
+        if (!animNames || !file || !file.bytes || !(file.names > 0)) return null;
+        var b = file.bytes, n = file.names, at = file.dictAt + 2, i, k;
+        if (at + 11 * n > b.length) return null;
+        if (made && made.n === n) {
+            for (k = 0; k < 11 * n && made.raw[k] === b[at + k]; k++);
+            if (k === 11 * n) return made;
+        }
+        var raw = new Uint8Array(11 * n), anim = new Int16Array(n), blank = new Uint8Array(n), pu = new Uint8Array(n);
+        for (k = 0; k < 11 * n; k++) raw[k] = b[at + k];
+        for (i = 0; i < n; i++) {
+            var name = '';
+            for (k = 0; k < 11 && raw[11 * i + k]; k++) name += String.fromCharCode(raw[11 * i + k]);
+            blank[i] = name === '' || name === '.' ? 1 : 0;
+            pu[i] = lowerAscii(name).indexOf('pu') === 0 ? 1 : 0;
+            if (blank[i] || (i >= 152 && i <= 155)) anim[i] = -1;
+            else if (i < animNames.length && lowerAscii(animNames[i]) === lowerAscii(name)) anim[i] = i;
+            else anim[i] = findAnimation(name);
+        }
+        made = { n: n, raw: raw, anim: anim, blank: blank, pu: pu, stamp: ++stamps };
+        return made;
+    }
+
+    // What the game draws from the id itself, whatever the dictionary says: a power-up (62 to 66), an original bomb (129 to 132), the fire wall (134), a hill (245 to 248: its own template) and a bridge (34 to 38)
+    function byId(id) { return (id >= 62 && id <= 66) || (id >= 129 && id <= 132) || id === 134 || (id >= 245 && id <= 248) || (id >= 34 && id <= 38); }
+
+    // The animation drawn for the number in a cell of layer 1 (-1: nothing; the ground behind is black). `tab` is tableOf(file), null for the number itself.
+    function ground(tab, id) { return tab ? (id < tab.n ? tab.anim[id] : -1) : id; }
+
+    // ... for the number of an anchored object of layer 2: the ones above are the number; an entry outside the dictionary, ".", a name that begins with "pu" (and a start marker: the table has none for it) draw nothing
+    function object(tab, id) {
+        if (!tab || byId(id)) return id;
+        if (id >= tab.n || tab.blank[id] || tab.pu[id]) return -1;
+        return tab.anim[id];
+    }
+
+    // ... for the tile of a food pile's stage: the name's animation, or the number itself when the name gives none (Renderer::food_stage_anim)
+    function stage(tab, id) {
+        if (!tab) return id;
+        var a = id < tab.n ? tab.anim[id] : -1;
+        return a >= 0 ? a : (id < animNames.length ? id : -1);
+    }
+
+    // ... for a tile that is about to be put (a brush's picture): an entry that is "." or missing is named by the tool when the tile goes down, so its picture is the number's; any other entry stays
+    function place(tab, id) { return !tab || id >= tab.n || tab.blank[id] ? id : object(tab, id); }
+
+    // the colors of an animation: its ground color when it is a ground tile, else its object color
+    function groundCss(a) { return a >= 431 && a <= 669 ? css1[a] : (css2[a] || OTHER_OBJECT); }
+
+    // the color of a cell (the object when there is one, else the ground) as a CSS color; with a map's table the colors are those of the animations that its dictionary names
+    function css(t1, t2, tab) {
+        if (!tab) return t2 !== EMPTY2 && css2[t2] ? css2[t2] : css1[t1 & 0xFFFF];
+        var a = t2 !== EMPTY2 ? object(tab, t2) : -1;
+        if (a >= 0 && css2[a]) return css2[a];
+        a = ground(tab, t1 & 0xFFFF);
+        return a < 0 ? BACK : groundCss(a);
+    }
+
+    // the same as packed colors for the pixel loop (a Uint32 for every tile id of each layer, made on first use; one pair more for the map whose table it is)
+    function packedTables(tab) {
         if (!packed1) {
             packed1 = new Uint32Array(65536); packed2 = new Uint32Array(65536);
             for (var i = 0; i < 65536; i++) { packed1[i] = hexToPacked(css1[i]); packed2[i] = css2[i] && i !== EMPTY2 ? hexToPacked(css2[i]) : 0; }
         }
-        return { ground: packed1, objects: packed2 };
+        if (!tab) return { ground: packed1, objects: packed2 };
+        if (!tab.packed) {
+            var g = new Uint32Array(65536), o = new Uint32Array(65536), back = hexToPacked(BACK), j;
+            for (j = 0; j < 65536; j++) {
+                var a1 = ground(tab, j), a2 = j !== EMPTY2 ? object(tab, j) : -1;
+                g[j] = a1 < 0 ? back : hexToPacked(groundCss(a1));
+                o[j] = a2 >= 0 && css2[a2] ? hexToPacked(css2[a2]) : 0;
+            }
+            tab.packed = { ground: g, objects: o };
+        }
+        return tab.packed;
     }
 
     // Packed color tables for the original game's minimap: 5 speckle entries per ground tile id, and one entry per layer-2 object id (0 for empty or bomb tiles 129..132 so terrain shows)
@@ -110,5 +205,5 @@
         return { ground: mini1, objects: mini2 };
     }
 
-    return { css: css, kindOf: kindOf, setAverages: setAverages, packedTables: packedTables, miniTables: miniTables, hexToPacked: hexToPacked, TEAMS: TEAMS, FOOD: FOOD, MINI_ANTS: MINI_ANTS, MINI_PLANT: MINI_PLANT, MINI_FOOD: MINI_FOOD, EMPTY2: EMPTY2 };
+    return { css: css, kindOf: kindOf, setAverages: setAverages, setAnimations: setAnimations, tableOf: tableOf, ground: ground, object: object, stage: stage, place: place, byId: byId, packedTables: packedTables, miniTables: miniTables, hexToPacked: hexToPacked, TEAMS: TEAMS, FOOD: FOOD, MINI_ANTS: MINI_ANTS, MINI_PLANT: MINI_PLANT, MINI_FOOD: MINI_FOOD, EMPTY2: EMPTY2, BACK: BACK };
 });

@@ -205,13 +205,13 @@
         function made(which) { return plans[which] || (plans[which] = plan(file, which === 'part' ? vis : null, G)); }
 
         function paint(cv, made, win, applied) {
-            var s = Math.max(2, Math.min(16, Math.floor(480 / win.w), Math.floor(320 / win.h))), ctx = cv.getContext('2d'), sprites = env.sprites && env.sprites(), by = {}, i, r, c;
+            var s = Math.max(2, Math.min(16, Math.floor(480 / win.w), Math.floor(320 / win.h))), ctx = cv.getContext('2d'), sprites = env.sprites && env.sprites(), tab = Tiles.tableOf(file), by = {}, i, r, c;          // (the table of the dictionary once, not for each tile)
             cv.width = win.w * s; cv.height = win.h * s;
             if (applied) for (i = 0; i < made.cells.length; i++) by[made.cells[i][0]] = made.cells[i][1];
             ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
             for (r = 0; r < win.h; r++) for (c = 0; c < win.w; c++) {
                 var idx = (win.r0 + r) * file.columns + win.c0 + c, id = by[idx] !== undefined ? by[idx] : file.tile1(win.r0 + r, win.c0 + c);
-                if (sprites && sprites.ground && sprites.ground(ctx, id, c * s, r * s, s)) continue;
+                if (sprites && sprites.ground && sprites.ground(ctx, id, c * s, r * s, s, tab, by[idx] !== undefined)) continue;
                 ctx.fillStyle = Tiles.css(id, File.EMPTY2); ctx.fillRect(c * s, r * s, s, s);
             }
         }

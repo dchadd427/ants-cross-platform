@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.123 - 2026-10-24 - The Map Maker draws each tile the way the game does
+
+**For players:**
+- **The Map Maker now draws each tile the way the game does.** A map keeps a list of names for its tiles, and the game draws the picture that the name says; the editor used to draw the picture of the tile's number. So a pile of jacks showed as a pink eraser and a purple ring as a yellow one on EatClanMap, and the same shift is in 121 library maps. They now look as they do in the game.
+- **A tile whose name is "." is not drawn, as in the game:** the ground there is black, and the flowers, grass and objects of such tiles are not in the picture (about 6,100 cells of 187 library maps). Only the picture changes: the maps, their files and the game are as they were.
+- The see-through picture of a tile you are about to put or a thing you pick up, and the before and after pictures of Fix edges, follow the same rule. Map Maker v1.5.6.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...b9a0ab04)
+
 ## v0.12.122 - 2026-10-24 - The picture starts in the shape nearest your screen
 
 **For players:**
@@ -589,27 +600,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c7c46030...895da29b), [the Extended map](docs/MAP_FORMAT.md#version-9-the-extended-map)
 
-## v0.12.64 - 2026-10-16 - Spelling follow-up: the history address and record say color
+## Older versions (v0.12.64 and before)
 
-**For players:**
-- Under the hood: the match history's address and records now say color; addresses, bookmarks and pages keep working as before, and nothing changes in the game or on the site.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a539116a...84e7e736), [the older spelling](docs/REPLAYS.md#the-match-history)
-
-## v0.12.63 - 2026-10-16 - Spelling: color, not the British spelling
-
-**For players:**
-- **Spelling: the site and the game now write "color".** The lobby, the team and color words, the map pages, the match list filter, the chat help and the game's own screens all use the American spelling. Nothing else changed: your saved settings, recordings and bookmarked addresses keep working, and the game plays exactly as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/06ea886a...f58c0990)
-
-## v0.12.62 - 2026-10-16 - Map maker: the map core runs in the browser
-
-**For players:**
-- Under the hood: the map code (reading, checking and writing a map) now also runs in the browser; nothing changes in the game or on the site.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0731389a...0d6c0ff6), [the map core in the browser](docs/MAP_FORMAT.md#in-the-browser)
-
-## Older versions (v0.12.61 and before)
-
-Every release before v0.12.62, and the long notes of v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.65, and the long notes of v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
