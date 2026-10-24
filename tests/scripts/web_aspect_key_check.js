@@ -689,8 +689,9 @@ try {
         expect('hand-off, a phone upright on the front page: the page shows 16:9 and START hands no shape on', phone.aspect + ' ' + phone.handoff('k7m2xq', 1, 'Ann') + ' ' + phone.picked(), '16:9 ?join=/ws&room=k7m2xq&seat=1&name=Ann ');
         const laptop = runLobby(lobbyPath, '', {}, { screen: { width: 1440, height: 900 } });
         expect('hand-off, a laptop that has not picked: no shape', laptop.picked() + '|' + laptop.handoff('k7m2xq', 1, 'Ann').includes('aspect') + '|' + laptop.solo('Ann').includes('aspect'), '|false|false');
-        pick(laptop, '16:10');                                                           // the shape that is shown: a pick all the same
+        laptop.radios['16:10'].listeners.click();                                       // the shape that is shown is already checked: a real browser sends a click and no change event
         expect('hand-off, the shown shape pressed: it is a pick and goes on', laptop.picked() + ' ' + laptop.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:10') + ' ' + laptop.solo('Ann').endsWith('&aspect=16:10'), '16:10 true true');
+        expect('hand-off, ... and it is stored', JSON.stringify(laptop.storage.writes), JSON.stringify([[NEW_KEY, '16:10']]));
         const stored = runLobby(lobbyPath, '', { [NEW_KEY]: '16:9' }, { screen: { width: 1440, height: 900 } });
         expect('hand-off, a stored 16:9 on a 16:10 laptop: goes on', stored.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:9'), true);
         const asked = runLobby(lobbyPath, '?aspect=21:9', {}, { screen: { width: 1440, height: 900 } });

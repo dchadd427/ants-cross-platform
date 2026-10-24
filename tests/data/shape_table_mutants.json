@@ -464,6 +464,13 @@
       "old": "(!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight)",
       "new": "(win.innerWidth > win.innerHeight)",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "page_lobby_shown_shape_press_unheard",
+      "file": "web/lobby.html",
+      "old": "            $('aspect-' + shapeId(shape)).addEventListener('click', press);\n",
+      "new": "",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     }
   ]
 }

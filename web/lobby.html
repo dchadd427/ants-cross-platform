@@ -1366,8 +1366,9 @@
 
         // SELECTOR_BEGIN
         AntsShapes.names().forEach(function (shape) {
-            $('aspect-' + shapeId(shape)).addEventListener('change', function () {
-                // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape
+            // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape. A press on the shape that is
+            // already checked (the first visit's) sends a click and no change: both events are listened to, so that it is a pick too
+            var press = function () {
                 if (!$('aspect-' + shapeId(shape)).checked) return;
                 var value = shape;
                 pickedShape = value;                                                              // (a press is a pick, the shape that is shown too)
@@ -1375,7 +1376,9 @@
                 aspect = value;
                 remember(ASPECT_KEY, value);
                 document.body.setAttribute('data-aspect', value);
-            });
+            };
+            $('aspect-' + shapeId(shape)).addEventListener('change', press);
+            $('aspect-' + shapeId(shape)).addEventListener('click', press);
         });
         // SELECTOR_END
 
