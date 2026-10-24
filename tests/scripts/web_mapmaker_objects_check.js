@@ -493,7 +493,7 @@ const maps = readAll();
 // (a list is printed and the script ends by itself: process.exit would cut a long output to a pipe short)
 if (argv.includes('--list-objects')) listObjects(maps);
 else {
-    const cases = [['A solid tiles are the game\'s', caseA], ['B the list is what the library says', caseB], ['C put and taken away on the library', caseC], ['D what is in the way', caseD], ['E edges, a wide map, the dictionary', caseE], ['F small objects are solid too', caseF], ['G the solid bit goes with every object', caseG]];
+    const cases = [['A solid tiles are the game\'s', caseA], ['B the list is what the library says', caseB], ['D what is in the way', caseD], ['E edges, a wide map, the dictionary', caseE], ['F small objects are solid too', caseF], ['G the solid bit goes with every object', caseG], ['C put and taken away on the library', caseC]];       // (the sweep of the library, the long one, is the last: a broken copy that a short case refuses is refused at once, tests/scripts/web_mapmaker_bail.js)
     for (const [name, fn] of cases) {
         const before = failures;
         try { fn(maps); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

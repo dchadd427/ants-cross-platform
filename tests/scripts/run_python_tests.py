@@ -5,7 +5,7 @@ usage: run_python_tests.py [--dir DIR] [--jobs N] [--list]
 
 The result is that of `python3 -m unittest discover -s tests/scripts -p 'test_*.py'`: every test runs and the exit status is 1 when any failed. What differs is the time: every
 test CLASS of every test_*.py file runs in a process of its own, N at a time (N = the number of cores, at most 8), so that the slowest class and not the sum of all of them
-decides. The output is a line for each class, in the order of the files, the full output of the classes that failed, and a total. The classes share nothing (each makes its
+decides (the long ones, listed in COSTS, start first). The output is a line for each class, in the order of the files, the full output of the classes that failed, and a total. The classes share nothing (each makes its
 folders under its own temporary folder), which is what lets them run together. A file without a class that has tests runs as a whole (an import error then shows up).
 """
 import argparse
@@ -17,6 +17,15 @@ import re
 import subprocess
 import sys
 import time
+
+
+# The classes that take 20 seconds or more (seconds, alone, on a four-core machine, rounded): the longest start first, so that the last one to start is a short one and a runner with three cores does not begin
+# a class of two minutes when the others are nearly done. The output stays in the order of the files. A name that is not a class here is refused by test_run_python_tests.
+COSTS = {
+    "test_web_mapmaker.TheCodeRuns": 110, "test_web_mapmaker.TheGroundAndTheSprites": 100, "test_web_mapmaker.ThePage": 20, "test_nginx_history.TheBlocksRun": 58, "test_web_admin.ThePagesOwnCode": 33,
+    "test_bot_names.TheMutants": 30, "test_web_death_map.TheCards": 30, "test_nginx_stats.TheCacheRuns": 28, "test_web_map_files.ThePagesOwnCode": 26, "test_web_lobby_chat.TheChecksAreNotVacuous": 24,
+    "test_web_mapmaker_play.ThePlayChecks": 20, "test_e2e_deadlines.Waits": 20,
+}
 
 
 def units(directory, package):
@@ -32,6 +41,11 @@ def units(directory, package):
         else:
             found.append((module, "%s.%s" % (package, module)))
     return found
+
+
+def start_order(work):
+    """the indexes of work in the order in which the groups start: the longest (COSTS) first; what has no cost keeps the order of the files"""
+    return sorted(range(len(work)), key=lambda i: -COSTS.get(work[i][0], 0))
 
 
 def run_unit(label, dotted, root):
@@ -62,8 +76,12 @@ def main(argv):
             print("%s\t%s" % (label, dotted))
         return 0
     started = time.monotonic()
+    order = start_order(work)
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(args.jobs, len(work))) as pool:
-        results = list(pool.map(lambda unit: run_unit(unit[0], unit[1], root), work))
+        done = list(pool.map(lambda i: run_unit(work[i][0], work[i][1], root), order))
+    results = [None] * len(work)
+    for i, r in zip(order, done):
+        results[i] = r
     failed = [r for r in results if r["status"] != 0]
     for r in results:
         print("%-62s %s  %3d tests  %5.1fs" % (r["label"], "ok    " if r["status"] == 0 else "FAILED", r["tests"], r["seconds"]))

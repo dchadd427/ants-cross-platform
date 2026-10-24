@@ -25,7 +25,7 @@ const { makeDocument } = require('./web_mapmaker_fake_dom.js');
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
 function equal(a, b, what) { check(JSON.stringify(a) === JSON.stringify(b), what + ': ' + JSON.stringify(a) + ' is not ' + JSON.stringify(b)); }
-const later = () => new Promise((r) => setTimeout(r, 25));
+const later = require('./web_mapmaker_clock.js').settle;
 
 const TOKEN = 'A'.repeat(43), TOKEN2 = 'B'.repeat(43), ID1 = 'a'.repeat(32), ID2 = 'b'.repeat(32), ID3 = 'c'.repeat(32), ID4 = 'd'.repeat(32);
 
