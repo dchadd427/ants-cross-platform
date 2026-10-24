@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (what a player sees, not what the match is: nobody's shape is sent to the server or to the other players).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9a0ab04...6b0ddc3c)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9a0ab04...c66cf43e)
 
 ## v0.12.123 - 2026-10-24 - The Map Maker draws each tile the way the game does
 
