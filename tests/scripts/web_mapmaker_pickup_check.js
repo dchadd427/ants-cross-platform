@@ -28,6 +28,7 @@
 'use strict';
 
 const fs = require('fs');
+const Clock = require('./web_mapmaker_clock.js');       // (CPU time: a budget is held to the work, not to the wait for a core)
 const path = require('path');
 const crypto = require('crypto');
 const { makeDocument } = require('./web_mapmaker_fake_dom.js');
@@ -618,14 +619,14 @@ function caseF() {
     const crowd = [];
     for (let i = 0; i < 5000; i++) crowd.push([i % 2 ? 153 : 155, 5 + ((i / 100) | 0), 5 + (i % 100)]);
     const g = File.parse(mapWith(9, 100, 200, crowd, [], []));
-    let t0 = Date.now();
+    let t0 = Clock.now();
     const all = Pick.areaItems(g, { r0: 0, c0: 0, r1: 99, c1: 199 });
     const checked = Pick.check(g, all, 40, 80, 'move', 'area');
     check(all.length === 5000 && checked.ok, '5,000 ants are an area and can move 40 down and 80 right');
     const ed = editor(g), before = Uint8Array.from(g.bytes);
     const change = Pick.build(g, all, 40, 80, 'move');
     check(!!ed.act(change) && ed.history.size().strokes === 1, 'in one step');
-    check(Date.now() - t0 < 2000, 'and fast (' + (Date.now() - t0) + ' ms)');
+    check(Clock.now() - t0 < 2000, 'and fast (' + (Clock.now() - t0) + ' ms)');
     equal(lay(ed.file).records.slice(0, 2).map((r) => [r.tile, r.row, r.column]), [[155, 45, 85], [153, 45, 86]], 'each ant keeps its team');
     ed.undo(); check(same(ed.file.bytes, before), 'Undo gives all 5,000 back');
     // a group of ants that touch is found fast too
@@ -633,8 +634,8 @@ function caseF() {
     const clump = [];
     for (let i = 0; i < 4000; i++) clump.push([154, 5 + ((i / 80) | 0), 5 + (i % 80)]);
     const h2 = File.parse(mapWith(9, 100, 200, clump, [], []));
-    t0 = Date.now();
-    check(Pick.antGroup(h2, items(h2, 30, 40)[0]).length === 4000 && Date.now() - t0 < 1500, 'the group of a clump of 4,000 touching ants is all of them, found fast (' + (Date.now() - t0) + ' ms)');
+    t0 = Clock.now();
+    check(Pick.antGroup(h2, items(h2, 30, 40)[0]).length === 4000 && Clock.now() - t0 < 1500, 'the group of a clump of 4,000 touching ants is all of them, found fast (' + (Clock.now() - t0) + ' ms)');
     // a map whose lists do not read: nothing is picked from them, nothing breaks
     const bytes = mapWith(8, 10, 10, [[153, 2, 2]], [], []), cut = bytes.slice(0, File.parse(bytes).blocksAt + 3);
     const h = File.parse(cut);
@@ -1251,37 +1252,37 @@ function caseM() {
     const big = File.parse((() => { const x = mapWith(9, 512, 512, recs, [], []); return x; })());
     putHill(big, 300, 300, RED_HILL); putHill(big, 300, 400, BLUE_HILL);
     for (let k = 0; k < 300; k++) putObject(big, MUSH, 160 + ((k / 15) | 0) * 6, 10 + (k % 15) * 6, SQUARE4);
-    let t0 = Date.now();
-    const hill = items(big, 301, 301)[0], tPick = Date.now() - t0;
+    let t0 = Clock.now();
+    const hill = items(big, 301, 301)[0], tPick = Clock.now() - t0;
     check(hill && hill.hill === 1 && tPick < 100, 'a pick on a 512 x 512 map is found at once (' + tPick + ' ms)');
-    t0 = Date.now();
+    t0 = Clock.now();
     for (let i = 0; i < 20; i++) Pick.check(big, [hill], 3 + i, 4, 'move', 'one');
-    check(Date.now() - t0 < 200, 'twenty verdicts of a ghost on it take ' + (Date.now() - t0) + ' ms');
-    t0 = Date.now();
+    check(Clock.now() - t0 < 200, 'twenty verdicts of a ghost on it take ' + (Clock.now() - t0) + ' ms');
+    t0 = Clock.now();
     const some = items(big, 25, 30)[0], group = Pick.antGroup(big, some);
-    check(group.length === 150 && Date.now() - t0 < 500, 'the group of an ant of the crowd is its row of 150 (found in ' + (Date.now() - t0) + ' ms)');
-    t0 = Date.now();
-    const whole = Pick.areaItems(big, { r0: 0, c0: 0, r1: 511, c1: 511 }), tArea = Date.now() - t0;
+    check(group.length === 150 && Clock.now() - t0 < 500, 'the group of an ant of the crowd is its row of 150 (found in ' + (Clock.now() - t0) + ' ms)');
+    t0 = Clock.now();
+    const whole = Pick.areaItems(big, { r0: 0, c0: 0, r1: 511, c1: 511 }), tArea = Clock.now() - t0;
     check(whole.length === 20000 + 300 + 2 && tArea < 3000, 'the area of the whole map holds all of it (' + whole.length + ' things in ' + tArea + ' ms)');
-    t0 = Date.now();
-    const v = Pick.check(big, whole, 1, 1, 'move', 'area'), tAll = Date.now() - t0;
+    t0 = Clock.now();
+    const v = Pick.check(big, whole, 1, 1, 'move', 'area'), tAll = Clock.now() - t0;
     check(tAll < 3000, 'and the verdict of moving all of it takes ' + tAll + ' ms');
     // the page: the ghost of a hill on a 512 x 512 map at the first view (22 pixels a cell): the work is on the overlay and small
     const sprites = []; const pg = page(big, { sprites: () => ({ ghost: () => sprites.push(1) }) });
     pg.tap(301, 301); pg.press('move');
-    t0 = Date.now(); pg.tap(305, 310); pg.tap(306, 311); pg.tap(307, 312);
+    t0 = Clock.now(); pg.tap(305, 310); pg.tap(306, 311); pg.tap(307, 312);
     const rects = pg.over.getContext('2d').log.rects;
-    check(Date.now() - t0 < 500 && rects < 5000 && !pg.map.ctx && pg.log.refreshes === 0, 'three taps of the ghost draw ' + rects + ' squares on the overlay in ' + (Date.now() - t0) + ' ms, and the tool asks for no repaint of the map');
+    check(Clock.now() - t0 < 500 && rects < 5000 && !pg.map.ctx && pg.log.refreshes === 0, 'three taps of the ghost draw ' + rects + ' squares on the overlay in ' + (Clock.now() - t0) + ' ms, and the tool asks for no repaint of the map');
     // a whole 20,000-ant crowd as an area, moved in one step
     const pa = page(big);
-    t0 = Date.now();
+    t0 = Clock.now();
     pa.tap(301, 301); pa.press('area'); pa.drag(15, 15, 155, 175);
     const n = pa.state().items.length;
     pa.press('move'); pa.tap(400, 100);
     const before = Uint8Array.from(pa.file().bytes);
     const verdict = pa.state().verdict.ok;
     pa.press('done');
-    check(n === 20000 && verdict && pa.log.acts === 1 && pa.ed().history.size().strokes === 1 && Date.now() - t0 < 6000, 'the whole crowd (' + n + ' things) is picked by a box, moved in one step, in ' + (Date.now() - t0) + ' ms');
+    check(n === 20000 && verdict && pa.log.acts === 1 && pa.ed().history.size().strokes === 1 && Clock.now() - t0 < 6000, 'the whole crowd (' + n + ' things) is picked by a box, moved in one step, in ' + (Clock.now() - t0) + ' ms');
     pa.undo(); check(same(pa.file().bytes, before), 'and Undo puts it all back');
 }
 
@@ -1449,8 +1450,9 @@ async function caseL() {
 }
 
 module.exports = { page, sceneBytes, mapWith, putHill, putObject, items, lay, File, Edit, Blocks, Pick };
+// (the sweep of the library, the long one, is the last: a broken copy that a short case refuses is refused at once, tests/scripts/web_mapmaker_bail.js)
 const CASES = [['A what stands on a cell', caseA], ['B a group and an area', caseB], ['C where a thing cannot go', caseC], ['D the change of a move', caseD], ['E copy, delete and an area', caseE], ['F lists, limits, crowds', caseF],
-    ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['K the library', () => caseK(null)], ['M big maps', caseM], ['N a drag is put down when the button is let go', caseN]];
+    ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['M big maps', caseM], ['N a drag is put down when the button is let go', caseN], ['K the library', () => caseK(null)]];
 async function run(cases) {
     for (const [name, fn] of cases) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');

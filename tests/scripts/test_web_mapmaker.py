@@ -41,6 +41,7 @@ SUBMIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_submit_check
 EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
+BAIL = os.path.join(REPO, "tests", "scripts", "web_mapmaker_bail.js")
 BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check.js")
 OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
 GROUND_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ground_check.js")
@@ -58,10 +59,23 @@ def read(*parts):
         return f.read()
 
 
+# The slowest run of one check that this file makes, alone on a four-core machine, is about 13 s (the whole Pick up check on the library); 600 s is a stall, not a slow runner. A run that passes this
+# limit fails with what it printed so far and the load of the machine (a 2 s check once took more than 300 s on a macOS runner and nothing said why).
+CHECK_LIMIT = 600
+
+
 def run_check(front=None, script=CHECK, extra=()):
-    args = [NODE, script] + (["--front", front] if front else []) + list(extra)
-    # 900 s, as ctest's own limit: a check that takes 2 s alone took more than 300 s on a loaded macOS runner (CI of PR 213)
-    return subprocess.run(args, capture_output=True, text=True, timeout=900)
+    """node runs a check on the real scripts (front=None: the whole check, which must pass) or on a folder of BROKEN copies (front=DIR: the check must fail, and the run ends at the first line that says so:
+    tests/scripts/web_mapmaker_bail.js; the sweeps of the 540 maps that follow in the other cases would only repeat a verdict that is known)"""
+    args = [NODE] + (["--require", BAIL] if front else []) + [script] + (["--front", front] if front else []) + list(extra)
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=CHECK_LIMIT)
+    except subprocess.TimeoutExpired as stopped:
+        def text(b):
+            return b.decode("utf-8", "replace") if isinstance(b, bytes) else (b or "")
+        raise AssertionError("the check did not end in %d s: %s\nload average %s, %d cores\nstdout so far: %s\nstderr so far: %s" % (
+            CHECK_LIMIT, " ".join(os.path.relpath(a, REPO) if os.path.isabs(a) and a.startswith(REPO) else a for a in args[1:]), ", ".join("%.1f" % v for v in os.getloadavg()) if hasattr(os, "getloadavg") else "unknown",
+            os.cpu_count() or 0, text(stopped.stdout)[-1500:], text(stopped.stderr)[-1500:])) from None
 
 
 def library():
@@ -693,6 +707,49 @@ class ThePageAndTheRealCore(unittest.TestCase):
             self.assertIn("SKIP", done.stdout)
             done = subprocess.run([NODE, CORE_CHECK, "--module", tmp, "--require"], capture_output=True, text=True, timeout=60)
             self.assertEqual(done.returncode, 1)
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class TheTimeAndTheBail(unittest.TestCase):
+    """what the checks use so that a busy runner changes no verdict and no time: the preload that ends a run of a broken copy at its first failed line, the CPU clock and the turns of the loop"""
+
+    def node(self, source, *flags):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "probe.js")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(source)
+            return subprocess.run([NODE] + list(flags) + [path], capture_output=True, text=True, timeout=60)
+
+    def test_a_run_ends_at_the_first_line_that_says_failed_and_a_run_without_one_goes_on(self):
+        for line in ("    FAILED: a thing", "    ERROR: a thing", "    CRASHED: a thing", "\n    FAILED: threw an error"):
+            source = "console.log('RUNNING: A ... PASS'); console.log(%s); console.log('LATER'); process.exitCode = 0;" % json.dumps(line)
+            stopped = self.node(source, "--require", BAIL)
+            self.assertEqual(stopped.returncode, 1, line + stopped.stdout + stopped.stderr)
+            self.assertIn("a thing" if "threw" not in line else "threw an error", stopped.stdout, "the line that says it is printed first")
+            self.assertNotIn("LATER", stopped.stdout, line)
+            whole = self.node(source)
+            self.assertEqual(whole.returncode, 0)
+            self.assertIn("LATER", whole.stdout, "without the preload the run goes on")
+        quiet = self.node("console.log('RUNNING: A ... PASS'); console.log('RUNNING: L ... SKIP: no core'); console.log('0 failed'); console.log('LATER');", "--require", BAIL)
+        self.assertEqual(quiet.returncode, 0, quiet.stdout + quiet.stderr)
+        self.assertIn("LATER", quiet.stdout, "a pass, a skip and the word failed in a sentence do not end a run")
+
+    def test_the_clock_counts_the_work_and_not_the_wait_and_settle_comes_after_every_chain_of_turns(self):
+        done = self.node("""
+const C = require(%s);
+const t0 = C.now(), w0 = Date.now();
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);                 // (a wait: wall time and no work)
+const waited = C.now() - t0, wall = Date.now() - w0;
+const t1 = C.now(); let x = 0; for (let i = 0; i < 2e8 && C.now() - t1 < 60; i++) x += i;     // (work)
+let hops = 0; const chain = () => { if (++hops < 900) setImmediate(chain); }; setImmediate(chain);
+C.settle().then(() => console.log(JSON.stringify({ waited, wall, worked: C.now() - t1, hops })));
+""" % json.dumps(os.path.join(REPO, "tests", "scripts", "web_mapmaker_clock.js")))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        got = json.loads(done.stdout)
+        self.assertGreaterEqual(got["wall"], 250)
+        self.assertLess(got["waited"], 100, "a wait of 300 ms is no CPU time: " + done.stdout)
+        self.assertGreaterEqual(got["worked"], 60, done.stdout)
+        self.assertEqual(got["hops"], 900, "the chain of 900 turns is over when settle() is")
 
 
 class ThePage(unittest.TestCase):

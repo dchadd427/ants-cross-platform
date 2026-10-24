@@ -23,6 +23,7 @@
 'use strict';
 
 const fs = require('fs');
+const Clock = require('./web_mapmaker_clock.js');       // (CPU time: a budget is held to the work, not to the wait for a core)
 const path = require('path');
 const crypto = require('crypto');
 
@@ -241,9 +242,9 @@ function caseC() {
     const t = eg.begin('objects', 302);
     check(t.fill(3, 3) === 0, 'fill on a hill does nothing');
     equal(cellOf(g, 2, 3, 3), [247, 1, 3 | (3 << 8)], 'and leaves the hill as it is');
-    const big = open(9, 512, 512), eb = Edit.create(big), t0 = Date.now(), sb = eb.begin('ground', 476);
+    const big = open(9, 512, 512), eb = Edit.create(big), t0 = Clock.now(), sb = eb.begin('ground', 476);
     check(sb.fill(0, 0) === 512 * 512, 'a fill of all of a 512 x 512 map');
-    const took = Date.now() - t0;
+    const took = Clock.now() - t0;
     check(took < 1500, 'takes ' + took + ' ms');
     const patch = sb.finish();
     check(patch.keys.length === 512 * 512 && patch.before.length === 3 * 512 * 512, 'its patch holds one record for each cell, three words before and three after');
