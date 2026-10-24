@@ -213,14 +213,9 @@ function makePage(opts) {
     const stage = make('div', 'game-stage'), box = make('div', 'game-container', stage), canvas = make('canvas', 'canvas', box), chat = make('input', 'chat-keys', box);
     stage.setAttribute('data-aspect', '16:9');
     const bar = make('div', 'view-bar'), label = make('span', 'view-bar-label', bar);
-    const shapes = {};
-    AntsShapes.names().forEach((s) => {
-        const b = make('button', 'aspect-' + s.replace(':', '-'), bar);
-        b.setAttribute('data-aspect', s);
-        b.setAttribute('aria-checked', s === '16:9' ? 'true' : 'false');
-        b.addEventListener('click', () => { shapes.clicked = (shapes.clicked || []).concat(s); stage.setAttribute('data-aspect', s); });
-        shapes[s] = b;
-    });
+    const shapes = {};                                                                   // (what the page's own dropdown does with a pick: antsPickShape; the page's `pickShape` is that function)
+    const pickShape = opts.noPick ? undefined : (shape) => { shapes.clicked = (shapes.clicked || []).concat(shape); if (!opts.keepShape) stage.setAttribute('data-aspect', shape); };
+    win.screen = opts.screen || { width: 1440, height: 900 };
     const lockOn = make('button', opts.noLock ? 'lock-x' : 'lock-on', bar), lockOff = make('button', opts.noLock ? 'lock-y' : 'lock-off', bar);
     lockOn.setAttribute('aria-checked', 'true');
     lockOff.setAttribute('aria-checked', 'false');
@@ -231,7 +226,7 @@ function makePage(opts) {
     toast.hidden = true;
     const intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
     const page = {
-        doc, win, shapes: AntsShapes, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
+        doc, win, shapes: AntsShapes, pickShape, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
         isFullscreen: () => state.fullscreen, enter: () => { state.enters++; state.fullscreen = true; }, leave: () => { state.leaves++; state.fullscreen = false; },
         isLocked: () => state.locked, releaseLock: () => { state.locks.push('release'); state.locked = false; }, requestLock: () => { state.locks.push('request'); state.locked = true; },
         every: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
@@ -366,6 +361,21 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('a page without the lock buttons has no Fullscreen mouse row', p.rows().map((r) => r.name).indexOf('Fullscreen mouse') < 0);
 }
 {
+    const p = makePage({ noPick: true }).ready();
+    p.open();
+    p.tab('video');
+    ok('a page without its own pick of the shape (no dropdown to follow) has no Picture shape row', p.rows().map((r) => r.name).indexOf('Picture shape') < 0 && !p.q('select'));
+}
+{
+    const p = makePage({ keepShape: true }).ready();                                     // (a page that did not take the pick: the game's picture stays as it was)
+    p.open();
+    p.tab('video');
+    const pick = p.q('.gm-pick select');
+    pick.value = '20:9';
+    pick.fire('change', {});
+    expect('a pick that the page did not take: the dropdown shows what the game has, not what was asked', [p.shapes.clicked, pick.value], [['20:9'], '16:9']);
+}
+{
     const p = makePage({ watch: true }).ready();
     const scrim = p.open();
     ok('a recording opens it too', !!scrim);
@@ -427,15 +437,28 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.game.calls.length = 0;
     p.tab('video');
     const video = p.qa('[role=radiogroup]');
-    expect('the Video section: the picture\'s four shapes, the mouse, the numbers', video.map((g) => g.children.map((b) => b.textContent)), [['Classic 4:3', '16:10', '16:9', '21:9'], ['Locked', 'Free'], ['On', 'Off']]);
-    expect('the shape that the page has is the chosen one', video[0].children.map((b) => b.getAttribute('aria-checked')), ['false', 'false', 'true', 'false']);
-    video[0].children[3].click();
-    expect('a shape is the page\'s own button, clicked (the selector, the address and the stored choice stay one function)', [p.shapes.clicked, p.stage.getAttribute('data-aspect'), p.game.calls.length], [['21:9'], '21:9', 0]);
-    expect('...and the choice follows it', video[0].children.map((b) => b.getAttribute('aria-checked')), ['false', 'false', 'false', 'true']);
-    expect('the mouse starts Locked', video[1].children.map((b) => b.getAttribute('aria-checked')), ['true', 'false']);
-    video[1].children[1].click();
+    expect('the Video section: the mouse and the numbers are button pairs (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['On', 'Off']]);
+    const dropdown = p.qa('select');
+    expect('one dropdown in the panel: the picture\'s shape, a native select, in the row of its own', [dropdown.length, dropdown[0].parentNode.className + '/' + dropdown[0].parentNode.parentNode.className, dropdown[0].parentNode.parentNode.parentNode.querySelector('.gm-name').textContent], [1, 'pick/gm-ctl gm-pick', 'Picture shape']);
+    const pick = dropdown[0];
+    ok('...named by its row', pick.getAttribute('aria-labelledby') === pick.parentNode.parentNode.parentNode.querySelector('.gm-name').id);
+    expect('...with one entry for each row of the page\'s table (web/shapes.js), in its order: the shape and its canvas', pick.children.map((o) => [o.value, o.textContent]), AntsShapes.rows.map((r) => [r.name, r.label + ' \u00b7 ' + r.width + ' x ' + r.height]));
+    expect('...and as many as the game\'s own row has words (the table of the game is the one that counts)', pick.children.length, JSON.parse(MATCH).rows.filter((r) => r.key === 'picture')[0].words.length);
+    expect('...the shape that the page has is the chosen one', pick.value, '16:9');
+    expect('...and a quiet line under it names the shape that fills the screen (a 1440 x 900 laptop)', p.qa('.gm-fits').map((n) => n.textContent), ['16:10 fills your screen']);
+    ok('...which the dropdown is described by (aria-describedby names the line)', !!p.q('.gm-fits').id && pick.getAttribute('aria-describedby') === p.q('.gm-fits').id);
+    pick.value = '21:9';
+    pick.fire('change', {});
+    expect('a choice is the page\'s own function, called (the selector, the address and the stored choice stay one function)', [p.shapes.clicked, p.stage.getAttribute('data-aspect'), p.game.calls.length], [['21:9'], '21:9', 0]);
+    expect('...and the dropdown follows the page (what the page has now)', pick.value, '21:9');
+    pick.value = '32:9';
+    pick.fire('change', {});
+    expect('...every shape of the table can be chosen (32:9 is the last)', [p.shapes.clicked, p.stage.getAttribute('data-aspect'), pick.value], [['21:9', '32:9'], '32:9', '32:9']);
+    ok('the dropdown is in the panel\'s own focus order and no button of a shape is there', !p.qa('.gm-panel button').some((b) => /^\d+:\d+$/.test(b.textContent)) && pick.getAttribute('disabled') === null);
+    expect('the mouse starts Locked', video[0].children.map((b) => b.getAttribute('aria-checked')), ['true', 'false']);
+    video[0].children[1].click();
     expect('Free is the page\'s Free button', [p.game.calls, p.lockOff.getAttribute('aria-checked')], [[['lock', 'off']], 'true']);
-    video[2].children[1].click();
+    video[1].children[1].click();
     expect('the hit point numbers are row 8 (value 0 is Off)', p.game.calls[1], ['set', 8, 0]);
     const scroll = p.qa('.gm-panel input')[0];
     scroll.value = '12';
@@ -501,7 +524,29 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('...and F1', e.reachedPage);
     e = p.doc.key('Enter');
     ok('Enter and Space are the panel\'s own', !e.reachedPage && !p.doc.key(' ').reachedPage);
+    // the Picture shape's dropdown (a native select): its keys are the browser's own, the game is not told
+    p.tab('video');
+    const pick = p.q('.gm-pick select');
+    pick.focus();
+    e = p.doc.key('ArrowDown');
+    ok('ArrowDown on the dropdown: the panel does not take it (the browser moves the choice) and the page behind does not get it (the game would scroll the map)', !e.prevented && !e.reachedPage && p.doc.activeElement === pick);
+    pick.value = '20:9';                                                                 // (what the browser does with that key: the next entry is chosen, and `change` comes at once)
+    pick.fire('change', {});
+    expect('...the choice is made in the running game at once (the page\'s function), and the panel stays open', [p.shapes.clicked, p.menu.isOpen(), p.doc.activeElement === pick], [['20:9'], true, true]);
+    e = p.doc.key('ArrowUp');
+    ok('ArrowUp is the same, Home and End too', !e.prevented && !e.reachedPage && !p.doc.key('Home').prevented && !p.doc.key('End').reachedPage);
+    e = p.doc.key('Tab');
+    ok('Tab on the dropdown goes on inside (the browser moves it): not prevented, not for the page', !e.prevented && !e.reachedPage);
+    // the dropdown is in the panel's own focus list (the wrap at the ends uses it): with every button and input turned off it is the only control, and Tab / Shift+Tab hold the focus on it
+    const others = p.qa('.gm-scrim button').concat(p.qa('.gm-scrim input')).filter((n) => !n.disabled);
+    others.forEach((n) => { n.disabled = true; });
+    pick.focus();
+    e = p.doc.key('Tab');
+    const eBack = p.doc.key('Tab', { shiftKey: true });
+    ok('the dropdown alone in the panel is both the first and the last control: Tab and Shift+Tab wrap onto it (the browser does not leave the panel)', e.prevented && eBack.prevented && p.doc.activeElement === pick);
+    others.forEach((n) => { n.disabled = false; });
     p.qa('[role=tab]')[0].focus();
+    p.tab('sound');
     e = p.doc.key('ArrowDown');
     expect('the arrow keys move between the sections, and the section follows', [e.prevented, p.doc.activeElement.textContent, p.qa('[role=tab]')[1].getAttribute('aria-selected')], [true, 'Video', 'true']);
     p.doc.key('End');

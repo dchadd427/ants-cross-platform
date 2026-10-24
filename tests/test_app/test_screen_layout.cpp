@@ -132,6 +132,10 @@ void test_classic_numbers() {
     check(LATENCY_RIGHT_EDGE == 632, "the latency texts end where the frame rate ends");
 }
 
+/// The canvas of every shape of the table (include/ants_app/canvas_layout.hpp kAspectTable) and the map view that its match screen has: the rows that the picture of the layout is checked at
+struct Shape { int32_t w, h, view_w, view_h; };
+constexpr Shape kShapeCanvases[] = {{640, 480, 442, 440}, {960, 640, 762, 600}, {960, 600, 762, 560}, {960, 540, 762, 500}, {1200, 540, 1002, 500}, {1260, 540, 1062, 500}, {1920, 540, 1722, 500}};
+
 void test_sized_layouts() {
     group("sized", "a layout of another size moves the right-anchored parts by dx, the bottom-anchored ones by dy, and the view takes the rest");
     const ScreenLayout w = ScreenLayout::with_size(960, 540);
@@ -154,9 +158,8 @@ void test_sized_layouts() {
     check(ScreenLayout::with_size(600, 400) == ScreenLayout::classic() && ScreenLayout::with_size(639, 479).is_classic() && ScreenLayout::with_size(0, 0).is_classic(), "a smaller canvas gives the classic layout");
     check(ScreenLayout::with_size(1920, 1080).dx() == 1280 && ScreenLayout::with_size(1920, 1080).dy() == 600, "1920 x 1080: dx = 1280, dy = 600");
     check(ScreenLayout::with_size(800, 480).dx() == 160 && ScreenLayout::with_size(800, 480).dy() == 0, "a wider canvas of the same height only has dx");
-    // the four shapes of the live aspect switch (Classic 4:3, 16:10, 16:9, 21:9): the map views of the picture that was approved
-    struct Shape4 { int32_t w, h, view_w, view_h; };
-    for (const Shape4& sh : {Shape4{640, 480, 442, 440}, Shape4{960, 600, 762, 560}, Shape4{960, 540, 762, 500}, Shape4{1260, 540, 1062, 500}}) {
+    // the shapes of the live aspect switch (every row of the shape table): the map views of the pictures that were approved
+    for (const Shape& sh : kShapeCanvases) {
         const ScreenLayout l = ScreenLayout::with_size(sh.w, sh.h);
         const std::string at = std::to_string(sh.w) + " x " + std::to_string(sh.h) + ": ";
         check(l.width == sh.w && l.height == sh.h && l.dx() == sh.w - 640 && l.dy() == sh.h - 480, at + "dx and dy are the canvas's difference from 640 x 480");
@@ -165,10 +168,24 @@ void test_sized_layouts() {
     }
 }
 
+/// The three bottom score boxes are spread over the bottom strip by its three cuts (the extra width in thirds, the leftmost cut taking the remainder): the x of each at the canvases that docs/VIEW_AND_HUD.md lists
+void test_score_boxes_in_every_shape() {
+    group("score-boxes", "the three bottom score boxes at the canvas of every shape: x of each, in the top bar and the bottom strip");
+    struct Row { int32_t w, h, x0, x1, x2; };
+    for (const Row& r : {Row{640, 480, 105, 254, 402}, Row{960, 640, 213, 468, 722}, Row{960, 600, 213, 468, 722}, Row{960, 540, 213, 468, 722}, Row{1200, 540, 293, 628, 962}, Row{1260, 540, 313, 668, 1022}, Row{1920, 540, 533, 1108, 1682}}) {
+        const ScreenLayout l = ScreenLayout::with_size(r.w, r.h);
+        const std::string at = std::to_string(r.w) + " x " + std::to_string(r.h) + ": ";
+        check(l.score_slot(1).box_left == r.x0 && l.score_slot(2).box_left == r.x1 && l.score_slot(3).box_left == r.x2, at + "the bottom score boxes are at x " + std::to_string(r.x0) + ", " + std::to_string(r.x1) + ", " + std::to_string(r.x2)
+              + " (are " + std::to_string(l.score_slot(1).box_left) + ", " + std::to_string(l.score_slot(2).box_left) + ", " + std::to_string(l.score_slot(3).box_left) + ")");
+        check(l.score_slot(1).top == r.h - 480 + 464 && l.score_slot(0).top == 4, at + "the bottom ones are down by the canvas's extra height, the local one stays in the top bar");
+    }
+}
+
 void test_anchoring_invariants() {
     group("anchors", "the same relations hold in every size: the panel meets the edges, the view meets the panel and the bottom strip, nothing leaves the screen");
     for (const ScreenLayout& l : {ScreenLayout::classic(), ScreenLayout::with_size(800, 600), ScreenLayout::with_size(960, 540), ScreenLayout::with_size(1280, 720),
-                                  ScreenLayout::with_size(1920, 1080), ScreenLayout::with_size(2560, 1080), ScreenLayout::with_size(960, 600), ScreenLayout::with_size(1260, 540)}) {
+                                  ScreenLayout::with_size(1920, 1080), ScreenLayout::with_size(2560, 1080), ScreenLayout::with_size(960, 600), ScreenLayout::with_size(1260, 540),
+                                  ScreenLayout::with_size(960, 640), ScreenLayout::with_size(1200, 540), ScreenLayout::with_size(1920, 540)}) {
         const std::string at = "at " + std::to_string(l.width) + " x " + std::to_string(l.height) + ": ";
         check(l.panel_fill().right() == l.width && l.panel_fill().bottom() == l.height, at + "the panel fill reaches the right and bottom edges");
         check(l.minimap().x - l.view().right() == 22 && l.view().x == 16 && l.view().y == 21, at + "the gap between the view and the minimap is the original's 22, the view's corner stays");
@@ -199,7 +216,7 @@ void test_original_strips() {
         check(n.x0 == kInner[i].x0 && n.y0 == kInner[i].y0 && n.x1 == kInner[i].x1 && n.y1 == kInner[i].y1, "inner strip " + std::to_string(i));
     }
     // the bands of any screen are disjoint, lie on its border ring, and the quiet area (13 px in) touches none of them
-    for (const ScreenLayout& l : {ScreenLayout::classic(), ScreenLayout::with_size(960, 540), ScreenLayout::with_size(1280, 720)}) {
+    for (const ScreenLayout& l : {ScreenLayout::classic(), ScreenLayout::with_size(960, 540), ScreenLayout::with_size(1280, 720), ScreenLayout::with_size(960, 640), ScreenLayout::with_size(1200, 540), ScreenLayout::with_size(1920, 540)}) {
         bool ok = true;
         int ring = 0;
         for (int32_t y = 0; y < l.height && ok; ++y) {
@@ -214,6 +231,30 @@ void test_original_strips() {
         }
         check(ok, "the eight bands of " + std::to_string(l.width) + " x " + std::to_string(l.height) + " are disjoint and cover the 12 px ring, the quiet area is clear of them");
         check(ring == l.width * l.height - (l.width - 24) * (l.height - 24), "... and they hold exactly the ring's " + std::to_string(l.width * l.height - (l.width - 24) * (l.height - 24)) + " pixels");
+    }
+}
+
+/// The edge scroll at the canvas of every shape (the strips are the original's 12 and 5 px at the picture's own edges, whatever its size)
+void test_edge_scroll_in_every_shape() {
+    group("scroll-shapes", "the edge strips run along the edges of every canvas of the shape table: east and south at its last pixel, the middle of the old screen is quiet, the view's own limits decide");
+    for (const Shape& shape : kShapeCanvases) {
+        const ScreenLayout layout = ScreenLayout::with_size(shape.w, shape.h);
+        const std::string at = std::to_string(shape.w) + " x " + std::to_string(shape.h) + ": ";
+        const int32_t mid_x = (1920 - shape.view_w) / 2, mid_y = (1920 - shape.view_h) / 2;      // (the middle of the origins that the view has on a 60 x 60 map: every way open)
+        const EdgeScroll east = edge_scroll_step(shape.w - 1, shape.h / 2, 0, mid_x, mid_y, 60, 60, layout);
+        const EdgeScroll south = edge_scroll_step(shape.w / 2, shape.h - 1, 0, mid_x, mid_y, 60, 60, layout);
+        check(east.dir == 2 && east.dx > 0, at + "the last column scrolls east");
+        check(south.dir == 4 && south.dy > 0, at + "the last row scrolls south");
+        check(edge_scroll_step(0, shape.h / 2, 0, mid_x, mid_y, 60, 60, layout).dir == 6 && edge_scroll_step(shape.w / 2, 0, 0, mid_x, mid_y, 60, 60, layout).dir == 0, at + "the first column scrolls west and the first row north");
+        check(edge_scroll_step(shape.w - 1, shape.h - 1, 0, mid_x, mid_y, 60, 60, layout).dir == 3 && edge_scroll_step(0, 0, 0, mid_x, mid_y, 60, 60, layout).dir == 7, at + "the south east and the north west corners");
+        check(edge_scroll_step(shape.w - 12, shape.h / 2, 0, mid_x, mid_y, 60, 60, layout).dir == 2 && edge_scroll_step(shape.w - 13, shape.h / 2, 0, mid_x, mid_y, 60, 60, layout).dir == -1, at + "the east band is 12 px wide");
+        check(edge_scroll_step(shape.w / 2, shape.h / 2, 0, mid_x, mid_y, 60, 60, layout).dir == -1, at + "the middle of the picture is quiet");
+        if (shape.w > 640) check(edge_scroll_step(639, 240, 0, mid_x, mid_y, 60, 60, layout).dir == -1, at + "(639, 240), the classic east strip, is quiet");
+        // the view limits follow the view: east is open until the origin is 1920 - view_w, south until 1920 - view_h
+        check(edge_scroll_step(shape.w - 1, shape.h / 2, 0, 1920 - shape.view_w, mid_y, 60, 60, layout).dir == -1 && edge_scroll_step(shape.w - 1, shape.h / 2, 0, 1919 - shape.view_w, mid_y, 60, 60, layout).dir == 2,
+              at + "the largest origin east is 1920 - " + std::to_string(shape.view_w));
+        check(edge_scroll_step(shape.w / 2, shape.h - 1, 0, mid_x, 1920 - shape.view_h, 60, 60, layout).dir == -1 && edge_scroll_step(shape.w / 2, shape.h - 1, 0, mid_x, 1919 - shape.view_h, 60, 60, layout).dir == 4,
+              at + "the largest origin south is 1920 - " + std::to_string(shape.view_h));
     }
 }
 
@@ -494,44 +535,61 @@ void test_hud_classic_rectangles() {
 }
 
 void test_hud_anchoring() {
-    group("hud-anchors", "a layout with dx and dy moves exactly the right-anchored and bottom-anchored rectangles by dx and dy, and nothing else");
+    group("hud-anchors", "a layout with dx and dy moves exactly the right-anchored and bottom-anchored rectangles by dx and dy, and nothing else: at every canvas of the shape table");
     HUD classic;
-    HUD wide;
-    const ScreenLayout layout = ScreenLayout::with_size(960, 540);
-    wide.set_layout(layout);
-    check(wide.layout() == layout, "set_layout keeps the layout");
-    const int32_t dx = layout.dx();
-    const int32_t dy = layout.dy();
-    struct Item {
-        const char* name;
-        const UIButton* c;
-        const UIButton* w;
-        bool right;
-        bool bottom;
-    };
-    const Item items[] = {
-        {"Help", &classic.help_button(), &wide.help_button(), true, false},
-        {"Options", &classic.options_button(), &wide.options_button(), true, false},
-        {"Quit", &classic.quit_button(), &wide.quit_button(), true, false},
-        {"the move pedestal", &classic.get_move_pedestal_button(), &wide.get_move_pedestal_button(), true, false},
-        {"the ability pedestal", &classic.get_ability_pedestal_button(), &wide.get_ability_pedestal_button(), true, false},
-        {"Stop", &classic.stop_button(), &wide.stop_button(), true, false},
-        {"the hatch pedestal", &classic.hatch_button(), &wide.hatch_button(), true, false},
-        {"the ally pedestal", &classic.team_up_button(), &wide.team_up_button(), true, false},
-        {"[All]", &classic.send_to_button(), &wide.send_to_button(), true, true},
-        {"[Team]", &classic.team_button(), &wide.team_button(), true, true},
-        {"the quit dialog's Yes", &classic.quit_yes_button(), &wide.quit_yes_button(), false, false},
-        {"the quit dialog's No", &classic.quit_no_button(), &wide.quit_no_button(), false, false},
-    };
-    for (const Item& item : items) {
-        const LayoutRect want = rect_of(*item.c).moved(item.right ? dx : 0, item.bottom ? dy : 0);
-        check_rect(rect_of(*item.w), want, std::string(item.name) + (item.right ? (item.bottom ? " (right and bottom anchored)" : " (right anchored)") : " (a picture of the original's screen: stays)"));
+    for (const Shape& shape : kShapeCanvases) {
+        if (shape.w == 640) continue;                                                          // (the classic canvas is the classic HUD itself)
+        HUD wide;
+        const ScreenLayout layout = ScreenLayout::with_size(shape.w, shape.h);
+        const std::string where = std::to_string(shape.w) + " x " + std::to_string(shape.h) + ": ";
+        wide.set_layout(layout);
+        check(wide.layout() == layout, where + "set_layout keeps the layout");
+        const int32_t dx = layout.dx();
+        const int32_t dy = layout.dy();
+        struct Item {
+            const char* name;
+            const UIButton* c;
+            const UIButton* w;
+            bool right;
+            bool bottom;
+        };
+        const Item items[] = {
+            {"Help", &classic.help_button(), &wide.help_button(), true, false},
+            {"Options", &classic.options_button(), &wide.options_button(), true, false},
+            {"Quit", &classic.quit_button(), &wide.quit_button(), true, false},
+            {"the move pedestal", &classic.get_move_pedestal_button(), &wide.get_move_pedestal_button(), true, false},
+            {"the ability pedestal", &classic.get_ability_pedestal_button(), &wide.get_ability_pedestal_button(), true, false},
+            {"Stop", &classic.stop_button(), &wide.stop_button(), true, false},
+            {"the hatch pedestal", &classic.hatch_button(), &wide.hatch_button(), true, false},
+            {"the ally pedestal", &classic.team_up_button(), &wide.team_up_button(), true, false},
+            {"[All]", &classic.send_to_button(), &wide.send_to_button(), true, true},
+            {"[Team]", &classic.team_button(), &wide.team_button(), true, true},
+            {"the quit dialog's Yes", &classic.quit_yes_button(), &wide.quit_yes_button(), false, false},
+            {"the quit dialog's No", &classic.quit_no_button(), &wide.quit_no_button(), false, false},
+        };
+        for (const Item& item : items) {
+            const LayoutRect want = rect_of(*item.c).moved(item.right ? dx : 0, item.bottom ? dy : 0);
+            check_rect(rect_of(*item.w), want, where + item.name + (item.right ? (item.bottom ? " (right and bottom anchored)" : " (right anchored)") : " (a picture of the original's screen: stays)"));
+            if (item.right) check(rect_of(*item.w).right() <= shape.w && rect_of(*item.w).bottom() <= shape.h, where + item.name + " is on the screen");
+        }
+        // the zones follow: the map is the layout's view (16, 21) and its size, the minimap and the chat stay at the right edge
+        const LayoutRect view = layout.view();
+        check(wide.over_map(view.x, view.y) && wide.over_map(view.right() - 1, view.bottom() - 1) && !wide.over_map(view.right(), 100) && !wide.over_map(100, view.bottom()) && !wide.over_map(view.x - 1, 100), where + "the map zone is the layout's view: (16, 21) - (" + std::to_string(view.right()) + ", " + std::to_string(view.bottom()) + ")");
+        const LayoutRect mini = layout.minimap();
+        check(wide.over_minimap(mini.x, mini.y + 1) && wide.over_minimap(mini.right() - 1, mini.bottom() - 1) && !wide.over_minimap(mini.right(), 100) && !wide.over_minimap(view.x + 100, mini.y + 1) && !wide.over_minimap(mini.x, mini.y - 1),
+              where + "the minimap zone is the layout's, at the right edge: x " + std::to_string(mini.x) + " - " + std::to_string(mini.right()));
+        const LayoutRect chat = layout.chat_view();
+        check(wide.in_chat_view(chat.x, chat.y) && wide.in_chat_view(chat.right() - 1, chat.bottom() - 1) && !wide.in_chat_view(chat.right() - 1, chat.bottom()) && !wide.in_chat_view(view.x + 100, chat.y), where + "the chat zone is the layout's: it took the extra height");
     }
-    // the zones follow
-    check(wide.over_map(16, 21) && wide.over_map(777, 520) && !wide.over_map(778, 100) && !wide.over_map(100, 521) && !wide.over_map(15, 100), "the map zone is (16, 21) - (778, 521)");
-    check(wide.over_minimap(800, 35) && wide.over_minimap(918, 125) && !wide.over_minimap(919, 100) && !wide.over_minimap(480, 35) && !wide.over_minimap(800, 34), "the minimap zone is (800, 35) - (919, 126)");
-    check(wide.in_chat_view(802, 299) && wide.in_chat_view(939, 459) && !wide.in_chat_view(939, 460) && !wide.in_chat_view(482, 299), "the chat zone is (802, 299) - (940, 460): it took the extra height");
-    check(classic.over_map(100, 100) && !classic.over_map(500, 100) && classic.over_minimap(480, 35), "the classic HUD's zones are untouched by the other HUD");
+    check(classic.over_map(100, 100) && !classic.over_map(500, 100) && classic.over_minimap(480, 35), "the classic HUD's zones are untouched by the other HUDs");
+    // the numbers of the one 960 x 540 canvas, written out
+    {
+        HUD wide;
+        wide.set_layout(ScreenLayout::with_size(960, 540));
+        check(wide.over_map(16, 21) && wide.over_map(777, 520) && !wide.over_map(778, 100) && !wide.over_map(100, 521) && !wide.over_map(15, 100), "960 x 540: the map zone is (16, 21) - (778, 521)");
+        check(wide.over_minimap(800, 35) && wide.over_minimap(918, 125) && !wide.over_minimap(919, 100) && !wide.over_minimap(480, 35) && !wide.over_minimap(800, 34), "960 x 540: the minimap zone is (800, 35) - (919, 126)");
+        check(wide.in_chat_view(802, 299) && wide.in_chat_view(939, 459) && !wide.in_chat_view(939, 460) && !wide.in_chat_view(482, 299), "960 x 540: the chat zone is (802, 299) - (940, 460)");
+    }
 }
 
 void test_hud_layout_survives_init() {
@@ -1350,9 +1408,11 @@ int main(int argc, char* argv[]) {
 
     test_classic_numbers();
     test_sized_layouts();
+    test_score_boxes_in_every_shape();
     test_anchoring_invariants();
     test_original_strips();
     test_edge_scroll_follows_layout();
+    test_edge_scroll_in_every_shape();
     test_pointer_limits();
     test_plate_and_overlay();
     test_hud_classic_rectangles();

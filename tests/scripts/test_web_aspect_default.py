@@ -9,8 +9,8 @@ a visitor who never pressed one follows the screen at every visit and anyone who
     considered with no other change), and the selectors' clicks, which must write the key and nothing else (tests/scripts/web_aspect_key_check.js). The front page's selector: a pick keeps the match, changes
     the page at once and the hand-off address to the game carries the shape (the page has no game open, so a pick never asks and never reloads);
   - what needs no browser is read from the files: the key is the one constant of each page and no call reads or writes the old key; the one place that stores a pick is the selectors' own handler; both
-    pages ask `AntsShapes.firstVisit(window)` and nothing else for the third answer; the markup of both pages starts in the 16:9 picture until that script runs (the game page's box, its selector and
-    the front page's "Picture" row in the match column); the front page's hand-offs to the game (START, Rejoin, a game for one) pass the player's pick on (and nothing before a pick); the nearest shape computed here, from
+    pages ask `AntsShapes.firstVisit(window)` and nothing else for the third answer; the markup of both pages starts in the 16:9 picture until that script runs (the game page's box, and the dropdowns,
+    which are empty until the page fills them from the table); the front page's hand-offs to the game (START, Rejoin, a game for one) pass the player's pick on (and nothing before a pick); the nearest shape computed here, from
     the game's own table (kAspectTable) and by the rule in the docs, is the one the page's code gives.
 The same cases in a real browser: tests/scripts/web_aspect_check.py (opt-in, against a running page).
 """
@@ -38,8 +38,7 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
     def test_the_game_page_box_selector_and_code_start_with_16_9_until_the_script_picks(self):
         page = read(SHELL)
         self.assertIn('<div id="game-stage" data-aspect="16:9">', page)
-        self.assertRegex(page, r'id="aspect-16-9" data-aspect="16:9" aria-checked="true"')
-        self.assertRegex(page, r'id="aspect-4-3" data-aspect="4:3" aria-checked="false"')
+        self.assertNotIn("data-aspect=\"4:3\" aria-checked", page)                                          # (the buttons of the old selector are gone: a dropdown that the script fills)
         self.assertRegex(page, r":root \{\s*--chrome: 180px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # the slot's own shape; the script sets the other shapes' numbers (web/shapes.js's rows: slotVars), a rule for each shape is gone
         self.assertNotIn('#game-stage[data-aspect=', page)
         self.assertIn("var ANTS_ASPECT = '16:9';", page)
@@ -48,17 +47,14 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertIn("ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window))", page)
         self.assertEqual(page.count("source: 'default' }"), 1)                                                   # (one place answers 'default', and it asks the table)
 
-    def test_the_selector_has_the_four_shapes_in_this_order_with_these_hover_texts(self):
+    def test_the_selector_is_one_empty_dropdown_with_a_label_and_a_line_under_it(self):
         page = read(SHELL)
         bar = page[page.index('<div class="view-bar" id="view-bar">'):page.index('id="lock-bar-label"')]
-        buttons = re.findall(r'<button type="button" role="radio" id="aspect-([0-9-]+)" data-aspect="([0-9:]+)" aria-checked="(true|false)" title="([^"]+)">([^<]+)</button>', bar)
-        self.assertEqual([(b[0], b[1], b[2], b[3], b[4]) for b in buttons], [
-            ("4-3", "4:3", "false", "Classic 4:3: the original's picture (640 x 480)", "Classic 4:3"),
-            ("16-10", "16:10", "false", "16:10: laptops and 16:10 monitors (960 x 600)", "16:10"),
-            ("16-9", "16:9", "true", "16:9: the wide picture (960 x 540)", "16:9"),
-            ("21-9", "21:9", "false", "21:9: ultrawide monitors (1260 x 540)", "21:9"),
+        self.assertEqual(bar.strip().splitlines()[1:3], [
+            '        <label id="view-bar-label" for="aspect-select">Picture</label>',
+            '        <span class="pick"><select class="pick-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture; the match goes on"></select><span class="fit-note" id="fit-note" hidden></span></span>',
         ])
-        self.assertEqual(bar.count('<span class="fit-tag" hidden>fills your screen</span>'), 4)             # one tag under each button, hidden until the script says which shape is the screen's
+        self.assertNotIn("role=\"radio\" id=\"aspect-", page)                                                 # (no button for a shape any more: the entries come from web/shapes.js)
 
     def test_the_page_and_the_game_agree_on_the_shapes(self):
         """The selector's order is the game's table (kAspectTable, which kAllAspects is made from), ants_set_aspect takes the shape's place in it, and each canvas is a whole number of steps of the page's box.
@@ -67,13 +63,13 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         header = read(os.path.join(REPO, "include", "ants_app", "canvas_layout.hpp"))
         game = read(os.path.join(REPO, "src", "ants_app", "application.cpp"))
         table = re.search(r"kAspectTable = \{\{(.*?)\}\};", header, re.S).group(1)
-        self.assertEqual(re.findall(r"\{(Aspect::\w+),", table), ["Aspect::Classic4x3", "Aspect::Wide16x10", "Aspect::Wide16x9", "Aspect::Ultra21x9"])
+        self.assertEqual(re.findall(r"\{(Aspect::\w+),", table), ["Aspect::Classic4x3", "Aspect::Wide3x2", "Aspect::Wide16x10", "Aspect::Wide16x9", "Aspect::Wide20x9", "Aspect::Ultra21x9", "Aspect::Super32x9"])
         self.assertIn("kAllAspects = shape_table_detail::aspects_of_table();", header)
         self.assertIn("extern \"C\" EMSCRIPTEN_KEEPALIVE int ants_set_aspect(int shape) {", game)
         self.assertIn("Module._ants_set_aspect(ANTS_PAGE.shapeNumber(ANTS_ASPECT))", page)
         shapes = read(os.path.join(REPO, "web", "shapes.js"))
-        steps = {"4:3": (4, 3), "16:10": (8, 5), "16:9": (16, 9), "21:9": (7, 3)}
-        canvas = {"4:3": (640, 480), "16:10": (960, 600), "16:9": (960, 540), "21:9": (1260, 540)}
+        steps = {"4:3": (4, 3), "3:2": (3, 2), "16:10": (8, 5), "16:9": (16, 9), "20:9": (20, 9), "21:9": (7, 3), "32:9": (32, 9)}
+        canvas = {"4:3": (640, 480), "3:2": (960, 640), "16:10": (960, 600), "16:9": (960, 540), "20:9": (1200, 540), "21:9": (1260, 540), "32:9": (1920, 540)}
         for name, (w, h) in steps.items():
             self.assertRegex(shapes, r"name: '%s', label: '[^']+', width: %d, height: %d," % (name, canvas[name][0], canvas[name][1]))
             self.assertEqual((canvas[name][0] % w, canvas[name][1] % h), (0, 0), name)
@@ -87,42 +83,38 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertNotIn("window.location.assign", block)                                                # no reload
         self.assertNotIn("window.confirm", block)                                                        # no "Leave the match to change the picture?"
         self.assertIn("antsSetAspect(value);", block)
+        self.assertIn("select.addEventListener('change', function () { antsPickShape(select.value); });", block)             # (a choice in the dropdown is the pick: the settings menu calls the same function)
 
-    def test_the_front_page_buttons_start_with_16_9_until_the_script_picks(self):
+    def test_the_front_page_dropdown_is_empty_markup_until_the_script_fills_it_from_the_table(self):
         page = read(LOBBY)
         self.assertNotIn(".frame {", page)                                                                 # (the lobby has no games in frames: the test room that had them is gone)
-        self.assertIn("var aspect = '16:9';", page)                                                         # (what the markup shows until the block below runs)
+        self.assertIn("var aspect = '16:9';", page)                                                         # (what the page shows until the block below runs)
         self.assertIn("else aspect = AntsShapes.firstVisit(window);", page)
-        self.assertEqual(len(re.findall(r'<input type="radio" name="aspect"', page)), 4)                   # (the picture's four buttons, nothing else)
-        self.assertIn('<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture (960 x 540)">16:9</label>', page)        # 16:9 is the one that is checked
-        self.assertEqual(len(re.findall(r'value="[0-9:]+" checked>', page)), 1)
+        self.assertEqual(len(re.findall(r'name="aspect"', page)), 0)                                         # (no radio button for a shape any more)
+        self.assertEqual(len(re.findall(r'<select class="shape-select" id="aspect-select"', page)), 1)       # (the picture's one dropdown, nothing else)
+        self.assertIn("AntsShapes.fillSelect($('aspect-select'), document).value = aspect;", page)           # (filled from the table, the first visit's shape chosen)
 
-    def test_the_front_page_selector_has_the_four_shapes_in_the_game_pages_order_with_its_hover_texts(self):
+    def test_the_front_page_and_the_game_page_make_their_dropdowns_with_the_same_function_and_say_the_same_line(self):
         page, shell = read(LOBBY), read(SHELL)
-        bar = shell[shell.index('<div class="view-bar" id="view-bar">'):shell.index('id="lock-bar-label"')]
-        game = [(shape, title, label) for shape, title, label in re.findall(r'data-aspect="([0-9:]+)" aria-checked="(?:true|false)" title="([^"]+)">([^<]+)</button>', bar)]
-        row = page[page.index('<div class="shape" id="shape-row">'):page.index('</footer>')]
-        front = re.findall(r'<input type="radio" name="aspect" id="aspect-[0-9-]+" value="([0-9:]+)"(?: checked)?><label for="aspect-[0-9-]+" title="([^"]+)">([^<]+)</label>', row)
-        self.assertEqual([shape for shape, _, _ in front], ["4:3", "16:10", "16:9", "21:9"])
-        self.assertEqual(front, game)                                                                     # the same names and the same hover texts as the game page's own buttons
         self.assertNotIn("var SHAPES = {", page + shell)                                                  # (no table of its own: both pages read web/shapes.js, which test_web_shapes.py pins to the game's)
         self.assertIn('<script src="shapes.js"></script>', page)
         self.assertIn('<script src="shapes.js"></script>', shell)
+        self.assertEqual(page.count("AntsShapes.fillsLine(window.screen.width, window.screen.height)"), 1)
+        self.assertEqual(shell.count("AntsShapes.fillsLine(window.screen.width, window.screen.height)"), 1)
+        self.assertNotIn("fit-tag", page + shell)                                                         # (the tag under a button is the quiet line under the dropdown now)
 
-    def test_the_front_page_buttons_are_the_picture_row_of_the_match_column_under_the_map_and_above_start(self):
-        """The picture draws the match column as the map picker, the map's line, the "Picture" row with the four buttons and START! (a window too narrow for the label and the buttons wraps the label above them); the footer has no selector."""
+    def test_the_front_page_dropdown_is_the_picture_row_of_the_match_column_under_the_map_and_above_start(self):
+        """The picture draws the match column as the map picker, the map's line, the "Picture" row (the label above the dropdown, the quiet line under it) and START!; the footer has no selector."""
         page = read(LOBBY)
         side = page[page.index('<aside class="side"'):page.index('</aside>')]
         footer = page[page.index('<footer class="bar" id="footer-bar">'):page.index("</footer>")]
         self.assertLess(side.index('id="map"'), side.index('<div class="shape" id="shape-row">'))
         self.assertLess(side.index('id="info"'), side.index('<div class="shape" id="shape-row">'))
         self.assertLess(side.index('<div class="shape" id="shape-row">'), side.index('id="start"'))
-        self.assertIn('<span class="shape-label" id="shape-label">Picture</span> <span class="seg" role="radiogroup" aria-labelledby="shape-label">', side)
-        order = [side.index('id="aspect-%s"' % shape) for shape in ("4-3", "16-10", "16-9", "21-9")]
-        self.assertEqual(order, sorted(order))                                                             # Classic 4:3, 16:10, 16:9, 21:9, as drawn
-        self.assertEqual(side.count('name="aspect"'), 4)                                                   # (all four buttons are in that one place)
-        for gone in ('name="aspect"', 'class="shape"', 'fit-tag', 'class="grow"', "Screen "):
-            self.assertNotIn(gone, footer, "the footer has no selector any more: " + gone)
+        self.assertIn('<label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note"', side)
+        self.assertLess(side.index('id="aspect-select"'), side.index('id="fit-note"'))                    # (the line is under the dropdown)
+        for gone in ('aspect-select', 'class="shape"', 'fit-note', 'class="grow"', "Screen "):
+            self.assertNotIn(gone, footer, "the footer has no selector: " + gone)
 
 
 class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
@@ -157,7 +149,8 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
         block = shell[shell.index("ANTS_SELECTOR_BEGIN"):shell.index("ANTS_SELECTOR_END")]
         self.assertEqual(len(re.findall(r"setItem\(\s*ANTS_ASPECT_KEY\b", shell)), 1)
         self.assertEqual(len(re.findall(r"setItem\(\s*ANTS_ASPECT_KEY\b", block)), 1)
-        self.assertEqual(shell.count("remember(value);"), 1)
+        self.assertEqual(shell.count("function antsPickShape(value) {"), 1)                                  # (the one function that a choice calls: the dropdowns' change and the settings menu)
+        self.assertEqual(len(re.findall(r"antsPickShape\(", block)), 2)                                       # (its definition and the dropdowns' handler: nothing else writes the key)
         selector = lobby[lobby.index("// SELECTOR_BEGIN"):lobby.index("// SELECTOR_END")]
         self.assertEqual(len(re.findall(r"remember\(\s*ASPECT_KEY\b", lobby)), len(re.findall(r"remember\(\s*ASPECT_KEY\b", selector)))
         self.assertGreaterEqual(len(re.findall(r"remember\(\s*ASPECT_KEY\b", selector)), 1)
@@ -179,7 +172,7 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
         header = read(os.path.join(REPO, "include", "ants_app", "canvas_layout.hpp"))
         table = re.search(r"kAspectTable = \{\{(.*?)\}\};", header, re.S).group(1)
         rows = [(name, int(w), int(h)) for name, w, h in re.findall(r'\{Aspect::\w+, "([^"]+)", "[^"]*", (\d+), (\d+)\}', table)]
-        self.assertGreaterEqual(len(rows), 4)
+        self.assertGreaterEqual(len(rows), 7)
         shapes = [(name, (w // math.gcd(w, h)) / (h // math.gcd(w, h))) for name, w, h in rows]
 
         def nearest(w, h, inner):
@@ -196,7 +189,7 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
             return best
 
         screens = [(1000 + 3 * i, 1000, None) for i in range(0, 1100)]                                   # ratios 1.0 .. 4.3
-        screens += [(1920, 1080, None), (1366, 768, None), (1440, 900, None), (3440, 1440, None), (5120, 1440, None), (1280, 1024, None), (844, 390, None), (915, 412, None)]
+        screens += [(1920, 1080, None), (1366, 768, None), (1440, 900, None), (3440, 1440, None), (5120, 1440, None), (1280, 1024, None), (844, 390, None), (915, 412, None), (2736, 1824, None), (3840, 1080, None)]
         screens += [(390, 844, (390, 664)), (768, 1024, (768, 900)), (390, 844, (844, 340)), (1080, 1920, (1080, 1700)), (0, 0, None), (1920, -5, None), (float("nan"), 1080, None)]
         script = ("const S = require(process.argv[1]); const input = JSON.parse(process.argv[2]);"
                   "console.log(JSON.stringify(input.map(([w, h, inner]) => S.firstVisit({ screen: { width: w === null ? NaN : w, height: h }, innerWidth: inner ? inner[0] : undefined, innerHeight: inner ? inner[1] : undefined }))));")
@@ -206,7 +199,7 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
         got = json.loads(done.stdout)
         want = [nearest(w, h, inner) for w, h, inner in screens]
         self.assertEqual([(s, g) for s, g, x in zip(screens, got, want) if g != x], [])
-        self.assertGreaterEqual(len(set(want)), 4)                                                        # (the sweep reaches every shape)
+        self.assertEqual(len(set(want) - {"16:9"}) + 1, len(rows))                                         # (the sweep reaches every shape)
 
 
 class TheFrontPageHandsTheShapeOnToTheGame(unittest.TestCase):

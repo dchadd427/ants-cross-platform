@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map that a replay carries (the optional chunk tmap: ants_replay/replay, recorder and player, net::hash_bytes, the door's file flag for a replay of up to 2 MiB, the store's caps, the viewer and replay_tool) for tools/mutate.py: python3 tools/mutate.py tests/data/replay_embed_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: test_replay (RP1.9, RP9.x), replay_tool --selftest, test_replay_store (RS10.x), tests/scripts/test_nginx_big_replays.py (the real server) and test_replay_app (RA7.9). The page's reader (web/map_files.js embeddedMapOfReplay) has its mutants in tests/scripts/test_web_map_files.py.",
+ "note": "Mutants of the map that a replay carries (the optional chunk tmap: ants_replay/replay, recorder and player, net::hash_bytes, the door's file flag for a replay of up to 2 MiB, the store's caps, the viewer and replay_tool) for tools/mutate.py: python3 tools/mutate.py tests/data/replay_embed_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: test_replay (RP1.9, RP9.x), replay_tool --selftest, test_replay_store (RS10.x), tests/scripts/test_nginx_big_replays.py (the real server) and test_replay_app (RA7.9). The page's reader (web/map_files.js embeddedMapOfReplay) has its mutants in tests/scripts/test_web_map_files.py. The mutant that would make replay_tool map write into the map library is left out on purpose (a mutant that works would write a file there): the guard has library_guard_mutants.json.",
  "defaults": {},
  "mutants": [
   {
@@ -22,7 +22,7 @@
    "id": "a_second_map_is_taken",
    "file": "src/ants_replay/replay.cpp",
    "old": "            if (have_map) {\n                error = \"tmap: two tmap chunks\";",
-   "new": "            if (false) {\n                error = \"tmap: two tmap chunks\";",
+   "new": "            if (have_map && false) {\n                error = \"tmap: two tmap chunks\";",
    "build": "test_replay",
    "test": "timeout 300 ./build/tests/test_replay/test_replay"
   },
@@ -166,7 +166,7 @@
    "id": "the_embedded_map_comes_first",
    "file": "src/ants_replay/player.cpp",
    "old": "if (load_map(replay.head, dirs, level, error)) return true;",
-   "new": "if (false) return true;",
+   "new": "if (false && load_map(replay.head, dirs, level, error)) return true;",
    "build": "test_replay",
    "test": "timeout 300 ./build/tests/test_replay/test_replay"
   },
@@ -214,7 +214,7 @@
    "id": "hash_bytes_forgets_its_seed",
    "file": "src/ants_net/protocol.cpp",
    "old": "uint64_t h = seed;",
-   "new": "uint64_t h = kFnv64Basis;",
+   "new": "uint64_t h = seed * 0 + kFnv64Basis;",
    "build": "test_replay",
    "test": "timeout 300 ./build/tests/test_replay/test_replay"
   },
@@ -231,14 +231,6 @@
    "file": "tools/replay_tool.cpp",
    "old": "if (!r.embedded_map.empty()) out << \"embedded map: \"",
    "new": "if (false) out << \"embedded map: \"",
-   "build": "replay_tool",
-   "test": "timeout 300 ./build/replay_tool --selftest"
-  },
-  {
-   "id": "map_writes_into_the_library",
-   "file": "tools/replay_tool.cpp",
-   "old": "const std::string refusal = library_guard::write_refusal(o.map_out, {o.file});",
-   "new": "const std::string refusal;",
    "build": "replay_tool",
    "test": "timeout 300 ./build/replay_tool --selftest"
   },

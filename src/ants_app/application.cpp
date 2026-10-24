@@ -1004,7 +1004,7 @@ LayoutRect Application::corner_area() const {
     return page_up() ? canvas().page() : canvas().rect();
 }
 
-// The setup screen has a wide version for the 16:9 canvas of 960 x 540, which is also the page of the 16:10 and 21:9 canvases (CanvasLayout::page: centred in them); any other canvas draws the original's page
+// The setup screen has a wide version for the 16:9 canvas of 960 x 540, which is also the page of every bigger canvas of the shape table (CanvasLayout::page: centred in them); any other canvas draws the original's page
 bool Application::wide_setup() const {
     const LayoutRect p = canvas().page();
     return SetupLayout::supports(p.w, p.h);
@@ -1040,7 +1040,7 @@ void Application::update_picture() {
 
 // --aspect, else the settings' key `aspect`, else the default of the platform (parse_arguments puts it into the config: kPlatformDefaultAspect in canvas_layout.hpp, 16:9 on a desktop and
 // in the web build, whose page passes the shape it shows as `--aspect`); a config that is made by hand keeps its own aspect (the original's 4:3 unless it says otherwise). A settings file
-// never stops the game: a value that is none of 4:3, 16:10, 16:9 and 21:9 is reported and ignored. The settings of the web build are the browser's local storage (the same key).
+// never stops the game: a value that is no name of the shape table (canvas_layout.hpp) is reported and ignored. The settings of the web build are the browser's local storage (the same key).
 void Application::choose_aspect() {
     aspect_ = config_.aspect;
     if (!config_.aspect_given && config_store_.has("aspect")) {

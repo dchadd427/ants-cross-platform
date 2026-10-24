@@ -136,7 +136,7 @@ ants-cross-platform/
 │   │   ├── run_python_tests.py         # Runs those python tests side by side
 │   │   ├── process_state.py            # Helper: whether a process still runs
 │   │   ├── stack_command.py            # Helper: the server's command in docker-compose.stack.yml
-│   │   ├── test_web_aspect.sh          # The picture's shape (the four shapes), the selector, fullscreen, the pointer
+│   │   ├── test_web_aspect.sh          # The picture's shape (the seven shapes), the dropdown, fullscreen, the pointer
 │   │   ├── test_web_camera.sh          # The camera of a replay (Auto / Manual) with the real game, desktop and phone
 │   │   ├── test_web_changelog.sh       # The changelog page's pages: tabs, addresses, Back and Forward, a phone, no JavaScript
 │   │   ├── test_web_replay_lock.sh     # The mouse in the fullscreen of a replay (the pointer lock, the bar under it) with the real game

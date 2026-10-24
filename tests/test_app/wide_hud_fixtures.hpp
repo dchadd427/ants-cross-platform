@@ -348,6 +348,7 @@ void test_small_map_pointer(const assets::AssetArchive& arc);
 void test_small_map_pointer_rows(const assets::AssetArchive& arc);
 void test_small_map_clip(const assets::AssetArchive& arc);
 void test_picture_per_screen();
+void test_every_shape_screens();
 void test_small_levels_in_the_application();
 void test_margin_and_pages_in_match();
 void test_options_dim(const assets::AssetArchive& arc);

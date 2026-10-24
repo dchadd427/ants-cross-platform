@@ -72,7 +72,7 @@ function loadPage(text) {
     const doc = {
         body: Object.assign(element(), { style: { setProperty() {} } }),       // (the page sets the slot's custom properties on it)
         getElementById(id) { if (id === 'game-stage') return stage; throw new Error('the page asked for #' + id); },
-        querySelectorAll(selectorText) { if (selectorText === '.seg button[data-aspect]') return []; throw new Error('the page asked for ' + selectorText); },
+        querySelectorAll(selectorText) { if (selectorText === '.pick-select' || selectorText === '.fit-note') return []; throw new Error('the page asked for ' + selectorText); },
     };
     return new Function('window', 'document', page + '\nreturn ANTS_PAGE;')(win, doc);
 }

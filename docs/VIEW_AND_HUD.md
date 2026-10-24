@@ -6,17 +6,21 @@ What you see in a match and how the game draws it: the 16:9 picture, the map vie
 
 ## 16:9 by default: a wider view with more of the map (desktop and web builds)
 
-The game opens in a 16:9 picture, a fixed canvas of 960 x 540. The original's own 640 x 480 picture is `--aspect 4:3` on the command line, `aspect=4:3` in the settings file, or, in the browser, `?aspect=4:3` on the page's address or the page's selector. Two more wide shapes are offered for other screens: `16:10` (960 x 600, laptops and 16:10 monitors) and `21:9` (1260 x 540, ultrawide monitors). The desktop window is created in the picture's shape from the first moment. In the browser, a first visit with nothing stored starts in the shape nearest the player's screen instead ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md), "Which shape").
+The game opens in a 16:9 picture, a fixed canvas of 960 x 540. The original's own 640 x 480 picture is `--aspect 4:3` on the command line, `aspect=4:3` in the settings file, or, in the browser, `?aspect=4:3` on the page's address or the page's Picture dropdown. Five more wide shapes are offered for other screens: `3:2` (960 x 640, tablets and Surface-style laptops), `16:10` (960 x 600, laptops and 16:10 monitors), `20:9` (1200 x 540, phones held sideways), `21:9` (1260 x 540, ultrawide monitors) and `32:9` (1920 x 540, super-ultrawide monitors). Every canvas but the classic one is at least 960 x 540, because the pages (setup, room, loading, quick help, results) exist only for 640 x 480 and for 960 x 540. The desktop window is created in the picture's shape from the first moment. In the browser, a first visit with nothing stored starts in the shape nearest the player's screen instead ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md), "Which shape").
 
-| | `--aspect 4:3` | 16:10 | 16:9 (the default) | 21:9 |
-|---|---|---|---|---|
-| Canvas | 640 x 480 | 960 x 600 | 960 x 540 | 1260 x 540 |
-| Map view, at (16, 21) | 442 x 440 pixels (13.8 x 13.75 tiles) | 762 x 560 pixels (23.8 x 17.5 tiles) | 762 x 500 pixels (23.8 x 15.6 tiles) | 1062 x 500 pixels (33.2 x 15.6 tiles) |
-| Right panel and minimap | the original's places (minimap at (480, 35)) | pinned to the right edge, 320 px further right (minimap at (800, 35)) | the same as 16:10 | pinned to the right edge, 620 px further right (minimap at (1100, 35)) |
-| Chat log | 138 x 101 at (482, 299) | 138 x 221 (120 px taller) at (802, 299) | 138 x 161 (60 px taller) at (802, 299) | 138 x 161 at (1102, 299) |
-| The three bottom score boxes, x | 105, 254, 402 | 213, 468, 722 (60 px lower than 16:9) | 213, 468, 722 | 313, 668, 1022 |
+| Shape | Canvas | Map view, at (16, 21) | Tiles at the zoom 1 | Area of 16:9's | Minimap at | Chat log | Bottom score boxes, x |
+|---|---|---|---|---|---|---|---|
+| `4:3` | 640 x 480 | 442 x 440 | 13.8 x 13.8 | 0.51 | (480, 35) | 138 x 101 at (482, 299) | 105, 254, 402 |
+| `3:2` | 960 x 640 | 762 x 600 | 23.8 x 18.8 | 1.20 | (800, 35) | 138 x 261 at (802, 299) | 213, 468, 722 |
+| `16:10` | 960 x 600 | 762 x 560 | 23.8 x 17.5 | 1.12 | (800, 35) | 138 x 221 at (802, 299) | 213, 468, 722 |
+| `16:9` (the default) | 960 x 540 | 762 x 500 | 23.8 x 15.6 | 1 | (800, 35) | 138 x 161 at (802, 299) | 213, 468, 722 |
+| `20:9` | 1200 x 540 | 1002 x 500 | 31.3 x 15.6 | 1.31 | (1040, 35) | 138 x 161 at (1042, 299) | 293, 628, 962 |
+| `21:9` | 1260 x 540 | 1062 x 500 | 33.2 x 15.6 | 1.39 | (1100, 35) | 138 x 161 at (1102, 299) | 313, 668, 1022 |
+| `32:9` | 1920 x 540 | 1722 x 500 | 53.8 x 15.6 | 2.26 | (1760, 35) | 138 x 161 at (1762, 299) | 533, 1108, 1682 |
 
-The shape can be changed **while a match runs**: in the browser the selector under the game (Classic 4:3, 16:10, 16:9, 21:9) switches at once, with no reload, no new connection and nothing asked; the simulation is not touched (a switched player's state hash after every tick is the one of a match that was never switched: `test_aspect_switch`). `Application::set_aspect` is the call. The world point in the middle of the view stays in the middle, the zoom that the player chose is kept and comes back where the new view offers it, and the pointer, the HUD and the screens follow. A native window keeps its size (the picture is fitted into it with bars, as for any window); nothing in the desktop game calls it yet.
+The right panel and the minimap are pinned to the right edge (the canvas's extra width further right), the bottom strip and the chat log take the extra height, and the three score boxes are spread by the bottom strip's three cuts. `tests/test_app/test_screen_layout.cpp` pins every number above at every canvas (and that nothing leaves the screen), `test_wide_hud_frame.cpp` the frame pixel for pixel at each of them.
+
+The shape can be changed **while a match runs**: in the browser the Picture dropdown under the game (and the one in the settings menu) switches at once, with no reload, no new connection and nothing asked; the simulation is not touched (a switched player's state hash after every tick is the one of a match that was never switched: `test_aspect_switch`). `Application::set_aspect` is the call. The world point in the middle of the view stays in the middle, the zoom that the player chose is kept and comes back where the new view offers it, and the pointer, the HUD and the screens follow. A native window keeps its size (the picture is fitted into it with bars, as for any window); nothing in the desktop game calls it yet.
 
 - The view shows about twice the area of the world at once. At the zoom 1 everybody who plays the same aspect sees the same area. The zoom is each player's own choice (see Mouse-wheel zoom below).
 - The frame is the original's own art, grown by repeating one line of its pieces: the top bar, the bottom strip and the left strip, and, in the right panel, the strip beside the map, the chat box and the right edge strip at one row (357, where all three are plain between their ant decorations). The clock box, the score boxes and the decorations are never stretched (`include/ants_app/shell_layout.hpp` lists the cuts). The bottom strip is widened at three plain cuts of its art, so that the three score boxes are spread evenly over it (they are laid out by slot).
@@ -27,9 +31,9 @@ The shape can be changed **while a match runs**: in the browser the selector und
   - the results screen (see Results Screen below);
   - the desktop start menu: its controls untouched, the title at the top, the buttons centred, the hint and the server line at the bottom;
   - the setup screen and the room have their own 16:9 version with a map preview (see [`CONTROLS.md`](CONTROLS.md)).
-  - in the 16:10 and 21:9 canvases these pages are the 960 x 540 page, **centred in the canvas with black around it** (`CanvasLayout::page()`; the frame-rate plate and the version stand in the page's corner); the match itself fills the whole canvas. Pages composed for the other shapes are future work.
+  - in every canvas bigger than 960 x 540 (3:2, 16:10, 20:9, 21:9, 32:9) these pages are the 960 x 540 page, **centred in the canvas with black around it** (`CanvasLayout::page()`; the frame-rate plate and the version stand in the page's corner); the match itself fills the whole canvas. Pages composed for the other shapes are future work.
 - The windows that open during a match (the options window, the quick help, the quit and alliance dialogs, "get ready") are centred over the map view, with the frame around them. The options window dims everything outside its card with the checker dither of its art: the whole picture, the frame and the panel included.
-- The web page's own handling of the picture (its selector, its fullscreen) is in [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md).
+- The web page's own handling of the picture (its dropdown, its fullscreen) is in [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md).
 
 ## Edge Scrolling & Minimap
 
@@ -60,14 +64,19 @@ The wheel over the map view zooms through many levels, one a notch, towards the 
 
 - The levels are the series 2^(k/4), four to a doubling: **2** (every world pixel a crisp 2 x 2 square), 1.68, 1.41, 1.19 and **1** (the original's picture, exactly), then 0.84, 0.71, 0.59, **0.5**, 0.42 ... down to the map's own limit. The exact limit is the last level. A level closer than a quarter step above it is left out.
 - **The limit is `max(view width / map width, view height / map height)`.** The map's width or its height just fills the view, so the view never shows anything outside the map. A map that the view already covers at 1 has no zoom-out.
-- **The limit depends on the picture's shape.** On TREASURE (1920 x 1920 world pixels):
+- **The limit depends on the picture's shape.** On TREASURE (1920 x 1920 world pixels), fully zoomed out:
 
-  | | 4:3 view (442 x 440) | 16:9 view (762 x 500) |
-  |---|---|---|
-  | Limit | 0.230 | 0.397 |
-  | World pixels shown at the limit | 1920 x 1911, nearly the whole map | 1920 x 1260, two thirds of it |
+  | Shape | Limit | World pixels shown at the limit | Share of the map |
+  |---|---|---|---|
+  | 4:3 (442 x 440) | 0.230 | 1920 x 1911 | nearly all |
+  | 3:2 (762 x 600) | 0.397 | 1920 x 1512 | 79% |
+  | 16:10 (762 x 560) | 0.397 | 1920 x 1411 | 73% |
+  | 16:9 (762 x 500) | 0.397 | 1920 x 1260 | 66% |
+  | 20:9 (1002 x 500) | 0.522 | 1920 x 958 | 50% |
+  | 21:9 (1062 x 500) | 0.553 | 1920 x 904 | 47% |
+  | 32:9 (1722 x 500) | 0.897 | 1920 x 557 | 29% |
 
-  So in one match a player in the 4:3 picture can zoom out to nearly the whole of TREASURE, while a player in the 16:9 picture sees at most two thirds of it (at the zoom 1 the 16:9 picture already shows about twice the area of the 4:3 one). Every player can choose either shape.
+  So a wide picture shows more at the zoom 1 and less at the limit: a player in the 4:3 picture can zoom out to nearly the whole of TREASURE, one in the 32:9 picture sees 29% of it at most (and 2.26 times the area of 16:9 at the zoom 1). Every player can choose any shape, and the zoom-out is free.
 
 ### The wheel, the middle button and where they act
 
@@ -80,6 +89,7 @@ The wheel over the map view zooms through many levels, one a notch, towards the 
 
 ### The zoom is the player's own view
 
+- **The picture's shape is the player's own view too, and nothing else.** No rule caps the view beyond the table of shapes: the widest picture there is, 32:9, shows at most 2.26 times the area of 16:9 at the zoom 1, and the zoom-out is free for everybody, so a wide picture sees more at the zoom 1 and less at the limit (above). The shape is in no recording and in no message of the network (the game server and its rooms never receive it: `--aspect`, `ants_set_aspect` and the settings key are read by the application only), and the simulation, the lock-step and every state hash never see it: the hash after every tick is the one of a match that was never switched (`tests/test_app/test_aspect_switch.cpp`, with bots too), and the golden hash tests do not change. **Which tiles a player can see is the simulation's fog of war, not the view's size** (a tile that is not explored is dithered and hides the enemy things whatever the shape); `tests/test_app/test_aspect_switch.cpp` also pins the numbers of the table above (tiles at the zoom 1, the share at the limit).
 - **The zoom is the player's own view and nothing else.** The simulation, the network, the bots and every state hash never see it.
 - **Every kind of match has the same levels**: a local game, a game with bots, a server's room, a LAN game (host or guest), and a match that the leader's START filled with bots.
 - **With Fog of War on, every level draws exactly what the zoom 1 draws.** One world pass serves every level, with the same culling and the same gates: a tile that is not explored is dithered and hides the enemy ants, the food, the bombs, fire walls and power-ups, and the effects on it. The minimap respects the fog too (enemy ants, food, power-ups and fire walls only on explored cells). A test pins it at every level (`tests/test_app/test_zoom_view_renderer.cpp`).
