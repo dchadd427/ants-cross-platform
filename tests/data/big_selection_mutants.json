@@ -13,7 +13,7 @@
    "id": "only_the_first_32_ants",
    "file": "src/ants_app/hud_input.cpp",
    "old": "out.cap = std::min(limit, kMaxAntsPerClick);",
-   "new": "out.cap = sim::kMaxCommandAnts;",
+   "new": "out.cap = std::min(limit, sim::kMaxCommandAnts);",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
@@ -189,7 +189,7 @@
    "id": "no_own_line_for_the_move_limit",
    "file": "src/ants_app/hud_input.cpp",
    "old": "    if (result.cap == kMaxAntsPerMove) post_status_id(sim::strings::kMoveLimit);\n    else post_status_id",
-   "new": "    post_status_id",
+   "new": "    (void)result;\n    post_status_id",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },

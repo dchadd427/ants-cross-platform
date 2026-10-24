@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none in the rules; network protocol 21 is unchanged (several ordinary commands). A server holds up to 1,024 waiting commands of a player (it was 256) so that a burst of big clicks is carried, not refused.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...LASTCODE)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...70c2ce6b)
 
 ## v0.12.124 - 2026-10-24 - Three more picture shapes, and one dropdown to pick them
 
