@@ -131,7 +131,7 @@ class ThePages(unittest.TestCase):
 
     def test_the_pages_stay_within_their_limits(self):
         """tools/check_hygiene.py holds the two pages to their sizes: the rematch's code is in front/rematch.js and front/rematch.css"""
-        self.assertLessEqual(len(self.shell.splitlines()), 3998)
+        self.assertLessEqual(len(self.shell.splitlines()), 3966)
         self.assertLessEqual(len(self.lobby.splitlines()), 1500)
 
 

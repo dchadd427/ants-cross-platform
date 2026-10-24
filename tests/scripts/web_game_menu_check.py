@@ -11,11 +11,11 @@ for tests/scripts/test_web_camera.sh) makes the parts that watch a replay run. N
     Tab stays inside it; a click on the dimmed area does nothing; a held Esc (a repeat) does not close it and the next Esc does, the focus is on the canvas; Esc with a hill selected only deselects and the
     next one opens it; Esc closes the quick help and asks for nothing; a slider moved with the arrow key is the game's value and the settings file's (master=); Mute and the hit point numbers are the game's
     and remembered (mute=, hp_numbers=); the picture's shape is the selector's (the stage, the game's canvas, the address); the Fullscreen row makes the stage fullscreen with the panel inside it, the pointer lock
-    is let go while it is up and asked for again by Resume; in fullscreen the Settings button is over the picture and opens it; a dialog that comes up (the quick help, from the panel's own act) closes it;
+    is let go while it is up and asked for again by Resume; in fullscreen no Settings button is on the screen and Esc opens the panel; a dialog that comes up (the quick help, from the panel's own act) closes it;
     Leave game asks (a forfeit with one opponent left), Esc and Stay stay, Forfeit ends the match (the results); in a game for one it asks "Leave the game?" and leaves for the front page;
   * a phone, 390 x 844 with touch: the button is under the picture (44 px), a tap opens the panel inside a gutter of 16 px, every button and slider is at least 44 px high, the text is at least 16 px
     (hints 13), the page does not scroll sideways, the touch model sees nothing of what is tapped on the panel, the cross closes it, the Controls list is the touch list, the question of Leave game fits;
-    a phone on its side (844 x 390): the panel is the screen's height less the gutter and every button is on the screen;
+    a phone on its side (844 x 390): the panel is the screen's height less the gutter and every button is on the screen; in fullscreen on a touch screen no Settings button is on the screen (there is no Esc either: fullscreen is left first), and it is back when it is left;
   * a recording (play.html?replay=...): the button is in the bar, Esc opens the panel with no Game section, the replay goes on meanwhile, "Back to the matches" asks nothing and leaves for the list; in the
     frame of a match page (embed=1) there is no panel, no button and no script.
 
@@ -51,6 +51,18 @@ JSON.stringify((function () {
 BUTTONS = r"""
 JSON.stringify([].map.call(document.querySelectorAll('.gm-btn'), function (b) { var r = b.getBoundingClientRect(), s = getComputedStyle(b); return { id: b.id, hidden: b.hidden, shown: s.display !== 'none' && r.width > 0, disabled: b.disabled, w: r.width, h: r.height, x: r.x, y: r.y }; }))"""
 
+VISIBLE = r"""
+(function () {
+  var seen = 0;
+  [].forEach.call(document.querySelectorAll('.gm-btn'), function (b) {
+    var r = b.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || b.hidden || getComputedStyle(b).display === 'none') return;
+    var top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    if (top && (top === b || b.contains(top))) seen++;
+  });
+  return seen;
+})()"""
+
 PANEL_SIZES = r"""
 JSON.stringify((function () {
   var menu = document.getElementById('game-menu'); if (!menu) return null;
@@ -59,6 +71,11 @@ JSON.stringify((function () {
   [].forEach.call(menu.querySelectorAll('.gm-name, .gm-hint, .gm-note, .gm-ask-b'), function (b) { var r = b.getBoundingClientRect(); if (r.width > 0) text.push([b.className, parseFloat(getComputedStyle(b).fontSize)]); });
   return { small: small, text: text };
 })())"""
+
+
+def any_visible(tab):
+    """a Settings button that is really on the screen (not covered: in fullscreen the page around the stage lies under it)"""
+    return tab.ev(VISIBLE) > 0
 
 
 def wait_for(fn, seconds, step=0.2):
@@ -222,8 +239,8 @@ def computer(p, args, check):
     tab.ev("window.__lockSeen = false; window.addEventListener('pointerlockchange', function () { if (document.pointerLockElement) window.__lockSeen = true; }, true); 1")      # (the check's own witness that the browser grants a lock, however quickly the panel lets go of it: it is put in before the panel's own listener, which is made when it opens)
     wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown") and not p.buttons()["settings-btn"]["disabled"], 10)       # (the page polls the game every quarter second: shown and on are two moments)
     b = p.buttons()
-    check(b.get("settings-btn", {}).get("shown") and not b["settings-btn"]["disabled"] and not b["settings-btn-narrow"]["shown"] and not b["settings-btn-fs"]["shown"],
-          "the Settings button is in the header and on, the narrow one and the fullscreen one are not shown (%s)" % {k: v["shown"] for k, v in b.items()})
+    check(b.get("settings-btn", {}).get("shown") and not b["settings-btn"]["disabled"] and not b["settings-btn-narrow"]["shown"] and "settings-btn-fs" not in b,
+          "the Settings button is in the header and on, the narrow one is not shown and there is none over the picture (%s)" % {k: v["shown"] for k, v in b.items()})
     header = tab.ev("document.getElementById('settings-btn').previousElementSibling.id")
     check(header == "menu-btn", "the header button stands right after Menu (%s)" % header)
     tab.ev("document.getElementById('canvas').focus(); 1")
@@ -338,7 +355,7 @@ def computer(p, args, check):
     s = p.state()
     check(not s["open"] and s["locked"] == "canvas", "Resume closes it and asks for the pointer lock again (open %s, locked %s)" % (s["open"], s["locked"]))
     b = p.buttons()
-    check(b["settings-btn-fs"]["shown"] and b["settings-btn-fs"]["y"] < 20 and b["settings-btn-fs"]["h"] >= 43.5, "in fullscreen the Settings button is over the picture, at the top, 44 px high (%s)" % {k: round(v) if isinstance(v, float) else v for k, v in b["settings-btn-fs"].items()})
+    check("settings-btn-fs" not in b and not any_visible(tab), "in fullscreen a computer has nothing of the menu on the screen: no button over the picture, none of the page's (%s)" % list(b))
     p.esc()
     s = p.state()
     check(s["open"] and s["locked"] is None and s["fullscreen"] == "game-stage", "Esc in fullscreen with the mouse locked opens the panel and lets the lock go (open %s, locked %s)" % (s["open"], s["locked"]))
@@ -346,9 +363,9 @@ def computer(p, args, check):
     check(not p.state()["open"], "(Esc closes it)")
     tab.ev("document.exitPointerLock(); 1")
     time.sleep(0.6)
-    p.click_element("#settings-btn-fs")
+    p.esc()
     s = p.state()
-    check(s["open"] and s["parent"] == "game-stage" and s["fullscreen"] == "game-stage", "the fullscreen button opens the panel in fullscreen")
+    check(s["open"] and s["parent"] == "game-stage" and s["fullscreen"] == "game-stage", "Esc opens the panel in fullscreen with the mouse free as well")
     p.esc()
     tab.ev("document.exitFullscreen(); 1")
     wait_for(lambda: not p.state()["fullscreen"], 5, 0.2)
@@ -472,6 +489,19 @@ def phone(p, args, check):
     check(all(ok for _, ok in on_screen), "the cross, the sections, the note, Resume and Leave game are all on the screen (%s)" % [c for c, ok in on_screen if not ok])
     tab.save_shot(args.shots, "menu-phone-landscape")
     tab.emulate(390, 844, 1, mobile=True)
+    p.tap_element(".gm-x")
+
+    # ---- fullscreen on a touch screen: a phone has no Esc and, by the owner's word, nothing is laid over the picture either: no Settings button is on the screen until fullscreen is left
+    tab.ev("enterFullscreen(); 1")
+    wait_for(lambda: p.state()["fullscreen"], 5, 0.2)
+    time.sleep(1.0)
+    b = p.buttons()
+    check(p.state()["fullscreen"] and "settings-btn-fs" not in b and not any_visible(tab), "in fullscreen on a touch screen nothing of the menu is on the screen: no button over the picture, none of the page's (%s)" % list(b))
+    tab.save_shot(args.shots, "menu-phone-fullscreen")
+    tab.ev("document.exitFullscreen(); 1")
+    wait_for(lambda: not p.state()["fullscreen"], 5, 0.2)
+    time.sleep(0.8)
+    check(any_visible(tab), "(and the page's own Settings button is back when fullscreen is left)")
 
 
 def recording(p, args, check):

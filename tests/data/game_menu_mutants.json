@@ -275,10 +275,10 @@
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
-      "id": "fullscreen_button_always",
+      "id": "overlay_button_back",
       "file": "web/game_menu.js",
-      "old": "show(b, styleReady && ready() && !(mine && !fs));",
-      "new": "show(b, styleReady && ready());",
+      "old": "if (bar) bar.insertBefore(makeButton('gm-narrow', 'settings-btn-narrow'), bar.firstChild);",
+      "new": "if (bar) bar.insertBefore(makeButton('gm-narrow', 'settings-btn-narrow'), bar.firstChild); stage.appendChild(makeButton('gm-fs', 'settings-btn-fs'));",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {

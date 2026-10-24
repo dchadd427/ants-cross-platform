@@ -102,15 +102,13 @@
             }
             if (menu && menu.parentNode) insertAfter(makeButton('gm-wide', 'settings-btn'), menu);
             if (bar) bar.insertBefore(makeButton('gm-narrow', 'settings-btn-narrow'), bar.firstChild);
-            var fs = makeButton('gm-fs', 'settings-btn-fs');
-            stage.appendChild(fs);
         }
 
         function refresh() {
-            var up = available(), fs = !!page.isFullscreen && page.isFullscreen();
+            var up = available();
             for (var i = 0; i < buttons.length; i++) {
-                var b = buttons[i], mine = b.className.indexOf('gm-fs') >= 0;
-                show(b, styleReady && ready() && !(mine && !fs));
+                var b = buttons[i];
+                show(b, styleReady && ready());
                 b.disabled = !up;
                 b.title = up ? 'Settings: sound, picture, controls and Leave game' : 'Not now';
             }

@@ -8,8 +8,6 @@
 .view-bar .btn.gm-narrow { margin-right: 6px; min-height: 44px; }
 @media (max-width: 1139px) { .gm-wide { display: none !important; } }
 @media (min-width: 1140px) { .gm-narrow { display: none !important; } }
-.btn.gm-fs { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); z-index: 1001; min-height: 44px; cursor: pointer; }
-#game-stage.pseudo-fullscreen .btn.gm-fs { right: calc(max(8px, env(safe-area-inset-right)) + 56px); }
 
 /* the dimmed screen and the panel */
 .gm-scrim { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .64); cursor: default;

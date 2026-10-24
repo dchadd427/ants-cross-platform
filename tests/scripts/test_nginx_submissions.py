@@ -39,7 +39,7 @@ ID = "0123456789abcdef0123456789abcdef"
 
 
 class Door(BaseHTTPRequestHandler):
-    """The submission door and the replay port of the rig: each answers JSON (or a file) and remembers what it was sent."""
+    """The submission door, the test-map door and the replay port of the rig: each answers JSON (or a file) and remembers what it was sent."""
     seen = []
     lock = threading.Lock()
     name = "door"
@@ -62,11 +62,11 @@ class Door(BaseHTTPRequestHandler):
             return
         else:
             data, kind = json.dumps({"stub": self.name, "path": self.path}).encode(), "application/json"
-        self.send_response(201 if self.command == "POST" and self.name == "door" else 200)
+        self.send_response(201 if self.command == "POST" and self.name in ("door", "testdoor") else 200)
         self.send_header("Content-Type", kind)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        if self.name == "door":
+        if self.name in ("door", "testdoor"):
             self.send_header("Set-Cookie", "evil=1")                  # (the game server sets the cookie of the owner's sign-in; for a player's call the site would not pass one on)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -88,7 +88,7 @@ def stub(name):
 
 class Rig:
     def __init__(self, trusted="", relaxed=True, log=False, real_ports=None):
-        """`real_ports` = (submission door, replay door) of a running ants_server: the doors are then not the stand-ins of the rig but the real program (test_nginx_big_maps.py)."""
+        """`real_ports` = (submission door, replay door[, test-map door]) of a running ants_server: the doors are then not the stand-ins of the rig but the real program (test_nginx_big_maps.py, test_nginx_test_maps.py)."""
         self.work = tempfile.mkdtemp(prefix="ants_nginx_submit_")
         for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp", "html", "trusted"):
             os.makedirs(os.path.join(self.work, sub), exist_ok=True)
@@ -107,13 +107,16 @@ class Rig:
         if real_ports is None:
             self.door, self.door_server, self.door_port = stub("door")
             self.replay, self.replay_server, self.replay_port = stub("replay")
+            self.test_door, self.test_door_server, self.test_door_port = stub("testdoor")
         else:
-            self.door = self.replay = self.door_server = self.replay_server = None
-            self.door_port, self.replay_port = real_ports
+            self.door = self.replay = self.door_server = self.replay_server = self.test_door = self.test_door_server = None
+            self.door_port, self.replay_port = real_ports[0], real_ports[1]
+            self.test_door_port = real_ports[2] if len(real_ports) > 2 else real_ports[0]
         text = RAW
         text = text.replace("/usr/share/nginx/html", self.work + "/html")
         text = text.replace("/etc/nginx/ants-trusted-proxies/", self.work + "/trusted/")
         text = text.replace("set $ants_submit ants-server:4030;", "set $ants_submit 127.0.0.1:%d;" % self.door_port)
+        text = text.replace("set $ants_test_maps ants-server:4031;", "set $ants_test_maps 127.0.0.1:%d;" % self.test_door_port)
         text = text.replace("set $ants_replays ants-server:4020;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
         text = text.replace("set $ants_replays ants-server:4002;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
         text = text.replace("set $ants_server ants-server:4002;", "set $ants_server 127.0.0.1:%d;" % self.replay_port)
@@ -121,6 +124,7 @@ class Rig:
         if relaxed:                                                                              # (the tests that send many requests are not the flood; the test of the allowance is)
             text = re.sub(r"(zone=ants_submit_post:1m rate=)10r/m", r"\g<1>100000r/s", text)
             text = re.sub(r"(zone=ants_submit_read:1m rate=)10r/s", r"\g<1>100000r/s", text)
+            text = re.sub(r"(zone=ants_test_maps:1m rate=)10r/m", r"\g<1>100000r/s", text)
         text = text.replace("/srv/community-maps/", self.work + "/srv/").replace("/var/cache/nginx/", self.work + "/cache/")
         self.log_file = os.path.join(self.work, "access.log")
         text = text.replace("access_log /dev/stdout ants_noquery;", ("access_log %s ants_noquery;" % self.log_file) if log else "access_log off;")          # (the image logs to its output)
@@ -143,7 +147,7 @@ class Rig:
     def stop(self):
         self.proc.terminate()
         self.proc.wait(timeout=10)
-        for server in (self.door_server, self.replay_server):
+        for server in (self.door_server, self.replay_server, self.test_door_server):
             if server is not None:
                 server.shutdown()
                 server.server_close()
@@ -280,7 +284,8 @@ class TheText(unittest.TestCase):
             self.assertNotIn(query, fmt)
         for header in ("location = /submissions ", "location ^~ /submissions/ ", "location ^~ /admin/api/ "):
             self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, header), header)
-        self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 3)             # (no other block says it: the other paths keep the stock log)
+        self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, "location = /test-maps "))          # (the name of a test map is in the query: tests/scripts/test_nginx_test_maps.py)
+        self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 4)             # (no other block says it: the other paths keep the stock log)
 
     def test_the_stacks_the_image_and_the_documents_agree_with_the_file(self):
         for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):

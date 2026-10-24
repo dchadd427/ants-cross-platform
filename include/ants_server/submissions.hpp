@@ -20,6 +20,7 @@
 
 #include "ants_ctl/json.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/upload_common.hpp"
 
 namespace ants::db {
 class Database;
@@ -38,14 +39,6 @@ struct SubmissionConfig {
     uint64_t min_free_bytes{256ull << 20};            // the disk keeps this much free after a file is written
     uint32_t declined_file_days{30};                  // a declined map's file is deleted after this long (the owner can look at it until then)
     uint32_t old_row_days{90};                        // a declined or withdrawn submission's row is deleted after this long
-};
-
-/// A refusal: the HTTP status, a stable code (docs/MAP_SUBMISSIONS.md lists them) and one sentence in plain words for the person
-struct Failure {
-    int status{0};
-    std::string code;
-    std::string message;
-    ctl::JsonValue extra;                             // an object whose members are added to the answer (the findings of a map that fails, a suggested name), or null
 };
 
 /// One row of map_submissions
@@ -74,15 +67,6 @@ struct SubmitOutcome {
     bool name_taken{false};                           // the name is the name of a map already: the owner may change it or add a number (not an error)
 };
 
-struct TestSubmitOutcome {
-    bool ok{false};
-    Failure fail;
-    ApprovedMap map;
-    std::string clean_name;
-    std::string hash_text;
-    bool usable[4]{false, false, false, false};
-};
-
 /// The four lists of the owner page and their counts
 struct ReviewCounts {
     size_t waiting{0}, approved{0}, declined{0}, taken_down{0};
@@ -103,20 +87,6 @@ public:
     static size_t max_upload_bytes(const std::string& kind);
 
     SubmitOutcome submit(const SubmitInput& in, int64_t now);
-    /// Checks a draft map for an unlisted online test room (POST /submissions?test=1): keeps the CANONICAL file (the core's rewrite, never the bytes that came) in dir/test (mode 0700, the files 0600) for
-    /// kTestMapTtlS seconds, at most kMaxTestMaps of them and at most kMaxTestPerAddress for one address, touches no database table. A map too big for a room (OnlineLimits) is refused. A new map takes the place of
-    /// the oldest one only when that one is not in use (set_test_map_in_use: a room has it) and has been kept for kTestMinKeepS: when none can be dropped the upload is refused (503, 429 for one address).
-    static constexpr size_t kMaxTestMaps = 64;
-    static constexpr size_t kMaxTestPerAddress = 4;
-    static constexpr int64_t kTestMapTtlS = 6 * 3600;
-    static constexpr int64_t kTestMinKeepS = 120;
-    TestSubmitOutcome submit_test(const SubmitInput& in, int64_t now);
-    std::vector<ApprovedMap> test_maps(int64_t now);
-    /// Says whether a room uses the test map of this file name now (the server's rooms); a map in use is not dropped to make room. Unset: no map is in use.
-    void set_test_map_in_use(std::function<bool(const std::string& file_name)> fn) { test_in_use_ = std::move(fn); }
-    /// Whether the set of test maps changed since the last call (one came in, or one was dropped)
-    bool take_test_changed();
-
     // the maker's side: the token's own submissions
     bool list_for_token(const std::string& token, std::vector<Submission>& out, Failure& why);
     bool get_for_token(const std::string& id, const std::string& token, Submission& out, Failure& why);
@@ -162,32 +132,21 @@ private:
     void audit(int64_t now, const std::string& actor_id, const std::string& actor_name, const char* action, const std::string& id, const std::string& detail);
     bool database_failed(Failure& why, const char* where);
     std::string address_key(const std::string& address, int64_t day) const;
-    void prune_test_maps(int64_t now);
-
-    struct KeptTestMap {
-        ApprovedMap map;
-        int64_t created_at{0};
-        std::string owner;                                // the address identity that sent it (never written to a file or a log)
-    };
     /// A hash that was made of a file: valid while the file has the size and the time it had (approved files do not change, so the hash of each is made once, not at every approval)
     struct CachedHash {
         uint64_t size{0};
         int64_t mtime{0};
         uint64_t hash{0};
     };
-    bool drop_oldest_test_map(int64_t now, const std::string& only_owner);
 
     db::Database& db_;
     SubmissionConfig config_;
     std::function<bool(const std::string& key)> library_has_;
     std::string salt_;
     std::vector<std::string> notices_;
-    std::vector<KeptTestMap> test_maps_;
-    std::function<bool(const std::string& file_name)> test_in_use_;
     std::map<std::string, CachedHash> hash_cache_;        // file path -> its hash (approved_maps)
     bool open_{false};
     bool approved_changed_{true};
-    bool test_changed_{false};
 };
 
 /// The maker's view of a submission, and the owner's, as JSON (docs/MAP_SUBMISSIONS.md has the members)

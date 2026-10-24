@@ -357,7 +357,7 @@ try {
         expect(what + ': the old key is untouched', Object.prototype.hasOwnProperty.call(r.storage.data, OLD_KEY), false);
         expect(what + ': the page does not reload, nothing is asked', r.win.assigned.length + ' ' + r.win.asked.length, '0 0');
         expect(what + ': the picture is the new shape', r.now(), shape);
-        expect(what + ': the stage has the shape (the box\'s shape in CSS)', r.stage.attributes['data-aspect'], shape);
+        expect(what + ': the stage names the shape (data-aspect: what the tests and the menu read; the CSS takes the custom properties below)', r.stage.attributes['data-aspect'], shape);
         expect(what + ': the slot\'s ratio and widest width, as custom properties of the table\'s rows (what the CSS reads)', JSON.stringify(r.body.style.props), JSON.stringify(SLOT_VARS[shape]));
         expect(what + ': the selector shows it', r.checked, checkedString(shape));
         expect(what + ': a game that has not started starts with it (--aspect)', r.args.slice(-2).join(' '), '--aspect ' + shape);
