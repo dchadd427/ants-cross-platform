@@ -422,6 +422,9 @@ public:
     uint8_t roster_mask() const noexcept;
     /// A world made by hand for tests and tools; @p rules as Grid::init_empty (1 = a map of extended rules: the wall at row 90 is down).
     void init_test_world(uint32_t width, uint32_t height, uint32_t random_seed = 1, uint32_t match_time_ms = 720000, uint16_t rules = 0);
+    /// Test hook (Grid::allow_rules_two_for_tests): call it BEFORE init / init_test_world to have a rules word of 2 (the wide search of the path finder) played as 2; without it a
+    /// word of 2 is played as 1. Nothing outside the tests calls it.
+    void allow_rules_two_for_tests();
 
     void tick();
     /// The one entry through which a player changes the simulation (command.hpp): validates the command (issuer, ownership, ranges) and applies
