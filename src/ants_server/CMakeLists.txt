@@ -22,6 +22,7 @@ add_library(ants_server_core STATIC
     submissions_http.cpp
     test_maps.cpp
     test_maps_http.cpp
+    test_maps_rooms.cpp
     upload_common.cpp
     admin_accounts.cpp
     admin_cli.cpp

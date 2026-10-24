@@ -177,7 +177,7 @@ class TheWholeWay(unittest.TestCase):
         self.assertEqual(s.head_only("POST", "/test-maps?kind=classic&name=Big", 10 * 1024 * 1024, dict(OCTET, **addr(20))), 413)
         self.assertEqual(s.head_only("POST", "/submissions", 5000, dict(OCTET, **addr(20))), 413)                            # (any other path: a few KB)
         status, headers, body = s.call("POST", "/test-maps?kind=classic&name=Big", dict(OCTET, **addr(21)), b"\x08\x00\x00\x00" + b"x" * (600 * 1024))
-        self.assertEqual((status, j((status, headers, body))["error"]), (413, "too_large"))                               # (more than a Classic map has: read, then refused)
+        self.assertEqual(status, 413)                                                                                     # (more than a Classic map has: refused on the head, 512 KB for any kind but extended)
 
     @unittest.skipUnless(os.path.exists(LVL_TOOL), "lvl_tool is not built")
     def test_an_extended_map_is_kept_too(self):

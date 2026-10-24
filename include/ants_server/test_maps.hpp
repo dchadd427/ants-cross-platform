@@ -52,6 +52,7 @@ public:
     static constexpr size_t kMaxTestPerAddress = 4;
     static constexpr int64_t kTestMapTtlS = 6 * 3600;
     static constexpr int64_t kTestMinKeepS = 120;
+    static constexpr uint32_t kUpkeepEveryMs = 60 * 1000;          // how often upkeep() looks for maps that are six hours old (the server's loop calls it on every pass)
     static constexpr size_t kClassicBytes = 512u * 1024u;          // the file of a Classic map (LevelLimits::for_new_maps())
     static constexpr size_t kMaxBodyBytes = 2u * 1024u * 1024u;    // the largest upload of any kind: a 256 x 256 Extended map (the most a room plays) is under 1 MB
 
@@ -70,8 +71,11 @@ public:
     TestMapOutcome submit(const TestMapInput& in, int64_t now);
     /// The held maps (those that are too old are dropped first)
     std::vector<ApprovedMap> maps(int64_t now);
-    /// Drops the maps that are too old; cheap, call it now and then (once an hour)
+    /// Drops the maps that are too old (cheap: it looks at the held maps only)
     void maintenance(int64_t now);
+    /// What the server's loop calls on every pass: runs maintenance() when kUpkeepEveryMs have passed since the last run (`now_ms` is a steady millisecond clock), so a map is gone within a minute of its six hours.
+    /// True when the set of held maps changed since the last call of take_changed().
+    bool upkeep(int64_t now, uint32_t now_ms);
     /// Says whether a room uses the test map of this file name now (the server's rooms); a map in use is not dropped to make room. Unset: no map is in use.
     void set_in_use(std::function<bool(const std::string& file_name)> fn) { in_use_ = std::move(fn); }
     /// Whether the set of held maps changed since the last call (one came in, or one was dropped)
@@ -89,13 +93,16 @@ private:
         std::string owner;                                // the address identity that sent it (never written to a file or a log)
     };
     void prune(int64_t now);
-    bool drop_oldest(int64_t now, const std::string& only_owner);
+    /// The index of the oldest held map that may be dropped (held for kTestMinKeepS, no room has it, of `only_owner` when that is not empty, not one of `taken`), or kept_.size() when there is none
+    size_t droppable(int64_t now, const std::string& only_owner, const std::vector<size_t>& taken) const;
 
     TestMapConfig config_;
     std::vector<Kept> kept_;
     std::function<bool(const std::string& file_name)> in_use_;
     bool open_{false};
     bool changed_{false};
+    bool upkept_{false};
+    uint32_t last_upkeep_ms_{0};
 };
 
 }  // namespace ants::server

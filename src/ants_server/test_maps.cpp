@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 
 #include "ants_assets/lvl_core.hpp"
@@ -80,6 +81,14 @@ void TestMapStore::prune(int64_t now) {
 
 void TestMapStore::maintenance(int64_t now) { prune(now); }
 
+bool TestMapStore::upkeep(int64_t now, uint32_t now_ms) {
+    if (upkept_ && static_cast<uint32_t>(now_ms - last_upkeep_ms_) < kUpkeepEveryMs) return false;
+    upkept_ = true;
+    last_upkeep_ms_ = now_ms;
+    prune(now);
+    return take_changed();
+}
+
 std::vector<ApprovedMap> TestMapStore::maps(int64_t now) {
     prune(now);
     std::vector<ApprovedMap> out;
@@ -100,18 +109,16 @@ uint64_t TestMapStore::held_bytes() const {
     return total;
 }
 
-// Drops the oldest test map that may go: one that has been kept for kTestMinKeepS and that no room uses (of `only_owner` when that is not empty). False when there is none.
-bool TestMapStore::drop_oldest(int64_t now, const std::string& only_owner) {
-    for (auto it = kept_.begin(); it != kept_.end(); ++it) {
-        if (!only_owner.empty() && it->owner != only_owner) continue;
-        if (now - it->created_at < kTestMinKeepS) continue;
-        if (in_use_ && in_use_(it->map.name)) continue;
-        remove_quietly(it->map.path);
-        kept_.erase(it);
-        changed_ = true;
-        return true;
+// The oldest test map that may go: one that has been kept for kTestMinKeepS and that no room uses (of `only_owner` when that is not empty), and is not already in `taken`. kept_.size() when there is none.
+size_t TestMapStore::droppable(int64_t now, const std::string& only_owner, const std::vector<size_t>& taken) const {
+    for (size_t i = 0; i < kept_.size(); ++i) {
+        if (std::find(taken.begin(), taken.end(), i) != taken.end()) continue;
+        if (!only_owner.empty() && kept_[i].owner != only_owner) continue;
+        if (now - kept_[i].created_at < kTestMinKeepS) continue;
+        if (in_use_ && in_use_(kept_[i].map.name)) continue;
+        return i;
     }
-    return false;
+    return kept_.size();
 }
 
 TestMapOutcome TestMapStore::submit(const TestMapInput& in, int64_t now) {
@@ -121,6 +128,7 @@ TestMapOutcome TestMapStore::submit(const TestMapInput& in, int64_t now) {
         return out;
     };
     if (!open_) return refuse(503, "test_maps_off", "Test rooms are not switched on right now.");
+    prune(now);                                                // (a map that is six hours old is gone before anything else is asked: the lobby is told even when this upload is refused)
     if (in.kind != "classic" && in.kind != "extended") return refuse(400, "bad_kind", "Say whether the map is a Classic map or an Extended map.");
     if (in.bytes.empty()) return refuse(400, "not_a_map", "No map file came with the request.");
     if (in.bytes.size() > max_upload_bytes(in.kind)) return refuse(413, "too_large", "This map file is bigger than a map of this kind may be.");
@@ -215,17 +223,24 @@ TestMapOutcome TestMapStore::submit(const TestMapInput& in, int64_t now) {
     const names::Cleaned cleaned = names::clean_map_name(filtered);
     const std::string stem = cleaned.ok && cleaned.text.size() <= kMaxTestStemChars ? cleaned.text : std::string("Test Map");
 
-    // Room for it: the maps that are too old go; then an address that holds its share drops its own oldest, and a full store (by count or by bytes) drops the oldest of all. A map that a room uses, or that is new,
-    // never goes: when nothing can, the upload is refused (so a burst of uploads cannot push out the map of a room that has not pressed START yet).
-    prune(now);
+    // Room for it: an address that holds its share gives up its own oldest, and a full store (by count or by bytes) the oldest of all. A map that a room uses, or that is new, never goes: when nothing can,
+    // the upload is refused and NOTHING is dropped (so a burst of uploads cannot push out the map of a room that has not pressed START yet, and a refused upload costs nobody a map).
+    std::vector<size_t> taken;
+    uint64_t freed = 0;
     size_t mine = 0;
     for (const Kept& m : kept_) mine += m.owner == in.address ? 1u : 0u;
     while (!in.address.empty() && mine >= kMaxTestPerAddress) {
-        if (!drop_oldest(now, in.address)) return refuse(429, "test_limit", "You have as many test maps open as you may. Please try again in a few minutes.");
+        const size_t i = droppable(now, in.address, taken);
+        if (i == kept_.size()) return refuse(429, "test_limit", "You have as many test maps open as you may. Please try again in a few minutes.");
+        taken.push_back(i);
+        freed += kept_[i].map.size;
         --mine;
     }
-    while (kept_.size() >= kMaxTestMaps || held_bytes() + canonical.size() > config_.max_held_bytes) {
-        if (!drop_oldest(now, std::string())) return refuse(503, "test_full", "The server holds as many test maps as it can right now. Please try again in a few minutes.");
+    while (kept_.size() - taken.size() >= kMaxTestMaps || held_bytes() - freed + canonical.size() > config_.max_held_bytes) {
+        const size_t i = droppable(now, std::string(), taken);
+        if (i == kept_.size()) return refuse(503, "test_full", "The server holds as many test maps as it can right now. Please try again in a few minutes.");
+        taken.push_back(i);
+        freed += kept_[i].map.size;
     }
     std::string id8;
     for (int attempt = 0; attempt < 8 && id8.empty(); ++attempt) {          // (an id that is held already is drawn again: a file is never written over)
@@ -268,6 +283,12 @@ TestMapOutcome TestMapStore::submit(const TestMapInput& in, int64_t now) {
     m.players = static_cast<uint32_t>(players);
     m.description = names::clean_description(meta.get("description").str());
     m.kind = real_kind;
+    std::sort(taken.begin(), taken.end(), std::greater<size_t>());          // (the new map is safe on disk: now the ones that made room go)
+    for (const size_t i : taken) {
+        remove_quietly(kept_[i].map.path);
+        kept_.erase(kept_.begin() + static_cast<std::ptrdiff_t>(i));
+        changed_ = true;
+    }
     kept_.push_back(Kept{m, now, in.address});
     changed_ = true;
     out.ok = true;

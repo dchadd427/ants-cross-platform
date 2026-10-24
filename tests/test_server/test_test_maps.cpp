@@ -24,6 +24,7 @@
 #include "ants_server/submissions.hpp"
 #include "ants_server/test_maps.hpp"
 #include "ants_server/test_maps_http.hpp"
+#include "ants_server/test_maps_rooms.hpp"
 #include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
@@ -68,6 +69,16 @@ using ctl::HttpResponse;
 std::string tiny() {
     std::ifstream in(fs::path(maps_dir()) / "TINY.LVL", std::ios::binary);
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+// TINY with the description `text` written as it is (a Classic map holds 30 bytes)
+std::string tiny_described(const std::string& text) {
+    const std::string base = tiny();
+    ants::assets::LevelData t;
+    if (!ants::assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), t, nullptr, ants::assets::LevelLimits::for_new_maps())) return std::string();
+    t.description = text;
+    const ants::assets::LevelWriteResult w = ants::assets::write_level(t, ants::assets::LevelLimits::for_new_maps());
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 
 std::string read_file(const std::string& path) {
@@ -203,9 +214,9 @@ int main() {
         ASSERT_EQ(static_cast<unsigned>(static_cast<unsigned char>(stored[0])), 8u);
     } TEST_END();
 
-    TEST_CASE("TM1.3a The numbers that the server runs with are the owner's: 30 an hour for an address and 120 for all, 2 checks in a window of 10 s with 1 for an address and 600 ms of checking time, 64 maps, 4 for an address, 64 MiB, 6 hours, 2 minutes, 2 MiB of body and 512 KB for a Classic file") {
+    TEST_CASE("TM1.3a The numbers that the server runs with are the owner's: 30 an hour for an address and 600 for all, 2 checks in a window of 10 s with 1 for an address and 600 ms of checking time, 64 maps, 4 for an address, 64 MiB, 6 hours, 2 minutes, 2 MiB of body and 512 KB for a Classic file") {
         const TestMapApiConfig c;
-        ASSERT_TRUE(c.trust_client_header && c.attempts_per_hour == 30 && c.total_per_hour == 120 && c.checks_per_window == 2 && c.checks_per_address_window == 1 && c.check_window_ms == 10000 && c.check_budget_ms == 600);
+        ASSERT_TRUE(c.trust_client_header && c.attempts_per_hour == 30 && c.total_per_hour == 600 && c.checks_per_window == 2 && c.checks_per_address_window == 1 && c.check_window_ms == 10000 && c.check_budget_ms == 600);
         const TestMapConfig s;
         ASSERT_TRUE(s.max_held_bytes == (uint64_t{64} << 20) && s.min_free_bytes == (uint64_t{256} << 20));
         ASSERT_TRUE(TestMapStore::kMaxTestMaps == 64 && TestMapStore::kMaxTestPerAddress == 4 && TestMapStore::kTestMapTtlS == 6 * 3600 && TestMapStore::kTestMinKeepS == 120);
@@ -566,7 +577,7 @@ int main() {
             ms.set_test_maps(t.store->maps(t.now));
             ASSERT_TRUE(ms.test_map(files[0]) == nullptr && ms.test_map(files[1]) != nullptr && ms.test_map(files[3]) != nullptr);
         }
-        {   // a refused upload that dropped a map of the address first still tells the lobby: its test list must not name a file that is gone
+        {   // a refused upload drops nothing: the address holds its four, the other three have a room, and what would be left of the room after its oldest goes is still not enough
             Door t(nullptr, [&](TestMapConfig& c) { c.max_held_bytes = one * 4 + 1; });
             std::vector<std::string> files;
             for (int i = 0; i < 4; ++i) {
@@ -574,16 +585,29 @@ int main() {
                 ASSERT_TRUE(o.ok);
                 files.push_back(o.map.name);
             }
-            std::set<std::string> in_use(files.begin() + 1, files.end());                          // (the other three have a room)
+            std::set<std::string> in_use(files.begin() + 1, files.end());
             t.store->set_in_use([&](const std::string& file) { return in_use.count(file) != 0; });
             t.store->take_changed();
             t.now_ms += 20000;
-            const HttpResponse r = t.upload(grown_tiny(64, 64), "Big", "198.51.100.1", "extended");       // (the address holds its four: its oldest goes, and the rest of the room is still not enough)
+            const HttpResponse r = t.upload(grown_tiny(64, 64), "Big", "198.51.100.1", "extended");
             ASSERT_MSG(r.status == 503 && parse_text(r.body).get("error").str() == "test_full", std::to_string(r.status) + " " + r.body.substr(0, 120));
+            ASSERT_EQ(t.refreshed, 0);                                                              // (nothing changed: the lobby is not told)
+            ASSERT_EQ(t.store->maps(t.now).size(), size_t{4});                                      // (the address's own oldest was NOT dropped for an upload that failed)
+            ASSERT_EQ(files_in(t.config.dir), size_t{4});
+            in_use.clear();                                                                         // (nobody has a room: the same upload now takes the room it needs)
+            t.now_ms += 20000;
+            ASSERT_EQ(t.upload(grown_tiny(64, 64), "Big", "198.51.100.1", "extended").status, 201);
             ASSERT_EQ(t.refreshed, 1);
-            MapStore ms("", "");
-            ms.set_test_maps(t.store->maps(t.now));
-            ASSERT_TRUE(ms.test_map(files[0]) == nullptr && ms.test_map(files[1]) != nullptr && t.store->maps(t.now).size() == 3);
+        }
+        {   // a map that is six hours old is gone before an upload is judged, so the lobby is told even when that upload is refused
+            Door t;
+            ASSERT_EQ(t.upload(tiny(), "Old", "198.51.100.1").status, 201);
+            ASSERT_EQ(t.refreshed, 1);
+            t.now += TestMapStore::kTestMapTtlS;
+            t.now_ms += 20000;
+            ASSERT_EQ(t.upload("not a map at all", "Bad", "198.51.100.2").status, 400);
+            ASSERT_EQ(t.refreshed, 2);
+            ASSERT_EQ(files_in(t.config.dir), size_t{0});
         }
         {   // a cap smaller than one map: nothing is ever kept
             Door t(nullptr, [&](TestMapConfig& c) { c.max_held_bytes = one - 1; });
@@ -592,6 +616,22 @@ int main() {
             ASSERT_EQ(files_in(t.config.dir), size_t{0});
         }
         ASSERT_EQ(TestMapConfig().max_held_bytes, uint64_t{64} << 20);                      // (the real cap: 64 MiB)
+    } TEST_END();
+
+    TEST_CASE("TM1.10 A map that is six hours old is gone within a minute whether anybody uploads or not: upkeep() looks once a kUpkeepEveryMs and tells whether the set changed") {
+        Door t;
+        ASSERT_TRUE(t.keep("198.51.100.1").ok);
+        t.store->take_changed();
+        ASSERT_FALSE(t.store->upkeep(t.now, 1000));                                                  // (the first look: nothing is old)
+        ASSERT_FALSE(t.store->upkeep(t.now + TestMapStore::kTestMapTtlS, 1000 + TestMapStore::kUpkeepEveryMs - 1));          // (a minute has not passed: not looked at)
+        ASSERT_EQ(files_in(t.config.dir), size_t{1});
+        ASSERT_TRUE(t.store->upkeep(t.now + TestMapStore::kTestMapTtlS, 1000 + TestMapStore::kUpkeepEveryMs));
+        ASSERT_EQ(files_in(t.config.dir), size_t{0});
+        ASSERT_FALSE(t.store->upkeep(t.now + TestMapStore::kTestMapTtlS, 1000 + 2 * TestMapStore::kUpkeepEveryMs));          // (and it is told once)
+        ASSERT_EQ(TestMapStore::kUpkeepEveryMs, uint32_t{60000});
+        ASSERT_TRUE(t.keep("198.51.100.1").ok);
+        ASSERT_TRUE(t.store->upkeep(t.now + TestMapStore::kTestMapTtlS, 4294967000u));                // (the steady clock wraps at 2^32: a minute later is still a minute)
+        ASSERT_EQ(files_in(t.config.dir), size_t{0});
     } TEST_END();
 
     TEST_CASE("TM2.1 The door has ONE route: POST /test-maps. The submissions routes, the owner's API, a path below or beside it, the old test form and every other method on it get a 404 or a 405, and nothing is made") {
@@ -617,11 +657,15 @@ int main() {
         ASSERT_EQ(std::string(TestMapApi::route()), std::string("/test-maps"));
     } TEST_END();
 
-    TEST_CASE("TM2.2 The body limit is asked on the head: 2 MiB for POST /test-maps of either kind, a few KB for every other call; a Classic body over 512 KB is read and refused 413 too_large") {
+    TEST_CASE("TM2.2 The body limit is asked on the head: 2 MiB for POST /test-maps of an Extended map, 512 KB for any other kind, a few KB for every other call; the store refuses a Classic body over 512 KB 413 too_large too") {
         Door t;
-        ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "kind=classic&name=x")), size_t{2 * 1024 * 1024});
+        ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "kind=classic&name=x")), size_t{512 * 1024});
         ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "kind=extended&name=x")), size_t{2 * 1024 * 1024});
-        ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "")), size_t{2 * 1024 * 1024});
+        ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "name=x&kind=extended")), size_t{2 * 1024 * 1024});
+        ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "")), size_t{512 * 1024});
+        ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "kind=extended%20&name=x")), size_t{512 * 1024});
+        ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "kind=Extended&name=x")), size_t{512 * 1024});
+        ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps", "x=kind=extended")), size_t{512 * 1024});
         ASSERT_EQ(TestMapApi::body_limit(t.req("GET", "/test-maps", "kind=extended")), size_t{4096});
         ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/submissions", "kind=extended&name=x")), size_t{4096});
         ASSERT_EQ(TestMapApi::body_limit(t.req("POST", "/test-maps/x", "kind=extended")), size_t{4096});
@@ -724,7 +768,7 @@ int main() {
         ASSERT_TRUE(MapStore::is_test_map_name(name) && library.test_map(name) != nullptr);
     } TEST_END();
 
-    TEST_CASE("TM2.6 The same bytes get the same verdict from the test store as from the real submissions store (one core checker), except the two rules that are a room's (a map of two or three colors may be played, a map over 65,536 cells may not)") {
+    TEST_CASE("TM2.6 The same bytes get the same verdict from the test store as from the real submissions store (one core checker), except the three rules that are a room's (a map of two or three colors may be played, a warning of the checker does not stop a map, a map over 65,536 cells may not)") {
         TempDir dir;
         db::Database database;
         ASSERT_TRUE(open_server_db(database, ""));
@@ -745,7 +789,7 @@ int main() {
 
         struct Case {
             std::string what, kind, bytes;
-            int mode;                        // 0: the same answer and the same code; 1: both refuse, the code may differ (the test store rewrites a map before it judges it, the real one judges the bytes first); 2: only the test store refuses (the online limit); 3: only the real store refuses (a map that works for two or three colors: a room of two can play it, a library map must work for all four)
+            int mode;                        // 0: the same answer and the same code; 1: both refuse, the code may differ (the test store rewrites a map before it judges it, the real one judges the bytes first); 2: only the test store refuses (the online limit); 3: only the real store refuses (a map that works for two or three colors, a map with a warning of the checker: a room of two can play them, a library map must work for all four colors and without a warning)
         };
         const core::Result blank = core::blank(31, 31, 485, 10, 10, core::Profile::NewMap);       // (a map that does not pass)
         ASSERT_EQ(blank.status, 0);
@@ -763,6 +807,7 @@ int main() {
             {"no body", "classic", std::string(), 0},
             {"a map that ends in the middle", "classic", cut, 1},
             {"more bytes than a Classic map has", "classic", std::string(600000, 'x'), 0},
+            {"a Classic map with a description that fills all 30 bytes (a warning of the checker)", "classic", tiny_described(std::string(30, 'x')), 3},
             {"a map of two teams", "classic", tiny_with_teams(0x03), 3},
             {"a map of three teams", "classic", tiny_with_teams(0x07), 3},
             {"a map of one team", "classic", tiny_with_teams(0x01), 0},
@@ -803,6 +848,49 @@ int main() {
                 ASSERT_MSG(a.ok && !b.ok && b.fail.status == 422 && b.fail.code == "map_too_big_online", saw);
             }
         }
+    } TEST_END();
+
+    TEST_CASE("TM3.1 The wiring to the rooms (connect_test_maps, upkeep_test_maps, what main() calls): the rooms' store knows a new map and a dropped one, a map that a room has is not dropped to make room, and the upkeep reaches the rooms") {
+        const TestMapOutcome probe = Door().keep("198.51.100.200");
+        ASSERT_TRUE(probe.ok);
+        Door u(nullptr, [&](TestMapConfig& c) { c.max_held_bytes = probe.map.size + probe.map.size / 2; });          // (room for one map)
+        MapStore library{maps_dir()};
+        RoomManager rooms(std::move(library), ServerLimits());
+        connect_test_maps(rooms, *u.store, *u.api, [&u]() { return u.now; });
+        u.now_ms += 20000;
+        HttpResponse r = u.upload(tiny(), "Room", "198.51.100.1");
+        ASSERT_EQ(r.status, 201);
+        const std::string file = parse_text(r.body).get("test_map").get("file").str();
+        ASSERT_TRUE(rooms.store().test_map(file) != nullptr);                                        // (the door told the rooms' store)
+        RoomSpec spec;
+        spec.code = "TM-ROOM-1";
+        spec.map = file;
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        ASSERT_TRUE(rooms.create_room(spec, 1000).ok);
+        ASSERT_TRUE(rooms.map_in_use(file));
+        u.now += 300;
+        u.now_ms += 20000;
+        r = u.upload(tiny(), "Next", "198.51.100.2");                                                // (the only map that could go has a room: refused, and the map stays)
+        ASSERT_MSG(r.status == 503 && parse_text(r.body).get("error").str() == "test_full", std::to_string(r.status) + " " + r.body.substr(0, 100));
+        ASSERT_TRUE(rooms.store().test_map(file) != nullptr);
+        ASSERT_TRUE(rooms.close_room("TM-ROOM-1", 2000));
+        for (const uint32_t ms : {2000u, 600000u, 3600000u, 7200000u}) {                              // (a closed room is gone when its keep time is over and the manager has seen it)
+            rooms.update(ms);
+            rooms.take_ended(ms);
+            if (!rooms.map_in_use(file)) break;
+        }
+        ASSERT_FALSE(rooms.map_in_use(file));
+        u.now_ms += 20000;
+        r = u.upload(tiny(), "Next", "198.51.100.2");
+        ASSERT_EQ(r.status, 201);
+        ASSERT_TRUE(rooms.store().test_map(file) == nullptr);                                        // (the old one was dropped, and the rooms' store knows)
+        const std::string next = parse_text(r.body).get("test_map").get("file").str();
+        ASSERT_TRUE(rooms.store().test_map(next) != nullptr);
+        upkeep_test_maps(rooms, *u.store, u.now + TestMapStore::kTestMapTtlS, 5000);                  // (six hours on: the upkeep drops it and the rooms follow)
+        ASSERT_TRUE(rooms.store().test_map(next) == nullptr);
+        ASSERT_EQ(files_in(u.config.dir), size_t{0});
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

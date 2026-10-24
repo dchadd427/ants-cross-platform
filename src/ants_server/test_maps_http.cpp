@@ -26,7 +26,10 @@ const char* TestMapApi::route() { return kRoute; }
 size_t TestMapApi::max_body() { return TestMapStore::kMaxBodyBytes; }
 
 size_t TestMapApi::body_limit(const HttpRequest& head) {
-    if (head.method == "POST" && head.path == kRoute) return TestMapStore::kMaxBodyBytes;
+    if (head.method == "POST" && head.path == kRoute) {
+        std::string kind;
+        return query_value(head.query, "kind", kind) && kind == "extended" ? TestMapStore::kMaxBodyBytes : TestMapStore::kClassicBytes;
+    }
     return kSmallBody;
 }
 

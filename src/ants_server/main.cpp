@@ -151,6 +151,7 @@
 #include "ants_server/submissions_http.hpp"
 #include "ants_server/test_maps.hpp"
 #include "ants_server/test_maps_http.hpp"
+#include "ants_server/test_maps_rooms.hpp"
 
 namespace {
 
@@ -567,7 +568,7 @@ int main(int argc, char** argv) {
         door.request_timeout_ms = 30000;                           // (up to 2 MiB from a slow line, and only four such bodies are read at once)
         door.body_limit = [](const ants::ctl::HttpRequest& head) { return ants::server::TestMapApi::body_limit(head); };
         test_map_http = ants::ctl::HttpServer::listen_door(o.test_map_port, door, !o.test_map_any_interface);
-        if (!test_map_http) std::fprintf(stderr, "[ants_server] test rooms are off: cannot listen on test-map port %u\n", static_cast<unsigned>(o.test_map_port));
+        if (!test_map_http) log("test rooms are off: cannot listen on test-map port " + std::to_string(o.test_map_port));
     }
     if (!tcp && !ws) {
         std::fprintf(stderr, "no game port: give --port or --ws-port\n");
@@ -842,10 +843,7 @@ int main(int argc, char** argv) {
             ants::server::TestMapApiConfig tac;
             tac.trust_client_header = !o.test_map_ignore_client_header;
             test_api = std::make_unique<ants::server::TestMapApi>(*test_store, tac);
-            test_store->set_in_use([&rooms](const std::string& file) { return rooms.map_in_use(file); });          // (a test map that a room has is not dropped to make room for another)
-            test_api->set_on_changed([&rooms, &test_store]() { rooms.mutable_store().set_test_maps(test_store->maps(static_cast<int64_t>(std::time(nullptr)))); });          // (a test upload does not read every approved map again)
-            rooms.mutable_store().set_test_maps(test_store->maps(static_cast<int64_t>(std::time(nullptr))));
-            test_store->take_changed();
+            ants::server::connect_test_maps(rooms, *test_store, *test_api, []() { return static_cast<int64_t>(std::time(nullptr)); });
             log("test rooms on: maps in " + tc.dir + ", at most " + std::to_string(ants::server::TestMapStore::kMaxTestMaps) + " held and " + std::to_string(ants::server::TestMapStore::kMaxTestPerAddress) + " for one address" +
                 (o.replay_port != 0 ? std::string() : std::string("; the replay port is off, so a guest cannot download a test map")));
         }
@@ -882,7 +880,6 @@ int main(int argc, char** argv) {
         for (const std::string& line : rooms.take_notices()) log(line);
     }
     uint32_t last_submission_upkeep_ms = now_ms();
-    uint32_t last_test_upkeep_ms = now_ms();
     while (!g_stop) {
         const uint32_t now = now_ms();
         if (tcp) {
@@ -918,11 +915,7 @@ int main(int argc, char** argv) {
         }
         if (test_map_http && test_api) {
             test_map_http->update(now, [&](const ants::ctl::HttpRequest& request) { return test_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });
-            if (static_cast<uint32_t>(now - last_test_upkeep_ms) >= 3600u * 1000u) {                       // (once an hour: the maps that are six hours old)
-                last_test_upkeep_ms = now;
-                test_store->maintenance(static_cast<int64_t>(std::time(nullptr)));
-                if (test_store->take_changed()) rooms.mutable_store().set_test_maps(test_store->maps(static_cast<int64_t>(std::time(nullptr))));
-            }
+            ants::server::upkeep_test_maps(rooms, *test_store, static_cast<int64_t>(std::time(nullptr)), now);          // (once a minute: the maps that are six hours old)
         }
         if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
