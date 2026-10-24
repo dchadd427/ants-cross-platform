@@ -66,10 +66,16 @@ def problems(page, js):
         bad.append("the link says Map maker")
     if ".mast #mapmaker-top:focus-visible { outline: 3px solid" not in js:
         bad.append("keyboard focus is visible")
-    if "top: -6px; bottom: -6px;" not in js or "'.mast #mapmaker-top::before { content:" not in js:
+    if "#mapmaker-top::before { content: \"\"; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }" not in js:
         bad.append("the touch layer makes it 44 px (38 + 6)")
-    if 'grid-template-areas: "logo . map btn" "text text text text"' not in js or "grid-area: map;" not in js:
-        bad.append("on a phone both buttons stay on the logo's row")
+    if 'grid-template-areas: "logo . map btn" "text text text disc"' not in js or "grid-area: map;" not in js:
+        bad.append("on a phone both buttons stay on the logo's row, and the Discord link has the tagline's row at the right")
+    if "'.mast #discord-top { margin-left: -12px; flex: 0 0 auto; position: relative;" not in js:
+        bad.append("the Discord link follows Matches 10 px away (the row's gap is 22)")
+    if "'.mast #discord-top { grid-area: disc; justify-self: end; align-self: start; margin-left: 0; min-width: 44px;" not in js:
+        bad.append("on a phone the Discord link is in its own place and is 44 px wide")
+    if "'.mast #discord-top::before { content:" not in js or ".mast #discord-top .dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }" not in js:
+        bad.append("the Discord link's touch layer, and on a phone only its mark shows (the word stays for a screen reader)")
     if "@media (max-width: 389px)" not in js or "width: 88px" not in js:
         bad.append("at 320 px both fit")
     for need, why in (("flex: 0 0 auto; position: relative; }", "the layer is anchored to the link (position: relative)"),
@@ -78,7 +84,7 @@ def problems(page, js):
                       ("column-gap: 10px;", "10 px between the columns on a phone"),
                       ("outline: 3px solid var(--gold, #f2c14e); outline-offset: 3px;", "the focus ring is drawn"),
                       ("document.head.appendChild(style);", "the style is added to the page"),
-                      ("left: -4px; right: -4px;", "the layer reaches 2 px past the border each side")):
+                      ("#mapmaker-top::before { content: \"\"; position: absolute; left: -4px; right: -4px;", "the layer reaches 2 px past the border each side")):
         if need not in js:
             bad.append(why)
     for forbid, why in (("pointer-events", "the layer does not block touches"), (".target", "the link opens in this tab"), ("setAttribute", "no attributes set behind the tests' back"), ("outline: none", "no focus ring switched off"),

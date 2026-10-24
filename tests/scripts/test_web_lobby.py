@@ -15,6 +15,7 @@ and START sends every page to the game page (web/shell.html) in the same tab wit
 The routes of nginx are run in tests/scripts/test_nginx_routes.py; the game page's look (the front page's) is read in tests/scripts/test_web_game.py; the whole flow in a real browser is
 tests/scripts/web_home_check.py (opt-in).
 """
+import hashlib
 import os
 import re
 import shutil
@@ -22,6 +23,7 @@ import subprocess
 import tempfile
 import unittest
 
+DISCORD_MARK_SHA256 = "6806ec0e2319eb7f7d9f5d02636a197d42903ff8f8e9bab0c267c8fabc1b03fe"          # the path of Discord's mark in the header's button (the file discord.svg of Simple Icons 13.0.0, CC0; the mark itself is Discord's trademark)
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SHELL = os.path.join(REPO, "web", "shell.html")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
@@ -370,11 +372,21 @@ class TheFrontPageMarkup(PageCase):
         for ident in ("room-panel", "play-tab", "all-here", "all-windows", "new-room", "any-link", "copy-any", "seat-rows", "room-code", "room-map", "popup-hint", "fill-hint", "sync", "grid", "frames-note"):
             self.assertEqual(self.markup.count('id="%s"' % ident), 0, ident)
 
+    def test_the_header_ends_with_the_discord_link_in_a_new_tab_and_it_loads_nothing(self):
+        header = re.search(r'<header class="mast">(.*?)</header>', self.page, re.S).group(1)
+        found = re.search(r'Matches</a>(<a class="btn sm discord" href="https://discord\.gg/WaWrXQnKPj" id="discord-top" target="_blank" rel="noopener noreferrer" title="[^"]*">'
+                          r'<svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="([^"]+)"/></svg><span class="dt">Discord</span></a>)$', header)
+        self.assertIsNotNone(found, "the Discord link is the last thing of the header, right after Matches")
+        self.assertEqual(hashlib.sha256(found.group(2).encode()).hexdigest(), DISCORD_MARK_SHA256, "the mark is Discord's own glyph (Simple Icons, CC0), as it is, not redrawn")
+        self.assertEqual(header.count('id="discord-top"'), 1)
+        self.assertEqual(len(re.findall(r"<img", header)), 1, "the logo is the header's only picture: the mark is inline")
+        self.assertEqual(self.page.count("discord.gg"), 1)
+
     def test_nothing_opens_a_new_tab_but_the_links_that_leave_the_game_and_the_explicit_windows(self):
         anchors = re.findall(r"<a [^>]*>", self.page)
         blank = [a for a in anchors if 'target="_blank"' in a]
         hrefs = sorted(set(re.search(r'href="([^"]*)"', a).group(1) for a in blank))
-        self.assertEqual(hrefs, ["/asset_catalog/", "/changelog.html", "/legal.html", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "https://www.buymeacoffee.com/dchadd"])       # (the last is the owner's Buy Me a Coffee button, the one link that leaves for another site)
+        self.assertEqual(hrefs, ["/asset_catalog/", "/changelog.html", "/legal.html", "https://discord.gg/WaWrXQnKPj", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "https://www.buymeacoffee.com/dchadd"])       # (the last is the owner's Buy Me a Coffee button, the one link that leaves for another site)
         self.assertEqual(len(re.findall(r"window\.open\(", self.page)), 0, "the front page opens no window of its own")
 
     def test_start_goes_to_this_tab(self):

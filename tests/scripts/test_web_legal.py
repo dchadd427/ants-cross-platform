@@ -148,7 +148,7 @@ class TheLegalPage(unittest.TestCase):
         self.assertIn("the maps that players made", self.text)
 
     def test_it_is_short_and_says_nothing_of_what_the_site_stores_or_for_how_long(self):
-        self.assertLessEqual(len(self.text.split()), 250)
+        self.assertLessEqual(len(self.text.split()), 300)                                                      # (250 until the Discord link's panel, and the coffee button's, joined the five of the notice)
         for word in ("record", "recorded", "recordings", "stored", "kept", "retain", "retention", "cookie", "cookies", "privacy", "personal", "days", "names"):
             self.assertNotRegex(self.text.lower(), r"\b%s\b" % word, word)
 
