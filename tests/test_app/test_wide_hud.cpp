@@ -45,6 +45,7 @@ int main(int argc, char* argv[]) {
     test_small_map_pointer_rows(arc);
     test_small_map_clip(arc);
     test_picture_per_screen();
+    test_every_shape_screens();
     test_small_levels_in_the_application();
     test_margin_and_pages_in_match();
     test_options_dim(arc);

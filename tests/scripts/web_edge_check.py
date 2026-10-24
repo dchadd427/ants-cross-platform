@@ -434,7 +434,7 @@ def main():
                 expect_gone("margin, beside the box but 120 px below its bottom edge (one axis is far enough)", box, left - 40, bottom + 120)
 
                 # the page's own controls: a pointer over one is on the page, whatever its distance from the box (all of these are inside the margin)
-                for what, selector in (("the picture's selector 16:9", "#aspect-16-9"), ("the picture's selector Classic 4:3", "#aspect-4-3"), ("the mouse setting Locked", "#lock-on"),
+                for what, selector in (("the picture's dropdown", "#aspect-select"), ("the mouse setting Locked", "#lock-on"),
                                        ("the mouse setting Free", "#lock-off"), ("a link of the header above the game", "header a.btn"), ("the Fullscreen button of the header", "#fullscreen-btn")):
                     x, y = spot(selector)
                     dx = max(left - x, x - right, 0)

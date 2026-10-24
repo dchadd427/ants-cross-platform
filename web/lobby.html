@@ -180,7 +180,7 @@
     .bar nav { display: flex; gap: 6px 18px; flex-wrap: wrap; }
     .bar .ver { font-variant-numeric: tabular-nums; background: var(--edge); padding: 2px 10px; border-radius: 2px; color: #fff; }
     .live { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: #8b9a93; box-shadow: 0 0 0 1px #000; vertical-align: -1px; }
-    .shape { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 16px; color: var(--cream); }     /* the Picture row of the match column; in a window too narrow for the label and four buttons the label sits above them */
+    .shape { display: flex; flex-direction: column; align-items: stretch; gap: 6px; font-size: 16px; color: var(--cream); }     /* the Picture row of the match column: the label above the dropdown, the quiet line under it */
 
     .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 70; background: #0b1117; color: var(--cream); border: 3px solid var(--gold); border-radius: 6px; padding: 10px 18px; width: max-content; max-width: min(520px, 92vw); overflow-wrap: anywhere; pointer-events: none; text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
     .how { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .72); overflow: auto; }
@@ -266,19 +266,15 @@
     #stats-played:empty { display: none; }
     .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; } .bar .coffee { margin: 6px 0 0; text-align: center; } .bar .coffee a { display: inline-block; padding: 0; } .bar .coffee img { display: block; width: 217px; max-width: 100%; height: auto; border-radius: 6px; }                      /* the recording notice, for a visitor who is not asked for a name */
     .name-step-notice { margin-top: 8px; }
-    .shape .seg { position: relative; display: inline-flex; gap: 8px; }                     /* the picture's four shapes: radio buttons that look like the game's two-state buttons */
-    .shape .opt { position: relative; display: inline-flex; }                               /* a shape's button with its "fills your screen" tag */
-    .fit-tag { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 6px; white-space: nowrap; font-size: 13px; line-height: 1.2; color: #cfe3da; pointer-events: none; }
-    .fit-tag[hidden] { display: none; }
-    .shape.has-fit-tag { padding-bottom: 22px; }                                            /* room under the buttons for the tag (on the row, not on the footer) */
-    .shape .opt:last-child .fit-tag { left: auto; right: 0; transform: none; }              /* the last button's tag ends with the button: centred it would stick out of the bar on a narrow window */
-    @media (hover: none) { .fit-tag { display: none; } .shape.has-fit-tag { padding-bottom: 0; } }     /* the tag is for a computer with a mouse: a phone or a tablet has no use for it (after the rules above, which it overrides) */
-    .shape .seg input { position: absolute; left: 0; top: 0; opacity: 0; width: 1px; height: 1px; margin: 0; }
-    .shape .seg label { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 3px 10px; font-size: 14px; line-height: 1.1; cursor: pointer;
-        background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 2px 0 var(--shadow); }
-    .shape .seg label:hover { background-color: var(--teal-hi); }
-    .shape .seg input:checked + label { background: #102b25; color: #f6dc86; transform: translate(1px, 2px); box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16, 1px 1px 0 var(--shadow); }
-    .shape .seg input:focus-visible + label { outline: 3px solid var(--gold); outline-offset: 2px; }
+    .shape-box { position: relative; display: flex; }
+    .shape-box::after { content: ""; position: absolute; right: 16px; top: calc(50% - 6px); width: 7px; height: 7px; border: solid var(--cream); border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
+    .shape-select { appearance: none; -webkit-appearance: none; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 40px; padding: 6px 40px 6px 14px; font: inherit; font-size: 15px; line-height: 1.1; color: var(--cream); text-overflow: ellipsis; cursor: pointer;
+        background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 2px 0 var(--shadow); }     /* the picture's shapes: a native dropdown that the script fills from web/shapes.js's table */
+    .shape-select:hover { background-color: var(--teal-hi); }
+    .shape-select:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+    .shape-select option { color: var(--cream); background: #102b25; }
+    .fit-note { font-size: 13px; line-height: 1.2; color: #cfe3da; }                         /* the quiet line under the dropdown: which shape fills the computer's screen */
+    .fit-note[hidden] { display: none; }
     .live.on { background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
 
     /* a long room code or name in a strip never runs over the edge of a phone */
@@ -324,7 +320,7 @@
                 <button class="btn sm browse" type="button" id="browse" aria-haspopup="dialog" hidden>Browse all maps</button>
             </div>
             <div id="gtype"></div>
-            <div class="shape" id="shape-row"><span class="shape-label" id="shape-label">Picture</span> <span class="seg" role="radiogroup" aria-labelledby="shape-label"><span class="opt"><input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3" title="Classic 4:3: the original's picture (640 x 480)">Classic 4:3</label><span class="fit-tag" id="fit-4-3" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-10" value="16:10"><label for="aspect-16-10" title="16:10: laptops and 16:10 monitors (960 x 600)">16:10</label><span class="fit-tag" id="fit-16-10" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture (960 x 540)">16:9</label><span class="fit-tag" id="fit-16-9" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-21-9" value="21:9"><label for="aspect-21-9" title="21:9: ultrawide monitors (1260 x 540)">21:9</label><span class="fit-tag" id="fit-21-9" hidden>fills your screen</span></span></span></div>
+            <div class="shape" id="shape-row"><label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture"></select></span><span class="fit-note" id="fit-note" hidden></span></div>
             <div class="go">
                 <button class="btn big" type="button" id="start">START!</button>
                 <p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>
@@ -401,11 +397,10 @@
         // HELPERS_END
         // SHAPES_BEGIN (tests/scripts/web_aspect_key_check.js, web_lobby_check.js and web_rejoin_block_check.js run this block, with the AntsShapes of web/shapes.js)
         // THE SHAPES of the picture come from web/shapes.js, the one table of the pages (the game page and the settings menu read it too; the game's own is kAspectTable in include/ants_app/canvas_layout.hpp):
-        // their names, left to right as the Picture row shows them, the id that ends the ids of a button and its tag (aspect-16-10, fit-16-10) and the shape nearest to a screen (the footer tags
-        // it "fills your screen": AntsShapes.forScreen). isShape(text) says whether a text names one (an address, a remembered value), aspectQuery(shape) is the `&aspect=` part of a hand-off to the game (only a pick goes in it: see `pickedShape` below).
+        // the entries of the Picture dropdown (AntsShapes.fillSelect), the shape nearest to a screen and the line under the dropdown that says so (AntsShapes.fillsLine).
+        // isShape(text) says whether a text names one (an address, a remembered value), aspectQuery(shape) is the `&aspect=` part of a hand-off to the game (only a pick goes in it: see `pickedShape` below).
         function isShape(text) { return AntsShapes.parse(text) !== null; }
         function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }
-        function shapeId(shape) { return AntsShapes.rowOf(shape).id; }
         // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
@@ -476,12 +471,12 @@
         }
         // LOBBY_END
 
-        // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else the shape nearest to the screen (16:9 when it has no say). A hand-off to a game
+        // The shape of the games' pictures: ?aspect= and the name of a shape of the table (anything else is ignored), else what the selector of this page or of the game page remembered, else the shape nearest to the screen (16:9 when it has no say). A hand-off to a game
         // (START, Rejoin, a game for one) carries ?aspect= in the game's address only when the player picked (`pickedShape`): otherwise the game page works out the first visit's shape itself, when it loads.
         // The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the selectors write it. The key of the first versions of the pages was 'ants.aspect': it is NOT
         // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: a browser with no choice starts with the shape nearest to its screen (AntsShapes.firstVisit, which the
         // game page asks too; it is never stored) until its player picks a shape.
-        // The footer tags "fills your screen" under the shape nearest to the computer's screen (the CSS shows the tag only where there is a mouse).
+        // The quiet line under the Picture dropdown names the shape that fills the computer's screen ("16:10 fills your screen"; none when no shape does).
         // SHAPE_BEGIN
         var ASPECT_KEY = 'ants.aspect.v2';
         var aspect = '16:9';
@@ -494,13 +489,10 @@
             else if (isShape(remembered)) aspect = pickedShape = remembered;
             else aspect = AntsShapes.firstVisit(window);                          // (nothing chosen: the shape nearest to the screen, the game page's own answer; never stored)
             document.body.setAttribute('data-aspect', aspect);
-            $('aspect-' + shapeId(aspect)).checked = true;
-            var fits = null;
-            try { fits = AntsShapes.forScreen(window.screen.width, window.screen.height); } catch (e) { /* no screen to ask */ }
-            if (fits) {
-                $('fit-' + shapeId(fits)).hidden = false;
-                $('shape-row').classList.add('has-fit-tag');
-            }
+            AntsShapes.fillSelect($('aspect-select'), document).value = aspect;
+            var line = '';
+            try { line = AntsShapes.fillsLine(window.screen.width, window.screen.height); } catch (e) { /* no screen to ask */ }
+            if (line) { $('fit-note').textContent = line; $('fit-note').hidden = false; }
         })();
         // SHAPE_END
 
@@ -1365,20 +1357,16 @@
         }
 
         // SELECTOR_BEGIN
-        AntsShapes.names().forEach(function (shape) {
-            // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape. A press on the shape that is
-            // already checked (the first visit's) sends a click and no change: both events are listened to, so that it is a pick too
-            var press = function () {
-                if (!$('aspect-' + shapeId(shape)).checked) return;
-                var value = shape;
-                pickedShape = value;                                                              // (a press is a pick, the shape that is shown too)
-                if (value === aspect) { remember(ASPECT_KEY, value); return; }
-                aspect = value;
-                remember(ASPECT_KEY, value);
-                document.body.setAttribute('data-aspect', value);
-            };
-            $('aspect-' + shapeId(shape)).addEventListener('change', press);
-            $('aspect-' + shapeId(shape)).addEventListener('click', press);
+        // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape. The dropdown says a change only: choosing
+        // the entry that is shown (the first visit's) is no event, so that one is no pick
+        $('aspect-select').addEventListener('change', function () {
+            var value = $('aspect-select').value;
+            if (!isShape(value)) return;
+            pickedShape = value;                                                                  // (a choice is a pick, the shape that is shown too)
+            remember(ASPECT_KEY, value);
+            if (value === aspect) return;
+            aspect = value;
+            document.body.setAttribute('data-aspect', value);
         });
         // SELECTOR_END
 

@@ -197,7 +197,7 @@ class TheFiles(unittest.TestCase):
         self.assertIn("redraw(pop)", helpers)
         self.assertIn("redraw(flow)", helpers)
         self.assertIn("deathMap: window.AntsDeathMap && window.AntsDeathMap.create(", self.shell)
-        self.assertEqual(len(self.shell.splitlines()), 3966)                                    # (tools/check_hygiene.py: the game page may not grow)
+        self.assertEqual(len(self.shell.splitlines()), 3928)                                    # (tools/check_hygiene.py: the game page may not grow)
 
     def test_the_seat_colors_are_the_pages(self):
         for token in ("--c-green", "--c-red", "--c-blue", "--c-black"):

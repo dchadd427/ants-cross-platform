@@ -270,7 +270,7 @@ class TheLiveGlue(unittest.TestCase):
 
 class TheSpectatorsPicture(unittest.TestCase):
     """A spectator (a replay, a live match) chooses the picture's shape as a player does: the same remembered choice and ?aspect= (the shape nearest the screen without them), a Picture button in the replay bar that opens a small
-    window with the four shapes, and the bar as wide as the picture in every shape. The node checks run the page's own code (web_aspect_key_check.js: the shape that a spectator gets;
+    window with the dropdown of the shapes, and the bar as wide as the picture in every shape. The node checks run the page's own code (web_aspect_key_check.js: the shape that a spectator gets;
     web_picture_popover_check.js: the button); tests/scripts/web_aspect_check.py and web_live_check.py look at the real layout."""
     page = read("web", "shell.html")
     glue = page[page.index("<!-- BEGIN replay glue"):page.index("<!-- END replay glue")]
@@ -282,27 +282,24 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertNotIn("ANTS_REPLAY_MODE", block)                                                          # (the choice is the page's for every address)
         self.assertIn("var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window));", block)        # (the same first visit as a player: the shape nearest the screen)
 
-    def test_the_picture_button_and_its_window_are_in_the_bar_with_the_four_shapes(self):
+    def test_the_picture_button_and_its_window_are_in_the_bar_with_the_dropdown_of_the_shapes(self):
         bar = self.page[self.page.index('<div class="rbar rep-only" id="rbar">'):self.page.index('id="b-tab"')]
         self.assertRegex(bar, r'<div class="picwrap" id="picwrap"><button class="btn sm" type="button" id="picbtn" aria-haspopup="true" aria-expanded="false" aria-controls="picpop"[^>]*>Picture &#9652;</button>')
         self.assertLess(bar.index('id="picwrap"'), bar.index('id="b-fsx"'))
         self.assertGreater(bar.index('id="picwrap"'), bar.index('id="speed"'))
         pop = bar[bar.index('id="picpop"'):bar.index('id="b-fsx"')]
         self.assertRegex(pop, r'^id="picpop" role="group" aria-labelledby="picpop-h" hidden>')
-        self.assertIn('role="radiogroup"', pop)
-        shapes = re.findall(r'<button type="button" role="radio" data-aspect="([^"]+)" aria-checked="(true|false)" title="([^"]+)">([^<]+)</button><span class="fit-tag" hidden>fills your screen</span>', pop)
-        self.assertEqual(shapes, [("4:3", "false", "Classic 4:3: the original's picture (640 x 480)", "Classic 4:3"), ("16:10", "false", "16:10: laptops and 16:10 monitors (960 x 600)", "16:10"),
-                                  ("16:9", "true", "16:9: the wide picture (960 x 540)", "16:9"), ("21:9", "false", "21:9: ultrawide monitors (1260 x 540)", "21:9")])
-        self.assertNotRegex(pop, r'\bid="aspect-')                                                          # (the player's buttons keep their ids: one of each on the page)
-        self.assertEqual(len(re.findall(r'\bid="aspect-(?:4-3|16-10|16-9|21-9)"', self.page)), 4)
+        self.assertEqual(re.findall(r'<select class="pick-select" id="pic-select" aria-labelledby="picpop-h" aria-describedby="pic-note" title="[^"]+"></select><span class="fit-note" id="pic-note" hidden></span>', pop).__len__(), 1)
+        self.assertNotIn('role="radio"', pop)                                                               # (no button for a shape: the dropdown is filled from web/shapes.js)
+        self.assertNotRegex(self.page, r'\bid="aspect-\d')                                                   # (no button of a shape on the page at all)
 
     def test_the_window_uses_the_pages_own_selector_and_remembers_the_choice(self):
-        self.assertIn("document.querySelectorAll('.seg button[data-aspect]').forEach(function (button) {\n                button.addEventListener('click'", self.page)   # (every shape button of the page, the bar's too)
-        self.assertIn("remember(value);", self.page)
+        self.assertIn("document.querySelectorAll('.pick-select').forEach(function (select) {\n                select.addEventListener('change', function () { antsPickShape(select.value); });", self.page)   # (every dropdown of the page, the bar's too)
+        self.assertIn("window.localStorage.setItem(ANTS_ASPECT_KEY, value);", self.page)
         self.assertIn("body.replay .view-bar", self.page)
         self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's row stays hidden here)
         self.assertEqual(len(re.findall(r"\n\s*\.picpop \{", self.page)), 1)
-        self.assertNotRegex(self.page, r"(?m)^\s*\.seg \{[^}]*picpop")                                       # (no new style for the buttons: the page's .seg)
+        self.assertEqual(len(re.findall(r"\n\s*\.pick-select \{", self.page)), 1)                           # (one style for the dropdown, the player's and the bar's)
 
     def test_the_bar_is_as_wide_as_the_picture_in_every_shape(self):
         """The bar reads the same custom properties as the stage (--ar-w, --ar-h, --stage-max: 16:9 until the script sets the shape's own from web/shapes.js, ANTS_PAGE.slotVars, which tests/scripts/web_aspect_key_check.js runs)."""
@@ -326,11 +323,12 @@ class TheSpectatorsPicture(unittest.TestCase):
     def test_the_window_stays_on_a_narrow_screen(self):
         rule = re.search(r"\n\s*\.picpop \{([^}]*)\}", self.page).group(1)
         self.assertIn("box-sizing: border-box; width: max-content; max-width: calc(100vw - 44px);", rule)                    # (one line when it fits, never wider than the screen less a gutter at each side)
-        self.assertIn(".picpop .seg { flex-wrap: wrap; }", self.page)                                        # (the four shapes take two lines under about 380 px)
+        self.assertIn(".picpop .pick-select { width: min(300px, calc(100vw - 88px)); }", self.page)             # (the dropdown narrows under about 390 px)
         self.assertIn("right: 0;", rule)
 
-    def test_the_arrows_choose_a_shape_and_the_keys_are_not_overstated(self):
-        self.assertIn("['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key)", self.glue)
+    def test_the_arrows_are_the_dropdowns_own_and_the_game_does_not_get_them(self):
+        self.assertNotIn("['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key)", self.glue)        # (the window had its own arrows for the four buttons: a native dropdown has them)
+        self.assertIn("['keydown', 'keypress', 'keyup'].forEach(function (name) { select.addEventListener(name, function (e) { e.stopPropagation(); }); });", self.page)
 
     def test_the_bar_stays_while_the_window_is_open_and_esc_is_the_windows(self):
         self.assertIn("if (dragging || !$('picpop').hidden) {", self.glue)

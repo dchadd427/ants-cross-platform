@@ -314,7 +314,7 @@ void forget_pointer(Application& app) {
 }
 
 struct Match {
-    Match() : rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true), ok(rig.ok) {
+    explicit Match(Aspect aspect = Aspect::Wide16x9) : rig(aspect, 1.0f, false, std::string(), true, true), ok(rig.ok) {
         if (ok) scene = std::make_unique<Scene>(rig.app);
     }
     AppRig rig;
@@ -2378,7 +2378,8 @@ void test_slop() {
     QuietStdout quiet;
     SDL_Init(SDL_INIT_VIDEO);
     for (const auto& c : std::vector<std::tuple<Aspect, int, int, double>>{{Aspect::Wide16x9, 960, 540, 8.0}, {Aspect::Wide16x9, 1920, 1080, 4.0}, {Aspect::Wide16x9, 480, 270, 16.0},
-                                                                            {Aspect::Classic4x3, 640, 480, 8.0}, {Aspect::Classic4x3, 1280, 960, 4.0}}) {
+                                                                            {Aspect::Classic4x3, 640, 480, 8.0}, {Aspect::Classic4x3, 1280, 960, 4.0},
+                                                                            {Aspect::Wide3x2, 960, 640, 8.0}, {Aspect::Wide20x9, 1200, 540, 8.0}, {Aspect::Super32x9, 1920, 540, 8.0}, {Aspect::Super32x9, 3840, 1080, 4.0}, {Aspect::Super32x9, 960, 270, 16.0}}) {
         ApplicationConfig cfg = base_config(std::get<0>(c));
         cfg.window_w = std::get<1>(c);
         cfg.window_h = std::get<2>(c);
@@ -2397,6 +2398,53 @@ void test_slop() {
             hand.up(1, Pt{40, 40});
             hand.frame();
         }
+    }
+}
+
+void test_every_shape() {
+    group("shapes", "the fingers work in the canvas of every shape of the table: a tap selects and orders, two fingers move the view, the last pixels of the picture are reachable");
+    for (const Aspect aspect : kAllAspects) {
+        Match m(aspect);
+        const std::string name = aspect_name(aspect);
+        if (!m.ok) { check(false, name + ": the match is up"); continue; }
+        Application& app = m.app();
+        Scene& s = *m.scene;
+        Hand hand(app);
+        check(app.aspect() == aspect && app.layout().view().w == ScreenLayout::with_size(canvas_width_of(aspect), canvas_height_of(aspect)).view().w, name + ": the match has the shape's own view (" + std::to_string(app.layout().view().w) + " x " + std::to_string(app.layout().view().h) + ")");
+        s.clear();
+        hand.tap(s.on_ant(s.worker));
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker} && s.sink.commands.empty(), name + ": a tap on the worker selects it");
+        const Pt g = s.ground(2, 1);
+        hand.tap(g);
+        const sim::TileCoord t = s.tile_under(g);
+        check(s.sink.commands.size() == 1 && s.sink.commands[0].type == sim::CommandType::GroupMove && s.sink.commands[0].tile_x == t.x && s.sink.commands[0].tile_y == t.y, name + ": a tap on the ground orders a move to the tile under the finger");
+        // two fingers at the far right of the view (the 32:9 view is 1722 px wide: the right end is far from the left)
+        ViewportCamera& camera = app.renderer().camera();
+        const LayoutRect view = app.layout().view();
+        camera.set_origin((static_cast<double>(app.sim().grid().width()) * TILE_SIZE - view.w) / 2.0, 500.0, app.sim().grid().width(), app.sim().grid().height());      // (the middle of the origins that the view has: it can go either way)
+        const int32_t before_x = camera.origin_screen_x();
+        const Pt a{view.right() - 120, view.y + 200};
+        const Pt b{view.right() - 20, view.y + 200};
+        hand.down(1, a);
+        hand.down(2, b);
+        hand.frame();
+        for (int i = 1; i <= 5; ++i) {
+            hand.wait(16);
+            hand.move(1, Pt{a.x - 6 * i, a.y});
+            hand.move(2, Pt{b.x - 6 * i, b.y});
+            hand.frame();
+        }
+        check(std::abs(camera.origin_screen_x() - before_x - 30) <= 1, name + ": two fingers at the right end of the view move it by the distance they moved (" + std::to_string(camera.origin_screen_x() - before_x) + ")");
+        hand.up(1, Pt{a.x - 30, a.y});
+        hand.up(2, Pt{b.x - 30, b.y});
+        hand.frame();
+        // a finger in the bar right of the picture of a window of another shape is at the picture's last pixel (the model: the last pixel of the canvas is reachable)
+        hand.down(1, Pt{canvas_width_of(aspect) + 40, canvas_height_of(aspect) + 40});
+        hand.frame();
+        double fx = 0.0, fy = 0.0;
+        check(app.touch().primary_point(fx, fy) && fx > canvas_width_of(aspect) - 1.0 && fx < canvas_width_of(aspect) && fy > canvas_height_of(aspect) - 1.0 && fy < canvas_height_of(aspect), name + ": a finger below and right of the picture is at its last pixel");
+        hand.up(1, Pt{canvas_width_of(aspect) + 40, canvas_height_of(aspect) + 40});
+        hand.frame();
     }
 }
 
@@ -2423,6 +2471,7 @@ int main(int argc, char* argv[]) {
     test_letterbox();
     test_inset_picture();
     test_slop();
+    test_every_shape();
     std::printf("\ntouch application: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
