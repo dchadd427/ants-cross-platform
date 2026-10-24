@@ -17,6 +17,8 @@
 //   F  a toy that is not in the sheet is fetched alone from /asset_catalog/sprites/ the first time, drawn when it is there, and a 404 draws nothing and breaks nothing
 //   G  the starting ants: the ant and a ring in the team's color at 12 pixels a cell and up, a dot below; the ghost of a bigger object is see-through
 //   H  chips: a picture fitted in a canvas for a ground tile and for an object, nothing for a tile that has none
+//   I  the open map's dictionary: a tile is the picture of the animation that its entry names (as the game's renderer does), "." draws nothing, a changed name paints the layer again, the flat colors, the
+//      ghost of a bigger object, a plant, a pile and a thing picked up, and the ground tile of the edges' before and after (tests/scripts/web_mapmaker_names_check.js holds the rule to the 540 maps)
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -115,6 +117,7 @@ async function ready(opts) {
 }
 
 function treasure() { return File.parse(new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', 'TREASURE.LVL')))); }
+function setName(f, id, name) { const at = f.dictAt + 2 + 11 * id; for (let k = 0; k < 11; k++) f.bytes[at + k] = k < name.length ? name.charCodeAt(k) : 0; }
 function put2(f, r, c, id, flags) { const at = f.layer2 + 6 * (r * f.columns + c); f.bytes[at] = id & 255; f.bytes[at + 1] = id >> 8; f.bytes[at + 2] = flags; f.bytes[at + 3] = 0; }
 function tile1(f, r, c) { const at = f.layer1 + 6 * (r * f.columns + c); return f.bytes[at] | (f.bytes[at + 1] << 8); }
 
@@ -324,6 +327,7 @@ async function caseE() {
 
 async function caseF() {
     const rig = await ready(), f = treasure(), w = 600, h = 400;
+    setName(f, 347, 'chicken');            // (Treasure's dictionary has "." there: the game would draw nothing)
     put2(f, 20, 25, 347, 1);               // chicken: a toy that is not in the sheet
     put2(f, 21, 25, 99999 & 0xFFFF, 1);    // (nothing: no picture, not in the index)
     const view = { scale: 20, cx: 30, cy: 24 };
@@ -343,6 +347,7 @@ async function caseF() {
     }
     // a 404: nothing is drawn, nothing breaks, and it is not asked for again
     const lost = await ready({ farMissing: true }), g = treasure();
+    setName(g, 347, 'chicken');
     put2(g, 20, 25, 347, 1);
     frame(lost, g, view, w, h);
     lost.env.settle();
@@ -404,8 +409,104 @@ async function caseH() {
     check(cold.chip({ style: {}, appendChild() {} }, false, 485, 30) === false, 'and none before the atlas is in');
 }
 
+async function caseI() {
+    const rig = await ready(), f = treasure(), w = 600, h = 400, T = 20, k = T / 32, items = INDEX.objects.items, view = { scale: T, cx: 30, cy: 30 };
+    const x0 = Math.round(w / 2 - 30 * T), y0 = Math.round(h / 2 - 30 * T), at = (c, it, r2, c2) => c.a[4] === Math.round(x0 + c2 * T + it[4] * k) && c.a[5] === Math.round(y0 + r2 * T + it[5] * k);
+    const objectsAt = (calls, it) => calls.filter((c) => isObject(c) && c.a[0] === it[0] && c.a[1] === it[1] && c.a[2] === it[2]);
+    check(INDEX.names[339] === 'jacks4' && INDEX.names[302] === 'smlrock1' && !INDEX.objects.items['339'] && !!INDEX.far['339'], 'jacks4 is animation 339, fetched alone; smlrock1 (302) is in the sheet');
+    // an entry that names ANOTHER animation: the picture of that one, at the cell
+    setName(f, 340, 'smlrock1');
+    put2(f, 20, 25, 340, 1);
+    const named = frame(rig, f, view, w, h);
+    check(objectsAt(named.calls, items['302']).some((c) => at(c, items['302'], 20, 25)), 'a tile whose entry is "smlrock1" is the small rock\'s picture (302), not the picture of its own number');
+    check(!objectsAt(named.calls, items['340']).some((c) => at(c, items['340'], 20, 25)), 'and not the picture of its own number (340, the pink eraser)');
+    // the name that gives a picture that has to be fetched: jacks4 (339) for the number 340
+    setName(f, 340, 'jacks4');
+    const asked = frame(rig, f, view, w, h);
+    const jacksUrl = '/asset_catalog/sprites/sprite_' + ('000' + INDEX.far['339'][0]).slice(-4) + '.png';
+    check(rig.env.images.some((i) => i.url === jacksUrl) && !objectsAt(asked.calls, items['340']).some((c) => at(c, items['340'], 20, 25)), 'the entry "jacks4" asks for the sprite of jacks4 (339), and draws not the pink eraser (340) of the sheet');
+    rig.env.settle();
+    const jacks = frame(rig, f, view, w, h).calls.filter((c) => c.op === 'drawImage' && c.img && c.img.url === jacksUrl);
+    check(jacks.length === 1 && jacks[0].a[4] === Math.round(x0 + 25 * T + INDEX.far['339'][1] * k) && jacks[0].a[5] === Math.round(y0 + 20 * T + INDEX.far['339'][2] * k), 'and draws it at the cell\'s corner plus its own offset');
+    // "." draws nothing: the same tile with an empty entry; a tile outside the dictionary draws nothing
+    setName(f, 340, '.');
+    const none = frame(rig, f, view, w, h);
+    check(!none.calls.some((c) => c.op === 'drawImage' && c.img && c.img.url === jacksUrl) && !none.calls.some((c) => isObject(c) && at(c, items['302'], 20, 25)), 'an entry of "." draws nothing');
+    put2(f, 20, 25, 2000, 1);
+    check(frame(rig, f, view, w, h).calls.filter((c) => isObject(c) && at(c, items['302'], 20, 25)).length === 0, 'a number beyond the dictionary draws nothing');
+    put2(f, 20, 25, EMPTY2, 0);
+    // the ids that the game draws from the number: a power-up and a bomb whose entries are "."
+    setName(f, 62, '.'); setName(f, 129, '.');
+    put2(f, 20, 25, 62, 1); put2(f, 21, 25, 129, 1);
+    const byId = frame(rig, f, view, w, h);
+    check(objectsAt(byId.calls, items['62']).some((c) => at(c, items['62'], 20, 25)) && objectsAt(byId.calls, items['129']).some((c) => at(c, items['129'], 21, 25)), 'a power-up and an original bomb are drawn from their numbers, whatever their entries say');
+    put2(f, 20, 25, EMPTY2, 0); put2(f, 21, 25, EMPTY2, 0);
+    // the ground: an entry that is "." leaves the cell black, an entry that names another ground tile shows that tile
+    const vis = View.visible(view, f, w, h), cellsInView = (vis.r1 - vis.r0 + 1) * (vis.c1 - vis.c0 + 1), counts = {};
+    for (let r = vis.r0; r <= vis.r1; r++) for (let c = vis.c0; c <= vis.c1; c++) counts[tile1(f, r, c)] = (counts[tile1(f, r, c)] || 0) + 1;
+    const commonest = Object.keys(counts).map(Number).sort((a, b) => counts[b] - counts[a])[0], group = (calls) => calls.filter((c) => isTile(c, w, h)).length;
+    check(commonest >= 431 && counts[commonest] > 20, 'a tile in the view that many cells have: ' + commonest + ' (' + counts[commonest] + ' cells)');
+    const before = frame(rig, f, view, w, h);
+    check(group(before.calls) === 0, 'the same view again paints no cell (the layer is kept)');
+    setName(f, commonest, '.');
+    const blank = frame(rig, f, view, w, h);
+    check(group(blank.calls) === cellsInView - counts[commonest], 'a name written in place paints the whole layer again, and the ' + counts[commonest] + ' cells of the tile whose entry is "." are not drawn from the sheet (' + group(blank.calls) + ' of ' + cellsInView + ')');
+    check(blank.calls.filter((c) => c.op === 'fillRect' && c.fill === Tiles.BACK && c.owner !== blank.ctx.owner).length >= counts[commonest], 'they are the black that the game leaves');
+    const other = commonest === 485 ? 486 : 485;
+    setName(f, commonest, INDEX.names[other]);
+    const shown = frame(rig, f, view, w, h), g = INDEX.ground, wanted = [((other - g.first) % g.columns) * T, Math.floor((other - g.first) / g.columns) * T];
+    const same = shown.calls.filter((c) => isTile(c, w, h) && c.a[0] === wanted[0] && c.a[1] === wanted[1]).length;
+    check(same >= counts[commonest], 'an entry that names another ground tile (' + INDEX.names[other] + ') shows that tile\'s picture in its ' + counts[commonest] + ' cells (' + same + ' with that picture)');
+    setName(f, commonest, 'smlrock1');
+    const rocks = frame(rig, f, view, w, h);
+    check(objectsAt(rocks.calls, items['302']).length >= counts[commonest] && rocks.calls.some((c) => c.op === 'fillRect' && c.fill === Tiles.BACK && c.owner !== rocks.ctx.owner), 'an entry that names an object (smlrock1) on a ground cell draws that picture over the black, in each of the ' + counts[commonest] + ' cells');
+    setName(f, commonest, INDEX.names[commonest]);
+    check(group(frame(rig, f, view, w, h).calls) === cellsInView, 'the name put back paints the whole layer again');
+    // the flat colors follow the names
+    setName(f, 340, 'smlrock1');
+    put2(f, 20, 25, 340, 1);
+    const flat = frame(rig, f, { scale: 6, cx: 30, cy: 30 }, w, h), s6 = 6, fx = Math.round(w / 2 - 30 * s6 + 25 * s6), fy = Math.round(h / 2 - 30 * s6 + 20 * s6);
+    check(flat.calls.some((c) => c.op === 'fillRect' && c.a[0] === fx && c.a[1] === fy && c.fill === Tiles.css(0, 302, null)), 'at 6 pixels a cell the rectangle of a tile named smlrock1 is that rock\'s color: ' + Tiles.css(0, 302, null));
+    const rockColor = Tiles.css(0, 302, null), rockPacked = Tiles.hexToPacked(rockColor), scratch = rig.env.makeCanvas(), small = { scale: 3, cx: 30, cy: 30 };
+    View.draw(rig.env.makeCanvas().getContext('2d'), small, f, w, h, { scratch, sprites: null });
+    const kept = scratch.keptImage, px = new Uint32Array(kept.data.buffer), pxAt = (r, c) => px[Math.round(h / 2 - 30 * 3 + r * 3 + 1) * kept.width + Math.round(w / 2 - 30 * 3 + c * 3 + 1)];
+    check(pxAt(20, 25) === rockPacked, 'under 5 pixels a cell the pixel of a tile named smlrock1 is that rock\'s color');
+    put2(f, 22, 25, 340, 1);
+    check(View.redrawPixelCell(small, f, w, h, 22, 25, scratch, { x0: 1e9, y0: 1e9, x1: -1, y1: -1 }) === true && pxAt(22, 25) === rockPacked, 'and the cell that a stroke changed is painted again with it');
+    const one = rig.env.makeCanvas().getContext('2d');
+    rig.env.log.length = 0;
+    View.redrawCell(one, { scale: 6, cx: 30, cy: 30 }, f, w, h, 22, 25);
+    check(rig.env.log.some((c) => c.op === 'fillRect' && c.fill === rockColor), 'at 6 pixels a cell that a stroke changed is painted again with its color by name');
+    put2(f, 22, 25, EMPTY2, 0);
+    // the ghost: a plant is its number; a tile that is put is named by the tool when its entry is "."; a thing that is picked up keeps its entry; a pile is its stage
+    const ghosts = (id, row, column, file, kind) => { const gx = rig.env.makeCanvas().getContext('2d'); rig.env.log.length = 0; rig.sprites.ghost(gx, view, w, h, id, row, column, file, kind); return rig.env.log.filter((c) => c.op === 'drawImage' && c.alpha < 1); };
+    setName(f, 340, 'smlrock1'); setName(f, 346, '.'); setName(f, 410, 'smlrock1');
+    check(ghosts(340, 30, 30, f).length === 1 && ghosts(340, 30, 30, f)[0].a[2] === items['302'][2] && ghosts(340, 30, 30, f)[0].a[0] === items['302'][0], 'the ghost of a tile that is about to be put shows the picture of its entry (smlrock1: the small rock)');
+    check(ghosts(346, 30, 30, f).length === 1 && ghosts(346, 30, 30, f)[0].a[0] === items['346'][0], 'an entry of "." is named by the tool when the tile goes down: its picture is the number\'s');
+    check(ghosts(346, 30, 30, f, 'obj').length === 0, 'a thing that is picked up and put down again keeps its entry: "." is nothing');
+    check(ghosts(410, 30, 30, f, 'plant').length === 1 && ghosts(410, 30, 30, f, 'plant')[0].a[0] === items['410'][0] && ghosts(410, 30, 30, f).length === 1 && ghosts(410, 30, 30, f)[0].a[0] === items['410'][0], 'a plant is its number (the game draws plants by number), put or picked up');
+    check(ghosts(340, 30, 30, f, 'pile').length === 1 && ghosts(340, 30, 30, f, 'pile')[0].a[0] === items['302'][0], 'a pile\'s stage tile is the name\'s animation too');
+    setName(f, 350, 'zzz');
+    check(ghosts(350, 30, 30, f, 'pile').length === 1 && ghosts(350, 30, 30, f, 'pile')[0].a[0] === items['350'][0] && ghosts(350, 30, 30, f).length === 0, 'a stage whose entry gives no animation is its number, but a tile that is put with such an entry stays nothing');
+    check(ghosts(340, 30, 30, null).length === 1 && ghosts(340, 30, 30, null)[0].a[0] === items['340'][0], 'with no map the number is the picture');
+    // the ground tile of the before and after of Fix edges
+    const cx = rig.env.makeCanvas().getContext('2d');
+    rig.env.log.length = 0;
+    setName(f, 500, '.');
+    check(rig.sprites.ground(cx, 500, 0, 0, 10, f, false) === true && rig.env.log.some((c) => c.op === 'fillRect' && c.fill === Tiles.BACK) && !rig.env.log.some((c) => c.op === 'drawImage'), 'a cell of the map whose entry is "." is black in the before picture');
+    rig.env.log.length = 0;
+    check(rig.sprites.ground(cx, 500, 0, 0, 10, f, true) === true && rig.env.log.some((c) => c.op === 'drawImage'), 'and a tile that is put there takes the number\'s picture in the after picture (the tool names it)');
+    rig.env.log.length = 0;
+    check(rig.sprites.ground(cx, 500, 0, 0, 10) === true && rig.env.log.some((c) => c.op === 'drawImage'), 'with no map the number is the picture');
+    setName(f, 500, INDEX.names[501]);
+    rig.env.log.length = 0;
+    rig.sprites.ground(cx, 500, 0, 0, 10, f, false);
+    const g501 = rig.env.log.filter((c) => c.op === 'drawImage').pop();
+    check(!!g501 && g501.a[0] === ((501 - 431) % 16) * 32 && g501.a[1] === Math.floor((501 - 431) / 16) * 32, 'a cell whose entry names another ground tile shows that tile');
+}
+
 (async function () {
-    for (const [name, fn] of [['A loading', caseA], ['B a whole frame', caseB], ['C pictures and flat colors', caseC], ['D the layer kept between frames', caseD], ['E the zoom', caseE], ['F a toy that is fetched alone', caseF], ['G the ants and the ghost', caseG], ['H chips', caseH]]) {
+    for (const [name, fn] of [['A loading', caseA], ['B a whole frame', caseB], ['C pictures and flat colors', caseC], ['D the layer kept between frames', caseD], ['E the zoom', caseE], ['F a toy that is fetched alone', caseF], ['G the ants and the ghost', caseG], ['H chips', caseH], ['I the open map\'s dictionary', caseI]]) {
         const before = failures;
         console.log('RUNNING: ' + name + ' ...');
         try { await fn(); } catch (e) { failures++; console.log('    CRASHED: ' + (e && e.stack || e)); }

@@ -46,6 +46,7 @@ BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check
 OBJECTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_objects_check.js")
 GROUND_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ground_check.js")
 SPRITES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_sprites_check.js")
+NAMES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_names_check.js")
 EDGES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edges_check.js")
 ANTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ants_check.js")
 PICKUP_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_pickup_check.js")
@@ -1127,8 +1128,42 @@ class TheGroundAndTheSprites(unittest.TestCase):
         done = run_check(script=SPRITES_CHECK, extra=["--atlas", self.atlas])
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
-        for part in ("A loading", "B a whole frame", "C pictures and flat colors", "D the layer kept between frames", "E the zoom", "F a toy that is fetched alone", "G the ants and the ghost", "H chips"):
+        for part in ("A loading", "B a whole frame", "C pictures and flat colors", "D the layer kept between frames", "E the zoom", "F a toy that is fetched alone", "G the ants and the ghost", "H chips", "I the open map's dictionary"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_pictures_follow_the_open_maps_dictionary_as_the_games_renderer_does(self):
+        """every cell of the 540 maps against an oracle that is written again from src/ants_app/renderer.cpp (web_mapmaker_names_check.js): the pictures by number were wrong in thousands of cells, by the dictionary in none"""
+        done = run_check(script=NAMES_CHECK, extra=["--atlas", self.atlas])
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the rule on made-up dictionaries", "B the atlas names and pictures", "C a frame that is kept", "D the library against an oracle of the renderer"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+        self.assertRegex(done.stdout, r"by the dictionary now 0 cells in 0 maps")
+
+    def test_the_checks_can_fail_on_the_broken_copies_of_the_names_rule(self):
+        """tests/data/mapmaker_names_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check named for it"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_names_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 45)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        checks = {"web_mapmaker_names_check": NAMES_CHECK, "web_mapmaker_sprites_check": SPRITES_CHECK}
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    script = [v for k, v in checks.items() if k in m["test"]][0]
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, script, ["--atlas", self.atlas])
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
     def test_the_checks_can_fail_on_the_broken_copies_of_the_ground_the_tools_and_the_sprites(self):
         """tests/data/mapmaker_sprites_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check named for it"""

@@ -59,7 +59,7 @@
 
         // The whole frame can be skipped for a few cells only when the picture is the one of the last whole frame: the same view, the same size, the same map
         function sameAsFull() {
-            return !!full && full.file === file && full.cx === view.cx && full.cy === view.cy && full.scale === view.scale && full.w === w && full.h === h && full.dpr === dpr;
+            return !!full && full.file === file && full.stamp === View.stamp(file) && full.cx === view.cx && full.cy === view.cy && full.scale === view.scale && full.w === w && full.h === h && full.dpr === dpr;
         }
 
         // The cells to paint again after the last frame: the ones that changed, and those under the marked square before and after (its lines reach a little past it)
@@ -94,7 +94,7 @@
                 kind = 'cells';
             } else {
                 View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1, door: doorNow(), shape: shape, sprites: sprites, dpr: dpr, ghost: ghostNow(cell) });
-                full = { file: file, cx: view.cx, cy: view.cy, scale: view.scale, w: w, h: h, dpr: dpr };
+                full = { file: file, stamp: View.stamp(file), cx: view.cx, cy: view.cy, scale: view.scale, w: w, h: h, dpr: dpr };
                 count = -1;
             }
             dirty = []; lastRect = rect;
