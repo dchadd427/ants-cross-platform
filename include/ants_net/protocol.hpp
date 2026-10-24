@@ -152,6 +152,9 @@ inline constexpr size_t kMaxMapNameChars = 64;
 /// community's names hold spaces, '!', '~', '#', '&', ... and even ".."), none of `/ \ : * ? " < > |` (so a name can never name a path), not starting with '.',
 /// ending in ".lvl" or ".LVL"
 bool valid_map_name(const std::string& name) noexcept;
+/// FNV-1a 64 over `size` bytes, continuing from `seed` (the start value by default): the identity of a map file that the start barrier, the replay's head and the map store compare. net::hash_file is this over a file.
+inline constexpr uint64_t kFnv64Basis = 0xcbf29ce484222325ULL;
+uint64_t hash_bytes(const uint8_t* data, size_t size, uint64_t seed = kFnv64Basis) noexcept;
 /// A game mode by the word that the control interface, the replay list and the command line use (sim::game_mode_name: "highest-score", "187"): true and `mode` set when the text is exactly one of them
 bool parse_game_mode_name(const std::string& text, uint8_t& mode) noexcept;
 /// A room code (a server hosts many rooms): empty = no room (a LAN or direct host), else 1 .. kMaxRoomCodeChars of letters, digits, '_' and '-'

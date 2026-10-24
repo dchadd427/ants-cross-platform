@@ -83,6 +83,36 @@ bool load_map_file(const Header& head, const std::string& path, assets::LevelDat
     return true;
 }
 
+bool load_embedded_map(const Replay& replay, assets::LevelData& level, std::string& error) {
+    error.clear();
+    const std::vector<uint8_t>& bytes = replay.embedded_map;
+    if (bytes.empty()) {
+        error = "the replay carries no map";
+        return false;
+    }
+    if (bytes.size() > kMaxEmbeddedMapBytes) {                    // (decode() refuses it; a replay made by hand could hold it)
+        error = "the map in the replay is longer than a map can be";
+        return false;
+    }
+    const uint64_t hash = net::hash_bytes(bytes.data(), bytes.size());
+    if (hash != replay.head.map_hash) {
+        error = "the map in the replay is not the file that the match was played on (its hash is " + hex64(hash) + ", the head's is " + hex64(replay.head.map_hash) + ")";
+        return false;
+    }
+    assets::LevelValidation verdict;
+    if (!level.load_from_memory(bytes.data(), bytes.size(), &verdict, assets::LevelLimits::for_play_extended())) {
+        error = "the map in the replay cannot be loaded" + (verdict.first_fatal() ? ": " + verdict.reason() : std::string());
+        return false;
+    }
+    return true;
+}
+
+bool load_map_or_embedded(const Replay& replay, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error) {
+    if (load_map(replay.head, dirs, level, error)) return true;
+    if (replay.embedded_map.empty()) return false;                // (the folder's own words)
+    return load_embedded_map(replay, level, error);
+}
+
 std::string rules_refusal(const Header& head) {
     const uint16_t needs = sim_rules_of(head);
     const std::string made_by = head.game_version.empty() ? std::string("a game of unknown version") : head.game_version;

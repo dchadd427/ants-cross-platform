@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -107,6 +108,11 @@ struct Map {
 bool load_shipped(const std::string& name, Map& m) {
     m.path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + name + ".LVL";
     return m.level.load_from_file(m.path) && net::hash_file(m.path, m.hash);
+}
+
+std::vector<uint8_t> read_bytes(const fs::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
 Header head_for(const Map& m, const std::string& name, uint32_t seed, uint8_t roster) {
@@ -361,7 +367,7 @@ struct SnapshotTap {
 using OrdersFn = std::vector<Command> (*)(const sim::SimulationEngine&, uint32_t);
 
 Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster = 0x0F, const sim::StartTeams& teams = sim::StartTeams{}, bool fog = false, SnapshotTap* tap = nullptr, uint8_t mode = 0,
-                     OrdersFn orders = nullptr) {
+                     OrdersFn orders = nullptr, const std::vector<uint8_t>* embed = nullptr) {
     Played p;
     sim::SimulationEngine engine;
     engine.set_fog_of_war_enabled(fog);
@@ -373,6 +379,7 @@ Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster
     head.fog = fog;
     head.set_mode(mode);
     Recorder rec(head);
+    if (embed != nullptr && !rec.set_embedded_map(*embed)) std::cout << "\n    set_embedded_map refused the map\n";
     for (uint32_t turn = 0; turn < turns; ++turn) {
         std::vector<Command> commands = orders != nullptr ? orders(engine, turn) : orders_at(engine, turn);
         sim::canonical_order(commands);                                      // (a turn of a lock-step match is in canonical order: the same file whichever way it is fed)
@@ -750,11 +757,16 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("RP1.9 A File Over 1 MiB Is Refused At Once, A Chunk That Claims Four Billion Bytes Does Not Allocate Them, And Random Bytes Are Never A Replay") {
+    TEST_CASE("RP1.9 A File Over The Longest A File Can Be (A Match And Its Map) Is Refused At Once, A Match Over 1 MiB Is Refused Whatever Its Map, A Chunk That Claims Four Billion Bytes Does Not Allocate Them, And Random Bytes Are Never A Replay") {
         std::vector<uint8_t> big = encoded(synthetic());
-        big.resize(kMaxFileBytes + 1, 0);
+        big.resize(kMaxFileBytesWithMap + 1, 0);
         Decoded d = decoded(big);
         ASSERT_TRUE(!d.ok && contains(d.error, "KiB"));
+        big = encoded(synthetic());
+        big.resize(kMaxFileBytes + 1, 0);                                          // (within what a file with a map may be: read, and then the zeros are no chunk)
+        d = decoded(big);
+        ASSERT_FALSE(d.ok);
+        ASSERT_FALSE(d.error.empty());
         std::vector<uint8_t> liar = magic_bytes();
         liar.insert(liar.end(), {'H', 'E', 'A', 'D', 0xFF, 0xFF, 0xFF, 0xFF, 1, 2, 3, 4, 5, 6, 7, 8});
         d = decoded(liar);
@@ -1406,6 +1418,428 @@ int main(int argc, char* argv[]) {
         h.map_hash = broken_hash;
         ASSERT_FALSE(load_map(h, dir.path.string(), level, error));
         ASSERT_TRUE(contains(error, "cannot be loaded"));
+    } TEST_END();
+
+    // ---- the map in the file (the optional chunk `tmap`) -------------------------------------------------------------------------
+
+    TEST_CASE("RP9.1 hash_bytes Is FNV-1a 64 (The Map's Identity): The Known Values, In Pieces, And The Same As The Hash Of The Same File") {
+        ASSERT_EQ(net::hash_bytes(nullptr, 0), 0xcbf29ce484222325ull);
+        const uint8_t a = 'a';
+        ASSERT_EQ(net::hash_bytes(&a, 1), 0xaf63dc4c8601ec8cull);
+        const std::string text = "foobar";
+        const uint8_t* bytes = reinterpret_cast<const uint8_t*>(text.data());
+        ASSERT_EQ(net::hash_bytes(bytes, text.size()), 0x85944171f73967e8ull);
+        ASSERT_EQ(net::hash_bytes(bytes + 3, 3, net::hash_bytes(bytes, 3)), net::hash_bytes(bytes, text.size()));
+        const std::vector<uint8_t> file = read_bytes(tiny.path);
+        ASSERT_TRUE(file.size() > 10000);
+        ASSERT_EQ(net::hash_bytes(file.data(), file.size()), tiny.hash);          // (hash_file is this over a file)
+    } TEST_END();
+
+    TEST_CASE("RP9.2 A Replay Holding Its Map Is Written Right After HEAD As The Chunk `tmap` With Exactly The Map's Bytes, And Read Back; Written Again It Is The Same Bytes; A Replay Without One Is Written Byte For Byte As Before") {
+        const std::vector<uint8_t> map = read_bytes(tiny.path);
+        Replay plain = synthetic_small();
+        plain.head.map_hash = tiny.hash;
+        const std::vector<uint8_t> without = encoded(plain);
+        Replay carrying = plain;
+        carrying.embedded_map = map;
+        const std::vector<uint8_t> with = encoded(carrying);
+        ASSERT_TRUE(with.size() == without.size() + map.size() + kChunkFrameBytes);
+        const std::vector<Chunk> chunks = chunks_of(with);
+        ASSERT_TRUE(chunks.size() == 5 && chunks[0].tag == "HEAD" && chunks[1].tag == "tmap" && chunks[2].tag == "CMDS" && chunks[3].tag == "hash" && chunks.back().tag == "ENDS");
+        ASSERT_EQ(chunks[1].payload, map);
+        ASSERT_TRUE(chunks[1].tag[0] >= 'a' && chunks[1].tag[0] <= 'z');           // (lower case: an older reader skips it)
+        ASSERT_EQ(count_chunks(with, "tmap"), 1u);
+        const Decoded d = decoded(with);
+        ASSERT_TRUE(d.ok);
+        ASSERT_TRUE(same(d.replay, plain));                                        // (everything else is what it was)
+        ASSERT_EQ(d.replay.embedded_map, map);
+        ASSERT_EQ(encoded(d.replay), with);                                        // (read and written again: the same bytes)
+        ASSERT_EQ(encoded(carrying), with);
+        // without the field: the bytes that the writer made before the chunk existed, which are the same chunks without it
+        std::vector<Chunk> old_way = chunks;
+        old_way.erase(old_way.begin() + 1);
+        ASSERT_EQ(file_of(old_way), without);
+        const Decoded none = decoded(without);
+        ASSERT_TRUE(none.ok && none.replay.embedded_map.empty() && same(none.replay, plain));
+        ASSERT_EQ(count_chunks(without, "tmap"), 0u);
+        // the head is what it was in both
+        ASSERT_EQ(chunks_of(without)[0].payload, chunks[0].payload);
+        // a snapshot never holds the map, whatever the replay holds
+        Replay running = carrying;
+        running.complete = false;
+        std::string error;
+        const std::vector<uint8_t> shot = encode_snapshot(running, 450, error);
+        ASSERT_FALSE(shot.empty());
+        ASSERT_TRUE(count_chunks(shot, "tmap") == 0 && decoded(shot).ok && decoded(shot).replay.embedded_map.empty());
+        running.embedded_map.clear();
+        ASSERT_EQ(encode_snapshot(running, 450, error), shot);
+    } TEST_END();
+
+    TEST_CASE("RP9.3 The Writer Refuses A Map That Is Not The File That The Head's Hash Names Or Is Over 1 MiB; A Map Of Exactly 1 MiB Is Written And Read; The Match Keeps Its Own 1 MiB, With Or Without A Map") {
+        std::string error;
+        Replay r = synthetic_small();
+        r.embedded_map = read_bytes(tiny.path);
+        ASSERT_TRUE(encode(r, error).empty() && contains(error, "map hash"));       // (the head's hash is another file's: 0x0123456789ABCDEF)
+        r.head.map_hash = tiny.hash;
+        ASSERT_FALSE(encode(r, error).empty());
+        r.embedded_map.back() ^= 1u;
+        ASSERT_TRUE(encode(r, error).empty() && contains(error, "map hash"));
+        Replay edge = synthetic_small();
+        edge.embedded_map.assign(kMaxEmbeddedMapBytes, 0x5A);
+        edge.head.map_hash = net::hash_bytes(edge.embedded_map.data(), edge.embedded_map.size());
+        const std::vector<uint8_t> edge_file = encoded(edge);
+        ASSERT_TRUE(!edge_file.empty() && edge_file.size() > kMaxFileBytes && edge_file.size() <= kMaxFileBytesWithMap);
+        Decoded d = decoded(edge_file);
+        ASSERT_TRUE(d.ok && d.replay.embedded_map == edge.embedded_map);
+        edge.embedded_map.push_back(0x5A);
+        edge.head.map_hash = net::hash_bytes(edge.embedded_map.data(), edge.embedded_map.size());
+        ASSERT_TRUE(encode(edge, error).empty() && contains(error, "embedded map"));       // (right hash, one byte over)
+        // the match is limited as it was: a map does not make room for more commands, and a match under the limit with a map is a file over 1 MiB that is kept
+        Replay match;
+        match.head = head_for(tiny, "TINY", 1, 0x0F);
+        match.complete = true;
+        match.total_turns = 300;
+        for (uint32_t i = 0; i < 40000; ++i) match.commands.push_back(TimedCommand{i / 400, make_command(CommandType::GroupMove, 0, 1, 1, std::vector<uint32_t>(32, i))});
+        ASSERT_TRUE(encode(match, error).empty() && contains(error, "KiB"));
+        match.embedded_map = read_bytes(tiny.path);
+        ASSERT_TRUE(encode(match, error).empty() && contains(error, "KiB"));
+        match.commands.resize(9000);                                                // (9,000 of 137 bytes: 1.2 MB, more than a match may be, and less than a match and a map: the map does not make room for it)
+        ASSERT_TRUE(encode(match, error).empty() && contains(error, "KiB"));
+        match.embedded_map.clear();
+        ASSERT_TRUE(encode(match, error).empty() && contains(error, "KiB"));
+        match.embedded_map = read_bytes(tiny.path);
+        match.commands.resize(7000);                                                // (7,000 of 137 bytes: just under 1 MiB)
+        match.embedded_map.clear();
+        const std::vector<uint8_t> bare = encoded(match);
+        ASSERT_TRUE(!bare.empty() && bare.size() < kMaxFileBytes && bare.size() > kMaxFileBytes - 100000);
+        match.embedded_map.assign(300000, 7);
+        match.head.map_hash = net::hash_bytes(match.embedded_map.data(), match.embedded_map.size());
+        const std::vector<uint8_t> both = encoded(match);
+        ASSERT_TRUE(!both.empty() && both.size() > kMaxFileBytes);
+        d = decoded(both);
+        ASSERT_TRUE(d.ok && d.replay.embedded_map == match.embedded_map && d.replay.commands.size() == 7000);
+    } TEST_END();
+
+    TEST_CASE("RP9.4 The Reader Refuses A Second tmap, A tmap Over 1 MiB (From Its Length, Before Its Bytes: Four Billion Allocates Nothing, Even In A Cut File), An Empty One, One Whose Hash Is Not The Head's, And One After The End Or Before The Head, Each With The Chunk Named") {
+        Replay r = synthetic_small();
+        r.embedded_map = read_bytes(tiny.path);
+        r.head.map_hash = tiny.hash;
+        const std::vector<Chunk> base = chunks_of(encoded(r));
+        const auto refused_with = [&](const std::vector<Chunk>& c, const std::string& word) {
+            const Decoded d = decoded(file_of(c));
+            return !d.ok && contains(d.error, word);
+        };
+        ASSERT_TRUE(decoded(file_of(base)).ok);
+        std::vector<Chunk> c = base;
+        c.insert(c.begin() + 2, base[1]);                                           // two maps (the same bytes twice)
+        ASSERT_TRUE(refused_with(c, "tmap"));
+        c = base;
+        c[1].payload.back() ^= 1u;                                                  // a hash that is not the head's (the checksum of the chunk is right)
+        ASSERT_TRUE(refused_with(c, "tmap"));
+        c = base;
+        c[1].payload.clear();
+        ASSERT_TRUE(refused_with(c, "tmap"));
+        {
+            Replay nothing = synthetic_small();                                      // (an empty map whose hash the head names: the hash of no bytes is still a number)
+            nothing.head.map_hash = net::hash_bytes(nullptr, 0);
+            c[0].payload = chunks_of(encoded(nothing))[0].payload;
+            ASSERT_TRUE(refused_with(c, "tmap"));
+            c[0] = base[0];
+        }
+        c = base;
+        c[1].payload.assign(kMaxEmbeddedMapBytes + 1, 0x41);                        // over the cap, with the head naming exactly these bytes: the length alone is enough
+        {
+            Replay named = synthetic_small();
+            named.head.map_hash = net::hash_bytes(c[1].payload.data(), c[1].payload.size());
+            c[0].payload = chunks_of(encoded(named))[0].payload;
+            ASSERT_TRUE(refused_with(c, "tmap") && refused_with(c, "KiB"));
+        }
+        // a claim of four billion bytes, in a file that is cut right there: refused by the claim, not taken for a cut file, nothing allocated
+        {
+            std::vector<uint8_t> file = file_of({base[0]});
+            file.insert(file.end(), {'t', 'm', 'a', 'p', 0xFF, 0xFF, 0xFF, 0xFF, 1, 2, 3, 4});
+            const Decoded d = decoded(file);
+            ASSERT_TRUE(!d.ok && contains(d.error, "tmap") && contains(d.error, "KiB"));
+            file = file_of({base[0]});
+            file.insert(file.end(), {'t', 'm', 'a', 'p', 0x01, 0x00, 0x10, 0x00});    // 1 MiB + 1: the cap is on the number, whatever follows
+            file.insert(file.end(), 4, 0);
+            ASSERT_FALSE(decoded(file).ok);
+            file = file_of({base[0]});
+            file.insert(file.end(), {'t', 'm', 'a', 'p', 0x00, 0x00, 0x10, 0x00});    // exactly 1 MiB claimed and the file ends: a cut file, which plays as far as it goes (nothing)
+            const Decoded cut = decoded(file);
+            ASSERT_TRUE(cut.ok && !cut.replay.complete && cut.replay.embedded_map.empty());
+        }
+        c = base;
+        c.push_back(base[1]);                                                       // after the end
+        ASSERT_TRUE(refused_with(c, "ENDS"));
+        c = base;
+        std::swap(c[0], c[1]);                                                      // before the head
+        ASSERT_TRUE(refused_with(c, "HEAD"));
+        // the map of another match: a head with another hash
+        c = base;
+        Replay other = synthetic_small();
+        other.head.map_hash = tiny.hash ^ 1u;
+        c[0].payload = chunks_of(encoded(other))[0].payload;
+        ASSERT_TRUE(refused_with(c, "tmap"));
+    } TEST_END();
+
+    TEST_CASE("RP9.5 A File That Was Cut Still Has Its Map When The Cut Is After The Chunk (It Is Right After HEAD); A Cut Inside The Chunk Is A Cut File With No Map; No Cut And No Flipped Byte Reads As A Different Map") {
+        Replay r = synthetic_small();
+        r.embedded_map.resize(700);
+        for (size_t i = 0; i < r.embedded_map.size(); ++i) r.embedded_map[i] = static_cast<uint8_t>(i * 7 + 3);
+        r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+        const std::vector<uint8_t> bytes = encoded(r);
+        const size_t after_map = 8 + (chunks_of(bytes)[0].payload.size() + kChunkFrameBytes) + (r.embedded_map.size() + kChunkFrameBytes);
+        size_t whole = 0;
+        size_t refused = 0;
+        for (size_t cut = 0; cut <= bytes.size(); ++cut) {
+            const std::vector<uint8_t> piece(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(cut));
+            const Decoded d = decoded(piece);
+            if (!d.ok) {
+                ++refused;
+                ASSERT_FALSE(d.error.empty());
+                continue;
+            }
+            if (cut >= after_map) {
+                ASSERT_EQ(d.replay.embedded_map, r.embedded_map);
+                ++whole;
+            } else {
+                ASSERT_TRUE(d.replay.embedded_map.empty() && !d.replay.complete && d.replay.commands.empty());
+            }
+        }
+        ASSERT_TRUE(whole > 10 && refused > 100);
+        // a copy that lost its end is a cut file with its map; a copy that lost its commands too
+        const std::vector<uint8_t> no_end(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(bytes.size() - 12 - 13));
+        const Decoded d = decoded(no_end);
+        ASSERT_TRUE(d.ok && !d.replay.complete && d.replay.embedded_map == r.embedded_map && !d.replay.commands.empty());
+        // every flipped bit of the chunk is found: the checksum of the chunk (and, were it right, the hash of the map)
+        for (size_t at = 8 + chunks_of(bytes)[0].payload.size() + kChunkFrameBytes; at < after_map; ++at) {            // (from the chunk's tag on)
+            std::vector<uint8_t> flipped = bytes;
+            flipped[at] ^= 0x10u;
+            const Decoded f = decoded(flipped);
+            ASSERT_TRUE(!f.ok || f.replay.embedded_map.empty());
+        }
+    } TEST_END();
+
+    TEST_CASE("RP9.6 The File Without Its Map Is The Match: The Match Part Is Limited To 1 MiB Whatever The Map, A File Over 2 MiB Is Refused At Once; An Older Reader Skips The Chunk And Reads The Same Match") {
+        Replay r = synthetic_small();
+        r.embedded_map.assign(1000, 9);
+        r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+        const std::vector<Chunk> base = chunks_of(encoded(r));
+        // a skipped lower case chunk that makes the file exactly `size` long
+        const auto padded_to = [](std::vector<Chunk> chunks, size_t size) {
+            Chunk filler;
+            filler.tag = "padd";
+            filler.payload.assign(size - file_of(chunks).size() - kChunkFrameBytes, 0);
+            chunks.insert(chunks.begin() + 1, filler);
+            return file_of(chunks);
+        };
+        // the match part is the file without the map's whole chunk: exactly kMaxFileBytes of match is read, one byte more is not
+        const size_t map_chunk = base[1].payload.size() + kChunkFrameBytes;
+        const std::vector<uint8_t> longest = padded_to(base, kMaxFileBytes + map_chunk);
+        ASSERT_EQ(longest.size(), kMaxFileBytes + map_chunk);
+        Decoded d = decoded(longest);
+        ASSERT_TRUE(d.ok && d.replay.embedded_map == r.embedded_map);
+        d = decoded(padded_to(base, kMaxFileBytes + map_chunk + 1));
+        ASSERT_TRUE(!d.ok && contains(d.error, "KiB") && contains(d.error, "map"));
+        // without a map the same file is the match: exactly 1 MiB is read, one byte more is refused, as it always was
+        std::vector<Chunk> no_map = base;
+        no_map.erase(no_map.begin() + 1);
+        ASSERT_TRUE(decoded(padded_to(no_map, kMaxFileBytes)).ok);
+        d = decoded(padded_to(no_map, kMaxFileBytes + 1));
+        ASSERT_TRUE(!d.ok && contains(d.error, "KiB"));
+        // a file over the longest there can be is refused before any chunk is read
+        std::vector<uint8_t> too_long = longest;
+        too_long.resize(kMaxFileBytesWithMap + 1, 0);
+        d = decoded(too_long);
+        ASSERT_TRUE(!d.ok && contains(d.error, "KiB"));
+        ASSERT_TRUE(kMaxFileBytesWithMap == 2 * (1u << 20) + kChunkFrameBytes && max_file_bytes(0) == kMaxFileBytes && max_file_bytes(5) == kMaxFileBytes + 5 + kChunkFrameBytes);
+        // an older reader skips the chunk: with the tag as another lower case name the file is the match as it was before the chunk
+        std::vector<Chunk> older = base;
+        older[1].tag = "tmax";
+        d = decoded(file_of(older));
+        ASSERT_TRUE(d.ok && d.replay.embedded_map.empty());
+        Replay plain = r;
+        plain.embedded_map.clear();
+        ASSERT_TRUE(same(d.replay, plain));
+        older[1].tag = "Tmap";                                                      // (the same chunk with a capital is critical: a reader that does not know it refuses the file)
+        d = decoded(file_of(older));
+        ASSERT_TRUE(!d.ok && contains(d.error, "cannot skip"));
+    } TEST_END();
+
+    TEST_CASE("RP9.7 The Recorder Keeps A Map For The File (Only The File The Head Names, Not Empty, Not Over 1 MiB) Without Spoiling The Recording; The File Plays With No Maps Folder Entry, And A Snapshot Of The Match Never Holds The Map") {
+        const std::vector<uint8_t> map = read_bytes(tiny.path);
+        SnapshotTap tap;
+        tap.every = 100;
+        const Played p = play_scripted(tiny, 31, 450, 0x0F, sim::StartTeams{}, false, &tap, 0, nullptr, &map);
+        ASSERT_FALSE(p.file.empty());
+        ASSERT_TRUE(p.replay.complete && p.replay.embedded_map == map);
+        ASSERT_EQ(count_chunks(p.file, "tmap"), 1u);
+        ASSERT_TRUE(tap.files.size() == 4);
+        for (const std::vector<uint8_t>& shot : tap.files) {
+            ASSERT_TRUE(!shot.empty() && count_chunks(shot, "tmap") == 0 && decoded(shot).ok && shot.size() < 20000);
+        }
+        // the same match without the map: the same bytes but for the chunk
+        const Played plain = play_scripted(tiny, 31, 450);
+        ASSERT_EQ(plain.hash, p.hash);
+        std::vector<Chunk> minus = chunks_of(p.file);
+        minus.erase(minus.begin() + 1);
+        ASSERT_EQ(file_of(minus), plain.file);
+        // played with the maps folder empty, the file's own map is the map, and every hash is right
+        TempDir empty;
+        assets::LevelData level;
+        std::string error;
+        ASSERT_FALSE(load_map(p.replay.head, empty.path.string(), level, error));
+        ASSERT_TRUE(load_map_or_embedded(p.replay, std::vector<std::string>{empty.path.string()}, level, error) && error.empty());
+        ASSERT_TRUE(level.width() == tiny.level.width() && level.height() == tiny.level.height());
+        const Outcome o = play(p.replay, level);
+        ASSERT_TRUE(o.ok && o.ran && o.complete && o.hash == p.hash && o.hashes_checked == 4);
+        // what the recorder refuses leaves the recording as it was
+        Header head = head_for(tiny, "TINY", 5, 0x0F);
+        Recorder rec(head);
+        ASSERT_FALSE(rec.set_embedded_map({}));
+        std::vector<uint8_t> wrong = map;
+        wrong.push_back(0);
+        ASSERT_FALSE(rec.set_embedded_map(wrong));                                  // (not the head's file)
+        ASSERT_TRUE(rec.failure().empty() && rec.replay().embedded_map.empty());
+        Header big_head = head;
+        const std::vector<uint8_t> big(kMaxEmbeddedMapBytes + 1, 0x33);
+        big_head.map_hash = net::hash_bytes(big.data(), big.size());
+        Recorder over(big_head);
+        ASSERT_FALSE(over.set_embedded_map(big));                                   // (the head's file, but too long)
+        ASSERT_TRUE(over.failure().empty() && over.replay().embedded_map.empty());
+        ASSERT_TRUE(rec.set_embedded_map(map) && rec.replay().embedded_map == map);
+        sim::SimulationEngine engine;
+        engine.init(tiny.level, 5, 0x0F);
+        engine.tick();
+        rec.on_tick(engine);
+        const std::vector<uint8_t> done = rec.finish(engine, error);
+        ASSERT_TRUE(!done.empty() && count_chunks(done, "tmap") == 1);
+        ASSERT_FALSE(rec.set_embedded_map(map));                                    // (a finished recording takes nothing more)
+    } TEST_END();
+
+    TEST_CASE("RP9.8 The Replay's Map Comes From The Folder When The Folder Has It, Else From The File: Another File Of The Name Gives Way To The File's, A Missing One Too; A Map In The File That Is Not The Head's, Or Is No Map, Is Refused With The Facts; No Map Of Its Own Leaves The Folder's Words; Nothing Is Written Into A Folder") {
+        const std::vector<uint8_t> map = read_bytes(tiny.path);
+        Replay r = synthetic_small();
+        r.head.map_name = "TINY.LVL";
+        r.head.map_hash = tiny.hash;
+        r.embedded_map = map;
+        TempDir folder;
+        std::string error;
+        assets::LevelData level;
+        // no such file in the folder: the file's own
+        ASSERT_TRUE(load_map_or_embedded(r, std::vector<std::string>{folder.path.string()}, level, error) && error.empty());
+        ASSERT_TRUE(fs::is_empty(folder.path));                                    // (nothing was written)
+        // another file of the name: the file's own
+        {
+            std::ofstream other(folder.path / "tiny.lvl", std::ios::binary);
+            other << "this is not the map";
+        }
+        ASSERT_FALSE(load_map(r.head, folder.path.string(), level, error));
+        ASSERT_TRUE(contains(error, "not the file"));
+        ASSERT_TRUE(load_map_or_embedded(r, std::vector<std::string>{folder.path.string()}, level, error) && error.empty());
+        ASSERT_EQ(read_bytes(folder.path / "tiny.lvl").size(), std::string("this is not the map").size());       // (and the folder's file is as it was)
+        // the right file in the folder: the folder's (the same bytes)
+        fs::remove(folder.path / "tiny.lvl");                                      // (first: on a file system that folds case it is the same name as TINY.LVL)
+        fs::copy_file(tiny.path, folder.path / "TINY.LVL");
+        ASSERT_TRUE(load_map_or_embedded(r, std::vector<std::string>{folder.path.string()}, level, error) && error.empty());
+        // a folder that holds the right file is preferred to whatever the file carries (a replay made by hand, with a map that is not the head's: the folder's file is used)
+        Replay forged_too = r;
+        forged_too.embedded_map.push_back(0);
+        ASSERT_TRUE(load_map_or_embedded(forged_too, std::vector<std::string>{folder.path.string()}, level, error) && error.empty());
+        // an Extended map of more than 256 a side is a map that a replay plays: the file's own is read with the limits of playing
+        const std::string grown = grown_tiny(260, 260);
+        ASSERT_FALSE(grown.empty());
+        Replay extended = r;
+        extended.embedded_map.assign(grown.begin(), grown.end());
+        extended.head.map_hash = net::hash_bytes(extended.embedded_map.data(), extended.embedded_map.size());
+        ASSERT_TRUE(extended.embedded_map.size() < kMaxEmbeddedMapBytes);
+        TempDir nowhere;
+        ASSERT_TRUE(load_map_or_embedded(extended, std::vector<std::string>{nowhere.path.string()}, level, error) && error.empty());
+        ASSERT_TRUE(level.width() == 260 && level.height() == 260);
+        // no map of its own: the folder's own words, as load_map says them
+        Replay bare = r;
+        bare.embedded_map.clear();
+        TempDir nothing;
+        ASSERT_FALSE(load_map_or_embedded(bare, std::vector<std::string>{nothing.path.string()}, level, error));
+        ASSERT_TRUE(contains(error, "TINY.LVL") && contains(error, "not in") && contains(error, nothing.path.string()));
+        ASSERT_FALSE(load_embedded_map(bare, level, error));
+        ASSERT_TRUE(contains(error, "no map"));
+        // a map in the file that is not the file of the head (a replay made by hand; decode() never gives one)
+        Replay forged = r;
+        forged.embedded_map.push_back(0);
+        ASSERT_FALSE(load_map_or_embedded(forged, std::vector<std::string>{nothing.path.string()}, level, error));
+        ASSERT_TRUE(contains(error, "not the file") && contains(error, "hash"));
+        // a file of the right hash that is no map
+        Replay broken = r;
+        broken.embedded_map = {'n', 'o', ' ', 'm', 'a', 'p'};
+        broken.head.map_hash = net::hash_bytes(broken.embedded_map.data(), broken.embedded_map.size());
+        ASSERT_FALSE(load_map_or_embedded(broken, std::vector<std::string>{nothing.path.string()}, level, error));
+        ASSERT_TRUE(contains(error, "cannot be loaded"));
+        // a map that is too long for a file (made by hand)
+        Replay huge = r;
+        huge.embedded_map.assign(kMaxEmbeddedMapBytes + 1, 0);
+        ASSERT_FALSE(load_embedded_map(huge, level, error));
+        ASSERT_TRUE(contains(error, "longer"));
+    } TEST_END();
+
+    TEST_CASE("RP9.9 The Bytes Of A Replay That Carries Its Map Are Those Of tests/data/replay_tmap.hex (The Browser's Reader, web/map_files.js embeddedMapOfReplay, Reads The Same File: tests/scripts/web_map_files_check.js)") {
+        Replay r;
+        r.head.game_version = "v0.0.0";
+        r.head.build_id = "test";
+        r.head.venue = "network game";
+        r.head.map_name = "Draft Map ~test-0badf00d.lvl";
+        r.head.seed = 5;
+        r.head.roster = 0x03;
+        r.head.names[0] = "Ann";
+        r.head.names[1] = "Bob";
+        for (size_t i = 0; i < 40; ++i) r.embedded_map.push_back(static_cast<uint8_t>(i * 3 + 1));
+        r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+        r.complete = true;
+        r.total_turns = 20;
+        r.final_hash = 99;
+        const std::vector<uint8_t> bytes = encoded(r);
+        ASSERT_FALSE(bytes.empty());
+        std::string hex;
+        for (const uint8_t b : bytes) {
+            char two[3];
+            std::snprintf(two, sizeof two, "%02x", static_cast<unsigned>(b));
+            hex += two;
+        }
+        if (std::getenv("ANTS_WRITE_REPLAY_TMAP") != nullptr) std::cout << hex << "\n";        // the file again after the layout changed: redirect this output to the end of tests/data/replay_tmap.hex
+        std::ifstream in(std::string(TEST_DATA_DIR) + "/replay_tmap.hex");
+        std::string line, last;
+        while (std::getline(in, line)) {
+            if (!line.empty() && line[0] != '#') last = line;
+        }
+        ASSERT_EQ(last, hex);
+    } TEST_END();
+
+    TEST_CASE("RP9.10 A Map Chunk That Was Cut Is The Map's Part Of The File And Not The Match's: A 1 MiB Map Cut Near Its End Is A Cut File With No Map (As A Shorter One Is), While A Match Over 1 MiB In Front Of A Cut Map Is Refused") {
+        Replay r = synthetic_small();
+        r.embedded_map.assign(kMaxEmbeddedMapBytes, 0x6B);
+        r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+        const std::vector<uint8_t> whole = encoded(r);
+        const size_t map_at = 8 + chunks_of(whole)[0].payload.size() + kChunkFrameBytes;       // where the tmap chunk starts
+        ASSERT_TRUE(whole.size() > kMaxFileBytes);
+        for (const size_t keep : {size_t{100}, kMaxEmbeddedMapBytes / 2, kMaxEmbeddedMapBytes - 1000, kMaxEmbeddedMapBytes + 2}) {      // (the last: cut inside its checksum)
+            const std::vector<uint8_t> piece(whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(map_at + 8 + keep));
+            const Decoded d = decoded(piece);
+            ASSERT_TRUE(d.ok && !d.replay.complete && d.replay.embedded_map.empty() && d.replay.commands.empty());
+        }
+        const std::vector<uint8_t> nearly(whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(whole.size() - 1));
+        ASSERT_TRUE(decoded(nearly).ok);                                              // (cut in the last chunk, which is after the map: the map is whole and the file is read)
+        ASSERT_TRUE(decoded(nearly).replay.embedded_map == r.embedded_map);
+        // a match of more than 1 MiB in front of a cut map is refused: the map's cut part does not hide it
+        std::vector<Chunk> chunks = chunks_of(whole);
+        Chunk filler;
+        filler.tag = "padd";
+        filler.payload.assign(kMaxFileBytes, 0);
+        chunks.insert(chunks.begin() + 1, filler);
+        std::vector<uint8_t> big = file_of(chunks);
+        big.resize(big.size() - 1000);                                                 // (cut inside the map's chunk)
+        const Decoded refused = decoded(big);
+        ASSERT_TRUE(!refused.ok && contains(refused.error, "KiB"));
     } TEST_END();
 
     // ---- the rules number of the simulation (kSimRules) ---------------------------------------------------------------------------

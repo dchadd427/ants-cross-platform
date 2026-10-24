@@ -29,6 +29,12 @@ bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::
 /// The same for a map whose file is known: `path` is the file (a map the server keeps under a name of its own), it must be the file that the head's hash names, and it is loaded.
 bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error);
 
+/// The map of `replay`: the file in the folders (load_map) when one of that name is there and is the head's, else the map that the file carries (its tmap chunk, replay.hpp), loaded the same way (the head's hash,
+/// LevelLimits::for_play_extended). A folder is never written. With no embedded map this is load_map and says what it says; with one and no usable file in the folders, `error` is the embedded map's.
+bool load_map_or_embedded(const Replay& replay, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error);
+/// The same for a replay with a map of its own only: the bytes of the replay's tmap chunk, which must be the file that the head's hash names, loaded as any map is.
+bool load_embedded_map(const Replay& replay, assets::LevelData& level, std::string& error);
+
 /// Why this build does not play `head`'s match (its rules number and the game that made it): "recorded by v0.10.0 with simulation rules 0 ...". Only for a head that plays_here() says no to.
 std::string rules_refusal(const Header& head);
 

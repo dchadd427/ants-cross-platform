@@ -55,6 +55,10 @@ public:
     /// It changes nothing in the recorder (the engine is not read, and the recording goes on). The server makes one at most once a second for a match (ants_server/live_board.hpp).
     std::vector<uint8_t> snapshot(std::string& error) const;
 
+    /// Keeps the bytes of the map file to be written into the file (the tmap chunk, replay.hpp) when the recording is finished; never into a snapshot. True when they are kept: not empty, at most
+    /// kMaxEmbeddedMapBytes and the file that the head's map_hash names. False keeps nothing and changes nothing else (the recording goes on without the map; the caller says what that means).
+    bool set_embedded_map(const std::vector<uint8_t>& bytes);
+
     /// The replay as it stands (for the tests)
     const Replay& replay() const noexcept { return replay_; }
 

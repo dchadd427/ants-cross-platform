@@ -349,6 +349,7 @@ ctl::HttpResponse replay_file_response(const ReplayStore& store, const std::stri
     ctl::HttpResponse r;
     r.status = 200;
     r.content_type = "application/octet-stream";
+    r.file = true;                                       // a replay that carries its map is up to about 2 MiB (replay::kMaxFileBytesWithMap), and a non-file answer over 1 MiB is a 500 (ctl::HttpResponse::file)
     r.body.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     return r;
 }
