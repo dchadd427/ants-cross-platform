@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.116 - 2026-10-23 - No Settings button over the picture on a computer
+
+**For players:**
+- **Nothing is laid over the game's picture in fullscreen on a computer.** The Settings button that sat at the top of the picture is gone when you have a mouse; press **Esc** (with nothing selected and no dialog open) to open the settings menu, as before.
+- **Phones and tablets keep the button** over the picture in fullscreen, because they have no Esc. A Settings button in the game's own top bar is planned.
+- In Safari and Firefox on a computer, Esc belongs to the browser in fullscreen: leave fullscreen first to open the menu until that button exists.
+
+**Rules / network:** none: the page only; network protocol 21 and the simulation rules are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56e02b48...dd469a43)
+
 ## v0.12.115 - 2026-10-23 - Path finder: a wide search for very big maps (switched off for now)
 
 **For players:**
