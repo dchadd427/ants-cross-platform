@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens, and Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b29f40d8...feb90e21)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/14bbbfdb...feb90e21)
 
 ## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
 
