@@ -583,7 +583,7 @@ void run_exactness_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP1.9 A Big Selection (One Click Of 100 Ants, Four Commands Given In One Step) Is Predicted Command By Command And Sealed In One Turn In The Order It Was Given: No Rebuild, Nothing Lost, Every Frame Is The Oracle's") {
+    TEST_CASE("RP9.1 A Big Selection (One Click Of 100 Ants, Four Commands Given In One Step) Is Predicted Command By Command And Sealed In One Turn In The Order It Was Given: No Rebuild, Nothing Lost, Every Frame Is The Oracle's") {
         Scenario sc;
         sc.seed = 19;
         sc.extra_workers = 100;

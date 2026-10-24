@@ -23,16 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.125 - 2026-10-24 - Orders reach every selected ant
+## v0.12.125 - 2026-10-24 - Orders for big selections
 
 **For players:**
-- **Ctrl+A or a drag over more than 32 ants now orders every ant that can take the order.** A move, attack or special click, or Stop, on a bigger selection used to reach only the first 32 ants; it is now sent as several orders of 32 ants each, in the order you selected them, in that same click. A click on 32 ants or fewer works exactly as before.
-- One click orders up to 1,536 ants. Beyond that the rest are left alone and the status line says "Only 1536 ants ordered."
-- The rule for where ants go is unchanged: a move still gives a free tile within four tiles of the clicked one (81 at the most), so of a very big crowd the ants that find no free tile there keep what they were doing.
+- **Ctrl+A or a drag over more than 32 ants no longer orders only the first 32.** A click or Stop on a bigger selection is sent as several orders of 32 ants each, in the order you selected them, together in that click. A click on 32 ants or fewer works exactly as before.
+- **A move now names up to 81 ants:** the game gives a free tile within four tiles of the clicked spot to 81 ants at the most, so the first 81 of a bigger selection walk there; the rest are left alone and keep what they were doing, and the status line says "Only 81 ants fit here." A wider search is planned for the next rules release.
+- Attack, special and Stop orders reach up to 1,536 ants in one click ("Only 1536 ants ordered." beyond that). A held Stop key (S) now stops once, not twenty times a second.
+- A big click adds to a recording (a move about 350 bytes, a Stop of 1,500 ants about 6 KB), so a very long match on a big map can pass the size a recording may have and then keeps none.
 
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the game sends several ordinary orders; recordings and the network need nothing new).
+**Rules / network:** none in the rules; network protocol 21 is unchanged (several ordinary commands). A server holds up to 1,024 waiting commands of a player (it was 256) so that a burst of big clicks is carried, not refused.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...30e058a6)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...LASTCODE)
 
 ## v0.12.124 - 2026-10-24 - Three more picture shapes, and one dropdown to pick them
 
@@ -588,13 +589,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/38a4311d...1d896268), [the 187 bots](docs/BOT_187.md)
 
-## v0.12.69 - 2026-10-17 - Extended maps: the browser module does conversions and the per-kind check
+## Older versions (v0.12.69 and before)
 
-**For players:**
-- Under the hood: the map code in the browser module can now make a blank Extended map, turn a Classic map into an Extended one and back (with plain reasons and notes, each with a stable code), check either kind and tell a page the limits of each; a page can refuse an older module. No page uses it yet; nothing changes in the game or on the site.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/15c56b6b...0372a2e2), [the map core in the browser](docs/MAP_FORMAT.md#in-the-browser)
-
-## Older versions (v0.12.68 and before)
-
-Every release before v0.12.69, and the long notes of v0.12.68, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.70, and the long notes of v0.12.69, v0.12.68, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

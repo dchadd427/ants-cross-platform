@@ -296,10 +296,11 @@ uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bo
 // The ants of one order go out as commands of at most kMaxCommandAnts each (a command names no more: the engine, the recording and the wire refuse a longer list), in the selection
 // order, all in this call: they reach the same turn (the sequencer keeps a player's commands in the order they came) and run one after the other. A selection of at most
 // kMaxCommandAnts is one command, exactly the one that was always sent.
-HUD::ChunkedResult HUD::submit_in_chunks(sim::SimulationEngine& sim, sim::Command proto, const std::vector<uint32_t>& ants) {
+HUD::ChunkedResult HUD::submit_in_chunks(sim::SimulationEngine& sim, sim::Command proto, const std::vector<uint32_t>& ants, size_t limit) {
     static_assert(kMaxCommandsPerClick < net::Sequencer::Config{}.max_commands_per_turn, "a click must leave room in the turn for the player's other commands");
     ChunkedResult out;
-    const size_t sendable = std::min(ants.size(), kMaxAntsPerClick);
+    out.cap = std::min(limit, kMaxAntsPerClick);
+    const size_t sendable = std::min(ants.size(), out.cap);
     out.left_out = ants.size() - sendable;
     for (size_t from = 0; from < sendable; from += sim::kMaxCommandAnts) {
         const auto first = ants.begin() + static_cast<std::ptrdiff_t>(from);
@@ -314,7 +315,10 @@ HUD::ChunkedResult HUD::submit_in_chunks(sim::SimulationEngine& sim, sim::Comman
     return out;
 }
 
-void HUD::post_click_limit(size_t ordered) { post_status_id(sim::strings::kClickLimit, std::to_string(ordered)); }
+void HUD::post_click_limit(const ChunkedResult& result, size_t ordered) {
+    if (result.cap == kMaxAntsPerMove) post_status_id(sim::strings::kMoveLimit);
+    else post_status_id(sim::strings::kClickLimit, std::to_string(ordered));
+}
 
 // The group order of the original (FUN_010287b5) as the player's command: the engine keeps only the issuer's own ants, checks the tile and answers with
 // the ant that acknowledges
@@ -324,14 +328,14 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
     cmd.issuer = local_player_id_;
     cmd.tile_x = static_cast<int16_t>(tile.x);
     cmd.tile_y = static_cast<int16_t>(tile.y);
-    const ChunkedResult result = submit_in_chunks(sim, cmd, targets);
+    const ChunkedResult result = submit_in_chunks(sim, cmd, targets, attack || special ? kMaxAntsPerClick : kMaxAntsPerMove);
     const uint32_t ack = result.ack_ant;
     // FUN_010287b5 (0x1028929 .. 0x1028a07): nothing happens when every ant already carries out this click; otherwise the closest ant's GoTo decides the voice (a refusal is
     // silent, the others' answers do not count), a special order speaks only when exactly one ant needed it (none for more, not even the go voice), and the function returns 1
     // whatever the GoTos answered, which is what the pedestal feedback follows. A selection of several commands is one click: its ants that needed an order are counted together
     // and the first command that had any gives the voice.
     if (result.needing_order == 0) {
-        if (result.left_out != 0) post_click_limit(targets.size() - result.left_out);
+        if (result.left_out != 0) post_click_limit(result, targets.size() - result.left_out);
         return 0;
     }
     if (ack != 0) {
@@ -341,7 +345,7 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
         else voice_go(voice_type);
     }
     order_feedback(special, attack);
-    if (result.left_out != 0) post_click_limit(targets.size() - result.left_out);       // (after the voice's text: the line says what the click did not do)
+    if (result.left_out != 0) post_click_limit(result, targets.size() - result.left_out);       // (after the voice's text: the line says what the click did not do)
     return ack;
 }
 
@@ -369,9 +373,9 @@ void HUD::stop_selected(sim::SimulationEngine& sim) {
     for (uint32_t aid : ids) {
         if (sim.get_unit(aid).player_id == local_player_id_) own.push_back(aid);
     }
-    const ChunkedResult result = submit_in_chunks(sim, cmd, own);
+    const ChunkedResult result = submit_in_chunks(sim, cmd, own, kMaxAntsPerClick);
     post_status_id(sim::strings::kStopping);                                     // always posted (0x1028b43)
-    if (result.left_out != 0) post_click_limit(own.size() - result.left_out);
+    if (result.left_out != 0) post_click_limit(result, own.size() - result.left_out);
 }
 
 // ------------------------------------------------------------------------------------------------

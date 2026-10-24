@@ -2898,9 +2898,9 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. The remake's design
   order `FUN_010287b5` with its special and attack flags (`GroupMove / GroupSpecial / GroupAttack`), the Stop button `FUN_01028a60` (`Stop`), the hatch pedestal `FUN_01010aca` (`Hatch`) and the alliance protocol
   (`AllianceInvite / Accept / Deny / Withdraw / Break`, `FUN_0100c7ac`, `FUN_0100c5fa`). `SimulationEngine::apply_command` validates: the issuer is stamped by the transport and must be a player; a group order
   keeps only ants of its issuer (foreign, unknown, removed and repeated ids are dropped, the selection order is kept because the group order's exchange sort is not stable), the tile must be on the map, lists are
-  1 .. 32 ants (the original's behavior beyond 24 ants is not established; the HUD sends a bigger click as several commands); an answer to an invitation needs that invitation; nothing changes after the end of the match. The wire form is `u8 type, u8 issuer, u8 other,
-  i16 tile_x, i16 tile_y, u8 count, u32 ant id * count`; `decode` checks every field before use and `canonical_order` (by issuer, stable) fixes the order in which a turn's commands
-  are applied.
+  1 .. 32 ants (beyond 24 ants not established; the HUD splits a bigger click); an answer to an invitation needs that invitation; nothing changes after the end of the match. The wire form is `u8 type, u8 issuer, u8 other,
+  i16 tile_x, i16 tile_y, u8 count, u32 ant id * count`; `decode` checks every field before use (fuzzed with 300000 buffers) and `canonical_order` (by issuer, stable) fixes the order in which a turn's commands
+  are applied whatever order they arrived in.
 
 * **State hash** (`SimulationEngine::state_hash`): FNV-1a 64 over the deterministic gameplay state, fed field by field in fixed width little endian (the same on every platform), in seven parts (engine, players,
   grid, food, ants, paths, droppers) so that a mismatch names the subsystem: both PRNG states (the cosmetic generator picks the death clip and so decides when an ant leaves its tile), the clocks, CHECKGO, hatching,

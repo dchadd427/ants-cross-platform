@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the click on a big selection for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): HUD::submit_in_chunks and its callers (src/ants_app/hud_input.cpp: the size of a command, the budget of 48 commands, the ants that count, the voice and the click that does nothing, the status line, Stop, the selection order) against tests/test_app/test_pointer_model_big.cpp, the line of the status box (src/ants_sim/game_strings.cpp), the sequencer's quota of a turn against test_lockstep N2.5c, and the recording of a crowd's commands against test_replay RP2.14. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/big_selection_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "note": "Mutants of the click on a big selection for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): HUD::submit_in_chunks and its callers (src/ants_app/hud_input.cpp: the size of a command, the budget of 48 commands, the ants that count, the voice and the click that does nothing, the status line, Stop, the selection order) against tests/test_app/test_pointer_model_big.cpp, the line of the status box (src/ants_sim/game_strings.cpp), the sequencer's quota of a turn and its carry against test_lockstep N2.5c and N2.5d, the Stop key's repeats, the limit of 81 ants for a move, and the recording of a crowd's commands against test_replay RP2.14. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/big_selection_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
  "mutants": [
   {
    "id": "chunk_of_24_ants",
@@ -12,8 +12,8 @@
   {
    "id": "only_the_first_32_ants",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "const size_t sendable = std::min(ants.size(), kMaxAntsPerClick);",
-   "new": "const size_t sendable = std::min(ants.size(), sim::kMaxCommandAnts);",
+   "old": "out.cap = std::min(limit, kMaxAntsPerClick);",
+   "new": "out.cap = sim::kMaxCommandAnts;",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
@@ -52,7 +52,7 @@
   {
    "id": "no_line_when_nothing_needed_an_order",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "        if (result.left_out != 0) post_click_limit(targets.size() - result.left_out);\n        return 0;",
+   "old": "        if (result.left_out != 0) post_click_limit(result, targets.size() - result.left_out);\n        return 0;",
    "new": "        return 0;",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
@@ -60,7 +60,7 @@
   {
    "id": "no_line_after_an_order",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "    if (result.left_out != 0) post_click_limit(targets.size() - result.left_out);       // (after the voice's text: the line says what the click did not do)\n",
+   "old": "    if (result.left_out != 0) post_click_limit(result, targets.size() - result.left_out);       // (after the voice's text: the line says what the click did not do)\n",
    "new": "",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
@@ -68,8 +68,8 @@
   {
    "id": "line_counts_the_selection_not_the_ordered",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "post_click_limit(targets.size() - result.left_out);       // (after",
-   "new": "post_click_limit(targets.size());       // (after",
+   "old": "post_click_limit(result, targets.size() - result.left_out);       // (after",
+   "new": "post_click_limit(result, targets.size());       // (after",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
@@ -84,7 +84,7 @@
   {
    "id": "no_line_after_stop",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "    if (result.left_out != 0) post_click_limit(own.size() - result.left_out);\n",
+   "old": "    if (result.left_out != 0) post_click_limit(result, own.size() - result.left_out);\n",
    "new": "    (void)result;\n",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
@@ -128,6 +128,94 @@
    "new": "    tc.turn = turns_;\n    tc.command = command;\n    if (command.type != sim::CommandType::GroupMove || replay_.commands.empty() || replay_.commands.back().turn != turns_) replay_.commands.push_back(std::move(tc));",
    "build": "test_replay",
    "test": "timeout 900 env ANTS_TEST_FILTER=RP2.14 ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "chunk_of_31_ants",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "std::min(sendable - from, sim::kMaxCommandAnts)",
+   "new": "std::min(sendable - from, size_t{31})",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "chunk_of_33_ants",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "std::min(sendable - from, sim::kMaxCommandAnts)",
+   "new": "std::min(sendable - from, size_t{33})",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "budget_of_47_commands",
+   "file": "include/ants_app/hud.hpp",
+   "old": "static constexpr size_t kMaxCommandsPerClick = 48;",
+   "new": "static constexpr size_t kMaxCommandsPerClick = 47;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "move_names_80_ants",
+   "file": "include/ants_app/hud.hpp",
+   "old": "static constexpr size_t kMaxAntsPerMove = 81;",
+   "new": "static constexpr size_t kMaxAntsPerMove = 80;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "move_names_82_ants",
+   "file": "include/ants_app/hud.hpp",
+   "old": "static constexpr size_t kMaxAntsPerMove = 81;",
+   "new": "static constexpr size_t kMaxAntsPerMove = 82;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "move_not_limited",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "attack || special ? kMaxAntsPerClick : kMaxAntsPerMove",
+   "new": "kMaxAntsPerClick",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "attack_limited_like_a_move",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "attack || special ? kMaxAntsPerClick : kMaxAntsPerMove",
+   "new": "kMaxAntsPerMove",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "no_own_line_for_the_move_limit",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "    if (result.cap == kMaxAntsPerMove) post_status_id(sim::strings::kMoveLimit);\n    else post_status_id",
+   "new": "    post_status_id",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "no_ack_ant",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "            out.ack_ant = result.ack_ant;",
+   "new": "            out.ack_ant = 0;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "stop_key_obeys_repeats",
+   "file": "src/ants_app/hud.cpp",
+   "old": "if (!repeat && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) stop_selected(sim);",
+   "new": "if (panel == PanelMode::OneAnt || panel == PanelMode::Ants) stop_selected(sim);",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "sequencer_carry_of_four_turns",
+   "file": "include/ants_net/sequencer.hpp",
+   "old": "uint32_t max_carried_commands = 16 * 64;",
+   "new": "uint32_t max_carried_commands = 4 * 64;",
+   "build": "test_lockstep",
+   "test": "timeout 900 env ANTS_TEST_FILTER=N2.5d ./build/tests/test_net/test_lockstep"
   }
  ]
 }

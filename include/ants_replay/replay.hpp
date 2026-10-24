@@ -39,7 +39,7 @@ namespace ants::replay {
 
 inline constexpr uint16_t kFormatVersion = 1;
 inline constexpr uint32_t kHashPeriodTurns = 100;      // the state hash is kept after every 100th turn (5 s of play)
-inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half hour of four people is under 200 KiB
+inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half hour of four people is under 200 KiB (a click on a big selection adds up to 6 KiB: docs/CONTROLS.md)
 inline constexpr uint32_t kMaxTurns = 1u << 21;        // 29 hours of play: more is not a match
 inline constexpr size_t kMaxHeadBytes = 4096;
 inline constexpr size_t kMaxTextBytes = 64;            // a text field of the head (a player's name is at most 32)

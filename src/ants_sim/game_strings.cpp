@@ -88,6 +88,7 @@ constexpr Entry kTable[] = {
     {113, "%s was missing the map file '%s' and had to leave the game.", false},
     {200, "%s (%s) is out of ants!", false},      // the remake's own (187), not in the original's table
     {201, "Only %s ants ordered.", false},        // the remake's own: a click left ants out (HUD::kMaxCommandsPerClick)
+    {202, "Only 81 ants fit here.", false},       // the remake's own: a move click names at most 81 ants (HUD::kMaxAntsPerMove)
 };
 
 const Entry* find(uint16_t id) noexcept {
