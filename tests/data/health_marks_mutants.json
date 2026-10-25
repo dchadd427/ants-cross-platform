@@ -375,7 +375,7 @@
       "id": "parse_accepts_anything",
       "file": "include/ants_app/health_marks.hpp",
       "old": "if (text == word(w)) { out = w; return true; }",
-      "new": "{ out = w; return true; }",
+      "new": "if (text == word(w) || !text.empty()) { out = w; return true; }",
       "build": [
         "test_health_marks"
       ],
@@ -475,7 +475,7 @@
       "id": "thick_ignored",
       "file": "src/ants_app/renderer_health.cpp",
       "old": "    health_thick_ = health::thick_for(picture_px_per_css);",
-      "new": "    health_thick_ = false;",
+      "new": "    health_thick_ = health::thick_for(picture_px_per_css) && false;",
       "build": [
         "test_health_marks"
       ],

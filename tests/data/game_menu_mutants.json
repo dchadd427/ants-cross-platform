@@ -1166,7 +1166,7 @@
       "id": "health_word_out_of_range_taken",
       "file": "src/ants_app/application_game_menu.cpp",
       "old": "            if (value < row->min || value > row->max) return false;                    // (a word that the row does not have)\n",
-      "new": "",
+      "new": "            (void)row;\n",
       "build": [
         "test_game_menu"
       ],

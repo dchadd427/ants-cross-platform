@@ -113,6 +113,8 @@ void test_words() {
         hm::Style st = hm::Style::Number;
         check(!hm::parse(bad, w) && w == hm::When::All && !hm::parse(bad, st) && st == hm::Style::Number, "'" + bad + "' is no word and changes nothing");
     }
+    check(std::string(hm::word(hm::When::Hurt)) == "hurt" && std::string(hm::word(hm::When::All)) == "all" && std::string(hm::word(hm::When::Off)) == "off" &&
+              std::string(hm::word(hm::Style::Bar)) == "bar" && std::string(hm::word(hm::Style::Number)) == "number", "the words of the settings file: hurt, all, off, bar, number");
     check(hm::Setting{}.when == hm::When::Hurt && hm::Setting{}.style == hm::Style::Bar, "the default is a bar on hurt ants");
 }
 
