@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: only what is drawn changes; the rules, replays and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fe195f16...PLACEHOLDER)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fe195f16...2abf0410)
 
 ## v0.12.133 - 2026-10-25 - Map Maker: the footer line is no longer cut off by the screen's frame
 
