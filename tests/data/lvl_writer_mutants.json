@@ -93,8 +93,8 @@
   {
    "id": "the_writer_forgets_the_cells_limit",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "if (cells > limits.cells()) return",
-   "new": "if (cells > limits.cells() + 200u) return",
+   "old": "if (cells > limits.cells_for(level.version)) return",
+   "new": "if (cells > limits.cells_for(level.version) + 200u) return",
    "build": [
     "test_lvl_writer",
     "lvl_tool"
@@ -104,8 +104,19 @@
   {
    "id": "bytes_after_the_egg_word_not_named",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "add(RewriteChangeKind::TrailingBytes, size - m, m,",
-   "new": "add(RewriteChangeKind::TrailingBytes, size - m - 1, m,",
+   "old": "add(RewriteChangeKind::TrailingBytes, size - m, m, num(size - m) + \" bytes after the egg word are dropped (the original never reads them)\");",
+   "new": "add(RewriteChangeKind::TrailingBytes, size - m - 1, m, num(size - m) + \" bytes after the egg word are dropped (the original never reads them)\");",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "bytes_after_the_egg_word_of_a_version_9_file_not_named",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "add(RewriteChangeKind::TrailingBytes, size - m, m, num(size - m) + \" bytes after the egg word are dropped (a reader never reads them)\");",
+   "new": "add(RewriteChangeKind::TrailingBytes, size - m - 1, m, num(size - m) + \" bytes after the egg word are dropped (a reader never reads them)\");",
    "build": [
     "test_lvl_writer",
     "lvl_tool"
@@ -203,18 +214,30 @@
   {
    "id": "the_proof_misses_trailing_bytes",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "add(RewriteChangeKind::TrailingBytes, size - m, m,",
-   "new": "add(RewriteChangeKind::DescriptionPadding, size - m, m,",
+   "old": "add(RewriteChangeKind::TrailingBytes, size - m, m, num(size - m) + \" bytes after the egg word are dropped (the original never reads them)\");",
+   "new": "add(RewriteChangeKind::DescriptionPadding, size - m, m, num(size - m) + \" bytes after the egg word are dropped (the original never reads them)\");",
    "build": [
     "test_map_roundtrip"
    ],
    "test": "./build/tests/test_sim/test_map_roundtrip"
   },
   {
+   "id": "the_proof_misses_trailing_bytes_of_a_version_9_file",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "add(RewriteChangeKind::TrailingBytes, size - m, m, num(size - m) + \" bytes after the egg word are dropped (a reader never reads them)\");",
+   "new": "add(RewriteChangeKind::DescriptionPadding, size - m, m, num(size - m) + \" bytes after the egg word are dropped (a reader never reads them)\");",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool",
+    "test_map_roundtrip"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest && ./build/tests/test_sim/test_map_roundtrip"
+  },
+  {
    "id": "the_columns_limit_forgotten",
    "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "} else if (rows > limits.rows() || columns > limits.columns()) {",
-   "new": "} else if (rows > limits.rows()) {",
+   "old": "} else if (rows > limits.rows_for(version) || columns > limits.columns_for(version)) {",
+   "new": "} else if (rows > limits.rows_for(version)) {",
    "build": [
     "test_assets",
     "test_lvl_writer"
@@ -224,8 +247,8 @@
   {
    "id": "the_cells_limit_forgotten",
    "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "    } else if (static_cast<uint64_t>(rows) * columns > limits.cells()) {",
-   "new": "    } else if (static_cast<uint64_t>(rows) * columns > limits.cells() + 200u) {",
+   "old": "    } else if (static_cast<uint64_t>(rows) * columns > limits.cells_for(version)) {",
+   "new": "    } else if (static_cast<uint64_t>(rows) * columns > limits.cells_for(version) + 200u) {",
    "build": [
     "test_assets",
     "test_lvl_writer"
@@ -246,8 +269,8 @@
   {
    "id": "the_size_limit_forgotten_in_memory",
    "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "        if (size > limits.max_read_bytes) {",
-   "new": "        if (size > limits.max_read_bytes && size > (1u << 30)) {",
+   "old": "        if (size > limits.read_bytes()) {",
+   "new": "        if (size > limits.read_bytes() && size > (1u << 30)) {",
    "build": [
     "test_assets",
     "test_lvl_writer"
@@ -257,8 +280,8 @@
   {
    "id": "a_large_file_read_before_it_is_refused",
    "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "        if (static_cast<uint64_t>(size) > limits.max_read_bytes) {",
-   "new": "        if (static_cast<uint64_t>(size) > limits.max_read_bytes && size < 0) {",
+   "old": "        if (static_cast<uint64_t>(size) > limits.read_bytes()) {",
+   "new": "        if (static_cast<uint64_t>(size) > limits.read_bytes() && size < 0) {",
    "build": [
     "test_assets",
     "test_lvl_writer"
@@ -321,8 +344,8 @@
   {
    "id": "a_file_of_exactly_the_write_limit_refused",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "if (size > limits.max_write_bytes) return",
-   "new": "if (size >= limits.max_write_bytes) return",
+   "old": "if (size > most) return \"the file would have \"",
+   "new": "if (size >= most) return \"the file would have \"",
    "build": [
     "test_lvl_writer",
     "lvl_tool"
@@ -332,8 +355,8 @@
   {
    "id": "a_grid_of_exactly_the_column_limit_refused_by_the_writer",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "if (rows > limits.rows() || columns > limits.columns()) {",
-   "new": "if (rows > limits.rows() || columns >= limits.columns()) {",
+   "old": "if (rows > limits.rows_for(level.version) || columns > limits.columns_for(level.version)) {",
+   "new": "if (rows > limits.rows_for(level.version) || columns >= limits.columns_for(level.version)) {",
    "build": [
     "test_lvl_writer",
     "lvl_tool"
@@ -365,7 +388,7 @@
   {
    "id": "blank_level_ignores_its_limits",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "if (rows <= limits.rows() && columns <= limits.columns() && cells <= limits.cells()) {",
+   "old": "if (rows <= limits.rows_for(version) && columns <= limits.columns_for(version) && cells <= limits.cells_for(version)) {",
    "new": "if (rows <= LVL_MAX_GRID_SIDE && columns <= LVL_MAX_GRID_SIDE && limits.max_rows != 0) {",
    "build": [
     "test_lvl_writer",
@@ -376,8 +399,8 @@
   {
    "id": "a_file_of_exactly_the_read_limit_refused",
    "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "        if (size > limits.max_read_bytes) {",
-   "new": "        if (size >= limits.max_read_bytes) {",
+   "old": "        if (size > limits.read_bytes()) {",
+   "new": "        if (size >= limits.read_bytes()) {",
    "build": [
     "test_assets",
     "test_lvl_writer"
@@ -387,8 +410,8 @@
   {
    "id": "a_grid_of_exactly_the_column_limit_refused_by_the_reader",
    "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "} else if (rows > limits.rows() || columns > limits.columns()) {",
-   "new": "} else if (rows > limits.rows() || columns >= limits.columns()) {",
+   "old": "} else if (rows > limits.rows_for(version) || columns > limits.columns_for(version)) {",
+   "new": "} else if (rows > limits.rows_for(version) || columns >= limits.columns_for(version)) {",
    "build": [
     "test_assets",
     "test_lvl_writer"

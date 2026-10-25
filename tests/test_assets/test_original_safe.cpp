@@ -144,6 +144,10 @@ void s1_rules() {
         const OriginalSafeReport r = check_original_safe(l);
         CHECK(finds(r, Code::VersionNot8, Severity::Fatal, "the map is version 10: the original plays version 8 only (it says \"wrong version\" and starts without a map)"));
         CHECK(!r.works_in_original_game());
+        l.version = 7;                                                     // (a level below 8 is refused too: the original plays version 8 only)
+        const OriginalSafeReport below = check_original_safe(l);
+        CHECK(finds(below, Code::VersionNot8, Severity::Fatal, "the map is version 7: the original plays version 8 only (it says \"wrong version\" and starts without a map)"));
+        CHECK(!below.works_in_original_game());
         l.version = 8;
         CHECK(!check_original_safe(l).has(Code::VersionNot8));
     });
