@@ -245,7 +245,7 @@
    "id": "big_map_refusal_is_silent",
    "file": "src/ants_server/room_manager.cpp",
    "old": "s.map_refusal = [this](const std::string& name) { return store_.online_refusal(name); };",
-   "new": "s.map_refusal = [this](const std::string& name) { return std::string(); };",
+   "new": "s.map_refusal = [](const std::string&) { return std::string(); };",
    "build": [
     "test_map_list",
     "test_server",
@@ -678,7 +678,7 @@
    "id": "ants_counter_counts_plants",
    "file": "src/ants_server/online_limits.cpp",
    "old": "if (spawn.team_id < 4) ++ants;",
-   "new": "++ants;",
+   "new": "if (spawn.team_id < 4 || true) ++ants;",
    "build": [
     "test_map_list",
     "test_server",
@@ -714,7 +714,7 @@
    "id": "ants_notice_names_no_count",
    "file": "src/ants_server/online_limits.cpp",
    "old": "\"This map starts with \" + with_commas(start_ants)",
-   "new": "\"This map starts with \" + std::string(\"many\")",
+   "new": "\"This map starts with \" + with_commas(start_ants * 0)",
    "build": [
     "test_map_list",
     "test_server",
@@ -726,7 +726,7 @@
    "id": "ants_notice_names_no_limit",
    "file": "src/ants_server/online_limits.cpp",
    "old": "+ with_commas(kMaxStartAnts) + \".\";",
-   "new": "+ std::string(\"300\") + \".\";",
+   "new": "+ with_commas(kMaxStartAnts + 1) + \".\";",
    "build": [
     "test_map_list",
     "test_server",
@@ -762,7 +762,7 @@
    "id": "originals_are_judged_for_their_ants",
    "file": "src/ants_server/map_store.cpp",
    "old": "if (!original && !OnlineLimits::allows_ants(start_ants)) return",
-   "new": "if (!OnlineLimits::allows_ants(start_ants)) return",
+   "new": "if ((!OnlineLimits::allows_ants(start_ants)) || (original && false)) return",
    "build": [
     "test_map_list",
     "test_server",
