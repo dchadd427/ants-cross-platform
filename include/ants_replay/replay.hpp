@@ -41,7 +41,7 @@ namespace ants::replay {
 
 inline constexpr uint16_t kFormatVersion = 1;
 inline constexpr uint32_t kHashPeriodTurns = 100;      // the state hash is kept after every 100th turn (5 s of play)
-inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half hour of four people is under 200 KiB (a click on a big selection adds up to 6 KiB: docs/CONTROLS.md). It is the size of the MATCH: a file that holds a map (tmap) may be that much longer than the map's chunk (max_file_bytes)
+inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half hour of four people is under 200 KiB (a click on a big selection adds up to 6.4 KiB: docs/CONTROLS.md). It is the size of the MATCH: a file that holds a map (tmap) may be that much longer than the map's chunk (max_file_bytes)
 inline constexpr size_t kChunkFrameBytes = 4 + 4 + 4;  // a chunk's tag, length and checksum
 inline constexpr size_t kMaxEmbeddedMapBytes = 1u << 20;   // 1 MiB: a map of 65,536 cells (the most that a room plays) is about 0.8 MB, a Classic map at most 512 KB
 inline constexpr size_t kMaxFileBytesWithMap = kMaxFileBytes + kMaxEmbeddedMapBytes + kChunkFrameBytes;   // the longest file there can be: 2 MiB and the frame of the map's chunk (a reader refuses more before it reads a byte)

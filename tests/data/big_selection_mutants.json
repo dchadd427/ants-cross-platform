@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the click on a big selection for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): HUD::submit_in_chunks and its callers (src/ants_app/hud_input.cpp: the size of a command, the budget of 48 commands, the ants that count, the voice and the click that does nothing, the status line, Stop, the selection order) against tests/test_app/test_pointer_model_big.cpp, the line of the status box (src/ants_sim/game_strings.cpp), the sequencer's quota of a turn and its carry against test_lockstep N2.5c and N2.5d, the Stop key's repeats, the limit of 81 ants for a move, and the recording of a crowd's commands against test_replay RP2.14. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/big_selection_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "note": "Mutants of the click on a big selection for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): HUD::submit_in_chunks and its callers (src/ants_app/hud_input.cpp: the size of a command, the budget of 48 commands, the ants that count, the voice and the click that does nothing, the status line, Stop, the selection order), the rules that a move, a Stop and a group attack name EVERY ant (no cap, no hill special case) and that a special order is one command of at most 32 ants, never chunked, with the voice and the feedback of the old click, against tests/test_app/test_pointer_model_big.cpp, the line of the status box (src/ants_sim/game_strings.cpp), the sequencer's quota of a turn and its carry against test_lockstep N2.5c and N2.5d, the Stop key's repeats, and the recording of a crowd's commands against test_replay RP2.14. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/big_selection_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
  "mutants": [
   {
    "id": "chunk_of_24_ants",
@@ -12,8 +12,8 @@
   {
    "id": "only_the_first_32_ants",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "out.cap = std::min(limit, kMaxAntsPerClick);",
-   "new": "out.cap = std::min(limit, sim::kMaxCommandAnts);",
+   "old": "const size_t sendable = std::min(ants.size(), kMaxAntsPerClick);",
+   "new": "const size_t sendable = std::min(ants.size(), sim::kMaxCommandAnts);",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
@@ -52,7 +52,7 @@
   {
    "id": "no_line_when_nothing_needed_an_order",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "        if (result.left_out != 0) post_click_limit(result, named->size() - result.left_out);\n        return 0;",
+   "old": "        if (result.left_out != 0) post_click_limit(targets.size() - result.left_out);\n        return 0;",
    "new": "        return 0;",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
@@ -60,7 +60,7 @@
   {
    "id": "no_line_after_an_order",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "    if (result.left_out != 0) post_click_limit(result, named->size() - result.left_out);       // (after the voice's text: the line says what the click did not do)\n",
+   "old": "    if (result.left_out != 0) post_click_limit(targets.size() - result.left_out);       // (after the voice's text: the line says what the click did not do)\n",
    "new": "",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
@@ -68,8 +68,8 @@
   {
    "id": "line_counts_the_selection_not_the_ordered",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "post_click_limit(result, named->size() - result.left_out);       // (after",
-   "new": "post_click_limit(result, named->size());       // (after",
+   "old": "post_click_limit(targets.size() - result.left_out);       // (after",
+   "new": "post_click_limit(targets.size());       // (after",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
@@ -84,7 +84,7 @@
   {
    "id": "no_line_after_stop",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "    if (result.left_out != 0) post_click_limit(result, own.size() - result.left_out);\n",
+   "old": "    if (result.left_out != 0) post_click_limit(own.size() - result.left_out);\n",
    "new": "    (void)result;\n",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
@@ -154,46 +154,6 @@
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
   {
-   "id": "move_names_80_ants",
-   "file": "include/ants_app/hud.hpp",
-   "old": "static constexpr size_t kMaxAntsPerMove = 81;",
-   "new": "static constexpr size_t kMaxAntsPerMove = 80;",
-   "build": "test_pointer_model",
-   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
-  },
-  {
-   "id": "move_names_82_ants",
-   "file": "include/ants_app/hud.hpp",
-   "old": "static constexpr size_t kMaxAntsPerMove = 81;",
-   "new": "static constexpr size_t kMaxAntsPerMove = 82;",
-   "build": "test_pointer_model",
-   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
-  },
-  {
-   "id": "move_not_limited",
-   "file": "src/ants_app/hud_input.cpp",
-   "old": "attack || special ? kMaxAntsPerClick : kMaxAntsPerMove",
-   "new": "kMaxAntsPerClick",
-   "build": "test_pointer_model",
-   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
-  },
-  {
-   "id": "attack_limited_like_a_move",
-   "file": "src/ants_app/hud_input.cpp",
-   "old": "attack || special ? kMaxAntsPerClick : kMaxAntsPerMove",
-   "new": "kMaxAntsPerMove",
-   "build": "test_pointer_model",
-   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
-  },
-  {
-   "id": "no_own_line_for_the_move_limit",
-   "file": "src/ants_app/hud_input.cpp",
-   "old": "    if (result.cap == kMaxAntsPerMove) post_status_id(sim::strings::kMoveLimit);\n    else post_status_id",
-   "new": "    (void)result;\n    post_status_id",
-   "build": "test_pointer_model",
-   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
-  },
-  {
    "id": "no_ack_ant",
    "file": "src/ants_app/hud_input.cpp",
    "old": "            out.ack_ant = result.ack_ant;",
@@ -218,20 +178,116 @@
    "test": "timeout 900 env ANTS_TEST_FILTER=N2.5d ./build/tests/test_net/test_lockstep"
   },
   {
-   "id": "raid_click_is_capped",
+   "id": "move_capped_again",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "            limit = kMaxAntsPerClick;\n            std::unordered_map",
-   "new": "            limit = kMaxAntsPerMove;\n            std::unordered_map",
+   "old": "result = submit_in_chunks(sim, cmd, targets);",
+   "new": "result = submit_in_chunks(sim, cmd, attack ? targets : std::vector<uint32_t>(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(targets.size(), 81))));",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
   {
-   "id": "every_ant_named_on_a_hill_click",
+   "id": "move_capped_at_32",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "if (i < sim::kMaxCommandAnts || (it != raw.end() && it->second == sim::AntType::Thief)) raiders.push_back(targets[i]);",
-   "new": "raiders.push_back(targets[i]); (void)it;",
+   "old": "result = submit_in_chunks(sim, cmd, targets);",
+   "new": "result = submit_in_chunks(sim, cmd, attack ? targets : std::vector<uint32_t>(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(targets.size(), 32))));",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "attack_capped",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "result = submit_in_chunks(sim, cmd, targets);",
+   "new": "result = submit_in_chunks(sim, cmd, !attack ? targets : std::vector<uint32_t>(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(targets.size(), 81))));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "special_chunked",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "    if (special) {\n        cmd.ants.assign",
+   "new": "    if (special && false) {\n        cmd.ants.assign",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "move_not_chunked",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "    if (special) {\n        cmd.ants.assign",
+   "new": "    if (special || (!attack && targets.size() > 0)) {\n        cmd.ants.assign",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "attack_not_chunked",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "    if (special) {\n        cmd.ants.assign",
+   "new": "    if (special || attack) {\n        cmd.ants.assign",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "special_names_31",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), sim::kMaxCommandAnts)));\n        const sim::CommandResult one",
+   "new": "cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), size_t{31})));\n        const sim::CommandResult one",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "special_names_33",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), sim::kMaxCommandAnts)));\n        const sim::CommandResult one",
+   "new": "cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), size_t{33})));\n        const sim::CommandResult one",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "special_names_every_ant",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), sim::kMaxCommandAnts)));\n        const sim::CommandResult one",
+   "new": "cmd.ants.assign(targets.begin(), targets.end());\n        const sim::CommandResult one",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "special_speaks_for_many",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "else if (special) voice_special(voice_type, result.needing_order);",
+   "new": "else if (special) voice_special(voice_type, 1);",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "special_sums_the_needing",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "        result.needing_order = one.needing_order;\n        result.ack_ant = one.ack_ant;",
+   "new": "        result.needing_order = one.needing_order + 1;\n        result.ack_ant = one.ack_ant;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "thief_exemption_back",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "result = submit_in_chunks(sim, cmd, targets);",
+   "new": "{ std::vector<uint32_t> named = targets; const assets::AnthillSpawn* hill = hill_at(sim.get_world_state(), tile.x, tile.y); if (!attack && hill != nullptr && hill->team_id != local_player_id_ && named.size() > sim::kMaxCommandAnts) named.resize(sim::kMaxCommandAnts); result = submit_in_chunks(sim, cmd, named); }",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "special_line_of_a_limit",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "        result.needing_order = one.needing_order;\n        result.ack_ant = one.ack_ant;",
+   "new": "        result.needing_order = one.needing_order;\n        result.ack_ant = one.ack_ant;\n        result.left_out = targets.size() - std::min(targets.size(), sim::kMaxCommandAnts);",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "sequencer_carry_of_six_turns",
+   "file": "include/ants_net/sequencer.hpp",
+   "old": "uint32_t max_carried_commands = 16 * 64;",
+   "new": "uint32_t max_carried_commands = 6 * 64;",
+   "build": "test_lockstep",
+   "test": "timeout 900 env ANTS_TEST_FILTER=N2.5d ./build/tests/test_net/test_lockstep"
   }
  ]
 }
