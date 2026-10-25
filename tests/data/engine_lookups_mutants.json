@@ -1,0 +1,129 @@
+{
+ "note": "Mutants of the O(1) lookups of the simulation (a queued-request flag for each ant in PathManager, the slot of an ant's id in SimulationEngineImpl::find_unit) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/engine_lookups_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp: a flag that goes stale (delivery, a rotation, clear), a copy or a move that loses the flags, a flag array that is one short, ids that are never found, a request that does not replace the old one (also for an id above the flag array), a copy assignment from a moved-from manager that keeps the flags, an init or init_test_world that keeps the old id counter, a slot that is not checked or is off by one, ids that are not dense.",
+ "defaults": {
+  "build": "test_engine_lookups",
+  "test": "timeout 600 ./build/tests/test_sim/test_engine_lookups"
+ },
+ "mutants": [
+  {
+   "id": "queue_flag_survives_a_delivery",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "        set_queued(ant_id, false);   // (the flags say what the queue holds at every moment, also while the cost callback runs)\n",
+   "new": ""
+  },
+  {
+   "id": "queue_flag_stays_while_running_a_search",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "            queue_.push_back(std::move(r));  // unfinished: back of the queue\n            set_queued(ant_id, true);\n",
+   "new": "            queue_.push_back(std::move(r));  // unfinished: back of the queue\n"
+  },
+  {
+   "id": "queue_flag_lost_in_a_rotation",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "        queue_.push_back(std::move(r));  // no grid free: rotate and try the next request\n        set_queued(ant_id, true);\n",
+   "new": "        queue_.push_back(std::move(r));  // no grid free: rotate and try the next request\n"
+  },
+  {
+   "id": "queue_flags_survive_clear",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "void PathManager::clear() {\n    queue_.clear();\n    queued_.clear();\n",
+   "new": "void PathManager::clear() {\n    queue_.clear();\n"
+  },
+  {
+   "id": "copy_constructor_without_flags",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "    for (const auto& search : other.queue_) queue_.push_back(std::make_unique<PathSearch>(*search, *pool_));\n    rebuild_queued();\n}",
+   "new": "    for (const auto& search : other.queue_) queue_.push_back(std::make_unique<PathSearch>(*search, *pool_));\n}"
+  },
+  {
+   "id": "copy_assignment_without_flags",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "    rebuild_queued();\n    return *this;",
+   "new": "    return *this;"
+  },
+  {
+   "id": "copy_assignment_from_a_moved_from_manager_keeps_the_flags",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "        pool_.reset();\n        rebuild_queued();                              // (the queue is empty now: no flag may stay set)\n",
+   "new": "        pool_.reset();\n"
+  },
+  {
+   "id": "move_constructor_drops_the_flags",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "queue_(std::move(other.queue_)), queued_(std::move(other.queued_)), queued_far_",
+   "new": "queue_(std::move(other.queue_)), queued_far_"
+  },
+  {
+   "id": "move_assignment_drops_the_flags",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "        queued_ = std::move(other.queued_);\n        queued_far_ = other.queued_far_;\n",
+   "new": "        queued_far_ = other.queued_far_;\n"
+  },
+  {
+   "id": "queue_flag_never_cleared",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "    queued_[ant_id] = queued ? 1 : 0;",
+   "new": "    queued_[ant_id] = 1;"
+  },
+  {
+   "id": "queue_flag_array_one_short",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "queued_.resize(static_cast<size_t>(ant_id) + 1, 0);",
+   "new": "queued_.resize(static_cast<size_t>(ant_id), 0);"
+  },
+  {
+   "id": "far_ids_never_queued",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "(queued_far_ != 0 && scan_for(ant_id))",
+   "new": "false"
+  },
+  {
+   "id": "new_request_keeps_the_old_one",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "    if (has_request_for(ant_id)) {\n        for (auto it",
+   "new": "    if (false) {\n        for (auto it"
+  },
+  {
+   "id": "far_ids_not_replaced",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "    if (has_request_for(ant_id)) {\n        for (auto it",
+   "new": "    if (ant_id < kFlaggedIds && has_request_for(ant_id)) {\n        for (auto it"
+  },
+  {
+   "id": "find_unit_slot_not_checked",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "if (slot < ants_.size() && ants_[slot] && ants_[slot]->id == id) {",
+   "new": "if (slot < ants_.size()) {"
+  },
+  {
+   "id": "find_unit_no_scan_after_a_miss",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "        AntUnit* const found = find_unit_scan(id);\n",
+   "new": "        AntUnit* const found = nullptr;\n"
+  },
+  {
+   "id": "find_unit_slot_off_by_one",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "const size_t slot = static_cast<size_t>(id) - 1u;",
+   "new": "const size_t slot = static_cast<size_t>(id);"
+  },
+  {
+   "id": "ant_ids_not_dense",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    uint32_t id = impl_->next_ant_id_++;\n    auto unit = std::make_unique<AntUnit>(id, static_cast<TeamId>(player_id % 4)",
+   "new": "    uint32_t id = (impl_->next_ant_id_ += 2) - 1;\n    auto unit = std::make_unique<AntUnit>(id, static_cast<TeamId>(player_id % 4)"
+  },
+  {
+   "id": "init_keeps_old_id_counter",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    impl_->next_ant_id_ = 1;\n    impl_->world_state_dirty_ = true;\n    impl_->movement_reset();\n\n    impl_->flower_droppers_.clear();",
+   "new": "    impl_->world_state_dirty_ = true;\n    impl_->movement_reset();\n\n    impl_->flower_droppers_.clear();"
+  },
+  {
+   "id": "init_test_world_keeps_old_id_counter",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    impl_->next_ant_id_ = 1;\n    impl_->world_state_dirty_ = true;\n    impl_->movement_reset();\n\n    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {\n        impl_->stats_.set_egg_count(p, 10);",
+   "new": "    impl_->world_state_dirty_ = true;\n    impl_->movement_reset();\n\n    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {\n        impl_->stats_.set_egg_count(p, 10);"
+  }
+ ]
+}
