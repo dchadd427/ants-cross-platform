@@ -324,6 +324,40 @@ add_test(NAME test_engine_copy COMMAND test_engine_copy --all)
 # COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
 set_tests_properties(test_engine_copy PROPERTIES COST 50)
 
+# The lookups that replaced scans (find_unit by id, has_request_for by flag) against the scans, in matches: the simulation again, with the shadow check compiled in
+# (include/ants_sim/lookup_shadow.hpp: every call also runs the scan and stops the program on a difference, and a thread can be switched to the scans alone). Only this
+# program links it; no product build has the check. The program is one ctest entry (the quick tests and the big ones: run_tests.sh has them as suites 2.33 and 2.34).
+get_target_property(ANTS_SIM_SOURCE_NAMES ants_sim SOURCES)
+list(TRANSFORM ANTS_SIM_SOURCE_NAMES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/../../src/ants_sim/")
+add_library(ants_sim_shadow STATIC ${ANTS_SIM_SOURCE_NAMES})
+
+target_include_directories(ants_sim_shadow PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_link_libraries(ants_sim_shadow PUBLIC ants_assets)
+
+target_compile_definitions(ants_sim_shadow PUBLIC ANTS_SIM_LOOKUP_SHADOW=1)
+
+add_executable(test_engine_lookups
+    test_engine_lookups.cpp
+)
+
+target_link_libraries(test_engine_lookups PRIVATE
+    ants_sim_shadow
+    ants_assets
+)
+
+target_include_directories(test_engine_lookups PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common
+)
+
+target_link_libraries(test_engine_lookups PRIVATE ants_test_paths)
+
+add_test(NAME test_engine_lookups COMMAND test_engine_lookups --all)
+set_tests_properties(test_engine_lookups PROPERTIES COST 60)
+
 add_executable(test_game_mode
     test_game_mode.cpp
 )

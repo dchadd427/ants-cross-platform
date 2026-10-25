@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "ants_sim/lookup_shadow.hpp"
+
 namespace ants::sim {
 
 namespace {
@@ -410,11 +412,39 @@ int PathSearch::step_wide(uint16_t budget, const StepCostFn& cost) {
 
 PathManager::PathManager() : pool_(std::make_unique<PathGridPool>()) {}
 
+// The queued-ant index (queued_, see the header) is rebuilt from the queue after every copy, never copied: it cannot disagree with the queue it was built from.
+void PathManager::set_queued(uint32_t ant_id, bool queued) {
+    if (ant_id >= kFlaggedIds) {
+        if (queued) ++queued_far_;
+        else --queued_far_;
+        return;
+    }
+    if (queued_.size() <= ant_id) {
+        if (!queued) return;
+        queued_.resize(static_cast<size_t>(ant_id) + 1, 0);
+    }
+    queued_[ant_id] = queued ? 1 : 0;
+}
+
+void PathManager::rebuild_queued() {
+    queued_.clear();
+    queued_far_ = 0;
+    for (const auto& r : queue_) set_queued(r->ant_id(), true);
+}
+
+bool PathManager::scan_for(uint32_t ant_id) const noexcept {
+    for (const auto& r : queue_) {
+        if (r->ant_id() == ant_id) return true;
+    }
+    return false;
+}
+
 // Deep copy. The new pool is a copy of the old one (the slots in use with their cells), and every queued search is copied into the new queue in the same order and attached
 // to the new pool, so that nothing is shared and the copy delivers the same paths in the same runs as the original.
 PathManager::PathManager(const PathManager& other)
     : pool_(other.pool_ ? std::make_unique<PathGridPool>(*other.pool_) : nullptr) {
     for (const auto& search : other.queue_) queue_.push_back(std::make_unique<PathSearch>(*search, *pool_));
+    rebuild_queued();
 }
 
 PathManager& PathManager::operator=(const PathManager& other) {
@@ -427,7 +457,15 @@ PathManager& PathManager::operator=(const PathManager& other) {
     if (pool_) *pool_ = *other.pool_;                  // keeps the memory of our slots where it fits
     else pool_ = std::make_unique<PathGridPool>(*other.pool_);
     for (const auto& search : other.queue_) queue_.push_back(std::make_unique<PathSearch>(*search, *pool_));
+    rebuild_queued();
     return *this;
+}
+
+PathManager::PathManager(PathManager&& other) noexcept
+    : pool_(std::move(other.pool_)), queue_(std::move(other.queue_)), queued_(std::move(other.queued_)), queued_far_(other.queued_far_) {
+    other.queue_.clear();   // a moved-from manager is empty, whatever the library leaves in a moved-from container
+    other.queued_.clear();
+    other.queued_far_ = 0;
 }
 
 PathManager& PathManager::operator=(PathManager&& other) noexcept {
@@ -435,6 +473,11 @@ PathManager& PathManager::operator=(PathManager&& other) noexcept {
         queue_.clear();  // release our searches while our pool still exists
         pool_ = std::move(other.pool_);
         queue_ = std::move(other.queue_);
+        queued_ = std::move(other.queued_);
+        queued_far_ = other.queued_far_;
+        other.queue_.clear();
+        other.queued_.clear();
+        other.queued_far_ = 0;
     }
     return *this;
 }
@@ -442,15 +485,19 @@ PathManager& PathManager::operator=(PathManager&& other) noexcept {
 // PathMgr::Request (FUN_010246e8).
 void PathManager::request(uint32_t ant_id, TileCoord from, TileCoord to, uint16_t rows, uint16_t cols, bool wall_at_row_90, bool wide) {
     if (!pool_) pool_ = std::make_unique<PathGridPool>();  // moved-from manager
-    // Remove the FIRST queued request of the same ant (0x10246f8-0x102473b); destroying it frees its slot.
-    for (auto it = queue_.begin(); it != queue_.end(); ++it) {
-        if ((*it)->ant_id() == ant_id) {
-            queue_.erase(it);
-            break;
+    // Remove the FIRST queued request of the same ant (0x10246f8-0x102473b); destroying it frees its slot. The scan only runs for an ant that has one.
+    if (has_request_for(ant_id)) {
+        for (auto it = queue_.begin(); it != queue_.end(); ++it) {
+            if ((*it)->ant_id() == ant_id) {
+                queue_.erase(it);
+                set_queued(ant_id, false);
+                break;
+            }
         }
     }
     // Construct (runs Init) and append at the tail (0x1024769).
     queue_.push_back(std::make_unique<PathSearch>(ant_id, from, to, rows, cols, *pool_, wall_at_row_90, wide));
+    set_queued(ant_id, true);
 }
 
 // PathMgr::Run (0x1024786).
@@ -463,6 +510,7 @@ std::optional<PathManager::Delivery> PathManager::run(const CostProvider& cost, 
         std::unique_ptr<PathSearch> r = std::move(queue_.front());
         queue_.pop_front();
         const uint32_t ant_id = r->ant_id();
+        set_queued(ant_id, false);   // (the flags say what the queue holds at every moment, also while the cost callback runs)
         const PathSearch::StepCostFn step_cost = [&cost, ant_id](TileCoord from, TileCoord to) {
             return cost(ant_id, from, to);
         };
@@ -472,22 +520,33 @@ std::optional<PathManager::Delivery> PathManager::run(const CostProvider& cost, 
                 return Delivery{ant_id, r->path()};
             }
             queue_.push_back(std::move(r));  // unfinished: back of the queue
+            set_queued(ant_id, true);
             return std::nullopt;
         }
         queue_.push_back(std::move(r));  // no grid free: rotate and try the next request
+        set_queued(ant_id, true);
     }
     return std::nullopt;
 }
 
 void PathManager::clear() {
     queue_.clear();
+    queued_.clear();
+    queued_far_ = 0;
 }
 
 bool PathManager::has_request_for(uint32_t ant_id) const noexcept {
-    for (const auto& r : queue_) {
-        if (r->ant_id() == ant_id) return true;
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    if (lookup_shadow_linear_only()) return scan_for(ant_id);
+#endif
+    const bool queued = ant_id < kFlaggedIds ? (ant_id < queued_.size() && queued_[ant_id] != 0) : (queued_far_ != 0 && scan_for(ant_id));
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    if (lookup_shadow_sample(queue_.size())) {
+        ++lookup_shadow_checks();
+        if (queued != scan_for(ant_id)) lookup_shadow_fail("has_request_for", ant_id);
     }
-    return false;
+#endif
+    return queued;
 }
 
 } // namespace ants::sim

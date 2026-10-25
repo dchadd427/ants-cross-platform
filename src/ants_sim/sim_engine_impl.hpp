@@ -7,6 +7,7 @@
 #include "ants_sim/path_planner.hpp"
 #include "ants_sim/movement_tables.hpp"
 #include "ants_sim/effect_specs.hpp"
+#include "ants_sim/lookup_shadow.hpp"
 #include <unordered_map>
 #include <memory>
 #include <algorithm>
@@ -287,7 +288,30 @@ public:
     SimulationEngineImpl() = default;
 
 
+    /// The ant with this id, or nullptr. The table only grows and an ant's id is `next_ant_id_++` at its push_back (and both restart at 1 in init), so ant n sits in slot
+    /// n - 1: one look, no scan. The slot is checked, never trusted: a slot that does not hold the id (an id that was never handed out, or a table that stops being dense)
+    /// falls back to the scan that this lookup replaced, so the answer is the scan's in every state.
     AntUnit* find_unit(uint32_t id) {
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+        if (lookup_shadow_linear_only()) return find_unit_scan(id);
+#endif
+        const size_t slot = static_cast<size_t>(id) - 1u;   // (id 0 wraps to a slot that does not exist)
+        if (slot < ants_.size() && ants_[slot] && ants_[slot]->id == id) {
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+            if (lookup_shadow_sample(ants_.size())) {
+                ++lookup_shadow_checks();
+                if (ants_[slot].get() != find_unit_scan(id)) lookup_shadow_fail("find_unit", id);
+            }
+#endif
+            return ants_[slot].get();
+        }
+        AntUnit* const found = find_unit_scan(id);
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+        if (id != 0) ++lookup_shadow_fallbacks();   // (0 is "no ant": asked now and then, answered by the scan)
+#endif
+        return found;
+    }
+    AntUnit* find_unit_scan(uint32_t id) {
         for (auto& a : ants_) {
             if (a && a->id == id) return a.get();
         }
