@@ -2111,6 +2111,8 @@ def run_part(part, tab, args, check, tiny, junk):
             pickup_part.run_pickup_sheet(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, name, mobile)
             if not mobile:
                 pickup_part.run_pickup_strobe(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, name, False)
+        tab.emulate(1000, 700, 1)
+        pickup_part.run_pickup_resize(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, "desktop resized while moving", False)
         pickup_part.run_pickup_turn(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS, "phone turned 844x390 to 390x844", True)          # (it emulates the sideways phone itself, and turns it)
     elif part == "play":
         import web_mapmaker_play_browser as play                      # (Play this map: its own file, this one is at the limit of lines)

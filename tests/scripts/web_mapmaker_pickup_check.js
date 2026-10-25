@@ -1620,29 +1620,32 @@ function caseP() {
     check(pg.bar.offsetHeight === 150 && pg.bar.style.minHeight === '150px', 'and the same when it gets wider: ' + pg.bar.offsetHeight);
 
     // the observer: made with the tool, sees the bar, tells the page when the bar's size changed, lets go when the tool is left
-    const made = [];
+    // (its call only asks for the next frame: settling changes the bar's own height, which inside the observer's call is a change of what is watched, and the browser reports an undelivered notification at every resize)
+    const made = [], frames = [];
     class Watcher { constructor(cb) { this.cb = cb; this.seen = []; this.gone = false; made.push(this); } observe(n) { this.seen.push(n); } disconnect() { this.gone = true; this.seen = []; } }
-    const rp = barPage({ win: { ResizeObserver: Watcher } });
+    const rp = barPage({ win: { ResizeObserver: Watcher, requestAnimationFrame: (fn) => frames.push({ fn, live: true }), cancelAnimationFrame: (id) => { frames[id - 1].live = false; } } });
+    const flush = () => { for (const f of frames.slice()) if (f.live) { f.live = false; f.fn(); } };          // (the frames that are waiting now run once; every frame ever asked for stays in the list, its number is its place; the ghost's own loop asks for one at each)
+    const ping = () => { made[0].cb([]); flush(); };
     check(made.length === 1 && made[0].seen.length === 1 && made[0].seen[0] === rp.bar, 'the tool watches the size of its bar (a ResizeObserver made with the tool)');
     rp.tap(101, 41);
     const settles = () => rp.log.settles.length;
     let n = settles();
     check(rp.log.vars['--pk-h'] === '150px', 'the page has room for the bar: ' + rp.log.vars['--pk-h']);
-    made[0].cb([]); made[0].cb([]);
+    ping(); ping();
     check(settles() === n, 'the observer is told and the size is the same: nothing is done (it cannot go round in a circle)');
     rp.model.width = 390;          // (a phone turned upright while the bar is open: it is 40 higher, and nothing was drawn again)
-    made[0].cb([]);
+    ping();
     check(rp.log.vars['--pk-h'] === '190px' && settles() === n + 1, 'the bar is higher with nothing drawn again: the page gets the room of the bar as it is now (' + rp.log.vars['--pk-h'] + ') and the map is told');
-    made[0].cb([]);
+    ping();
     check(settles() === n + 1, 'and the next call with this size does nothing');
-    rp.model.width = 800; made[0].cb([]);
+    rp.model.width = 800; ping();
     check(rp.log.vars['--pk-h'] === '150px' && settles() === n + 2, 'a wider bar, lower again: ' + rp.log.vars['--pk-h']);
     rp.press('move'); rp.p.hover({ row: 0, column: 41 }); rp.p.hover({ row: 60, column: 41 });
-    n = settles(); rp.model.width = 390; made[0].cb([]);
+    n = settles(); rp.model.width = 390; ping();
     check(rp.log.vars['--pk-h'] === '190px' && settles() === n + 1, 'while a thing is on its way, the observer sees the bar at the new width too, not at the old height held: ' + rp.log.vars['--pk-h']);
     rp.press('cancel'); rp.press('cancel');
     check(rp.hidden(), 'Cancel twice: the bar goes');
-    n = settles(); rp.model.width = 800; made[0].cb([]);
+    n = settles(); rp.model.width = 800; ping();
     check(settles() === n, 'a hidden bar is not looked at');
     rp.pick.show(false);
     check(made[0].gone === true && made[0].seen.length === 0, 'the observer is let go of when the tool is left');
@@ -1653,19 +1656,22 @@ function caseP() {
     rp.pick.show(true);
     check(made.length === 2, 'and choosing it twice makes no second observer');
 
-    // a page without the observer: the window's resize does it, and it is taken off again
-    const listeners = [], fake = { addEventListener: (t, fn) => listeners.push([t, fn]), removeEventListener: (t, fn) => { const i = listeners.findIndex((l) => l[0] === t && l[1] === fn); if (i >= 0) listeners.splice(i, 1); } };
-    const wp = barPage({ win: fake });
-    check(listeners.length === 1 && listeners[0][0] === 'resize', 'with no ResizeObserver the tool listens to the window\'s resize');
-    wp.tap(101, 41);
-    n = wp.log.settles.length; wp.model.width = 390; listeners[0][1]();
-    check(wp.log.vars['--pk-h'] === '190px' && wp.log.settles.length === n + 1, 'a resize: the room of the bar is made again (' + wp.log.vars['--pk-h'] + ')');
-    listeners[0][1]();
-    check(wp.log.settles.length === n + 1, 'and the same size again does nothing');
-    wp.pick.show(false);
-    check(listeners.length === 0, 'the listener is taken off when the tool is left');
-    wp.pick.show(true); wp.pick.show(true);
-    check(listeners.length === 1, 'and put on once when it is chosen again');
+    // the observer's call settles nothing itself: it asks for one frame (however often it is told) and the frame does it; a frame that is waiting when the tool is left or the bar is gone does nothing
+    rp.tap(101, 41); n = settles(); rp.model.width = 390;
+    const asked = frames.length; made[1].cb([]); made[1].cb([]); made[1].cb([]);
+    check(settles() === n && frames.length === asked + 1, 'the observer is told three times: nothing is settled inside its call, one frame is asked for (' + (frames.length - asked) + ')');
+    flush();
+    check(rp.log.vars['--pk-h'] === '190px' && settles() === n + 1, 'and the frame settles it: ' + rp.log.vars['--pk-h']);
+    rp.press('cancel'); n = settles(); rp.model.width = 800; made[1].cb([]); flush();
+    check(rp.hidden() && settles() === n, 'a frame that comes when the bar is gone does nothing');
+    rp.tap(101, 41); rp.model.width = 390; made[1].cb([]);
+    const pending = frames[frames.length - 1];
+    rp.pick.show(false); n = settles();
+    check(pending.live === false, 'a frame that is waiting when the tool is left is cancelled');
+    let threw = null; try { pending.fn(); } catch (e) { threw = e; }
+    check(threw === null && settles() === n, 'and one that the browser did not cancel does nothing and does not throw');
+    rp.pick.show(true); rp.tap(101, 41); n = settles(); rp.model.width = 800; made[2].cb([]); flush();
+    check(made.length === 3 && settles() === n + 1, 'the tool chosen again: its new observer asks for frames again');
 }
 
 // ================= L (the core) =================

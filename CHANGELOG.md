@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Fixes:**
 - On a short screen the Hide button sits on the line of the words, so the bar is lower; a map under 300 pixels high shows the smaller map of the whole map, without its caption, so that it never reaches into the bar.
-- While a thing is on its way the bar keeps the height it has had, so the map no longer grows and shrinks under the mouse near the foot; a phone that is turned with the bar open leaves room for all of it below the page.
+- While a thing is on its way the bar keeps the height it has had, so the map no longer grows and shrinks under the mouse near the foot; a phone that is turned with the bar open leaves room for all of it below the page, and a window that is resized while a thing is on its way logs no "ResizeObserver loop" message.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/50b7ae4b...574702cd)
 

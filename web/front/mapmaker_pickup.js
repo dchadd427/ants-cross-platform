@@ -416,7 +416,7 @@
     function create(env) {
         var doc = env.doc, win = env.win, host = env.host;
         var st = { mode: 'idle', items: [], kind: 'one', group: [], copy: false, dr: 0, dc: 0, pad: false, box: null, drag: null, cycle: null, note: '', verdict: { ok: true }, target: [], ask: '', hov: null, fold: false, away: false };
-        var shown = false, over = null, bar = null, live = null, wrap = host.cv ? host.cv.parentNode : null, loop = 0, last = '', latch = 0, seenW = 0, seenH = 0, ro = null, sized = false;
+        var shown = false, over = null, bar = null, live = null, wrap = host.cv ? host.cv.parentNode : null, loop = 0, last = '', latch = 0, seenW = 0, seenH = 0, ro = null, sized = false, frame = 0;
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function file() { return env.file(); }
@@ -576,11 +576,12 @@
             if (keep && h > latch && bar.style) { latch = h; bar.style.minHeight = h + 'px'; }
             return seenH = h;
         }
-        // the bar's size changed on its own (the phone is turned, the window is resized): the room below the page and the map's height follow
+        // the bar's size changed on its own (the phone is turned, the window is resized): the room below the page and the map's height follow. Settling changes the bar's own height (hold), so it waits for the next frame:
+        // inside the observer's call it would be a change of the thing that is watched, and the browser reports an undelivered notification at every resize
         function resized() { if (bar && !bar.hidden && ((bar.offsetWidth || 0) !== seenW || (bar.offsetHeight || 0) !== seenH)) settle(); }
         function listen(on) {
-            if (on && bar && !sized) { sized = true; if (win.ResizeObserver) { ro = new win.ResizeObserver(resized); ro.observe(bar); } else if (win.addEventListener) win.addEventListener('resize', resized); }
-            else if (!on && sized) { sized = false; if (ro) ro.disconnect(); else if (win.removeEventListener) win.removeEventListener('resize', resized); ro = null; }
+            if (on && bar && !sized) { sized = true; if (win.ResizeObserver) { ro = new win.ResizeObserver(function () { if (!frame) frame = win.requestAnimationFrame(function () { frame = 0; resized(); }); }); ro.observe(bar); } }
+            else if (!on && sized) { sized = false; if (ro) ro.disconnect(); ro = null; if (frame && win.cancelAnimationFrame) win.cancelAnimationFrame(frame); frame = 0; }
         }
         // how far (in cells) the middle of the map moves so that the stretch lo..hi (pixels) is inside 0..size; one that is longer than that has its start there
         function into(lo, hi, size, pad, s) { return hi - lo > size - 2 * pad || lo < pad ? (lo - pad) / s : Math.max(0, hi - (size - pad)) / s; }

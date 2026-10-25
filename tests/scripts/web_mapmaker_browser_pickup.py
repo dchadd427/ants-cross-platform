@@ -608,6 +608,33 @@ def run_pickup_strobe(page, tab, args, check, env, edges_bytes, edges_js, name, 
     h.press("cancel")
 
 
+def run_pickup_resize(page, tab, args, check, env, edges_bytes, edges_js, name, touch):
+    """a window that changes its width while a thing is on its way: the page follows the bar, and the browser reports no "ResizeObserver loop completed with undelivered notifications" (a window 'error' event, one at each
+    resize when the bar's own height was changed inside the observer's call)"""
+    global wait_for
+    wait_for = env["wait_for"]
+    print("[web map maker] the Pick up tool, a window resized while a thing is on its way gives no ResizeObserver error (%s)" % name)
+    setup(page, args, check, edges_js, edges_bytes, name)
+    page.ev("(function () { var b = [].filter.call(document.querySelectorAll('#dialogs button'), function (n) { return n.textContent === 'Throw it away'; })[0]; if (b) b.click(); })()")
+    time.sleep(0.4)
+    h = Pick(page, tab, touch)
+    page.tool("pickup")
+    check(wait_for(lambda: page.ev("!!document.querySelector('.pk-bar')"), 10), "%s: Pick up is chosen" % name)
+    h.focus_on(6, 6, 20, 0.5, 0.25)
+    h.tap(6, 6)
+    check(h.press("move") and "Moving" in h.line(), "%s: a thing is picked and on its way: %s" % (name, h.line()))
+    page.ev("window.__errors = []; window.addEventListener('error', function (e) { window.__errors.push(String(e.message)); })")
+    for width, height in ((700, 650), (1000, 700), (900, 600), (1200, 800), (700, 650), (1000, 700)):
+        tab.emulate(width, height, 1)
+        time.sleep(0.5)
+        room, bar = float(page.ev("parseFloat(document.body.style.getPropertyValue('--pk-h'))")), page.box(".pk-bar")["h"]
+        check(abs(room - bar) < 1.5, "%s: at %dx%d the page has the bar's height in --pk-h (%d, the bar is %d)" % (name, width, height, room, bar))
+    errors = page.ev("window.__errors")
+    check(errors == [], "%s: six resizes while a thing is on its way gave %d window errors: %s" % (name, len(errors), errors[:2]))
+    h.press("cancel")
+    h.press("cancel")
+
+
 def run_pickup_turn(page, tab, args, check, env, edges_bytes, edges_js, name, touch):
     """a bar that is open when the phone is turned: the page's room below it (--pk-h) is the bar's height as it is now, not the one it had"""
     global wait_for
