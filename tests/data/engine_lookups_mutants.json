@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the O(1) lookups of the simulation (a queued-request flag for each ant in PathManager, the slot of an ant's id in SimulationEngineImpl::find_unit) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/engine_lookups_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp: a flag that goes stale (delivery, a rotation, clear), a copy or a move that loses the flags, a flag array that is one short, ids that are never found, a request that does not replace the old one, a slot that is not checked or is off by one, ids that are not dense.",
+ "note": "Mutants of the O(1) lookups of the simulation (a queued-request flag for each ant in PathManager, the slot of an ant's id in SimulationEngineImpl::find_unit) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/engine_lookups_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp: a flag that goes stale (delivery, a rotation, clear), a copy or a move that loses the flags, a flag array that is one short, ids that are never found, a request that does not replace the old one (also for an id above the flag array), a copy assignment from a moved-from manager that keeps the flags, an init or init_test_world that keeps the old id counter, a slot that is not checked or is off by one, ids that are not dense.",
  "defaults": {
   "build": "test_engine_lookups",
   "test": "timeout 600 ./build/tests/test_sim/test_engine_lookups"
@@ -42,6 +42,12 @@
    "new": "    return *this;"
   },
   {
+   "id": "copy_assignment_from_a_moved_from_manager_keeps_the_flags",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "        pool_.reset();\n        rebuild_queued();                              // (the queue is empty now: no flag may stay set)\n",
+   "new": "        pool_.reset();\n"
+  },
+  {
    "id": "move_constructor_drops_the_flags",
    "file": "src/ants_sim/path_planner.cpp",
    "old": "queue_(std::move(other.queue_)), queued_(std::move(other.queued_)), queued_far_",
@@ -78,6 +84,12 @@
    "new": "    if (false) {\n        for (auto it"
   },
   {
+   "id": "far_ids_not_replaced",
+   "file": "src/ants_sim/path_planner.cpp",
+   "old": "    if (has_request_for(ant_id)) {\n        for (auto it",
+   "new": "    if (ant_id < kFlaggedIds && has_request_for(ant_id)) {\n        for (auto it"
+  },
+  {
    "id": "find_unit_slot_not_checked",
    "file": "src/ants_sim/sim_engine_impl.hpp",
    "old": "if (slot < ants_.size() && ants_[slot] && ants_[slot]->id == id) {",
@@ -100,6 +112,18 @@
    "file": "src/ants_sim/sim_engine.cpp",
    "old": "    uint32_t id = impl_->next_ant_id_++;\n    auto unit = std::make_unique<AntUnit>(id, static_cast<TeamId>(player_id % 4)",
    "new": "    uint32_t id = (impl_->next_ant_id_ += 2) - 1;\n    auto unit = std::make_unique<AntUnit>(id, static_cast<TeamId>(player_id % 4)"
+  },
+  {
+   "id": "init_keeps_old_id_counter",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    impl_->next_ant_id_ = 1;\n    impl_->world_state_dirty_ = true;\n    impl_->movement_reset();\n\n    impl_->flower_droppers_.clear();",
+   "new": "    impl_->world_state_dirty_ = true;\n    impl_->movement_reset();\n\n    impl_->flower_droppers_.clear();"
+  },
+  {
+   "id": "init_test_world_keeps_old_id_counter",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    impl_->next_ant_id_ = 1;\n    impl_->world_state_dirty_ = true;\n    impl_->movement_reset();\n\n    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {\n        impl_->stats_.set_egg_count(p, 10);",
+   "new": "    impl_->world_state_dirty_ = true;\n    impl_->movement_reset();\n\n    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {\n        impl_->stats_.set_egg_count(p, 10);"
   }
  ]
 }

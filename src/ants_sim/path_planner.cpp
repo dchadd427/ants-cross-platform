@@ -452,6 +452,7 @@ PathManager& PathManager::operator=(const PathManager& other) {
     queue_.clear();                                    // release our searches while our pool still exists
     if (!other.pool_) {                                // a moved-from manager: no pool, no searches
         pool_.reset();
+        rebuild_queued();                              // (the queue is empty now: no flag may stay set)
         return *this;
     }
     if (pool_) *pool_ = *other.pool_;                  // keeps the memory of our slots where it fits

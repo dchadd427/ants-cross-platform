@@ -299,7 +299,7 @@ private:
     std::deque<std::unique_ptr<PathSearch>> queue_;
 
     // Which ants have a request in the queue, so that has_request_for() and the "remove the first request of the same ant" of request() need no scan. Derived data: never
-    // copied, always rebuilt from the queue (mark_queued_from_queue()), and not part of any hash. An ant id below kFlaggedIds has a byte in queued_, a larger id (only a test
+    // copied, always rebuilt from the queue (rebuild_queued()), and not part of any hash. An ant id below kFlaggedIds has a byte in queued_, a larger id (only a test
     // makes one: the engine numbers its ants 1, 2, 3 ...) is counted in queued_far_ and found by a scan, so that the answer is exact for every id.
     static constexpr uint32_t kFlaggedIds = 1u << 20;
     std::vector<uint8_t> queued_;
