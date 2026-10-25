@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.130 - 2026-10-25 - Map Maker: hold Shift or Ctrl to paint a straight line
+
+**For players:**
+- **Map Maker: hold Shift or Ctrl while you paint and the stroke stays on one straight line.** It works for Ground (with Auto edges), Objects (rocks and power-ups) and Erase, with the mouse. The line goes straight across or straight down through the square where you pressed, whichever way your first move away from that square goes farther (exactly diagonal goes across), and it stays that way until you let go of the mouse button. Until you leave the first square only that square is painted, and a line that runs off the map ends at the edge.
+- **Let go of the key in the middle of a stroke and you paint freely again** from where the line ended; press it again and the square you are on starts a new line. Press the key before the mouse button and the line starts where you press. On a Mac use Shift, because Ctrl-click is a right click there.
+- Painting with no key is exactly as before, a finger on a touch screen is unchanged, and tools that put a whole thing with a tap, Fill, Pan, Pick up and the Ants box do not change. Map Maker v1.5.8.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/99261f5d...HEAD)
+
 ## v0.12.129 - 2026-10-25 - Big selections follow the original's rules
 
 **For players:**
@@ -564,15 +575,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e47cec0b...3ab82b75); the map core (interface version 4) has a new call, `lvl_crop`; the page needs the new module, so reload it once.
 
-## v0.12.77 - 2026-10-17 - Map maker: map properties (E3c)
+## Older versions (v0.12.77 and before)
 
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) can set the properties of a map now: press Properties in the top bar (or Menu, then Properties... on a phone), or the Edit link beside the short summary of the map. You can change the description, the length of a match (1 to 120 minutes), the eggs that every team starts with (0 to 255) and the default ant type (none, combat, thief, bomber, swimmer or fire).
-- The description counter counts bytes, because the map file does: a Classic map has room for 29 and an Extended map for 255, and a letter such as the e with an accent counts double. A text that is too long gets the same sentence as the check of the map and a button that cuts it to fit.
-- Apply makes all the changes one step (Undo takes them all back), and Cancel changes nothing. The map's other bytes are not touched, so a map that you open and apply without a change is the same file.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4256634d...05168d98)
-
-## Older versions (v0.12.76 and before)
-
-Every release before v0.12.77, and the long notes of v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.78, and the long notes of v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
