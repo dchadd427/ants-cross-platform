@@ -28,6 +28,7 @@
             w = Math.max(1, Math.round(box.width)); h = Math.max(1, Math.round(box.height));
             dpr = Math.min(3, win.devicePixelRatio || 1, Math.sqrt(16000000 / (w * h)));       // (at most 16 million pixels behind the canvas)
             canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+            if (env.minimap.classList) env.minimap.classList.toggle('tiny', h < 300);
             full = null;                                                    // (a canvas that changed size is empty: the next frame is a whole one)
         }
 
@@ -333,6 +334,12 @@
                 select({ row: r, column: c });
                 View.centerOn(view, file, w, h, r, c, 22);
                 redraw();
+            },
+            // The canvas changed its size (Pick up's bar came or went): look(view, w, h) puts the map where it should be (the tool's own business)
+            settle: function (look) {
+                var r = canvas.getBoundingClientRect();
+                if (!file || Math.round(r.width) === w && Math.round(r.height) === h) return;
+                measure(); look(view, w, h); View.clamp(view, file, w, h); paint();
             },
             state: function () { return { view: view, cursor: cursor, width: w, height: h }; }
         };

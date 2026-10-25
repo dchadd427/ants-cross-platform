@@ -1877,7 +1877,7 @@ def main():
             marker = tab.ev("window.antsMarker = 7; 1")
             aspect.choose_shape(tab, "4:3")
             time.sleep(1.0)
-            chosen = json.loads(value("JSON.stringify([document.getElementById('aspect-select').value, localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))
+            chosen = json.loads(value("JSON.stringify([document.querySelector('#aspect-select-list [aria-selected=true]').getAttribute('data-shape'), localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))
             check(chosen == ["4:3", "4:3", "4:3", 7, True], "Classic 4:3 chosen in the dropdown: the picture changes at once (no reload), the browser remembers it, the address has it (%s)" % (chosen,))
             shot("game_classic_1440")
             clear_storage()

@@ -151,6 +151,8 @@ COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 
 # The shapes of the picture, one table for the game page, the front page and the settings menu (docs/PLAY_IN_BROWSER.md "Four shapes"; shapes.js)
 COPY web/shapes.js /usr/share/nginx/html/shapes.js
+# ... and the control that the game page and the settings menu choose a shape with (a button and a list made by the page: a native list does not open under the fullscreen mouse lock; shape_picker.js)
+COPY web/shape_picker.js /usr/share/nginx/html/shape_picker.js
 
 # The players' maps (docs/PLAY_IN_BROWSER.md "Players' maps in the browser"): the game page fetches the map of a room or a recording from /maps/files/ (map_files.js)
 COPY web/map_files.js /usr/share/nginx/html/map_files.js

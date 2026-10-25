@@ -297,7 +297,7 @@ class TheLookIsTheFrontPages(PageCase):
         for shadow in (ours["box-shadow"], theirs["box-shadow"]):
             self.assertRegex(shadow, r"^var\(--bevel-sm\), \d+px \d+px 0 var\(--shadow\)$")
         # the buttons are the same elements as ever (the page's script and the browser checks find them by these)
-        for markup in ('id="aspect-select"', 'id="lock-on" data-lock="on" aria-checked="true"', 'id="lock-off" data-lock="off" aria-checked="false"'):
+        for markup in ('id="aspect-pick"', 'id="lock-on" data-lock="on" aria-checked="true"', 'id="lock-off" data-lock="off" aria-checked="false"'):
             self.assertIn(markup, self.page)
         self.assertEqual(len(re.findall(r'<button type="button" role="radio" id="(?:lock-on|lock-off)"', self.page)), 2)
         self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 2)           # (the mouse and the replay bar's speed: TheReplayPage)

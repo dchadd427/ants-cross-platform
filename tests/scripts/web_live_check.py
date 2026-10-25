@@ -663,6 +663,7 @@ def main():
             fresh(kept_at=1.0)
             width_of = "(function () { var s = document.getElementById('game-stage').getBoundingClientRect(), b = document.getElementById('rbar').getBoundingClientRect(); return [Math.round(s.width), Math.round(b.width), Math.round(s.left), Math.round(b.left)]; })()"
             state = "(function () { return [document.getElementById('picpop').hidden, document.getElementById('picbtn').getAttribute('aria-expanded'), document.activeElement && document.activeElement.id]; })()"
+            shown_shape = "(document.querySelector('#pic-select-list [aria-selected=true]') || document.body).getAttribute('data-shape')"
             key = lambda tab, name, code, vk: [tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": code, "windowsVirtualKeyCode": vk}) for kind in ("keyDown", "keyUp")]
             for query, shape in (("", "16:9"), ("&aspect=4:3", "4:3"), ("&aspect=16:10", "16:10"), ("&aspect=21:9", "21:9"), ("&aspect=32:9", "32:9")):
                 tab = new_tab()
@@ -678,9 +679,9 @@ def main():
                 tab.click(bx[0], bx[1])
                 check(tab.ev(state)[:2] == [False, "true"], "%s: the button opens the window and says so" % shape)
                 pos = tab.ev("(function () { var p = document.getElementById('picpop').getBoundingClientRect(), b = document.getElementById('picbtn').getBoundingClientRect(), r = document.getElementById('rbar').getBoundingClientRect();"
-                             " return [p.bottom <= b.top, Math.abs(p.right - b.right) <= 2, p.left >= 0 && p.right <= window.innerWidth, p.top >= 0, [].map.call(document.querySelectorAll('#pic-select option'), function (x) { return x.value; }).join(' ')]; })()")
+                             " return [p.bottom <= b.top, Math.abs(p.right - b.right) <= 2, p.left >= 0 && p.right <= window.innerWidth, p.top >= 0, [].map.call(document.querySelectorAll('#pic-select-list [role=option]'), function (x) { return x.getAttribute('data-shape'); }).join(' ')]; })()")
                 check(pos == [True, True, True, True, "4:3 3:2 16:10 16:9 20:9 21:9 32:9"], "%s: the window opens above the bar at its right end, inside the screen, with the dropdown of the seven shapes (%s)" % (shape, pos))
-                check(tab.ev("document.getElementById('pic-select').value") == shape, "%s: the dropdown shows the picture's shape" % shape)
+                check(tab.ev(shown_shape) == shape, "%s: the dropdown shows the picture's shape" % shape)
                 if shape == "16:9":
                     shot(tab, "picture-open")
                     check(tab.ev("(function () { var n = document.getElementById('pic-note'); return (n.hidden ? '' : n.textContent) === AntsShapes.fillsLine(window.screen.width, window.screen.height); })()") is True,
@@ -693,13 +694,20 @@ def main():
                     check(tab.ev(state) == [True, "false", "picbtn"], "Esc closes the window and gives the focus back to the button")
                     tab.click(bx[0], bx[1])
                     tab.ev("document.getElementById('pic-select').focus(); 1")
+                    key(tab, "Enter", "Enter", 13)
+                    check(tab.ev("document.getElementById('pic-select-list').hidden") is False and tab.ev("document.getElementById('pic-select').getAttribute('aria-expanded')") == "true", "Enter on the dropdown opens its list")
+                    key(tab, "Escape", "Escape", 27)
+                    check(tab.ev("document.getElementById('pic-select-list').hidden") is True and tab.ev(state)[0] is False and tab.ev("document.activeElement.id") == "pic-select", "Esc with the list open closes the list alone: the window stays open and the focus stays on the dropdown")
+                    key(tab, "Enter", "Enter", 13)
                     key(tab, "ArrowDown", "ArrowDown", 40)
-                    key(tab, "ArrowDown", "ArrowDown", 40)                                          # (16:9, 20:9, 21:9: the keys of a native dropdown; the window stays open)
+                    key(tab, "ArrowDown", "ArrowDown", 40)                                          # (16:9, 20:9, 21:9: the mark moves, nothing is chosen yet)
+                    check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "16:9", "the arrows only move the mark: the picture is still 16:9")
+                    key(tab, "Enter", "Enter", 13)                                                  # (the choice; the window stays open)
                     time.sleep(0.5)
                     got = tab.ev(width_of)
                     check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9" and abs(got[0] - got[1]) <= 1 and got[0] > 1200, "a shape chosen in the window changes the picture at once and the bar follows it (stage %s, bar %s)" % (got[0], got[1]))
                     check(tab.ev("localStorage.getItem('ants.aspect.v2')") == "21:9" and "aspect=21:9" in tab.ev("location.search") and tab.ev(state)[0] is False, "the choice is remembered and put in the address; the window stays open")
-                    check(tab.ev("document.getElementById('pic-select').value") == "21:9", "the chosen shape is the dropdown's")
+                    check(tab.ev(shown_shape) == "21:9" and tab.ev("document.getElementById('pic-select-list').hidden") is True, "the chosen shape is the dropdown's, and its list is shut")
                     tab.call("Page.reload")
                     check(until(tab, READY) is True and tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9", "the page, opened again with the address as it was, keeps the shape")
                     tab.call("Page.navigate", {"url": door.url("/play.html?replay=" + KEPT)})

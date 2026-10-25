@@ -47,13 +47,13 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertIn("ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window))", page)
         self.assertEqual(page.count("source: 'default' }"), 1)                                                   # (one place answers 'default', and it asks the table)
 
-    def test_the_selector_is_one_empty_dropdown_with_a_label_and_a_line_under_it(self):
+    def test_the_selector_is_one_empty_host_with_a_label_and_a_line_under_it(self):
         page = read(SHELL)
         bar = page[page.index('<div class="view-bar" id="view-bar">'):page.index('id="lock-bar-label"')]
         self.assertEqual(bar.strip().splitlines()[1:3], [
-            '        <label id="view-bar-label" for="aspect-select">Picture</label>',
-            '        <span class="pick"><select class="pick-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture; the match goes on"></select><span class="fit-note" id="fit-note" hidden></span></span>',
-        ])
+            '        <span id="view-bar-label">Picture</span>',
+            '        <span class="pick" id="aspect-pick"><span class="fit-note" id="fit-note" hidden></span></span>',
+        ])                                                                                                  # (the picker, web/shape_picker.js, puts the button and its list in the host: the label names the button by id)
         self.assertNotIn("role=\"radio\" id=\"aspect-", page)                                                 # (no button for a shape any more: the entries come from web/shapes.js)
 
     def test_the_page_and_the_game_agree_on_the_shapes(self):
@@ -83,7 +83,7 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertNotIn("window.location.assign", block)                                                # no reload
         self.assertNotIn("window.confirm", block)                                                        # no "Leave the match to change the picture?"
         self.assertIn("antsSetAspect(value);", block)
-        self.assertIn("select.addEventListener('change', function () { antsPickShape(select.value); });", block)             # (a choice in the dropdown is the pick: the settings menu calls the same function)
+        self.assertIn("onPick: antsPickShape }", block)                                                   # (a choice in either dropdown is the pick: the settings menu calls the same function)
 
     def test_the_front_page_dropdown_is_empty_markup_until_the_script_fills_it_from_the_table(self):
         page = read(LOBBY)
@@ -150,7 +150,8 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
         self.assertEqual(len(re.findall(r"setItem\(\s*ANTS_ASPECT_KEY\b", shell)), 1)
         self.assertEqual(len(re.findall(r"setItem\(\s*ANTS_ASPECT_KEY\b", block)), 1)
         self.assertEqual(shell.count("function antsPickShape(value) {"), 1)                                  # (the one function that a choice calls: the dropdowns' change and the settings menu)
-        self.assertEqual(len(re.findall(r"antsPickShape\(", block)), 2)                                       # (its definition and the dropdowns' handler: nothing else writes the key)
+        self.assertEqual(len(re.findall(r"antsPickShape\(", block)), 1)                                       # (its definition: the dropdowns are handed the function itself, nothing else writes the key)
+        self.assertEqual(len(re.findall(r"onPick: antsPickShape\b", block)), 1)                              # (... as the one `onPick` of the picker that both dropdowns are made with)
         selector = lobby[lobby.index("// SELECTOR_BEGIN"):lobby.index("// SELECTOR_END")]
         self.assertEqual(len(re.findall(r"remember\(\s*ASPECT_KEY\b", lobby)), len(re.findall(r"remember\(\s*ASPECT_KEY\b", selector)))
         self.assertGreaterEqual(len(re.findall(r"remember\(\s*ASPECT_KEY\b", selector)), 1)

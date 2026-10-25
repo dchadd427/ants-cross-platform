@@ -53,7 +53,7 @@ JSON.stringify((function () {
   var lock = document.pointerLockElement || document.webkitPointerLockElement;
   var cur = $('rcursor');
   return { fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement), locked: !!lock && lock.id === 'canvas', canvas: r($('canvas')),
-           play: r($('b-play')), tl: r($('tl')), rail: r($('tl').querySelector('.rail')), speed4: r($('speed').querySelector('button[data-s="4"]')), pic: r($('picbtn')), bar: r($('rbar')),
+           play: r($('b-play')), tl: r($('tl')), rail: r($('tl').querySelector('.rail')), speed4: r($('speed').querySelector('button[data-s="4"]')), pic: r($('picbtn')), bar: r($('rbar')), sel: r($('pic-select')), o5: r($('pic-select-o5')), listOpen: !$('pic-select-list').hidden, shape: $('game-stage').getAttribute('data-aspect'), focus: (document.activeElement || {}).id || '',
            over: $('rbar').classList.contains('over'), idle: $('rbar').classList.contains('idle'), mark: cur ? !cur.hidden : null, markAt: cur ? cur.style.transform : null,
            picOpen: !$('picpop').hidden, events: window.__lockEvents || [], keys: window.__keys || [],
            game: [Module._ants_replay_get(0), Module._ants_replay_get(1)], pointer: [Module._ants_probe(0), Module._ants_probe(1), Module._ants_probe(2)],
@@ -283,7 +283,23 @@ def replay_page(p, args, check):
     s = state(tab)
     check(s["picOpen"] and s["locked"], "the Picture button opens its window with the mouse held")
     tab.save_shot(args.shots, "replay-lock-picture-window")
-    cur.press()                                                             # (closes it again)
+    # the window's dropdown is the page's own list, not the browser's: a native select cannot be opened by the page's cursor (the real press goes to the canvas, the bar gets synthetic events)
+    cur.place(*centre("sel"))
+    cur.press()
+    s = state(tab)
+    check(s["listOpen"] and s["picOpen"] and s["locked"] and s["focus"] == "pic-select", "the dropdown's list opens with the mouse held (the window stays, the focus is on the dropdown)")
+    tab.save_shot(args.shots, "replay-lock-picture-list")
+    cur.place(*centre("o5"))
+    cur.press()
+    s = state(tab)
+    check(not s["listOpen"] and s["shape"] == "21:9" and s["picOpen"] and s["locked"] and s["focus"] == "pic-select", "a click on 21:9 in the list chooses it with the mouse held: the picture is 21:9 (%s), the window stays, the lock stays" % s["shape"])
+    key = lambda name, vk: [tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": name, "windowsVirtualKeyCode": vk}) for kind in ("keyDown", "keyUp")]
+    key("Enter", 13)
+    key("Escape", 27)
+    s = state(tab)
+    check(not s["listOpen"] and s["picOpen"] and s["locked"] and s["fullscreen"] and s["focus"] == "pic-select", "Enter opens the list and Esc closes the list ALONE: the Picture window stays, and so do the lock and fullscreen")
+    cur.place(*centre("pic"))
+    cur.press()                                                             # (closes the window again)
     cur.place(canvas[2] / 2, canvas[3] / 2 - 100)
     s = state(tab)
     check(s["mark"] is False and s["pointer"][2] == 0 and s["locked"], "the cursor back on the picture: the arrow is gone and the game has its pointer again (out %d)" % s["pointer"][2])

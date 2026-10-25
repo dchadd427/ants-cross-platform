@@ -3,7 +3,7 @@
 //   * A row is a shape: its name (the text of `?aspect=`, `--aspect` and the remembered value: "4:3"), its words, the game's canvas in pixels and the widest the page's slot gets. The rows are in the order of the
 //     dropdowns, narrowest to widest, and a shape's place in them is the number that the game's `ants_set_aspect` takes.
 //   * What follows from a row is worked out here and nowhere else: the shape in the smallest whole numbers (the page's box is a whole number of those steps, and the CSS slot has that ratio), the dropdown (fillSelect:
-//     one entry for each row, "16:9 \u00b7 960 x 540", for the game page, the front page and the settings menu), which shape fills a screen (and the line that says so), and which shape a first visit starts in.
+//     one entry for each row, "16:9 \u00b7 960 x 540", for the front page; the game page and the settings menu make their own list from the rows, web/shape_picker.js), which shape fills a screen (and the line that says so), and which shape a first visit starts in.
 // ES5, no module system: a page gets the global AntsShapes, node gets module.exports (tests/scripts/web_aspect_key_check.js and the other checks of the pages run the pages' code with it).
 (function (root, factory) {
     var api = factory();
