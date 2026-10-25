@@ -420,7 +420,7 @@
             background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); cursor: pointer; text-overflow: ellipsis; touch-action: manipulation;
         }
         .pick-list { position: fixed; left: 0; top: 0; z-index: 80; box-sizing: border-box; margin: 0; padding: 4px 0; list-style: none; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; font-size: 15px; line-height: 1.1; color: var(--cream); background: #102b25; border: 2px solid var(--edge); border-radius: 8px; box-shadow: 0 8px 20px rgba(0, 0, 0, .55), 2px 3px 0 var(--shadow); }
-        .pick-opt { display: flex; align-items: center; min-height: 38px; padding: 6px 14px; white-space: nowrap; cursor: pointer; touch-action: manipulation; } .pick-opt.act { background: var(--teal) var(--sheen); } .pick-opt[aria-selected="true"] { color: #f6dc86; } .pick-opt[aria-selected="true"]::after { content: "\2713"; margin-left: auto; padding-left: 14px; } @media (pointer: coarse) { .pick-opt { min-height: 44px; } }
+        .pick-opt { display: flex; align-items: center; min-height: 38px; padding: 6px 14px; white-space: nowrap; cursor: pointer; touch-action: manipulation; } .pick-opt.act { background: var(--teal) var(--sheen); } .pick-opt[aria-selected="true"] { color: #f6dc86; } .pick-opt[aria-selected="true"]::after { content: "\2713"; margin-left: auto; padding-left: 14px; } @media (pointer: coarse) { .pick-opt { min-height: 44px; } } @media (forced-colors: active) { .pick-opt.act { outline: 2px solid Highlight; outline-offset: -2px; } }
         .fit-note { position: absolute; left: 4px; top: 100%; margin-top: 6px; white-space: nowrap; font-size: 13px; line-height: 1.2; color: var(--ink); pointer-events: none; }
         .fit-note[hidden] { display: none; }
         .view-bar.has-fit-note { margin-bottom: 28px; }
@@ -1497,8 +1497,8 @@
                 return edgePixel(left, top, width, height, clientX, clientY);
             }
             // The page's own controls: a pointer over one of them is on the page and never at the game's edge (hovering a button, a link or a selector near the game must not scroll the map). `target` is
-            // the element under the pointer; anything inside a control counts.
-            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], .rbar';
+            // the element under the pointer; anything inside a control counts (the open list of the picture's dropdown is one: a page-made list lies over the page, which a native list never did).
+            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], [role="option"], .pick-list, .rbar';
             function overControl(target) {
                 return !!(target && typeof target.closest === 'function' && target.closest(CONTROLS));
             }

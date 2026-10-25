@@ -152,6 +152,15 @@ class TheDropdownsAreTheTable(unittest.TestCase):
         self.assertEqual(page.count("AntsShapePicker.create(AntsShapes, {"), 1, "the game page makes its two dropdowns once, at the start")
         self.assertNotIn("fillSelect", page)
 
+    def test_the_pickers_key_listener_is_made_before_the_picture_windows_so_that_esc_closes_only_the_list(self):
+        """Both are window listeners in the capture phase, and those run in the order they were added: the picker's (made by AntsShapePicker.create) must come first, or the Picture window's Esc would close the window
+        with the list still open. The order is the text order of the page's scripts (the selector block runs before the popover block)."""
+        page = read("web", "shell.html")
+        made = page.index("AntsShapePicker.create(AntsShapes, {")
+        self.assertLess(made, page.index("PICTURE_POPOVER_BEGIN"), "the dropdowns must be made before the Picture window's block adds its Esc listener")
+        self.assertLess(page.index("ANTS_SELECTOR_BEGIN"), page.index("PICTURE_POPOVER_BEGIN"))
+        self.assertIn("}, true);\n            // PICTURE_POPOVER_END", page, "the Picture window's key listener is a capture listener: only then does the order decide")
+
     def test_the_front_pages_picture_row_is_an_empty_select_filled_from_the_table(self):
         page = read("web", "lobby.html")
         row = page[page.index('<div class="shape" id="shape-row">'):page.index('<div class="go">')]

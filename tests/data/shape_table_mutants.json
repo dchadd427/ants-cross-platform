@@ -685,6 +685,13 @@
       ]
     },
     {
+      "id": "picture_window_block_starts_before_the_dropdowns_are_made",
+      "file": "web/shell.html",
+      "old": "            // the dropdowns: the strip under the game and the recording's Picture window (the settings menu makes its own);",
+      "new": "            // PICTURE_POPOVER_BEGIN\n            // the dropdowns: the strip under the game and the recording's Picture window (the settings menu makes its own);",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
       "id": "page_does_not_load_the_picker",
       "file": "web/shell.html",
       "old": "<script src=\"shape_picker.js\"></script><script src=\"replay_page.js\">",

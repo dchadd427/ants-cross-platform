@@ -357,6 +357,19 @@ function setup(opts) {
     const modified = p.down('c', { ctrlKey: true });
     expect('Ctrl+C is not a letter of the list: not taken, the mark stays', [p.mark(), modified.prevented], ['3', false]);
 }
+{   // the ratio finds its row too ("Classic 4:3" is the row of "4:3")
+    const p = setup({ value: '16:9' });
+    p.down('Enter');
+    p.down('4');
+    expect('"4" marks Classic 4:3: the row is found by its ratio as well as by the start of its text', p.mark(), '0');
+    p.advance(2000);
+    p.down('c');
+    p.advance(2000);
+    p.down('4');
+    p.advance(100);
+    p.down(':');
+    expect('"4:" stays on it (the word is the ratio)', p.mark(), '0');
+}
 {   // what was typed is forgotten when the list closes
     const p = setup({ value: '21:9' });
     p.down('Enter');

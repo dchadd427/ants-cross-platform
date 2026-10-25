@@ -142,6 +142,7 @@
             for (var k = 0; k < ROWS.length; k++) {
                 var i = (start + k) % ROWS.length;
                 if (ROWS[i].text.toLowerCase().indexOf(word) === 0) return i;
+                if (ROWS[i].name.indexOf(word) === 0) return i;
             }
             return -1;
         }

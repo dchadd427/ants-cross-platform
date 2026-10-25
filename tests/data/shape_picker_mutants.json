@@ -2,6 +2,13 @@
   "note": "Mutants of the picture's picker for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/shape_picker.js against tests/scripts/web_shape_picker_check.js (node, on a fake of the DOM). Run from the checkout: tools/mutate.py tests/data/shape_picker_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_shapes.py runs them on a copy of the script.",
   "mutants": [
     {
+      "id": "typeahead_ignores_the_ratio",
+      "file": "web/shape_picker.js",
+      "old": "if (ROWS[i].name.indexOf(word) === 0) return i;",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
       "id": "button_not_a_combobox",
       "file": "web/shape_picker.js",
       "old": "button.setAttribute('role', 'combobox');",
