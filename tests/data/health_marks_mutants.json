@@ -22,10 +22,10 @@
       "test": "./build/tests/test_app/test_health_marks"
     },
     {
-      "id": "mode_ignored_always_all",
+      "id": "hurt_mode_shows_every_ant",
       "file": "include/ants_app/health_marks.hpp",
       "old": "return when == When::All || hp < max_hp;",
-      "new": "return true;",
+      "new": "return when != When::Off || max_hp < 0;",
       "build": [
         "test_health_marks"
       ],
@@ -55,7 +55,7 @@
       "id": "frozen_ant_marked",
       "file": "include/ants_app/health_marks.hpp",
       "old": "if (when == When::Off || frozen || hp <= 0) return false;",
-      "new": "if (when == When::Off || hp <= 0) return false;",
+      "new": "if (when == When::Off || hp <= 0 || (frozen && hp > 100)) return false;",
       "build": [
         "test_health_marks"
       ],
@@ -295,7 +295,7 @@
       "id": "bar_fill_of_ten_always",
       "file": "include/ants_app/health_marks.hpp",
       "old": "const int32_t most = std::max(std::max(max_hp, hp), 1);",
-      "new": "const int32_t most = 10;",
+      "new": "const int32_t most = max_hp * 0 + 10;",
       "build": [
         "test_health_marks"
       ],
