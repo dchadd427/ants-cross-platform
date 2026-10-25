@@ -537,8 +537,20 @@
   {
    "id": "extended_file_read_by_the_original_check",
    "file": "src/ants_assets/lvl_checker.cpp",
-   "old": "(static_cast<uint32_t>(data[3]) << 24)) == LVL_EXTENDED_VERSION) {",
-   "new": "(static_cast<uint32_t>(data[3]) << 24)) == 12345u) {",
+   "old": "(static_cast<uint32_t>(data[3]) << 24)) == LVL_EXTENDED_VERSION) {\n        return not_for_original_report();",
+   "new": "(static_cast<uint32_t>(data[3]) << 24)) == 12345u) {\n        return not_for_original_report();",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_file_read_by_the_map_check",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "(static_cast<uint32_t>(data[3]) << 24)) == LVL_EXTENDED_VERSION) {\n        if (!limits.allow_extended) return extended_not_accepted();",
+   "new": "(static_cast<uint32_t>(data[3]) << 24)) == 12345u) {\n        if (!limits.allow_extended) return extended_not_accepted();",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -573,8 +585,8 @@
   {
    "id": "extended_map_works_in_the_original",
    "file": "src/ants_assets/lvl_checker.cpp",
-   "old": "if (!judged || not_for_original()) return false;",
-   "new": "if (!judged) return false;",
+   "old": "bool OriginalSafeReport::works_in_original_game() const noexcept { return !not_for_original() && has_no_failure(); }",
+   "new": "bool OriginalSafeReport::works_in_original_game() const noexcept { return has_no_failure(); }",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -737,8 +749,8 @@
   {
    "id": "flags_do_not_stop_a_classic_map",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "if (level.format_flags != 0) why.push_back(\"the map has format flags",
-   "new": "if (false) why.push_back(\"the map has format flags",
+   "old": "if (level.format_flags != 0) why.push_back({\"format_flags_set\"",
+   "new": "if (false) why.push_back({\"format_flags_set\"",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -869,8 +881,20 @@
   {
    "id": "tool_convert_overwrites_the_source",
    "file": "tools/lvl_tool.cpp",
-   "old": "if (fs::exists(o.output, same) && fs::equivalent(in_path, o.output, same)) {",
-   "new": "if (false) {",
+   "old": "refuse_output(o.output, {in_path}, err)",
+   "new": "refuse_output(o.output, {}, err)",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_rewrite_overwrites_the_source",
+   "file": "tools/lvl_tool.cpp",
+   "old": "refuse_output(out_path, {in_path}, err)",
+   "new": "refuse_output(out_path, {}, err)",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
