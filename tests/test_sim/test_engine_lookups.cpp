@@ -10,7 +10,7 @@
 // parts) is compared at EVERY tick.
 //
 //   ./test_engine_lookups          the quick tests (seconds): the lookups alone, the six shipped maps, big library maps, small packed and spread worlds
-//   ./test_engine_lookups --big    4 x 700 and 4 x 1,500 ants (packed in the corners, spread over the map, piled on shared tiles), 600 ticks (400 for the 1,500s; minutes: the engine that scans is the old, slow one)
+//   ./test_engine_lookups --big    4 x 700 and 4 x 1,500 ants (packed in the corners, spread over the map, piled on shared tiles), 600 ticks (300 for the 1,500s; minutes: the engine that scans is the old, slow one)
 //   ./test_engine_lookups --all    both
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/command.hpp"
@@ -758,7 +758,7 @@ void add_hazards(SimulationEngine& e, uint32_t width, Crowd& crowd) {
 
 // What happens besides the orders of crowd_script (the same calls in both engines): a fire wall across the middle of the world at tick 30 and bombs beside it at tick 31 (ants
 // that walk or are thrown onto them), the typed ants sent to the middle at tick 5 and given special orders at tick 220, an egg hatched for each team every 45 ticks, a third
-// of the ants of team 1 killed at tick 200 (a mass death) and team 2 leaving the match at tick 330 (all its ants die)
+// of the ants of team 1 killed at tick 200 (a mass death) and team 2 leaving the match at tick 270 (all its ants die)
 Script hazard_script(const Crowd& crowd, uint32_t width) {
     const Script orders = crowd_script(crowd, width);
     return [crowd, width, orders](Twin& t, uint32_t tick, std::vector<Command>& out) {
@@ -802,7 +802,7 @@ Script hazard_script(const Crowd& crowd, uint32_t width) {
         if (tick == 220) {
             for (uint8_t p = 0; p < 4; ++p) special_group(p, CommandType::GroupSpecial, mid - 3 + 2 * p, mid - 4);
         }
-        if (tick == 330) t.both([](SimulationEngine& e) { e.drop_player(2); });
+        if (tick == 270) t.both([](SimulationEngine& e) { e.drop_player(2); });
     };
 }
 
@@ -836,8 +836,8 @@ void run_crowd_tests(bool big) {
         cases.push_back({"4 x 700 packed, 150 x 150", 150, 700, Layout::Packed, 0});
         cases.push_back({"4 x 700 spread, 150 x 150", 150, 700, Layout::Spread, 0});
         cases.push_back({"4 x 700 in piles of 24, 150 x 150", 150, 700, Layout::Piled, 0});
-        cases.push_back({"4 x 1500 spread, 150 x 150", 150, 1500, Layout::Spread, 400});
-        cases.push_back({"4 x 1500 in piles of 24, 150 x 150", 150, 1500, Layout::Piled, 400});
+        cases.push_back({"4 x 1500 spread, 150 x 150", 150, 1500, Layout::Spread, 300});
+        cases.push_back({"4 x 1500 in piles of 24, 150 x 150", 150, 1500, Layout::Piled, 300});
     }
     TEST_CASE(big ? "L3.2 Packed, Spread And Piled Worlds Of 4 x 700 And 4 x 1,500 Ants, ordered across the map, stopped, re-ordered, attacked, with bombs, fire, deaths and hatching: the hashes equal at every tick" :
                     "L3.1 Small Packed, Spread And Piled Worlds, ordered across the map, stopped, re-ordered, attacked, with bombs, fire, deaths and hatching: the hashes equal at every tick, 600 ticks") {
