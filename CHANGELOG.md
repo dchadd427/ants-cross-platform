@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c03ec4c0...PLACEHOLDER)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c03ec4c0...fbb14974)
 
 ## v0.12.131 - 2026-10-25 - Big maps now warn: "may run slowly"
 
