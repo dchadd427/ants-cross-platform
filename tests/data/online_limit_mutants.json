@@ -675,7 +675,7 @@
    "id": "count_cache_never_forgets",
    "file": "src/ants_server/map_store.cpp",
    "old": "it = held ? std::next(it) : counted_.erase(it);",
-   "new": "it = std::next(it);",
+   "new": "it = held ? std::next(it) : std::next(it);",
    "build": [
     "test_map_list"
    ],
@@ -686,7 +686,7 @@
    "id": "count_cache_forgets_everything",
    "file": "src/ants_server/map_store.cpp",
    "old": "it = held ? std::next(it) : counted_.erase(it);",
-   "new": "it = counted_.erase(it);",
+   "new": "it = held ? counted_.erase(it) : counted_.erase(it);",
    "build": [
     "test_map_list"
    ],
@@ -840,7 +840,7 @@
    "id": "count_plants_as_ants",
    "file": "src/ants_server/online_limits.cpp",
    "old": "if (spawn.team_id < 4) ++ants;",
-   "new": "++ants;",
+   "new": "if (spawn.team_id < 4 || spawn.team_id == 255) ++ants;",
    "build": [
     "test_map_list",
     "test_server"

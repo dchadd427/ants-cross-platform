@@ -667,7 +667,7 @@ int main() {
             net::hash_file(a.path, a.hash);
             return a;
         };
-        const auto ants = [&]() { const ctl::JsonValue* e = entry_of(parse_text(store.list_json(nullptr, true)), "Kept.lvl"); return e == nullptr ? int64_t{-1} : e->get("ants").as_int_or(0); };       // (0: not heavy, no count in the list)
+        const auto ants = [&]() { const ctl::JsonValue list = parse_text(store.list_json(nullptr, true)); const ctl::JsonValue* e = entry_of(list, "Kept.lvl"); return e == nullptr ? int64_t{-1} : e->get("ants").as_int_or(0); };       // (0: not heavy, no count in the list)
         const std::string first = tiny_with_ants({75, 75, 75, 76});                     // 301
         const std::string second = tiny_with_ants({75, 75, 75, 77});                    // 302: another size
         const std::string third = with_one_marker_made_a_plant(second);                 // 301: the size of the second, other bytes
