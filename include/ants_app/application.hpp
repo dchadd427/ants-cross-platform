@@ -347,6 +347,13 @@ public:
     const TouchControl& touch() const noexcept { return touch_; }
     void set_touch_clock(std::function<uint32_t()> clock) { touch_clock_ = std::move(clock); }
     uint32_t touch_now() const { return touch_clock_ ? touch_clock_() : SDL_GetTicks(); }
+    /// How the picture is shown: its pixels for one CSS pixel of the game box (a page: the box that the browser shows the canvas in; a window: its size in points) and for one device pixel of the screen.
+    /// The touch slop and the thickness of the health bars read it.
+    struct CanvasDensity {
+        double per_css{1.0};
+        double per_device{1.0};
+    };
+    CanvasDensity canvas_density() const;
     /// The size of a finger's wobble that is still a tap or a hold, in picture pixels: 8 CSS pixels of the game box (touch::slop_pixels), whatever the window or the page's box makes of the picture
     double touch_slop() const;
     /// Scrolls the map view by (dx, dy) screen pixels of the picture, the way fingers that drag the world do: the world follows them, so the view moves the opposite way, by the same distance on the screen
@@ -799,8 +806,8 @@ private:
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes
     void note_seat();                                     // the seat that the room gave this machine, told once to on_seat_known_
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
-    void load_game_menu_settings();                       // the settings menu's new settings (game_menu::MenuSettings) from the settings file; the HUD's hit point numbers and the mixer take them
-    void sync_game_menu_settings();                       // Ctrl+L flipped the hit point numbers: remembered
+    void load_game_menu_settings();                       // the settings menu's new settings (game_menu::MenuSettings) from the settings file; the HUD's ant health marks and the mixer take them
+    void sync_game_menu_settings();                       // Ctrl+L flipped the ant health marks: remembered
     int game_menu_where() const;                          // -1 no match screen, 0 a match, 1 a recording or a live match that is watched
     bool game_menu_needs_answer() const;                  // a dialog, a vote or a lost link comes first
     bool match_held() const;                              // a seat is missing, the countdown runs or the link is on its way back (confirm_quit and Leave game)

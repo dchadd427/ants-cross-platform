@@ -51,11 +51,11 @@ void group(const char* name, const char* what) {
     std::printf("[%s] %s\n", name, what);
 }
 
-/// One frame of the application's world pass over its own world (no HUD, no hit point digits), read back: `sub_tick` seconds after the last tick, with the ants or without them
+/// One frame of the application's world pass over its own world (no HUD, no health marks), read back: `sub_tick` seconds after the last tick, with the ants or without them
 Picture world_frame(Application& app, int32_t w, int32_t h, float sub_tick, bool with_ants) {
     sim::WorldState world = app.sim().get_world_state();
     if (!with_ants) world.ants.clear();
-    app.renderer().set_show_hp(false);
+    app.renderer().set_health_marks(kNoMarks);
     app.renderer().begin_frame();
     app.renderer().render_world(world, app.sim().grid(), -1, {}, false, false, -1, -1, 0, sub_tick);
     return read_canvas(app, w, h);
@@ -232,7 +232,6 @@ void test_local() {
                 app.update_simulation(0.05f);
                 return app.sim().current_tick() == 1;
             });
-            app.renderer().set_show_hp(true);
         }
     }
 }
@@ -314,7 +313,6 @@ void test_network() {
         // the first turn is sealed 5 s after the match began (game time of the two machines)
         check_same_pixels_after_the_first_tick(app, at, cw, ch, [&]() { return duo.until([&]() { return app.sim().current_tick() >= 1; }, 9000); });
         check(!app.hud().is_match_start_modal_active(), at + "the dialog is gone with the first turn");
-        app.renderer().set_show_hp(true);
         app.return_to_map_select();
     }
 }

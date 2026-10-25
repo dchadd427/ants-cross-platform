@@ -1526,8 +1526,8 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             unlatch_pedestals();
             select_base(local_player_id_);
             return true;
-        case 'l': case 'L':                                    // hit point digits on every ant
-            show_hp_ = !show_hp_;
+        case 'l': case 'L':                                    // the ant health marks: off, or on as they were before
+            set_ant_health({health_.when == health::When::Off ? health_resume_ : health::When::Off, health_.style});
             return true;
         case 'o': case 'O':
             open_options();

@@ -57,9 +57,9 @@ bool Application::touch_view_open() const {
     return touch_match_screen() && !catch_up_screen_active();
 }
 
-// 8 CSS pixels of the game box on the glass (Android's own touch slop is 8 dp), at least 6 device pixels, in picture pixels. The page's box is what the browser shows the canvas in (its CSS size, which
-// Emscripten's SDL reads as its window's); on a desktop the window's size in points stands for it (and the output's size in pixels for the device's).
-double Application::touch_slop() const {
+// The picture's pixels for one CSS pixel of the game box and for one device pixel. The page's box is what the browser shows the canvas in (its CSS size, which Emscripten's SDL reads as its window's); on a
+// desktop the window's size in points stands for it (and the output's size in pixels for the device's).
+Application::CanvasDensity Application::canvas_density() const {
     const double canvas_w = renderer_ ? static_cast<double>(renderer_->canvas_w()) : static_cast<double>(ScreenLayout::kClassicWidth);
     double per_css = 1.0;
     double per_device = 1.0;
@@ -88,7 +88,13 @@ double Application::touch_slop() const {
         }
     }
 #endif
-    return touch::slop_pixels(per_css, per_device);
+    return CanvasDensity{per_css, per_device};
+}
+
+// 8 CSS pixels of the game box on the glass (Android's own touch slop is 8 dp), at least 6 device pixels, in picture pixels
+double Application::touch_slop() const {
+    const CanvasDensity density = canvas_density();
+    return touch::slop_pixels(density.per_css, density.per_device);
 }
 
 bool Application::pan_view(int32_t dx, int32_t dy) {

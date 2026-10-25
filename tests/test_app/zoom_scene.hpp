@@ -156,6 +156,10 @@ inline void reveal_some(sim::WorldState& world) {
     }
 }
 
+/// The two settings that the pictures of the tests use: no health mark, and the health number of every ant
+inline constexpr health::Setting kNoMarks{health::When::Off, health::Style::Bar};
+inline constexpr health::Setting kNumbersOnAll{health::When::All, health::Style::Number};
+
 /// A real renderer over a hidden window of the canvas's size (the software renderer, the dummy video driver) with a map loaded, a pinned animation clock and a world of its own
 struct PixelRig {
     PixelRig(const assets::AssetArchive& archive, const std::string& map, int32_t canvas_w, int32_t canvas_h, uint32_t synthetic_tiles = 0) : arc(archive), cw(canvas_w), ch(canvas_h) {
@@ -208,9 +212,13 @@ struct PixelRig {
         cam().zoom = zoom_level;
         cam().set_origin(x, y, tiles_w, tiles_h);
     }
-    /// One frame of the world pass (the HUD is not drawn: the canvas outside the view stays black)
+    /// One frame of the world pass (the HUD is not drawn: the canvas outside the view stays black); `hp`: the health number of every ant (All ants, Number), else no mark
     Picture shoot(int32_t selected_id = -1, const std::vector<uint32_t>& selected_ids = {}, int32_t base_team = -1, bool hp = false) {
-        renderer.set_show_hp(hp);
+        return shoot_with(hp ? kNumbersOnAll : kNoMarks, 1.0, selected_id, selected_ids, base_team);
+    }
+    /// ... with the health marks as asked (`per_css`: the picture's pixels for one CSS pixel of the page, which makes the bars thicker when the canvas is shown small)
+    Picture shoot_with(health::Setting marks, double per_css = 1.0, int32_t selected_id = -1, const std::vector<uint32_t>& selected_ids = {}, int32_t base_team = -1) {
+        renderer.set_health_marks(marks, per_css);
         renderer.begin_frame();
         renderer.render_world(world, engine.grid(), selected_id, selected_ids, false, false, -1, -1, base_team, 0.0f);
         return read();
@@ -526,20 +534,20 @@ inline bool start_ticked_match(Application& app, const std::string& map, int tic
     return true;
 }
 
-/// One frame of the application's own world pass over a copy of its world without the ants (and without their digits), read back: what the picture would be if no ant were drawn
+/// One frame of the application's own world pass over a copy of its world without the ants (and without their marks), read back: what the picture would be if no ant were drawn
 inline Picture world_without_ants(Application& app, int32_t w, int32_t h) {
     sim::WorldState world = app.sim().get_world_state();
     world.ants.clear();
-    app.renderer().set_show_hp(false);
+    app.renderer().set_health_marks(kNoMarks);
     app.renderer().begin_frame();
     app.renderer().render_world(world, app.sim().grid(), -1, {}, false, false, -1, -1, 0, 0.0f);
     return read_canvas(app, w, h);
 }
 
-/// ... and with the ants of the world, but also without their digits (so that only the sprites make the difference)
+/// ... and with the ants of the world, but also without their marks (so that only the sprites make the difference)
 inline Picture world_with_ants(Application& app, int32_t w, int32_t h) {
     const sim::WorldState& world = app.sim().get_world_state();
-    app.renderer().set_show_hp(false);
+    app.renderer().set_health_marks(kNoMarks);
     app.renderer().begin_frame();
     app.renderer().render_world(world, app.sim().grid(), -1, {}, false, false, -1, -1, 0, 0.0f);
     return read_canvas(app, w, h);

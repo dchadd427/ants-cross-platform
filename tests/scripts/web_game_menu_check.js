@@ -192,7 +192,7 @@ function makeDocument() {
 function makeGame(json) {
     const g = {
         where: 0, needsAnswer: 0, leave: 2, opened: false, calls: [],
-        values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 1, 9: 50, 10: 1, 11: 1 },
+        values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 0, 9: 50, 10: 1, 11: 1, 15: 0 },
         describes: 0, saves: [],
     };
     g.module = {
@@ -449,7 +449,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.game.calls.length = 0;
     p.tab('video');
     const video = p.qa('[role=radiogroup]');
-    expect('the Video section: the mouse and the numbers are button pairs (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['On', 'Off']]);
+    expect('the Video section: the mouse and the two rows of the ant health are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number']]);
     const dropdown = p.qa('.pick-select');
     expect('one dropdown in the panel: the picture\'s shape, the page\'s picker (a button), in the row of its own', [dropdown.length, dropdown[0].tagName, dropdown[0].parentNode.className + '/' + dropdown[0].parentNode.parentNode.className, dropdown[0].parentNode.parentNode.parentNode.querySelector('.gm-name').textContent], [1, 'button', 'pick/gm-ctl gm-pick', 'Picture shape']);
     ok('...no native select is in the panel', !p.q('select') && p.qa('option').length === 0);
@@ -476,12 +476,18 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     expect('the mouse starts Locked', video[0].children.map((b) => b.getAttribute('aria-checked')), ['true', 'false']);
     video[0].children[1].click();
     expect('Free is the page\'s Free button', [p.game.calls, p.lockOff.getAttribute('aria-checked')], [[['lock', 'off']], 'true']);
+    expect('Ant health starts on the game\'s value (Hurt ants), Show health as on Bar', [video[1], video[2]].map((g) => g.children.map((b) => b.getAttribute('aria-checked'))), [['true', 'false', 'false'], ['true', 'false']]);
+    video[1].children[2].click();
+    expect('Ant health is row 8, and its words are its values in their order (Off is 2), shown pressed in', [p.game.calls[1], video[1].children.map((b) => b.getAttribute('aria-checked'))], [['set', 8, 2], ['false', 'false', 'true']]);
     video[1].children[1].click();
-    expect('the hit point numbers are row 8 (value 0 is Off)', p.game.calls[1], ['set', 8, 0]);
+    expect('All ants is value 1 of row 8', p.game.calls[2], ['set', 8, 1]);
+    video[2].children[1].click();
+    expect('Show health as is row 15: Number is value 1, and is shown pressed in', [p.game.calls[3], video[2].children.map((b) => b.getAttribute('aria-checked'))], [['set', 15, 1], ['false', 'true']]);
+    expect('...and the game\'s own rows are kept at once (the save flag is 1)', p.game.saves.filter((x) => x[0] === 8 || x[0] === 15), [[8, 2, 1], [8, 1, 1], [15, 1, 1]]);
     const scroll = p.qa('.gm-panel input')[0];
     scroll.value = '12';
     scroll.fire('change', {});
-    expect('the scroll speed is row 9', p.game.calls[2], ['set', 9, 12]);
+    expect('the scroll speed is row 9', p.game.calls[4], ['set', 9, 12]);
 
     p.game.calls.length = 0;
     const fsButton = p.qa('.gm-act')[0];

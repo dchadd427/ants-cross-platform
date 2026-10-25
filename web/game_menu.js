@@ -28,7 +28,7 @@
         touch: [['Tap', 'Select or order'], ['Hold, then lift', 'Right click'], ['Drag', 'Rubber band'], ['Two fingers', 'Move the map'], ['Pinch', 'Zoom']],
         touchWatch: [['Two fingers', 'Move the map'], ['Pinch', 'Zoom'], ['Minimap', 'Move the view']],
         keys: [[['Esc'], 'Deselect; then this menu'], [['F1'], 'Quick help'], [['F9', '~\u2013', 'F12'], 'Quick chat', 'watch'], [['Enter'], 'Send chat', 'watch'], [['Ctrl', 'A'], 'Select all ants', 'watch'],
-               [['Ctrl', 'H'], 'Home hill', 'watch'], [['Ctrl', 'N', '~/', 'P'], 'Next / previous ant', 'watch'], [['Ctrl', 'S'], 'Stop', 'watch'], [['Ctrl', 'L'], 'Hit point numbers'],
+               [['Ctrl', 'H'], 'Home hill', 'watch'], [['Ctrl', 'N', '~/', 'P'], 'Next / previous ant', 'watch'], [['Ctrl', 'S'], 'Stop', 'watch'], [['Ctrl', 'L'], 'Health marks'],
                [['Ctrl', 'O'], 'Original options'], [['Ctrl', 'Q'], 'Quit question'], [['F2', '~/', 'F3'], 'Vote (network match)', 'watch']],
         note: 'On a Mac, Cmd works as Ctrl.'
     };
@@ -200,9 +200,10 @@
             var own = row.page ? PAGE_ROWS[row.key] : null;
             if (row.page && (!own && row.kind !== 'button')) return null;
             if (own && !own.has()) return null;
+            var mine = { read: function () { return get(row.id); }, write: function (v) { call('_ants_menu_set', row.id, v, 1); } };
             if (row.kind === 'slider') control = slider(row, id);
-            else if (row.kind === 'switch') control = choice(row, id, function () { return get(row.id); }, function (v) { call('_ants_menu_set', row.id, v, 1); }, [1, 0]);
-            else if (row.kind === 'choice') control = own.dropdown ? dropdown(row, id, own) : choice(row, id, own.read, own.write, row.words.map(function (w, i) { return i; }));
+            else if (row.kind === 'switch') control = choice(row, id, mine.read, mine.write, [1, 0]);
+            else if (row.kind === 'choice') control = own && own.dropdown ? dropdown(row, id, own) : choice(row, id, (own || mine).read, (own || mine).write, row.words.map(function (w, i) { return i; }));
             else if (row.kind === 'button') control = action(row, id);
             else { control = el('div', 'gm-ctl gm-info', page.version || ''); }
             line.appendChild(control);

@@ -880,7 +880,6 @@ void test_app_ants() {
             const Picture without05 = world_without_ants(app, cw, ch);
             const int shown05 = differ(with05, without05, view);
             check(shown05 > 100, at + "at the zoom 0.5 the ants are drawn: " + std::to_string(shown05));
-            app.renderer().set_show_hp(true);
         }
     }
 }

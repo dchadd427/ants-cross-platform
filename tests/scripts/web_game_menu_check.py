@@ -7,10 +7,10 @@ Needs the web page of this tree (`tools/web_without_docker.py -- tests/scripts/t
 for tests/scripts/test_web_camera.sh) makes the parts that watch a replay run. No game server is needed (the games are on this computer, against a computer player or alone). What it checks:
 
   * the computer, 1280 x 800 (play.html?map=tiny&bots=easy,none,none): the Settings button is in the header (and the narrow one and the fullscreen one are not shown); Esc with nothing selected (a first press) opens the
-    panel inside the stage, over the whole window, with the focus on Resume; what is typed meanwhile is not the game's chat line (and is, once it is closed); Ctrl+L does not turn the hit point numbers;
+    panel inside the stage, over the whole window, with the focus on Resume; what is typed meanwhile is not the game's chat line (and is, once it is closed); Ctrl+L does not turn the health marks;
     Tab stays inside it; a click on the dimmed area does nothing; a held Esc (a repeat) does not close it and the next Esc does, the focus is on the canvas; Esc with a hill selected only deselects and the
-    next one opens it; Esc closes the quick help and asks for nothing; a slider moved with the arrow key is the game's value and the settings file's (master=); Mute and the hit point numbers are the game's
-    and remembered (mute=, hp_numbers=); the picture's shape is the selector's (the stage, the game's canvas, the address); the Fullscreen row makes the stage fullscreen with the panel inside it, the pointer lock
+    next one opens it; Esc closes the quick help and asks for nothing; a slider moved with the arrow key is the game's value and the settings file's (master=); Mute and the ant health marks are the game's
+    and remembered (mute=, ant_health=, ant_health_style=); the picture's shape is the selector's (the stage, the game's canvas, the address); the Fullscreen row makes the stage fullscreen with the panel inside it, the pointer lock
     is let go while it is up and asked for again by Resume; in fullscreen no Settings button is on the screen and Esc opens the panel; a dialog that comes up (the quick help, from the panel's own act) closes it;
     Leave game asks (a forfeit with one opponent left), Esc and Stay stay, Forfeit ends the match (the results); in a game for one it asks "Leave the game?" and leaves for the front page;
   * a phone, 390 x 844 with touch: the button is under the picture (44 px), a tap opens the panel inside a gutter of 16 px, every button and slider is at least 44 px high, the text is at least 16 px
@@ -44,7 +44,7 @@ JSON.stringify((function () {
   return { open: !!menu, parent: menu ? menu.parentNode.id : null, menu: r(menu), panel: r(panel), active: ae ? (ae.id || ae.className || ae.tagName) : null, activeIn: !!(menu && ae && menu.contains(ae)),
            fullscreen: fs ? fs.id : null, locked: lock ? lock.id : null, aspect: $('game-stage').getAttribute('data-aspect'), where: Module._ants_menu_get(100), needs: Module._ants_menu_get(101), leave: Module._ants_menu_get(102),
            chat: Module._ants_chat_probe(5), modal: Module._ants_probe(5), running: Module._ants_match_running(), taps: Module._ants_probe(30), shape: Module._ants_probe(42),
-           master: Module._ants_menu_get(1), mute: Module._ants_menu_get(4), hp: Module._ants_menu_get(8), music: Module._ants_menu_get(2),
+           master: Module._ants_menu_get(1), mute: Module._ants_menu_get(4), hp: Module._ants_menu_get(8), style: Module._ants_menu_get(15), music: Module._ants_menu_get(2),
            settings: (function () { try { return localStorage.getItem('ants.settings') || ''; } catch (e) { return ''; } })(), path: location.pathname, scrollW: document.documentElement.scrollWidth, innerW: innerWidth, innerH: innerHeight };
 })())"""
 
@@ -259,7 +259,7 @@ def computer(p, args, check):
     p.type("xyz")
     p.ctrl("l", "KeyL", 76)
     s = p.state()
-    check(s["chat"] == 0 and s["hp"] == 1, "what is typed is not the game's: no chat line, Ctrl+L did not turn the numbers (chat %s, numbers %s)" % (s["chat"], s["hp"]))
+    check(s["chat"] == 0 and s["hp"] == 0, "what is typed is not the game's: no chat line, Ctrl+L did not turn the health marks off (chat %s, ant health %s)" % (s["chat"], s["hp"]))
     check(s["open"], "(and the panel is still up)")
     for _ in range(14):
         p.key("Tab", "Tab", 9)
@@ -329,7 +329,7 @@ def computer(p, args, check):
     p.tab_to("video")
     tab.save_shot(args.shots, "menu-2-video")
     groups = json.loads(tab.ev("JSON.stringify([].map.call(document.querySelectorAll('.gm-seg'), function (g) { return [].map.call(g.children, function (b) { return b.textContent; }); }))"))
-    check(groups == [["Locked", "Free"], ["On", "Off"]], "the Video section has the mouse and the numbers as button pairs (%s)" % groups)
+    check(groups == [["Locked", "Free"], ["Hurt ants", "All ants", "Off"], ["Bar", "Number"]], "the Video section has the mouse and the two rows of the ant health as button groups (%s)" % groups)
     dd = ".gm-panel .pick-select"
     list_open = lambda: tab.ev("document.querySelector('.gm-panel [role=listbox]').hidden") is False
     shown_in_menu = lambda: tab.ev("(document.querySelector('.gm-panel [role=option][aria-selected=true]') || document.body).getAttribute('data-shape')")
@@ -414,9 +414,12 @@ def computer(p, args, check):
     p.tab_to("video")
     p.click_text(".gm-seg .gm-opt", "Off")
     s = p.state()
-    check(s["hp"] == 0 and "hp_numbers=off\n" in s["settings"], "the hit point numbers go off and are remembered (hp %s)" % s["hp"])
-    p.click_text(".gm-seg .gm-opt", "On")
-    check(p.state()["hp"] == 1, "...and on")
+    check(s["hp"] == 2 and "ant_health=off\n" in s["settings"], "the ant health marks go off and are remembered (ant health %s)" % s["hp"])
+    p.click_text(".gm-seg .gm-opt", "Number")
+    s = p.state()
+    check(s["style"] == 1 and "ant_health_style=number\n" in s["settings"], "...the look is a number, remembered (style %s)" % s["style"])
+    p.click_text(".gm-seg .gm-opt", "Hurt ants")
+    check(p.state()["hp"] == 0, "...and the marks are on hurt ants again")
 
     # ---- fullscreen
     p.click_text(".gm-act", "Enter fullscreen")

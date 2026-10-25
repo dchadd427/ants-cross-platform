@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+#include "ants_app/health_marks.hpp"
+
 namespace ants::app {
 class ConfigStore;
 }
@@ -12,7 +14,7 @@ namespace ants::app::game_menu {
 // The settings menu that Esc opens in a match (docs/GAME_MENU.md): the model, with no window and no SDL, so that a test can run it. It is the ONE list of rows (what a row is called,
 // what it says, its range and default, which screens show it) that every skin of the menu draws: the page's panel (web/game_menu.js) gets it as one JSON text from describe_json(), and a skin of the
 // desktop app can read the same table. The values live where they always did (the original's options window, the zoom, the picture's shape, the fullscreen of the page): a row names its value, the
-// skin shows it and asks the game to change it. Three values are new: Master volume, Mute and the hit point numbers, kept in MenuSettings.
+// skin shows it and asks the game to change it. Four values are new: Master volume, Mute and the two of the ant health marks, kept in MenuSettings.
 
 enum RowId : int {
     kMaster = 1,            // Master volume: multiplies every sound and the music; the original's Sound Volume and Music Volume stay as they are
@@ -22,13 +24,14 @@ enum RowId : int {
     kFullscreen = 5,        // the page's own: the skin does it
     kPicture = 6,           // the picture's shape: the page's selector does it
     kLockMouse = 7,         // the browser's fullscreen mouse (Locked / Free): the page does it
-    kHpNumbers = 8,         // the white hit point numbers over every ant (Ctrl+L), now remembered
+    kAntHealth = 8,         // which ants wear a health mark (Hurt ants, All ants, Off: health::When; Ctrl+L flips Off and the last other choice), remembered
     kScroll = 9,            // the original's Scroll Speed
     kChat = 10,             // the original's Participate In Chat
     kQuickHelpAtStart = 11, // the original's Show Quick Help at Startup
     kQuickHelp = 12,        // opens the original's quick help (F1)
     kOptionsWindow = 13,    // opens the original's options window (Ctrl+O)
     kVersion = 14,          // the version of the game (the skin knows it)
+    kHealthStyle = 15,      // what the mark looks like (Bar, Number: health::Style), remembered
 };
 
 // What the skin may ask of the game besides reading and changing a row (ants_menu_do)
@@ -92,11 +95,12 @@ struct MenuSettings {
     static constexpr int kMasterMax = 100;
     int32_t master{100};        // 0 .. 100, 100 is every sound and the music as they are (the sliders of the menu show 99 at their end, as the original's do)
     bool mute{false};
-    bool hp_numbers{true};      // the hit point numbers: on, as the game always started
+    health::Setting ant_health{};   // which ants wear a mark and how: hurt ants, a bar, for everybody until they choose
 
-    static const char* key(int row_id) noexcept;                        // "master", "mute", "hp_numbers" ("" for any other row)
+    static const char* key(int row_id) noexcept;                        // "master", "mute", "ant_health", "ant_health_style" ("" for any other row)
+    /// An old `hp_numbers=off` (the numbers that this setting replaces) is read as Off when `ant_health` was never written; every other old value, and none, is the default (hurt ants, a bar)
     void load(const ConfigStore& store);
-    void write(ConfigStore& store, int row_id) const;                   // writes one of the three
+    void write(ConfigStore& store, int row_id) const;                   // writes one of the four
     /// The gain that master and mute give the whole mix: 0 when muted, else master (99 and 100 are the full volume) over 99
     float gain() const noexcept;
 };

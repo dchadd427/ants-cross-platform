@@ -997,7 +997,7 @@ void test_subtick_locomotion(Renderer& r, const assets::AssetArchive& arc) {
 // The selection marker and the health number follow the sprite, which the real-time player moves when a frame ends: they use the predicted position as well (the audit's LA NEW-3
 // found them at the tick's position, 50 ms behind a thrown ant). The display loop skips a frozen ant, its number included (FUN_0101b802 is what draws both).
 void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc) {
-    std::printf("[ears] the marker and the health number of a walking ant follow its predicted position\n");
+    std::printf("[ears] the marker and the health bar of a walking ant follow its predicted position\n");
     assets::LevelData level;
     if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
     const int32_t g = arc.find_animation_id("g01a");
@@ -1030,7 +1030,7 @@ void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc
     };
     auto render = [&](const sim::AntSnapshot& ant, const std::vector<uint32_t>& selected, bool show_hp, float sub_s) {
         r.pin_animation_clock(0);
-        r.set_show_hp(show_hp);
+        r.set_health_marks(health::Setting{show_hp ? health::When::All : health::When::Off, health::Style::Bar});
         sim::WorldState ws;
         ws.width = level.width;
         ws.height = level.height;
@@ -1039,7 +1039,7 @@ void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc
         SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
         SDL_RenderClear(sr);
         r.render_world(ws, grid, -1, selected, false, false, -1, -1, -1, sub_s);
-        r.set_show_hp(false);
+        r.set_health_marks(health::Setting{health::When::Off, health::Style::Bar});
         r.unpin_animation_clock();
         return read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
     };
@@ -1058,39 +1058,39 @@ void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc
         model_draw_frame(full, arc, ears_seq.subitems[0], 300, 204, false, arc.get_palette());
         check(same_image(got, full), "the ears are drawn at the ant's predicted position (300, 204), not at its tick position (300, 200)");
     }
-    // the number: the white pixels that it adds are those of the fixed font at the predicted position
+    // the bar: a full bar (the ant has 10 of 10 and the marks are on All ants) of 22 x 3 pixels in a black frame, its lower edge 31 pixels above the predicted position (300, 204)
     {
         const Image plain = render(snapshot(false), {}, false, 0.020f);
         const Image with = render(snapshot(false), {}, true, 0.020f);
-        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
-        SDL_RenderClear(sr);
-        r.draw_fixed_text("10", PLAYFIELD_X + 300, PLAYFIELD_Y + 204, assets::ColorRGBA{255, 255, 255, 255});
-        const Image digits = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
-        long added = 0, expected = 0, wrong = 0;
+        long added = 0, outside = 0, wrong_color = 0;
         for (int y = 0; y < PLAYFIELD_H; ++y) {
             for (int x = 0; x < PLAYFIELD_W; ++x) {
-                const bool is_new = std::memcmp(plain.at(x, y), with.at(x, y), 3) != 0;
-                const bool white = digits.at(x, y)[0] == 255 && digits.at(x, y)[1] == 255 && digits.at(x, y)[2] == 255;
-                if (is_new) ++added;
-                if (white) ++expected;
-                if (is_new != white) ++wrong;
+                if (std::memcmp(plain.at(x, y), with.at(x, y), 3) == 0) continue;
+                ++added;
+                if (x < 300 - 11 - 1 || x > 300 + 10 + 1 || y < 204 - 31 - 3 - 1 || y > 204 - 31) ++outside;
             }
         }
-        check(added > 0 && expected > 0, "the health number adds pixels");
-        check(wrong == 0, "the health number is drawn at the predicted position (300, 204): " + std::to_string(wrong) + " pixels differ");
+        for (int y = 204 - 34; y < 204 - 31; ++y) {
+            for (int x = 300 - 11; x < 300 + 11; ++x) {
+                if (with.at(x, y)[0] != 60 || with.at(x, y)[1] != 214 || with.at(x, y)[2] != 60) ++wrong_color;
+            }
+        }
+        check(added == 24 * 5, "the health bar is its 24 x 5 pixels (22 x 3 and the frame): " + std::to_string(added));
+        check(outside == 0, "the health bar is drawn at the predicted position (300, 204), 31 pixels up, not at the tick's (300, 200): " + std::to_string(outside) + " pixels outside");
+        check(wrong_color == 0, "a full bar is green (60, 214, 60) from end to end: " + std::to_string(wrong_color) + " pixels differ");
     }
-    // a frozen ant is skipped by the display loop: no number either (only its burn overlay is drawn)
+    // a frozen ant is skipped by the display loop: no mark either (only its burn overlay is drawn)
     {
         sim::AntSnapshot frozen = snapshot(true);
         frozen.burn_elapsed_ms = 0;
         const Image plain = render(frozen, {}, false, 0.0f);
         const Image with = render(frozen, {}, true, 0.0f);
-        check(same_image(plain, with), "a frozen ant shows no health number");
+        check(same_image(plain, with), "a frozen ant shows no health bar");
     }
 }
 
 // A dying ant plays death1 .. death4 on its own sprite (Ants.exe 0x101b3fd SetAction(0xC)): the renderer draws the ant through that clip, with the same sub-tick stepping as any
-// other, and the ant keeps its hit-point number until it is removed (the number is drawn by the ant's own draw function). There is no separate effect any more.
+// other, and wears no health mark (no hit points are left). There is no separate effect any more.
 void test_dying_ant(Renderer& r, const assets::AssetArchive& arc) {
     std::printf("[ants] a dying ant is drawn through its own death clip\n");
     assets::LevelData level;
@@ -1117,7 +1117,7 @@ void test_dying_ant(Renderer& r, const assets::AssetArchive& arc) {
         {"death4", 1, 5, 0.049f},           // frame 1 ends after 5 ms, frame 2 (80 ms) outlasts the tick
     };
     auto render = [&](const Case& c, int32_t clip, bool show_hp) {
-        r.set_show_hp(show_hp);
+        r.set_health_marks(health::Setting{show_hp ? health::When::All : health::When::Off, health::Style::Number});
         sim::WorldState ws;
         ws.width = level.width;
         ws.height = level.height;
@@ -1135,7 +1135,7 @@ void test_dying_ant(Renderer& r, const assets::AssetArchive& arc) {
         SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
         SDL_RenderClear(sr);
         r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, c.sub_s);
-        r.set_show_hp(false);
+        r.set_health_marks(health::Setting{health::When::Off, health::Style::Bar});
         return read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
     };
     for (const Case& c : cases) {
@@ -1157,22 +1157,12 @@ void test_dying_ant(Renderer& r, const assets::AssetArchive& arc) {
             for (int x = 0; x < PLAYFIELD_W && same; ++x) same = std::memcmp(plain.at(x, y), full.at(x, y), 3) == 0;
         check(same, std::string(c.clip) + " frame " + std::to_string(c.frame) + " with " + std::to_string(c.left_ms) + " ms left, +" + std::to_string(c.sub_s * 1000.0f) + " ms: frame " + std::to_string(frame));
 
-        // a dying ant keeps its hit-point number ("0") until it is removed: the pixels that it adds are the fixed font's at the ant's position
+        // a dying ant has no hit points left: it wears no mark even when every ant does (the picture is the same, number or not)
         const Image with = render(c, chd, true);
-        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
-        SDL_RenderClear(sr);
-        r.draw_fixed_text("0", PLAYFIELD_X + 300, PLAYFIELD_Y + 200, assets::ColorRGBA{255, 255, 255, 255});
-        const Image digit = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
-        long added = 0, wrong = 0;
-        for (int y = 0; y < PLAYFIELD_H; ++y) {
-            for (int x = 0; x < PLAYFIELD_W; ++x) {
-                const bool is_new = std::memcmp(plain.at(x, y), with.at(x, y), 3) != 0;
-                const bool white = digit.at(x, y)[0] == 255 && digit.at(x, y)[1] == 255 && digit.at(x, y)[2] == 255;
-                if (is_new) ++added;
-                if (is_new != white && !(white && std::memcmp(plain.at(x, y), digit.at(x, y), 3) == 0)) ++wrong;   // (a number pixel over a white pixel of the art changes nothing)
-            }
-        }
-        check(added > 0 && wrong == 0, std::string(c.clip) + ": a dying ant still shows its hit-point number (" + std::to_string(wrong) + " wrong pixels)");
+        bool unmarked = true;
+        for (int y = 0; y < PLAYFIELD_H && unmarked; ++y)
+            for (int x = 0; x < PLAYFIELD_W && unmarked; ++x) unmarked = std::memcmp(plain.at(x, y), with.at(x, y), 3) == 0;
+        check(unmarked, std::string(c.clip) + ": a dying ant wears no health number");
     }
     r.unpin_animation_clock();
 }
