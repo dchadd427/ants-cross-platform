@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e9e67d74...e9e67d74)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e9e67d74...811a2509)
 
 ## v0.12.128 - 2026-10-25 - The Picture dropdown opens in fullscreen
 
