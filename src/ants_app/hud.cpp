@@ -1537,7 +1537,8 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             return true;
         case 's': case 'S': {                                  // the stop order, without flash, lock or deselect (panels 3 and 4)
             const PanelMode panel = panel_mode(world);
-            if (panel == PanelMode::OneAnt || panel == PanelMode::Ants) stop_selected(sim);
+            // (a held key is not a stream of orders: a Stop of a big selection is up to 48 commands, and 20 repeats a second of it would fill the sequencer's carry and cost the player its seat)
+            if (!repeat && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) stop_selected(sim);
             return true;
         }
         case 'n': case 'N': case 'p': case 'P': {

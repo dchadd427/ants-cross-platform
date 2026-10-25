@@ -5,7 +5,10 @@
 #include "ants_app/hud.hpp"
 
 #include <algorithm>
+#include <string>
+#include <unordered_map>
 
+#include "ants_net/sequencer.hpp"
 #include "ants_sim/game_strings.hpp"
 
 namespace ants::app {
@@ -291,6 +294,33 @@ uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bo
     return issue_group_order(sim, tile, special, attack, targets);
 }
 
+// The ants of one order go out as commands of at most kMaxCommandAnts each (a command names no more: the engine, the recording and the wire refuse a longer list), in the selection
+// order, all in this call: they reach the same turn (the sequencer keeps a player's commands in the order they came) and run one after the other. A selection of at most
+// kMaxCommandAnts is one command, exactly the one that was always sent.
+HUD::ChunkedResult HUD::submit_in_chunks(sim::SimulationEngine& sim, sim::Command proto, const std::vector<uint32_t>& ants, size_t limit) {
+    static_assert(kMaxCommandsPerClick < net::Sequencer::Config{}.max_commands_per_turn, "a click must leave room in the turn for the player's other commands");
+    ChunkedResult out;
+    out.cap = std::min(limit, kMaxAntsPerClick);
+    const size_t sendable = std::min(ants.size(), out.cap);
+    out.left_out = ants.size() - sendable;
+    for (size_t from = 0; from < sendable; from += sim::kMaxCommandAnts) {
+        const auto first = ants.begin() + static_cast<std::ptrdiff_t>(from);
+        proto.ants.assign(first, first + static_cast<std::ptrdiff_t>(std::min(sendable - from, sim::kMaxCommandAnts)));
+        const sim::CommandResult result = submit_command(sim, proto);
+        out.needing_order += result.needing_order;
+        if (!out.voiced && result.needing_order > 0) {           // the voice is the first command that had an ant to order (the first command, when it has one)
+            out.voiced = true;
+            out.ack_ant = result.ack_ant;
+        }
+    }
+    return out;
+}
+
+void HUD::post_click_limit(const ChunkedResult& result, size_t ordered) {
+    if (result.cap == kMaxAntsPerMove) post_status_id(sim::strings::kMoveLimit);
+    else post_status_id(sim::strings::kClickLimit, std::to_string(ordered));
+}
+
 // The group order of the original (FUN_010287b5) as the player's command: the engine keeps only the issuer's own ants, checks the tile and answers with
 // the ant that acknowledges
 uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack, const std::vector<uint32_t>& targets) {
@@ -299,13 +329,36 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
     cmd.issuer = local_player_id_;
     cmd.tile_x = static_cast<int16_t>(tile.x);
     cmd.tile_y = static_cast<int16_t>(tile.y);
-    cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), sim::kMaxCommandAnts)));
-    const sim::CommandResult result = submit_command(sim, cmd);
+    // A move's goal goes through the goal search, which serves 81 ants at the most (kMaxAntsPerMove), except where the engine does not search: a click on a hill that is not the player's own
+    // (SimulationEngineImpl::go_to): a thief (its OWN type, raw_type) raids, with no tile of its own, and any other ant is stopped by the click (the original does that to the ants it names).
+    // For that click every thief is named up to the budget, and an ant that is not a thief only as far as it was named before this limit existed (the first kMaxCommandAnts of the selection),
+    // so that no ant is stopped that was not before.
+    size_t limit = attack || special ? kMaxAntsPerClick : kMaxAntsPerMove;
+    std::vector<uint32_t> raiders;
+    const std::vector<uint32_t>* named = &targets;
+    if (!attack && !special) {
+        const assets::AnthillSpawn* hill = hill_at(sim.get_world_state(), tile.x, tile.y);
+        if (hill != nullptr && hill->team_id != local_player_id_) {
+            limit = kMaxAntsPerClick;
+            std::unordered_map<uint32_t, sim::AntType> raw;
+            for (const auto& a : sim.get_world_state().ants) raw.emplace(a.id, a.raw_type);
+            for (size_t i = 0; i < targets.size(); ++i) {
+                const auto it = raw.find(targets[i]);
+                if (i < sim::kMaxCommandAnts || (it != raw.end() && it->second == sim::AntType::Thief)) raiders.push_back(targets[i]);
+            }
+            named = &raiders;
+        }
+    }
+    const ChunkedResult result = submit_in_chunks(sim, cmd, *named, limit);
     const uint32_t ack = result.ack_ant;
     // FUN_010287b5 (0x1028929 .. 0x1028a07): nothing happens when every ant already carries out this click; otherwise the closest ant's GoTo decides the voice (a refusal is
     // silent, the others' answers do not count), a special order speaks only when exactly one ant needed it (none for more, not even the go voice), and the function returns 1
-    // whatever the GoTos answered, which is what the pedestal feedback follows
-    if (result.needing_order == 0) return 0;
+    // whatever the GoTos answered, which is what the pedestal feedback follows. A selection of several commands is one click: its ants that needed an order are counted together
+    // and the first command that had any gives the voice.
+    if (result.needing_order == 0) {
+        if (result.left_out != 0) post_click_limit(result, named->size() - result.left_out);
+        return 0;
+    }
     if (ack != 0) {
         const sim::AntType voice_type = sim.ant_type(sim.get_unit(ack));          // the voices ask the getter (0x101b680, 0x101b715, 0x101b78e)
         if (attack) voice_attack(voice_type);
@@ -313,6 +366,7 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
         else voice_go(voice_type);
     }
     order_feedback(special, attack);
+    if (result.left_out != 0) post_click_limit(result, named->size() - result.left_out);       // (after the voice's text: the line says what the click did not do)
     return ack;
 }
 
@@ -336,12 +390,13 @@ void HUD::stop_selected(sim::SimulationEngine& sim) {
     cmd.issuer = local_player_id_;
     std::vector<uint32_t> ids = selected_ant_ids_;
     if (ids.empty() && selected_ant_id_ != 0) ids.push_back(selected_ant_id_);
+    std::vector<uint32_t> own;
     for (uint32_t aid : ids) {
-        if (cmd.ants.size() >= sim::kMaxCommandAnts) break;
-        if (sim.get_unit(aid).player_id == local_player_id_) cmd.ants.push_back(aid);
+        if (sim.get_unit(aid).player_id == local_player_id_) own.push_back(aid);
     }
-    if (!cmd.ants.empty()) submit_command(sim, cmd);
+    const ChunkedResult result = submit_in_chunks(sim, cmd, own, kMaxAntsPerClick);
     post_status_id(sim::strings::kStopping);                                     // always posted (0x1028b43)
+    if (result.left_out != 0) post_click_limit(result, own.size() - result.left_out);
 }
 
 // ------------------------------------------------------------------------------------------------

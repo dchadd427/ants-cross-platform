@@ -23,7 +23,7 @@ public:
     struct Config {
         uint32_t max_lag_turns = 3 * kTurnsPerSecond;   // sealing stalls while a peer's ack is this many turns behind (3 s); a host without a seat never waits (session.hpp)
         uint32_t max_commands_per_turn = 64;  // per peer and turn: what does not fit waits for the next turns (a flooding client cannot fill a turn)
-        uint32_t max_carried_commands = 4 * 64;   // per peer: the commands that wait for a later turn (four turns' worth at the default): a stuck uplink that is let go delivers
+        uint32_t max_carried_commands = 16 * 64;  // per peer: the commands that wait for a later turn (sixteen turns' worth at the default: a click on a big selection is up to 48 commands): a stuck uplink that is let go delivers
                                                   // all the orders of the player at once (15 a second for 5 s are 76), which are NOT a flood and must not cost the player its
                                                   // seat; beyond this many waiting commands a peer is refused
     };

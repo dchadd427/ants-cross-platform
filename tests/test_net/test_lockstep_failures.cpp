@@ -954,7 +954,7 @@ void run_failure_tests() {
         evil->send(std::vector<uint8_t>(kMaxMessageBytes + 10, 4));      // oversized
         m.run(500, false);
         ASSERT_TRUE(m.host->violations(2) >= 4 || !m.host->client_present(2));
-        for (int i = 0; i < 400; ++i) evil->send(encode(CommandMsg{cmd(CommandType::Hatch, 2)}));
+        for (int i = 0; i < 1300; ++i) evil->send(encode(CommandMsg{cmd(CommandType::Hatch, 2)}));     // (more than a turn and the carry hold: 64 + 1,024)
         m.run(1000, false);
         ASSERT_FALSE(m.host->client_present(2));                        // thrown out
         ASSERT_FALSE(evil->is_open());
