@@ -1,0 +1,215 @@
+{
+  "note": "Mutants of the map maker's straight line (Shift or Ctrl held in a stroke keeps it to one line; docs/MAP_EDITOR.md, 'Painting') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/front/mapmaker_canvas.js (aim) and mapmaker_tools.js (straight) against tests/scripts/web_mapmaker_line_check.js. Run from the checkout: tools/mutate.py tests/data/mapmaker_line_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+  "mutants": [
+    {
+      "id": "axis_not_locked_across",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "{ row: line.from.row, column: Math.max(0, Math.min(file.columns - 1, column)) } : {",
+      "new": "{ row: Math.max(0, Math.min(file.rows - 1, row)), column: Math.max(0, Math.min(file.columns - 1, column)) } : {",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "axis_not_locked_down",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "{ row: Math.max(0, Math.min(file.rows - 1, row)), column: line.from.column };",
+      "new": "{ row: Math.max(0, Math.min(file.rows - 1, row)), column: Math.max(0, Math.min(file.columns - 1, column)) };",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "axis_always_across",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "line.axis = Math.abs(dc) >= Math.abs(dr) ? 'row' : 'column';",
+      "new": "line.axis = 'row';",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "axis_always_down",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "line.axis = Math.abs(dc) >= Math.abs(dr) ? 'row' : 'column';",
+      "new": "line.axis = 'column';",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "tie_goes_down",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "Math.abs(dc) >= Math.abs(dr) ? 'row'",
+      "new": "Math.abs(dc) > Math.abs(dr) ? 'row'",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "axis_swapped",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "Math.abs(dc) >= Math.abs(dr) ? 'row' : 'column'",
+      "new": "Math.abs(dr) >= Math.abs(dc) ? 'row' : 'column'",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "axis_chosen_inside_the_start_cell",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!line.axis) { if (!dr && !dc) return line.from; line.axis",
+      "new": "if (!line.axis) { line.axis",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "axis_chosen_again_every_move",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!line.axis) { if (!dr && !dc) return line.from;",
+      "new": "line.axis = ''; if (!line.axis) { if (!dr && !dc) return line.from;",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "lock_not_reset_at_a_new_stroke",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "            line = null;\n            if (!painter || !painter.begin(cell)) return false;",
+      "new": "            if (!painter || !painter.begin(cell)) return false;",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "lock_not_reset_when_the_key_is_let_go",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "{ line = null; return cellOf(p); }",
+      "new": "{ return cellOf(p); }",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "lock_without_a_key",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!(e.shiftKey || e.ctrlKey) || !painter.straight",
+      "new": "if (false || !painter.straight",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "shift_only",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!(e.shiftKey || e.ctrlKey) || !painter.straight",
+      "new": "if (!e.shiftKey || !painter.straight",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "ctrl_only",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!(e.shiftKey || e.ctrlKey) || !painter.straight",
+      "new": "if (!e.ctrlKey || !painter.straight",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "command_locks_too",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!(e.shiftKey || e.ctrlKey) || !painter.straight",
+      "new": "if (!(e.shiftKey || e.ctrlKey || e.metaKey) || !painter.straight",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "alt_locks_too",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!(e.shiftKey || e.ctrlKey) || !painter.straight",
+      "new": "if (!(e.shiftKey || e.ctrlKey || e.altKey) || !painter.straight",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "modifier_ignored_for_a_finger",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (startStroke(e.pointerId, first)) { var now = aim(e, p); if (now) carryOn(now); }",
+      "new": "if (startStroke(e.pointerId, first)) { var now = cellOf(p); if (now) carryOn(now); }",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "anchor_is_the_pointer_cell",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "line = { from: stroke.last, axis: '' };",
+      "new": "line = { from: cellOf(p) || stroke.last, axis: '' };",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "anchor_is_never_moved_by_a_new_press",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!line) line = { from: stroke.last, axis: '' };",
+      "new": "if (!line) line = { from: stroke.first || (stroke.first = stroke.last), axis: '' };",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "row_from_the_wrong_view_center",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "Math.floor((p.y - h / 2) / view.scale + view.cy)",
+      "new": "Math.floor((p.y - h / 2) / view.scale + view.cx)",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "column_from_the_wrong_view_center",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "Math.floor((p.x - w / 2) / view.scale + view.cx)",
+      "new": "Math.floor((p.x - w / 2) / view.scale + view.cy)",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "pixels_not_cells",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "Math.floor((p.x - w / 2) / view.scale + view.cx)",
+      "new": "Math.round((p.x - w / 2) / view.scale + view.cx)",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "edge_not_clamped_across",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "column: Math.max(0, Math.min(file.columns - 1, column)) } : { row: Math.max",
+      "new": "column: column } : { row: Math.max",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "edge_not_clamped_down",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "{ row: Math.max(0, Math.min(file.rows - 1, row)), column: line.from.column };",
+      "new": "{ row: row, column: line.from.column };",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "past_the_edge_ignored",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "var row = Math.floor((p.y - h / 2) / view.scale + view.cy), column",
+      "new": "if (!cellOf(p)) return null; var row = Math.floor((p.y - h / 2) / view.scale + view.cy), column",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "tool_ignored_for_erase",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "straight: function () { return !!editor && !mine() && paints(); },",
+      "new": "straight: function () { return !!editor && !mine() && paints() && state.tool !== 'erase'; },",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "tool_ignored_for_objects",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "straight: function () { return !!editor && !mine() && paints(); },",
+      "new": "straight: function () { return !!editor && !mine() && paints() && state.tool !== 'objects'; },",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "tool_ignored_for_ground",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "straight: function () { return !!editor && !mine() && paints(); },",
+      "new": "straight: function () { return !!editor && !mine() && paints() && state.tool !== 'ground'; },",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "the_boxes_and_pick_up_lock_too",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "straight: function () { return !!editor && !mine() && paints(); },",
+      "new": "straight: function () { return !!editor && (!!mine() || paints()); },",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "the_tap_tools_lock_too",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "straight: function () { return !!editor && !mine() && paints(); },",
+      "new": "straight: function () { return !!editor && !mine() && (paints() || places()); },",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "no_tool_asked",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "if (!(e.shiftKey || e.ctrlKey) || !painter.straight || !painter.straight())",
+      "new": "if (!(e.shiftKey || e.ctrlKey))",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    }
+  ]
+}
