@@ -48,6 +48,12 @@
 #include <cstdarg>
 #include <cctype>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define WATCH_PRINTF(fmt_index, first_arg) __attribute__((format(printf, fmt_index, first_arg)))
+#else
+#define WATCH_PRINTF(fmt_index, first_arg)
+#endif
+
 namespace fs = std::filesystem;
 namespace ai = ants::ai;
 namespace sim = ants::sim;
@@ -63,8 +69,7 @@ constexpr size_t kMinutes = 31;            // 0 .. 30 minutes of game time (a mi
 constexpr int32_t kNear = 3;               // "within reach": the nearest free ant is at most this many tiles from the tile the blow comes from
 constexpr int32_t kFar = 8;
 
-std::string fmt(const char* format, ...) __attribute__((format(printf, 1, 2)));
-std::string fmt(const char* format, ...) {
+WATCH_PRINTF(1, 2) std::string fmt(const char* format, ...) {
     char buf[512];
     va_list ap;
     va_start(ap, format);
