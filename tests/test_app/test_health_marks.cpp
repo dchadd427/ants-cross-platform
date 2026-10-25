@@ -363,9 +363,9 @@ void test_thick_and_target(const assets::AssetArchive& arc) {
         const Delta d = delta(none, rig.shoot_with(kHurtBar, t.per_css));
         check(d.n > 100 && d.y1 == sy - 31 && d.y1 - d.y0 + 1 == t.outline_h && d.x0 == sx - 12 && d.x1 == sx + 11, "a picture shown at " + std::to_string(t.per_css) + " pixels for a CSS pixel: the bar with its frame is " + num(t.outline_h) + " pixels high: " + num(d.y1 - d.y0 + 1));
     }
-    const Delta far = delta(none, rig.shoot_with(kHurtNumber, 4.0));
-    const Delta near_ = delta(none, rig.shoot_with(kHurtNumber, 1.0));
-    check(far.n == near_.n && far.n > 40, "a number is the same size whatever the page shows");
+    const Delta shown_small = delta(none, rig.shoot_with(kHurtNumber, 4.0));
+    const Delta shown_big = delta(none, rig.shoot_with(kHurtNumber, 1.0));
+    check(shown_small.n == shown_big.n && shown_small.n > 40, "a number is the same size whatever the page shows");
 
     // the zoom 1 pass drawn straight into the view and through the offscreen target
     sim::WorldState& world = rig.world;
