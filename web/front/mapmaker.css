@@ -37,7 +37,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .btn.gold { background: var(--gold); color: #1b1608; border-color: #7a5f0c; text-shadow: none; } .btn.gold:hover { background: #ffe27d; }
 .btn[disabled] { opacity: .45; cursor: default; }
 .edbody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 150px minmax(0, 1fr) 270px; gap: 18px; padding: 8px 28px 4px 28px; }
-.edfoot { padding: 3px 28px; font-size: 13px; }
+.edfoot { margin-top: 14px; padding: 3px 28px 13px; font-size: 13px; }
 .tools { padding: 10px; display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; }
 .tools h3, .side h3 { font-size: 13px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
 .tool { min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 15px; text-align: left; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
@@ -337,7 +337,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .fld input { width: 100px; }
     .ccard { padding: 14px 14px 12px; } .ccard .hl { font-size: 21px; }
     .checks .dlg-foot { padding: 10px 0 0; }
-    .edfoot { padding: 6px 14px; font-size: 12px; }
+    .edfoot { padding: 6px 14px 16px; font-size: 12px; }
 }
 
 /* a phone held sideways */

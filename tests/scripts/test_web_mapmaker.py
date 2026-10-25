@@ -1403,6 +1403,16 @@ class TheImageCarriesThePage(unittest.TestCase):
         for href in ('href="/"', 'href="matches.html"', 'href="changelog.html"', 'href="legal.html"'):
             self.assertIn(href, page)
 
+    def test_the_footer_line_sits_above_the_screens_frame(self):
+        """the screen's frame (classic.css, --screen-frame) lies over the last pixels of the page: the footer's bottom padding must be at least as thick as the frame, or the line is cut by the red edge (browser part `foot`)"""
+        frame = max(int(n) for n in re.findall(r"inset 0 0 0 (\d+)px", re.search(r"--screen-frame:([^;]*);", read("web", "front", "classic.css")).group(1)))
+        self.assertGreaterEqual(frame, 10)
+        rules = [r for r in re.findall(r"\.edfoot \{([^}]*)\}", read("web", "front", "mapmaker.css")) if "padding:" in r]
+        self.assertGreaterEqual(len(rules), 2, "the desktop's rule and the phone's")
+        for rule in rules:
+            sides = [float(v) for v in re.search(r"padding:\s*([^;]*);", rule).group(1).replace("px", "").split()]
+            self.assertGreaterEqual(sides[2] if len(sides) > 2 else sides[0], frame, "the footer's bottom padding clears the frame: %s" % rule.strip())
+
     def test_every_file_of_the_page_is_in_front_and_the_folder_is_copied_whole(self):
         self.assertIn("COPY web/front/ /usr/share/nginx/html/front/", read("Dockerfile"))
         for name in ALL_SCRIPTS + ("mapmaker.css",):
