@@ -36,7 +36,7 @@
 // notice too ("You are lagging (12 s behind)"): a player whose own link is the slow one has its backlog on the way, not in its queue, and nothing else tells it. A player that
 // is 60 s behind, or whose acks have not moved for 30 s although it is connected, is dropped like a player that left (a Drop in the turn stream): its link is closed, and a
 // machine that finds its link closed with half a minute of the match unplayed in its queue says so ("You were away too long and were dropped from the match.").
-// A command that does not fit into a turn (more than the 64 a player may have in one) waits for the next turns (up to 256 of them) in the sequencer instead of costing the
+// A command that does not fit into a turn (more than the 64 a player may have in one) waits for the next turns (up to 1,024 of them) in the sequencer instead of costing the
 // player a violation: a stuck uplink that is let go delivers 76 orders at once.
 //
 // Coming back (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A dedicated server's room may HOLD the seat of a player whose connection is LOST instead of dropping it

@@ -1175,8 +1175,8 @@ void run_sequencer_tests() {
         ASSERT_EQ(small.seal().commands.size(), 3u);
     } TEST_END();
 
-    TEST_CASE("N2.5b Sequencer: Commands Beyond The Turn's Quota Are Carried Into The Next Turns In The Order They Came (A Stuck Uplink That Is Let Go Delivers 76 Orders At Once: They Are Not A Flood), Nobody Else's Quota Is Touched, Only More Than Four Turns' Worth Waiting Is Refused") {
-        Sequencer seq;                                                 // the defaults: 64 per turn, 256 waiting
+    TEST_CASE("N2.5b Sequencer: Commands Beyond The Turn's Quota Are Carried Into The Next Turns In The Order They Came (A Stuck Uplink That Is Let Go Delivers 76 Orders At Once: They Are Not A Flood), Nobody Else's Quota Is Touched, Only More Than Sixteen Turns' Worth Waiting Is Refused") {
+        Sequencer seq;                                                 // the defaults: 64 per turn, 1,024 waiting
         seq.set_active(0, true);
         seq.set_active(1, true);
         for (int i = 0; i < 76; ++i) ASSERT_TRUE(seq.submit(1, cmd(CommandType::GroupMove, 1, 255, static_cast<int16_t>(i), 0, {7})));   // order i goes to the tile x = i
@@ -1199,24 +1199,24 @@ void run_sequencer_tests() {
         ASSERT_EQ(second.commands.size(), 13u);
         for (int i = 0; i < 12; ++i) ASSERT_EQ(second.commands[static_cast<size_t>(i)].tile_x, 64 + i);
         ASSERT_EQ(second.commands[12].tile_x, 100);
-        // a burst that fills the turn and the carry: 64 + 256 are taken, the rest refused; nobody's quota is shared
+        // a burst that fills the turn and the carry: 64 + 1,024 are taken, the rest refused; nobody's quota is shared
         Sequencer flood;
         flood.set_active(1, true);
         flood.set_active(2, true);
         int taken = 0;
-        for (int i = 0; i < 400; ++i) taken += flood.submit(1, cmd(CommandType::Hatch, 1)) ? 1 : 0;
-        ASSERT_EQ(taken, 64 + 256);
-        ASSERT_EQ(flood.carried(1), 256u);
+        for (int i = 0; i < 1200; ++i) taken += flood.submit(1, cmd(CommandType::Hatch, 1)) ? 1 : 0;
+        ASSERT_EQ(taken, 64 + 1024);
+        ASSERT_EQ(flood.carried(1), 1024u);
         ASSERT_TRUE(flood.submit(2, cmd(CommandType::Hatch, 2)));      // player 2 is not affected by player 1's flood
         size_t total = 0;
         uint32_t turns = 0;
-        while (flood.carried(1) > 0 || flood.queued() > 0) {           // the 320 commands take five turns of 64, in order, none lost
+        while (flood.carried(1) > 0 || flood.queued() > 0) {           // the 1,089 commands take seventeen turns of 64, in order, none lost
             const TurnMsg t = flood.seal();
             total += t.commands.size();
             ++turns;
-            ASSERT_TRUE(turns <= 5);
+            ASSERT_TRUE(turns <= 17);
         }
-        ASSERT_EQ(total, size_t{64 + 256 + 1});
+        ASSERT_EQ(total, size_t{64 + 1024 + 1});
         // a player that is gone has no commands waiting, and a host that resumes forgets them
         Sequencer gone;
         gone.set_active(1, true);
@@ -1231,6 +1231,65 @@ void run_sequencer_tests() {
         ASSERT_TRUE(moved.carried(1) == 0 && moved.queued() == 0);
         ASSERT_FALSE(moved.submit(1, cmd(CommandType::Hatch, 1)));     // (nobody is active after a resume)
         ASSERT_EQ(moved.carried(1), 0u);
+    } TEST_END();
+
+    TEST_CASE("N2.5c Sequencer: A Big Selection Is One Click Of Up To 48 Commands Of 32 Ants (The HUD's Budget, 1,536 Ants): They Reach One Turn In The Order They Were Sent, Beside The Player's Other Commands, Nothing Is Carried, And The Turn Goes Over The Wire Whole") {
+        Sequencer seq;                                                 // the defaults: 64 per turn
+        seq.set_active(0, true);
+        seq.set_active(1, true);
+        ASSERT_TRUE(seq.submit(1, cmd(CommandType::Hatch, 1)));        // a command of the player's before the click
+        ASSERT_TRUE(seq.submit(0, cmd(CommandType::Hatch, 0)));        // and one of another player in the middle of it
+        for (uint32_t i = 0; i < 48; ++i) {
+            std::vector<uint32_t> ants;
+            for (uint32_t k = 0; k < sim::kMaxCommandAnts; ++k) ants.push_back(1 + i * 32 + k);
+            ASSERT_TRUE(seq.submit(1, cmd(CommandType::GroupMove, 1, 255, 20, 30, ants)));
+            if (i == 20) ASSERT_TRUE(seq.submit(0, cmd(CommandType::Stop, 0, 255, 0, 0, {7})));
+        }
+        for (int i = 0; i < 15; ++i) ASSERT_TRUE(seq.submit(1, cmd(CommandType::Hatch, 1)));      // 1 + 48 + 15 = 64: the turn is full and nothing waits
+        ASSERT_EQ(seq.carried(1), 0u);
+        const TurnMsg turn = seq.seal();
+        ASSERT_EQ(turn.commands.size(), size_t{2 + 1 + 48 + 15});
+        ASSERT_EQ(turn.commands[0].issuer, 0);                         // (canonical order: the lower issuer first, each issuer's commands as they came)
+        ASSERT_EQ(turn.commands[1].issuer, 0);
+        ASSERT_EQ(turn.commands[2].type, CommandType::Hatch);
+        for (uint32_t i = 0; i < 48; ++i) {
+            const Command& c = turn.commands[3 + i];
+            ASSERT_TRUE(c.issuer == 1 && c.type == CommandType::GroupMove && c.ants.size() == sim::kMaxCommandAnts && c.ants.front() == 1 + i * 32);
+        }
+        TurnMsg decoded;
+        ASSERT_TRUE(decode(encode(turn), decoded));
+        ASSERT_TRUE(decoded.commands == turn.commands);
+        // one more command than the quota carries into the next turn, behind the others (a click that came on top of a full turn is not lost)
+        Sequencer full;
+        full.set_active(1, true);
+        for (int i = 0; i < 16; ++i) ASSERT_TRUE(full.submit(1, cmd(CommandType::Hatch, 1)));
+        for (uint32_t i = 0; i < 48; ++i) ASSERT_TRUE(full.submit(1, cmd(CommandType::GroupMove, 1, 255, 20, 30, {i + 1})));
+        for (int i = 0; i < 16; ++i) ASSERT_TRUE(full.submit(1, cmd(CommandType::Hatch, 1)));
+        ASSERT_EQ(full.carried(1), 16u);
+        ASSERT_EQ(full.seal().commands.size(), 64u);
+        const TurnMsg next = full.seal();
+        ASSERT_TRUE(next.commands.size() == 16 && next.commands[0].type == CommandType::Hatch);
+    } TEST_END();
+
+    TEST_CASE("N2.5d Sequencer: Ten Big Clicks Of 48 Commands Each Arrive Before A Single Turn Is Sealed (A Stuck Uplink That Is Let Go): None Is Refused, So The Player Has No Violation And Keeps Its Seat, And They All Run In The Order They Were Sent, 64 To A Turn") {
+        Sequencer seq;                                                 // the defaults
+        seq.set_active(1, true);
+        uint32_t refused = 0;
+        for (uint32_t click = 0; click < 10; ++click) {
+            for (uint32_t i = 0; i < 48; ++i) refused += seq.submit(1, cmd(CommandType::Stop, 1, 255, 0, 0, {1 + click * 48 + i})) ? 0u : 1u;
+        }
+        ASSERT_EQ(refused, 0u);                                        // (a refusal is a violation, and eight of them drop the player: Sequencer::submit false, HostSession::handle_message)
+        ASSERT_EQ(seq.carried(1), 480u - 64u);
+        uint32_t next = 1;
+        uint32_t turns = 0;
+        while (seq.carried(1) > 0 || seq.queued() > 0) {
+            const TurnMsg t = seq.seal();
+            ASSERT_TRUE(t.commands.size() <= 64);
+            for (const Command& c : t.commands) ASSERT_EQ(c.ants.front(), next++);
+            ++turns;
+            ASSERT_TRUE(turns <= 8);
+        }
+        ASSERT_EQ(next, 481u);                                         // all 480, in order, in eight turns
     } TEST_END();
 
     TEST_CASE("N2.6 Sequencer: Flow Control Stalls Sealing While A Peer Lags, Acks Only Move Forward, Reports Are Pruned") {

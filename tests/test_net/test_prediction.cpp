@@ -110,7 +110,7 @@ struct Ids {
     std::vector<uint32_t> ants[sim::MAX_PLAYERS];
 };
 
-Ids build_world(sim::SimulationEngine& sim, uint32_t seed, uint32_t match_ms = 720000) {
+Ids build_world(sim::SimulationEngine& sim, uint32_t seed, uint32_t match_ms = 720000, uint32_t extra_workers = 0) {
     Ids ids;
     sim.init_test_world(60, 60, seed, match_ms);
     const TileCoord hills[sim::MAX_PLAYERS] = {{4, 4}, {50, 4}, {4, 50}, {50, 50}};
@@ -123,6 +123,10 @@ Ids build_world(sim::SimulationEngine& sim, uint32_t seed, uint32_t match_ms = 7
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
         for (int i = 0; i < 6; ++i) ids.ants[p].push_back(sim.spawn_unit(p, types[i], TileCoord{hills[p].x + 1 + i, hills[p].y + 6}));
         sim.set_player_score(p, 800);                                           // (the points that make hatching possible)
+        for (uint32_t i = 0; i < extra_workers; ++i) {                          // (a big selection: a block of workers of 10 columns beside the hill's ants)
+            const int32_t y = hills[p].y < 30 ? hills[p].y + 8 + static_cast<int32_t>(i / 10) : hills[p].y - 8 - static_cast<int32_t>(i / 10);
+            ids.ants[p].push_back(sim.spawn_unit(p, AntType::Worker, TileCoord{hills[p].x - 3 + static_cast<int32_t>(i % 10), y}));
+        }
     }
     return ids;
 }
@@ -182,6 +186,7 @@ struct Scenario {
     bool predict{true};
     bool oracle_hashes{true};      // record the oracle's hash of every tick (the tests that compare with the oracle); off: only the engine runs (the property tests)
     uint32_t match_ms{720000};
+    uint32_t extra_workers{0};     // workers added to every player beyond the six ants (the tests of a selection of more than 32 ants)
     Prediction::Config prediction{rig_config()};
     // The rig's prediction has the lead that the scenario names and keeps it (the tests hold a wrong lead to account, and the exact one to exactness): it does not learn its lead and has no bias
     // (the tests of the learning and of the bias switch them on), and no budget (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the
@@ -206,8 +211,8 @@ class Rig {
 public:
     explicit Rig(const Scenario& sc)
         : sc_(sc), runner_(confirmed_, runner_config(sc)) {
-        ids = build_world(confirmed_, sc.seed, sc.match_ms);
-        build_world(oracle_, sc.seed, sc.match_ms);
+        ids = build_world(confirmed_, sc.seed, sc.match_ms, sc.extra_workers);
+        build_world(oracle_, sc.seed, sc.match_ms, sc.extra_workers);
         if (sc.predict) {
             Prediction::Config pc = sc.prediction;
             pc.seat = 0;
@@ -576,6 +581,45 @@ void run_exactness_tests() {
             ASSERT_EQ(rig.prediction()->pending_orders(), 0u);
             ASSERT_OK(verify_min(rig, rig.step_no() - 20, 10));                              // and when the last of them has been sealed and run, the prediction is the oracle
         }
+    } TEST_END();
+
+    TEST_CASE("RP10.1 A Big Selection (One Click Of 100 Ants, Four Commands Given In One Step) Is Predicted Command By Command And Sealed In One Turn In The Order It Was Given: No Rebuild, Nothing Lost, Every Frame Is The Oracle's") {
+        Scenario sc;
+        sc.seed = 19;
+        sc.extra_workers = 100;
+        Rig rig(sc);
+        rig.run(12);
+        const std::vector<uint32_t>& all = rig.ids.ants[0];
+        ASSERT_EQ(all.size(), size_t{106});
+        const uint32_t given = rig.step_no();
+        for (size_t from = 0; from < all.size(); from += sim::kMaxCommandAnts) {
+            const size_t to = std::min(all.size(), from + sim::kMaxCommandAnts);
+            rig.issue(make_command(CommandType::GroupMove, 0, 255, 44, 12, std::vector<uint32_t>(all.begin() + static_cast<std::ptrdiff_t>(from), all.begin() + static_cast<std::ptrdiff_t>(to))));
+        }
+        rig.run(50);
+        rig.run_quiet(30);
+        const Prediction::Stats& st = rig.prediction()->stats();
+        ASSERT_EQ(st.commands_predicted, 4u);
+        ASSERT_EQ(st.commands_lost, 0u);
+        ASSERT_EQ(st.rebuilds, 0u);
+        ASSERT_EQ(rig.prediction()->pending_orders(), 0u);
+        size_t turns_with_them = 0;
+        std::vector<uint32_t> in_turn;
+        for (const TurnMsg& t : rig.sealed) {
+            size_t here = 0;
+            for (const Command& c : t.commands) {
+                if (c.issuer != 0 || c.type != CommandType::GroupMove) continue;
+                ++here;
+                in_turn.insert(in_turn.end(), c.ants.begin(), c.ants.end());
+            }
+            if (here != 0) {
+                ++turns_with_them;
+                ASSERT_EQ(here, size_t{4});
+            }
+        }
+        ASSERT_EQ(turns_with_them, size_t{1});                                              // one turn carries the four commands
+        ASSERT_TRUE(in_turn == all);                                                        // in the order of the selection
+        ASSERT_OK(verify_min(rig, given + 10, 20));
     } TEST_END();
 }
 

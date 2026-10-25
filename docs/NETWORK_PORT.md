@@ -284,7 +284,7 @@ server's host has no seat, never stops sealing for a laggard, and punishes the l
 
 * **A burst of orders is carried, not refused** (review fix, `Sequencer::submit`): a turn takes 64 commands of one player at the most. A stuck uplink that is let go (5 s stuck while the player gives 15 orders a second: 76 orders in one message burst) used to
   hit the cap, and the 12 refused orders were 12 violations, of which 8 throw a player out: **a player lost its seat for an uplink that hiccuped**. Now the commands beyond the turn's 64 wait in a queue of the player's own in the
-  sequencer, up to 256 of them (four turns' worth, `Sequencer::Config::max_carried_commands`), and go into the next turns in the order they were sent, behind the commands that wait already; only a peer with more than that
+  sequencer, up to 1,024 of them (sixteen turns' worth, `Sequencer::Config::max_carried_commands`), and go into the next turns in the order they were sent, behind the commands that wait already; only a peer with more than that
   waiting is refused (a violation as before: it is a flood). The sequencer alone decides which turn carries a command, so every machine runs the same turns (`test_lockstep` S2.13: the stuck uplink of 5 s, 76 orders: the
   player stays, no violation, all 76 run in the order they were given, 64 in one turn and 12 in the next, and the turn logs of the server and of every client are byte for byte the same). The commands of a player that leaves
   are forgotten with it.
