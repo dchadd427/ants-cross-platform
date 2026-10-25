@@ -23,18 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.130 - 2026-10-25 - Online games start with at most 300 ants
+## v0.12.130 - 2026-10-25 - Big maps now warn: "may run slowly"
 
 **For players:**
-- **An online game starts with at most 300 ants** (all colors together: 75 a color on four). A map that starts more cannot be chosen for a room: the lobby's list marks it "Too many ants for an online game", and a leader who chooses it is told "This map starts with N ants; an online game allows up to 300." The limit is low only while the game is slow with thousands of ants, and goes up when that is fixed.
-- **Map Maker, Play this map:** *With other players* now says so before a room is made (and turns the room button off) when the map starts more than 300 ants. *Against bots* on this device is never refused; it only warns that a map with so many ants may run slowly.
-- None of the 540 maps of the library is affected (the most starts 248), and the six original maps are never refused for their ants.
+- **No map is refused for its ants.** A map that starts more than 300 ants (all colors together: 75 a color on four) only gets a warning, because a game on it may run slowly, most on phones and older computers. The number 300 is where the warning starts; it changes nothing else.
+- **The map picker** shows an amber chip, "Many ants: may run slowly", on the row of such a map. The map can be chosen as any other, for a room too.
+- **Map Maker, Play this map:** both *Against bots* and *With other players* say "This map starts with N ants, so a game may run slowly, especially on phones and older computers." right under the first sentence of the dialog. The buttons stay on.
+- We scanned the 540 maps of the library: none starts more than 300 ants (0 of 540; the most starts 248), so no map in the picker is marked today.
 
-**Rules / network:** none: the rules and network protocol 21 are unchanged (the server and the pages check the map before a room is made).
+**Rules / network:** none: the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...7c06297a), [the online limits](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
-
-## v0.12.126 - 2026-10-24 - Orders for big selections
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...CODECOMMIT), [the warning](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
 
 ## v0.12.129 - 2026-10-25 - Big selections follow the original's rules
 

@@ -19,17 +19,16 @@
     var TEAM_CODES = { hill_missing: 1, hill_without_entrance: 1, hills_several: 1, starting_ants_missing: 1 };      // the findings that are about one color's start (their `team` says which)
     var KEPT = 3;                                                                       // the hand-overs that this tab keeps (a game tab that is reloaded asks for its own again)
     var TOAST_MS = 7000;
-    var MAX_ONLINE_ANTS = 300;                                                          // the most start ants (all colors together) that an online room plays: the server's OnlineLimits::kMaxStartAnts (include/ants_server/online_limits.hpp), which a test keeps equal to this
+    var HEAVY_START_ANTS = 300;                                                         // above this many start ants (all colors together) a map is heavy: the server's OnlineLimits::kHeavyStartAnts (include/ants_server/online_limits.hpp), which a test keeps equal to this
 
-    function capital(text) { text = String(text); return text.charAt(0).toUpperCase() + text.slice(1); }
     function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
-    // The sentence of the server's refusal (OnlineLimits::too_many_ants_notice), here said before a room is made; and the warning for the game on this device, which is never refused
-    function onlineAntsText(ants) { return 'This map starts with ' + commas(ants) + ' ants; an online game allows up to ' + commas(MAX_ONLINE_ANTS) + '.'; }
-    function slowAntsText(ants) { return 'This map starts with ' + commas(ants) + ' ants, so it may run slowly on this device.'; }
+    // The one warning for a heavy map, in both tabs: a warning only, nothing is refused and no button is turned off
+    function heavyText(ants) { return 'This map starts with ' + commas(ants) + ' ants, so a game may run slowly, especially on phones and older computers.'; }
+    function capital(text) { text = String(text); return text.charAt(0).toUpperCase() + text.slice(1); }
 
-    // What the check and the first reading say of the open map, as the dialog needs it: { ok, title, text, note, list, convert, seats }
+    // What the check and the first reading say of the open map, as the dialog needs it: { ok, title, text, note, list, convert, seats, ants, heavy }
     //   seats[seat] = { seat, name, dot, ants, hills, usable, why: [the check's own sentences about this color] }
-    //   ants = the start markers of the four colors added up, as the server counts them; tooMany = more than an online room plays (an online room refuses it, a game against bots on this device does not)
+    //   ants = the start markers of the four colors added up, as the server counts them; heavy = more than HEAVY_START_ANTS (the dialog warns; the map is played as any other)
     // A map is refused for the game when: the check could not judge it, a Classic map has more than 90 rows, an Extended map is bigger than 512 x 512 (262,144 cells, 1,024 a side), a finding that is about no color stops it, or fewer than
     // two colors have a hill and starting ants (one seat for you and one for a bot)
     function verdict(check, read) {
@@ -82,7 +81,7 @@
         }
         out.ants = 0;
         for (var c = 0; c < 4; c++) out.ants += (teams[c] && teams[c].start_markers > 0) ? teams[c].start_markers : 0;
-        out.tooMany = out.ants > MAX_ONLINE_ANTS;
+        out.heavy = out.ants > HEAVY_START_ANTS;
         out.ok = true;
         return out;
     }
@@ -210,7 +209,7 @@
                 friendsPanel.hidden = mode !== 'friends';
             }
             if (startButton) startButton.disabled = !go.ok;
-            if (startButton && mode === 'friends') { startButton.disabled = v.tooMany; startButton.textContent = '\u25b6 Open a room with this map'; }
+            if (startButton && mode === 'friends') { startButton.disabled = false; startButton.textContent = '\u25b6 Open a room with this map'; }
             else if (startButton) startButton.textContent = '\u25b6 Start the game';
         }
         function set(seat, value) {
@@ -225,7 +224,7 @@
 
         var started = false;
         function start(ctl) {
-            var go = mode === 'friends' ? { ok: !v.tooMany } : startable(choice, v.seats);
+            var go = mode === 'friends' ? { ok: true } : startable(choice, v.seats);
             if (!go.ok || started) return;
             started = true;                                                          // (a second call opens no second tab)
             var rec = { id: randomId(win), name: m.name, bytes: m.bytes.slice() };
@@ -239,6 +238,7 @@
             ctl.close();
         }
 
+        function warning() { var w = el('p', 'play-status no', heavyText(v.ants)); w.setAttribute('role', 'status'); return w; }
         var ctl = dialogs.open({
             title: 'Play this map', cls: 'play',
             build: function (body) {
@@ -259,6 +259,7 @@
                 body.appendChild(tablist);
                 botsPanel = el('div', 'play-panel-bots');
                 botsPanel.appendChild(named(el('p', 'play-lead'), 'A test game on ', m.name, ' (' + shape + ') as it is now. Nothing is saved and no score is kept.'));
+                if (v.heavy) botsPanel.appendChild(warning());              // (under the intro, above the seats, so that a phone shows it without scrolling)
                 var qrow = el('div', 'play-quick');
                 qrow.appendChild(el('span', 'play-ql', 'Quick:'));
                 [1, 2, 3].forEach(function (n) {
@@ -298,7 +299,6 @@
                 status = el('p', 'play-status');
                 status.setAttribute('role', 'status');
                 botsPanel.appendChild(status);
-                if (v.tooMany) { var slow = el('p', 'play-status no', slowAntsText(v.ants)); slow.setAttribute('role', 'status'); botsPanel.appendChild(slow); }       // (a warning only: the game on this device is never refused)
                 body.appendChild(botsPanel);
 
                 friendsPanel = el('div', 'play-panel-friends');
@@ -311,7 +311,7 @@
                 fcard.appendChild(el('p', 'play-ftext', 'Opens a room in a new tab with the map as it is right now (' + kbText(m.bytes.length) + '). Anyone with your room link or 6-character room code receives the map automatically when they join.'));
                 fcard.appendChild(el('p', 'play-fnote', 'Not added to the public map list and not submitted for approval. Your editor tab stays open as you left it.'));
                 friendsPanel.appendChild(fcard);
-                if (v.tooMany) { var big = el('p', 'play-status no', onlineAntsText(v.ants) + ' You can still play it against bots on this device.'); big.setAttribute('role', 'status'); friendsPanel.appendChild(big); }
+                if (v.heavy) friendsPanel.appendChild(warning());
                 var usableCount = v.seats.filter(function (x) { return x.usable; }).length;
                 friendsPanel.appendChild(el('p', 'play-fhead', 'Colors available on this map (' + usableCount + ' of 4):'));
                 var flist = el('div', 'play-fseats');
@@ -336,5 +336,5 @@
         return ctl;
     }
 
-    return { verdict: verdict, startable: startable, quick: quick, firstChoice: firstChoice, code: code, open: open, onlineAntsText: onlineAntsText, MAX_ONLINE_ANTS: MAX_ONLINE_ANTS, MAX_ROWS: MAX_ROWS, MAX_EXTENDED_SIDE: MAX_EXTENDED_SIDE, KEPT: KEPT, kept: function () { return kept; } };
+    return { verdict: verdict, startable: startable, quick: quick, firstChoice: firstChoice, code: code, open: open, heavyText: heavyText, HEAVY_START_ANTS: HEAVY_START_ANTS, MAX_ROWS: MAX_ROWS, MAX_EXTENDED_SIDE: MAX_EXTENDED_SIDE, KEPT: KEPT, kept: function () { return kept; } };
 });

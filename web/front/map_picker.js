@@ -82,7 +82,7 @@
                 file: m.file, name: displayName(m.file, original), original: original, kind: kind, order: i,
                 width: whole(m.width) ? m.width : 0, height: whole(m.height) ? m.height : 0, minutes: whole(m.minutes) ? m.minutes : 0, players: whole(m.players) ? m.players : 0,
                 description: text(m.description, 200), plays: whole(m.plays) ? m.plays : 0, thumb: ownPath(m.thumb),
-                online: m.online !== false, ants: whole(m.ants) ? m.ants : 0       // (online false: a room refuses the map, too big or too many start ants; ants says how many in the second case)
+                heavy: m.heavy === true       // (the server's flag: more start ants than the game runs comfortably everywhere; a warning on the row, never a refusal)
             });
         });
         return out;
@@ -112,8 +112,8 @@
             return words.every(function (w) { return hay.indexOf(w) !== -1; });
         });
     }
-    // Why a room does not play a map that the server marked "online": false (the server's own sentences are in chat when the leader chooses it anyway)
-    function offlineText(m) { return m.ants > 0 ? 'Too many ants for an online game' : 'Too big for an online game'; }
+    // The words of the warning chip of a heavy map (a game on it may run slowly; the map can be chosen as any other)
+    var HEAVY_TEXT = 'Many ants: may run slowly';
     function playsText(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
     function metaText(m) { return m.original ? 'Shipped with the game' : m.players + ' players · ' + m.minutes + ' min · ' + m.width + '×' + m.height; }
     // The Map Info line of a map of the players, as the selector shows it under the picture
@@ -253,7 +253,7 @@
             var nm = el('div', 'pk-nm', m.name);
             if (m.original) nm.appendChild(el('span', 'pk-badge', 'Original'));
             else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));
-            if (!m.online) nm.appendChild(el('span', 'pk-badge pk-off', offlineText(m)));
+            if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));
             body.appendChild(nm);
             if (!thumbs) {
                 body.appendChild(el('div', 'pk-meta', metaText(m)));
@@ -375,5 +375,5 @@
         };
     }
 
-    return { VIEW_KEY: VIEW_KEY, SORTS: SORTS, validMapFile: validMapFile, previewPath: previewPath, thumbFor: thumbFor, percentEncode: percentEncode, displayName: displayName, parseList: parseList, sortMaps: sortMaps, filterMaps: filterMaps, playsText: playsText, metaText: metaText, infoText: infoText, offlineText: offlineText, create: create };
+    return { VIEW_KEY: VIEW_KEY, SORTS: SORTS, validMapFile: validMapFile, previewPath: previewPath, thumbFor: thumbFor, percentEncode: percentEncode, displayName: displayName, parseList: parseList, sortMaps: sortMaps, filterMaps: filterMaps, playsText: playsText, metaText: metaText, infoText: infoText, HEAVY_TEXT: HEAVY_TEXT, create: create };
 });

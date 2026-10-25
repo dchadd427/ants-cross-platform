@@ -408,24 +408,6 @@
    "file": "src/ants_server/test_maps_rooms.cpp",
    "old": "    if (store.upkeep(now_s, now_ms)) rooms",
    "new": "    if (false && store.upkeep(now_s, now_ms)) rooms"
-  },
-  {
-   "id": "test_map_ants_limit_not_asked",
-   "file": "src/ants_server/test_maps.cpp",
-   "old": "    if (!OnlineLimits::allows_ants(start_ants)) {",
-   "new": "    if (false) {"
-  },
-  {
-   "id": "test_map_ants_of_three_colors",
-   "file": "src/ants_server/test_maps.cpp",
-   "old": "for (size_t s = 0; s < 4 && s < meta.get(\"teams\").size(); ++s) {\n        const int64_t markers",
-   "new": "for (size_t s = 0; s < 3 && s < meta.get(\"teams\").size(); ++s) {\n        const int64_t markers"
-  },
-  {
-   "id": "test_map_ants_refusal_is_a_size_refusal",
-   "file": "src/ants_server/test_maps.cpp",
-   "old": "refuse(422, \"map_too_many_ants_online\",",
-   "new": "refuse(422, \"map_too_big_online\","
   }
  ]
 }

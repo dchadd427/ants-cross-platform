@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the online size limit and of the limit on start ants (online_limits.hpp: the count, the 300, the originals that are never refused, the sentence), the weight of a big map, the words for a game that cannot load a map, the public door's map files, the history of approved maps and the arena's play limits, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_limit_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'The leader's START') or docs/MAP_SUBMISSIONS.md ('Older games and big maps'); the test maps' own rules (the canonical file and its limits) are tests/data/test_maps_mutants.json. Not listed on purpose: the weight of a retired match (no test has a rematch on a big map), the wiring of main.cpp (the program is run by the script suites), and three second locks: the name of the person who left (the room looks at the seat as well), the hash check of load_map_file (the replay's own checkpoints refuse another map) and the cap of the weight when places are counted (a match heavier than all the places only makes the server full).",
+ "note": "Mutants of the online size limit, the count of the start ants and the heavy-map flag of the list (nothing is refused for ants), the weight of a big map, the words for a game that cannot load a map, the public door's map files, the history of approved maps and the arena's play limits, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_limit_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'The leader's START') or docs/MAP_SUBMISSIONS.md ('Older games and big maps'); the test maps' own rules (the canonical file and its limits) are tests/data/test_maps_mutants.json. Not listed on purpose: the weight of a retired match (no test has a rematch on a big map), the wiring of main.cpp (the program is run by the script suites), and three second locks: the name of the person who left (the room looks at the seat as well), the hash check of load_map_file (the replay's own checkpoints refuse another map) and the cap of the weight when places are counted (a match heavier than all the places only makes the server full).",
  "mutants": [
   {
    "id": "door_file_flag_ignored",
@@ -112,86 +112,86 @@
   {
    "id": "lobby_choice_takes_a_big_approved_map",
    "file": "src/ants_server/map_store.cpp",
-   "old": "    for (const MapListing& m : extended_listing_) {\n        if (m.file == name && refusal_of(m).empty()) return m.file;",
-   "new": "    for (const MapListing& m : extended_listing_) {\n        if (m.file == name) return m.file;",
+   "old": "        if (m.file == name && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;\n",
+   "new": "        if (m.file == name) return m.file;\n",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "lobby_choice_takes_a_big_test_map",
    "file": "src/ants_server/map_store.cpp",
-   "old": "        if (t.name == name && refusal_of(t).empty()) return t.name;\n",
+   "old": "        if (t.name == name && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;\n",
    "new": "        if (t.name == name) return t.name;\n",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "lobby_choice_takes_a_big_approved_map_in_other_case",
    "file": "src/ants_server/map_store.cpp",
-   "old": "    for (const MapListing& m : extended_listing_) {\n        if (lower(m.file) == folded && refusal_of(m).empty()) return m.file;",
-   "new": "    for (const MapListing& m : extended_listing_) {\n        if (lower(m.file) == folded) return m.file;",
+   "old": "        if (lower(m.file) == folded && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;\n",
+   "new": "        if (lower(m.file) == folded) return m.file;\n",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "lobby_choice_takes_a_big_test_map_in_other_case",
    "file": "src/ants_server/map_store.cpp",
-   "old": "        if (lower(t.name) == folded && refusal_of(t).empty()) return t.name;\n",
+   "old": "        if (lower(t.name) == folded && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;\n",
    "new": "        if (lower(t.name) == folded) return t.name;\n",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
-   "id": "refusal_ignores_approved_extended_maps",
+   "id": "too_big_online_ignores_approved_maps",
    "file": "src/ants_server/map_store.cpp",
-   "old": "    for (const MapListing& m : extended_listing_) {\n        if (lower(m.file) == folded && !refusal_of(m).empty()) return refusal_of(m);",
-   "new": "    for (const MapListing& m : extended_listing_) {\n        if (false && lower(m.file) == folded && !refusal_of(m).empty()) return refusal_of(m);",
+   "old": "        if (lower(m.file) == folded && !OnlineLimits::allows(cells_in(m.width, m.height))) return true;\n",
+   "new": "        if (false && lower(m.file) == folded && !OnlineLimits::allows(cells_in(m.width, m.height))) return true;\n",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
-   "id": "refusal_ignores_test_maps",
+   "id": "too_big_online_ignores_test_maps",
    "file": "src/ants_server/map_store.cpp",
-   "old": "        if (lower(t.name) == folded && !refusal_of(t).empty()) return refusal_of(t);",
-   "new": "        if (false && lower(t.name) == folded && !refusal_of(t).empty()) return refusal_of(t);",
+   "old": "        if (lower(t.name) == folded && !OnlineLimits::allows(cells_in(t.width, t.height))) return true;\n",
+   "new": "        if (false && lower(t.name) == folded && !OnlineLimits::allows(cells_in(t.width, t.height))) return true;\n",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "list_does_not_say_online_false",
    "file": "src/ants_server/map_store.cpp",
-   "old": "if (with_extended && !refusal_of(m).empty()) {",
-   "new": "if (false && !refusal_of(m).empty()) {",
+   "old": "if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height))) o.set(\"online\"",
+   "new": "if (false && !OnlineLimits::allows(cells_in(m.width, m.height))) o.set(\"online\"",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "cells_of_knows_no_extended_map",
@@ -208,50 +208,50 @@
   {
    "id": "room_of_the_control_interface_on_a_big_map",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "if (const std::string refusal = store_.online_refusal(entry, level); !refusal.empty()) {      // (a room is online",
-   "new": "if (const std::string refusal = std::string(); !refusal.empty()) {      // (a room is online",
+   "old": "    if (!OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height())) {      // (a room is online",
+   "new": "    if (false) {      // (a room is online",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "lobby_loads_a_big_map",
    "file": "src/ants_server/room_manager.cpp",
-   "old": " && store_.online_refusal(entry, level).empty();\n    };",
+   "old": " && OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height());\n    };",
    "new": ";\n    };",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "lobby_page_block_takes_a_big_test_map",
    "file": "src/ants_server/room_manager.cpp",
-   "old": " && store_.online_refusal(block.map_name).empty()) map =",
+   "old": " && OnlineLimits::allows(store_.cells_of(block.map_name))) map =",
    "new": ") map =",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "big_map_refusal_is_silent",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "s.map_refusal = [this](const std::string& name) { return store_.online_refusal(name); };",
-   "new": "s.map_refusal = [](const std::string&) { return std::string(); };",
+   "old": "return store_.too_big_online(name) ? std::string(net::kNoticeMapTooBig) : std::string(); };",
+   "new": "return store_.too_big_online(name) && false ? std::string(net::kNoticeMapTooBig) : std::string(); };",
    "build": [
     "test_map_list",
     "test_server",
     "test_test_maps"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
   },
   {
    "id": "big_map_takes_one_place_at_start",
@@ -472,7 +472,7 @@
   {
    "id": "history_plays_big_approved_maps",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "return map != nullptr && store_.online_refusal(name).empty() ? map->path : std::string();",
+   "old": "return map != nullptr && OnlineLimits::allows(static_cast<uint64_t>(map->width) * map->height) ? map->path : std::string();",
    "new": "return map != nullptr ? map->path : std::string();",
    "build": [
     "test_map_plays"
@@ -530,12 +530,12 @@
   {
    "id": "restart_record_ignores_the_online_limit",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "if (const std::string refusal = store_.online_refusal(entry, level); !refusal.empty()) return \"ended by a restart of the server: the map \"",
-   "new": "if (const std::string refusal = std::string(); !refusal.empty()) return \"ended by a restart of the server: the map \"",
+   "old": "    if (!OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height())) return \"ended by a restart of the server: the map \"",
+   "new": "    if (false) return \"ended by a restart of the server: the map \"",
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "start_ends_abandoned_matches_though_it_cannot_be_seated",
@@ -639,160 +639,59 @@
    "test": "./build/tests/test_server/test_map_list"
   },
   {
-   "id": "ants_limit_one_over",
-   "file": "include/ants_server/online_limits.hpp",
-   "old": "kMaxStartAnts = 300;",
-   "new": "kMaxStartAnts = 301;",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_limit_one_under",
-   "file": "include/ants_server/online_limits.hpp",
-   "old": "kMaxStartAnts = 300;",
-   "new": "kMaxStartAnts = 299;",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_at_the_limit_is_out",
-   "file": "include/ants_server/online_limits.hpp",
-   "old": "{ return start_ants <= kMaxStartAnts; }",
-   "new": "{ return start_ants < kMaxStartAnts; }",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_counter_counts_plants",
-   "file": "src/ants_server/online_limits.cpp",
-   "old": "if (spawn.team_id < 4) ++ants;",
-   "new": "if (spawn.team_id < 4 || true) ++ants;",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_counter_counts_one_color",
-   "file": "src/ants_server/online_limits.cpp",
-   "old": "if (spawn.team_id < 4) ++ants;",
-   "new": "if (spawn.team_id < 1) ++ants;",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_counter_counts_three_colors",
-   "file": "src/ants_server/online_limits.cpp",
-   "old": "if (spawn.team_id < 4) ++ants;",
-   "new": "if (spawn.team_id < 3) ++ants;",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_notice_names_no_count",
-   "file": "src/ants_server/online_limits.cpp",
-   "old": "\"This map starts with \" + with_commas(start_ants)",
-   "new": "\"This map starts with \" + with_commas(start_ants * 0)",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_notice_names_no_limit",
-   "file": "src/ants_server/online_limits.cpp",
-   "old": "+ with_commas(kMaxStartAnts) + \".\";",
-   "new": "+ with_commas(kMaxStartAnts + 1) + \".\";",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_notice_commas_are_dots",
-   "file": "src/ants_server/online_limits.cpp",
-   "old": "out.push_back(',');",
-   "new": "out.push_back('.');",
-   "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "ants_ignored_by_the_judgement",
+   "id": "count_cache_hits_on_the_path_alone",
    "file": "src/ants_server/map_store.cpp",
-   "old": "if (!original && !OnlineLimits::allows_ants(start_ants)) return",
-   "new": "if (false && !original && !OnlineLimits::allows_ants(start_ants)) return",
+   "old": "if (kept != counted_.end() && kept->second.size == size && kept->second.hash == hash) return kept->second.ants;",
+   "new": "if (kept != counted_.end()) return kept->second.ants;",
    "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
+    "test_map_list"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
+   "test": "ANTS_TEST_FILTER=ML4.6 ./build/tests/test_server/test_map_list",
+   "expect": "ML4.6"
   },
   {
-   "id": "originals_are_judged_for_their_ants",
+   "id": "count_cache_ignores_the_hash",
    "file": "src/ants_server/map_store.cpp",
-   "old": "if (!original && !OnlineLimits::allows_ants(start_ants)) return",
-   "new": "if ((!OnlineLimits::allows_ants(start_ants)) || (original && false)) return",
+   "old": "kept->second.size == size && kept->second.hash == hash) return",
+   "new": "kept->second.size == size) return",
    "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
+    "test_map_list"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
+   "test": "ANTS_TEST_FILTER=ML4.6 ./build/tests/test_server/test_map_list",
+   "expect": "ML4.6"
   },
   {
-   "id": "every_file_called_like_an_original_is_one",
+   "id": "count_cache_never_hits",
    "file": "src/ants_server/map_store.cpp",
-   "old": "&& entry.path == (fs::path(dir_) / entry.name).string();",
-   "new": "&& true;",
+   "old": "if (kept != counted_.end() && kept->second.size",
+   "new": "if (false && kept != counted_.end() && kept->second.size",
    "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
+    "test_map_list"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
+   "test": "ANTS_TEST_FILTER=ML4.6 ./build/tests/test_server/test_map_list",
+   "expect": "ML4.6"
   },
   {
-   "id": "the_list_judges_an_original_as_any_map",
+   "id": "count_cache_never_forgets",
    "file": "src/ants_server/map_store.cpp",
-   "old": "return refusal_sentence(m.original, cells_in(m.width, m.height), m.start_ants);",
-   "new": "return refusal_sentence(false, cells_in(m.width, m.height), m.start_ants);",
+   "old": "it = held ? std::next(it) : counted_.erase(it);",
+   "new": "it = std::next(it);",
    "build": [
-    "test_map_list",
-    "test_server",
-    "test_test_maps"
+    "test_map_list"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
+   "test": "ANTS_TEST_FILTER=ML4.6 ./build/tests/test_server/test_map_list",
+   "expect": "ML4.6"
+  },
+  {
+   "id": "count_cache_forgets_everything",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "it = held ? std::next(it) : counted_.erase(it);",
+   "new": "it = counted_.erase(it);",
+   "build": [
+    "test_map_list"
+   ],
+   "test": "ANTS_TEST_FILTER=ML4.6 ./build/tests/test_server/test_map_list",
+   "expect": "ML4.6"
   },
   {
    "id": "approved_ants_are_the_callers_number",
@@ -801,22 +700,20 @@
    "new": "for (ApprovedMap& a : approved_) a.start_ants = a.start_ants;",
    "build": [
     "test_map_list",
-    "test_server",
-    "test_test_maps"
+    "test_server"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
   },
   {
-   "id": "test_map_ants_are_the_callers_number",
+   "id": "approved_ants_not_in_the_list",
    "file": "src/ants_server/map_store.cpp",
-   "old": "for (ApprovedMap& t : test_maps_) t.start_ants = start_ants_of_file(t.path, t.size, t.hash);",
-   "new": "for (ApprovedMap& t : test_maps_) t.start_ants = t.start_ants;",
+   "old": "m.start_ants = a.start_ants;\n",
+   "new": "",
    "build": [
     "test_map_list",
-    "test_server",
-    "test_test_maps"
+    "test_server"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "library_ants_not_counted_from_the_file",
@@ -825,54 +722,141 @@
    "new": "",
    "build": [
     "test_map_list",
-    "test_server",
-    "test_test_maps"
+    "test_server"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "maps_folder_ants_not_counted",
    "file": "src/ants_server/map_store.cpp",
-   "old": "            m.start_ants = OnlineLimits::start_ants(level);\n        }",
-   "new": "            m.start_ants = 0;\n        }",
+   "old": "            m.start_ants = OnlineLimits::start_ants(level);\n",
+   "new": "            m.start_ants = 0;\n",
    "build": [
     "test_map_list",
-    "test_server",
-    "test_test_maps"
+    "test_server"
    ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
   },
   {
-   "id": "list_says_no_count_of_the_ants",
+   "id": "list_never_says_heavy",
    "file": "src/ants_server/map_store.cpp",
-   "old": "if (OnlineLimits::allows(cells_in(m.width, m.height))) o.set(\"ants\"",
-   "new": "if (false) o.set(\"ants\"",
+   "old": "if (with_extended && OnlineLimits::heavy(m.start_ants)) {",
+   "new": "if (false && with_extended && OnlineLimits::heavy(m.start_ants)) {",
    "build": [
     "test_map_list",
-    "test_server",
-    "test_test_maps"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_test_maps"
-  },
-  {
-   "id": "restart_record_names_the_ants",
-   "file": "src/ants_server/room_manager.cpp",
-   "old": "(refusal == net::kNoticeMapTooBig ? \" is too big to play online now (\" : \" has too many ants to play online now (\")",
-   "new": "(refusal == net::kNoticeMapTooBig ? \" is too big to play online now (\" : \" is too big to play online now (\")",
-   "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
   },
   {
-   "id": "control_room_says_ants_as_size",
-   "file": "src/ants_server/room_manager.cpp",
-   "old": "(refusal == net::kNoticeMapTooBig ? \"is too big\" : \"has too many ants\")",
-   "new": "(refusal == net::kNoticeMapTooBig ? \"is too big\" : \"is too big\")",
+   "id": "list_says_heavy_of_every_map",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "if (with_extended && OnlineLimits::heavy(m.start_ants)) {",
+   "new": "if (with_extended) {",
    "build": [
+    "test_map_list",
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "old_list_says_heavy_too",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "if (with_extended && OnlineLimits::heavy(m.start_ants)) {",
+   "new": "if (OnlineLimits::heavy(m.start_ants)) {",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "list_says_no_count",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "o.set(\"ants\", ctl::JsonValue::make_int(static_cast<int64_t>(m.start_ants)));",
+   "new": "",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "list_marks_heavy_as_offline",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "o.set(\"heavy\", ctl::JsonValue::make_bool(true));",
+   "new": "o.set(\"heavy\", ctl::JsonValue::make_bool(true));\n            o.set(\"online\", ctl::JsonValue::make_bool(false));",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "heavy_from_301_up_is_300",
+   "file": "include/ants_server/online_limits.hpp",
+   "old": "static constexpr uint32_t kHeavyStartAnts = 300;",
+   "new": "static constexpr uint32_t kHeavyStartAnts = 301;",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "heavy_from_299",
+   "file": "include/ants_server/online_limits.hpp",
+   "old": "static constexpr uint32_t kHeavyStartAnts = 300;",
+   "new": "static constexpr uint32_t kHeavyStartAnts = 299;",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "heavy_at_the_limit",
+   "file": "include/ants_server/online_limits.hpp",
+   "old": "return start_ants > kHeavyStartAnts; }",
+   "new": "return start_ants >= kHeavyStartAnts; }",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "count_three_colors_only",
+   "file": "src/ants_server/online_limits.cpp",
+   "old": "if (spawn.team_id < 4) ++ants;",
+   "new": "if (spawn.team_id < 3) ++ants;",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "count_plants_as_ants",
+   "file": "src/ants_server/online_limits.cpp",
+   "old": "if (spawn.team_id < 4) ++ants;",
+   "new": "++ants;",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "count_one_ant_a_color",
+   "file": "src/ants_server/online_limits.cpp",
+   "old": "if (spawn.team_id < 4) ++ants;",
+   "new": "if (spawn.team_id < 4 && ants < 4) ++ants;",
+   "build": [
+    "test_map_list",
+    "test_server"
+   ],
+   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
   }
  ]
 }

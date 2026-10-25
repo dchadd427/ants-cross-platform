@@ -66,7 +66,7 @@ public:
     /// The size of the largest upload of this kind (the limit that the door applies before it reads a byte)
     static size_t max_upload_bytes(const std::string& kind);
 
-    /// Checks a draft map and keeps its canonical file. Refusals carry the codes of a submission (`not_a_map`, `kind_mismatch`, `map_fails_checks`, `map_too_big`) and `map_too_big_online`, `map_too_many_ants_online`, `too_large`, `busy`,
+    /// Checks a draft map and keeps its canonical file. Refusals carry the codes of a submission (`not_a_map`, `kind_mismatch`, `map_fails_checks`, `map_too_big`) and `map_too_big_online`, `too_large`, `busy`,
     /// `storage_full`, `test_limit` (429, one address holds its share) and `test_full` (503).
     TestMapOutcome submit(const TestMapInput& in, int64_t now);
     /// The held maps (those that are too old are dropped first)

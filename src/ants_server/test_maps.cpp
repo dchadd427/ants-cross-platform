@@ -175,14 +175,6 @@ TestMapOutcome TestMapStore::submit(const TestMapInput& in, int64_t now) {
     if (!OnlineLimits::allows(static_cast<uint64_t>(rows * columns))) {          // (it is a good map: it can be played here against bots, not by a room)
         return refuse(422, "map_too_big_online", "This map is too big to play online yet (65,536 cells at most, like 256 x 256). You can still play it against bots on this computer.");
     }
-    uint64_t start_ants = 0;                                                      // (the start markers of the four colors, from the report that the core made of the canonical file: not from anything the client said)
-    for (size_t s = 0; s < 4 && s < meta.get("teams").size(); ++s) {
-        const int64_t markers = meta.get("teams").at(s).get("start_markers").as_int_or(0);
-        if (markers > 0) start_ants += static_cast<uint64_t>(markers);
-    }
-    if (!OnlineLimits::allows_ants(start_ants)) {                                  // (a test room has other players in it: an online room, so the limit of OnlineLimits holds; against bots on the maker's own computer it never did)
-        return refuse(422, "map_too_many_ants_online", (OnlineLimits::too_many_ants_notice(start_ants) + " You can still play it against bots on this computer.").c_str());
-    }
     const JsonValue& findings = report.get("findings");
     bool team_bad[4] = {false, false, false, false};
     for (size_t i = 0; i < findings.size(); ++i) {
