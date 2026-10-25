@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...CODECOMMIT), [the warning](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...85c01ad8), [the warning](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
 
 ## v0.12.129 - 2026-10-25 - Big selections follow the original's rules
 
