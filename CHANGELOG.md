@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.132 - 2026-10-25 - Faster: big maps with thousands of ants
+
+**For players:**
+- **Faster: a map with thousands of ants plays quicker.** Two questions that looked at every ant (which ant has this number, and does an ant wait for a path) are now answered at once. A tick with 4 x 693 ants walking across a 90 x 90 map takes 11 ms instead of 26 ms (2,772 ants packed in the corners: 10 ms instead of 38 ms), and 4 x 1,500 ants on 150 x 150 take 47 ms instead of 112 ms (packed: 46 instead of 119); the browser build gains the same (27 to 12 ms and 115 to 49 ms).
+- A crowd that only stands and fights is not faster yet (6,000 ants in a brawl cost about 47 ms a tick: still too much for a slow computer); the next releases remove the other scans.
+- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library and crowds of 6,000 ants play identically).
+
+**Rules / network:** none; the rules and network protocol 21 are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c03ec4c0...fbb14974)
+
 ## v0.12.131 - 2026-10-25 - Big maps now warn: "may run slowly"
 
 **For players:**
@@ -568,16 +579,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c30c9a4a...f6d1f011)
 
-## v0.12.79 - 2026-10-18 - Map maker: save as a new map and drafts (E5)
+## Older versions (v0.12.79 and before)
 
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) can save a map now. Save as new... (in the top bar, or in the Menu on a phone) keeps the map in your browser as a new map under a free name, and shows it, so the next Save makes one more new map. A map is never written over: if the name is already used by the map you opened, one of your saved maps or one of the game's maps, it says so and offers the next free name in one click ("Use Sunny Picnic 3").
-- Copy and Start an Extended map use the same name check, so a copy can no longer take the name of a game map or a saved map.
-- What you draw is kept in the browser while you work. If you close the page without saving, the next visit offers to pick the work up or throw it away, and the question before you leave a map offers Save as a new map first. A browser that cannot keep files says so, offers Download, and asks before the page is closed as before.
-- Saved maps cannot be opened again from the page yet: the list of your maps comes next.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d09bb5c9...421ebb6b)
-
-## Older versions (v0.12.78 and before)
-
-Every release before v0.12.79, and the long notes of v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.80, and the long notes of v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

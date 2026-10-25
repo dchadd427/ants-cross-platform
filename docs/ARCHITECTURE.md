@@ -317,6 +317,15 @@ The big boxes are the layers. Solid arrows show what feeds what; dotted arrows a
 
 `third_party/` holds code that is not ours and is built from source (SQLite today; the music decoder `dr_mp3.h` is in `include/ants_app/`). Two small libraries sit beside them: `ants_version` (the generated `ants_app/version.hpp` and `ants::BUILD_ID`, linked by the game and the server) and `ants_test_paths` (where the checkout is, for tests and tools).
 
+### Lookups in the tick loop
+
+The tick asks two questions thousands of times, and both are O(1) (as scans they made a map of thousands of ants cost about the square of its ants). Each gives exactly the answer of the scan it replaced, so no tick changes by a bit:
+
+- **The ant of an id** (`SimulationEngineImpl::find_unit`). Ants are never removed and an id is `next_ant_id_++` at the push_back (both restart at 1 in `init`), so ant n sits in slot n - 1. The slot is checked, and a miss (id 0, an id never handed out, a table that stopped being dense) falls back to the scan.
+- **Whether an ant has a path request queued** (`PathManager::has_request_for`, and the replacement of an ant's first request in `request`). A byte for each ant id (a larger id is counted and scanned) changes with every push, pop and clear of the queue and is rebuilt from the queue after a copy. It is derived data: never copied, not in the state hash, so a copy of the engine (prediction) cannot carry a stale flag.
+
+`test_engine_lookups` ([`TESTING.md`](TESTING.md)) links `ants_sim_shadow`, the same sources compiled with `ANTS_SIM_LOOKUP_SHADOW` (no product build has it): every call also runs the scan (every 64th once the table or the queue holds more than 256) and stops the program on a difference, and each match is played twice, with the scans alone and with the lookups, the state hash compared at every tick. A new index of this kind keeps its scan beside it and joins that check.
+
 Where to read more:
 
 - The turns, the sequencer, the runner and the sessions: [`NETWORK_PORT.md`](NETWORK_PORT.md#the-lock-step-core-srcants_net-v0044) ("The lock-step core"); network play for players: [`MULTIPLAYER.md`](MULTIPLAYER.md).
