@@ -23,10 +23,10 @@ DATA = os.path.join(REPO, "tests", "data")
 
 # Specs that are not checked yet: file name -> why, and when to look again.
 STALE_ALLOWED = {
-    "rules_one_mutants.json": "7 of its 29 mutants aim at src/ants_sim/path_planner.cpp, movement_system.cpp and include/ants_sim/grid.hpp, files that the speed-up of the simulation "
-                              "is rewriting; listed 2026-10-25, re-aim them (and take the file off this list) after P4 of the speed-up series",
-    "grid_extended_mutants.json": "2 of its 31 mutants aim at src/ants_sim/grid.cpp and include/ants_sim/grid.hpp, files that the speed-up of the simulation is rewriting; "
-                                  "listed 2026-10-25, re-aim them (and take the file off this list) after P4 of the speed-up series",
+    "rules_one_mutants.json": "7 of its 29 mutants aim at src/ants_sim/path_planner.cpp, movement_system.cpp and include/ants_sim/grid.hpp, files that the engine speed-up work is still "
+                              "changing; listed 2026-10-25, re-aim them (and take the file off this list) after those changes to path_planner, movement_system and grid land",
+    "grid_extended_mutants.json": "2 of its 31 mutants aim at src/ants_sim/grid.cpp and include/ants_sim/grid.hpp, files that the engine speed-up work is still changing; "
+                                  "listed 2026-10-25, re-aim them (and take the file off this list) after those changes to grid land",
 }
 
 
@@ -60,7 +60,7 @@ class EverySpecStillApplies(unittest.TestCase):
                 spec = os.path.join(DATA, name)
                 self.assertTrue(os.path.isfile(spec), "STALE_ALLOWED names %s, which is not in tests/data" % name)
                 self.assertIn("listed 20", why, "say when it was listed")
-                self.assertIn("after P4", why, "say when to look again")
+                self.assertIn("after those changes", why, "say when to look again")
                 status, output = check(spec)
                 self.assertNotEqual(status, 0, "%s applies again: take it off STALE_ALLOWED so that it is checked" % name)
 

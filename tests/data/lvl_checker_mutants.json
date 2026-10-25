@@ -14,6 +14,17 @@
    "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
   },
   {
+   "id": "a_level_below_version_8_allowed",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (original && level.version != LVL_EXPECTED_VERSION) {",
+   "new": "if (original && level.version > LVL_EXPECTED_VERSION) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
    "id": "mode_is_a_warning",
    "file": "src/ants_assets/lvl_checker.cpp",
    "old": "f.add(Code::ModeNot1, Severity::Info, \"the mode word is \"",
