@@ -38,7 +38,8 @@ enum class CommandType : uint8_t {
     Last = Drop
 };
 
-/// The most ants one command may name (the original's drag select holds 24; a team never has more than ten eggs' worth of ants).
+/// The most ants one command may name. A bigger selection goes out as several commands (the HUD's click, hud.hpp kMaxCommandsPerClick); what the original does beyond its drag select
+/// of 24 is not established (docs/GAME_REVERSE_ENGINEERING.md).
 inline constexpr size_t kMaxCommandAnts = 32;
 inline constexpr size_t kCommandHeaderBytes = 8;
 

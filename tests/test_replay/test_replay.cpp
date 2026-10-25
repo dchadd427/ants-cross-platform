@@ -326,6 +326,36 @@ std::vector<Command> big_orders_at(const sim::SimulationEngine& engine, uint32_t
     return out;
 }
 
+/// A map for a crowd: TINY grown to 90 x 90 as a Classic map, with 700 more start markers of the green team on plain ground below and to the right of what TINY holds (a crowd as big as a map from the Map Maker can hold)
+bool crowd_map(Map& m) {
+    const std::string bytes = grown_classic(90, 90);
+    if (bytes.empty() || !assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), m.level, nullptr, assets::LevelLimits{})) return false;
+    for (uint16_t i = 0; i < 700; ++i) {
+        assets::AnthillSpawn marker;
+        marker.tile_id = 152;                                   // (the green start marker)
+        marker.team_id = 0;
+        marker.x = static_cast<uint16_t>(40 + i % 40);
+        marker.y = static_cast<uint16_t>(40 + i / 40);
+        m.level.anthill_spawns.push_back(marker);
+    }
+    return true;
+}
+
+/// What the HUD sends for Ctrl+A and a move click, and later Ctrl+S, of the green team's whole crowd: commands of 32 ants in the selection order (HUD::submit_in_chunks), all of one turn
+std::vector<Command> crowd_orders_at(const sim::SimulationEngine& engine, uint32_t turn) {
+    std::vector<Command> out;
+    if (turn != 5 && turn != 80) return out;
+    std::vector<uint32_t> ids;
+    for (const sim::AntSnapshot& a : engine.get_world_state().ants) {
+        if (a.player_id == 0 && a.hp > 0) ids.push_back(a.id);
+    }
+    for (size_t from = 0; from < ids.size(); from += sim::kMaxCommandAnts) {
+        const std::vector<uint32_t> chunk(ids.begin() + static_cast<std::ptrdiff_t>(from), ids.begin() + static_cast<std::ptrdiff_t>(std::min(ids.size(), from + sim::kMaxCommandAnts)));
+        out.push_back(turn == 5 ? make_command(CommandType::GroupMove, 0, 85, 85, chunk) : make_command(CommandType::Stop, 0, 0, 0, chunk));
+    }
+    return out;
+}
+
 /// Asks the recorder for a snapshot after every `every` turns (and notes the engine's state hash then): what the server does for a match that still runs
 struct SnapshotTap {
     uint32_t every{0};
@@ -1125,6 +1155,25 @@ int main(int argc, char* argv[]) {
         const Played q = play_scripted(tiny, 31, 450, 0x07);
         o = play(q.replay, tiny.level);
         ASSERT_TRUE(o.ok && o.result.standing == sim::PLAYER_NEUTRAL && o.result.ants_left[0] == 0 && o.result.ants_left[2] == 0);
+    } TEST_END();
+
+    TEST_CASE("RP2.14 A Click On A Crowd Of More Than 693 Ants Is Recorded As The Commands Of 32 That The HUD Sends (A Move, Then Stop): All Of One Turn, In The Selection Order, The File Reads Back Whole, And It Plays Out Twice To The Same Hashes As The Match") {
+        Map crowd;
+        ASSERT_TRUE(crowd_map(crowd));
+        const Played first = play_scripted(crowd, 31, 310, 0x0F, sim::StartTeams{}, false, nullptr, 0, crowd_orders_at);
+        const Played second = play_scripted(crowd, 31, 310, 0x0F, sim::StartTeams{}, false, nullptr, 0, crowd_orders_at);
+        ASSERT_FALSE(first.file.empty());
+        ASSERT_TRUE(first.replay.complete && first.replay.total_turns == 310u);
+        ASSERT_TRUE(first.hash == second.hash && first.file == second.file);
+        size_t moves = 0, stops = 0, ants = 0;
+        for (const TimedCommand& tc : first.replay.commands) {
+            ASSERT_TRUE(tc.command.ants.size() <= sim::kMaxCommandAnts);
+            if (tc.command.type == CommandType::GroupMove) { ASSERT_EQ(tc.turn, 5u); ++moves; ants += tc.command.ants.size(); }
+            if (tc.command.type == CommandType::Stop) { ASSERT_EQ(tc.turn, 80u); ++stops; }
+        }
+        ASSERT_TRUE(ants >= 700 && moves == (ants + 31) / 32 && stops == moves);                             // (a command per 32 ants: every ant of the crowd is named once)
+        const Outcome o = play(first.replay, crowd.level);
+        ASSERT_TRUE(o.ran && o.ok && o.complete && o.turns == 310u && o.hash == first.hash && o.hashes_checked == 3u);       // (the ledger of hashes the file holds is matched at every period)
     } TEST_END();
 
     TEST_CASE("RP2.13 A Map Of More Than 256 A Side Plays And Replays: TINY Grown To 400 x 400 And 512 x 512 (Rules 1), Orders Of 100 To 200 Tiles, Also To Column 120 Row 90, 300 Ticks Twice To The Same Hash, The Replay Verifies, A Copy Of The Engine Has The Hash") {
