@@ -445,8 +445,8 @@
     {
       "id": "hide_keeps_the_pick",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "show: function (on) { shown = !!on; if (!on) clear(); else {",
-      "new": "show: function (on) { shown = !!on; if (!on) render(); else {",
+      "old": "show: function (on) { shown = !!on; listen(shown); if (!on) clear(); else {",
+      "new": "show: function (on) { shown = !!on; listen(shown); if (!on) render(); else {",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -1250,8 +1250,8 @@
     {
       "id": "sheet_height_kept_when_gone",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "high = bar.hidden ? 0 : bar.offsetHeight || 0;",
-      "new": "high = bar.offsetHeight || 0;",
+      "old": "h = on ? bar.offsetHeight || 0 : 0;",
+      "new": "h = bar.offsetHeight || 0;",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -1322,6 +1322,111 @@
       "file": "web/front/mapmaker_pickup.css",
       "old": "body.pk-on { padding-bottom: var(--pk-h, 0px); }",
       "new": "body.pk-on { padding-bottom: 240px; }",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "bar_height_not_held",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (keep && h > latch && bar.style) {",
+      "new": "if (false && keep && h > latch && bar.style) {",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_height_held_when_picked",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "keep = on && st.mode === 'moving' && !st.fold,",
+      "new": "keep = on && !st.fold,",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_height_held_when_folded",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "keep = on && st.mode === 'moving' && !st.fold,",
+      "new": "keep = on && st.mode === 'moving',",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_height_held_at_another_width",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if ((!keep || w !== seenW) && bar.style) {",
+      "new": "if (!keep && bar.style) {",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_height_never_let_go",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if ((!keep || w !== seenW) && bar.style) { bar.style.minHeight = ''; latch = 0; }",
+      "new": "if (w !== seenW && bar.style) { bar.style.minHeight = ''; latch = 0; }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_not_watched",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "ro = new win.ResizeObserver(resized); ro.observe(bar);",
+      "new": "ro = new win.ResizeObserver(resized);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_not_watched_without_observer",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "else if (win.addEventListener) win.addEventListener('resize', resized); }",
+      "new": "}",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_size_loops",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "function resized() { if (bar && !bar.hidden && ((bar.offsetWidth || 0) !== seenW || (bar.offsetHeight || 0) !== seenH)) settle(); }",
+      "new": "function resized() { if (bar && !bar.hidden) settle(); }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_size_not_remembered",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return seenH = h;",
+      "new": "return h;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_observer_not_let_go",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (ro) ro.disconnect(); else if (win.removeEventListener)",
+      "new": "if (ro) {} else if (win.removeEventListener)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_listener_not_taken_off",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "else if (win.removeEventListener) win.removeEventListener('resize', resized); ro = null;",
+      "new": "ro = null;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_observer_made_twice",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (on && bar && !sized) { sized = true;",
+      "new": "if (on && bar) { sized = true;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_not_watched_when_chosen",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "show: function (on) { shown = !!on; listen(shown);",
+      "new": "show: function (on) { shown = !!on;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "browser_bar_height_not_held",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (keep && h > latch && bar.style) {",
+      "new": "if (false && keep && h > latch && bar.style) {",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "browser_bar_not_watched",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "ro = new win.ResizeObserver(resized); ro.observe(bar);",
+      "new": "ro = new win.ResizeObserver(resized);",
       "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
     }
   ]

@@ -25,6 +25,7 @@
 //   L  with a built core: the check of the map says the same after a move, a copy and a delete as it said before (no new finding), on the library
 //   M  big maps (512 x 512) stay fast: a pick, the verdict of a ghost and the area of the whole map are measured
 //   N  a drag is put down where the ghost is when the mouse or the finger is let go (one change, one Undo; red: the thing goes back to where it was picked up, nothing written, "Put back: ..." says why; Escape, a cancelled or lost pointer, a second lift, Done while held; Done on a red place keeps it in hand; a copy, an area, a group)
+//   P  the bar's height holds while a thing is on its way (the map does not strobe under the pointer), and the page follows the bar's own size (a phone turned, a window resized) with an observer that is let go of with the tool
 //   O  the bar is a row of its own under the map: it comes after the map and before the line under it, the page is told its height, and the map is given a way to bring a picked thing (or the ghost, when no pointer drives it) above the bar
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
@@ -160,7 +161,7 @@ function page(file, opts) {
     let ed = editor(file), view = View.create(file, opts.width || 600, opts.height || 400), cursor = null, busy = false, stroking = false;          // (`stroking`: the real page takes no change while a stroke goes on, tools.act)
     const log = { acts: 0, refused: 0, refreshes: 0, said: [], focus: 0, frames: [], dialogs: [], settles: [], vars: {} };
     const env = {
-        doc, win: { devicePixelRatio: 1, requestAnimationFrame: null }, host: { map, cv, hint: el('p') },
+        doc, win: Object.assign({ devicePixelRatio: 1, requestAnimationFrame: null }, opts.win || {}), host: { map, cv, hint: el('p') },
         file: () => ed.file, act: (change) => { if (stroking) { log.refused++; return false; } log.acts++; const d = ed.act(change); if (d) pickRef.refresh(); return !!d; },
         say: (t, m) => log.said.push(t + ': ' + m), sprites: () => null, view: () => ({ view, cursor, width: opts.width || 600, height: opts.height || 400 }),
         settle: (keep) => { log.settles.push(keep); }, refresh: () => { log.refreshes++; }, focus: () => { log.focus++; }, busy: () => busy,
@@ -1575,6 +1576,98 @@ function caseO() {
     check(pg.log.vars['--pk-h'] === '0px', 'a bar that has no height says 0');
 }
 
+// ================= P =================
+// The sentence sets the bar's height (a place where it cannot go says more than one where it can), and the bar sets the map's: a model of the page's layout (the bar is 150 high, 200 with the warning, 40 more when it is narrow,
+// never lower than its min-height) and a map that is 500 minus the bar.
+function barPage(opts) {
+    const f = File.parse(mapWith(9, 120, 80, [], [], []));
+    putHill(f, 100, 40, RED_HILL);
+    const pg = page(f, { width: 400, height: 300, win: opts && opts.win });
+    const model = { width: 800 };
+    Object.defineProperty(pg.bar, 'offsetWidth', { get: () => model.width });
+    Object.defineProperty(pg.bar, 'offsetHeight', { get: () => (pg.bar.hidden ? 0 : Math.max((pg.bar.querySelector('.pk-warn') ? 200 : 150) + (model.width < 500 ? 40 : 0), parseFloat(pg.bar.style.minHeight) || 0)) });
+    pg.model = model;
+    pg.mapHeight = () => 500 - pg.bar.offsetHeight;
+    return pg;
+}
+function caseP() {
+    const pg = barPage(), heights = [];
+    pg.tap(101, 41); pg.press('move');
+    const lastH = () => pg.mapHeight();
+    // the pointer goes over the last rows 2 pixels at a time: a place that is red (off the map) and one that is green (a hill's height away from it) follow each other
+    for (let i = 0; i < 12; i++) { pg.p.hover({ row: i % 2 ? 0 : 60, column: 41 }); heights.push(lastH()); }
+    check(pg.warn() !== '' || heights.some((h) => h === 300), 'a red place says why in a warning, and the bar is higher for it: ' + heights.join(','));
+    check(heights.every((h, i) => i === 0 || h <= heights[i - 1]) && new Set(heights).size <= 2, 'the map is never made higher while the pointer moves: it shrinks once, not at every step (' + heights.join(',') + ')');
+    pg.p.hover({ row: 60, column: 41 });
+    check(pg.bar.querySelector('.pk-warn') === null && pg.bar.offsetHeight === 200 && pg.bar.style.minHeight === '200px', 'back on a green place the bar stays as high as it was (' + pg.bar.offsetHeight + ', min-height ' + pg.bar.style.minHeight + ')');
+    pg.press('fold'); check(pg.bar.style.minHeight === '' && pg.bar.offsetHeight === 150, 'a bar that is folded by its Hide button keeps no height');
+    pg.press('fold'); check(pg.bar.style.minHeight === '150px' && pg.bar.offsetHeight === 150, 'and holds the height that it has when it is open again');
+    pg.p.hover({ row: 0, column: 41 });
+    check(pg.bar.offsetHeight === 200, 'a place where it cannot go makes it high again: ' + pg.bar.offsetHeight);
+    pg.p.hover(null); pg.press('cancel'); pg.press('cancel');
+    check(pg.hidden() && pg.bar.style.minHeight === '' && pg.log.vars['--pk-h'] === '0px', 'the bar goes: no height is kept');
+    pg.tap(101, 41);
+    check(pg.bar.style.minHeight === '' && pg.bar.offsetHeight === 150, 'a thing that is only picked up: the bar has the height of its words (' + pg.bar.offsetHeight + ')');
+    pg.press('move'); pg.p.hover({ row: 0, column: 41 }); pg.p.hover({ row: 60, column: 41 });
+    check(pg.bar.offsetHeight === 200, 'a second move starts again from nothing: it keeps the height of this move (' + pg.bar.offsetHeight + ')');
+    pg.press('cancel');
+    check(pg.bar.style.minHeight === '' && pg.bar.offsetHeight === 150, 'Cancel: the bar has the height of its words again');
+    pg.press('move'); pg.p.hover({ row: 0, column: 41 });
+    pg.model.width = 390;          // (the phone is turned upright: the bar is narrower, its words wrap)
+    pg.p.hover({ row: 60, column: 41 });
+    check(pg.bar.offsetHeight === 190 && pg.bar.style.minHeight === '190px', 'a bar at another width is measured again, not held at the height of the old one: ' + pg.bar.offsetHeight);
+    pg.model.width = 800; pg.p.hover({ row: 61, column: 41 });
+    check(pg.bar.offsetHeight === 150 && pg.bar.style.minHeight === '150px', 'and the same when it gets wider: ' + pg.bar.offsetHeight);
+
+    // the observer: made with the tool, sees the bar, tells the page when the bar's size changed, lets go when the tool is left
+    const made = [];
+    class Watcher { constructor(cb) { this.cb = cb; this.seen = []; this.gone = false; made.push(this); } observe(n) { this.seen.push(n); } disconnect() { this.gone = true; this.seen = []; } }
+    const rp = barPage({ win: { ResizeObserver: Watcher } });
+    check(made.length === 1 && made[0].seen.length === 1 && made[0].seen[0] === rp.bar, 'the tool watches the size of its bar (a ResizeObserver made with the tool)');
+    rp.tap(101, 41);
+    const settles = () => rp.log.settles.length;
+    let n = settles();
+    check(rp.log.vars['--pk-h'] === '150px', 'the page has room for the bar: ' + rp.log.vars['--pk-h']);
+    made[0].cb([]); made[0].cb([]);
+    check(settles() === n, 'the observer is told and the size is the same: nothing is done (it cannot go round in a circle)');
+    rp.model.width = 390;          // (a phone turned upright while the bar is open: it is 40 higher, and nothing was drawn again)
+    made[0].cb([]);
+    check(rp.log.vars['--pk-h'] === '190px' && settles() === n + 1, 'the bar is higher with nothing drawn again: the page gets the room of the bar as it is now (' + rp.log.vars['--pk-h'] + ') and the map is told');
+    made[0].cb([]);
+    check(settles() === n + 1, 'and the next call with this size does nothing');
+    rp.model.width = 800; made[0].cb([]);
+    check(rp.log.vars['--pk-h'] === '150px' && settles() === n + 2, 'a wider bar, lower again: ' + rp.log.vars['--pk-h']);
+    rp.press('move'); rp.p.hover({ row: 0, column: 41 }); rp.p.hover({ row: 60, column: 41 });
+    n = settles(); rp.model.width = 390; made[0].cb([]);
+    check(rp.log.vars['--pk-h'] === '190px' && settles() === n + 1, 'while a thing is on its way, the observer sees the bar at the new width too, not at the old height held: ' + rp.log.vars['--pk-h']);
+    rp.press('cancel'); rp.press('cancel');
+    check(rp.hidden(), 'Cancel twice: the bar goes');
+    n = settles(); rp.model.width = 800; made[0].cb([]);
+    check(settles() === n, 'a hidden bar is not looked at');
+    rp.pick.show(false);
+    check(made[0].gone === true && made[0].seen.length === 0, 'the observer is let go of when the tool is left');
+    rp.pick.show(false);
+    check(made.length === 1, 'and leaving twice does nothing');
+    rp.pick.show(true);
+    check(made.length === 2 && made[1].seen[0] === rp.bar && made[0].gone === true, 'the tool chosen again watches again, once');
+    rp.pick.show(true);
+    check(made.length === 2, 'and choosing it twice makes no second observer');
+
+    // a page without the observer: the window's resize does it, and it is taken off again
+    const listeners = [], fake = { addEventListener: (t, fn) => listeners.push([t, fn]), removeEventListener: (t, fn) => { const i = listeners.findIndex((l) => l[0] === t && l[1] === fn); if (i >= 0) listeners.splice(i, 1); } };
+    const wp = barPage({ win: fake });
+    check(listeners.length === 1 && listeners[0][0] === 'resize', 'with no ResizeObserver the tool listens to the window\'s resize');
+    wp.tap(101, 41);
+    n = wp.log.settles.length; wp.model.width = 390; listeners[0][1]();
+    check(wp.log.vars['--pk-h'] === '190px' && wp.log.settles.length === n + 1, 'a resize: the room of the bar is made again (' + wp.log.vars['--pk-h'] + ')');
+    listeners[0][1]();
+    check(wp.log.settles.length === n + 1, 'and the same size again does nothing');
+    wp.pick.show(false);
+    check(listeners.length === 0, 'the listener is taken off when the tool is left');
+    wp.pick.show(true); wp.pick.show(true);
+    check(listeners.length === 1, 'and put on once when it is chosen again');
+}
+
 // ================= L (the core) =================
 async function caseL() {
     const js = path.join(MODULE, 'lvl_core.js');
@@ -1590,7 +1683,7 @@ async function caseL() {
 module.exports = { page, sceneBytes, mapWith, putHill, putObject, items, lay, File, Edit, Blocks, Pick };
 // (the sweep of the library, the long one, is the last: a broken copy that a short case refuses is refused at once, tests/scripts/web_mapmaker_bail.js)
 const CASES = [['A what stands on a cell', caseA], ['B a group and an area', caseB], ['C where a thing cannot go', caseC], ['W water is a hint, not a refusal', caseW], ['D the change of a move', caseD], ['E copy, delete and an area', caseE], ['F lists, limits, crowds', caseF],
-    ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['M big maps', caseM], ['O the bar is a row under the map', caseO], ['N a drag is put down when the button is let go', caseN], ['K the library', () => caseK(null)]];
+    ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['M big maps', caseM], ['O the bar is a row under the map', caseO], ['P the bar holds its height, the page follows its size', caseP], ['N a drag is put down when the button is let go', caseN], ['K the library', () => caseK(null)]];
 async function run(cases) {
     for (const [name, fn] of cases) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');
