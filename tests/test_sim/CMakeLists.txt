@@ -356,7 +356,7 @@ target_include_directories(test_engine_lookups PRIVATE
 target_link_libraries(test_engine_lookups PRIVATE ants_test_paths)
 
 add_test(NAME test_engine_lookups COMMAND test_engine_lookups --all)
-set_tests_properties(test_engine_lookups PROPERTIES COST 60)
+set_tests_properties(test_engine_lookups PROPERTIES COST 400)
 
 add_executable(test_game_mode
     test_game_mode.cpp

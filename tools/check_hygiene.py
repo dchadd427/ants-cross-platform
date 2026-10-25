@@ -40,7 +40,7 @@ LINE_CEILINGS = {
     "tools/map_sweep.cpp": 2626,
     "src/ants_app/renderer.cpp": 2368,
     "src/ants_app/hud.cpp": 1867,
-    "src/ants_sim/movement_system.cpp": 1787,
+    "src/ants_sim/movement_system.cpp": 1696,
     "src/ants_net/session.cpp": 1571,
     "src/ants_net/netgame.cpp": 1565,
     "src/ants_sim/sim_engine.cpp": 1533,

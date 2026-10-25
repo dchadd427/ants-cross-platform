@@ -76,107 +76,12 @@ void SimulationEngineImpl::movement_reset() {
     anim_clock_ms_ = 0;
     now_ms_ = 0;
     occ_.assign(static_cast<size_t>(grid_.width()) * grid_.height(), OccCell{});
+    tile_ants_.reset(occ_.size());
     for (auto& pm : path_managers_) pm.clear();
     path_request_serial_.clear();
     anthillq_next_ms_ = 200;
     fdtask_next_ms_ = 0;                                    // FDTASK (task, 0, 3000): its first run is at once
     hatch_ = {};
-}
-
-// ------------------------------------------------------------------------------------------------
-// Occupancy grid (world+0x553c)
-// ------------------------------------------------------------------------------------------------
-
-SimulationEngineImpl::OccCell* SimulationEngineImpl::occ_cell(TileCoord t) noexcept {
-    if (!grid_.in_bounds(t)) return nullptr;
-    const size_t idx = static_cast<size_t>(t.y) * grid_.width() + static_cast<size_t>(t.x);
-    if (idx >= occ_.size()) return nullptr;
-    return &occ_[idx];
-}
-
-// FUN_0100f2cd: every ant registered on t (team slots 0..3, then team index order); the first one found
-// is the default occupant, and a later ant replaces it when it has no path and a stationary action.
-AntUnit* SimulationEngineImpl::occ_scan(TileCoord t, const AntUnit* exclude, uint16_t* count) {
-    uint16_t n = 0;
-    AntUnit* best = nullptr;
-    for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
-        for (auto& up : ants_) {
-            AntUnit* a = up.get();
-            if (!a || a->player_id != team || a == exclude) continue;
-            if (a->occ_tile != t) continue;
-            ++n;
-            if (!best) {
-                best = a;
-            } else if (a->waypoints.empty() && is_stationary_action(orig_action_of(*a))) {
-                best = a;
-            }
-        }
-    }
-    if (count) *count = n;
-    return best;
-}
-
-// FUN_0100f17f: move the ant's registration from its old tile to nt.
-void SimulationEngineImpl::occ_move(AntUnit& a, TileCoord nt) {
-    const TileCoord old = a.occ_tile;
-    if (old.x >= 0) {
-        if (nt == old) return;
-        if (OccCell* c = occ_cell(old)) {
-            if (c->multi) {
-                uint16_t n = 0;
-                AntUnit* one = occ_scan(old, &a, &n);
-                c->multi = (n > 1);
-                if (n == 1 && one) c->ant = static_cast<int32_t>(one->id);
-                // n == 0: the original only clears the multi bit and leaves the departing ant's id.
-            } else {
-                c->ant = -1;
-            }
-        }
-    }
-    a.occ_tile = nt;
-    if (nt.x < 0) return;
-    if (OccCell* c = occ_cell(nt)) {
-        if (c->ant < 0) c->ant = static_cast<int32_t>(a.id);
-        else c->multi = true;
-    }
-}
-
-// Remake: re-register ants whose pixel tile changed outside the movement system (teleports, knock-backs,
-// spawns, test set-ups) and drop dead or underground ones, before occupancy is consulted by an order.
-void SimulationEngineImpl::occ_refresh() {
-    const size_t cells = static_cast<size_t>(grid_.width()) * grid_.height();
-    if (occ_.size() != cells) {
-        occ_.assign(cells, OccCell{});
-        for (auto& up : ants_) {
-            if (up) up->occ_tile = TileCoord{-1, -1};
-        }
-    }
-    for (auto& up : ants_) {
-        if (!up) continue;
-        AntUnit& a = *up;
-        if (!a.is_alive()) {
-            if (a.occ_tile.x >= 0) occ_move(a, TileCoord{-1, -1});
-        } else if (a.occ_tile != pixel_tile(a)) {
-            occ_move(a, pixel_tile(a));
-        }
-    }
-}
-
-// FUN_0100f421 (TileInfo mask 1): the tile's occupant, or nullptr.
-AntUnit* SimulationEngineImpl::occupant_at(TileCoord t) {
-    OccCell* c = occ_cell(t);
-    if (!c) return nullptr;
-    AntUnit* a = nullptr;
-    if (c->multi) a = occ_scan(t, nullptr, nullptr);
-    else if (c->ant >= 0) a = find_unit(static_cast<uint32_t>(c->ant));
-    // Remake: ants that died or went underground since the last movement tick are unregistered lazily.
-    if (a && (!a->is_alive())) return nullptr;
-    return a;
-}
-
-// FUN_0100f3ca: any ant registered on the tile.
-bool SimulationEngineImpl::tile_occupied(TileCoord t) {
-    return occupant_at(t) != nullptr;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1782,6 +1687,10 @@ void SimulationEngineImpl::movement_tick() {
         }, grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget);
         if (delivery) deliver_path(delivery->ant_id, delivery->path);
     }
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    static thread_local uint64_t ticks_run = 0;
+    if (ants_.size() <= kFullCheckSize || (++ticks_run & 15u) == 0) tile_ants_verify();   // the whole lists against the ants (every tick while the table is small)
+#endif
 }
 
 } // namespace ants::sim

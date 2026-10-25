@@ -1,0 +1,129 @@
+{
+ "note": "Mutants of the per-tile ant lists of the simulation (TileAntIndex, occ_scan and the ants of a blast, src/ants_sim/occupancy.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/tile_lists_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp: an entry that stays after a move or a death, an ant listed on the wrong tile, a blast or a tile question that looks at the next tile, the order of a blast or of the default occupant that is not the table's, an excluded ant or an ant of no team that is counted, a removed ant that is thrown, a copy, an assignment or a move that loses the lists, lists that survive a new match or a grid of another size, broken links, a slot that is taken from the id of the ant.",
+ "defaults": {
+  "build": "test_engine_lookups",
+  "test": "timeout 600 ./build/tests/test_sim/test_engine_lookups"
+ },
+ "mutants": [
+  {
+   "id": "stale_entry_after_a_move",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        if (old_index != kNoCell && slot != TileAntIndex::kNone) tile_ants_.unlink(old_index, slot);\n",
+   "new": "        (void)old_index;\n"
+  },
+  {
+   "id": "missed_removal_on_death",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        if (old_index != kNoCell && slot != TileAntIndex::kNone) tile_ants_.unlink(old_index, slot);\n",
+   "new": "        if (old_index != kNoCell && slot != TileAntIndex::kNone && nt.x >= 0) tile_ants_.unlink(old_index, slot);\n"
+  },
+  {
+   "id": "wrong_tile_after_a_teleport",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    if (new_index != kNoCell && slot != TileAntIndex::kNone) tile_ants_.link(new_index, slot);\n",
+   "new": "    if (new_index != kNoCell && slot != TileAntIndex::kNone) tile_ants_.link(occ_cell_index(old) != kNoCell ? occ_cell_index(old) : new_index, slot);\n"
+  },
+  {
+   "id": "blast_takes_the_next_tile",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    const size_t cell = occ_cell_index(at);\n    if (cell == kNoCell) return blast_victims_scan(at, out);",
+   "new": "    const size_t cell = occ_cell_index(TileCoord{at.x + 1, at.y});\n    if (cell == kNoCell) return blast_victims_scan(at, out);"
+  },
+  {
+   "id": "occ_scan_takes_the_next_row",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    const size_t cell = occ_cell_index(t);\n    if (cell == kNoCell) return occ_scan_scan(t, exclude, count);",
+   "new": "    const size_t cell = occ_cell_index(TileCoord{t.x, t.y + 1});\n    if (cell == kNoCell) return occ_scan_scan(t, exclude, count);"
+  },
+  {
+   "id": "blast_order_is_the_lists",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    std::sort(slots.begin(), slots.end());\n",
+   "new": ""
+  },
+  {
+   "id": "occ_scan_order_ignores_the_team",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        const uint64_t key = (static_cast<uint64_t>(a->player_id) << 32) | slot;\n",
+   "new": "        const uint64_t key = slot;\n"
+  },
+  {
+   "id": "occ_scan_takes_the_first_ant_that_stands",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        if (key >= last_still_key && a->waypoints.empty()",
+   "new": "        if ((!last_still || key < last_still_key) && a->waypoints.empty()"
+  },
+  {
+   "id": "occ_scan_never_keeps_the_first_of_the_visit",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    AntUnit* const best = last_still ? last_still : first;\n",
+   "new": "    AntUnit* const best = last_still ? last_still : (n > 1 ? nullptr : first);\n"
+  },
+  {
+   "id": "occ_scan_counts_the_excluded_ant",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        if (!a || a->player_id >= MAX_PLAYERS || a == exclude) continue;\n        ++n;\n        const uint64_t key",
+   "new": "        if (!a || a->player_id >= MAX_PLAYERS) continue;\n        ++n;\n        const uint64_t key"
+  },
+  {
+   "id": "occ_scan_counts_a_seat_outside_the_four_teams",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        if (!a || a->player_id >= MAX_PLAYERS || a == exclude) continue;\n        ++n;\n        const uint64_t key",
+   "new": "        if (!a || a == exclude) continue;\n        ++n;\n        const uint64_t key"
+  },
+  {
+   "id": "blast_throws_a_removed_ant",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        if (x && !x->removed) slots.push_back(slot);\n",
+   "new": "        if (x) slots.push_back(slot);\n"
+  },
+  {
+   "id": "copy_constructor_loses_the_lists",
+   "file": "src/ants_sim/tile_ants.hpp",
+   "old": "    TileAntIndex(const TileAntIndex&) = default;\n",
+   "new": "    TileAntIndex(const TileAntIndex&) {}\n"
+  },
+  {
+   "id": "copy_assignment_keeps_the_old_lists",
+   "file": "src/ants_sim/tile_ants.hpp",
+   "old": "    TileAntIndex& operator=(const TileAntIndex&) = default;\n",
+   "new": "    TileAntIndex& operator=(const TileAntIndex&) { return *this; }\n"
+  },
+  {
+   "id": "move_assignment_loses_the_lists",
+   "file": "src/ants_sim/tile_ants.hpp",
+   "old": "    TileAntIndex& operator=(TileAntIndex&&) noexcept = default;\n",
+   "new": "    TileAntIndex& operator=(TileAntIndex&&) noexcept { return *this; }\n"
+  },
+  {
+   "id": "new_match_keeps_the_lists",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    tile_ants_.reset(occ_.size());\n",
+   "new": ""
+  },
+  {
+   "id": "grid_of_another_size_keeps_the_lists",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        tile_ants_.reset(cells);\n",
+   "new": ""
+  },
+  {
+   "id": "link_forgets_the_back_link",
+   "file": "src/ants_sim/tile_ants.hpp",
+   "old": "        if (old_first != kNone) prev_[old_first] = slot;\n",
+   "new": ""
+  },
+  {
+   "id": "unlink_forgets_the_head",
+   "file": "src/ants_sim/tile_ants.hpp",
+   "old": "        if (p != kNone) next_[p] = n; else head_[cell] = n;\n",
+   "new": "        if (p != kNone) next_[p] = n;\n        (void)cell;\n"
+  },
+  {
+   "id": "slot_of_an_ant_trusts_its_id",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    if (guess < ants_.size() && ants_[guess].get() == &a) return static_cast<uint32_t>(guess);\n",
+   "new": "    if (guess < ants_.size()) return static_cast<uint32_t>(guess);\n"
+  }
+ ]
+}
