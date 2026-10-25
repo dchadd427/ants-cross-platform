@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.127 - 2026-10-24 - Big selections follow the original's rules
+
+**For players:**
+- **A big selection is ordered with the original's rules for every ant.** Ctrl+A or a drag over any number of ants, then a right click: every selected ant gets the move, attack or Stop order (one click orders up to 1,536 ants; "Only 1536 ants ordered." beyond that). The limit of v0.12.126 for a move is gone. Ants that find no free spot near the clicked tile stop where they stand, as in the original; a move onto an enemy hill makes thieves raid and stops the other ants.
+- **Special orders stay one ant at a time:** steal, bomb, fire and bridge orders go to the first 32 selected ants at the most, as before v0.12.126, so a crowd cannot steal from one ant or drop 80 bombs on one square. Order those ants one by one.
+- A move of a whole army makes the game work hard for a moment while the ants look for a spot (about 0.4 s for four players with 693 ants each on a busy machine).
+
+**Rules / network:** none; network protocol 21 is unchanged.
+
 ## v0.12.126 - 2026-10-24 - Orders for big selections
 
 **For players:**
@@ -567,30 +576,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fa324b31...a1dbecfd)
 
-## v0.12.73 - 2026-10-17 - Map maker: draw and undo (E2)
+## Older versions (v0.12.73 and before)
 
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) can draw now: paint ground and put rocks and power-ups with a click, a tap or a drag, take things away with the eraser, fill a field, choose a brush of 1, 3, 5 or 9 cells, and undo and redo as often as you like (Control or Command with Z; a letter chooses a tool).
-- On a phone the tiles are one button that opens a list with their names, the buttons fit in both directions, and an upright phone scrolls when the screen is short.
-- The position of the mouse or finger shows under the map, and the check of the map runs again by itself after a change. Hills, starting ants and food come next.
-- A map that you drew on is handed over as a new, valid file when you press Download, and the page asks before it lets you leave a map that you have not downloaded.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/83133ebe...89e37e86)
-
-## v0.12.72 - 2026-10-17 - Map maker: the editor starts (E1)
-
-**For players:**
-- A first map maker page (not linked from the site yet: /mapmaker.html): make a Classic or Extended map, open a map file, look around, check it, download it. Drawing comes next.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b39a8c8b...4e1327d9)
-
-## v0.12.71 - 2026-10-17 - Tests: faster and steadier (round 2)
-
-**For players:**
-- Under the hood: the tests are faster and steadier on slow or busy machines (the flood-control checks follow the time that really went by, the match history's timing test counts work instead of milliseconds, and the test servers no longer look up host names); nothing changes in the game or on the site.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/edf7086a...e86c5501), [the tests' timing rules](docs/TESTING.md)
-
-## Older versions (v0.12.70 and before)
-
-Every release before v0.12.71, and the long notes of v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.74, and the long notes of v0.12.73, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

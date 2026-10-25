@@ -52,7 +52,7 @@ bool parse_style(std::string_view text, Style& out) noexcept;
 /// Whether a bot of the level may play the style: Random always, every style at Easy and Medium, Aggressive and Raider only at Hard
 bool style_allowed(Level level, Style style) noexcept;
 
-/// The most ants one command of a bot names: a chosen conservative cap (a command holds up to 32 = sim::kMaxCommandAnts and the HUD sends a bigger click as several commands;
+/// The most ants one command of a bot names: a chosen conservative cap (a command holds up to 32 = sim::kMaxCommandAnts and the HUD sends a bigger move, attack or Stop as several commands;
 /// how many the original's selection holds has not been established). A bot never exceeds it, whatever its profile says.
 inline constexpr uint32_t kHudAntCap = 24;
 
