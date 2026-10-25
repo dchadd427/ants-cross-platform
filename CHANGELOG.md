@@ -28,9 +28,11 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **A big selection is ordered with the original's rules for every ant.** Ctrl+A or a drag over any number of ants, then a right click: every selected ant gets the move, attack or Stop order (one click orders up to 1,536 ants; "Only 1536 ants ordered." beyond that). The limit of v0.12.126 for a move is gone. Ants that find no free spot near the clicked tile stop where they stand, as in the original; a move onto an enemy hill makes thieves raid and stops the other ants.
 - **Special orders stay one ant at a time:** steal, bomb, fire and bridge orders go to the first 32 selected ants at the most, as before v0.12.126, so a crowd cannot steal from one ant or drop 80 bombs on one square. Order those ants one by one.
-- A move of a whole army makes the game work hard for a moment while the ants look for a spot (about 0.4 s for four players with 693 ants each on a busy machine).
+- A move of a whole army makes the game work hard for a moment while the ants look for a spot (about a third of a second when all four players send 693 ants each to one spot).
 
 **Rules / network:** none; network protocol 21 is unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...961523be)
 
 ## v0.12.126 - 2026-10-24 - Orders for big selections
 
