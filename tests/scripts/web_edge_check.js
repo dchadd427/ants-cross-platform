@@ -208,6 +208,7 @@ try {
     {
         const matches = (el, part) => {
             const attr = /^\[(\w+)="([^"]*)"\]$/.exec(part);
+            if (part.charAt(0) === '.') return (el.attrs.class || '').split(' ').indexOf(part.slice(1)) >= 0;
             return attr ? el.attrs[attr[1]] === attr[2] : el.tag === part;
         };
         const closestOf = (el) => function (selectorText) {
@@ -220,6 +221,11 @@ try {
         for (const tag of ['a', 'button', 'input', 'select', 'textarea', 'summary', 'label']) expect('control: <' + tag + '> is a control', P.overControl(make(tag, {}, body)), true);
         expect('control: a radio of the page is a control (the picture\'s and the mouse\'s selectors)', P.overControl(make('div', { role: 'radio' }, body)), true);
         expect('control: a role="button" is a control', P.overControl(make('div', { role: 'button' }, body)), true);
+        // the open list of the picture's dropdown (web/shape_picker.js) lies over the page, within the margin of a windowed game: its rows and its box are the page's, not the game's edge
+        const pickList = make('ul', { class: 'pick-list', role: 'listbox' }, body);
+        expect('control: a row of the picture dropdown\'s open list is a control (hovering it must not scroll the map)', P.overControl(make('li', { class: 'pick-opt', role: 'option' }, pickList)), true);
+        expect('control: ...so is a bare row (role option) and the list\'s box and padding (class pick-list)', [P.overControl(make('li', {}, make('div', { role: 'option' }, body))), P.overControl(pickList), P.overControl(make('span', {}, pickList))], [true, true, true]);
+        expect('control: the replay bar (class rbar) is a control, and a div with another class is not', [P.overControl(make('div', {}, make('div', { class: 'rbar' }, body))), P.overControl(make('div', { class: 'pick' }, body))], [true, false]);
         expect('control: what is inside a control counts (the icon of a button, the text of a link)', [P.overControl(make('span', {}, make('button', {}, body))), P.overControl(make('svg', {}, make('a', {}, body)))], [true, true]);
         for (const tag of ['div', 'span', 'h1', 'p', 'canvas', 'header', 'footer', 'section', 'details', 'ul']) expect('control: <' + tag + '> is not one', P.overControl(make(tag, {}, body)), false);
         expect('control: the page itself, nothing at all, and an object that cannot answer are not controls', [P.overControl(body), P.overControl(null), P.overControl(undefined), P.overControl({}), P.overControl({ closest: 3 })], [false, false, false, false, false]);

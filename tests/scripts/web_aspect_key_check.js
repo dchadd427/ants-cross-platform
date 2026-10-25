@@ -3,7 +3,8 @@
 // shape, the selector's listener, and the functions that build the addresses of its hand-offs: the Rejoin / START address of a lobby (rejoinQuery) and the address of a game on this computer (localGameQuery)).
 // A first visit (nothing under the key `ants.aspect.v2` that names a shape, and no ?aspect= that does) starts in the shape NEAREST the player's screen (AntsShapes.firstVisit; 16:9 for a phone held upright
 // and for a screen that cannot be asked), the same on both pages and never stored: only the choice of the selector (the key) or ?aspect= in the address ends it. Both pages have every shape of the
-// table (4:3, 3:2, 16:10, 16:9, 20:9, 21:9, 32:9) as a native dropdown that web/shapes.js fills (one entry for each row: the shape and its canvas), with the quiet line "16:10 fills your screen" under it for the shape
+// table (4:3, 3:2, 16:10, 16:9, 20:9, 21:9, 32:9) as a dropdown with one entry for each row (the shape and its canvas): the front page's is a native one that web/shapes.js fills, the game page's two are made
+// by web/shape_picker.js (a button and a list that works in fullscreen; its own check is web_shape_picker_check.js, and a fake of it stands here), with the quiet line "16:10 fills your screen" under it for the shape
 // nearest to the computer's screen (within 8 per cent). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
 // starts with the first visit's shape once), and the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
 // stay): what it stores, tells the game (ants_set_aspect), puts in the address and shows is checked here on a page of fakes; "fills your screen" and the shapes' boxes too.
@@ -97,6 +98,12 @@ function fakeSelect() {
     };
     return select;
 }
+// the game page's pickers (web/shape_picker.js, which its own check runs): the page makes them from the table into two hosts, shows each the shape that the picture has and is told of a pick by `onPick`; a picker says nothing
+// when the shape that it shows is chosen again (tests/scripts/web_shape_picker_check.js), so `choose` is the person's, and the page's own function is `opts.onPick` (what `press` calls: a pick of any shape, the shown one too)
+function fakePickers() {
+    const made = [];
+    return { made, create(shapes, opts) { const picker = { shapes, opts, shown: opts.value, set(name) { picker.shown = name; }, choose(shape) { if (shape !== picker.shown) opts.onPick(shape); } }; made.push(picker); return picker; } };
+}
 const fakeCreate = (tag) => { if (tag !== 'option') throw new Error('the page made a <' + tag + '>'); return {}; };
 // the person chooses another entry: the dropdown has the new value and says `change` (choosing the entry that is shown says nothing: no event)
 function choose(select, shape) { select.value = shape; select.fire('change'); }
@@ -118,7 +125,8 @@ function runShell(path, search, stored, options) {
     const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner, options && options.framed);
     win.AntsReplay = { fileOf() { return 'ants-TEST-20260101-000000Z.antsrep'; }, liveIdOf() { return 'LIVE-1'; } };         // (replay_page.js: only a spectator's address asks for it)
     const stage = element({ 'data-aspect': '16:9' });
-    const selects = [fakeSelect(), fakeSelect()];                                   // (the strip under the game, the replay's Picture window)
+    const hosts = [element(), element()];                                           // (where the strip under the game and the replay's Picture window get their dropdowns)
+    const makers = fakePickers();
     const notes = [element(), element()];
     notes.forEach((note) => { note.hidden = true; });                               // (the markup hides every line: the script shows them)
     const viewBar = element();
@@ -127,9 +135,9 @@ function runShell(path, search, stored, options) {
     const body = element();
     const doc = {
         body,
-        getElementById(id) { if (id === 'game-stage') return stage; if (id === 'view-bar') return viewBar; throw new Error('the page asked for #' + id); },
+        getElementById(id) { if (id === 'game-stage') return stage; if (id === 'view-bar') return viewBar; if (id === 'aspect-pick') return hosts[0]; if (id === 'pic-pick') return hosts[1]; throw new Error('the page asked for #' + id); },
         createElement: fakeCreate,
-        querySelectorAll(selectorText) { if (selectorText === '.pick-select') return selects; if (selectorText === '.fit-note') return notes; throw new Error('the page asked for ' + selectorText); },
+        querySelectorAll(selectorText) { if (selectorText === '.fit-note') return notes; throw new Error('the page asked for ' + selectorText); },
     };
     // the game that the page talks to: `ready` is the page's isReadyToPlay, `module` makes the Module of the program (given the window, so that it can look at where the page has gone by then, and
     // the events: what the page does, in order: the game's calls and the box's layout)
@@ -145,19 +153,20 @@ function runShell(path, search, stored, options) {
         + '\nvar postRunHook = ' + hook[1] + ';'
         + '\nreturn { aspect: ANTS_ASPECT, source: ANTS_ASPECT_SOURCE, args: ANTS_ARGS, key: ANTS_ASPECT_KEY, page: ANTS_PAGE, relayoutCalls: relayoutCalls, sync: antsSyncAspect, set: antsSetAspect,'
         + ' postRun: postRunHook, ready: function () { return isReadyToPlay; }, setReady: function (on) { isReadyToPlay = on; }, now: function () { return ANTS_ASPECT; }, pick: antsPickShape };';
-    const result = new Function('window', 'document', 'fakeModule', 'fakeHolds', 'fakeStage', 'events', code)(win, doc, fake, holdsFn, stage, events);
+    const result = new Function('window', 'document', 'fakeModule', 'fakeHolds', 'fakeStage', 'events', 'AntsShapePicker', code)(win, doc, fake, holdsFn, stage, events, makers);
     result.storage = storage;
     result.win = win;
     result.holdsCalls = holdsCalls;
     result.stage = stage;
     result.body = body;
-    result.selects = selects;
+    result.hosts = hosts;
+    result.pickers = makers.made;
     result.notes = notes;
     result.viewBar = viewBar;
     result.events = events;
-    result.press = (shape) => choose(selects[0], shape);                           // (the person chooses an entry of the strip's dropdown)
+    result.press = (shape) => makers.made[0].opts.onPick(shape);                  // (a pick of the strip's dropdown, as the page is told of it)
     // (read when asked: what the dropdowns show and what the quiet line says change as they are used)
-    Object.defineProperty(result, 'checked', { get() { return selects.map((select) => select.value).join('+'); } });
+    Object.defineProperty(result, 'checked', { get() { return makers.made.map((picker) => picker.shown).join('+'); } });
     Object.defineProperty(result, 'tags', { get() { const said = notes.map((note) => (note.hidden ? '' : note.textContent)); return said[0] === said[1] ? said[0].replace(/ fills your screen$/, '') : 'THE TWO LINES DIFFER: ' + said.join(' | '); } });
     return result;
 }
@@ -283,7 +292,7 @@ try {
         expect('shell.html, ' + label + ' (the slot\'s custom properties)', JSON.stringify(r.body.style.props), JSON.stringify(SLOT_VARS[aspect]));
         expect('shell.html, ' + label + ' (... which are the rule: the shape\'s steps, and 960 / 1280 / its canvas\'s width as the widest slot)', Object.values(r.body.style.props).join(' '), SLOT_RULE[aspect].join(' '));
         expect('shell.html, ' + label + ' (the dropdowns show it)', r.checked, checkedString(aspect));
-        expect('shell.html, ' + label + ' (both dropdowns have one entry for each row of the table, in its order, each with its canvas)', JSON.stringify(r.selects.map((select) => select.options.map((o) => [o.value, o.textContent]))), JSON.stringify([ENTRIES, ENTRIES]));
+        expect('shell.html, ' + label + ' (two dropdowns are made from the page\'s table, one in each host, named and described by the page\'s own words, each showing the chosen shape)', JSON.stringify(r.pickers.map((picker) => [picker.shapes === AntsShapes, picker.opts.host === (picker.opts.id === 'aspect-select' ? r.hosts[0] : r.hosts[1]), picker.opts.id, picker.opts.labelledBy, picker.opts.describedBy, picker.opts.value, typeof picker.opts.onPick])), JSON.stringify([[true, true, 'aspect-select', 'view-bar-label', 'fit-note', aspect, 'function'], [true, true, 'pic-select', 'picpop-h', 'pic-note', aspect, 'function']]));
         expect('shell.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('shell.html, the key', r.key, NEW_KEY);
     }
@@ -719,12 +728,10 @@ try {
         expect('hand-off, a laptop that has not picked: no shape', laptop.picked() + '|' + laptop.handoff('k7m2xq', 1, 'Ann').includes('aspect') + '|' + laptop.solo('Ann').includes('aspect'), '|false|false');
         expect('hand-off, the shown entry chosen again says nothing (a dropdown sends no event; opening it is no pick either): the page listens to change and to nothing else', Object.keys(laptop.select.listeners).join(), 'change');
         const shellPick = runShell(shellPath, '', {}, { screen: { width: 1440, height: 900 } });
-        expect('hand-off, the game page too: change is the pick, and its keys stay the dropdown\'s own (the game\'s window listener does not get them)', shellPick.selects.map((x) => Object.keys(x.listeners).sort().join()).join(' | '), 'change,keydown,keypress,keyup | change,keydown,keypress,keyup');
-        for (const type of ['keydown', 'keypress', 'keyup']) {
-            let stopped = 0;
-            shellPick.selects[0].fire(type, { stopPropagation() { stopped++; } });
-            expect('hand-off, the game page\'s dropdown stops a ' + type + ' before the game\'s window listener', stopped, 1);
-        }
+        shellPick.pickers[0].choose('16:10');
+        expect('hand-off, the game page too: the picker says nothing when the shape that it shows is chosen again (its own check), so a pick is a shape that is not the shown one', JSON.stringify(shellPick.storage.writes), '[]');
+        shellPick.pickers[1].choose('21:9');
+        expect('hand-off, ... and a choice in either dropdown is the page\'s pick: stored, and both dropdowns show it', JSON.stringify(shellPick.storage.writes) + ' ' + shellPick.checked, JSON.stringify([[NEW_KEY, '21:9']]) + ' 21:9+21:9');
         laptop.select.fire('change');                                                   // (the value is the shape that is shown)
         expect('hand-off, a change that names the shown shape: it is a pick and goes on', laptop.picked() + ' ' + laptop.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:10') + ' ' + laptop.solo('Ann').endsWith('&aspect=16:10'), '16:10 true true');
         expect('hand-off, ... and it is stored', JSON.stringify(laptop.storage.writes), JSON.stringify([[NEW_KEY, '16:10']]));

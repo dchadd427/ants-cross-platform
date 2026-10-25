@@ -1290,6 +1290,26 @@ void run_sequencer_tests() {
             ASSERT_TRUE(turns <= 8);
         }
         ASSERT_EQ(next, 481u);                                         // all 480, in order, in eight turns
+        // the same for ten move clicks of 693 ants each (22 commands: 21 of 32 ants and one of 21), none of them refused either
+        Sequencer moves;
+        moves.set_active(1, true);
+        uint32_t refused_moves = 0;
+        for (uint32_t click = 0; click < 10; ++click) {
+            for (uint32_t i = 0; i < 22; ++i) {
+                std::vector<uint32_t> ants;
+                for (uint32_t k = 0; k < (i < 21 ? sim::kMaxCommandAnts : 693u - 21 * 32); ++k) ants.push_back(1 + i * 32 + k);
+                refused_moves += moves.submit(1, cmd(CommandType::GroupMove, 1, 255, 20, 30, ants)) ? 0u : 1u;
+            }
+        }
+        ASSERT_EQ(refused_moves, 0u);
+        ASSERT_EQ(moves.carried(1), 220u - 64u);
+        uint32_t move_turns = 0;
+        size_t move_commands = 0;
+        while (moves.carried(1) > 0 || moves.queued() > 0) {
+            move_commands += moves.seal().commands.size();
+            ASSERT_TRUE(++move_turns <= 4);                              // (220 commands: four turns of 64 at the most)
+        }
+        ASSERT_EQ(move_commands, size_t{220});                         // (the 64 that were queued and the 156 that waited)
     } TEST_END();
 
     TEST_CASE("N2.6 Sequencer: Flow Control Stalls Sealing While A Peer Lags, Acks Only Move Forward, Reports Are Pruned") {

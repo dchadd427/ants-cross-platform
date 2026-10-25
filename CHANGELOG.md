@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.127 - 2026-10-24 - Online games start with at most 300 ants
+## v0.12.130 - 2026-10-25 - Online games start with at most 300 ants
 
 **For players:**
 - **An online game starts with at most 300 ants** (all colors together: 75 a color on four). A map that starts more cannot be chosen for a room: the lobby's list marks it "Too many ants for an online game", and a leader who chooses it is told "This map starts with N ants; an online game allows up to 300." The limit is low only while the game is slow with thousands of ants, and goes up when that is fixed.
@@ -33,6 +33,40 @@ Work that is not released yet is written in the same template under a heading th
 **Rules / network:** none: the rules and network protocol 21 are unchanged (the server and the pages check the map before a room is made).
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...7c06297a), [the online limits](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
+
+## v0.12.126 - 2026-10-24 - Orders for big selections
+
+## v0.12.129 - 2026-10-25 - Big selections follow the original's rules
+
+**For players:**
+- **A big selection is ordered with the original's rules for every ant.** Ctrl+A or a drag over any number of ants, then a right click: every selected ant gets the move, attack or Stop order (one click orders up to 1,536 ants; "Only 1536 ants ordered." beyond that). The limit of v0.12.126 for a move is gone. Ants that find no free spot near the clicked tile stop where they stand, as in the original; a move onto an enemy hill makes thieves raid and stops the other ants.
+- **Special orders stay one ant at a time:** steal, bomb, fire and bridge orders go to the first 32 selected ants at the most, as before v0.12.126, so a crowd cannot steal from one ant or drop 80 bombs on one square. Order those ants one by one.
+- A move of a whole army makes the game work hard for a moment while the ants look for a spot. One player's click on a big army costs a few to tens of milliseconds; it is only noticeable when four players' big clicks land together (about 1,500 ants each costs more than a second on a desktop, and a phone is several times slower).
+
+**Rules / network:** none; network protocol 21 is unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...961523be)
+
+## v0.12.128 - 2026-10-25 - The Picture dropdown opens in fullscreen
+
+**For players:**
+- **The Picture dropdown now opens in fullscreen.** Watching a replay or a live match in fullscreen with the mouse held (the default, "Locked"), a click on the dropdown in the Picture window did nothing: the browser's own list cannot be opened by the game's held mouse. The control is now the page's own button and list, so a click or a tap opens it and a click or a tap on a shape chooses it, in fullscreen, in the settings menu (Esc), under the game and in the Picture window, on every browser. It looks as before.
+- **Keys:** Enter, Space, ArrowDown or ArrowUp open the list; the arrows, Home, End, a letter or a number ("4" for Classic 4:3) move the mark; Enter or Space chooses; Esc closes the list and only the list (the Picture window or the settings menu stays open). On a closed dropdown the arrow keys no longer change the picture (they did on Windows and Linux); they open the list, the same on every browser. The front page's Picture row is unchanged.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...025710cf)
+
+## v0.12.127 - 2026-10-24 - Map Maker: the Pick up bar no longer covers the map
+
+**For players:**
+- Map Maker, Pick up: the bar with Move, Copy here, Delete and Cancel no longer covers the bottom of the map. On a desktop it has a row of its own under the map, so the map ends above it and can be panned until its last row is above the bar; a thing picked near the bottom is brought into view, and the map keeps its top row and its zoom when the bar comes and goes. A phone's bar stays at the foot of the screen, and the page can be scrolled until its last line is above it. Map Maker v1.5.7.
+
+**Fixes:**
+- On a short screen the Hide button sits on the line of the words, so the bar is lower; a map under 300 pixels high shows the smaller map of the whole map, without its caption, so that it never reaches into the bar.
+- While a thing is on its way the bar keeps the height it has had, so the map no longer grows and shrinks under the mouse near the foot; a phone that is turned with the bar open leaves room for all of it below the page, and a window that is resized while a thing is on its way logs no "ResizeObserver loop" message.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/50b7ae4b...67a05f86)
 
 ## v0.12.126 - 2026-10-24 - Orders for big selections
 
@@ -543,41 +577,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e47cec0b...3ab82b75); the map core (interface version 4) has a new call, `lvl_crop`; the page needs the new module, so reload it once.
 
-## v0.12.77 - 2026-10-17 - Map maker: map properties (E3c)
+## Older versions (v0.12.77 and before)
 
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) can set the properties of a map now: press Properties in the top bar (or Menu, then Properties... on a phone), or the Edit link beside the short summary of the map. You can change the description, the length of a match (1 to 120 minutes), the eggs that every team starts with (0 to 255) and the default ant type (none, combat, thief, bomber, swimmer or fire).
-- The description counter counts bytes, because the map file does: a Classic map has room for 29 and an Extended map for 255, and a letter such as the e with an accent counts double. A text that is too long gets the same sentence as the check of the map and a button that cuts it to fit.
-- Apply makes all the changes one step (Undo takes them all back), and Cancel changes nothing. The map's other bytes are not touched, so a map that you open and apply without a change is the same file.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4256634d...05168d98)
-
-## v0.12.76 - 2026-10-17 - Map maker: bigger objects (E3b)
-
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) has a new tool, Bigger (or press K), for the objects that cover several cells: grass, leaves, rocks, toys, cans and glasses, 29 of them, named as the game names them (grass4, grassmed1, bearbod ...), each drawn as its shape. They are the ones that the game's own maps use most. Tap or click and the whole object appears, the same shape that the game's maps have; the eraser takes it away whole; undo and redo work for it.
-- Rocks and power-ups put with the Objects tool now block ants and work in the game, as the ones in the game's maps do (before, the map file did not say that they are solid).
-- A hill, a team's starting ants or a food pile are never taken away by an object, big or small: the page says what is in the way and puts nothing. The list shows the shape of each object.
-- Putting objects does not change what the check says about a map.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3906df6f...54418041)
-
-## v0.12.75 - 2026-10-17 - Map maker: hills, ants and food (E3a)
-
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) can put hills, starting ants and food now. Choose Hills, Ants or Food (or press H, A or F), choose a team (Green, Red, Blue or Black), and tap or click the map: a whole hill appears, a team's ants stand together where you tapped (you choose how many), or a food pile (you choose how many stages). Put one again and it moves; the eraser takes a hill, a team's ants or a pile away; undo and redo work for them like for drawing.
-- The check says what is still missing, for example "Blue has no hill", and says nothing of it once the hill is there.
-- On a phone the team, the number of ants and the stages are on one button that opens a list.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/402c19c5...23feff4e)
-
-## v0.12.74 - 2026-10-17 - Replays: the scrub bar should jump to where you tap
-
-**For players:**
-- The replay bar: on a phone in fullscreen, tapping it should now jump to that spot instead of the start (a phone is no longer given the mouse lock).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fa324b31...a1dbecfd)
-
-## Older versions (v0.12.73 and before)
-
-Every release before v0.12.74, and the long notes of v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.78, and the long notes of v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

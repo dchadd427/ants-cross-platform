@@ -1,10 +1,10 @@
 // The settings menu of the game page (docs/GAME_MENU.md; the game's side: src/ants_app/application_game_menu.cpp and its one table of rows, game_menu.hpp).
 // Esc with nothing to cancel, or a Settings button, opens a panel over the running game: Sound, Video, Controls, Game, Resume and Leave game.
 //   * The rows come from the game as one JSON text (Module._ants_menu_describe): this script draws what the table says. A row's value is read with Module._ants_menu_get and changed with Module._ants_menu_set;
-//     Fullscreen, Picture shape and Fullscreen mouse are the page's own (its buttons are clicked, and the shape is its function `pickShape`: one function for the selector, the address and the stored choice). The Picture shape is a
-//     native dropdown that this file fills from the page's table of shapes (`shapes`, web/shapes.js; the game's own row only says how many there are); the arrows change the picture of the running game at once and the panel stays open. The Controls list is data of this file.
+//     Fullscreen, Picture shape and Fullscreen mouse are the page's own (its buttons are clicked, and the shape is its function `pickShape`: one function for the selector, the address and the stored choice). The Picture shape is the page's
+//     picker (`page.picker`, web/shape_picker.js: the game's own row only says how many shapes there are); a choice changes the running game's picture at once and the panel stays open. The Controls list is data of this file.
 //   * The panel is a child of the stage (it goes fullscreen with it), fixed over the window. The pointer lock is let go while it is up and asked for again when it closes; the page behind it is inert; Tab stays
-//     inside; Esc closes it (in the question of Leave game it means stay; a held key does nothing); the game is told (Module._ants_menu_open) and takes no input meanwhile; a click on the dimmed area does nothing;
+//     inside; Esc closes it (in the question of Leave game it means stay, and with the picture's list open it closes the list; a held key does nothing); the game is told (Module._ants_menu_open) and takes no input meanwhile; a click on the dimmed area does nothing;
 //     a dialog that needs an answer closes it (ask 101). Leave game asks in the words of what it will do (ask 102). A recording has no Game section.
 //   * It makes its own Settings buttons and fetches its own stylesheet; every text goes in with textContent. ES5, no module system: a page gets the global AntsGameMenu, node gets module.exports
 //     (tests/scripts/web_game_menu_check.js runs it on a strict fake of the DOM).
@@ -16,7 +16,7 @@
     'use strict';
 
     var POLL_MS = 250;
-    var FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled])';
+    var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
     var CSS_FILE = 'game_menu.css';
     var USED = /^(Tab|Enter| |Spacebar|Arrow(Left|Right|Up|Down)|Home|End)$/; // the keys of the panel's own controls (Esc is handled before)
 
@@ -164,17 +164,13 @@
             return group;
         }
 
-        // The picture's shape: a native dropdown, one entry for each row of the page's table (shape and canvas), the quiet line under it that names the shape that fills the screen
+        // The picture's shape: the page's picker (a button and a list of the page's table, inside the panel), the quiet line under it that names the shape that fills the screen
         function dropdown(row, labelId, own) {
-            var wrap = el('div', 'gm-ctl gm-pick'), select = el('select', 'pick-select gm-select'), line = '';
-            select.setAttribute('aria-labelledby', labelId);
-            page.shapes.fillSelect(select, doc);
-            function mark() { select.value = own.read(); }
-            select.addEventListener('change', function () { own.write(select.value); mark(); });
-            mark();
-            wrap.appendChild(el('span', 'pick')).appendChild(select);                      // (the page's .pick: the chevron of its dropdowns)
+            var wrap = el('div', 'gm-ctl gm-pick'), host = wrap.appendChild(el('span', 'pick')), line = '';
+            var picker = page.picker({ doc: doc, win: win, host: host, id: 'gm-picture', labelledBy: labelId, className: 'gm-select', value: own.read(), onPick: function (name) { own.write(name); picker.set(own.read()); } });
+            state.picker = picker;
             try { line = page.shapes.fillsLine(win.screen.width, win.screen.height); } catch (e) { /* no screen to ask */ }
-            if (line) { var fits = wrap.appendChild(el('div', 'gm-fits', line)); fits.id = labelId + '-fits'; select.setAttribute('aria-describedby', fits.id); }
+            if (line) { var fits = wrap.appendChild(el('div', 'gm-fits', line)); fits.id = labelId + '-fits'; picker.button.setAttribute('aria-describedby', fits.id); }
             return wrap;
         }
 
@@ -236,8 +232,10 @@
             return box;
         }
 
+        function dropPicker() { if (state && state.picker) { state.picker.destroy(); state.picker = null; } }
         function fillPane(id) {
             var pane = state.pane, watching = state.watching;
+            dropPicker();
             pane.textContent = '';
             state.fsButton = null;
             if (id === 'controls') { pane.appendChild(controlsList(watching)); return; }
@@ -442,6 +440,7 @@
             if (!state) return;
             var again = !(opts && opts.relock === false);
             hideAsk(true);
+            dropPicker();
             for (var i = 0; i < removers.length; i++) removers[i]();
             removers = [];
             if (scrim.parentNode) scrim.parentNode.removeChild(scrim);

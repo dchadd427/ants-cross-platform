@@ -7,9 +7,11 @@ menu (and, through the page, the CSS slot and the box) on the web. Here:
   - the two tables agree row by row (name, words, canvas width and height), in the same order, which is also the place that `ants_set_aspect` takes;
   - every canvas is one that the pages can stand in (640 x 480, or 960 x 540 and more in both directions), and each row is wider than the one before;
   - no page, script or source file keeps a list of the shapes of its own: a quoted shape name or a shape's steps appears in web/shapes.js (and, for the game, canvas_layout.hpp) and nowhere else
-    in the code; the three dropdowns (the game page's, the replay's Picture window, the front page's Picture row) are empty selects in the markup and are filled from the table by one function
-    (AntsShapes.fillSelect), as is the settings menu's; each entry says the shape and its canvas ("16:9 · 960 x 540") and nothing else;
-  - the pages load web/shapes.js before their own code, and the image, the web build and the CI's file check carry it.
+    in the code; the front page's Picture row is an empty select that AntsShapes.fillSelect fills from the table, and the game page's dropdown, the replay's Picture window's and the settings menu's
+    are empty hosts in which the picker (web/shape_picker.js) makes a button and a list from the same rows (a native list does not open under the fullscreen mouse lock); each entry says the shape
+    and its canvas ("16:9 · 960 x 540") and nothing else;
+  - the pages load web/shapes.js (and the game page web/shape_picker.js) before their own code, and the image, the web build and the CI's file check carry them;
+  - the picker runs on a fake of the DOM (tests/scripts/web_shape_picker_check.js) and every broken copy of it is noticed (tests/data/shape_picker_mutants.json).
 The behavior of the table's functions (which shape fills a screen, the box of each shape, the place of a shape) is run by tests/scripts/web_aspect_key_check.js (test_web_aspect_default.py).
 Mutants of both tables: tests/data/shape_table_mutants.json (tools/mutate.py; the page-side ones are run here on copies of the files).
 """
@@ -135,17 +137,29 @@ class NoCopyOfTheListIsLeft(unittest.TestCase):
 
 
 class TheDropdownsAreTheTable(unittest.TestCase):
-    """The three dropdowns are empty selects in the markup, so that no page can keep a shape list of its own; each is filled from the table by AntsShapes.fillSelect (the settings menu's too)."""
+    """The front page's dropdown is an empty select, filled from the table by AntsShapes.fillSelect; the game page's, the replay's Picture window's and the settings menu's are made by the picker (web/shape_picker.js) from
+    the same rows, into empty hosts: no page can keep a shape list of its own."""
 
-    def test_the_game_pages_dropdown_and_the_replays_picture_window_are_empty_selects(self):
+    def test_the_game_pages_dropdown_and_the_replays_picture_window_are_empty_hosts_for_the_picker(self):
         page = read("web", "shell.html")
         bar = page[page.index('<div class="view-bar" id="view-bar">'):page.index('id="lock-bar-label"')]
-        self.assertEqual(re.findall(r'<select class="pick-select" id="aspect-select"[^>]*></select>', bar).__len__(), 1)
-        self.assertIn('<label id="view-bar-label" for="aspect-select">Picture</label>', bar)
+        self.assertEqual(bar.count('<span class="pick" id="aspect-pick"><span class="fit-note" id="fit-note" hidden></span></span>'), 1)
+        self.assertIn('<span id="view-bar-label">Picture</span>', bar)
         pop = page[page.index('id="picpop"'):page.index('id="b-fsx"')]
-        self.assertEqual(len(re.findall(r'<select class="pick-select" id="pic-select"[^>]*></select>', pop)), 1)
+        self.assertEqual(pop.count('<span class="pick" id="pic-pick"><span class="fit-note" id="pic-note" hidden></span></span>'), 1)
         self.assertNotIn("<option", page, "the entries come from the table, not from the markup")
-        self.assertEqual(page.count("AntsShapes.fillSelect(select, document)"), 1, "the game page fills every .pick-select once, at the start")
+        self.assertNotIn("<select", page, "no native select is left on the game page: its list does not open under the fullscreen mouse lock")
+        self.assertEqual(page.count("AntsShapePicker.create(AntsShapes, {"), 1, "the game page makes its two dropdowns once, at the start")
+        self.assertNotIn("fillSelect", page)
+
+    def test_the_pickers_key_listener_is_made_before_the_picture_windows_so_that_esc_closes_only_the_list(self):
+        """Both are window listeners in the capture phase, and those run in the order they were added: the picker's (made by AntsShapePicker.create) must come first, or the Picture window's Esc would close the window
+        with the list still open. The order is the text order of the page's scripts (the selector block runs before the popover block)."""
+        page = read("web", "shell.html")
+        made = page.index("AntsShapePicker.create(AntsShapes, {")
+        self.assertLess(made, page.index("PICTURE_POPOVER_BEGIN"), "the dropdowns must be made before the Picture window's block adds its Esc listener")
+        self.assertLess(page.index("ANTS_SELECTOR_BEGIN"), page.index("PICTURE_POPOVER_BEGIN"))
+        self.assertIn("}, true);\n            // PICTURE_POPOVER_END", page, "the Picture window's key listener is a capture listener: only then does the order decide")
 
     def test_the_front_pages_picture_row_is_an_empty_select_filled_from_the_table(self):
         page = read("web", "lobby.html")
@@ -157,8 +171,9 @@ class TheDropdownsAreTheTable(unittest.TestCase):
 
     def test_the_settings_menu_builds_its_dropdown_from_the_page_table(self):
         menu = read("web", "game_menu.js")
-        self.assertIn("page.shapes.fillSelect(select, doc);", menu)
-        self.assertIn("select:not([disabled])", menu)                                                       # (the panel's Tab wraps around it)
+        self.assertIn("page.picker({ doc: doc, win: win, host: host,", menu)
+        self.assertNotIn("fillSelect", menu)
+        self.assertNotIn("select:not([disabled])", menu, "the panel has no native select any more: the picker's button is a button")
 
     def test_an_entry_is_the_shape_and_its_canvas_and_nothing_else(self):
         for _, label, w, h, _ in page_rows():
@@ -173,6 +188,11 @@ class ThePagesLoadTheTable(unittest.TestCase):
         self.assertLess(shell.index('<script src="shapes.js">'), shell.index("var ANTS_PAGE = (function"))
         self.assertLess(lobby.index('<script src="shapes.js">'), lobby.index("SHAPES_BEGIN"))
         self.assertIn("shapes: window.AntsShapes", shell)                                                    # (the settings menu gets the table from the page)
+        self.assertIn("picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }", shell)       # (... and the function that makes the picker)
+        self.assertEqual(shell.count('<script src="shape_picker.js"></script>'), 1)
+        self.assertLess(shell.index('<script src="shapes.js">'), shell.index('<script src="shape_picker.js">'))
+        self.assertLess(shell.index('<script src="shape_picker.js">'), shell.index("var ANTS_PAGE = (function"))
+        self.assertNotIn("shape_picker.js", read("web", "lobby.html"), "the front page keeps its native dropdown: it is never fullscreen")
 
     def test_the_games_page_exports_read_the_table(self):
         game = read("src", "ants_app", "application.cpp")
@@ -181,8 +201,10 @@ class ThePagesLoadTheTable(unittest.TestCase):
 
     def test_the_image_the_web_build_and_the_ci_check_carry_it(self):
         self.assertIn("COPY web/shapes.js /usr/share/nginx/html/shapes.js", read("Dockerfile"))
+        self.assertIn("COPY web/shape_picker.js /usr/share/nginx/html/shape_picker.js", read("Dockerfile"))
         self.assertIn('"${SCRIPT_DIR}/web/shapes.js"', read("build_web.sh"))
-        self.assertRegex(read(".github", "workflows", "ci.yml"), r"lvl_core_api\.js shapes\.js admin\.html")
+        self.assertIn('"${SCRIPT_DIR}/web/shape_picker.js"', read("build_web.sh"))
+        self.assertRegex(read(".github", "workflows", "ci.yml"), r"lvl_core_api\.js shapes\.js shape_picker\.js admin\.html")
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: web/shapes.js was NOT run")
@@ -213,6 +235,45 @@ class TheTablesFunctions(unittest.TestCase):
     def test_the_line_under_a_dropdown_names_the_shape_that_fills_the_screen(self):
         got = self.run_js("console.log(JSON.stringify([S.fillsLine(1920, 1080), S.fillsLine(1440, 900), S.fillsLine(2736, 1824), S.fillsLine(2560, 1080), S.fillsLine(3840, 1080), S.fillsLine(1280, 1024), S.fillsLine(1000, 1000), S.fillsLine(0, 0)]));")
         self.assertEqual(got, ["16:9 fills your screen", "16:10 fills your screen", "3:2 fills your screen", "21:9 fills your screen", "32:9 fills your screen", "Classic 4:3 fills your screen", "", ""])
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: web/shape_picker.js was NOT run")
+class ThePickerRunsOnAFakeOfTheDom(unittest.TestCase):
+    CHECK = os.path.join(REPO, "tests", "scripts", "web_shape_picker_check.js")
+
+    def test_the_picker_does_what_its_header_says(self):
+        done = subprocess.run([shutil.which("node"), self.CHECK, os.path.join(REPO, "web", "shape_picker.js")], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertRegex(done.stdout, r"\d+ checks, 0 failures")
+
+    def test_the_picker_has_no_table_of_its_own_and_makes_no_markup(self):
+        text = read("web", "shape_picker.js")
+        for gone in ("innerHTML", "insertAdjacentHTML", "fillSelect", "createElement('select')", "createElement('option')", "var TABLE"):
+            self.assertNotIn(gone, text)
+        self.assertIn("shapes.rows", text)                                                                  # (the rows are the table's)
+        self.assertNotRegex(text, r"'(?:4:3|3:2|16:10|16:9|20:9|21:9|32:9)'")
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the mutants of the picker were NOT run")
+class TheMutantsOfThePicker(unittest.TestCase):
+    def test_the_check_can_fail_on_every_broken_copy_of_the_picker(self):
+        """tests/data/shape_picker_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy of web/shape_picker.js must fail the check"""
+        with open(os.path.join(REPO, "tests", "data", "shape_picker_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        self.assertGreaterEqual(len(ids), 100)
+        text = read("web", "shape_picker.js") if ROOT == REPO else None
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = os.path.join(tmp, "shape_picker.js")
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    self.assertEqual(m["file"], "web/shape_picker.js")
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in the script exactly once" % m["id"])
+                    with open(copy, "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    done = subprocess.run([shutil.which("node"), ThePickerRunsOnAFakeOfTheDom.CHECK, copy], capture_output=True, text=True, timeout=120)
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
 
 # the classes that read the files (the mutants' own class is not among them: the copy runs these)

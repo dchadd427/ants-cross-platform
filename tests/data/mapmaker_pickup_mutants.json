@@ -445,8 +445,8 @@
     {
       "id": "hide_keeps_the_pick",
       "file": "web/front/mapmaker_pickup.js",
-      "old": "show: function (on) { shown = !!on; if (!on) clear(); else {",
-      "new": "show: function (on) { shown = !!on; if (!on) render(); else {",
+      "old": "show: function (on) { shown = !!on; listen(shown); if (!on) clear(); else {",
+      "new": "show: function (on) { shown = !!on; listen(shown); if (!on) render(); else {",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
@@ -1218,6 +1218,230 @@
       "old": "return { ok: false, cells: bad, reason: text, text:",
       "new": "return { ok: false, cells: bad, text:",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_over_the_map",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "wrap.insertBefore(bar, host.cv.nextSibling);",
+      "new": "host.cv.appendChild(bar);",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_map_not_told",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (env.settle && was) env.settle(",
+      "new": "if (false) env.settle(",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_top_row_not_kept",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "view.cx += (w - was.width) / (2 * view.scale); view.cy += (h - was.height) / (2 * view.scale);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_height_not_told",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "doc.body.style.setProperty('--pk-h', high + 'px')",
+      "new": "doc.body.style.setProperty('--pk-h', '0px')",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_height_kept_when_gone",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "h = on ? bar.offsetHeight || 0 : 0;",
+      "new": "h = bar.offsetHeight || 0;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_ghost_not_looked_at",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "b = { r0: b.r0 + st.dr, c0: b.c0 + st.dc, r1: b.r1 + st.dr, c1: b.c1 + st.dc };",
+      "new": "b = { r0: b.r0, c0: b.c0, r1: b.r1, c1: b.c1 };",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_moves_the_map_under_the_mouse",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "b = !bar.hidden && f && !st.hov && !st.drag ? bbox(f) : null",
+      "new": "b = !bar.hidden && f && !st.drag ? bbox(f) : null",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_moves_the_map_in_a_drag",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "b = !bar.hidden && f && !st.hov && !st.drag ? bbox(f) : null",
+      "new": "b = !bar.hidden && f && !st.hov ? bbox(f) : null",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_thing_above_not_brought_down",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return hi - lo > size - 2 * pad || lo < pad ? (lo - pad) / s :",
+      "new": "return hi - lo > size - 2 * pad ? (lo - pad) / s :",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_tall_thing_not_started",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return hi - lo > size - 2 * pad || lo < pad ? (lo - pad) / s :",
+      "new": "return lo < pad ? (lo - pad) / s :",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_foot_margin_lost",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "Math.max(0, hi - (size - pad)) / s; }",
+      "new": "Math.max(0, hi - size) / s; }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_margin_too_small",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "pad = Math.min(s * 2, 40), a = View.toScreen(view, w, h, b.r0, b.c0)",
+      "new": "pad = Math.min(s * 2, 10), a = View.toScreen(view, w, h, b.r0, b.c0)",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "sheet_tools_settle_not_handed_on",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "settle: function (look) { canvas.settle(look); }, ",
+      "new": "settle: function () {}, ",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "browser_sheet_over_the_map",
+      "file": "web/front/mapmaker_pickup.css",
+      "old": ".pk-bar { position: relative; flex: none; z-index: 3;",
+      "new": ".pk-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "browser_sheet_page_room_guessed",
+      "file": "web/front/mapmaker_pickup.css",
+      "old": "body.pk-on { padding-bottom: var(--pk-h, 0px); }",
+      "new": "body.pk-on { padding-bottom: 240px; }",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "bar_height_not_held",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (keep && h > latch && bar.style) {",
+      "new": "if (false && keep && h > latch && bar.style) {",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_height_held_when_picked",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "keep = on && st.mode === 'moving' && !st.fold,",
+      "new": "keep = on && !st.fold,",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_height_held_when_folded",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "keep = on && st.mode === 'moving' && !st.fold,",
+      "new": "keep = on && st.mode === 'moving',",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_height_held_at_another_width",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if ((!keep || w !== seenW) && bar.style) {",
+      "new": "if (!keep && bar.style) {",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_height_never_let_go",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if ((!keep || w !== seenW) && bar.style) { bar.style.minHeight = ''; latch = 0; }",
+      "new": "if (w !== seenW && bar.style) { bar.style.minHeight = ''; latch = 0; }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_not_watched",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "ro.observe(bar);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_size_loops",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "function resized() { if (bar && !bar.hidden && ((bar.offsetWidth || 0) !== seenW || (bar.offsetHeight || 0) !== seenH)) settle(); }",
+      "new": "function resized() { if (bar && !bar.hidden) settle(); }",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_size_not_remembered",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "return seenH = h;",
+      "new": "return h;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_observer_not_let_go",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (ro) ro.disconnect(); ro = null;",
+      "new": "ro = null;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_observer_made_twice",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (on && bar && !sized) { sized = true;",
+      "new": "if (on && bar) { sized = true;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_not_watched_when_chosen",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "show: function (on) { shown = !!on; listen(shown);",
+      "new": "show: function (on) { shown = !!on;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_resize_not_deferred",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!frame) frame = win.requestAnimationFrame(function () { frame = 0; resized(); });",
+      "new": "resized();",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_resize_frames_not_merged",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!frame) frame = win.requestAnimationFrame(",
+      "new": "frame = win.requestAnimationFrame(",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bar_resize_frame_not_cancelled",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (frame && win.cancelAnimationFrame) win.cancelAnimationFrame(frame); frame = 0;",
+      "new": "frame = 0;",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "browser_bar_height_not_held",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (keep && h > latch && bar.style) {",
+      "new": "if (false && keep && h > latch && bar.style) {",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "browser_bar_not_watched",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "ro.observe(bar);",
+      "new": "",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
+    },
+    {
+      "id": "browser_bar_resize_not_deferred",
+      "file": "web/front/mapmaker_pickup.js",
+      "old": "if (!frame) frame = win.requestAnimationFrame(function () { frame = 0; resized(); });",
+      "new": "resized();",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only pickup"
     }
   ]
 }

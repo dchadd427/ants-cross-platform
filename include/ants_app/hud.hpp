@@ -317,15 +317,11 @@ public:
     }
     void unlatch_pedestals() noexcept { slot_latched_[0] = false; slot_latched_[1] = false; }
 
-    /// The most commands that one click or Stop sends: a selection of more than sim::kMaxCommandAnts ants goes out as several commands in one go. The sequencer takes 64 commands
-    /// from a player in a turn (net::Sequencer::Config::max_commands_per_turn), shared with the player's other commands of that turn; a click stays well below it. Ants beyond
-    /// kMaxAntsPerClick are not ordered, and the status line says so.
+    /// The most commands that one click or Stop sends: a move, a group attack or a Stop of more than sim::kMaxCommandAnts ants goes out as several commands in one go. The sequencer takes
+    /// 64 commands from a player in a turn (net::Sequencer::Config::max_commands_per_turn), shared with the player's other commands of that turn; a click stays well below it. Ants beyond
+    /// kMaxAntsPerClick are not ordered, and the status line says so. A special order (steal, bomb, fire, bridge) is never chunked: one command, as the original gives it.
     static constexpr size_t kMaxCommandsPerClick = 48;
     static constexpr size_t kMaxAntsPerClick = kMaxCommandsPerClick * sim::kMaxCommandAnts;
-    /// A move click names at most this many ants: the original's goal search (SimulationEngineImpl::adjust_goal) gives a tile to the ants that find a free one within four tiles of the clicked
-    /// one, (2 * 4 + 1)^2 = 81 at the most, and an ant that finds none STOPS (go_to: stop_sync), so an ant named beyond it would lose what it was doing. Unnamed ants are not touched. A wider
-    /// search is a change of the rules (planned for the next rules release); attack, special and Stop orders have no such limit (the probe: tests/test_app/test_pointer_model_big.cpp).
-    static constexpr size_t kMaxAntsPerMove = 81;
     /// The group order of the original (FUN_010287b5) for the selected own ants: `special` and `attack` are its two flags. Returns the ant that
     /// acknowledged (0 = none).
     uint32_t order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack);
@@ -691,12 +687,11 @@ private:
         uint32_t ack_ant{0};
         bool voiced{false};
         size_t left_out{0};
-        size_t cap{0};               // the most ants this click could name (kMaxAntsPerClick or kMaxAntsPerMove)
     };
-    /// Sends the first `limit` of `ants` (at most kMaxAntsPerClick) in the selection order as commands of `proto` (its type, issuer and tile) of at most sim::kMaxCommandAnts ants each
-    ChunkedResult submit_in_chunks(sim::SimulationEngine& sim, sim::Command proto, const std::vector<uint32_t>& ants, size_t limit);
-    /// The status line of a click that left ants out: "Up to 81 walk here." for a move (kMaxAntsPerMove), else "Only N ants ordered." (kMaxAntsPerClick)
-    void post_click_limit(const ChunkedResult& result, size_t ordered);
+    /// Sends the first kMaxAntsPerClick of `ants` in the selection order as commands of `proto` (its type, issuer and tile) of at most sim::kMaxCommandAnts ants each
+    ChunkedResult submit_in_chunks(sim::SimulationEngine& sim, sim::Command proto, const std::vector<uint32_t>& ants);
+    /// The status line of a click that left ants out: "Only N ants ordered."
+    void post_click_limit(size_t ordered);
 
     bool show_quick_help_{false};
     ScreenButton quick_help_return_{ButtonRect{529, 437, 98, 26}, ButtonRect{527, 437, 97, 24}};      // the pictures qh_return1 / 2 and qh_return3 (the hit test is the rectangle of the picture that shows)
