@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.129 - 2026-10-24 - Faster: big maps with thousands of ants
+## v0.12.130 - 2026-10-25 - Faster: big maps with thousands of ants
 
 **For players:**
 - **Faster: a map with thousands of ants plays quicker.** Two questions that looked at every ant (which ant has this number, and does an ant wait for a path) are now answered at once. A tick with 4 x 693 ants walking across a 90 x 90 map takes 11 ms instead of 26 ms (2,772 ants packed in the corners: 10 ms instead of 38 ms), and 4 x 1,500 ants on 150 x 150 take 47 ms instead of 112 ms (packed: 46 instead of 119); the browser build gains the same (27 to 12 ms and 115 to 49 ms).
@@ -33,6 +33,17 @@ Work that is not released yet is written in the same template under a heading th
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e9e67d74...811a2509)
+
+## v0.12.129 - 2026-10-25 - Big selections follow the original's rules
+
+**For players:**
+- **A big selection is ordered with the original's rules for every ant.** Ctrl+A or a drag over any number of ants, then a right click: every selected ant gets the move, attack or Stop order (one click orders up to 1,536 ants; "Only 1536 ants ordered." beyond that). The limit of v0.12.126 for a move is gone. Ants that find no free spot near the clicked tile stop where they stand, as in the original; a move onto an enemy hill makes thieves raid and stops the other ants.
+- **Special orders stay one ant at a time:** steal, bomb, fire and bridge orders go to the first 32 selected ants at the most, as before v0.12.126, so a crowd cannot steal from one ant or drop 80 bombs on one square. Order those ants one by one.
+- A move of a whole army makes the game work hard for a moment while the ants look for a spot. One player's click on a big army costs a few to tens of milliseconds; it is only noticeable when four players' big clicks land together (about 1,500 ants each costs more than a second on a desktop, and a phone is several times slower).
+
+**Rules / network:** none; network protocol 21 is unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...961523be)
 
 ## v0.12.128 - 2026-10-25 - The Picture dropdown opens in fullscreen
 
@@ -564,15 +575,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e47cec0b...3ab82b75); the map core (interface version 4) has a new call, `lvl_crop`; the page needs the new module, so reload it once.
 
-## v0.12.77 - 2026-10-17 - Map maker: map properties (E3c)
+## Older versions (v0.12.77 and before)
 
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) can set the properties of a map now: press Properties in the top bar (or Menu, then Properties... on a phone), or the Edit link beside the short summary of the map. You can change the description, the length of a match (1 to 120 minutes), the eggs that every team starts with (0 to 255) and the default ant type (none, combat, thief, bomber, swimmer or fire).
-- The description counter counts bytes, because the map file does: a Classic map has room for 29 and an Extended map for 255, and a letter such as the e with an accent counts double. A text that is too long gets the same sentence as the check of the map and a button that cuts it to fit.
-- Apply makes all the changes one step (Undo takes them all back), and Cancel changes nothing. The map's other bytes are not touched, so a map that you open and apply without a change is the same file.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4256634d...05168d98)
-
-## Older versions (v0.12.76 and before)
-
-Every release before v0.12.77, and the long notes of v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.77, and the long notes of v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

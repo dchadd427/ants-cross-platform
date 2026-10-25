@@ -1,6 +1,7 @@
-// Pointer model tests: a click or Stop on more ants than one command holds (sim::kMaxCommandAnts = 32). Ctrl+A or a drag selects every own ant; the HUD sends the click as several
-// commands of the same kind in the selection order (HUD::submit_in_chunks, docs/CONTROLS.md, "A big selection"), at most HUD::kMaxCommandsPerClick of them, and a click of at most 32 ants
-// sends what it always sent. The voice and the pedestal feedback follow the click as a whole.
+// Pointer model tests: a click or Stop on more ants than one command holds (sim::kMaxCommandAnts = 32). Ctrl+A or a drag selects every own ant; a move, a group attack and Stop name ALL of
+// them as several commands of the same kind in the selection order (HUD::submit_in_chunks, docs/CONTROLS.md, "A big selection"), at most HUD::kMaxCommandsPerClick of them, and the engine decides
+// what each ant does (the original's logic: an ant that finds no free tile stops). A SPECIAL order (steal, bomb, ...) is never chunked: one command of at most 32 ants, as before. A click of at
+// most 32 ants sends what it always sent. The voice and the pedestal feedback follow the click as a whole.
 #include <algorithm>
 #include <cstdlib>
 #include <cstdint>
@@ -103,12 +104,27 @@ sim::CommandResult answer(uint32_t needing, uint32_t ack) {
     return r;
 }
 
+// What a special click sent before the click on a big selection existed: ONE command with the first 32 of the selected ants
+sim::Command old_special(const std::vector<uint32_t>& ids, int16_t tx, int16_t ty) {
+    return make_cmd(sim::CommandType::GroupSpecial, tx, ty, std::vector<uint32_t>(ids.begin(), ids.begin() + static_cast<std::ptrdiff_t>(std::min(ids.size(), sim::kMaxCommandAnts))));
+}
+
+// The commands that a move of the selection `ids` is, built by hand: chunks of 32 in the order (what the engine gets from the HUD)
+std::vector<sim::Command> hand_chunks(sim::CommandType type, int16_t tx, int16_t ty, const std::vector<uint32_t>& ids) {
+    std::vector<sim::Command> out;
+    for (size_t from = 0; from < ids.size(); from += sim::kMaxCommandAnts) {
+        const size_t to = std::min(ids.size(), from + sim::kMaxCommandAnts);
+        out.push_back(make_cmd(type, tx, ty, std::vector<uint32_t>(ids.begin() + static_cast<std::ptrdiff_t>(from), ids.begin() + static_cast<std::ptrdiff_t>(to))));
+    }
+    return out;
+}
+
 }  // namespace
 
 void test_big_selection() {
     g_group = "big selection";
-    std::printf("[pointer] a click or Stop on more ants than a command holds goes out as several commands in the selection order, up to the click's budget; a click of at most 32 ants sends what it always sent\n");
-    // 200 thieves, Ctrl+A, a plain move on the enemy hill (a right click on the minimap, or on a hill in the fog: the pointer over it is the plain move there, not a special target): a move that the engine turns into a raid, which has no goal search and no limit of 81: seven commands name all 200 ants, and every thief raids
+    std::printf("[pointer] a move, an attack or Stop on more ants than a command holds names every ant in several commands (up to the click's budget); a special order is one command of at most 32; a click of at most 32 ants sends what it always sent\n");
+    // 200 thieves, Ctrl+A, a plain move on the enemy hill (a right click on the minimap, or on a hill in the fog: the pointer over it is the plain move there, not a special target): seven commands name all 200 ants, and every thief raids
     {
         Fixture f;
         f.sim.grid_mut().set_anthill(1, TileCoord{40, 40});
@@ -125,7 +141,7 @@ void test_big_selection() {
         size_t raiding = 0;
         for (uint32_t id : ids) raiding += f.unit(id).orig_order == sim::AntUnit::kOrderRaid ? size_t{1} : size_t{0};
         check(raiding == 200, "every one of the 200 ants raids (" + std::to_string(raiding) + ")");
-        check(f.hud.status_line().text().find("Up to 81") == std::string::npos, "and the line does not speak of a limit of 81");
+        check(f.hud.status_line().text().find("Only") == std::string::npos, "and the line does not speak of a limit");
         // the feedback is the click's, once: the sounds of a click on 30 ants
         const size_t big = f.sounds.size();
         Fixture g;
@@ -136,8 +152,8 @@ void test_big_selection() {
         g.hud.order_selected(g.sim, TileCoord{41, 41}, false, false);
         check(big != 0 && big == g.sounds.size(), "the voice and the click sound are heard once, as for 30 ants (" + std::to_string(big) + " and " + std::to_string(g.sounds.size()) + " sounds)");
     }
-    // 40 walking workers and then 200 thieves, a plain click on the enemy hill: the thieves all raid; of the workers (the click would only stop them) the first 32 are named as before and the other 8 are
-    // not named and keep walking
+    // 40 WALKING workers and 200 thieves, a plain move on the enemy hill: no special case for anyone, all 240 are named (eight commands) and the ENGINE decides, as the original does: the thieves raid, the
+    // workers are stopped by the click
     {
         Fixture f;
         f.sim.grid_mut().set_anthill(1, TileCoord{40, 40});
@@ -146,18 +162,19 @@ void test_big_selection() {
         for (int32_t tx = 5; tx < 45; ++tx) for (int32_t ty = 20; ty < 25; ++ty) ids.push_back(f.spawn(0, AntType::Thief, tx, ty));
         f.settle();
         make_walk(f, workers);
-        std::vector<TileCoord> goal;
-        for (uint32_t id : workers) goal.push_back(f.unit(id).orig_order_tile);
+        for (uint32_t id : workers) check(f.unit(id).orig_order == sim::AntUnit::kOrderMove, "the workers walk before the click");
         RecordingSink sink(f.sim);
         f.hud.set_command_sink(&sink);
         select_all(f);
+        check(f.hud.get_selected_ant_ids().size() == 240, "Ctrl+A selects 240 ants");
         f.hud.order_selected(f.sim, TileCoord{41, 41}, false, false);
-        size_t raiding = 0, kept = 0;
+        size_t raiding = 0, stopped = 0;
         for (size_t i = 40; i < ids.size(); ++i) raiding += f.unit(ids[i]).orig_order == sim::AntUnit::kOrderRaid ? size_t{1} : size_t{0};
-        for (size_t i = 32; i < 40; ++i) kept += f.unit(workers[i]).orig_order == sim::AntUnit::kOrderMove && f.unit(workers[i]).orig_order_tile == goal[i] ? size_t{1} : size_t{0};
-        check(raiding == 200 && kept == 8 && ants_in(sink.log) == 232, "200 thieves raid (" + std::to_string(raiding) + "), 8 workers beyond the first 32 are not named and walk on (" + std::to_string(kept) + "), 232 named");
+        for (uint32_t id : workers) stopped += f.unit(id).orig_order == sim::AntUnit::kOrderNone ? size_t{1} : size_t{0};
+        check(shaped(sink.log, sim::CommandType::GroupMove, 240) && ants_sent(sink.log).size() == 240, "all 240 ants are named, in eight commands");
+        check(raiding == 200 && stopped == 40, "the engine's result: 200 thieves raid (" + std::to_string(raiding) + ") and the 40 workers stop (" + std::to_string(stopped) + ")");
     }
-    // a click on the player's own hill is a goal search (the entrance): 200 walking workers, 81 named
+    // a move on the player's own hill is the goal search of the entrance: 200 walking workers are all named (seven commands) and the engine's answer is what the same commands give it directly
     {
         Fixture f;
         f.sim.grid_mut().set_anthill(0, TileCoord{20, 20});
@@ -167,7 +184,8 @@ void test_big_selection() {
         f.hud.set_command_sink(&sink);
         select_all(f);
         f.hud.order_selected(f.sim, TileCoord{21, 21}, false, false);
-        check(shaped(sink.log, sim::CommandType::GroupMove, 81) && f.hud.status_line().text() == "Up to 81 walk here.", "own hill: 81 named, and the line says so");
+        check(shaped(sink.log, sim::CommandType::GroupMove, 200) && ants_sent(sink.log) == ids, "own hill: all 200 named in seven commands");
+        check(f.hud.status_line().text().find("Only") == std::string::npos && f.hud.status_line().text().find("walk here") == std::string::npos, "and no line about a limit");
     }
     // 80 workers and a move click (the right button, by the cursor): three commands and every ant has the order
     {
@@ -184,29 +202,44 @@ void test_big_selection() {
         check(moving == 80, "every one of the 80 ants carries the move order (" + std::to_string(moving) + ")");
         check(!f.sounds.empty() && f.hud.status_line().text().find("Only") == std::string::npos, "the click had its voice and sound, and says nothing of a limit");
     }
-    // a move click names at most 81 ants (HUD::kMaxAntsPerMove): the goal search gives a tile to 81 at the most and an ant that finds none STOPS, so 100 WALKING workers: three commands (32, 32, 17),
-    // the first 81 take the new goals, the other 19 are not named and keep walking where they walked
+    // 200 WALKING workers and a move click: no cap of 81 ants. All 200 are named (seven commands: 32 six times and 8); the goal search of the engine gives a tile to the ants that find a free one within four
+    // tiles of the clicked tile, and an ant that finds none STOPS where it stands: that is the original's logic, which the click does not change. The engine gets exactly the commands that a hand-built
+    // list of the same chunks is: the same state at every one of the next ticks
     {
         Fixture f;
-        const std::vector<uint32_t> ids = spawn_own(f, 100, AntType::Worker);
+        const std::vector<uint32_t> ids = spawn_own(f, 200, AntType::Worker);
         make_walk(f, ids);
+        Fixture g;
+        const std::vector<uint32_t> same = spawn_own(g, 200, AntType::Worker);
+        make_walk(g, same);
+        check(same == ids && f.sim.state_hash() == g.sim.state_hash(), "the two worlds are the same before the click");
         std::vector<TileCoord> goal;
         for (uint32_t id : ids) goal.push_back(f.unit(id).orig_order_tile);
         RecordingSink sink(f.sim);
         f.hud.set_command_sink(&sink);
         select_all(f);
         f.click_tile(30, 30, SDL_BUTTON_RIGHT);
-        check(shaped(sink.log, sim::CommandType::GroupMove, 81) && ants_sent(sink.log) == std::vector<uint32_t>(ids.begin(), ids.begin() + 81), "100 workers: three commands name the first 81");
-        size_t new_goal = 0, kept = 0;
+        check(shaped(sink.log, sim::CommandType::GroupMove, 200) && ants_sent(sink.log) == ids, "200 workers: seven commands name every ant, in the selection order");
+        size_t new_goal = 0, stopped = 0, kept = 0;
         for (size_t i = 0; i < ids.size(); ++i) {
             const sim::AntUnit& u = f.unit(ids[i]);
-            new_goal += i < 81 && u.orig_order == sim::AntUnit::kOrderMove && u.orig_order_tile != goal[i] ? size_t{1} : size_t{0};
-            kept += i >= 81 && u.orig_order == sim::AntUnit::kOrderMove && u.orig_order_tile == goal[i] ? size_t{1} : size_t{0};
+            new_goal += u.orig_order == sim::AntUnit::kOrderMove && u.orig_order_tile != goal[i] ? size_t{1} : size_t{0};
+            stopped += u.orig_order == sim::AntUnit::kOrderNone ? size_t{1} : size_t{0};
+            kept += u.orig_order == sim::AntUnit::kOrderMove && u.orig_order_tile == goal[i] ? size_t{1} : size_t{0};
         }
-        check(new_goal == 81, "the 81 take a tile around the click (" + std::to_string(new_goal) + ")");
-        check(kept == 19, "the 19 that were not named keep walking to their own goals (" + std::to_string(kept) + ")");
-        check(f.hud.status_line().text() == "Up to 81 walk here.", "the status line says why: '" + f.hud.status_line().text() + "'");
-        // an attack order and Stop have no such limit: 100 walking combat ants all take the attack on an enemy worker
+        check(new_goal > 0 && new_goal <= 81 && stopped == 200 - new_goal && kept == 0, "the engine's result: " + std::to_string(new_goal) + " take a tile around the click (at most 81), the other " + std::to_string(stopped) + " stop, none is left alone");
+        for (const sim::Command& c : hand_chunks(sim::CommandType::GroupMove, 30, 30, same)) g.sim.apply_command(c);
+        bool equal = f.sim.state_hash() == g.sim.state_hash();
+        for (int t = 0; t < 40 && equal; ++t) {
+            f.settle();
+            g.settle();
+            equal = f.sim.state_hash() == g.sim.state_hash();
+        }
+        check(equal, "the HUD's commands do to the engine what the hand-built chunks do, at every tick");
+        check(f.hud.status_line().text().find("Only") == std::string::npos, "and the line says nothing of a limit");
+    }
+    // an attack order has no limit either: 100 walking combat ants all take the attack on an enemy worker, four commands name all 100
+    {
         Fixture g;
         const std::vector<uint32_t> fighters = spawn_own(g, 100, AntType::Combat);
         make_walk(g, fighters);
@@ -218,25 +251,35 @@ void test_big_selection() {
         g.hud.order_selected(g.sim, TileCoord{30, 30}, false, true);
         size_t attacking = 0;
         for (uint32_t id : fighters) attacking += g.unit(id).orig_order == sim::AntUnit::kOrderAttack ? size_t{1} : size_t{0};
-        check(shaped(gsink.log, sim::CommandType::GroupAttack, 100) && attacking == 100, "100 walking combat ants: four attack commands and every ant attacks (" + std::to_string(attacking) + ")");
+        check(shaped(gsink.log, sim::CommandType::GroupAttack, 100) && ants_sent(gsink.log) == fighters && attacking == 100, "100 walking combat ants: four attack commands name all 100 and every ant attacks (" + std::to_string(attacking) + ")");
     }
-    // at most 32 ants: one command, byte for byte the one that was always sent (a move and Stop)
+    // at most 32 ants: one command, byte for byte the one that was always sent (a move, a special order, an attack and Stop)
     for (size_t n : {size_t{1}, size_t{10}, size_t{32}}) {
         Fixture f;
         const std::vector<uint32_t> ids = spawn_own(f, n, AntType::Worker);
+        f.spawn(1, AntType::Worker, 40, 40);
+        f.settle();
         RecordingSink sink(f.sim);
         f.hud.set_command_sink(&sink);
         select_all(f);
         f.click_tile(30, 30, SDL_BUTTON_RIGHT);
         check(sink.log.size() == 1 && bytes_of(sink.log[0]) == bytes_of(make_cmd(sim::CommandType::GroupMove, 30, 30, ids)), std::to_string(n) + " ants: one command with the bytes of the old click");
         sink.log.clear();
+        f.hud.order_selected(f.sim, TileCoord{31, 30}, true, false);
+        check(sink.log.size() == 1 && bytes_of(sink.log[0]) == bytes_of(old_special(ids, 31, 30)), std::to_string(n) + " ants: a special order is one command with the bytes of the old one");
+        sink.log.clear();
+        f.hud.order_selected(f.sim, TileCoord{40, 40}, false, true);
+        check(sink.log.size() == 1 && bytes_of(sink.log[0]) == bytes_of(make_cmd(sim::CommandType::GroupAttack, 40, 40, ids)), std::to_string(n) + " ants: an attack is one command with the bytes of the old one");
+        sink.log.clear();
         press_stop(f);
         check(sink.log.size() == 1 && bytes_of(sink.log[0]) == bytes_of(make_cmd(sim::CommandType::Stop, 0, 0, ids)), std::to_string(n) + " ants: Stop is one command with the bytes of the old one");
     }
-    // 33 ants: 32 and 1; Stop, an attack and a special order are split the same way
+    // 33 ants: 32 and 1 for a move, an attack and Stop
     {
         Fixture f;
         const std::vector<uint32_t> ids = spawn_own(f, 33, AntType::Worker);
+        f.spawn(1, AntType::Worker, 40, 40);
+        f.settle();
         RecordingSink sink(f.sim);
         f.hud.set_command_sink(&sink);
         select_all(f);
@@ -260,11 +303,42 @@ void test_big_selection() {
         sink.log.clear();
         f.hud.order_selected(f.sim, TileCoord{40, 40}, false, true);
         check(shaped(sink.log, sim::CommandType::GroupAttack, 33), "an attack order is split into attack commands");
-        sink.log.clear();
-        f.hud.order_selected(f.sim, TileCoord{41, 40}, true, false);
-        check(shaped(sink.log, sim::CommandType::GroupSpecial, 33), "a special order is split into special commands");
     }
-    // the budget: 1,600 thieves make 48 commands of the first 1,536; the rest are not ordered and the status line says so; Stop has the same budget
+    // a SPECIAL order is never chunked: of 1, 10, 32, 33 and 200 selected ants it is ONE command with the first 32 (33 and 200: exactly the first 32), the bytes of the old command, and the unnamed ants are not touched
+    for (size_t n : {size_t{1}, size_t{10}, size_t{32}, size_t{33}, size_t{200}}) {
+        Fixture f;
+        const std::vector<uint32_t> ids = spawn_own(f, n, AntType::Bomber);
+        RecordingSink sink(f.sim);
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.sounds.clear();
+        f.hud.order_selected(f.sim, TileCoord{31, 30}, true, false);
+        check(sink.log.size() == 1 && bytes_of(sink.log[0]) == bytes_of(old_special(ids, 31, 30)), std::to_string(n) + " ants: ONE special command with the bytes of the old one (the first " + std::to_string(std::min(n, size_t{32})) + ")");
+        size_t touched = 0;
+        for (size_t i = 32; i < ids.size(); ++i) touched += f.unit(ids[i]).orig_order != sim::AntUnit::kOrderNone ? size_t{1} : size_t{0};
+        check(touched == 0, std::to_string(n) + " ants: the ants beyond the 32 are not touched");
+        check(f.hud.status_line().text().find("Only") == std::string::npos, std::to_string(n) + " ants: no line about a limit (a special order is the one-at-a-time order, not a click that left ants out)");
+        // the voice: a special order speaks only when exactly one ant needed it (the old rule, in the one command)
+        check(n == 1 ? f.sounds.size() == 2 : f.sounds.size() == 1, std::to_string(n) + " ants: " + (n == 1 ? "the voice and the click sound" : "the click sound only, no voice"));
+    }
+    // the same on the scripted sink: the answers of the one command decide the feedback, whatever the other ants of the selection are
+    {
+        Fixture f;
+        const std::vector<uint32_t> ids = spawn_own(f, 200, AntType::Bomber);
+        ScriptedSink sink;
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        const uint32_t ability = sim::get_ability_voice_sound(AntType::Bomber);
+        f.sounds.clear();
+        sink.answers = {answer(1, ids[3])};
+        check(f.hud.order_selected(f.sim, TileCoord{31, 30}, true, false) == ids[3] && sink.log.size() == 1 && sink.log[0].ants.size() == 32, "200 bombers, one of the first 32 needs the order: ONE command of 32, and the answer is that ant's");
+        check(f.sounds.size() == 2 && f.sounds[0] == ability, "that one ant speaks (the old rule), then the click");
+        sink.log.clear();
+        sink.answers = {answer(0, 0)};
+        f.sounds.clear();
+        check(f.hud.order_selected(f.sim, TileCoord{31, 30}, true, false) == 0 && sink.log.size() == 1 && f.sounds.empty(), "no ant of the first 32 needs it: one command, nothing happens");
+    }
+    // the budget: 1,600 thieves make 48 commands of the first 1,536 for a move; the rest are not ordered and the status line says so; an attack and Stop have the same budget
     {
         Fixture f;
         f.sim.grid_mut().set_anthill(1, TileCoord{40, 40});
@@ -273,8 +347,8 @@ void test_big_selection() {
         RecordingSink sink(f.sim);
         f.hud.set_command_sink(&sink);
         select_all(f);
-        f.hud.order_selected(f.sim, TileCoord{41, 41}, true, false);
-        check(HUD::kMaxCommandsPerClick == 48 && HUD::kMaxAntsPerClick == 1536 && HUD::kMaxAntsPerMove == 81, "the budget is 48 commands of 32 ants, a move names 81");
+        f.hud.order_selected(f.sim, TileCoord{41, 41}, false, false);
+        check(HUD::kMaxCommandsPerClick == 48 && HUD::kMaxAntsPerClick == 1536, "the budget is 48 commands of 32 ants");
         check(sink.log.size() == 48 && ants_sent(sink.log) == std::vector<uint32_t>(ids.begin(), ids.begin() + 1536), "a click sends 48 commands naming the first 1,536 ants in the selection order");
         size_t ordered = 0;
         bool prefix = true;
@@ -286,10 +360,34 @@ void test_big_selection() {
         check(ordered == 1536 && prefix, "the first 1,536 ants carry the order and no other (" + std::to_string(ordered) + ")");
         const std::string said = f.hud.status_line().text();
         check(said == "Only 1536 ants ordered.", "the status line says how many were ordered: '" + said + "'");
-        check(fits_status_box(said) && fits_status_box("Up to 81 walk here."), "and both lines fit the status box (139 px: the box clips at 139 px, the shipped font needs about 112 for this one)");
+        check(fits_status_box(said), "and it fits the status box (139 px: the box clips at 139 px, the shipped font needs about 112 for this one)");
         sink.log.clear();
         press_stop(f);
         check(sink.log.size() == 48 && ants_in(sink.log) == 1536 && f.hud.status_line().text() == "Only 1536 ants ordered.", "Stop: 48 commands, 1,536 ants and the same line");
+    }
+    // the attack's budget: 1,600 combat ants, an attack on an enemy worker: 48 commands, the same line
+    {
+        Fixture f;
+        spawn_own(f, 1600, AntType::Combat);
+        f.spawn(1, AntType::Worker, 58, 58);
+        f.settle();
+        ScriptedSink sink;
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.hud.order_selected(f.sim, TileCoord{58, 58}, false, true);
+        size_t sent = 0;
+        for (const auto& c : sink.log) sent += c.type == sim::CommandType::GroupAttack ? c.ants.size() : size_t{0};
+        check(sink.log.size() == 48 && sent == 1536 && f.hud.status_line().text() == "Only 1536 ants ordered.", "an attack of 1,600 ants: 48 commands, 1,536 ants, the same line");
+    }
+    // a SPECIAL order of 1,600 ants is one command of 32 and no line (it is not a click that left ants out: the one-at-a-time order)
+    {
+        Fixture f;
+        spawn_own(f, 1600, AntType::Bomber);
+        ScriptedSink sink;
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.hud.order_selected(f.sim, TileCoord{30, 30}, true, false);
+        check(sink.log.size() == 1 && sink.log[0].ants.size() == 32 && f.hud.status_line().text().find("Only") == std::string::npos, "a special order of 1,600 ants: one command of 32, no line");
     }
     // the budget is exact: 1,536 ants are all sent and the line stays silent
     {
@@ -299,21 +397,21 @@ void test_big_selection() {
         RecordingSink sink(f.sim);
         f.hud.set_command_sink(&sink);
         select_all(f);
-        f.hud.order_selected(f.sim, TileCoord{41, 41}, true, false);
+        f.hud.order_selected(f.sim, TileCoord{41, 41}, false, false);
         check(sink.log.size() == 48 && ants_in(sink.log) == 1536 && f.hud.status_line().text().find("Only") == std::string::npos, "1,536 ants: 48 commands, nothing left out, no line about a limit");
     }
-    // a click that no ant needs (every command says so) still tells that ants were left out: 1,600 bombers, the sink answers "none needs an order"
+    // a click that no ant needs (every command says so) still tells that ants were left out: 1,600 workers, the sink answers "none needs an order"
     {
         Fixture f;
-        spawn_own(f, 1600, AntType::Bomber);
+        spawn_own(f, 1600, AntType::Worker);
         ScriptedSink sink;
         f.hud.set_command_sink(&sink);
         select_all(f);
         f.sounds.clear();
-        f.hud.order_selected(f.sim, TileCoord{30, 30}, true, false);
+        f.hud.order_selected(f.sim, TileCoord{30, 30}, false, false);
         check(sink.log.size() == 48 && f.sounds.empty() && f.hud.status_line().text() == "Only 1536 ants ordered.", "nothing needed an order: no voice, no sound, and the line says that 1,536 were ordered");
     }
-    // the same for a move, whose limit is 81: 100 bombers, three commands, nothing needs an order, the line says why
+    // a move of 100 ants that nothing needs: four commands and no line (nothing was left out)
     {
         Fixture f;
         spawn_own(f, 100, AntType::Bomber);
@@ -322,7 +420,7 @@ void test_big_selection() {
         select_all(f);
         f.sounds.clear();
         f.hud.order_selected(f.sim, TileCoord{30, 30}, false, false);
-        check(shaped(sink.log, sim::CommandType::GroupMove, 81) && f.sounds.empty() && f.hud.status_line().text() == "Up to 81 walk here.", "a move of 100 ants: 81 named in three commands, and the line says that only 81 fit");
+        check(shaped(sink.log, sim::CommandType::GroupMove, 100) && f.sounds.empty() && f.hud.status_line().text().find("Only") == std::string::npos, "a move of 100 ants that nothing needs: all 100 named in four commands, silent, no line");
     }
     // a held Stop key is not a stream of orders: the repeats of the key do nothing (a Stop of 1,500 ants is 47 commands, and 20 a second of them would fill the sequencer's carry and cost the player its seat)
     {
@@ -346,19 +444,18 @@ void test_big_selection() {
         ScriptedSink sink;
         f.hud.set_command_sink(&sink);
         f.hud.set_selected_ant_ids(ids);
-        const uint32_t ability = sim::get_ability_voice_sound(AntType::Bomber);
         const TileCoord tile{30, 30};
-        const auto click = [&](bool special, std::vector<sim::CommandResult> answers) {
+        const auto click = [&](bool attack, std::vector<sim::CommandResult> answers) {
             sink.log.clear();
             sink.answers = std::move(answers);
             f.sounds.clear();
-            return f.hud.order_selected(f.sim, tile, special, false);
+            return f.hud.order_selected(f.sim, tile, false, attack);
         };
-        check(click(true, {answer(0, 0), answer(1, ids[40]), answer(0, 0)}) == ids[40] && sink.log.size() == 3 && f.sounds.size() == 2 && f.sounds[0] == ability,
-              "a special order that one ant needs, in the second command: the voice of that ant and the click");
-        check(click(true, {answer(1, ids[0]), answer(1, ids[40]), answer(0, 0)}) == ids[0] && f.sounds.size() == 1, "two ants need it, one in each command: no voice, only the click");
+        check(click(false, {answer(0, 0), answer(1, ids[40]), answer(0, 0)}) == ids[40] && sink.log.size() == 3 && f.sounds.size() == 2, "a move that one ant needs, in the second command: the voice of that ant and the click");
+        check(click(false, {answer(1, ids[0]), answer(1, ids[40]), answer(0, 0)}) == ids[0] && f.sounds.size() == 2, "two ants need it, one in each command: the voice is the first command's");
         check(click(false, {answer(0, 0), answer(0, 0), answer(0, 0)}) == 0 && sink.log.size() == 3 && f.sounds.empty(), "no ant needs an order in any command: the click does nothing, and all three were sent");
         check(click(false, {answer(2, 0), answer(5, ids[40]), answer(0, 0)}) == 0 && f.sounds.size() == 1, "the first command with ants in need is refused (no ack): no voice, the click sound only");
         check(click(false, {answer(0, 0), answer(5, ids[40]), answer(3, ids[64])}) == ids[40] && f.sounds.size() == 2, "a move: the voice is that of the first command with ants in need");
+        check(click(true, {answer(0, 0), answer(5, ids[40]), answer(3, ids[64])}) == ids[40] && sink.log.size() == 3 && f.sounds.size() == 2, "an attack of 65 ants: three commands, the voice of the first command with ants in need");
     }
 }
