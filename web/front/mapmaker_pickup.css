@@ -1,7 +1,7 @@
-/* The Pick up tool (mapmaker_pickup.js, docs/MAP_EDITOR.md): its bar, the nudge arrows and the canvas over the map. Every button is 44 pixels high or more. */
+/* The Pick up tool (mapmaker_pickup.js, docs/MAP_EDITOR.md): its bar, the nudge arrows and the canvas over the map. Every button is 44 pixels high or more. The bar is a row of its own under the map (a phone's is fixed to the screen), so the map ends above it. */
 .cv canvas.pk-over { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
 .cv .minimap, .cv .atlasnote { z-index: 2; }
-.pk-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 8px 12px 10px; color: var(--cream); background: rgba(8, 19, 15, .95); border-top: 2px solid var(--gold); box-shadow: 0 -16px 14px -8px rgba(8, 19, 15, .85); }
+.pk-bar { position: relative; flex: none; z-index: 3; padding: 8px 12px 10px; color: var(--cream); background: #08130f; border-top: 2px solid var(--gold); }
 .pk-bar[hidden] { display: none; }
 .pk-line { margin: 0 0 8px; font-size: 14.5px; line-height: 1.35; }
 .pk-name { color: var(--gold); }
@@ -29,32 +29,28 @@
 .pk-side .pk-name { display: block; }
 .pk-side .pk-b { width: 100%; }
 @media (max-width: 600px) {
-    .pk-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); background: #08130f; box-shadow: none; }
+    .pk-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
     .pk-line, .pk-warn { font-size: 17px; }
     .pk-b { min-height: 52px; font-size: 16px; padding: 4px 3px; }
-    body.pk-on { padding-bottom: 240px; }
+    body.pk-on { padding-bottom: var(--pk-h, 0px); }          /* (the page can be scrolled until its last line is above the bar: mapmaker_pickup.js sets --pk-h to the bar's height) */
 }
 
 .pk-fold { display: none; }
-/* A short screen (a phone held sideways, a small window): one flowing row, the arrows in a row, a Hide button; under 520 pixels high the bar is fixed at the foot of the screen. */
+/* A short screen (a phone held sideways, a small window): one flowing row, the arrows in a row, a Hide button that folds the bar to a button over the foot of the map. */
 @media (min-width: 601px) and (max-height: 700px) {
     .pk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 8px 6px; }
-    .pk-line, .pk-said { flex: 1 1 200px; margin: 0; font-size: 13.5px; line-height: 1.25; }
+    .pk-line, .pk-said { flex: 1 1 180px; margin: 0; font-size: 13.5px; line-height: 1.25; }
     .pk-warn { flex: 1 1 100%; margin: 0; padding: 3px 8px; font-size: 13px; }
     .pk-row, .pk-row.one, .pk-row.two, .pk-row.three, .pk-row.four, .pk-padwrap, .pk-side { display: contents; }
     .pk-row > .pk-b, .pk-row.two > .pk-b, .pk-row.four > .pk-b, .pk-row.one > .pk-b { grid-column: auto; flex: 0 0 auto; padding: 4px 10px; font-size: 14px; }
     .pk-pad { display: flex; flex: none; gap: 6px; }
     .pk-one { display: none; }
+    .pk-line { order: 1; } .pk-said { order: 2; } .pk-fold { order: 3; display: inline-block; margin-left: auto; } .pk-warn { order: 4; } .pk-row > .pk-b, .pk-side .pk-b { order: 5; } .pk-pad { order: 6; }          /* (the Hide button is on the line of the words: the bar is as low as it can be) */
     .pk-arrow.left { order: 1; } .pk-arrow.up { order: 2; } .pk-arrow.down { order: 3; } .pk-arrow.right { order: 4; }
     .pk-side .pk-b { width: auto; }
-    .pk-fold { display: inline-block; margin-left: auto; }
-    .pk-bar.folded { background: none; border: 0; box-shadow: none; padding: 0 6px 6px; pointer-events: none; justify-content: flex-end; }
+    .pk-bar.folded { height: 0; padding: 0; border: 0; background: none; }
     .pk-bar.folded > :not(.pk-fold) { display: none; }
-    .pk-bar.folded .pk-fold { pointer-events: auto; background: rgba(8, 19, 15, .95); }
-}
-@media (min-width: 601px) and (max-height: 520px) {
-    .pk-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 4px 10px calc(6px + env(safe-area-inset-bottom)); background: #08130f; box-shadow: none; }
-    .pk-bar.folded { background: none; }
+    .pk-bar.folded .pk-fold { position: absolute; right: 6px; bottom: 6px; background: rgba(8, 19, 15, .95); }
 }
 
 .pk-help { display: block; margin-top: 6px; padding: 0 2px; min-height: 36px; font: inherit; text-align: left; color: var(--gold); background: none; border: 0; text-decoration: underline; cursor: pointer; }
