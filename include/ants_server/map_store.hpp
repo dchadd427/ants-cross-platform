@@ -10,6 +10,7 @@
 // in the maps folder first. scan() lists and hashes everything once, at the server's start, for GET /maps; find() always reads the file itself.
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,6 +35,7 @@ struct MapListing {
     uint32_t height{0};
     uint32_t minutes{0};
     uint32_t players{0};
+    uint64_t start_ants{0};    // the start markers of the four colors added up, counted from the file by the store itself (OnlineLimits::start_ants); 0 when the file does not load
     std::string description;
     bool original{false};      // one of the six maps of the original game
     std::string thumb;         // the address of its preview picture on the site, "" when it has none
@@ -49,6 +51,7 @@ struct ApprovedMap {
     uint64_t hash{0};          // FNV-1a 64 of the file (net::hash_file)
     uint64_t size{0};
     uint32_t width{0}, height{0}, minutes{0}, players{0};
+    uint64_t start_ants{0};    // filled in by MapStore::set_approved from the file (never from the caller's number); a test map's is not counted: it is on no list
     std::string description, maker, kind;
 };
 
@@ -107,6 +110,15 @@ private:
     bool scanned_{false};
     void add_approved_to_listing();
     void sort_listing();
+    // The start ants of an approved file (OnlineLimits::start_ants of the loaded map; 0 when it does not load), kept by path, size and hash so that a list that is rebuilt at every approval and take-down loads a file once
+    struct Counted {
+        uint64_t size{0};
+        uint64_t hash{0};
+        uint64_t ants{0};
+    };
+    std::map<std::string, Counted> counted_;
+    uint64_t start_ants_of_file(const std::string& path, uint64_t size, uint64_t hash);
+    void count_start_ants();
 };
 
 }  // namespace ants::server

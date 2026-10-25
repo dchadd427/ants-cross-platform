@@ -1078,6 +1078,111 @@
       "old": "if (!info.ants) parts.push('no starting ants');",
       "new": "if (!info.ants) parts.push('no ants');",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_limit_301",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var HEAVY_START_ANTS = 300;",
+      "new": "var HEAVY_START_ANTS = 301;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_limit_299",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var HEAVY_START_ANTS = 300;",
+      "new": "var HEAVY_START_ANTS = 299;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_at_the_limit",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.heavy = out.ants > HEAVY_START_ANTS;",
+      "new": "out.heavy = out.ants >= HEAVY_START_ANTS;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_three_colors_only",
+      "file": "web/front/mapmaker_play.js",
+      "old": "for (var c = 0; c < 4; c++) out.ants +=",
+      "new": "for (var c = 0; c < 3; c++) out.ants +=",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_only_colors_that_play",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.ants += (teams[c] && teams[c].start_markers > 0) ? teams[c].start_markers : 0;",
+      "new": "out.ants += (teams[c] && out.seats[c].usable && teams[c].start_markers > 0) ? teams[c].start_markers : 0;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_no_warning_against_bots",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (v.heavy) botsPanel.appendChild(warning());",
+      "new": "if (false) botsPanel.appendChild(warning());",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_no_warning_with_others",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (v.heavy) friendsPanel.appendChild(warning());",
+      "new": "if (false) friendsPanel.appendChild(warning());",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_warning_everywhere",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (v.heavy) botsPanel.appendChild(warning());",
+      "new": "if (true) botsPanel.appendChild(warning());",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_warning_below_the_quick_buttons",
+      "file": "web/front/mapmaker_play.js",
+      "old": "                if (v.heavy) botsPanel.appendChild(warning());              // (under the intro, above the seats, so that a phone shows it without scrolling)\n                var qrow = el('div', 'play-quick');\n                qrow.appendChild(el('span', 'play-ql', 'Quick:'));\n                [1, 2, 3].forEach(function (n) {\n                    var b = el('button', 'btn sm', n + (n === 1 ? ' bot' : ' bots'));\n                    b.type = 'button';\n                    b.addEventListener('click', function () { var next = quick(choice, v.seats, n); if (next) { choice = next; refresh(); } });\n                    quicks.push({ button: b, count: n });\n                    qrow.appendChild(b);\n                });\n                botsPanel.appendChild(qrow);",
+      "new": "                var qrow = el('div', 'play-quick');\n                qrow.appendChild(el('span', 'play-ql', 'Quick:'));\n                [1, 2, 3].forEach(function (n) {\n                    var b = el('button', 'btn sm', n + (n === 1 ? ' bot' : ' bots'));\n                    b.type = 'button';\n                    b.addEventListener('click', function () { var next = quick(choice, v.seats, n); if (next) { choice = next; refresh(); } });\n                    quicks.push({ button: b, count: n });\n                    qrow.appendChild(b);\n                });\n                botsPanel.appendChild(qrow);\n                if (v.heavy) botsPanel.appendChild(warning());              // (under the intro, above the seats, so that a phone shows it without scrolling)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_warning_below_the_seats",
+      "file": "web/front/mapmaker_play.js",
+      "old": "                if (v.heavy) botsPanel.appendChild(warning());              // (under the intro, above the seats, so that a phone shows it without scrolling)\n                var qrow = el('div', 'play-quick');\n                qrow.appendChild(el('span', 'play-ql', 'Quick:'));\n                [1, 2, 3].forEach(function (n) {\n                    var b = el('button', 'btn sm', n + (n === 1 ? ' bot' : ' bots'));\n                    b.type = 'button';\n                    b.addEventListener('click', function () { var next = quick(choice, v.seats, n); if (next) { choice = next; refresh(); } });\n                    quicks.push({ button: b, count: n });\n                    qrow.appendChild(b);\n                });\n                botsPanel.appendChild(qrow);\n                var list = el('div', 'play-seats');\n                ORDER.forEach(function (seat) {\n                    var info = v.seats[seat], row = el('div', 'pseat' + (info.usable ? '' : ' off')), who = el('div', 'pwho'), dot = el('span', 'pdot');\n                    dot.style.background = info.dot;\n                    dot.setAttribute('aria-hidden', 'true');\n                    var label = el('div', 'pname');\n                    label.appendChild(el('span', 'pn', info.name));\n                    label.appendChild(el('span', 'pf', info.usable ? antText(info.ants) + ', ' + hillText(info.hills) : why(info)));\n                    who.appendChild(dot); who.appendChild(label);\n                    var set1 = el('div', 'pchoices'), g = { seat: seat, inputs: [] };\n                    set1.setAttribute('role', 'radiogroup');\n                    set1.setAttribute('aria-label', info.name);\n                    CHOICES.forEach(function (c) {\n                        var lab = el('label', 'pc'), input = el('input');\n                        input.type = 'radio'; input.name = 'pseat-' + seat; input.value = c[0];\n                        input.addEventListener('change', function () { if (input.checked) set(seat, c[0]); });\n                        lab.appendChild(input);\n                        lab.appendChild(el('span', '', c[1]));\n                        set1.appendChild(lab);\n                        g.inputs.push(input);\n                    });\n                    groups.push(g);\n                    row.appendChild(who); row.appendChild(set1); list.appendChild(row);\n                });\n                botsPanel.appendChild(list);",
+      "new": "                var qrow = el('div', 'play-quick');\n                qrow.appendChild(el('span', 'play-ql', 'Quick:'));\n                [1, 2, 3].forEach(function (n) {\n                    var b = el('button', 'btn sm', n + (n === 1 ? ' bot' : ' bots'));\n                    b.type = 'button';\n                    b.addEventListener('click', function () { var next = quick(choice, v.seats, n); if (next) { choice = next; refresh(); } });\n                    quicks.push({ button: b, count: n });\n                    qrow.appendChild(b);\n                });\n                botsPanel.appendChild(qrow);\n                var list = el('div', 'play-seats');\n                ORDER.forEach(function (seat) {\n                    var info = v.seats[seat], row = el('div', 'pseat' + (info.usable ? '' : ' off')), who = el('div', 'pwho'), dot = el('span', 'pdot');\n                    dot.style.background = info.dot;\n                    dot.setAttribute('aria-hidden', 'true');\n                    var label = el('div', 'pname');\n                    label.appendChild(el('span', 'pn', info.name));\n                    label.appendChild(el('span', 'pf', info.usable ? antText(info.ants) + ', ' + hillText(info.hills) : why(info)));\n                    who.appendChild(dot); who.appendChild(label);\n                    var set1 = el('div', 'pchoices'), g = { seat: seat, inputs: [] };\n                    set1.setAttribute('role', 'radiogroup');\n                    set1.setAttribute('aria-label', info.name);\n                    CHOICES.forEach(function (c) {\n                        var lab = el('label', 'pc'), input = el('input');\n                        input.type = 'radio'; input.name = 'pseat-' + seat; input.value = c[0];\n                        input.addEventListener('change', function () { if (input.checked) set(seat, c[0]); });\n                        lab.appendChild(input);\n                        lab.appendChild(el('span', '', c[1]));\n                        set1.appendChild(lab);\n                        g.inputs.push(input);\n                    });\n                    groups.push(g);\n                    row.appendChild(who); row.appendChild(set1); list.appendChild(row);\n                });\n                botsPanel.appendChild(list);\n                if (v.heavy) botsPanel.appendChild(warning());              // (under the intro, above the seats, so that a phone shows it without scrolling)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_warning_not_a_status",
+      "file": "web/front/mapmaker_play.js",
+      "old": "w.setAttribute('role', 'status'); return w;",
+      "new": "return w;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_words",
+      "file": "web/front/mapmaker_play.js",
+      "old": "so a game may run slowly, especially on phones and older computers.",
+      "new": "so a game may be slow.",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_numbers_without_commas",
+      "file": "web/front/mapmaker_play.js",
+      "old": "function commas(n) { return String(n).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ','); }",
+      "new": "function commas(n) { return String(n); }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_room_button_off",
+      "file": "web/front/mapmaker_play.js",
+      "old": "startButton.disabled = false; startButton.textContent = '\\u25b6 Open a room with this map';",
+      "new": "startButton.disabled = v.heavy; startButton.textContent = '\\u25b6 Open a room with this map';",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_heavy_bots_button_off",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (startButton) startButton.disabled = !go.ok;",
+      "new": "if (startButton) startButton.disabled = !go.ok || v.heavy;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
     }
   ]
 }

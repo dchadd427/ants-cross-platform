@@ -58,6 +58,12 @@ const usable = (v) => v.seats.map((s) => (s.usable ? 1 : 0)).join('');
 function verdictChecks() {
     let v = verdictOf();
     check(v.ok && v.seats.length === 4 && usable(v) === '1111', 'four colors with ants and a hill: all four can play');
+    check(v.ants === 12 && v.heavy === false, 'the ants are the start markers of the four colors added up (12 here), and 12 is not heavy');
+    v = verdictOf({ teams: [[100, 16], [100, 16], [100, 16], [1, 0]] });
+    check(v.ok && usable(v) === '1110' && v.ants === 301 && v.heavy === true, 'a color that cannot play (no hill) still has its start markers counted, as the server counts them: 301 is heavy');
+    v = verdictOf({ teams: [[100, 16], [100, 16], [100, 16], [0, 16]] });
+    check(v.ok && v.ants === 300 && v.heavy === false, '300 is not heavy');
+    v = verdictOf();
     equal(v.seats.map((s) => [s.seat, s.name, s.ants, s.hills]), [[0, 'Green', 3, 1], [1, 'Red', 3, 1], [2, 'Blue', 3, 1], [3, 'Black', 3, 1]], 'the seats are the game\'s own: Green 0, Red 1, Blue 2, Black 3, with their ants and hills');
     check(verdictOf({ rows: 90 }).ok && !verdictOf({ rows: 91 }).ok, 'Classic: ninety rows play, ninety-one do not');
     // an Extended map up to 512 x 512 (262,144 cells, 1,024 a side) plays; one bigger is refused with a way to a Classic copy
@@ -448,6 +454,39 @@ function dialogChecks() {
     check(!!mr && p.opened[0][1] === '_blank', 'With other players opens /lobby.html?testroom=<id> in a new tab');
     const rrec = mr && p.win.antsTestGameHandoff(mr[1]);
     check(rrec && rrec.name === 'Mosh Pit' && digest(rrec.bytes) === before && rrec.bytes !== bytes, 'the lobby tab receives a copy of the open map bytes');
+    const warnings = (p, panel) => all(p, panel + ' .play-status').filter((n) => n.textContent.indexOf('may run slowly') >= 0);
+    equal([warnings(p, '.play-panel-bots').length, warnings(p, '.play-panel-friends').length], [0, 0], 'a map of 12 ants has no word about ants in either panel');
+    // a map of more than 300 start ants (all colors together): a warning in both tabs, under the intro, nothing refused and nothing turned off; 300 is not heavy
+    for (const [ants, heavy] of [[300, false], [301, true], [6000, true]]) {
+        const per = [Math.floor(ants / 4), Math.floor(ants / 4), Math.floor(ants / 4), ants - 3 * Math.floor(ants / 4)];
+        const big = answers({ teams: per.map((n) => [n, 16]) });
+        const count = ants === 6000 ? '6,000' : String(ants);
+        const word = 'This map starts with ' + count + ' ants, so a game may run slowly, especially on phones and older computers.';
+        p = pageOf();
+        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } }));
+        const bots = warnings(p, '.play-panel-bots'), others = warnings(p, '.play-panel-friends');
+        if (!heavy) {
+            equal([bots.length, others.length], [0, 0], ants + ' ants: no warning in either panel');
+        } else {
+            equal([bots.map((n) => n.textContent), others.map((n) => n.textContent)], [[word], [word]], ants + ' ants: the same warning in both panels');
+            check(bots[0].className === 'play-status no' && bots[0].getAttribute('role') === 'status' && others[0].className === 'play-status no', ants + ' ants: with the warning classes of the dialog');
+            const kids = q(p, '.play-panel-bots').children, at = kids.indexOf(bots[0]);
+            check(at > 0 && kids[at - 1].className === 'play-lead' && kids[at + 1].className === 'play-quick', ants + ' ants: against bots the warning is directly under the intro and above Quick, before the seats (a phone shows it without scrolling)');
+            const fkids = q(p, '.play-panel-friends').children, fat = fkids.indexOf(others[0]);
+            check(fat > 0 && fkids[fat - 1].className === 'play-fcard', ants + ' ants: with other players the warning is directly under the map card, above the colors');
+        }
+        check(!startButton(p).disabled && /Start the game/.test(startButton(p).textContent) && all(p, '.play-panel-bots .play-status').some((n) => /^You and 1 bot/.test(n.textContent)), ants + ' ants: the game against bots can be started');
+        all(p, '.play-tab')[1].click();
+        check(!startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), ants + ' ants: the room button is on');
+        startButton(p).click();
+        const room = /^\/lobby\.html\?testroom=([a-z0-9]{12})$/.exec((p.opened[0] || [])[0] || '');
+        check(p.opened.length === 1 && !!room, ants + ' ants: and it opens the room (nothing is refused)');
+        p = pageOf();
+        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } }));
+        startButton(p).click();
+        check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: the game against bots opens the game page');
+    }
+    check(Play.HEAVY_START_ANTS === 300 && Play.heavyText(1234567) === 'This map starts with 1,234,567 ants, so a game may run slowly, especially on phones and older computers.', 'the threshold is 300 and the words write the number with thousands separators');
     equal(digest(bytes), before, 'at the end the open file is still as it was');
 }
 
