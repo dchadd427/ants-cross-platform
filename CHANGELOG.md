@@ -27,11 +27,11 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **The Picture dropdown now opens in fullscreen.** Watching a replay or a live match in fullscreen with the mouse held (the default, "Locked"), a click on the dropdown in the Picture window did nothing: the browser's own list cannot be opened by the game's held mouse. The control is now the page's own button and list, so a click or a tap opens it and a click or a tap on a shape chooses it, in fullscreen, in the settings menu (Esc), under the game and in the Picture window, on every browser. It looks as before.
-- **Keys:** Enter, Space, ArrowDown or ArrowUp open the list; the arrows, Home, End and a letter move the mark; Enter or Space chooses; Esc closes the list and only the list (the Picture window or the settings menu stays open). On a closed dropdown the arrow keys no longer change the picture (they did on Windows and Linux); they open the list, the same on every browser. The front page's Picture row is unchanged.
+- **Keys:** Enter, Space, ArrowDown or ArrowUp open the list; the arrows, Home, End, a letter or a number ("4" for Classic 4:3) move the mark; Enter or Space chooses; Esc closes the list and only the list (the Picture window or the settings menu stays open). On a closed dropdown the arrow keys no longer change the picture (they did on Windows and Linux); they open the list, the same on every browser. The front page's Picture row is unchanged.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9ebb43d9...7ab10a6c)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...025710cf)
 
 ## v0.12.126 - 2026-10-24 - Orders for big selections
 
