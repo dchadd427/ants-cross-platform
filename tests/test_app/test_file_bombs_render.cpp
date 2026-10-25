@@ -44,7 +44,6 @@ struct Image {
     int w{0};
     int h{0};
     std::vector<uint8_t> px;   // RGBA8
-    Image() = default;
     Image(int width, int height) : w(width), h(height), px(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u, 0u) {}
     uint8_t* at(int x, int y) { return &px[(static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 4u]; }
 };

@@ -5,7 +5,7 @@
 # Integration"); the tiers of tests and the release procedure: docs/WORKFLOW.md.
 #
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
-# application), then the self-tests of the four tools (map_sweep, bot_arena, replay_tool, lvl_tool; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
+# application), then the self-tests of the four tools (map_sweep, bot_arena, replay_tool, lvl_tool; bot_watch and gen_food_footprints are only built, so that no change breaks them unseen; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
 # (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
 # tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
 # --asan, locally) and the browser-based checks are opt-in (docs/TESTING.md).
@@ -73,7 +73,7 @@ jobs:
         id: build
         run: |
           cmake --build build -- -k 0
-          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool -- -k 0
+          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool bot_watch gen_food_footprints -- -k 0
           ccache -s
 
       - name: Build the E2E runner
@@ -185,7 +185,7 @@ jobs:
         id: build
         run: |
           cmake --build build -- -k 0
-          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool -- -k 0
+          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool bot_watch gen_food_footprints -- -k 0
           ccache -s
 
       - name: Build the E2E runner
@@ -299,7 +299,7 @@ jobs:
         id: build
         run: |
           cmake --build build
-          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool
+          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool bot_watch gen_food_footprints
 
       - name: Build the E2E runner (Release)
         id: build_e2e
@@ -353,7 +353,7 @@ jobs:
       - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html matches.html match.html live.html matches.css history_page.js replay_stats.css replay_page.js map_files.js index.js index.wasm index.data match_stats.js match_stats.css countdown_button.js changelog.html death_map.js death_map.css front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/lobby_chat.js front/lobby_chat.css front/map_picker.css front/classic.css front/rematch.js front/rematch.css front/game_modes.js front/game_type.js front/game_type.css mapmaker.html front/mapmaker.css front/mapmaker_file.js front/mapmaker_tiles.js front/mapmaker_solid.js front/mapmaker_palette.js front/mapmaker_edit.js front/mapmaker_blocks.js front/mapmaker_objects.js front/mapmaker_view.js front/mapmaker_sizes.js front/mapmaker_checks.js front/mapmaker_dialog.js front/mapmaker_props.js front/mapmaker_crop.js front/mapmaker_convert.js front/mapmaker_canvas.js front/mapmaker_tools.js front/mapmaker_app.js front/mapmaker_ground.js front/mapmaker_sprites.js front/mapmaker_edges.js front/mapmaker_ants.js front/mapmaker_ants.css front/mapmaker_pickup.js front/mapmaker_pickup.css front/mapmaker_play.js front/mapmaker_play.css front/test_game.js mapmaker_atlas/atlas.json mapmaker_atlas/ground.png mapmaker_atlas/objects.png asset_catalog/sprites/sprite_0726.png lvl_core.js lvl_core.wasm lvl_core_api.js shapes.js shape_picker.js admin.html admin.css admin_page.js game_menu.js game_menu.css && cmp index.html play.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html matches.html match.html live.html matches.css history_page.js replay_stats.css replay_page.js map_files.js index.js index.wasm index.data match_stats.js match_stats.css countdown_button.js changelog.html death_map.js death_map.css front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/lobby_chat.js front/lobby_chat.css front/map_picker.css front/classic.css front/rematch.js front/rematch.css front/game_modes.js front/game_type.js front/game_type.css mapmaker.html front/mapmaker.css front/mapmaker_file.js front/mapmaker_tiles.js front/mapmaker_solid.js front/mapmaker_palette.js front/mapmaker_edit.js front/mapmaker_blocks.js front/mapmaker_objects.js front/mapmaker_view.js front/mapmaker_sizes.js front/mapmaker_checks.js front/mapmaker_dialog.js front/mapmaker_props.js front/mapmaker_crop.js front/mapmaker_convert.js front/mapmaker_canvas.js front/mapmaker_tools.js front/mapmaker_app.js front/mapmaker_ground.js front/mapmaker_sprites.js front/mapmaker_edges.js front/mapmaker_ants.js front/mapmaker_ants.css front/mapmaker_pickup.js front/mapmaker_pickup.css front/mapmaker_play.js front/mapmaker_play.css front/test_game.js mapmaker_atlas/atlas.json mapmaker_atlas/ground.png mapmaker_atlas/objects.png asset_catalog/sprites/sprite_0726.png lvl_core.js lvl_core.wasm lvl_core_api.js shapes.js shape_picker.js admin.html admin.css admin_page.js game_menu.js game_menu.css front/mapmaker_store.js front/mapmaker_mine.js front/mapmaker_submit.js && cmp index.html play.html'
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html matches.html match.html live.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && grep -Eo "id=.?game-build-date.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
 
       # The map core's module (docs/MAP_FORMAT.md, "In the browser"), taken out of the image that was just built and run in node on the library's maps: its answers are the native core's, byte

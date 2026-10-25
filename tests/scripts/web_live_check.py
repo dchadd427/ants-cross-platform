@@ -25,7 +25,6 @@ import time
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import web_aspect_check as aspect                                            # noqa: E402
 from web_aspect_check import Browser, NotReachable, Tab                    # noqa: E402
 from web_hidden_check import find_browser                                    # noqa: E402
 

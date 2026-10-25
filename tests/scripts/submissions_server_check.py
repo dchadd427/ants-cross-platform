@@ -15,7 +15,6 @@ import shutil
 import signal
 import socket
 import subprocess
-import sys
 import tempfile
 import time
 import unittest

@@ -8,7 +8,6 @@ play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code tha
     the live glue (the id's shape check, the doors it asks, the controls it calls, the words of its notes), nothing made from text that a recording or the door carries (a name is text), the file's name
     shape shared by the page, the nginx rules and the store, and that the image, the CI and the local web build carry the new files.
 """
-import json
 import os
 import re
 import shutil
@@ -390,7 +389,7 @@ class TheCameraButton(unittest.TestCase):
     def test_what_the_device_chose_is_kept_in_one_key_in_a_try_and_taking_the_camera_is_not_a_choice(self):
         self.assertIn("var CAM_KEY = 'ants.cam';", self.script)
         for call in ("storage.getItem(CAM_KEY)", "storage.setItem(CAM_KEY"):
-            line = next(l for l in self.script.splitlines() if call in l or call in l.replace("\n", ""))
+            self.assertTrue(any(call in l for l in self.script.splitlines()), call)
             self.assertTrue(self.script.index(call) > self.script.rindex("try", 0, self.script.index(call)), call)
         press = self.script[self.script.index("press: function"):self.script.index("wire: function")]
         self.assertIn("camSave(env.storage, pref);", press)

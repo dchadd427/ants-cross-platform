@@ -1,6 +1,5 @@
 """The Ants tool's box in the real browser (tests/scripts/web_mapmaker_browser.py, part `ants`; docs/MAP_EDITOR.md, "Ants: one at a time, group, mix"): kept in its own file so that neither passes the
 line limit of the test files. The page helpers of the main file (wait_for, make_extended, the Page class) are handed in by `run_ants`. The bytes are what Download hands over, read here with struct."""
-import json
 import os
 import struct
 import time
@@ -168,7 +167,6 @@ def run_ants(page, tab, args, check, env, edges_bytes, edges_js):
 
 
 def run_ants_phone(page, tab, args, check, env, edges_bytes, edges_js):
-    make_extended = env["make_extended"]
     print("[web map maker] the Ants tool, a phone held upright (390 x 844)")
     check(page.open(edges_js) and page.ready(), "the page starts")
     page.ev(edges_js)

@@ -2,7 +2,6 @@
 Real mouse events with the Shift and Ctrl modifiers of the DevTools protocol (pointer events with shiftKey and ctrlKey) drive Ground, Objects and Erase; the bytes are what Download hands over, read
 here with struct. A stroke with Shift or Ctrl keeps to one line through its first cell, across or down; with no key it is free; Command and Alt alone change nothing; Hills, Pick up and Pan are
 untouched (a drag looks around); a zoomed and panned view; the edge of the map; no text is selected by a Shift drag. The page helpers of the main file (wait_for, the Page class) are handed in."""
-import json
 import struct
 import time
 

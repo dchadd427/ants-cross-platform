@@ -661,7 +661,6 @@ struct Picture {
     int32_t w{0};
     int32_t h{0};
     std::vector<uint8_t> rgba;
-    bool ok() const { return w > 0 && h > 0; }
     bool is(int32_t x, int32_t y, uint8_t r, uint8_t g, uint8_t b) const {
         if (x < 0 || y < 0 || x >= w || y >= h) return false;
         const size_t i = (static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 4u;

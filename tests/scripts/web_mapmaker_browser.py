@@ -86,7 +86,6 @@ import argparse
 import base64
 import json
 import os
-import shutil
 import struct
 import sys
 import tempfile
@@ -425,7 +424,6 @@ def run_sprites(tab, args, check):
     page.key("Escape")
     check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Escape closes the sheet")
     check(page.ev("document.getElementById('palette-name').textContent") == "Dirt next to gravel: north edge (dg03a)", "the line under the palette names it: %s" % page.ev("document.getElementById('palette-name').textContent"))
-    before = spread(page, *gravel_cell)
     a = page.cell_point(*gravel_cell)
     page.tab.click(*a)
     time.sleep(0.4)
@@ -1552,7 +1550,6 @@ def run_part(part, tab, args, check, tiny, junk):
             page.shot(args.shots, "mapmaker-convert-copy-phone-%dx%d" % (w, h))
             page.ev("document.querySelector('.dlg-foot .btn:first-child').click()")
             # an Extended map that does not fit: the reasons sheet and the crop screen
-            page.press_act("new") if False else None
             page.ev("document.querySelector('[data-act=menu]').click()")
             wait_for(lambda: page.ev("!!document.querySelector('.menulist')"))
             page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent === 'New'; })[0].click()")
@@ -1607,7 +1604,6 @@ def run_part(part, tab, args, check, tiny, junk):
         wait_for(lambda: page.ev("!!window.__listed") or True)
         page.press_act("save")
         check(dialog(page, "Save as a new map") and page.ev("document.querySelector('.cname input').value") == "My map 2", "Save as new... opens the dialog with the next free name (My map 2)")
-        page.press_act("save") if False else None
         page.ev("document.querySelector('.dlg-foot .btn:first-child').click()")
         page.choose_file(tiny)
         check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
@@ -1923,7 +1919,7 @@ def run_part(part, tab, args, check, tiny, junk):
         check(posts[0]["length"] == tiny_size and posts[0]["type"] == "application/octet-stream" and posts[0]["auth"] == "", "the body is the file's own bytes (%d), as a file, with no token the first time (%s)" % (tiny_size, posts[0]))
         check("Sent. Waiting for approval." in text_of(page, ".dlg") and "\u201cSunny Picnic\u201d is with the owner now." in text_of(page, ".dlg"), "'Sent. Waiting for approval.' and the name: %s" % text_of(page, ".dlg"))
         page.shot(args.shots, "mapmaker-submit-sent")
-        stored = page.ev("(function () { window.__k = undefined; var q = indexedDB.open('ants-mapmaker-sent', 1); q.onsuccess = function () { var g = q.result.transaction('sent', 'readonly').objectStore('sent').getAll(); g.onsuccess = function () { window.__k = g.result.map(function (r) { return r.id.charAt(0) !== '#' ? 'map:' + r.name + ':' + (r.bytes && r.bytes.length) : r.id; }).sort().join('|'); }; }; })()")
+        page.ev("(function () { window.__k = undefined; var q = indexedDB.open('ants-mapmaker-sent', 1); q.onsuccess = function () { var g = q.result.transaction('sent', 'readonly').objectStore('sent').getAll(); g.onsuccess = function () { window.__k = g.result.map(function (r) { return r.id.charAt(0) !== '#' ? 'map:' + r.name + ':' + (r.bytes && r.bytes.length) : r.id; }).sort().join('|'); }; }; })()")
         wait_for(lambda: page.ev("window.__k !== undefined"), 5, 0.05)
         check(page.ev("window.__k") == "#maker|#tokens|map:Sunny Picnic:%d" % tiny_size, "the browser keeps the token, the player's name and the player's own copy: %s" % page.ev("window.__k"))
         click_text(page, ".dlg-foot button", "See my submissions")
@@ -1933,7 +1929,6 @@ def run_part(part, tab, args, check, tiny, junk):
         check("Waiting for approval" in rows(page)[0] and "Sunny Picnic" in rows(page)[0] and "Classic map" in rows(page)[0] and "31 x 31" in rows(page)[0] and "Sent today" in rows(page)[0], "Waiting, with its name, kind, size and day: %s" % rows(page)[0])
         check(page.ev("[].map.call(document.querySelectorAll('#mine-list .mrow button'), function (b) { return b.textContent; }).join('|')") == "Withdraw" and "never replaced" in text_of(page, "#mine-note"), "Withdraw only, and the line 'An approved map is never replaced'")
         # the four answers
-        first = json.loads(srv(page, "list[0]"))
         page.ev("""(function () { var s = window.__srv, a = s.list[0], now = Math.floor(Date.now() / 1000);
             s.list = [a,
               {id: 'b'.repeat(32), state: 'approved', kind: 'extended', name: 'Big Lake', width: 400, height: 300, sent_at: now - 86400 * 3, renamed_by_owner: true, approved_name: 'Big Lake 2', message: 'The name was taken. <b>Thank you</b> for the map!'},
@@ -2306,7 +2301,6 @@ def run_part(part, tab, args, check, tiny, junk):
             box = page.box("#map")
             cx, cy = box["x"] + box["w"] * 0.35, box["y"] + box["h"] * 0.7           # (left and low: the small map covers the top right)
             scale = page.state()["scale"]
-            fingers = {}
 
             def touch(kind, points):
                 tab.call("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [{"x": x, "y": y, "id": i, "radiusX": 10, "radiusY": 10, "force": .5} for i, (x, y) in points.items()]})

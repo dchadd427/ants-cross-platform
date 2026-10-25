@@ -165,7 +165,7 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     check(small == 0, "every answer and button of the dialog is at least 44 pixels high (%s are not)" % small)
     page.shot(args.shots, shots_prefix + "-desktop-dialog")
     known = {t["targetId"] for t in pages_of(dt)}
-    before = work_slot(page, mod)
+    work_slot(page, mod)
     dialog_button(page, "Start the game")
     game = game_tab(mod, dt, known, (1280, 800))
     check(game is not None, "Start opens a tab of its own at the game page")
