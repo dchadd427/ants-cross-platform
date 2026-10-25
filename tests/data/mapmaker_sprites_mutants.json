@@ -497,6 +497,41 @@
    "old": "chip: chip, ghost: ghost,",
    "new": "chip: chip,",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "canvas_settle_look_not_asked",
+   "file": "web/front/mapmaker_canvas.js",
+   "old": "measure(); look(view, w, h); View.clamp(view, file, w, h); paint();",
+   "new": "measure(); View.clamp(view, file, w, h); paint();",
+   "test": "node tests/scripts/web_mapmaker_edit_check.js"
+  },
+  {
+   "id": "canvas_settle_no_clamp",
+   "file": "web/front/mapmaker_canvas.js",
+   "old": "measure(); look(view, w, h); View.clamp(view, file, w, h); paint();",
+   "new": "measure(); look(view, w, h); paint();",
+   "test": "node tests/scripts/web_mapmaker_edit_check.js"
+  },
+  {
+   "id": "canvas_settle_always_looks",
+   "file": "web/front/mapmaker_canvas.js",
+   "old": "if (!file || Math.round(r.width) === w && Math.round(r.height) === h) return;",
+   "new": "if (!file) return;",
+   "test": "node tests/scripts/web_mapmaker_edit_check.js"
+  },
+  {
+   "id": "canvas_settle_not_measured",
+   "file": "web/front/mapmaker_canvas.js",
+   "old": "measure(); look(view, w, h); View.clamp(view, file, w, h); paint();",
+   "new": "look(view, w, h); View.clamp(view, file, w, h); paint();",
+   "test": "node tests/scripts/web_mapmaker_edit_check.js"
+  },
+  {
+   "id": "canvas_minimap_never_small",
+   "file": "web/front/mapmaker_canvas.js",
+   "old": "env.minimap.classList.toggle('tiny', h < 300);",
+   "new": "env.minimap.classList.toggle('tiny', h < 0);",
+   "test": "node tests/scripts/web_mapmaker_edit_check.js"
   }
  ]
 }

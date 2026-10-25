@@ -25,6 +25,8 @@
 //   L  with a built core: the check of the map says the same after a move, a copy and a delete as it said before (no new finding), on the library
 //   M  big maps (512 x 512) stay fast: a pick, the verdict of a ghost and the area of the whole map are measured
 //   N  a drag is put down where the ghost is when the mouse or the finger is let go (one change, one Undo; red: the thing goes back to where it was picked up, nothing written, "Put back: ..." says why; Escape, a cancelled or lost pointer, a second lift, Done while held; Done on a red place keeps it in hand; a copy, an area, a group)
+//   P  the bar's height holds while a thing is on its way (the map does not strobe under the pointer), and the page follows the bar's own size (a phone turned, a window resized) with an observer that is let go of with the tool
+//   O  the bar is a row of its own under the map: it comes after the map and before the line under it, the page is told its height, and the map is given a way to bring a picked thing (or the ghost, when no pointer drives it) above the bar
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -153,14 +155,16 @@ function page(file, opts) {
     const doc = strictDocument(), el = (tag) => doc.createElement(tag);
     const wrap = el('div'), cv = el('div'), map = el('canvas'), cvbar = el('div');
     wrap.appendChild(cv); wrap.appendChild(cvbar); cv.appendChild(map); doc.body.appendChild(wrap);
+    cv.nextSibling = cvbar;          // (the page's order: the map, the line under it)
+    doc.body.style.setProperty = (k, v) => { log.vars[k] = v; };
     map.offsetLeft = 0; map.offsetTop = 0;
     let ed = editor(file), view = View.create(file, opts.width || 600, opts.height || 400), cursor = null, busy = false, stroking = false;          // (`stroking`: the real page takes no change while a stroke goes on, tools.act)
-    const log = { acts: 0, refused: 0, refreshes: 0, said: [], focus: 0, frames: [], dialogs: [] };
+    const log = { acts: 0, refused: 0, refreshes: 0, said: [], focus: 0, frames: [], dialogs: [], settles: [], vars: {} };
     const env = {
-        doc, win: { devicePixelRatio: 1, requestAnimationFrame: null }, host: { map, cv, hint: el('p') },
+        doc, win: Object.assign({ devicePixelRatio: 1, requestAnimationFrame: null }, opts.win || {}), host: { map, cv, hint: el('p') },
         file: () => ed.file, act: (change) => { if (stroking) { log.refused++; return false; } log.acts++; const d = ed.act(change); if (d) pickRef.refresh(); return !!d; },
         say: (t, m) => log.said.push(t + ': ' + m), sprites: () => null, view: () => ({ view, cursor, width: opts.width || 600, height: opts.height || 400 }),
-        refresh: () => { log.refreshes++; }, focus: () => { log.focus++; }, busy: () => busy,
+        settle: (keep) => { log.settles.push(keep); }, refresh: () => { log.refreshes++; }, focus: () => { log.focus++; }, busy: () => busy,
         dialogs: { open: (spec) => { const body = el('div'); spec.build(body, { close() {} }); log.dialogs.push({ spec, body }); } }
     };
     if (opts.sprites) env.sprites = opts.sprites;
@@ -171,7 +175,7 @@ function page(file, opts) {
     const p = Object.assign({}, real, { begin: (c) => { const r = real.begin(c); if (r) stroking = true; return r; }, end: (w) => { stroking = false; return real.end(w); }, cancel: () => { stroking = false; return real.cancel(); }, abandon: () => { stroking = false; return real.abandon(); } });
     const buttons = () => { const o = {}; bar.querySelectorAll('.pk-b').length; for (let i = 0; i < bar.querySelectorAll('.pk-b').length; i++) { const b = bar.querySelectorAll('.pk-b')[i]; o[b.getAttribute('data-k')] = b; } return o; };
     const api = {
-        doc, pick, p, bar, env, log, ed: () => ed, file: () => ed.file, buttons, map, over: pick.over,
+        doc, pick, p, bar, env, log, cv, cvbar, wrap, ed: () => ed, file: () => ed.file, buttons, map, over: pick.over,
         text: () => bar.textContent, hidden: () => bar.hidden,
         press: (key) => { const b = buttons()[key]; if (!b) throw new Error('no button ' + key + ' in: ' + Object.keys(buttons()).join(',')); b.click(); },
         has: (key) => !!buttons()[key], off: (key) => !!buttons()[key].disabled,
@@ -1050,6 +1054,7 @@ function caseI() {
         check(p.begin({ row: 3, column: 3 }) === true, 'a press on a hill starts' + tag);
         p.end();
         check(t.pickPage().state().mode === 'picked' && t.pickBar().hidden === false, 'a tap picks it' + tag);
+        check(t.log.settled.length >= 1 && typeof t.log.settled[t.log.settled.length - 1] === 'function', 'the bar tells the page\'s canvas that its size may have changed (and how to bring the pick into view)' + tag);
         check(t.doc.key('ArrowRight', { target: t.canvasNode }) !== null && p.key({ key: 'ArrowRight' }) === true && t.pickPage().state().mode === 'moving', 'a key of the canvas goes to the tool first' + tag);
         p.key({ key: 'Enter' });
         check(t.log.edits === 1 && t.tools.state().history.strokes === 1, 'Done is one step of the page\'s history, and the page is told' + tag);
@@ -1086,7 +1091,7 @@ function caseI() {
 // the page's own Tools with the real Pick up part and a canvas that answers state()
 function toolsPage(file, opts) {
     opts = opts || {};
-    const doc = strictDocument(), el = (tag) => doc.createElement(tag), log = { dirty: [], edits: 0, minis: 0, refreshes: 0 };
+    const doc = strictDocument(), el = (tag) => doc.createElement(tag), log = { dirty: [], edits: 0, minis: 0, refreshes: 0, settled: [] };
     const autoBtn = el('button'), autoMob = el('button');
     autoBtn.appendChild(el('span')); autoBtn.appendChild(el('span')); autoMob.appendChild(el('span')); autoMob.appendChild(el('span'));
     const wrap = el('div'), cv = el('div'), map = el('canvas'), cvbar = el('div'); wrap.appendChild(cv); wrap.appendChild(cvbar); cv.appendChild(map); doc.body.appendChild(wrap);
@@ -1098,7 +1103,7 @@ function toolsPage(file, opts) {
     let current = file, painter = null, pickPart = null;
     const out = { doc, host, log, loads: 0, said: [], failLoad: !!opts.failLoad, canvasNode: map };
     const view = View.create(file, 600, 400);
-    const canvas = { setPainter: (p) => { painter = p; }, refresh: () => { log.refreshes++; }, markDirty: (l) => { log.dirty.push(l.slice()); }, refreshMini: () => { log.minis++; }, isStroking: () => false, state: () => ({ view, cursor: null, width: 600, height: 400 }), focus: () => {} };
+    const canvas = { setPainter: (p) => { painter = p; }, refresh: () => { log.refreshes++; }, markDirty: (l) => { log.dirty.push(l.slice()); }, refreshMini: () => { log.minis++; }, isStroking: () => false, state: () => ({ view, cursor: null, width: 600, height: 400 }), settle: (keep) => { log.settled.push(keep); }, focus: () => {} };
     const tools = Tools.create({
         doc, win: { devicePixelRatio: 1 }, canvas, host, file: () => current, busy: () => false, dialogs: { open: () => ({ close() {} }) }, say: (t, m) => out.said.push(t + ': ' + m),
         rebase: (bytes) => { current = File.parse(bytes); return current; }, onEdit: () => { log.edits++; },
@@ -1522,6 +1527,153 @@ function caseN() {
     g.undo(); check(same(g.file().bytes, wasG), 'in one step');
 }
 
+// ================= O =================
+// The bar is a row of its own under the map, so the map changes its size when the bar comes, goes or changes its height (mapmaker_canvas.js settle): the tool puts the view where it should be: the top row and
+// the scale stay, and a picked thing that the bar would cover is brought into view; never while the pointer drives the ghost, which is under the pointer already.
+function caseO() {
+    const f = File.parse(mapWith(9, 120, 80, [], [], []));
+    putHill(f, 100, 40, RED_HILL);          // (rows 100 to 103, columns 40 to 43)
+    const pg = page(f, { width: 400, height: 300 }), last = () => pg.log.settles[pg.log.settles.length - 1];
+    const kids = pg.wrap.children;
+    check(kids.indexOf(pg.cv) + 1 === kids.indexOf(pg.bar) && kids.indexOf(pg.bar) + 1 === kids.indexOf(pg.cvbar), 'the bar is its own row: after the map, before the line under it');
+    check(pg.cv.children.indexOf(pg.bar) < 0, 'and not over the map');
+    check(pg.log.vars['--pk-h'] === '0px' && typeof last() === 'function', 'with nothing picked the bar has no height, and the map is still told (it may have been higher a moment ago)');
+    pg.bar.offsetHeight = 150; pg.tap(101, 41);
+    check(pg.log.vars['--pk-h'] === '150px' && typeof last() === 'function', 'a pick: the page is told how high the bar is (a phone leaves that room below the page), and the map is told how to look');
+    const at = (cy, w, h, cx) => { const v = { cx: cx === undefined ? 42 : cx, cy, scale: 20 }; last()(v, w || 400, h || 300); return v; };
+    const edge = (v, row, h) => View.toScreen(v, 400, h || 300, row, 0).y, side = (v, col) => View.toScreen(v, 400, 300, 0, col).x;
+    check(at(101).cy === 101 && at(101).cx === 42, 'a hill that is in view does not move the map');
+    const low = at(96);
+    check(Math.abs(edge(low, 104) - (300 - 40)) < 1e-9 && low.cx === 42, 'a hill under the bar is brought up until its foot is one margin above the foot of the map (cy ' + low.cy + ')');
+    const high = at(106);
+    check(Math.abs(edge(high, 100) - 40) < 1e-9, 'one above the map is brought down to a margin below its top (cy ' + high.cy + ')');
+    check(Math.abs(side(at(101, 400, 300, 65), 40) - 40) < 1e-9 && Math.abs(side(at(101, 400, 300, 15), 44) - 360) < 1e-9, 'and sideways the same way: the left side of a hill that is left of the map is a margin inside the left edge, the right side of one that is right of it a margin inside the right edge');
+    const lower = at(101, 400, 200);
+    check(Math.abs(edge(lower, 104, 200) - (200 - 40)) < 1e-9 && Math.abs(edge(lower, 100, 200) - 80) < 1e-9, 'a map that got lower: the hill is still in view (cy ' + lower.cy + ')');
+    // a thing taller than the map has its start in view
+    const small = page(f, { width: 400, height: 100 }), lastS = () => small.log.settles[small.log.settles.length - 1];
+    small.bar.offsetHeight = 80; small.tap(101, 41);
+    const tallAt = (cy) => { const v = { cx: 42, cy, scale: 20 }; lastS()(v, 400, 100); return View.toScreen(v, 400, 100, 100, 0).y; };
+    check(Math.abs(tallAt(101) - 40) < 1e-9 && Math.abs(tallAt(99) - 40) < 1e-9, 'a thing taller than the map has its start in view, a margin inside its top, from above and from below');
+    // the ghost is looked at too (a tap put it down above the picked place), and not while the pointer drives it
+    pg.press('move'); pg.tap(80, 50);
+    const ghost = pg.state(), v = { cx: 42, cy: 101, scale: 20 };
+    last()(v, 400, 300);
+    check(ghost.dr !== 0 && Math.abs(edge(v, 100 + ghost.dr) - 40) < 1e-9, 'a thing on its way is looked at where the ghost is: ' + JSON.stringify([ghost.dr, ghost.dc, v.cy]));
+    const idle = () => at(96).cy === 96;          // (the hill would be brought up: it is not looked at)
+    pg.p.hover({ row: 90, column: 50 });
+    check(idle(), 'while the mouse drives the ghost the map is not moved (it is under the mouse)');
+    pg.p.hover(null);
+    pg.press('cancel');
+    pg.tap(101, 41);
+    pg.p.begin({ row: 101, column: 41 }); pg.p.extend({ row: 101, column: 41 }, { row: 90, column: 50 });
+    check(idle(), 'nor while a drag goes on');
+    pg.p.end();
+    pg.press('cancel');
+    check(pg.hidden() && idle() && Math.abs(at(30, 400, 200).cy - (30 - 100 / 40)) < 1e-9 && pg.log.vars['--pk-h'] === '0px', 'the bar goes: the map keeps its top row (the middle moves by half of the change), and looks at nothing; the page has no room to keep');
+    pg.bar.offsetHeight = undefined;
+    pg.tap(101, 41);
+    check(pg.log.vars['--pk-h'] === '0px', 'a bar that has no height says 0');
+}
+
+// ================= P =================
+// The sentence sets the bar's height (a place where it cannot go says more than one where it can), and the bar sets the map's: a model of the page's layout (the bar is 150 high, 200 with the warning, 40 more when it is narrow,
+// never lower than its min-height) and a map that is 500 minus the bar.
+function barPage(opts) {
+    const f = File.parse(mapWith(9, 120, 80, [], [], []));
+    putHill(f, 100, 40, RED_HILL);
+    const pg = page(f, { width: 400, height: 300, win: opts && opts.win });
+    const model = { width: 800 };
+    Object.defineProperty(pg.bar, 'offsetWidth', { get: () => model.width });
+    Object.defineProperty(pg.bar, 'offsetHeight', { get: () => (pg.bar.hidden ? 0 : Math.max((pg.bar.querySelector('.pk-warn') ? 200 : 150) + (model.width < 500 ? 40 : 0), parseFloat(pg.bar.style.minHeight) || 0)) });
+    pg.model = model;
+    pg.mapHeight = () => 500 - pg.bar.offsetHeight;
+    return pg;
+}
+function caseP() {
+    const pg = barPage(), heights = [];
+    pg.tap(101, 41); pg.press('move');
+    const lastH = () => pg.mapHeight();
+    // the pointer goes over the last rows 2 pixels at a time: a place that is red (off the map) and one that is green (a hill's height away from it) follow each other
+    for (let i = 0; i < 12; i++) { pg.p.hover({ row: i % 2 ? 0 : 60, column: 41 }); heights.push(lastH()); }
+    check(pg.warn() !== '' || heights.some((h) => h === 300), 'a red place says why in a warning, and the bar is higher for it: ' + heights.join(','));
+    check(heights.every((h, i) => i === 0 || h <= heights[i - 1]) && new Set(heights).size <= 2, 'the map is never made higher while the pointer moves: it shrinks once, not at every step (' + heights.join(',') + ')');
+    pg.p.hover({ row: 60, column: 41 });
+    check(pg.bar.querySelector('.pk-warn') === null && pg.bar.offsetHeight === 200 && pg.bar.style.minHeight === '200px', 'back on a green place the bar stays as high as it was (' + pg.bar.offsetHeight + ', min-height ' + pg.bar.style.minHeight + ')');
+    pg.press('fold'); check(pg.bar.style.minHeight === '' && pg.bar.offsetHeight === 150, 'a bar that is folded by its Hide button keeps no height');
+    pg.press('fold'); check(pg.bar.style.minHeight === '150px' && pg.bar.offsetHeight === 150, 'and holds the height that it has when it is open again');
+    pg.p.hover({ row: 0, column: 41 });
+    check(pg.bar.offsetHeight === 200, 'a place where it cannot go makes it high again: ' + pg.bar.offsetHeight);
+    pg.p.hover(null); pg.press('cancel'); pg.press('cancel');
+    check(pg.hidden() && pg.bar.style.minHeight === '' && pg.log.vars['--pk-h'] === '0px', 'the bar goes: no height is kept');
+    pg.tap(101, 41);
+    check(pg.bar.style.minHeight === '' && pg.bar.offsetHeight === 150, 'a thing that is only picked up: the bar has the height of its words (' + pg.bar.offsetHeight + ')');
+    pg.press('move'); pg.p.hover({ row: 0, column: 41 }); pg.p.hover({ row: 60, column: 41 });
+    check(pg.bar.offsetHeight === 200, 'a second move starts again from nothing: it keeps the height of this move (' + pg.bar.offsetHeight + ')');
+    pg.press('cancel');
+    check(pg.bar.style.minHeight === '' && pg.bar.offsetHeight === 150, 'Cancel: the bar has the height of its words again');
+    pg.press('move'); pg.p.hover({ row: 0, column: 41 });
+    pg.model.width = 390;          // (the phone is turned upright: the bar is narrower, its words wrap)
+    pg.p.hover({ row: 60, column: 41 });
+    check(pg.bar.offsetHeight === 190 && pg.bar.style.minHeight === '190px', 'a bar at another width is measured again, not held at the height of the old one: ' + pg.bar.offsetHeight);
+    pg.model.width = 800; pg.p.hover({ row: 61, column: 41 });
+    check(pg.bar.offsetHeight === 150 && pg.bar.style.minHeight === '150px', 'and the same when it gets wider: ' + pg.bar.offsetHeight);
+
+    // the observer: made with the tool, sees the bar, tells the page when the bar's size changed, lets go when the tool is left
+    // (its call only asks for the next frame: settling changes the bar's own height, which inside the observer's call is a change of what is watched, and the browser reports an undelivered notification at every resize)
+    const made = [], frames = [];
+    class Watcher { constructor(cb) { this.cb = cb; this.seen = []; this.gone = false; made.push(this); } observe(n) { this.seen.push(n); } disconnect() { this.gone = true; this.seen = []; } }
+    const rp = barPage({ win: { ResizeObserver: Watcher, requestAnimationFrame: (fn) => frames.push({ fn, live: true }), cancelAnimationFrame: (id) => { frames[id - 1].live = false; } } });
+    const flush = () => { for (const f of frames.slice()) if (f.live) { f.live = false; f.fn(); } };          // (the frames that are waiting now run once; every frame ever asked for stays in the list, its number is its place; the ghost's own loop asks for one at each)
+    const ping = () => { made[0].cb([]); flush(); };
+    check(made.length === 1 && made[0].seen.length === 1 && made[0].seen[0] === rp.bar, 'the tool watches the size of its bar (a ResizeObserver made with the tool)');
+    rp.tap(101, 41);
+    const settles = () => rp.log.settles.length;
+    let n = settles();
+    check(rp.log.vars['--pk-h'] === '150px', 'the page has room for the bar: ' + rp.log.vars['--pk-h']);
+    ping(); ping();
+    check(settles() === n, 'the observer is told and the size is the same: nothing is done (it cannot go round in a circle)');
+    rp.model.width = 390;          // (a phone turned upright while the bar is open: it is 40 higher, and nothing was drawn again)
+    ping();
+    check(rp.log.vars['--pk-h'] === '190px' && settles() === n + 1, 'the bar is higher with nothing drawn again: the page gets the room of the bar as it is now (' + rp.log.vars['--pk-h'] + ') and the map is told');
+    ping();
+    check(settles() === n + 1, 'and the next call with this size does nothing');
+    rp.model.width = 800; ping();
+    check(rp.log.vars['--pk-h'] === '150px' && settles() === n + 2, 'a wider bar, lower again: ' + rp.log.vars['--pk-h']);
+    rp.press('move'); rp.p.hover({ row: 0, column: 41 }); rp.p.hover({ row: 60, column: 41 });
+    n = settles(); rp.model.width = 390; ping();
+    check(rp.log.vars['--pk-h'] === '190px' && settles() === n + 1, 'while a thing is on its way, the observer sees the bar at the new width too, not at the old height held: ' + rp.log.vars['--pk-h']);
+    rp.press('cancel'); rp.press('cancel');
+    check(rp.hidden(), 'Cancel twice: the bar goes');
+    n = settles(); rp.model.width = 800; ping();
+    check(settles() === n, 'a hidden bar is not looked at');
+    rp.pick.show(false);
+    check(made[0].gone === true && made[0].seen.length === 0, 'the observer is let go of when the tool is left');
+    rp.pick.show(false);
+    check(made.length === 1, 'and leaving twice does nothing');
+    rp.pick.show(true);
+    check(made.length === 2 && made[1].seen[0] === rp.bar && made[0].gone === true, 'the tool chosen again watches again, once');
+    rp.pick.show(true);
+    check(made.length === 2, 'and choosing it twice makes no second observer');
+
+    // the observer's call settles nothing itself: it asks for one frame (however often it is told) and the frame does it; a frame that is waiting when the tool is left or the bar is gone does nothing
+    rp.tap(101, 41); n = settles(); rp.model.width = 390;
+    const asked = frames.length; made[1].cb([]); made[1].cb([]); made[1].cb([]);
+    check(settles() === n && frames.length === asked + 1, 'the observer is told three times: nothing is settled inside its call, one frame is asked for (' + (frames.length - asked) + ')');
+    flush();
+    check(rp.log.vars['--pk-h'] === '190px' && settles() === n + 1, 'and the frame settles it: ' + rp.log.vars['--pk-h']);
+    rp.press('cancel'); n = settles(); rp.model.width = 800; made[1].cb([]); flush();
+    check(rp.hidden() && settles() === n, 'a frame that comes when the bar is gone does nothing');
+    rp.tap(101, 41); rp.model.width = 390; made[1].cb([]);
+    const pending = frames[frames.length - 1];
+    rp.pick.show(false); n = settles();
+    check(pending.live === false, 'a frame that is waiting when the tool is left is cancelled');
+    let threw = null; try { pending.fn(); } catch (e) { threw = e; }
+    check(threw === null && settles() === n, 'and one that the browser did not cancel does nothing and does not throw');
+    rp.pick.show(true); rp.tap(101, 41); n = settles(); rp.model.width = 800; made[2].cb([]); flush();
+    check(made.length === 3 && settles() === n + 1, 'the tool chosen again: its new observer asks for frames again');
+}
+
 // ================= L (the core) =================
 async function caseL() {
     const js = path.join(MODULE, 'lvl_core.js');
@@ -1537,7 +1689,7 @@ async function caseL() {
 module.exports = { page, sceneBytes, mapWith, putHill, putObject, items, lay, File, Edit, Blocks, Pick };
 // (the sweep of the library, the long one, is the last: a broken copy that a short case refuses is refused at once, tests/scripts/web_mapmaker_bail.js)
 const CASES = [['A what stands on a cell', caseA], ['B a group and an area', caseB], ['C where a thing cannot go', caseC], ['W water is a hint, not a refusal', caseW], ['D the change of a move', caseD], ['E copy, delete and an area', caseE], ['F lists, limits, crowds', caseF],
-    ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['M big maps', caseM], ['N a drag is put down when the button is let go', caseN], ['K the library', () => caseK(null)]];
+    ['G the page: the bar, the ghost and the ring', caseG], ['H the keys and the pointer', caseH], ['I a map that changes, the page\'s Tools', caseI], ['J text of a file is only text', caseJ], ['M big maps', caseM], ['O the bar is a row under the map', caseO], ['P the bar holds its height, the page follows its size', caseP], ['N a drag is put down when the button is let go', caseN], ['K the library', () => caseK(null)]];
 async function run(cases) {
     for (const [name, fn] of cases) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');

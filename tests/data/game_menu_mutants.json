@@ -1040,49 +1040,105 @@
     {
       "id": "picture_dropdown_shows_the_first_entry",
       "file": "web/game_menu.js",
-      "old": "            function mark() { select.value = own.read(); }",
-      "new": "            function mark() { select.value = 'x'; }",
+      "old": "value: own.read(), onPick:",
+      "new": "value: '4:3', onPick:",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "picture_dropdown_not_in_focus_list",
       "file": "web/game_menu.js",
-      "old": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled])';",
-      "new": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';",
+      "old": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';",
+      "new": "var FOCUSABLE = 'input:not([disabled])';",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
-      "id": "picture_dropdown_no_change_handler",
+      "id": "picture_dropdown_is_not_the_pages_picker",
       "file": "web/game_menu.js",
-      "old": "select.addEventListener('change', function () { own.write(select.value); mark(); });",
-      "new": "",
+      "old": "var picker = page.picker({ doc: doc, win: win, host: host, id: 'gm-picture',",
+      "new": "var picker = page.picker({ doc: doc, win: win, host: host, id: 'gm-picker',",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_not_in_the_panel",
+      "file": "web/game_menu.js",
+      "old": "host = wrap.appendChild(el('span', 'pick'))",
+      "new": "host = doc.body.appendChild(el('span', 'pick'))",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_no_pick_handler",
+      "file": "web/game_menu.js",
+      "old": "onPick: function (name) { own.write(name); picker.set(own.read()); } });",
+      "new": "onPick: function (name) { picker.set(own.read()); } });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "picture_dropdown_not_marked_after_write",
       "file": "web/game_menu.js",
-      "old": "own.write(select.value); mark(); });",
-      "new": "own.write(select.value); });",
+      "old": "onPick: function (name) { own.write(name); picker.set(own.read()); } });",
+      "new": "onPick: function (name) { own.write(name); } });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "picture_dropdown_no_fits_line",
       "file": "web/game_menu.js",
-      "old": "if (line) {",
-      "new": "if (false) {",
+      "old": "if (line) { var fits",
+      "new": "if (false) { var fits",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "picture_dropdown_not_named_by_its_row",
       "file": "web/game_menu.js",
-      "old": "select.setAttribute('aria-labelledby', labelId);",
-      "new": "",
+      "old": "labelledBy: labelId, className: 'gm-select',",
+      "new": "className: 'gm-select',",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "picture_dropdown_not_described_by_its_line",
       "file": "web/game_menu.js",
-      "old": "select.setAttribute('aria-describedby', fits.id);",
+      "old": "picker.button.setAttribute('aria-describedby', fits.id);",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_without_the_menus_look",
+      "file": "web/game_menu.js",
+      "old": "className: 'gm-select', value:",
+      "new": "value:",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_not_the_windows",
+      "file": "web/game_menu.js",
+      "old": "id: 'gm-picture', labelledBy: labelId, className: 'gm-select',",
+      "new": "id: 'gm-picture', win: {}, labelledBy: labelId, className: 'gm-select',",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_outlives_its_section",
+      "file": "web/game_menu.js",
+      "old": "            dropPicker();\n            pane.textContent = '';",
+      "new": "            pane.textContent = '';",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_outlives_the_panel",
+      "file": "web/game_menu.js",
+      "old": "            hideAsk(true);\n            dropPicker();",
+      "new": "            hideAsk(true);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_destroyed_without_asking",
+      "file": "web/game_menu.js",
+      "old": "function dropPicker() { if (state && state.picker) { state.picker.destroy(); state.picker = null; } }",
+      "new": "function dropPicker() { if (state && state.picker) { state.picker = null; } }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "picture_dropdown_not_kept_for_the_section",
+      "file": "web/game_menu.js",
+      "old": "            state.picker = picker;\n",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
