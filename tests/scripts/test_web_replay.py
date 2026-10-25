@@ -289,12 +289,14 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertGreater(bar.index('id="picwrap"'), bar.index('id="speed"'))
         pop = bar[bar.index('id="picpop"'):bar.index('id="b-fsx"')]
         self.assertRegex(pop, r'^id="picpop" role="group" aria-labelledby="picpop-h" hidden>')
-        self.assertEqual(re.findall(r'<select class="pick-select" id="pic-select" aria-labelledby="picpop-h" aria-describedby="pic-note" title="[^"]+"></select><span class="fit-note" id="pic-note" hidden></span>', pop).__len__(), 1)
-        self.assertNotIn('role="radio"', pop)                                                               # (no button for a shape: the dropdown is filled from web/shapes.js)
+        self.assertEqual(pop.count('<span class="pick" id="pic-pick"><span class="fit-note" id="pic-note" hidden></span></span>'), 1)       # (the host of the picker, web/shape_picker.js: it makes the button and the list, named by the heading)
+        self.assertNotIn('role="radio"', pop)                                                               # (no button for a shape: the list is made from web/shapes.js's table)
+        self.assertNotIn("<select", self.page)                                                              # (no native select: its list does not open under the fullscreen mouse lock)
         self.assertNotRegex(self.page, r'\bid="aspect-\d')                                                   # (no button of a shape on the page at all)
 
     def test_the_window_uses_the_pages_own_selector_and_remembers_the_choice(self):
-        self.assertIn("document.querySelectorAll('.pick-select').forEach(function (select) {\n                select.addEventListener('change', function () { antsPickShape(select.value); });", self.page)   # (every dropdown of the page, the bar's too)
+        self.assertIn("['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']", self.page)          # (the bar's dropdown is made with the strip's, from the same picker)
+        self.assertIn("onPick: antsPickShape }", self.page)                                                 # (a choice of either is the page's own pick)
         self.assertIn("window.localStorage.setItem(ANTS_ASPECT_KEY, value);", self.page)
         self.assertIn("body.replay .view-bar", self.page)
         self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's row stays hidden here)
@@ -327,8 +329,9 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertIn("right: 0;", rule)
 
     def test_the_arrows_are_the_dropdowns_own_and_the_game_does_not_get_them(self):
-        self.assertNotIn("['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key)", self.glue)        # (the window had its own arrows for the four buttons: a native dropdown has them)
-        self.assertIn("['keydown', 'keypress', 'keyup'].forEach(function (name) { select.addEventListener(name, function (e) { e.stopPropagation(); }); });", self.page)
+        self.assertNotIn("['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key)", self.glue)        # (the window had its own arrows for the four buttons: the dropdown has them)
+        picker = read("web", "shape_picker.js")
+        self.assertIn("['keydown', 'keypress', 'keyup'].forEach(function (name) { button.addEventListener(name, function (e) { e.stopPropagation(); }); });", picker)       # (the picker's own keys: web_shape_picker_check.js)
 
     def test_the_bar_stays_while_the_window_is_open_and_esc_is_the_windows(self):
         self.assertIn("if (dragging || !$('picpop').hidden) {", self.glue)

@@ -64,6 +64,8 @@ GAME_MENU_FILES = ("game_menu.js", "game_menu.css")        # the game page's set
 GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 41 * 1000, 12 * 1000        # bytes, raw and gzipped, both files together (about 40,000 and 11,600; raised from 40,000 and 11,000 on purpose for the review's fixes: a question that never leaves by itself, the pointer lock heard on the window, the keys of the panel only, focus back to the button, the Controls grid): their own limits, not part of the folder's budget above or of the page's first load; a player who never opens the menu downloads them idle, after the game runs
 SHAPES_FILE = "shapes.js"        # the one table of the picture's shapes (docs/PLAY_IN_BROWSER.md): beside web/shell.html, not in web/front; both the game page and the front page load it before their own code
 SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 7.5 * 1000, 2900        # bytes, raw and gzipped (about 7,300 and 2,700; raised from 6,000 and 2,500 for the three rows of 3:2, 20:9 and 32:9 and the two functions of the dropdowns, fillSelect and fillsLine): a table and seven small functions, so a new shape's row does not need a bigger cap, and nothing else belongs in it
+PICKER_FILE = "shape_picker.js"        # the picture's dropdown, a button and a list that the page makes (docs/PLAY_IN_BROWSER.md, "Which shape"): beside web/shell.html, not in web/front; the game page only (the front page's dropdown is a native one: it is never fullscreen)
+PICKER_BUDGET, PICKER_GZIP_BUDGET = 14 * 1000, 4700        # bytes, raw and gzipped (about 13,600 and 4,450): one small control with its keys, its place and its comments, and nothing else
 GAME_SCRIPTS = ("test_game.js",)        # the game page's side of Play this map (web/shell.html loads it with the other scripts of this folder): not the lobby's, not the editor's
 GAME_BUDGET, GAME_GZIP_BUDGET = 14 * 1000, 5 * 1000        # bytes, raw and gzipped (about 10,700 and 4,100): its own limits, because it is neither the editor's nor the lobby's, and the game page downloads it for every visit
 SUBMIT_LAZY = ("mapmaker_submit.js",)        # the map maker's script that is loaded only when a player sends a map or looks at My submissions (web/front/mapmaker_app.js, withSubmit): not in the page's own list of scripts, so apart from the budget below
@@ -343,6 +345,15 @@ class TheFolder(unittest.TestCase):
         self.assertNotIn(SHAPES_FILE, os.listdir(FRONT), "the table is not in web/front, whose folder has its own cap")
         for page in ("shell.html", "lobby.html"):
             self.assertIn('<script src="%s"></script>' % SHAPES_FILE, read("web", page), "both pages load it, as a script of their own")
+
+    def test_the_pictures_picker_is_one_small_script_for_the_game_page_only(self):
+        import gzip
+        data = read_bytes("web", PICKER_FILE)
+        self.assertLess(len(data), PICKER_BUDGET, "the picker's script is %d bytes" % len(data))
+        self.assertLess(len(gzip.compress(data, 9)), PICKER_GZIP_BUDGET, "and %d bytes gzipped" % len(gzip.compress(data, 9)))
+        self.assertNotIn(PICKER_FILE, os.listdir(FRONT), "the picker is not in web/front, whose folder has its own cap")
+        self.assertIn('<script src="%s"></script>' % PICKER_FILE, read("web", "shell.html"))
+        self.assertNotIn(PICKER_FILE, read("web", "lobby.html"), "the front page's dropdown is a native one and does not load it")
 
     def test_the_font_is_a_byte_copy_of_the_games_own_with_its_licence_beside_it(self):
         for name in FONT_FILES:

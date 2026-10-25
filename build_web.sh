@@ -59,6 +59,7 @@ cp -f "${SCRIPT_DIR}/web/death_map.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/death_map.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/replay_stats.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/shapes.js" "${DIST_DIR}/"                                                                                                                                           # the pages' one table of the picture's shapes
+cp -f "${SCRIPT_DIR}/web/shape_picker.js" "${DIST_DIR}/"                                                                                                                                     # ... and its control, a button and a list that the page makes (a native list does not open under the fullscreen mouse lock)
 cp -f "${SCRIPT_DIR}/web/map_files.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers it shares with the game page
 cp -f "${SCRIPT_DIR}/web/countdown_button.js" "${DIST_DIR}/"                                                                                                                                             # ... and the countdown's Fullscreen button
 cp -f "${SCRIPT_DIR}/web/game_menu.js" "${SCRIPT_DIR}/web/game_menu.css" "${DIST_DIR}/"                                                                                  # ... the settings menu's panel (loaded by the game page once the game runs)

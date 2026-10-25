@@ -145,7 +145,7 @@ def main():
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
-    ap.add_argument("--only", default="", help="run only the parts whose name contains this text (bars, windowed, margin, pillar, pseudo, lock, release, setting, slow)")
+    ap.add_argument("--only", default="", help="run only the parts whose name contains this text (bars, windowed, windowed list, margin, pillar, pseudo, lock, release, setting, slow)")
     args = ap.parse_args()
     aspect.READY_TIMEOUT = args.ready_timeout
 
@@ -625,6 +625,34 @@ def main():
                 expect_scroll("margin, the top left corner (90 px beyond on both axes)", box, left - 90, top - 90, 0, 0, -1, -1)
                 expect_scroll("margin, the top right corner (90 px beyond on both axes)", box, right + 90, top - 90, PICTURE_W - 1, 0, 1, -1)
                 expect_gone("margin, a corner is a square: 97 px beyond on both axes (top left)", box, left - 97, top - 97)
+
+        if wanted("windowed list"):
+            print("[web edge] the WINDOWED page's open Picture list (1280 x 1500 window: it opens downward, under the box, inside the margin) is the page's: hovering a row is gone for the game")
+            game.open(width=1280, height=1500, storage={})
+            if started("windowed list"):
+                g = game.geometry()
+                box = g["box"]
+                left, top, right, bottom = box[0], box[1], box[0] + box[2], box[1] + box[3]
+                cx, cy = box[0] + box[2] / 2, box[1] + box[3] / 2
+                tab.ev("document.getElementById('aspect-select').click(); 1")
+                time.sleep(0.3)
+                check(tab.ev("document.getElementById('aspect-select').getAttribute('aria-expanded')") == "true", "windowed list: a click on the Picture dropdown opens its list")
+                for row in ("0",):
+                    x, y = spot("#aspect-select-list li:nth-child(%d)" % (int(row) + 1))
+                    dy = y - bottom
+                    check(not (left <= x <= right and top <= y <= bottom) and 0 < dy <= 96, "windowed list: row %s is under the box and inside the margin (%.0f px below its bottom edge): the page's own rule is what is tested" % (row, dy))
+                    s0 = game.park(box)
+                    game.move(x, y)
+                    time.sleep(0.15)
+                    mid = game.state()
+                    time.sleep(0.6)
+                    s1 = game.state()
+                    check(mid["out"] == 1 and abs(s1["vx"] - s0["vx"]) <= 4 and abs(s1["vy"] - s0["vy"]) <= 4,
+                          "windowed list: the pointer over row %s of the open list is gone for the game (%s) and the view stays (%+d, %+d px)" % (row, "gone" if mid["out"] else "STILL HERE", s1["vx"] - s0["vx"], s1["vy"] - s0["vy"]))
+                    check(tab.ev("document.getElementById('aspect-select').getAttribute('aria-expanded')") == "true", "windowed list: the list is still open (a pointer over it closes nothing)")
+                tab.ev("document.getElementById('aspect-select').click(); 1")
+                game.move(cx, cy)
+                time.sleep(0.3)
 
         if wanted("pillar"):
             print("[web edge] a wide screen (2560 x 1080, 21:9) and the classic 4:3 picture on a 1440 x 900 screen: bars at the sides")

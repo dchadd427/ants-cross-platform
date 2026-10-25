@@ -137,8 +137,8 @@
     {
       "id": "page_copy_in_menu",
       "file": "web/game_menu.js",
-      "old": "            page.shapes.fillSelect(select, doc);\n",
-      "new": "            ['4:3', '3:2'].forEach(function (name) { var o = el('option', '', name); o.value = name; select.appendChild(o); });\n",
+      "old": "host = wrap.appendChild(el('span', 'pick')), line = '';",
+      "new": "host = wrap.appendChild(el('span', 'pick')), line = '', copy = ['4:3', '3:2'];",
       "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
@@ -151,8 +151,8 @@
     {
       "id": "page_does_not_load_the_table",
       "file": "web/shell.html",
-      "old": "<script src=\"shapes.js\"></script><script src=\"replay_page.js\">",
-      "new": "<script src=\"replay_page.js\">",
+      "old": "<script src=\"shapes.js\"></script><script src=\"shape_picker.js\"></script>",
+      "new": "<script src=\"shape_picker.js\"></script>",
       "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
@@ -528,23 +528,23 @@
     {
       "id": "page_shell_dropdown_not_filled",
       "file": "web/shell.html",
-      "old": "                AntsShapes.fillSelect(select, document);                 // (one entry for each row of the table; the shown shape is the chosen one)\n",
-      "new": "",
+      "old": "AntsShapePicker.create(AntsShapes, {",
+      "new": "AntsShapePicker.create({ rows: AntsShapes.rows.slice(0, 3), placeOf: AntsShapes.placeOf }, {",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "page_shell_change_not_heard",
       "file": "web/shell.html",
-      "old": "                select.addEventListener('change', function () { antsPickShape(select.value); });\n",
-      "new": "",
+      "old": "onPick: antsPickShape }));",
+      "new": "onPick: function () {} }));",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "page_shell_dropdown_keys_reach_the_game",
-      "file": "web/shell.html",
-      "old": "                ['keydown', 'keypress', 'keyup'].forEach(function (name) { select.addEventListener(name, function (e) { e.stopPropagation(); }); });\n",
+      "file": "web/shape_picker.js",
+      "old": "['keydown', 'keypress', 'keyup'].forEach(function (name) { button.addEventListener(name, function (e) { e.stopPropagation(); }); });",
       "new": "",
-      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
     },
     {
       "id": "page_shell_pick_not_remembered",
@@ -556,8 +556,8 @@
     {
       "id": "page_shell_second_dropdown_not_followed",
       "file": "web/shell.html",
-      "old": "            document.querySelectorAll('.pick-select').forEach(function (select) { select.value = shape; });\n            antsSyncAspect();",
-      "new": "            antsSyncAspect();",
+      "old": "            antsPickers.forEach(function (picker) { picker.set(shape); });\n",
+      "new": "",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
@@ -605,29 +605,29 @@
     {
       "id": "menu_dropdown_not_filled_from_the_table",
       "file": "web/game_menu.js",
-      "old": "            page.shapes.fillSelect(select, doc);\n",
-      "new": "",
+      "old": "var picker = page.picker({",
+      "new": "var picker = { button: el('button'), set: function () {} }; ({",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "menu_dropdown_follows_not",
       "file": "web/game_menu.js",
-      "old": "own.write(select.value); mark(); });",
-      "new": "own.write(select.value); });",
+      "old": "onPick: function (name) { own.write(name); picker.set(own.read()); } });",
+      "new": "onPick: function (name) { own.write(name); } });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "menu_fills_line_dropped",
       "file": "web/game_menu.js",
-      "old": "            if (line) wrap.appendChild(el('div', 'gm-fits', line));\n",
+      "old": "            if (line) { var fits = wrap.appendChild(el('div', 'gm-fits', line)); fits.id = labelId + '-fits'; picker.button.setAttribute('aria-describedby', fits.id); }\n",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "menu_focus_list_without_select",
       "file": "web/game_menu.js",
-      "old": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled])';",
-      "new": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';",
+      "old": "var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';",
+      "new": "var FOCUSABLE = 'input:not([disabled])';",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -683,6 +683,20 @@
       "build": [
         "test_canvas_layout"
       ]
+    },
+    {
+      "id": "picture_window_block_starts_before_the_dropdowns_are_made",
+      "file": "web/shell.html",
+      "old": "            // the dropdowns: the strip under the game and the recording's Picture window (the settings menu makes its own);",
+      "new": "            // PICTURE_POPOVER_BEGIN\n            // the dropdowns: the strip under the game and the recording's Picture window (the settings menu makes its own);",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
+    },
+    {
+      "id": "page_does_not_load_the_picker",
+      "file": "web/shell.html",
+      "old": "<script src=\"shape_picker.js\"></script><script src=\"replay_page.js\">",
+      "new": "<script src=\"replay_page.js\">",
+      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     }
   ]
 }
