@@ -5,8 +5,8 @@
   {
    "id": "version_9_allowed",
    "file": "src/ants_assets/lvl_checker.cpp",
-   "old": "if (level.version != LVL_EXPECTED_VERSION) {",
-   "new": "if (level.version > LVL_EXPECTED_VERSION + 1) {",
+   "old": "if (level.version == LVL_EXTENDED_VERSION) return not_for_original_report();",
+   "new": "if (false) return not_for_original_report();",
    "build": [
     "test_original_safe",
     "lvl_tool"
@@ -38,8 +38,8 @@
   {
    "id": "257_rows_allowed",
    "file": "src/ants_assets/lvl_checker.cpp",
-   "old": "} else if (rows > kMostSide || columns > kMostSide) {",
-   "new": "} else if (rows > kMostSide + 1 || columns > kMostSide) {",
+   "old": "} else if (original && (rows > kMostSide || columns > kMostSide)) {",
+   "new": "} else if (original && (rows > kMostSide + 1 || columns > kMostSide)) {",
    "build": [
     "test_original_safe",
     "lvl_tool"
@@ -332,8 +332,8 @@
   {
    "id": "the_writer_forgets_the_read_limit",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "const size_t most = std::min(limits.max_write_bytes, limits.max_read_bytes);",
-   "new": "const size_t most = limits.max_write_bytes;",
+   "old": "const size_t most = std::min(limits.write_bytes(), limits.read_bytes());",
+   "new": "const size_t most = limits.write_bytes();",
    "build": [
     "test_lvl_writer"
    ],
@@ -495,8 +495,30 @@
   {
    "id": "a_file_not_read_is_judged",
    "file": "src/ants_assets/lvl_checker.cpp",
-   "old": "report.judged = false;",
-   "new": "report.judged = true;",
+   "old": "Severity::Fatal, p.message, -1, -1, -1, 1, true);\n                report.judged = false;",
+   "new": "Severity::Fatal, p.message, -1, -1, -1, 1, true);\n                report.judged = true;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_file_not_read_is_judged_by_the_map_check",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::FileTooLarge, p.severity, p.message, -1, -1, -1, 1, true);\n                report.judged = false;",
+   "new": "f.add(Code::FileTooLarge, p.severity, p.message, -1, -1, -1, 1, true);\n                report.judged = true;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_map_not_accepted_here_is_judged",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "OriginalSafeReport report;\n    report.judged = false;\n    Findings f(report);\n    f.add(Code::ExtendedNotAcceptedHere",
+   "new": "OriginalSafeReport report;\n    report.judged = true;\n    Findings f(report);\n    f.add(Code::ExtendedNotAcceptedHere",
    "build": [
     "test_original_safe",
     "lvl_tool"

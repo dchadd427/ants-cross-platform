@@ -325,8 +325,8 @@
   {
    "id": "map_bombs_spared_with_goals_out",
    "file": "src/ants_ai/standard_bot.cpp",
-   "old": "tactics_.gate_goals_live = tactics_.gate_map && !fallback && !gate_goals_.exhausted();",
-   "new": "tactics_.gate_goals_live = tactics_.gate_map;",
+   "old": "tactics_.gate_goals_live = tactics_.gate_map && !fallback && (!gate_goals_.exhausted() || (tactics_.field_map && field_.live()));",
+   "new": "tactics_.gate_goals_live = tactics_.gate_map && !fallback && (true || (tactics_.field_map && field_.live()));",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.14 ./build/tests/test_ai/test_ai",
    "expect": "AI27.14"
   },
