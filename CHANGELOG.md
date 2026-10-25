@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 - On a short screen the Hide button sits on the line of the words, so the bar is lower; a map under 300 pixels high shows the smaller map of the whole map, without its caption, so that it never reaches into the bar.
 - While a thing is on its way the bar keeps the height it has had, so the map no longer grows and shrinks under the mouse near the foot; a phone that is turned with the bar open leaves room for all of it below the page.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...a5c4e8c8)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/50b7ae4b...574702cd)
 
 ## v0.12.126 - 2026-10-24 - Orders for big selections
 
