@@ -253,7 +253,7 @@ public:
 
     // Moving keeps the searches valid: the pool is heap-allocated and moves with its queue. A moved-from
     // manager is empty and creates a fresh pool on its next request().
-    PathManager(PathManager&& other) = default;
+    PathManager(PathManager&& other) noexcept;
     PathManager& operator=(PathManager&& other) noexcept;
     /**
      * @brief Deep copy (a copy of the simulation engine): a new pool with the same slots, and a copy of every queued search, in queue order, attached to the new pool, so
@@ -284,7 +284,7 @@ public:
     /** @brief Number of queued requests. */
     size_t pending() const noexcept { return queue_.size(); }
 
-    /** @brief True if a request of this ant is queued. */
+    /** @brief True if a request of this ant is queued. O(1): a flag per ant (the queue holds at most one request of an ant). */
     bool has_request_for(uint32_t ant_id) const noexcept;
 
     /** @brief Calls fn(ant_id, start, goal, has_grid, finished) for every queued request in queue order (state hash, diagnostics). */
@@ -297,6 +297,16 @@ private:
     // Declared before the queue so that it is destroyed after the searches that reference it.
     std::unique_ptr<PathGridPool> pool_;
     std::deque<std::unique_ptr<PathSearch>> queue_;
+
+    // Which ants have a request in the queue, so that has_request_for() and the "remove the first request of the same ant" of request() need no scan. Derived data: never
+    // copied, always rebuilt from the queue (rebuild_queued()), and not part of any hash. An ant id below kFlaggedIds has a byte in queued_, a larger id (only a test
+    // makes one: the engine numbers its ants 1, 2, 3 ...) is counted in queued_far_ and found by a scan, so that the answer is exact for every id.
+    static constexpr uint32_t kFlaggedIds = 1u << 20;
+    std::vector<uint8_t> queued_;
+    uint32_t queued_far_{0};
+    void set_queued(uint32_t ant_id, bool queued);
+    void rebuild_queued();
+    bool scan_for(uint32_t ant_id) const noexcept;    // the queue scan: the answer that queued_ must equal
 };
 
 } // namespace ants::sim

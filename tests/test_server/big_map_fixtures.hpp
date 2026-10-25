@@ -77,4 +77,42 @@ namespace {
     return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 
+// TINY (a Classic map, its own grid) that starts exactly `per_color[c]` ants for color c: its start markers of that color repeated (on the same cells) or cut short, its other block 1 records (plants) kept. A map that a
+// start ants count and the heavy-map warning look at: 0 for every color is a map with no start marker, {1500, 1500, 1500, 1500} a 6,000-ant map. "" when it cannot be made.
+[[maybe_unused]] std::string tiny_with_ants(const std::array<uint32_t, 4>& per_color) {
+    using namespace ants::assets;
+    const std::string base = big_tiny_bytes();
+    LevelData t;
+    if (!LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), t, nullptr, LevelLimits::for_extended_maps())) return std::string();
+    std::vector<AnthillSpawn> kept;
+    std::array<std::vector<AnthillSpawn>, 4> markers;
+    for (const AnthillSpawn& s : t.anthill_spawns) {
+        if (s.team_id < 4) markers[s.team_id].push_back(s);
+        else kept.push_back(s);
+    }
+    for (size_t color = 0; color < 4; ++color) {
+        if (markers[color].empty()) return std::string();
+        for (uint32_t i = 0; i < per_color[color]; ++i) kept.push_back(markers[color][i % markers[color].size()]);
+    }
+    t.anthill_spawns.assign(kept.begin(), kept.end());
+    const LevelWriteResult w = write_level(t, LevelLimits::for_extended_maps());
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+}
+
+// The same map as `bytes` (made by tiny_with_ants) with its last start marker of a color turned into a plant record (team 255): one ant fewer and a file of the same size with other bytes. "" when it cannot be made.
+[[maybe_unused]] std::string with_one_marker_made_a_plant(const std::string& bytes) {
+    using namespace ants::assets;
+    LevelData t;
+    if (!LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), t, nullptr, LevelLimits::for_extended_maps())) return std::string();
+    for (size_t i = t.anthill_spawns.size(); i-- > 0;) {
+        if (t.anthill_spawns[i].team_id < 4) {
+            t.anthill_spawns[i].tile_id = 404;                                       // (a plant, as a map's own plants are)
+            t.anthill_spawns[i].team_id = 255;
+            const LevelWriteResult w = write_level(t, LevelLimits::for_extended_maps());
+            return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+        }
+    }
+    return std::string();
+}
+
 }  // namespace
