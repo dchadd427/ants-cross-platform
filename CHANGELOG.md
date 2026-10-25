@@ -33,6 +33,17 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...025710cf)
 
+## v0.12.127 - 2026-10-24 - Map Maker: the Pick up bar no longer covers the map
+
+**For players:**
+- Map Maker, Pick up: the bar with Move, Copy here, Delete and Cancel no longer covers the bottom of the map. On a desktop it has a row of its own under the map, so the map ends above it and can be panned until its last row is above the bar; a thing picked near the bottom is brought into view, and the map keeps its top row and its zoom when the bar comes and goes. A phone's bar stays at the foot of the screen, and the page can be scrolled until its last line is above it. Map Maker v1.5.7.
+
+**Fixes:**
+- On a short screen the Hide button sits on the line of the words, so the bar is lower; a map under 300 pixels high shows the smaller map of the whole map, without its caption, so that it never reaches into the bar.
+- While a thing is on its way the bar keeps the height it has had, so the map no longer grows and shrinks under the mouse near the foot; a phone that is turned with the bar open leaves room for all of it below the page, and a window that is resized while a thing is on its way logs no "ResizeObserver loop" message.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/50b7ae4b...67a05f86)
+
 ## v0.12.126 - 2026-10-24 - Orders for big selections
 
 **For players:**
@@ -561,22 +572,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3906df6f...54418041)
 
-## v0.12.75 - 2026-10-17 - Map maker: hills, ants and food (E3a)
+## Older versions (v0.12.75 and before)
 
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) can put hills, starting ants and food now. Choose Hills, Ants or Food (or press H, A or F), choose a team (Green, Red, Blue or Black), and tap or click the map: a whole hill appears, a team's ants stand together where you tapped (you choose how many), or a food pile (you choose how many stages). Put one again and it moves; the eraser takes a hill, a team's ants or a pile away; undo and redo work for them like for drawing.
-- The check says what is still missing, for example "Blue has no hill", and says nothing of it once the hill is there.
-- On a phone the team, the number of ants and the stages are on one button that opens a list.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/402c19c5...23feff4e)
-
-## v0.12.74 - 2026-10-17 - Replays: the scrub bar should jump to where you tap
-
-**For players:**
-- The replay bar: on a phone in fullscreen, tapping it should now jump to that spot instead of the start (a phone is no longer given the mouse lock).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fa324b31...a1dbecfd)
-
-## Older versions (v0.12.73 and before)
-
-Every release before v0.12.74, and the long notes of v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.76, and the long notes of v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

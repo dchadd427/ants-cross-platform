@@ -564,19 +564,21 @@ function caseG() {
 }
 
 // ---- H: a stroke ends when its pointer is lost, not only when it lifts (the canvas on a fake page) ----
-function fakeCanvasPage() {
+function fakeCanvasPage(rows) {
     const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (k === 'createImageData' ? (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }) : () => undefined)), set: (t, k, v) => { t[k] = v; return true; } });
     const listeners = () => { const l = {}; return { l, addEventListener: (t, f) => { (l[t] = l[t] || []).push(f); }, fire: (t, e) => (l[t] || []).forEach((f) => f(e)) }; };
-    const canvasNode = () => Object.assign(listeners(), { width: 0, height: 0, attrs: {}, classes: {}, getContext: () => ctx, getBoundingClientRect: () => ({ left: 0, top: 0, width: 600, height: 400 }),
+    const size = { w: 600, h: 400 };          // (the canvas's size on the page: a test may change it, as a sheet under the map does)
+    const canvasNode = () => Object.assign(listeners(), { width: 0, height: 0, attrs: {}, classes: {}, getContext: () => ctx, getBoundingClientRect: () => ({ left: 0, top: 0, width: size.w, height: size.h }),
         setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; }, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }, setPointerCapture() {}, focus() {}, classList: { toggle() {} }, hidden: false });
     const doc = Object.assign(listeners(), { createElement: canvasNode, visibilityState: 'visible' }), win = Object.assign(listeners(), { devicePixelRatio: 1, performance: { now: () => 0 } });
     const canvas = canvasNode(), log = [], plain = () => Object.assign(listeners(), { hidden: true, textContent: '', disabled: false });
-    const api = Canvas.create({ doc, win, canvas, minimap: plain(), mini: canvasNode(), miniCap: plain(), where: plain(), zoomIn: plain(), zoomOut: plain() });
+    const minimap = Object.assign(plain(), { tiny: false, classList: { toggle(name, on) { if (name === 'tiny') minimap.tiny = !!on; } } });          // (what mapmaker.css makes small)
+    const api = Canvas.create({ doc, win, canvas, minimap, mini: canvasNode(), miniCap: plain(), where: plain(), zoomIn: plain(), zoomOut: plain() });
     const painter = { size: () => 1, begin: () => { log.push('begin'); return true; }, extend: () => log.push('extend'), end: () => log.push('end'), cancel: () => log.push('cancel') };
     api.setPainter(painter);
-    api.setFile(open(9, 31, 31));
+    api.setFile(open(9, rows || 31, rows || 31));
     const mouse = (type, extra) => canvas.fire(type, Object.assign({ pointerType: 'mouse', pointerId: 7, button: 0, buttons: 1, clientX: 300, clientY: 200, preventDefault() {} }, extra));
-    return { api, canvas, doc, win, log, mouse };
+    return { api, canvas, doc, win, log, mouse, size, minimap };
 }
 
 function caseH() {
@@ -647,6 +649,33 @@ function caseH() {
     check(p.aways[p.aways.length - 1] === 'off:900,210' && p.log.indexOf('extend') >= 0, 'off the canvas is off the map even where the map goes on under the pointer: ' + p.aways.join(' ') + ' / ' + p.log.join());
     p = dropTool(); p.mouse('pointerdown', { pointerType: 'pen', pointerId: 4 }); p.mouse('pointermove', { pointerType: 'pen', pointerId: 4, clientX: 330 }); p.mouse('pointerup', { pointerType: 'pen', pointerId: 4 });
     check(p.log.join().indexOf('end') > 0 && !p.api.isStroking(), 'a pen is a lift too: ' + p.log.join());
+    // a sheet under the map (Pick up's bar) changes the canvas's height: settle measures it again, lets the tool put the view where it should be (look), keeps the view inside the map and paints
+    p = fakeCanvasPage(120);
+    const top = () => p.api.state().view.cy - p.api.state().height / 2 / p.api.state().view.scale, was = top(), scale0 = p.api.state().view.scale;
+    let told = null;
+    let before = 400;
+    const anchored = (view, w, h) => { told = [w, h]; view.cy += (h - before) / (2 * view.scale); before = h; };          // (what Pick up does: the top row stays)
+    p.size.h = 300; p.api.settle(anchored);
+    check(p.api.state().height === 300 && told && told[0] === 600 && told[1] === 300 && Math.abs(top() - was) < 1e-9 && p.api.state().view.scale === scale0, 'a canvas that got lower: look() is told the new size, the tool keeps the top row, the scale is as it was: ' + top().toFixed(3) + ' was ' + was.toFixed(3));
+    told = null; p.api.settle(() => { told = 'again'; });
+    check(told === null, 'the same size again does nothing (look() is not asked)');
+    p.size.h = 250; p.api.settle(anchored);
+    check(p.minimap.tiny === true, 'a canvas under 300 pixels high gets the small map of the whole map (mapmaker.css)');
+    p.size.h = 400; p.api.settle(anchored);
+    check(p.api.state().height === 400 && Math.abs(top() - was) < 1e-9 && p.minimap.tiny === false, 'a canvas that grew back: the top row is kept, and the big map of the whole map is back: ' + top().toFixed(3));
+    p.size.h = 300; p.api.settle((view) => { view.cy = 1e6; });
+    check(p.api.state().view.cy <= 120 - 300 / 2 / p.api.state().view.scale + 1e-9, 'the view stays inside the map, whatever look() did');
+    const frames = p.api.state().view.cy; p.size.h = 280; p.api.settle(() => {});
+    check(p.api.state().height === 280 && p.api.state().view.cy === frames, 'a tool that does nothing leaves the view where it is (the middle)');
+    p = fakeCanvasPage(31);
+    const fit = p.api.state().view.scale;
+    before = 400; p.size.h = 250; p.api.settle(anchored);
+    const cut = p.api.state();
+    check(cut.height === 250 && cut.view.scale === fit && Math.abs(cut.view.cy - 250 / 2 / fit) < 1e-9, 'a map that was whole keeps its scale under a sheet (nothing moves under a pointer): its top is in view and the foot is for panning: ' + JSON.stringify([cut.view.scale, cut.view.cy]));
+    p.size.h = 400; p.api.settle(anchored);
+    check(p.api.state().view.scale === fit && Math.abs(p.api.state().view.cy - 15.5) < 1e-9, 'and with the sheet gone it is whole again, as it was');
+    p = fakeCanvasPage(); p.api.setFile(null); p.size.h = 200; p.api.settle(() => { throw new Error('there is no map'); });
+    check(true, 'no map: nothing to do, nothing thrown');
 }
 
 
