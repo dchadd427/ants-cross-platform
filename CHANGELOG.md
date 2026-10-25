@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: the rules and network protocol 21 are unchanged (the server and the pages check the map before a room is made).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...HEAD_SHA), [the online limits](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...7c06297a), [the online limits](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
 
 ## v0.12.126 - 2026-10-24 - Orders for big selections
 
