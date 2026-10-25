@@ -2,7 +2,7 @@
 //   * the one table of rows: ids and names are unique, every text is plain (no markup), the JSON that the page gets is valid for a match and for a recording, in the browser and in the desktop build,
 //     and a recording has no Game section;
 //   * Leave game: what it does in every state (a forfeit with one opponent left, a drop out with more, the match held, a recording) and the words that ask;
-//   * the three new settings (Master volume, Mute, hit point numbers): read with the original's reader, written under their own names, and the gain they make;
+//   * the new settings (Master volume, Mute, the ant health marks): read with the original's reader, written under their own names, the old hit point numbers read once as Off, and the gain they make;
 //   * Esc: it cancels what is open or selected first, and asks for the menu only when there was nothing, only on a first press, never over a dialog that needs its answer;
 //   * what the panel changes is what the original's options window shows (the same state, stored under the original's names), and a change of Ctrl+L is remembered;
 //   * while the panel is up the game takes no key, text or click, does not scroll at the edges and sees no finger; closing gives the input back after the events that were queued;
@@ -119,7 +119,7 @@ void test_table() {
     std::printf("[table] the one list of rows\n");
     size_t count = 0;
     const gm::Row* rows = gm::rows(count);
-    check(count == 14, "fourteen rows");
+    check(count == 15, "fifteen rows");
     for (size_t i = 0; i < count; ++i) {
         const gm::Row& row = rows[i];
         check(gm::find_row(row.id) == &row, std::string("row ") + row.key + " is found by its id");
@@ -139,9 +139,9 @@ void test_table() {
               "the picture row has one word for each row of the shape table, in its order, and the web's default shape as its default");
         check(picture != nullptr && std::string(picture->hint) == "The shape of the picture; the match goes on", "the picture row's hint says what the dropdown does (the page lists the shapes, from its own copy of the table)");
     }
-    check(gm::find_row(0) == nullptr && gm::find_row(15) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
+    check(gm::find_row(0) == nullptr && gm::find_row(16) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
     check(gm::find_row(gm::kMaster)->def == 100 && gm::find_row(gm::kMusic)->def == 65 && gm::find_row(gm::kEffects)->def == 100 && gm::find_row(gm::kScroll)->def == 50, "the defaults are the original's (Master 100: nothing changes)");
-    check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kHpNumbers)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the three new rows carry the new tag");
+    check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kAntHealth)->show & gm::kShowNew) && (gm::find_row(gm::kHealthStyle)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the four new rows carry the new tag");
     check((gm::find_row(gm::kMaster)->show & gm::kShowLive) && !(gm::find_row(gm::kMusic)->show & gm::kShowLive), "Master volume acts while it is dragged, the original's sliders at the release");
 
     for (const bool watching : {false, true}) {
@@ -149,7 +149,7 @@ void test_table() {
             const std::string json = gm::describe_json(watching, web);
             Json reader(json);
             check(reader.valid(), std::string("the JSON is valid (watching ") + (watching ? "yes" : "no") + ", " + (web ? "web" : "desktop") + ")");
-            check(has(json, "\"key\":\"master\"") && has(json, "\"key\":\"mute\"") && has(json, "\"key\":\"hp_numbers\"") && has(json, "\"key\":\"scroll\""), "the sound and video rows are there");
+            check(has(json, "\"key\":\"master\"") && has(json, "\"key\":\"mute\"") && has(json, "\"key\":\"ant_health\"") && has(json, "\"key\":\"ant_health_style\"") && !has(json, "hp_numbers") && has(json, "\"key\":\"scroll\""), "the sound and video rows are there");
             check(has(json, "\"id\":\"controls\"") && has(json, "\"id\":\"sound\"") && has(json, "\"id\":\"video\""), "the Sound, Video and Controls sections are there");
             check(has(json, "\"key\":\"chat\"") == !watching && has(json, "\"id\":\"game\"") == !watching && has(json, "\"key\":\"version\"") == !watching, "the Game section is in a match and not in a recording");
             check(has(json, "\"key\":\"picture\"") == web && has(json, "\"key\":\"lockmouse\"") == web, "the picture's shape and the fullscreen mouse are the browser's rows");
@@ -201,32 +201,71 @@ void test_leave() {
 }
 
 void test_settings() {
-    std::printf("[settings] the three new settings\n");
+    std::printf("[settings] the new settings\n");
+    using health::When;
+    using health::Style;
     ConfigStore store;
     gm::MenuSettings defaults;
     defaults.load(store);
-    check(defaults.master == 100 && !defaults.mute && defaults.hp_numbers, "an empty file: Master 100, not muted, the numbers on");
+    check(defaults.master == 100 && !defaults.mute && defaults.ant_health == health::Setting{When::Hurt, Style::Bar}, "an empty file: Master 100, not muted, a bar on hurt ants");
     check(defaults.gain() == 1.0f, "which is the mix as it was");
     gm::MenuSettings s;
     s.master = 37;
     s.mute = true;
-    s.hp_numbers = false;
-    for (const int id : {gm::kMaster, gm::kMute, gm::kHpNumbers}) s.write(store, id);
-    check(store.get_string("master", "", 8) == "37" && store.get_string("mute", "", 8) == "on" && store.get_string("hp_numbers", "", 8) == "off", "written as master=37, mute=on, hp_numbers=off");
+    s.ant_health = health::Setting{When::All, Style::Number};
+    for (const int id : {gm::kMaster, gm::kMute, gm::kAntHealth, gm::kHealthStyle}) s.write(store, id);
+    check(store.get_string("master", "", 8) == "37" && store.get_string("mute", "", 8) == "on" && store.get_string("ant_health", "", 8) == "all" && store.get_string("ant_health_style", "", 8) == "number",
+          "written as master=37, mute=on, ant_health=all, ant_health_style=number");
     s.write(store, gm::kMusic);
-    check(!store.has("Music Volume") && !store.has("music"), "a row that is not one of the three writes nothing");
+    check(!store.has("Music Volume") && !store.has("music"), "a row that is not one of the four writes nothing");
     gm::MenuSettings back;
     back.load(store);
-    check(back.master == 37 && back.mute && !back.hp_numbers, "and read back");
-    check(std::string(gm::MenuSettings::key(gm::kMaster)) == "master" && std::string(gm::MenuSettings::key(gm::kMusic)).empty(), "the names");
+    check(back.master == 37 && back.mute && back.ant_health == health::Setting{When::All, Style::Number}, "and read back");
+    for (const When w : {When::Hurt, When::All, When::Off}) {
+        for (const Style st : {Style::Bar, Style::Number}) {
+            ConfigStore each;
+            gm::MenuSettings out;
+            out.ant_health = health::Setting{w, st};
+            out.write(each, gm::kAntHealth);
+            out.write(each, gm::kHealthStyle);
+            gm::MenuSettings in;
+            in.load(each);
+            check(in.ant_health == out.ant_health, std::string("round trip of ") + health::word(w) + " and " + health::word(st));
+        }
+    }
+    check(std::string(gm::MenuSettings::key(gm::kMaster)) == "master" && std::string(gm::MenuSettings::key(gm::kAntHealth)) == "ant_health" && std::string(gm::MenuSettings::key(gm::kHealthStyle)) == "ant_health_style" &&
+              std::string(gm::MenuSettings::key(gm::kMusic)).empty(), "the names");
     for (const std::string bad : {"abc", "-5", "101", "1e2", ""}) {
         ConfigStore broken;
         broken.set_string("master", bad);
         broken.set_string("mute", "yes");
-        broken.set_string("hp_numbers", "maybe");
+        broken.set_string("ant_health", "maybe");
+        broken.set_string("ant_health_style", bad);
         gm::MenuSettings m;
         m.load(broken);
-        check(m.master == 100 && !m.mute && m.hp_numbers, "a value that is not valid is the default: '" + bad + "'");
+        check(m.master == 100 && !m.mute && m.ant_health == health::Setting{When::Hurt, Style::Bar}, "a value that is not valid is the default: '" + bad + "'");
+    }
+    // the old Hit point numbers: off stays off, on (and none) is today's default, and a new choice wins over the old key
+    {
+        ConfigStore old_off;
+        old_off.set_string("hp_numbers", "off");
+        gm::MenuSettings m;
+        m.load(old_off);
+        check(m.ant_health == health::Setting{When::Off, Style::Bar}, "the old numbers off: the marks are off");
+        ConfigStore old_on;
+        old_on.set_string("hp_numbers", "on");
+        m.load(old_on);
+        check(m.ant_health == health::Setting{When::Hurt, Style::Bar}, "the old numbers on: the new default, a bar on hurt ants");
+        ConfigStore both = old_off;
+        both.set_string("ant_health", "all");
+        m.load(both);
+        check(m.ant_health.when == When::All, "a choice of the new row wins over the old key that is still in the file");
+        both.set_string("ant_health", "hurt");
+        m.load(both);
+        check(m.ant_health.when == When::Hurt, "...also when it is the default");
+        both.set_string("ant_health", "maybe");
+        m.load(both);
+        check(m.ant_health.when == When::Hurt, "...and a new key that is no word is the default, not the old key's off");
     }
     ConfigStore edge;
     edge.set_int("master", 0);
@@ -350,7 +389,7 @@ void test_values() {
         check(rig.ok, "the match is up");
         if (!rig.ok) return;
         Application& app = rig.app;
-        check(app.game_menu_get(gm::kMaster) == 100 && app.game_menu_get(gm::kMute) == 0 && app.game_menu_get(gm::kHpNumbers) == 1, "the new settings start as they always were");
+        check(app.game_menu_get(gm::kMaster) == 100 && app.game_menu_get(gm::kMute) == 0 && app.game_menu_get(gm::kAntHealth) == 0 && app.game_menu_get(gm::kHealthStyle) == 0, "the new settings start as they should: Master 100, no mute, a bar on hurt ants");
         check(app.game_menu_get(gm::kMusic) == 65 && app.game_menu_get(gm::kEffects) == 100 && app.game_menu_get(gm::kScroll) == 50 && app.game_menu_get(gm::kChat) == 1 && app.game_menu_get(gm::kQuickHelpAtStart) == 1, "the original's start as the original's");
         check(app.game_menu_get(gm::kFullscreen) == -1 && app.game_menu_get(gm::kPicture) == -1 && app.game_menu_get(gm::kLockMouse) == -1 && app.game_menu_get(99) == -1 && app.game_menu_get(0) == -1, "the page's rows and what is no row are not the game's");
 
@@ -369,7 +408,11 @@ void test_values() {
         check(app.game_menu_set(gm::kMusic, 30) && app.game_menu_set(gm::kEffects, 77) && app.game_menu_set(gm::kScroll, 12), "the original's sliders are taken");
         check(app.hud().get_music_volume() == 30 && app.hud().get_sound_volume() == 77 && app.hud().get_scroll_speed() == 12, "in the options state that the original's window reads");
         check(app.game_menu_set(gm::kChat, 0) && !app.hud().is_chat_enabled() && app.game_menu_set(gm::kQuickHelpAtStart, 0) && !app.hud().is_quick_help_enabled(), "the two switches too");
-        check(app.game_menu_set(gm::kHpNumbers, 0) && !app.hud().is_show_hp() && app.game_menu_get(gm::kHpNumbers) == 0, "the hit point numbers go off");
+        check(app.game_menu_set(gm::kAntHealth, 2) && app.hud().ant_health().when == health::When::Off && app.game_menu_get(gm::kAntHealth) == 2, "the ant health marks go off");
+        check(app.game_menu_set(gm::kHealthStyle, 1) && app.hud().ant_health().style == health::Style::Number && app.game_menu_get(gm::kHealthStyle) == 1, "...and their look is a number");
+        check(!app.game_menu_set(gm::kAntHealth, 3) && !app.game_menu_set(gm::kAntHealth, -1) && !app.game_menu_set(gm::kHealthStyle, 2) && app.game_menu_get(gm::kAntHealth) == 2 && app.game_menu_get(gm::kHealthStyle) == 1,
+              "a word that the row does not have is refused, and nothing changes");
+        check(has(read_file(file), "ant_health=off\n") && has(read_file(file), "ant_health_style=number\n"), "both are written at once");
         check(!app.game_menu_set(gm::kFullscreen, 1) && !app.game_menu_set(gm::kVersion, 1) && !app.game_menu_set(77, 1), "what is not the game's is refused");
         app.hud().open_options();
         check(app.hud().options_screen().slider(0).value() == ScreenSlider(188, 179, 77).value() && app.hud().options_screen().slider(1).value() == ScreenSlider(188, 216, 30).value() &&
@@ -377,14 +420,15 @@ void test_values() {
         app.hud().close_options();
         app.run_frame_with_delta(0.016f);
         press_key(app, SDLK_l, KMOD_LCTRL);
-        check(app.hud().is_show_hp(), "(Ctrl+L turns the numbers on again)");
+        check(app.hud().ant_health() == health::Setting{health::When::Hurt, health::Style::Number}, "(Ctrl+L turns the marks on again, with the look that was chosen)");
         app.run_frame_with_delta(0.016f);
-        check(app.menu_settings().hp_numbers, "...and the frame after it remembers that");
+        check(app.menu_settings().ant_health.when == health::When::Hurt && has(read_file(file), "ant_health=hurt\n"), "...and the frame after it remembers that");
         press_key(app, SDLK_l, KMOD_LCTRL);
         app.run_frame_with_delta(0.016f);
-        check(!app.menu_settings().hp_numbers, "...and off");
+        check(app.menu_settings().ant_health.when == health::When::Off, "...and off");
         const std::string saved = read_file(file);
-        check(has(saved, "master=41\n") && has(saved, "mute=on\n") && has(saved, "hp_numbers=off\n"), "the file has master=41, mute=on, hp_numbers=off");
+        check(has(saved, "master=41\n") && has(saved, "mute=on\n") && has(saved, "ant_health=off\n") && has(saved, "ant_health_style=number\n") && !has(saved, "hp_numbers"),
+              "the file has master=41, mute=on, ant_health=off, ant_health_style=number, and no old key");
         check(has(saved, "Music Volume=30\n") && has(saved, "Sound Volume=77\n") && has(saved, "Scroll Speed=12\n") && has(saved, "Participate In Chat=0\n") && has(saved, "Show Quick Help at Startup=0\n"), "the original's keep their own names");
     }
     {
@@ -392,7 +436,8 @@ void test_values() {
         check(again.ok, "the game starts again");
         if (again.ok) {
             Application& app = again.app;
-            check(app.game_menu_get(gm::kMaster) == 41 && app.game_menu_get(gm::kMute) == 1 && app.game_menu_get(gm::kHpNumbers) == 0 && !app.hud().is_show_hp(), "Master, Mute and the numbers come back");
+            check(app.game_menu_get(gm::kMaster) == 41 && app.game_menu_get(gm::kMute) == 1 && app.game_menu_get(gm::kAntHealth) == 2 && app.game_menu_get(gm::kHealthStyle) == 1 &&
+                      app.hud().ant_health() == health::Setting{health::When::Off, health::Style::Number}, "Master, Mute and the health marks come back");
             check(app.game_menu_get(gm::kMusic) == 30 && app.game_menu_get(gm::kScroll) == 12, "and the original's");
         }
     }
@@ -436,8 +481,8 @@ void test_input() {
     push_key(SDLK_l);
     app.run_frame_with_delta(0.016f);
     check(app.hud().get_chat_input().empty(), "no letter reaches the chat line");
-    check(app.hud().is_show_hp() == (app.game_menu_get(gm::kHpNumbers) == 1), "and no hotkey (the numbers are as they were)");
-    const bool had_numbers = app.hud().is_show_hp();
+    check(app.hud().ant_health() == health::Setting{} && app.game_menu_get(gm::kAntHealth) == 0, "and no hotkey (the marks are as they were)");
+    const health::Setting had_marks = app.hud().ant_health();
     push_key(SDLK_l);
     SDL_Event ctrl_l;
     SDL_zero(ctrl_l);
@@ -446,7 +491,7 @@ void test_input() {
     ctrl_l.key.keysym.mod = KMOD_LCTRL;
     SDL_PushEvent(&ctrl_l);
     app.run_frame_with_delta(0.016f);
-    check(app.hud().is_show_hp() == had_numbers, "Ctrl+L does not turn the numbers");
+    check(app.hud().ant_health() == had_marks, "Ctrl+L does not turn the marks");
 
     check(edge() == 0.0f, "the map does not scroll at the edge while the panel is up");
     const auto finger = [&](uint32_t type) {

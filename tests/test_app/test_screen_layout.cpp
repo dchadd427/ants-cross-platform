@@ -1167,7 +1167,7 @@ void test_renderer_world_window(const assets::AssetArchive& arc) {
         world.score_bubbles.push_back(bubble);
     }
     r.spawn_transient_effect("xmarks", cx + 450, cy + 200);          // the click marker, beyond the classic view's right edge
-    r.set_show_hp(true);
+    r.set_health_marks(health::Setting{health::When::All, health::Style::Number});
     // fog of war: the tiles of a pattern are explored, the rest is covered (and the ants of the enemies on covered ground are hidden)
     world.fog_of_war_enabled = true;
     world.fog_revealed.assign(static_cast<size_t>(world.width) * world.height, 0);

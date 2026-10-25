@@ -93,7 +93,7 @@ The wheel over the map view zooms through many levels, one a notch, towards the 
 - **The zoom is the player's own view and nothing else.** The simulation, the network, the bots and every state hash never see it.
 - **Every kind of match has the same levels**: a local game, a game with bots, a server's room, a LAN game (host or guest), and a match that the leader's START filled with bots.
 - **With Fog of War on, every level draws exactly what the zoom 1 draws.** One world pass serves every level, with the same culling and the same gates: a tile that is not explored is dithered and hides the enemy ants, the food, the bombs, fire walls and power-ups, and the effects on it. The minimap respects the fog too (enemy ants, food, power-ups and fire walls only on explored cells). A test pins it at every level (`tests/test_app/test_zoom_view_renderer.cpp`).
-- **What the zoom-out adds is breadth, not a new kind of information**: the types and states of the ants, planted bombs, effects and the hit point digits of every ant that is visible, over a wider area at once. Where those ants are was already on the minimap.
+- **What the zoom-out adds is breadth, not a new kind of information**: the types and states of the ants, planted bombs, effects and the health marks of every ant that is visible, over a wider area at once. Where those ants are was already on the minimap.
 - The level is remembered: `zoom` in the settings file, `--zoom N` for any number from 0.05 to 2. A match starts at the nearest level that its map offers, and the remembered number is kept, so a small map's limit does not change what the next, larger map starts with.
 - The map preview of the setup screens is always the zoom 1 picture, also on a room's screens when the game was started with `--zoom 0.5` or `--zoom 2`.
 
@@ -101,7 +101,7 @@ The wheel over the map view zooms through many levels, one a notch, towards the 
 
 - At the zoom 1 the world is drawn straight into the view. At another zoom it is drawn at one texel per world pixel into an offscreen target that covers the world that the view shows, and copied into the view: on a hardware window, every zoom-out level (`zoom < 1`) blits the `1x` world texture straight to the window viewport with nearest-neighbor sampling (`SDL_ScaleModeNearest`) so fullscreen / high-DPI windows keep full native resolution and crisp pixel art; on the software renderer (and from 1 up to 2) the target is copied into the lattice of whole screen pixels (nearest from 1 to 2, the exact average of 2 x 2 world pixels at each halving below 1 on the software renderer).
 - The origin of the view lies on a grid of one screen pixel at the zoom, so a scroll moves the picture and never makes it shimmer.
-- Everything else on the screen is drawn afterwards at its own size: the frame, the cursor, the rubber band and the hit point digits of Ctrl+L (one size at every zoom).
+- Everything else on the screen is drawn afterwards at its own size: the frame, the cursor, the rubber band and the health marks (a bar scales with the zoom, a number is one size at every zoom: [Ant health marks](#ant-health-marks)).
 - These follow the world that is seen: the edge scroll moves the same distance on the screen at every zoom (in screen pixels), the arrow cursors follow what the view can still do, the minimap's frame is the world that is seen and a press on the minimap centres it, and so do Ctrl+N / Ctrl+P, the start view (the hill stays in view at every zoom) and the sound listener.
 - **The zoom drawn is always the zoom the game says.** Every frame holds the camera inside the levels that the map offers (never below its limit). When the renderer cannot make the offscreen target, the zoom drops to 1 at the next frame and only 1 is offered. One line on stderr says so, once, when the failure begins. The levels come back when the target can be made again.
 - The API that other input uses (a touch screen's pinch calls it): `Application::set_zoom(level, anchor)`, `step_zoom(direction, anchor)`, `zoom()`, `zoom_levels()` and `view_zoom_allowed(x, y)`.
@@ -115,8 +115,18 @@ The gestures and their numbers are in [`TOUCH.md`](TOUCH.md#the-gestures-and-why
 - The frame and the right panel are the original's art, one animation (`uishell`, [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.34).
 - Besides the clock, the score boxes, the minimap and the chat, the HUD shows the card under the minimap with the two command pedestals (see [`CONTROLS.md`](CONTROLS.md)).
 - On your own hill the egg count is an egg tray, `egg1` to `egg9` (ten or more eggs show nine).
-- Every selected ant wears health-colored selection ears: `dogears` at 9 or more hit points, `yelears` at 3 to 8, `redears` at 2 or fewer.
+- Every selected ant wears health-colored selection ears: `dogears` at 9 or more hit points, `yelears` at 3 to 8, `redears` at 2 or fewer. The health marks over the ants use the same colors.
 - The recessed status box (`wstatus.bmp`) sits under the card. The chat log and the chat box are below it.
+
+## Ant health marks
+
+A bar or a number over an ant says how many of its hit points are left. Every ant has 10 at most (a power-up changes the type, not the hit points), so a hurt ant is one with fewer than 10. In the original only a selected ant shows its health (the ears) and Ctrl+L prints white numbers; this is an addition, a drawing aid that changes nothing of the game. It is set in the [settings menu](GAME_MENU.md) (Video: **Ant health**, Hurt ants (the default), All ants or Off; **Show health as**, Bar (the default) or Number) and **Ctrl+L** flips Off and the last choice that was on ([`CONTROLS.md`](CONTROLS.md)). Everybody has it, in a match, a recording and a live watch alike (the one renderer).
+
+- **Who:** every ant that is drawn: own, allied and enemy, as the numbers always were. With Fog of War an enemy ant on unexplored ground is not drawn and has no mark. An ant with no hit points left (it is dying) or a frozen one has none.
+- **Colors:** the selection ears': 9 and 10 hit points green, 3 to 8 amber, 1 and 2 red.
+- **Bar:** 22 world pixels wide and 3 high at the zoom 1, in a black frame, its lower edge 31 pixels over the ant; the colored part is the hit points out of 10 of a dark track. It follows the zoom (5 high from the zoom 1.5, 2 and without a frame below 0.6, 22 times the zoom wide) and is one and a half times as thick on a canvas that the page shows at less than half its size (a phone held upright).
+- **Number:** the fixed font of the original (an 8 x 15 cell), in the bar's color with a black outline, over the ant, one size at every zoom and left out below the zoom 0.6, where it would be bigger than the ant.
+- Marks are drawn once the world is on the screen (after the copy at a zoom), over everything of the world, for the ants in view only. The code is `health_marks.hpp` (the rule and every size, no SDL) and `renderer_health.cpp`; they read the hit points that every client already has, so the simulation, the recordings, the hashes and the network are untouched.
 
 ## Minimap
 
@@ -212,7 +222,7 @@ The application library (`ants_app`, `src/ants_app/`) draws the picture and play
   | 35 px | the start dialog's text |
 
 - The face is the original's "Franklin Gothic Medium" when a copy of that font is found next to the game or in the Windows fonts folder. Otherwise it is the bundled Libre Franklin Medium (a free interpretation of the same Franklin Gothic, SIL Open Font License).
-- The health numbers (Ctrl+L) are white digits in an 8 x 15 pixel cell, like the original's fixed system font.
+- The health numbers are digits of the original's fixed system font (an 8 x 15 pixel cell), colored and outlined ([Ant health marks](#ant-health-marks)).
 
 ### Sound and music
 

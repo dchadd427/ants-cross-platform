@@ -16,7 +16,7 @@
 //      conversions, what a press and a release do (which control reacts, what is selected, which command is issued, what is heard; every zone found to the exact pixel) in 17 HUD states
 //      and on the dialogs, the setup and results screens, and the application's own pointer gate.
 //   3. Pixels (names "px.*"): what the real software renderer puts on the 640 x 480 canvas: Renderer::render_world at the corners and edges of two maps and at
-//      the middle of the others (ants of every type, color and facing, effects, score bubbles, fog, selection markers, hit point digits, a crowd, all straddling the
+//      the middle of the others (ants of every type, color and facing, effects, score bubbles, fog, selection markers, health numbers, a crowd, all straddling the
 //      borders of the playfield), the single-frame cursors at every edge of the screen, and whole frames of an Application (the loading screen, the setup screen, the
 //      quick help, the match screen at the corners of the map). TrueType text is never part of a pixel hash (its pixels depend on the machine's font library): the
 //      boxes where the classic picture has text and the frame-rate plate are masked, with fixed rectangles. The numbers are the same on every machine (checked on
@@ -339,7 +339,7 @@ const Golden kGoldens[] = {
     {"px.world.MEDIUM.origin_1477_1479", 0x83195aeec913dc75, 307200},
     {"px.world.MEDIUM.origin_733_1", 0xa0360a8a2eba817f, 307200},
     {"px.world.MEDIUM.selected", 0x24d1c6b333ffe89f, 307200},
-    {"px.world.MEDIUM.selected_hp", 0x0cc19ed7e1ebe2eb, 307200},
+    {"px.world.MEDIUM.selected_hp", 0x5fa3fa710901367b, 307200},
     {"px.world.MEDIUM.hill_selected", 0x43240c98f09c3a36, 307200},
     {"px.world.MEDIUM.crowd", 0x581384e8758e49ec, 307200},
     {"px.world.MEDIUM.fog", 0xe028297bde386974, 307200},
@@ -368,7 +368,7 @@ const Golden kGoldens[] = {
     {"px.app.quickhelp.pressed_start", 0x9938fed9d1959abf, 307200},
     {"px.app.quickhelp.cursor", 0xa8d009d12219564d, 307200},
     {"px.app.match.modal", 0x635a5ce25c7d86c6, 307200},
-    {"px.app.match.start_view", 0x673ef86b26cd9338, 307200},
+    {"px.app.match.start_view", 0xf7b8a9c8fd45e65c, 307200},
     {"px.app.match.cam_tl", 0xecbe581afae0ead5, 307200},
     {"px.app.match.cam_t", 0xbcc22ae1a17c9bf2, 307200},
     {"px.app.match.cam_tr", 0x94da8a0e285b54cf, 307200},
@@ -630,28 +630,28 @@ const Golden kGoldens[] = {
     {"px.wide.app.quickhelp.hover_start", 0x2fa88736e7f1b0af, 518400},
     {"px.wide.app.results", 0xec037776c9912847, 518400},
     {"px.wide.app.results187", 0xc0568d8d52796ace, 518400},
-    {"px.wide.app.match.modal", 0x3ddb897f72c9d3d6, 518400},
-    {"px.wide.app.match.start_view", 0x595d3def1a48bb8b, 518400},
+    {"px.wide.app.match.modal", 0x69daa6727c2bb2aa, 518400},
+    {"px.wide.app.match.start_view", 0xc5a7e6576a802f1f, 518400},
     {"px.wide.app.match.cam_tl", 0xf19b355a5395c138, 518400},
-    {"px.wide.app.match.cam_t", 0x3a8f693eab398c3b, 518400},
+    {"px.wide.app.match.cam_t", 0x77379064168affaf, 518400},
     {"px.wide.app.match.cam_tr", 0xdc84467c2cc25cdb, 518400},
-    {"px.wide.app.match.cam_l", 0xca013b90f2f1e7ef, 518400},
+    {"px.wide.app.match.cam_l", 0x02484d93fae16d97, 518400},
     {"px.wide.app.match.cam_mid", 0x7d97859e8b29c4d7, 518400},
-    {"px.wide.app.match.cam_r", 0xe4b044b9be8bd77d, 518400},
+    {"px.wide.app.match.cam_r", 0xf9dcf96922aad0d1, 518400},
     {"px.wide.app.match.cam_bl", 0x35f62f16f716266a, 518400},
-    {"px.wide.app.match.cam_b", 0xbb57cdb5c8e1e1d7, 518400},
+    {"px.wide.app.match.cam_b", 0x098f21e6c7f653ef, 518400},
     {"px.wide.app.match.cam_br", 0xb82828fd3358d899, 518400},
-    {"px.wide.app.match.quit_dialog", 0xcb9a7f2c39318ead, 518400},
-    {"px.wide.app.match.options_page", 0xe594c3d9822c0d2f, 518400},
-    {"px.wide.app.match.quickhelp_page", 0xb19e23863dbf22c2, 518400},
-    {"px.wide.app.match.cursor_map", 0x8c1e413493cf0e22, 518400},
-    {"px.wide.app.match.cursor_edge", 0xa62d92275e38ffb9, 518400},
-    {"px.wide.app.match.cursor_edge_east", 0xf806b33e9b8d9fd4, 518400},
-    {"px.wide.app.start.TINY", 0x8c15e5245f01c313, 518400},
-    {"px.wide.app.start.SMALL", 0xfe362f5f666236d8, 518400},
-    {"px.wide.app.start.ISLANDS", 0x77dc81d9280a5b04, 518400},
-    {"px.wide.app.start.GAUNTLET", 0x79e2b3de5175248b, 518400},
-    {"px.wide.app.start.TREASURE", 0xffb65b08c16cda77, 518400},
+    {"px.wide.app.match.quit_dialog", 0x473faaf65792a391, 518400},
+    {"px.wide.app.match.options_page", 0x29624e3964bfbbf3, 518400},
+    {"px.wide.app.match.quickhelp_page", 0x52c4d42e3fff3a76, 518400},
+    {"px.wide.app.match.cursor_map", 0x7632c47ca3141356, 518400},
+    {"px.wide.app.match.cursor_edge", 0xd309440c51b5ea8d, 518400},
+    {"px.wide.app.match.cursor_edge_east", 0x8e15ab455fac2ea0, 518400},
+    {"px.wide.app.start.TINY", 0xecc97bfff5fe4203, 518400},
+    {"px.wide.app.start.SMALL", 0xe8ea3707f9ee0748, 518400},
+    {"px.wide.app.start.ISLANDS", 0x240257072453751c, 518400},
+    {"px.wide.app.start.GAUNTLET", 0xe5ecdeefc3042303, 518400},
+    {"px.wide.app.start.TREASURE", 0x7ea427fa17bd37f7, 518400},
 };
 
 }  // namespace

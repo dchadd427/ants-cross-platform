@@ -13,6 +13,7 @@
 #include "ants_app/renderer.hpp"
 #include "ants_app/config_store.hpp"
 #include "ants_app/countdown_card.hpp"
+#include "ants_app/health_marks.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/options_screen.hpp"
 #include "ants_app/screen_button.hpp"
@@ -404,10 +405,13 @@ public:
         return (index < 4) ? options_.state().quick_chat[index] : empty;
     }
 
-    /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position. A tweak of the original: ON by default
-    /// (the original starts with it off); Ctrl+L toggles it as in the original.
-    bool is_show_hp() const noexcept { return show_hp_; }
-    void set_show_hp(bool on) noexcept { show_hp_ = on; }
+    /// Ctrl+L (0x1026440): the original prints the hit points of every ant as text. Here it flips the ant health marks (health_marks.hpp: a bar or a number over the ants) between Off and the
+    /// mode they had before. A tweak of the original: marks on hurt ants are the default (the original starts with the numbers off).
+    health::Setting ant_health() const noexcept { return health_; }
+    void set_ant_health(health::Setting setting) noexcept {
+        health_ = setting;
+        if (setting.when != health::When::Off) health_resume_ = setting.when;
+    }
 
     /// The alliance dialogs (Ants.exe FUN_01015b65 invitation, FUN_010160e2 waiting, FUN_01016438 confirmation; docs 5.42). They follow from the state of the
     /// simulation, never from an event: the invitee sees the question while an offer to it is pending (Accept / Decline; keys A, D, Esc), the proposer sees the
@@ -563,7 +567,8 @@ private:
     int32_t mouse_y_{-1};
 
     // Marquee drag selection
-    bool show_hp_{true};                 // tweak: the original starts with the digits off
+    health::Setting health_{};           // tweak: the original starts with the digits off
+    health::When health_resume_{health::When::Hurt};     // what Ctrl+L brings back after Off
     bool is_dragging_{false};
     bool shift_held_{false};
     int32_t drag_start_x_{0};

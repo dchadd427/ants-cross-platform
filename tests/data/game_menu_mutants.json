@@ -179,8 +179,8 @@
     {
       "id": "switch_values_swapped",
       "file": "web/game_menu.js",
-      "old": "function (v) { call('_ants_menu_set', row.id, v, 1); }, [1, 0]);",
-      "new": "function (v) { call('_ants_menu_set', row.id, v, 1); }, [0, 1]);",
+      "old": "control = choice(row, id, mine.read, mine.write, [1, 0]);",
+      "new": "control = choice(row, id, mine.read, mine.write, [0, 1]);",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -581,10 +581,10 @@
       "test": "./build/tests/test_app/test_game_menu"
     },
     {
-      "id": "numbers_default_off",
+      "id": "old_numbers_off_not_read",
       "file": "src/ants_app/game_menu.cpp",
-      "old": "store.get_string(key(kHpNumbers), \"on\", 8) != \"off\"",
-      "new": "store.get_string(key(kHpNumbers), \"on\", 8) == \"on\"",
+      "old": "} else if (store.get_string(\"hp_numbers\", \"on\", 8) == \"off\") {",
+      "new": "} else if (store.get_string(\"hp_numbers\", \"on\", 8) != \"off\") {",
       "build": [
         "test_game_menu"
       ],
@@ -761,19 +761,19 @@
       "test": "./build/tests/test_app/test_game_menu"
     },
     {
-      "id": "numbers_not_remembered",
+      "id": "health_not_remembered",
       "file": "src/ants_app/application_game_menu.cpp",
-      "old": "    menu_settings_.hp_numbers = hud_.is_show_hp();\n    menu_settings_.write(config_store_, game_menu::kHpNumbers);",
-      "new": "    menu_settings_.hp_numbers = hud_.is_show_hp();",
+      "old": "    if (now.when != before.when) menu_settings_.write(config_store_, game_menu::kAntHealth);\n",
+      "new": "",
       "build": [
         "test_game_menu"
       ],
       "test": "./build/tests/test_app/test_game_menu"
     },
     {
-      "id": "numbers_not_loaded",
+      "id": "health_not_loaded",
       "file": "src/ants_app/application_game_menu.cpp",
-      "old": "    hud_.set_show_hp(menu_settings_.hp_numbers);\n",
+      "old": "    hud_.set_ant_health(menu_settings_.ant_health);\n",
       "new": "",
       "build": [
         "test_game_menu"
@@ -1140,6 +1140,127 @@
       "file": "web/game_menu.js",
       "old": "            state.picker = picker;\n",
       "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "old_key_beats_new",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "if (store.has(key(kAntHealth))) {",
+      "new": "if (!store.has(\"hp_numbers\") && store.has(key(kAntHealth))) {",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "health_style_not_remembered",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "    if (now.style != before.style) menu_settings_.write(config_store_, game_menu::kHealthStyle);\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "health_word_out_of_range_taken",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "            if (value < row->min || value > row->max) return false;                    // (a word that the row does not have)\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "health_style_row_sets_when",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "            if (id == gm::kAntHealth) setting.when = static_cast<health::When>(value);",
+      "new": "            if (id != gm::kAntHealth) setting.when = static_cast<health::When>(value);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "health_default_all",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "kAntHealth, \"ant_health\", Section::Video, Kind::Choice, 0, 2, static_cast<int>(health::When::Hurt)",
+      "new": "kAntHealth, \"ant_health\", Section::Video, Kind::Choice, 0, 2, static_cast<int>(health::When::All)",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "health_not_new_tagged",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "Kind::Choice, 0, 1, static_cast<int>(health::Style::Bar), kBoth | kShowWatch | kShowNew,",
+      "new": "Kind::Choice, 0, 1, static_cast<int>(health::Style::Bar), kBoth | kShowWatch,",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "health_not_in_recordings",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "static_cast<int>(health::When::Hurt), kBoth | kShowWatch | kShowNew",
+      "new": "static_cast<int>(health::When::Hurt), kBoth | kShowNew",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ctrl_l_forgets_the_choice",
+      "file": "src/ants_app/hud.cpp",
+      "old": "health_.when == health::When::Off ? health_resume_ : health::When::Off",
+      "new": "health_.when == health::When::Off ? health::When::Hurt : health::When::Off",
+      "build": [
+        "test_pointer_model"
+      ],
+      "test": "./build/tests/test_app/test_pointer_model"
+    },
+    {
+      "id": "ctrl_l_resets_the_look",
+      "file": "src/ants_app/hud.cpp",
+      "old": "health::When::Off, health_.style});",
+      "new": "health::When::Off, health::Style::Bar});",
+      "build": [
+        "test_pointer_model"
+      ],
+      "test": "./build/tests/test_app/test_pointer_model"
+    },
+    {
+      "id": "health_menu_choice_not_resumed",
+      "file": "include/ants_app/hud.hpp",
+      "old": "        if (setting.when != health::When::Off) health_resume_ = setting.when;\n",
+      "new": "",
+      "build": [
+        "test_pointer_model"
+      ],
+      "test": "./build/tests/test_app/test_pointer_model"
+    },
+    {
+      "id": "page_game_choice_read_nothing",
+      "file": "web/game_menu.js",
+      "old": "var mine = { read: function () { return get(row.id); },",
+      "new": "var mine = { read: function () { return 0; },",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "page_game_choice_wrong_values",
+      "file": "web/game_menu.js",
+      "old": "choice(row, id, (own || mine).read, (own || mine).write, row.words.map(function (w, i) { return i; }))",
+      "new": "choice(row, id, (own || mine).read, (own || mine).write, row.words.map(function (w, i) { return i + 1; }))",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "page_game_choice_not_saved",
+      "file": "web/game_menu.js",
+      "old": "write: function (v) { call('_ants_menu_set', row.id, v, 1); } };",
+      "new": "write: function (v) { call('_ants_menu_set', row.id, v, 0); } };",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
   ]

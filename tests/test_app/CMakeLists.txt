@@ -1155,6 +1155,40 @@ target_link_libraries(test_game_menu PRIVATE ants_test_paths)
 add_test(NAME test_game_menu COMMAND test_game_menu)
 set_tests_properties(test_game_menu PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The ant health marks: the rule, the colors and the sizes with no window, and the drawing (a bar or a number over the ants) on a real renderer, pixel for pixel
+add_executable(test_health_marks
+    test_health_marks.cpp
+)
+
+target_include_directories(test_health_marks PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_health_marks PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_health_marks PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_health_marks PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_health_marks PRIVATE ants_test_paths)
+
+add_test(NAME test_health_marks COMMAND test_health_marks)
+set_tests_properties(test_health_marks PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # Replays in the application: a headless application plays a game on this computer and a match of the network (the other machine is a bare NetGame over loopback sockets); the file that it keeps
 # of each is played again by the replay player on the engine alone and must reach the state in which the match ended
 add_executable(test_replay_app

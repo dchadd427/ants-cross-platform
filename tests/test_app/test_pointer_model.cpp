@@ -1889,11 +1889,20 @@ void test_keyboard() {
         check(f.hud.is_move_latched(), "a pedestal is latched");
         check(key(SDLK_ESCAPE), "Esc is handled");
         check(f.hud.get_selected_ant_ids().empty() && !f.hud.is_move_latched() && !f.hud.is_quit_dialog_open(), "Esc deselects everything and lets the pedestals up, no dialog");
-        check(f.hud.is_show_hp(), "hit point digits are on (a tweak: the original starts with them off)");
+        check(f.hud.ant_health() == health::Setting{health::When::Hurt, health::Style::Bar}, "the health marks are on, a bar on hurt ants (a tweak: the original starts with the numbers off)");
         key('l', KMOD_CTRL);
-        check(!f.hud.is_show_hp(), "Ctrl+L switches them off");
+        check(f.hud.ant_health().when == health::When::Off && f.hud.ant_health().style == health::Style::Bar, "Ctrl+L switches them off");
         key('L', KMOD_CTRL);
-        check(f.hud.is_show_hp(), "and on again");
+        check(f.hud.ant_health() == health::Setting{health::When::Hurt, health::Style::Bar}, "and on again, as they were");
+        f.hud.set_ant_health(health::Setting{health::When::All, health::Style::Number});
+        key('l', KMOD_CTRL);
+        check(f.hud.ant_health() == health::Setting{health::When::Off, health::Style::Number}, "from All ants with numbers: off, and the look stays");
+        key('l', KMOD_CTRL);
+        check(f.hud.ant_health() == health::Setting{health::When::All, health::Style::Number}, "...and back to All ants, not to the default");
+        f.hud.set_ant_health(health::Setting{health::When::Off, health::Style::Bar});
+        key('l', KMOD_CTRL);
+        check(f.hud.ant_health().when == health::When::All, "Ctrl+L from Off (chosen in the menu) brings back the last choice that was on: All ants");
+        f.hud.set_ant_health(health::Setting{});
         // Ctrl+S: the stop order without flash, lock or deselect, only for own ants
         f.hud.select_ant(s.mine);
         f.click_tile(30, 22);

@@ -3,6 +3,7 @@
 // state in which the match ended: the same state hash, every order at its turn.
 #include "ants_app/application.hpp"
 #include "ants_ai/bot_controller.hpp"
+#include "ants_app/game_menu.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
@@ -2102,6 +2103,90 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(app.game_menu_get(game_menu::kMaster), 55);
         ASSERT_TRUE(app.game_menu_do(game_menu::kActLeave));
         ASSERT_FALSE(app.is_running());                                                 // (a native game ends; the page goes to the list of matches)
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA10.2 The ant health marks in a recording: the viewer's own choice reaches the same renderer, a hurt ant has its bar in the frame (and a healthy one has none), Off draws nothing") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        Application& app = v.app;
+        v.frames(20);
+        ASSERT_TRUE(app.hud().ant_health() == health::Setting{});                          // (the default is the same for a viewer: hurt ants, a bar)
+        ASSERT_FALSE(app.sim().get_world_state().ants.empty());
+        const uint32_t id = app.sim().get_world_state().ants.front().id;
+        // the picture of this frame only: the viewer's copy of the world gets one hurt ant (seen at the next tick), and the camera looks at it
+        const auto look_at_the_ant = [&]() {
+            for (const sim::AntSnapshot& a : app.sim().get_world_state().ants) {
+                if (a.id != id) continue;
+                app.renderer().camera().zoom = 1.0f;
+                app.renderer().camera().set_origin(static_cast<double>(a.px) - 300.0, static_cast<double>(a.py) - 150.0, app.sim().grid().width(), app.sim().grid().height());
+                return a;
+            }
+            return sim::AntSnapshot{};
+        };
+        const int32_t cw = app.renderer().canvas_w(), ch = app.renderer().canvas_h();
+        app.renderer().pin_animation_clock(1500);                                          // (the water and the plants move with the clock: the same frame twice needs it still)
+        const auto frame = [&](int when, std::vector<uint8_t>& px) {                    // (the canvas as drawn: the window may be a whole multiple of it, which is sampled back)
+            if (!app.game_menu_set(game_menu::kAntHealth, when)) return false;
+            app.render_frame();
+            int ow = 0, oh = 0;
+            if (SDL_GetRendererOutputSize(app.renderer().get_sdl_renderer(), &ow, &oh) != 0 || ow < cw || oh < ch || ow % cw != 0 || oh % ch != 0 || ow / cw != oh / ch) return false;
+            const int32_t k = ow / cw;
+            std::vector<uint8_t> full(static_cast<size_t>(ow) * static_cast<size_t>(oh) * 4u, 0);
+            if (SDL_RenderReadPixels(app.renderer().get_sdl_renderer(), nullptr, SDL_PIXELFORMAT_RGBA32, full.data(), ow * 4) != 0) return false;
+            px.assign(static_cast<size_t>(cw) * static_cast<size_t>(ch) * 4u, 0);
+            for (int32_t y = 0; y < ch; ++y) {
+                for (int32_t x = 0; x < cw; ++x) {
+                    for (size_t c = 0; c < 4; ++c) px[(static_cast<size_t>(y) * static_cast<size_t>(cw) + static_cast<size_t>(x)) * 4u + c] = full[(static_cast<size_t>(y * k) * static_cast<size_t>(ow) + static_cast<size_t>(x * k)) * 4u + c];
+                }
+            }
+            return true;
+        };
+        // how many pixels of the view differ between two canvases, over the ant (the bar's place, with room for the few pixels that a walking ant's sprite is ahead) and elsewhere
+        const auto changed = [&](const std::vector<uint8_t>& a, const std::vector<uint8_t>& b, const sim::AntSnapshot& ant, int32_t* elsewhere) {
+            int32_t over = 0;
+            *elsewhere = 0;
+            const LayoutRect view = app.layout().view();
+            const int32_t sx = view.x + (ant.px - app.renderer().camera().world_x), sy = view.y + (ant.py - app.renderer().camera().world_y);
+            for (int32_t y = 0; y < ch; ++y) {
+                for (int32_t x = 0; x < cw; ++x) {
+                    const size_t i = (static_cast<size_t>(y) * static_cast<size_t>(cw) + static_cast<size_t>(x)) * 4u;
+                    if (a[i] == b[i] && a[i + 1] == b[i + 1] && a[i + 2] == b[i + 2]) continue;
+                    if (x < view.x || y < view.y || x >= view.x + view.w || y >= view.y + view.h) continue;           // (the world's view only: the frame rate's plate and the HUD change with the time)
+                    if (x >= sx - 20 && x <= sx + 20 && y >= sy - 45 && y <= sy - 25) ++over;
+                    else ++*elsewhere;
+                }
+            }
+            return over;
+        };
+        std::vector<uint8_t> off_a, off_b, hurt, healthy, all;
+        sim::AntSnapshot ant = look_at_the_ant();
+        ASSERT_EQ(ant.id, id);
+        int32_t elsewhere = 0;
+        ASSERT_TRUE(frame(2, off_a));
+        ASSERT_TRUE(frame(2, off_b));
+        ASSERT_EQ(changed(off_a, off_b, ant, &elsewhere) + elsewhere, 0);                // (the frame is the same twice: what differs below is the marks)
+        ASSERT_TRUE(frame(0, hurt));
+        ASSERT_EQ(changed(off_a, hurt, ant, &elsewhere) + elsewhere, 0);                 // (nobody is hurt yet: Hurt ants draws nothing)
+        app.sim().get_unit(id).hp = 4;
+        v.frames(1);
+        ant = look_at_the_ant();
+        ASSERT_EQ(ant.hp, 4);
+        ASSERT_TRUE(frame(2, off_a));
+        ASSERT_TRUE(frame(0, hurt));
+        ASSERT_TRUE(changed(off_a, hurt, ant, &elsewhere) > 80);                         // (the 24 x 5 pixels of the bar with its frame)
+        ASSERT_EQ(elsewhere, 0);                                                         // (and nothing else)
+        app.sim().get_unit(id).hp = 10;
+        v.frames(1);
+        ant = look_at_the_ant();
+        ASSERT_EQ(ant.hp, 10);
+        ASSERT_TRUE(frame(2, off_a));
+        ASSERT_TRUE(frame(0, healthy));
+        ASSERT_EQ(changed(off_a, healthy, ant, &elsewhere) + elsewhere, 0);              // (healed: no bar in Hurt ants)
+        ASSERT_TRUE(frame(1, all));
+        ASSERT_TRUE(changed(off_a, all, ant, &elsewhere) > 80);                          // (and one in All ants)
+        ASSERT_TRUE(app.renderer().health_marks() == (health::Setting{health::When::All, health::Style::Bar}));
         v.app.shutdown();
     } TEST_END();
 
