@@ -119,6 +119,20 @@ class ThePlayChecks(unittest.TestCase):
                 self.assertNotIn("play_check", m["test"], m["id"])
 
 
+class TheHeavyMapWarning(unittest.TestCase):
+    def test_the_page_warns_above_the_number_that_the_server_marks(self):
+        """a map is heavy above include/ants_server/online_limits.hpp's kHeavyStartAnts start ants; the page's copy of the number must be the same"""
+        header = re.search(r"kHeavyStartAnts = (\d+);", read("include", "ants_server", "online_limits.hpp"))
+        page = re.search(r"HEAVY_START_ANTS = (\d+);", read("web", "front", "mapmaker_play.js"))
+        self.assertTrue(header and page)
+        self.assertEqual(header.group(1), page.group(1))
+
+    def test_it_only_warns(self):
+        play = read("web", "front", "mapmaker_play.js")
+        for word in ("disabled = v.heavy", "ok: !v.heavy", "tooMany", "online game allows"):
+            self.assertNotIn(word, play, "a heavy map is never refused or turned off here: " + word)
+
+
 class ThePageWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -55,6 +55,11 @@ ApprovedMap approved_map(const fs::path& dir, const std::string& name, uint32_t 
     return a;
 }
 
+std::string lower_of(std::string text) {
+    for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return text;
+}
+
 fs::path fresh_dir(const char* name) {
     const fs::path dir = fs::temp_directory_path() / (std::string("ants_online_limit_") + name + "_" + std::to_string(ANTS_ONLINE_LIMIT_GETPID()));
     fs::remove_all(dir);
@@ -539,6 +544,140 @@ void run_online_limit_tests() {
             w.run(300);
             ASSERT_TRUE(cat.was_rejected && cat.rejected == net::RejectReason::NoSuchRoom);
         }
+        std::error_code ignore;
+        fs::remove_all(maps.parent_path(), ignore);
+    } TEST_END();
+
+    TEST_CASE("S3.220 The Start Ants Of A Map Are Its Start Markers Of The Four Colors Added Up, Counted From The File That The Server Loaded: 0, 300 (Not Heavy), 301 (Heavy), One Color With All Of Them, 6,000; A Plant Is No Ant") {
+        ASSERT_TRUE(OnlineLimits::kHeavyStartAnts == 300u && !OnlineLimits::heavy(0) && !OnlineLimits::heavy(299) && !OnlineLimits::heavy(300) && OnlineLimits::heavy(301) && OnlineLimits::heavy(6000));
+        const auto counted = [](const std::array<uint32_t, 4>& per_color) -> int64_t {
+            const std::string bytes = tiny_with_ants(per_color);
+            ants::assets::LevelData level;
+            if (bytes.empty() || !ants::assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, ants::assets::LevelLimits::for_play_extended())) return -1;
+            return static_cast<int64_t>(OnlineLimits::start_ants(level));
+        };
+        ASSERT_EQ(counted({0, 0, 0, 0}), int64_t{0});                                               // (no marker at all: no ant)
+        ASSERT_EQ(counted({3, 3, 3, 3}), int64_t{12});                                              // (TINY itself)
+        ASSERT_EQ(counted({75, 75, 75, 75}), int64_t{300});                                         // (75 a color on four colors: the last map that is not heavy)
+        ASSERT_EQ(counted({75, 75, 75, 76}), int64_t{301});
+        ASSERT_EQ(counted({300, 0, 0, 0}), int64_t{300});                                           // (one color with all of them: the same total)
+        ASSERT_EQ(counted({0, 0, 301, 0}), int64_t{301});
+        ASSERT_EQ(counted({100, 100, 100, 0}), int64_t{300});                                       // (three colors)
+        ASSERT_EQ(counted({693, 693, 693, 693}), int64_t{2772});
+        ASSERT_EQ(counted({1500, 1500, 1500, 1500}), int64_t{6000});                                // (a 6,000-ant map: 1,500 a color)
+        ASSERT_TRUE(OnlineLimits::heavy(static_cast<uint64_t>(counted({1500, 1500, 1500, 1500}))) && !OnlineLimits::heavy(static_cast<uint64_t>(counted({75, 75, 75, 75}))));
+        {   // a record of block 1 that is no start marker (a plant: team 255) starts no ant
+            const std::string base = tiny_with_ants({75, 75, 75, 75});
+            ants::assets::LevelData level;
+            ASSERT_TRUE(ants::assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), level, nullptr, ants::assets::LevelLimits::for_play_extended()));
+            const size_t before = level.anthill_spawns().size();
+            ants::assets::AnthillSpawn plant;
+            plant.tile_id = 404;
+            plant.team_id = 255;
+            plant.y = 5;
+            plant.x = 5;
+            for (int i = 0; i < 50; ++i) level.anthill_spawns.push_back(plant);
+            const ants::assets::LevelWriteResult w = ants::assets::write_level(level, ants::assets::LevelLimits::for_extended_maps());
+            ASSERT_TRUE(w.ok);
+            ants::assets::LevelData again;
+            ASSERT_TRUE(ants::assets::LVLParser::load_from_memory(w.bytes.data(), w.bytes.size(), again, nullptr, ants::assets::LevelLimits::for_play_extended()));
+            ASSERT_TRUE(again.anthill_spawns().size() == before + 50 && OnlineLimits::start_ants(again) == 300u);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.221 Nothing Is Refused For Its Start Ants: A Map Of 6,000 Ants Is Chosen By A Lobby's Leader (No Word In The Chat), Made Into A Room By The Control Interface, Offered To A Visitor Through --demo-maps, Taken As A Test Map Into A Lobby; The List Marks It Heavy And Names The Count") {
+        const fs::path dir = fresh_dir("s221");
+        const auto keep = [&](const std::string& name, const std::array<uint32_t, 4>& per_color) {
+            const std::string bytes = tiny_with_ants(per_color);
+            ASSERT_TRUE(!bytes.empty());
+            std::ofstream out(dir / name, std::ios::binary);
+            out << bytes;
+        };
+        keep("TINY.LVL", {3, 3, 3, 3});
+        keep("Edge 300.lvl", {75, 75, 75, 75});
+        keep("Over 301.lvl", {75, 75, 75, 76});
+        keep("Huge 6000.lvl", {1500, 1500, 1500, 1500});
+        ServerLimits l = limits_with(8);
+        l.demo_maps = {"TINY.LVL", "Huge 6000.lvl"};
+        World w(l, dir.string());
+        const MapStore& store = w.mgr.store();
+        Client& pia = w.connect_page("Pia", "ant00001", lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->is_leader());
+        for (const char* name : {"Over 301.lvl", "huge 6000.LVL", "Edge 300.lvl", "Huge 6000.lvl"}) {
+            ASSERT_TRUE(pia.lobby->request_plan(plan_for(name)));
+            w.run(300);
+            ASSERT_EQ(lower_of(w.status("ant00001").map), lower_of(name));                                    // (the room has the map that was chosen, whatever it starts)
+        }
+        ASSERT_TRUE(said(pia.room_chat).empty());                                                    // (and nobody is told anything)
+        const LobbyServices services = w.mgr.lobby_services();
+        for (const char* name : {"Over 301.lvl", "Huge 6000.lvl", "HUGE 6000.LVL"}) {
+            ASSERT_EQ(services.choose_map(name), store.listed_name(name));
+            ASSERT_TRUE(!services.choose_map(name).empty() && services.map_refusal(name).empty());
+        }
+        MapEntry entry;
+        ants::assets::LevelData level;
+        ASSERT_TRUE(services.load_map("Huge 6000.lvl", entry, level) && OnlineLimits::start_ants(level) == 6000u);
+        const ctl::JsonValue newest = [&]() { ctl::JsonValue v; ctl::parse_json(store.list_json(nullptr, true), v, nullptr, ctl::JsonLimits()); return v; }();
+        const auto entry_of = [&](const char* file) -> const ctl::JsonValue* {
+            for (size_t i = 0; i < newest.get("maps").size(); ++i) {
+                if (newest.get("maps").at(i).get("file").str() == file) return &newest.get("maps").at(i);
+            }
+            return nullptr;
+        };
+        ASSERT_TRUE(entry_of("Huge 6000.lvl") != nullptr && entry_of("Huge 6000.lvl")->get("heavy").as_bool_or(false) && entry_of("Huge 6000.lvl")->get("ants").as_int_or(0) == 6000);
+        ASSERT_TRUE(entry_of("Over 301.lvl") != nullptr && entry_of("Over 301.lvl")->get("heavy").as_bool_or(false) && entry_of("Over 301.lvl")->get("ants").as_int_or(0) == 301);
+        ASSERT_TRUE(entry_of("Edge 300.lvl") != nullptr && entry_of("Edge 300.lvl")->get("heavy").is_null() && entry_of("Edge 300.lvl")->get("ants").is_null());
+        ASSERT_TRUE(entry_of("TINY.LVL") != nullptr && entry_of("TINY.LVL")->get("heavy").is_null());
+        ASSERT_TRUE(entry_of("Huge 6000.lvl")->get("online").is_null());                              // ("online" is about the size of the grid only)
+        // the control interface makes a room on it
+        ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-huge", 2, "Huge 6000.lvl"), w.now).ok);
+        ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-over", 2, "Over 301.lvl"), w.now).ok);
+        {   // a test map (an unlisted room map with other players in it): taken into a lobby at 6,000 ants as at 300
+            ApprovedMap a;
+            a.name = "Huge Draft ~test-0badf00d.lvl";
+            const std::string bytes = tiny_with_ants({1500, 1500, 1500, 1500});
+            a.path = (dir / (a.name + ".bin")).string();
+            { std::ofstream out(a.path, std::ios::binary); out << bytes; }
+            a.size = bytes.size();
+            a.width = 31;
+            a.height = 31;
+            a.minutes = 10;
+            a.players = 4;
+            a.kind = "classic";
+            net::hash_file(a.path, a.hash);
+            w.mgr.mutable_store().set_test_maps({a});
+            w.connect_page("Ann", "ant00002", lobby_block_of(a.name));
+            w.run(300);
+            ASSERT_EQ(w.status("ant00002").map, a.name);
+        }
+        {   // a visitor's block that names a map that the operator offers (--demo-maps) and that has 6,000 ants: the room is made
+            ServerLimits offered = limits_with(8);
+            offered.demo_maps = {"TINY.LVL", "Huge 6000.lvl"};
+            World v(offered, dir.string());
+            Client& big = v.connect_creating("Big", "pub00501", block_of("Huge 6000.lvl", 2));
+            ASSERT_EQ(door_answer(v, big), static_cast<net::RejectReason>(0));
+            ASSERT_EQ(v.status("pub00501").map, std::string("Huge 6000.lvl"));
+        }
+        fs::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("S3.222 A Restart Record Of A Match On A Map Of 6,000 Ants Is Not Refused For Its Ants (It Goes To The Replay, Which Says What It Says For Its Own Reasons)") {
+        const fs::path maps = fs::path(temp_dir_for("online-222")) / "Maps";
+        fs::create_directories(maps);
+        fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
+        const std::string many = tiny_with_ants({1500, 1500, 1500, 1500});
+        ASSERT_TRUE(!many.empty());
+        { std::ofstream out(maps / "MANY.LVL", std::ios::binary); out << many; }
+        uint64_t many_hash = 0;
+        ASSERT_TRUE(net::hash_file((maps / "MANY.LVL").string(), many_hash));
+        PWorld w("online-222a", ServerLimits(), maps.string());
+        w.start_server(500);
+        crash_with_record_of(w, "AN-1", 8000);
+        rewrite_head(w, "AN-1", [&](RestartHead& h) { h.map = "MANY.LVL"; h.map_hash = many_hash; h.start.map_name = "MANY.LVL"; h.start.map_hash = many_hash; });
+        w.start_server(500);
+        ASSERT_TRUE(w.report.items.size() == 1);
+        ASSERT_MSG(w.report.items[0].note.find("to play online") == std::string::npos && w.report.items[0].note.find("ants") == std::string::npos, w.report.items[0].note);          // (this record's turns are TINY's, so its replay says no for its own reasons: not the map)
         std::error_code ignore;
         fs::remove_all(maps.parent_path(), ignore);
     } TEST_END();

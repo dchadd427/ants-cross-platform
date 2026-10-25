@@ -181,6 +181,8 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
             m.minutes = static_cast<uint32_t>(d.get("minutes").as_int_or(0));
             m.players = static_cast<uint32_t>(d.get("players").as_int_or(0));
             m.description = d.get("description").str();
+            assets::LevelData counted;                                  // (maps.json does not know the ants: they are counted from the file, so that the list can mark a heavy map)
+            if (counted.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) m.start_ants = OnlineLimits::start_ants(counted);
         } else {
             if (community && known != described.end()) note("maps.json describes " + name + " with another hash than the file has: the file's own header is used");
             assets::LevelData level;
@@ -194,6 +196,7 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
                 if (a.team_id < 4) teams.insert(a.team_id);
             }
             m.players = teams.empty() ? 4u : static_cast<uint32_t>(teams.size());
+            m.start_ants = OnlineLimits::start_ants(level);
         }
         if (m.original) {
             m.thumb = std::string(kOriginalPreviewDir) + original->second;
@@ -241,6 +244,7 @@ void MapStore::add_approved_to_listing() {
         m.height = a.height;
         m.minutes = a.minutes;
         m.players = a.players;
+        m.start_ants = a.start_ants;
         m.description = a.description;
         m.approved = true;
         m.maker = a.maker;
@@ -255,8 +259,27 @@ void MapStore::add_approved_to_listing() {
     std::sort(extended_listing_.begin(), extended_listing_.end(), [](const MapListing& a, const MapListing& b) { return a.file < b.file; });
 }
 
+// The start ants of an approved file: counted from the file, kept by path, size and hash (an approved file never changes, and the list is rebuilt at every approval and take-down)
+uint64_t MapStore::start_ants_of_file(const std::string& path, uint64_t size, uint64_t hash) {
+    const auto kept = counted_.find(path);
+    if (kept != counted_.end() && kept->second.size == size && kept->second.hash == hash) return kept->second.ants;
+    assets::LevelData level;
+    const uint64_t ants = level.load_from_file(path, nullptr, assets::LevelLimits::for_play_extended()) ? OnlineLimits::start_ants(level) : 0u;          // (a file that does not load starts none: the room's own load says no)
+    counted_[path] = Counted{size, hash, ants};
+    return ants;
+}
+
+void MapStore::count_start_ants() {
+    for (ApprovedMap& a : approved_) a.start_ants = start_ants_of_file(a.path, a.size, a.hash);
+    for (auto it = counted_.begin(); it != counted_.end();) {          // (a file that is no longer held is forgotten)
+        const bool held = std::any_of(approved_.begin(), approved_.end(), [&](const ApprovedMap& a) { return a.path == it->first; });
+        it = held ? std::next(it) : counted_.erase(it);
+    }
+}
+
 void MapStore::set_approved(std::vector<ApprovedMap> maps) {
     approved_ = std::move(maps);
+    count_start_ants();
     if (!scanned_) return;
     add_approved_to_listing();
     sort_listing();
@@ -379,6 +402,10 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_ex
         if (m.approved) o.set("maker", ctl::JsonValue::make_string(m.maker));
         if (with_extended) o.set("kind", ctl::JsonValue::make_string(m.kind));
         if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height))) o.set("online", ctl::JsonValue::make_bool(false));       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)
+        if (with_extended && OnlineLimits::heavy(m.start_ants)) {          // (a game on it may run slowly: the pages warn; no map is refused for its ants)
+            o.set("ants", ctl::JsonValue::make_int(static_cast<int64_t>(m.start_ants)));
+            o.set("heavy", ctl::JsonValue::make_bool(true));
+        }
         maps.push_back(std::move(o));
     }
     ctl::JsonValue root = ctl::JsonValue::make_object();
