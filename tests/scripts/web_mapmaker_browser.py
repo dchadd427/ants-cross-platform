@@ -73,6 +73,8 @@ Parts:
   * pickup   1280 x 800 and a touch screen (390 x 844), the Pick up tool (tests/scripts/web_mapmaker_browser_pickup.py, which says what it covers): its part loads on first use, a tap picks a hill, an ant (and its group),
              a pile or a box of things, the gold ring and the green or red ghost are read from the overlay canvas, Move, the nudge arrows and the keys put a thing down in ONE step (the bytes that Download hands over are
              read with struct; one Undo gives the file back), the bar is at the foot of a phone's screen with 44 pixel buttons and 48 pixel arrows (on a desktop it is a row under the map, so the map ends above it: its last row and a thing at its foot are in view above the bar, at 1280 x 800, 1000 x 700 and 390 x 844), Pan only looks around, and the pictures M1 to M7 are saved with --shots
+  * line     1280 x 800, the straight line (tests/scripts/web_mapmaker_browser_line.py, which says what it covers): real mouse events with Shift or Ctrl keep a stroke of Ground, Objects and Erase to one line
+             through its first cell, across or down; with no key, or Command or Alt alone, it is free; Hills, Pan and Pick up only look around; a zoomed view, the map's edge, the keys let go and pressed in a stroke
   * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -93,7 +95,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants", "pickup")
+PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants", "pickup", "line")
 WITH_ATLAS = ("panel", "sprites", "layer", "edges", "play", "ants", "pickup")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 VIOLATIONS = []                   # what the browser refused for the page's content security policy (the console's "Refused to ..." lines and the audit issues), kept for the part that is running
@@ -2093,6 +2095,9 @@ def run_part(part, tab, args, check, tiny, junk):
         ants_part.run_ants(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
         tab.emulate(390, 844, 2, mobile=True)
         ants_part.run_ants_phone(Page(tab, args.web), tab, args, check, env, edges_bytes, EDGES_JS)
+    elif part == "line":
+        import web_mapmaker_browser_line as line_part                  # (Shift or Ctrl keeps a stroke to a line: its own file, this one is at the limit of lines)
+        line_part.run_line(Page(tab, args.web), tab, args, check, {"wait_for": wait_for, "REPO": REPO}, edges_bytes, EDGES_JS)
     elif part == "pickup":
         import web_mapmaker_browser_pickup as pickup_part                  # (the Pick up tool: its own file, this one is at the limit of lines)
         env = {"wait_for": wait_for, "REPO": REPO}

@@ -19,7 +19,7 @@
     function create(env) {
         var doc = env.doc, win = env.win, canvas = env.canvas, file = null, view = null, cursor = null, hover = null, w = 0, h = 0, dpr = 1, frame = 0;
         var scratch = doc.createElement('canvas'), mini = null, pointers = {}, drag = null, pinch = null;
-        var painter = null, stroke = null, pending = null, spaceHeld = false, full = null, dirty = [], lastRect = null, sprites = null;       // (sprites: the game's pictures, once loaded: mapmaker_sprites.js)
+        var painter = null, stroke = null, pending = null, line = null, spaceHeld = false, full = null, dirty = [], lastRect = null, sprites = null;       // (sprites: the game's pictures, once loaded: mapmaker_sprites.js)
 
         function makeCanvas(cw, ch) { var c = doc.createElement('canvas'); c.width = cw; c.height = ch; return c; }
 
@@ -125,6 +125,7 @@
         function whereOf(e) { var p = at(e); return { outside: p.x < 0 || p.y < 0 || p.x > w || p.y > h || !cellOf(p), x: e.clientX, y: e.clientY }; }
 
         function startStroke(id, cell) {
+            line = null;
             if (!painter || !painter.begin(cell)) return false;
             setStroke({ id: id, last: cell });
             return true;
@@ -165,6 +166,15 @@
         function distance() { var a = pointers[Object.keys(pointers)[0]], b = pointers[Object.keys(pointers)[1]]; return Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)); }
         function middle() { var a = pointers[Object.keys(pointers)[0]], b = pointers[Object.keys(pointers)[1]]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
 
+        // Where a stroke goes on to: the cell under the pointer, or, with Shift or Ctrl held on a tool that paints (painter.straight), the cell on one line through where the hold began (docs/MAP_EDITOR.md, "A straight line")
+        function aim(e, p) {
+            if (!(e.shiftKey || e.ctrlKey) || !painter.straight || !painter.straight()) { line = null; return cellOf(p); }
+            if (!line) line = { from: stroke.last, axis: '' };
+            var row = Math.floor((p.y - h / 2) / view.scale + view.cy), column = Math.floor((p.x - w / 2) / view.scale + view.cx), dr = row - line.from.row, dc = column - line.from.column;
+            if (!line.axis) { if (!dr && !dc) return line.from; line.axis = Math.abs(dc) >= Math.abs(dr) ? 'row' : 'column'; }
+            return line.axis === 'row' ? { row: line.from.row, column: Math.max(0, Math.min(file.columns - 1, column)) } : { row: Math.max(0, Math.min(file.rows - 1, row)), column: line.from.column };
+        }
+
         // The stroke goes on to `cell`: the painter paints the line from the last cell
         function carryOn(cell) {
             hover = cell;
@@ -190,13 +200,13 @@
             if (stroke && stroke.id === e.pointerId) {
                 if (e.pointerType === 'mouse' && e.buttons === 0) return endStroke();               // (the button was let go where this page could not hear it)
                 if (painter.away) painter.away(whereOf(e));
-                var inside = cellOf(p); if (inside) carryOn(inside); return;
+                var inside = aim(e, p); if (inside) carryOn(inside); return;
             }
             if (pending && pending.id === e.pointerId) {
                 if (Math.hypot(p.x - drag.x, p.y - drag.y) < TAP) return;
-                var first = pending.cell, now = cellOf(p);
+                var first = pending.cell;
                 pending = null;
-                if (startStroke(e.pointerId, first) && now) carryOn(now);
+                if (startStroke(e.pointerId, first)) { var now = aim(e, p); if (now) carryOn(now); }
                 return;
             }
             if (pinch && Object.keys(pointers).length === 2) {

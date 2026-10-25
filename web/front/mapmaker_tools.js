@@ -493,6 +493,8 @@
             hover: function (cell) { if (editor && mine() && mine().hover) mine().hover(cell); },
             // a key that the tool uses (the arrows nudge the thing that is picked up, Enter, Escape and Delete)
             key: function (e) { return !!editor && !!mine() && !!mine().key && mine().key(e); },
+            // a stroke of ground, objects or Erase may be held to one line (Shift or Ctrl)
+            straight: function () { return !!editor && !mine() && paints(); },
             // the box of a bigger object, counted from the cell that is tapped
             shape: function () { return editor && state.tool === 'bigger' ? bigNow().box : null; },
             // the hill's door is marked in the square, and the cell that anchors a bigger object
