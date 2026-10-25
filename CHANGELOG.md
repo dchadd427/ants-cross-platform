@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e9e67d74...811a2509)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a340b5f7...dab4d264)
 
 ## v0.12.130 - 2026-10-25 - Map Maker: hold Shift or Ctrl to paint a straight line
 
