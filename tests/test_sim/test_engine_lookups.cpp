@@ -386,7 +386,7 @@ void run_lookup_tests() {
         w.impl.occ_scan(TileCoord{4, 4}, nullptr, &pile);
         ASSERT_TRUE(pile == 300);
         w.impl.blast_victims(TileCoord{4, 4}, victims);
-        ASSERT_TRUE(victims.size() == 300 && std::is_sorted(victims.begin(), victims.end(), [&w](const AntUnit* x, const AntUnit* y) { return x->id < y->id; }));
+        ASSERT_TRUE(victims.size() == 300 && std::is_sorted(victims.begin(), victims.end(), [](const AntUnit* x, const AntUnit* y) { return x->id < y->id; }));
         ASSERT_TILES_OK(w.impl, 2);
     } TEST_END();
 
