@@ -119,6 +119,15 @@ class ThePlayChecks(unittest.TestCase):
                 self.assertNotIn("play_check", m["test"], m["id"])
 
 
+class TheOnlineAntsLimit(unittest.TestCase):
+    def test_the_page_says_the_number_that_the_server_enforces(self):
+        """the limit on start ants lives in include/ants_server/online_limits.hpp; the page's copy of the number must be the same (a raise there, to 2,400, is a raise here)"""
+        header = re.search(r"kMaxStartAnts = (\d+);", read("include", "ants_server", "online_limits.hpp"))
+        page = re.search(r"MAX_ONLINE_ANTS = (\d+);", read("web", "front", "mapmaker_play.js"))
+        self.assertTrue(header and page)
+        self.assertEqual(header.group(1), page.group(1))
+
+
 class ThePageWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

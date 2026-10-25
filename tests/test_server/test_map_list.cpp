@@ -482,8 +482,8 @@ int main() {
         ASSERT_EQ(s.map_refusal("wide 410.lvl"), std::string(net::kNoticeMapTooBig));
         ASSERT_EQ(s.map_refusal("Draft Big ~test-0badf00d.lvl"), std::string(net::kNoticeMapTooBig));
         for (const char* fine : {"Fits 256.lvl", "Edge 65536.lvl", "TINY.LVL", "NOT-HERE.LVL", "", "Draft Fits ~test-0badf00e.lvl"}) ASSERT_EQ(s.map_refusal(fine), std::string());
-        ASSERT_TRUE(store.too_big_online("Wide 410.lvl") && store.too_big_online("WIDE 410.LVL") && store.too_big_online("Draft Big ~test-0badf00d.lvl"));
-        ASSERT_FALSE(store.too_big_online("Fits 256.lvl") || store.too_big_online("Edge 65536.lvl") || store.too_big_online("TINY.LVL") || store.too_big_online("NOT-HERE.LVL"));
+        ASSERT_TRUE(!store.online_refusal("Wide 410.lvl").empty() && !store.online_refusal("WIDE 410.LVL").empty() && !store.online_refusal("Draft Big ~test-0badf00d.lvl").empty());
+        ASSERT_TRUE(store.online_refusal("Fits 256.lvl").empty() && store.online_refusal("Edge 65536.lvl").empty() && store.online_refusal("TINY.LVL").empty() && store.online_refusal("NOT-HERE.LVL").empty());
         // a room does not load one (the START finds "map lost" in the lobby; a room of the control interface is a 422), the file is still found
         MapEntry entry;
         assets::LevelData level;
@@ -564,6 +564,103 @@ int main() {
             }
         }
         ASSERT_TRUE(std::string(net::kNoticeMapTooBig).find("65,536 cells") != std::string::npos && std::string(net::kNoticeMapTooBig).size() <= net::kMaxChatChars);
+    } TEST_END();
+
+    TEST_CASE("ML4.5 The limit on start ants (OnlineLimits::kMaxStartAnts = 300, all colors together): the 540 maps of the library start at most 248, so none is refused and none is marked; an approved Classic map of 301 is listed (\"online\": false, \"ants\") but the lobby may not choose it, one of 300 may; the counts come from the files") {
+        MapStore store(maps_dir(), community_dir());
+        store.scan();
+        uint64_t most = 0;
+        size_t over = 0;
+        size_t originals = 0;
+        for (const MapListing& m : store.listing()) {
+            most = std::max(most, m.start_ants);
+            over += OnlineLimits::allows_ants(m.start_ants) ? 0u : 1u;
+            if (m.original) {
+                ++originals;
+                ASSERT_TRUE(m.start_ants >= 12 && m.start_ants <= 32);                         // (TINY starts 12, ISLANDS 32)
+            }
+            ASSERT_TRUE(m.start_ants > 0);                                            // (every map of the library has start markers, so a count of 0 would mean a file that did not load)
+        }
+        ASSERT_EQ(store.listing().size(), size_t{540});
+        ASSERT_EQ(originals, size_t{6});
+        ASSERT_EQ(over, size_t{0});                                                            // (no library map is over: the list of maps that are "not for online games" is empty today)
+        ASSERT_EQ(most, uint64_t{248});
+        ASSERT_TRUE(store.list_json(nullptr, true).find("\"online\"") == std::string::npos && store.list_json(nullptr, true).find("\"ants\"") == std::string::npos);
+        TempDir dir;
+        const auto keep = [&](const std::string& name, const std::array<uint32_t, 4>& per_color, const char* kind = "classic") {
+            const std::string bytes = tiny_with_ants(per_color);
+            const fs::path path = dir.path / (name + ".bin");
+            { std::ofstream out(path, std::ios::binary); out << bytes; }
+            ApprovedMap a;
+            a.name = name;
+            a.path = path.string();
+            a.size = bytes.size();
+            a.width = 31;
+            a.height = 31;
+            a.minutes = 10;
+            a.players = 4;
+            a.maker = "Mia";
+            a.kind = kind;
+            a.start_ants = 5;                                                                 // (a number that the caller gives is not believed: the store counts the file)
+            net::hash_file(a.path, a.hash);
+            return a;
+        };
+        store.set_approved({keep("Ants 300.lvl", {75, 75, 75, 75}), keep("Ants 301.lvl", {75, 75, 75, 76}), keep("Ext 300.lvl", {75, 75, 75, 75}, "extended"), keep("Ext 301.lvl", {75, 75, 75, 76}, "extended")});
+        store.set_test_maps({keep("Draft 300 ~test-0badf00e.lvl", {75, 75, 75, 75}), keep("Draft 301 ~test-0badf00d.lvl", {75, 75, 75, 76})});
+        ASSERT_EQ(store.listed_name("Ants 301.lvl"), std::string());
+        ASSERT_EQ(store.listed_name("Ext 301.lvl"), std::string());
+        ASSERT_EQ(store.listed_name("ext 301.LVL"), std::string());
+        ASSERT_EQ(store.listed_name("Draft 301 ~test-0badf00d.lvl"), std::string());
+        ASSERT_EQ(store.listed_name("draft 301 ~TEST-0badf00d.lvl"), std::string());
+        for (const char* fine : {"Ants 300.lvl", "Ext 300.lvl", "Draft 300 ~test-0badf00e.lvl"}) ASSERT_EQ(store.listed_name(fine), std::string(fine));
+        for (const char* fine : {"ants 300.LVL", "EXT 300.lvl", "draft 300 ~test-0badf00e.LVL"}) ASSERT_TRUE(!store.listed_name(fine).empty() && store.online_refusal(fine).empty());
+        for (const char* refused : {"Ants 301.lvl", "Ext 301.lvl", "ext 301.LVL", "Draft 301 ~test-0badf00d.lvl", "DRAFT 301 ~test-0badf00d.LVL"}) ASSERT_EQ(store.online_refusal(refused), OnlineLimits::too_many_ants_notice(301));
+        const ctl::JsonValue newest = parse_text(store.list_json(nullptr, true));
+        const ctl::JsonValue* fine = entry_of(newest, "Ants 300.lvl");
+        const ctl::JsonValue* many = entry_of(newest, "Ants 301.lvl");
+        ASSERT_TRUE(fine != nullptr && many != nullptr);
+        ASSERT_TRUE(fine->get("online").is_null() && fine->get("ants").is_null());
+        ASSERT_TRUE(many->get("online").as_bool_or(true) == false && many->get("ants").as_int_or(0) == 301);
+        ASSERT_TRUE(entry_of(newest, "Ext 300.lvl")->get("online").is_null() && entry_of(newest, "Ext 301.lvl")->get("online").as_bool_or(true) == false && entry_of(newest, "Ext 301.lvl")->get("ants").as_int_or(0) == 301);
+        ASSERT_TRUE(store.list_json(nullptr, true).find("badf00") == std::string::npos);     // (a test map is on no list)
+        ASSERT_TRUE(entry_of(newest, "TREASURE.LVL")->get("online").is_null());
+        ASSERT_EQ(store.listed_name("Ants 300.lvl"), std::string("Ants 300.lvl"));
+        ASSERT_EQ(store.listed_name("ants 301.LVL"), std::string());
+        ASSERT_EQ(store.online_refusal("ANTS 301.lvl"), OnlineLimits::too_many_ants_notice(301));
+        ASSERT_TRUE(store.online_refusal("Ants 300.lvl").empty() && store.online_refusal("TINY.LVL").empty());
+        MapEntry entry;
+        ASSERT_TRUE(store.find("Ants 301.lvl", entry));                                        // (it stays on the lists, and its file is served)
+        ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, false)), "Ants 301.lvl") != nullptr && store.list_json(nullptr, false).find("online") == std::string::npos);      // (the old list has the same maps and no new keys)
+        // a take-down and a new approval: the count of a file that stays is kept, a file that is gone is forgotten
+        store.set_test_maps({});
+        store.set_approved({keep("Ants 300.lvl", {75, 75, 75, 75})});
+        ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, true)), "Ants 301.lvl") == nullptr);
+        ASSERT_EQ(store.online_refusal("Ants 301.lvl"), std::string());
+        {   // the six originals are never refused for their ants, as the maps folder holds them; a file of the same name that is not the maps folder's is a map like any other
+            TempDir folder;
+            fs::create_directories(folder.path / "maps");
+            fs::create_directories(folder.path / "players");
+            const std::string heavy = tiny_with_ants({100, 100, 100, 100});
+            { std::ofstream out(folder.path / "maps" / "TINY.LVL", std::ios::binary); out << heavy; }          // (400 ants under an original's name, in the maps folder)
+            { std::ofstream out(folder.path / "players" / "SMALL.LVL", std::ios::binary); out << heavy; }       // (400 ants under an original's name, in the players' folder)
+            { std::ofstream out(folder.path / "maps" / "Plain.lvl", std::ios::binary); out << heavy; }
+            MapStore own((folder.path / "maps").string(), (folder.path / "players").string());
+            own.scan();
+            MapEntry e;
+            assets::LevelData lv;
+            ASSERT_TRUE(own.find("TINY.LVL", e) && lv.load_from_file(e.path, nullptr, assets::LevelLimits::for_play_extended()) && OnlineLimits::start_ants(lv) == 400u);
+            ASSERT_EQ(own.online_refusal(e, lv), std::string());                                             // (an original: in)
+            ASSERT_TRUE(own.find("SMALL.LVL", e) && lv.load_from_file(e.path, nullptr, assets::LevelLimits::for_play_extended()));
+            ASSERT_EQ(own.online_refusal(e, lv), OnlineLimits::too_many_ants_notice(400));                   // (the same name from the players' folder: a map of the players)
+            ASSERT_TRUE(own.find("Plain.lvl", e) && lv.load_from_file(e.path, nullptr, assets::LevelLimits::for_play_extended()));
+            ASSERT_EQ(own.online_refusal(e, lv), OnlineLimits::too_many_ants_notice(400));
+            ASSERT_EQ(own.listed_name("TINY.LVL"), std::string("TINY.LVL"));
+            ASSERT_EQ(own.listed_name("SMALL.LVL"), std::string());
+            ASSERT_EQ(own.online_refusal("SMALL.LVL"), OnlineLimits::too_many_ants_notice(400));
+            ASSERT_TRUE(own.online_refusal("TINY.LVL").empty());
+            const ctl::JsonValue shown = parse_text(own.list_json(nullptr, true));
+            ASSERT_TRUE(entry_of(shown, "TINY.LVL")->get("online").is_null() && entry_of(shown, "SMALL.LVL")->get("online").as_bool_or(true) == false && entry_of(shown, "Plain.lvl")->get("ants").as_int_or(0) == 400);
+        }
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

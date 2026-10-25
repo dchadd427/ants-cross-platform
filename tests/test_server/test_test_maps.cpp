@@ -436,6 +436,29 @@ int main() {
         ASSERT_TRUE(std::string(ants::net::kNoticeMapTooBig).size() <= ants::net::kMaxChatChars);
     } TEST_END();
 
+    TEST_CASE("TM1.7b A map that starts more than 300 ants (OnlineLimits::kMaxStartAnts, all colors together) is refused as a test map with the one plain sentence and a 422 map_too_many_ants_online; 300 is the most; 0 ants is a map for the checks to judge; the count is the file's, whatever kind it says") {
+        Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
+        const auto step = [&]() { t.now_ms += 20000; };
+        HttpResponse r = t.upload(tiny_with_ants({75, 75, 75, 75}), "Edge", "203.0.113.30", "classic");          // 300: the limit
+        ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+        step();
+        r = t.upload(tiny_with_ants({75, 75, 75, 76}), "Over", "203.0.113.31", "classic");                       // 301
+        ASSERT_EQ(r.status, 422);
+        ASSERT_EQ(parse_text(r.body).get("error").str(), std::string("map_too_many_ants_online"));
+        ASSERT_EQ(parse_text(r.body).get("message").str(), ants::server::OnlineLimits::too_many_ants_notice(301) + " You can still play it against bots on this computer.");
+        step();
+        r = t.upload(tiny_with_ants({1500, 1500, 1500, 1500}), "Huge", "203.0.113.32", "classic");              // 6,000: the 1,500-a-color map of the lag study
+        ASSERT_EQ(r.status, 422);
+        ASSERT_TRUE(parse_text(r.body).get("message").str().find("This map starts with 6,000 ants; an online game allows up to 300.") == 0);
+        step();
+        r = t.upload(tiny_with_ants({1500, 1500, 1500, 1500}), "Huge", "203.0.113.33", "extended");             // (a Classic file sent as an Extended map is the door's own mismatch or the same refusal, never a kept map)
+        ASSERT_TRUE(r.status == 422 || r.status == 400);
+        step();
+        r = t.upload(tiny_with_ants({0, 0, 0, 0}), "None", "203.0.113.34", "classic");                          // no start marker: the checks say no (a color needs ants), the limit has nothing to say
+        ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_fails_checks", std::to_string(r.status) + " " + r.body.substr(0, 200));
+        ASSERT_EQ(t.store->maps(t.now).size(), size_t{1});                         // (only the map at the limit is kept)
+    } TEST_END();
+
     TEST_CASE("TM1.8 The store of test maps: at most kMaxTestMaps (the oldest goes), at most kMaxTestPerAddress for one address (its own oldest goes), a map that a room has or that is under two minutes old never goes - the upload is refused instead - so a burst cannot push out the map of a room that has not started") {
         {   // the 64: 70 uploads from 70 addresses, each 3 minutes after the last
             Door t;

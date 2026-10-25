@@ -181,6 +181,8 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
             m.minutes = static_cast<uint32_t>(d.get("minutes").as_int_or(0));
             m.players = static_cast<uint32_t>(d.get("players").as_int_or(0));
             m.description = d.get("description").str();
+            assets::LevelData counted;                                  // (maps.json does not know the ants: they are counted from the file, so that the list can tell a map that a room refuses)
+            if (counted.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) m.start_ants = OnlineLimits::start_ants(counted);
         } else {
             if (community && known != described.end()) note("maps.json describes " + name + " with another hash than the file has: the file's own header is used");
             assets::LevelData level;
@@ -194,6 +196,7 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
                 if (a.team_id < 4) teams.insert(a.team_id);
             }
             m.players = teams.empty() ? 4u : static_cast<uint32_t>(teams.size());
+            m.start_ants = OnlineLimits::start_ants(level);
         }
         if (m.original) {
             m.thumb = std::string(kOriginalPreviewDir) + original->second;
@@ -241,6 +244,7 @@ void MapStore::add_approved_to_listing() {
         m.height = a.height;
         m.minutes = a.minutes;
         m.players = a.players;
+        m.start_ants = a.start_ants;
         m.description = a.description;
         m.approved = true;
         m.maker = a.maker;
@@ -255,8 +259,29 @@ void MapStore::add_approved_to_listing() {
     std::sort(extended_listing_.begin(), extended_listing_.end(), [](const MapListing& a, const MapListing& b) { return a.file < b.file; });
 }
 
+// The start ants of a file of the store: counted from the file, kept by path, size and hash (an approved file never changes, and the list is rebuilt at every approval and take-down)
+uint64_t MapStore::start_ants_of_file(const std::string& path, uint64_t size, uint64_t hash) {
+    const auto kept = counted_.find(path);
+    if (kept != counted_.end() && kept->second.size == size && kept->second.hash == hash) return kept->second.ants;
+    assets::LevelData level;
+    const uint64_t ants = level.load_from_file(path, nullptr, assets::LevelLimits::for_play_extended()) ? OnlineLimits::start_ants(level) : 0u;          // (a file that does not load starts none: the room's own load says no)
+    counted_[path] = Counted{size, hash, ants};
+    return ants;
+}
+
+void MapStore::count_start_ants() {
+    for (ApprovedMap& a : approved_) a.start_ants = start_ants_of_file(a.path, a.size, a.hash);
+    for (ApprovedMap& t : test_maps_) t.start_ants = start_ants_of_file(t.path, t.size, t.hash);
+    for (auto it = counted_.begin(); it != counted_.end();) {          // (a file that is no longer held is forgotten)
+        const bool held = std::any_of(approved_.begin(), approved_.end(), [&](const ApprovedMap& a) { return a.path == it->first; }) ||
+                          std::any_of(test_maps_.begin(), test_maps_.end(), [&](const ApprovedMap& t) { return t.path == it->first; });
+        it = held ? std::next(it) : counted_.erase(it);
+    }
+}
+
 void MapStore::set_approved(std::vector<ApprovedMap> maps) {
     approved_ = std::move(maps);
+    count_start_ants();
     if (!scanned_) return;
     add_approved_to_listing();
     sort_listing();
@@ -292,6 +317,7 @@ bool MapStore::is_test_map_name(const std::string& file_name) noexcept {
 
 void MapStore::set_test_maps(std::vector<ApprovedMap> maps) {
     test_maps_ = std::move(maps);
+    count_start_ants();
 }
 
 const ApprovedMap* MapStore::test_map(const std::string& file_name) const {
@@ -305,38 +331,66 @@ namespace {
 uint64_t cells_in(uint32_t width, uint32_t height) { return static_cast<uint64_t>(width) * height; }
 }  // namespace
 
+namespace {
+
+// Why a room does not play a map of `cells` cells that starts `start_ants` ants ("" when it does): the size first (net::kNoticeMapTooBig), then the ants (OnlineLimits::too_many_ants_notice). The six maps of the
+// original game are never refused for their ants: they must always be playable online.
+std::string refusal_sentence(bool original, uint64_t cells, uint64_t start_ants) {
+    if (!OnlineLimits::allows(cells)) return net::kNoticeMapTooBig;
+    if (!original && !OnlineLimits::allows_ants(start_ants)) return OnlineLimits::too_many_ants_notice(start_ants);
+    return std::string();
+}
+
+std::string refusal_of(const MapListing& m) { return refusal_sentence(m.original, cells_in(m.width, m.height), m.start_ants); }
+std::string refusal_of(const ApprovedMap& a) { return refusal_sentence(false, cells_in(a.width, a.height), a.start_ants); }
+
+}  // namespace
+
 std::string MapStore::listed_name(const std::string& name) const {
-    for (const MapListing& m : listing_) {
-        if (m.file == name) return m.file;
-    }
     const std::string folded = lower(name);
+    for (const MapListing& m : listing_) {
+        if (m.file == name && refusal_of(m).empty()) return m.file;
+    }
     for (const MapListing& m : extended_listing_) {
-        if (m.file == name && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;
+        if (m.file == name && refusal_of(m).empty()) return m.file;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (t.name == name && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;
+        if (t.name == name && refusal_of(t).empty()) return t.name;
     }
     for (const MapListing& m : listing_) {
-        if (lower(m.file) == folded) return m.file;
+        if (lower(m.file) == folded && refusal_of(m).empty()) return m.file;
     }
     for (const MapListing& m : extended_listing_) {
-        if (lower(m.file) == folded && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;
+        if (lower(m.file) == folded && refusal_of(m).empty()) return m.file;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (lower(t.name) == folded && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;
+        if (lower(t.name) == folded && refusal_of(t).empty()) return t.name;
     }
     return std::string();
 }
 
-bool MapStore::too_big_online(const std::string& name) const {
+std::string MapStore::online_refusal(const std::string& name) const {
     const std::string folded = lower(name);
+    for (const MapListing& m : listing_) {
+        if (lower(m.file) == folded && !refusal_of(m).empty()) return refusal_of(m);
+    }
     for (const MapListing& m : extended_listing_) {
-        if (lower(m.file) == folded && !OnlineLimits::allows(cells_in(m.width, m.height))) return true;
+        if (lower(m.file) == folded && !refusal_of(m).empty()) return refusal_of(m);
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (lower(t.name) == folded && !OnlineLimits::allows(cells_in(t.width, t.height))) return true;
+        if (lower(t.name) == folded && !refusal_of(t).empty()) return refusal_of(t);
     }
-    return false;
+    return std::string();
+}
+
+// One of the six maps of the original game as the maps folder holds it (find() gave the path of the maps folder, not of the community folder or an approved map that has the same name)
+bool MapStore::original_file(const MapEntry& entry) const {
+    const auto& names = originals();
+    return std::any_of(names.begin(), names.end(), [&](const auto& o) { return o.first == entry.name; }) && entry.path == (fs::path(dir_) / entry.name).string();
+}
+
+std::string MapStore::online_refusal(const MapEntry& entry, const assets::LevelData& level) const {
+    return refusal_sentence(original_file(entry), cells_in(level.width(), level.height()), OnlineLimits::start_ants(level));
 }
 
 uint64_t MapStore::cells_of(const std::string& name) const {
@@ -378,7 +432,10 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_ex
         if (m.original) o.set("original", ctl::JsonValue::make_bool(true));
         if (m.approved) o.set("maker", ctl::JsonValue::make_string(m.maker));
         if (with_extended) o.set("kind", ctl::JsonValue::make_string(m.kind));
-        if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height))) o.set("online", ctl::JsonValue::make_bool(false));       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)
+        if (with_extended && !refusal_of(m).empty()) {                // (a room refuses it: the picker says so; it can still be opened in the Map Maker)
+            o.set("online", ctl::JsonValue::make_bool(false));
+            if (OnlineLimits::allows(cells_in(m.width, m.height))) o.set("ants", ctl::JsonValue::make_int(static_cast<int64_t>(m.start_ants)));       // (the ants are the reason: the picker names the number)
+        }
         maps.push_back(std::move(o));
     }
     ctl::JsonValue root = ctl::JsonValue::make_object();

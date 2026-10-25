@@ -209,6 +209,15 @@ function rig(options) {
             rext.picker.open(''); await settle();
             same('an Extended map has the Extended badge', [rext.rows()[0].querySelector('.pk-badge.pk-ext').textContent, rext.rows()[0].querySelectorAll('.pk-meta')[0].textContent], ['Extended', '4 players · 10 min · 256×256']);
         }
+        {   // a map that a room does not play (the server's "online": false) says so on its row, with the reason; a map of 300 ants or fewer and an original have no such mark
+            const roff = rig({ answer: () => Promise.resolve(response({ format: 2, maps: [M('Tiny.lvl', { original: true }), M('Fine.lvl', {}), M('Many.lvl', { online: false, ants: 6000 }), M('Wide.lvl', { online: false, kind: 'extended', width: 400, height: 400 })] })) });
+            roff.picker.open(''); await settle();
+            const marks = roff.rows().map((n) => { const b = n.querySelector('.pk-badge.pk-off'); return b ? b.textContent : ''; });
+            same('the rows that a room refuses are marked, in plain words, and only they', marks, ['', '', 'Too many ants for an online game', 'Too big for an online game']);
+            same('a marked map can still be picked (the server tells the leader why it is not taken)', roff.rows().length, 4);
+            same('the parts: the flag and the count are read as they are, and a missing flag means a map that a room plays', P.parseList({ format: 2, maps: [M('a.lvl', { online: false, ants: 301 }), M('b.lvl', {}), M('c.lvl', { online: false, ants: -5 }), M('d.lvl', { online: 'no', ants: 'many' })] }).map((m) => [m.online, m.ants]), [[false, 301], [true, 0], [false, 0], [true, 0]]);
+            same('the words', [P.offlineText({ ants: 301 }), P.offlineText({ ants: 0 })], ['Too many ants for an online game', 'Too big for an online game']);
+        }
     }
     // 2. the switch: Detail by default, remembered per browser, unaffected by a storage that throws
     {

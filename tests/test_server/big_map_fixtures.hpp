@@ -2,6 +2,7 @@
 // Extended map with only the teams of a mask. Included by the tests that need a map over the size limits of a room (online_limits.hpp) or over 1 MiB. Everything is in an unnamed namespace.
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
@@ -74,6 +75,28 @@ namespace {
     }
     t.anthill_spawns.assign(kept.begin(), kept.end());
     const LevelWriteResult w = write_level(t, LevelLimits::for_new_maps());
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+}
+
+// TINY (a Classic map, its own grid) that starts exactly `per_color[c]` ants for color c: its start markers of that color repeated (on the same cells) or cut short, its other block 1 records (plants) kept. A map that a
+// room's limit on start ants judges: 0 for every color is a map with no start marker, {1500, 1500, 1500, 1500} the 6,000-ant map of the lag study. "" when it cannot be made.
+[[maybe_unused]] std::string tiny_with_ants(const std::array<uint32_t, 4>& per_color) {
+    using namespace ants::assets;
+    const std::string base = big_tiny_bytes();
+    LevelData t;
+    if (!LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), t, nullptr, LevelLimits::for_extended_maps())) return std::string();
+    std::vector<AnthillSpawn> kept;
+    std::array<std::vector<AnthillSpawn>, 4> markers;
+    for (const AnthillSpawn& s : t.anthill_spawns) {
+        if (s.team_id < 4) markers[s.team_id].push_back(s);
+        else kept.push_back(s);
+    }
+    for (size_t color = 0; color < 4; ++color) {
+        if (markers[color].empty()) return std::string();
+        for (uint32_t i = 0; i < per_color[color]; ++i) kept.push_back(markers[color][i % markers[color].size()]);
+    }
+    t.anthill_spawns.assign(kept.begin(), kept.end());
+    const LevelWriteResult w = write_level(t, LevelLimits::for_extended_maps());
     return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 

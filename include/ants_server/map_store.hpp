@@ -10,9 +10,12 @@
 // in the maps folder first. scan() lists and hashes everything once, at the server's start, for GET /maps; find() always reads the file itself.
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace ants::assets { class LevelData; }
 
 namespace ants::server {
 
@@ -34,6 +37,7 @@ struct MapListing {
     uint32_t height{0};
     uint32_t minutes{0};
     uint32_t players{0};
+    uint64_t start_ants{0};    // the start markers of the four colors added up, counted from the file by the store itself (OnlineLimits::start_ants); 0 when the file does not load
     std::string description;
     bool original{false};      // one of the six maps of the original game
     std::string thumb;         // the address of its preview picture on the site, "" when it has none
@@ -49,6 +53,7 @@ struct ApprovedMap {
     uint64_t hash{0};          // FNV-1a 64 of the file (net::hash_file)
     uint64_t size{0};
     uint32_t width{0}, height{0}, minutes{0}, players{0};
+    uint64_t start_ants{0};    // filled in by MapStore::set_approved / set_test_maps from the file (never from the caller's number)
     std::string description, maker, kind;
 };
 
@@ -72,11 +77,15 @@ public:
     size_t scan(std::vector<std::string>* notes = nullptr);
     const std::vector<MapListing>& listing() const noexcept { return listing_; }
     bool scanned() const noexcept { return scanned_; }
-    /// The name under which the scanned list knows `name` (the same name, or the one that differs in letter case only); "" when it does not. A map that is too big for a room (OnlineLimits::kMaxCells) is
-    /// not found here: the lobby may not choose it (it is still on the lists, and its file and picture are still served).
+    /// The name under which the scanned list knows `name` (the same name, or the one that differs in letter case only); "" when it does not. A map that a room refuses (too big, or too many start ants:
+    /// online_refusal) is not found here: the lobby may not choose it (it is still on the lists, and its file and picture are still served).
     std::string listed_name(const std::string& name) const;
-    /// Whether `name` (exactly, or in another letter case) is an approved or test map that is too big to be played online (online_limits.hpp): the leader who chose it is told so
-    bool too_big_online(const std::string& name) const;
+    /// The sentence that tells why a room does not play the map `name` (exactly, or in another letter case) of the lists, the approved maps or the test maps ("" when it plays it, or the name is not known):
+    /// net::kNoticeMapTooBig over the cells limit, OnlineLimits::too_many_ants_notice over the start ants limit (counted from the file when the map came to the store, online_limits.hpp). The leader who chose it is told so.
+    std::string online_refusal(const std::string& name) const;
+    /// The same judgement for a map that a room has loaded itself (`entry` is the file that find() gave, `level` what it holds): the one that every room is made through, so that the counts of the lists are
+    /// never the only lock. The six maps of the original game, as the maps folder holds them, are never refused for their ants.
+    std::string online_refusal(const MapEntry& entry, const assets::LevelData& level) const;
     /// The cells (rows times columns) of the list's or the approved or test map `name` (exact name), 0 when it is not known: what a match on it costs (OnlineLimits::weight)
     uint64_t cells_of(const std::string& name) const;
     /// The body of GET /maps: {"format":1,"maps":[{file,width,height,minutes,players,description,plays,thumb[,original][,maker]}]}. `plays` is how many times each map was played (map_plays of the database, keyed
@@ -107,6 +116,16 @@ private:
     bool scanned_{false};
     void add_approved_to_listing();
     void sort_listing();
+    // The start ants of a file of the store (OnlineLimits::start_ants of the loaded map; 0 when it does not load), kept by path, size and hash so that a rebuilt list loads a file once
+    struct Counted {
+        uint64_t size{0};
+        uint64_t hash{0};
+        uint64_t ants{0};
+    };
+    std::map<std::string, Counted> counted_;
+    uint64_t start_ants_of_file(const std::string& path, uint64_t size, uint64_t hash);
+    void count_start_ants();
+    bool original_file(const MapEntry& entry) const;
 };
 
 }  // namespace ants::server

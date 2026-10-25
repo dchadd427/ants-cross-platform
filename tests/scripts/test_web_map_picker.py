@@ -141,6 +141,12 @@ class ThePickersOwnCode(unittest.TestCase):
             "the first spelling in another case beats the exact one": ("if (list[i].file.replace(/\\.lvl$/i, '') === base) return list[i].original ? '' : list[i].thumb;", "if (false) return '';"),
             "a map without a picture on the server gets a guessed address": ("return list[i].original ? '' : list[i].thumb;", "return list[i].thumb || previewPath(map);"),
             "an Extended map has no badge": ("else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));", ""),
+            "a map that a room refuses is not marked": ("if (!m.online) nm.appendChild(el('span', 'pk-badge pk-off', offlineText(m)));", ""),
+            "every map is marked as one that a room refuses": ("if (!m.online) nm.appendChild(el('span', 'pk-badge pk-off', offlineText(m)));", "nm.appendChild(el('span', 'pk-badge pk-off', offlineText(m)));"),
+            "the flag is not read from the list": ("online: m.online !== false,", "online: true,"),
+            "a map with no flag is a map that a room refuses": ("online: m.online !== false,", "online: m.online === true,"),
+            "too many ants is said as too big": ("return m.ants > 0 ? 'Too many ants for an online game' : 'Too big for an online game';", "return 'Too big for an online game';"),
+            "the count of ants is not read": ("ants: whole(m.ants) ? m.ants : 0 ", "ants: 0 "),
         }
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():

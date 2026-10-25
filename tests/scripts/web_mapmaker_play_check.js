@@ -105,6 +105,13 @@ function verdictChecks() {
         v = Play.verdict(a.check, a.read);
         check(v.ok && usable(v) === '1001' && v.seats[1].why[0] === 'Red has no starting ants' && v.seats[2].why[0] === 'Blue has no hill', 'a color with no ants or no hill in the first reading cannot play, though the check said nothing, and says why');
     }
+    // the start ants (all four colors added up, as the server counts them): at most 300 are played by an online room, more only against bots on this device
+    equal([Play.MAX_ONLINE_ANTS, verdictOf().ants, verdictOf().tooMany], [300, 12, false], 'the limit is 300 and an ordinary map starts 12 ants');
+    equal([75, 76].map((n) => { const v2 = verdictOf({ teams: [[75, 16], [75, 16], [75, 16], [n, 16]] }); return [v2.ants, v2.tooMany, v2.ok]; }), [[300, false, true], [301, true, true]], 'the boundary: 300 is in, 301 is over, and both can be played against bots');
+    equal([verdictOf({ teams: [[301, 16], [0, 0], [3, 16], [0, 0]] }).tooMany, verdictOf({ teams: [[0, 0], [0, 0], [0, 0], [0, 0]] }).ok], [true, false], 'one color with all of them is over; a map with no ants is refused as before (no seat can play) and says nothing about ants');
+    equal(verdictOf({ teams: [[1500, 16], [1500, 16], [1500, 16], [1500, 16]] }).ants, 6000, 'the 6,000-ant map of 1,500 a color');
+    equal(verdictOf({ teams: [[200, 16], [200, 0], [0, 16], [100, 16]] }).tooMany, true, 'a color that cannot play still counts: the server counts every start marker');
+    equal([Play.onlineAntsText(6000), Play.onlineAntsText(301)], ['This map starts with 6,000 ants; an online game allows up to 300.', 'This map starts with 301 ants; an online game allows up to 300.'], 'the sentence is the server\'s, with the number');
     // fewer than two colors
     v = verdictOf({ teams: [[3, 16], [0, 0], [0, 0], [0, 0]] });
     check(!v.ok && /two colors that each have a hill and starting ants/.test(v.text) && v.list.length === 6 && v.list[0] === 'Red has no hill', 'one color is not enough: refused with the reasons of the others');
@@ -448,6 +455,39 @@ function dialogChecks() {
     check(!!mr && p.opened[0][1] === '_blank', 'With other players opens /lobby.html?testroom=<id> in a new tab');
     const rrec = mr && p.win.antsTestGameHandoff(mr[1]);
     check(rrec && rrec.name === 'Mosh Pit' && digest(rrec.bytes) === before && rrec.bytes !== bytes, 'the lobby tab receives a copy of the open map bytes');
+    equal(all(p, '.play-panel-friends .play-status').length + all(p, '.play-panel-bots .play-status').filter((n) => n.className.indexOf('no') > 0 && n.textContent.indexOf('slowly') > 0).length, 0, 'a map of 12 ants has no word about ants in either panel');
+    // a map of more than 300 start ants: against bots it is allowed with a warning, with other players the sentence of the server is said first and the button is off
+    for (const [ants, over] of [[300, false], [301, true], [6000, true]]) {
+        const per = [Math.floor(ants / 4), Math.floor(ants / 4), Math.floor(ants / 4), ants - 3 * Math.floor(ants / 4)];
+        const big = answers({ teams: per.map((n) => [n, 16]) });
+        p = pageOf();
+        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } }));
+        const warn = all(p, '.play-panel-bots .play-status').filter((n) => n.textContent.indexOf('slowly') > 0);
+        const said = all(p, '.play-panel-friends .play-status');
+        const count = ants === 6000 ? '6,000' : String(ants);
+        if (!over) { equal([warn.length, said.length], [0, 0], ants + ' ants: no warning and no refusal'); }
+        else {
+            equal(warn.map((n) => n.textContent), ['This map starts with ' + count + ' ants, so it may run slowly on this device.'], ants + ' ants: against bots a warning, in the bots panel');
+            check(!startButton(p).disabled && /Start the game/.test(startButton(p).textContent) && !!/You and 1 bot/.test(q(p, '.play-panel-bots .play-status').textContent), ants + ' ants: the game against bots can still be started');
+            startButton(p).click();
+            check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: and it opens the game page');
+            p = pageOf();
+            Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } }));
+        }
+        all(p, '.play-tab')[1].click();
+        const friendsSaid = all(p, '.play-panel-friends .play-status');
+        if (!over) { check(friendsSaid.length === 0 && !startButton(p).disabled, ants + ' ants: with other players, no refusal and the room button is on'); continue; }
+        equal(friendsSaid.map((n) => n.textContent), ['This map starts with ' + count + ' ants; an online game allows up to 300. You can still play it against bots on this device.'], ants + ' ants: with other players the sentence is said before a room is made');
+        check(startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), ants + ' ants: and the room button is off');
+        startButton(p).click();
+        startButton(p).fire('click', {});
+        check(p.opened.length === 0, ants + ' ants: a button that is off opens no room (not even when the click comes through)');
+        all(p, '.play-tab')[0].click();
+        check(!startButton(p).disabled && /Start the game/.test(startButton(p).textContent), ants + ' ants: back at the game against bots the button is on again');
+        all(p, '.play-tab')[1].click();
+        check(startButton(p).disabled, ants + ' ants: and off again with other players');
+        p.dialogs.close();
+    }
     equal(digest(bytes), before, 'at the end the open file is still as it was');
 }
 
