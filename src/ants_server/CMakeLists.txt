@@ -1,6 +1,7 @@
 # The dedicated game server (native builds only: it needs sockets): a library with everything but main (so that the tests link it) and the program.
 add_library(ants_server_core STATIC
     map_store.cpp
+    online_limits.cpp
     room.cpp
     room_manager.cpp
     control.cpp

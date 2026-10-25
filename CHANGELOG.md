@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.131 - 2026-10-25 - Big maps now warn: "may run slowly"
+
+**For players:**
+- **No map is refused for its ants.** A map that starts more than 300 ants (all colors together: 75 a color on four) only gets a warning, because a game on it may run slowly, most on phones and older computers. The number 300 is where the warning starts; it changes nothing else.
+- **The map picker** shows an amber chip, "Many ants: may run slowly", on the row of such a map. The map can be chosen as any other, for a room too.
+- **Map Maker, Play this map:** both *Against bots* and *With other players* say "This map starts with N ants, so a game may run slowly, especially on phones and older computers." right under the first sentence of the dialog. The buttons stay on.
+- We scanned the 540 maps of the library: none starts more than 300 ants (0 of 540; the most starts 248), so no map in the picker is marked today.
+
+**Rules / network:** none: the rules and network protocol 21 are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/99261f5d...85c01ad8), [the warning](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
+
 ## v0.12.130 - 2026-10-25 - Map Maker: hold Shift or Ctrl to paint a straight line
 
 **For players:**
@@ -566,15 +578,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d09bb5c9...421ebb6b)
 
-## v0.12.78 - 2026-10-17 - Map maker: convert, crop and copy (E4)
+## Older versions (v0.12.78 and before)
 
-**For players:**
-- The map maker page (not linked from the site yet: /mapmaker.html) can copy and convert a map now. Copy... (in the top bar, or in the Menu on a phone) makes a new map of the same kind or of the other kind. Under the size numbers of the side panel, "Start an Extended map from this one..." makes an Extended map from any Classic map, and "Make a Classic map from this one..." brings an Extended map back when it fits. Every way makes a new map under a name that is free; the map you opened is never changed or replaced.
-- An Extended map that does not fit a Classic map shows the reasons in the converter's own words, and two ways out. Crop it to fit... opens a screen with a movable frame (never bigger than a new Classic map): drag it with the mouse or a finger, pull a corner or an edge, and a wider frame gets shorter by itself. Shorten the description... opens the map properties on the copy.
-- A part that is cropped out keeps every object whole or leaves it out (never half a hill), moves the starting ants and food piles inside it, and says what it left out.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e47cec0b...3ab82b75); the map core (interface version 4) has a new call, `lvl_crop`; the page needs the new module, so reload it once.
-
-## Older versions (v0.12.77 and before)
-
-Every release before v0.12.78, and the long notes of v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.79, and the long notes of v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

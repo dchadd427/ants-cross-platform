@@ -141,6 +141,11 @@ class ThePickersOwnCode(unittest.TestCase):
             "the first spelling in another case beats the exact one": ("if (list[i].file.replace(/\\.lvl$/i, '') === base) return list[i].original ? '' : list[i].thumb;", "if (false) return '';"),
             "a map without a picture on the server gets a guessed address": ("return list[i].original ? '' : list[i].thumb;", "return list[i].thumb || previewPath(map);"),
             "an Extended map has no badge": ("else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));", ""),
+            "a heavy map is not marked": ("if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));", ""),
+            "every map is marked as heavy": ("if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));", "nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));"),
+            "the flag is not read from the list": ("heavy: m.heavy === true", "heavy: false"),
+            "a map with no flag is heavy": ("heavy: m.heavy === true", "heavy: m.heavy !== false"),
+            "the warning says the map is refused": ("var HEAVY_TEXT = 'Many ants: may run slowly';", "var HEAVY_TEXT = 'Too many ants for an online game';"),
         }
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():
