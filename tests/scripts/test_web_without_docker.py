@@ -564,6 +564,8 @@ class TheSiteConfiguration(Scratch):
         self.assertIn("location = /busy", text, "the rest of the file is as it was")
         self.assertNotIn("/dev/stdout", text, "the image's log lines (the submission paths log to its output) go nowhere here")
         self.assertIn("log_format ants_noquery ", text, "but the log format stays, a location that is left would not know it")
+        self.assertGreater(text.count("resolver 127.0.0.11"), 10)
+        self.assertEqual(text.count("resolver_timeout 1s;"), text.count("resolver 127.0.0.11"), "a game server that is not there is not waited for for 30 seconds where Docker's resolver is not")
         self.assertEqual(text.count("access_log off;"), 4)           # (the four paths: the submissions, their single ids, the owner's API and the test maps)
 
     def test_a_file_that_the_tool_cannot_move_is_an_error(self):
@@ -744,6 +746,14 @@ class TheBrowser(Scratch):
             self.assertEqual(wd.find_chromium(), "/usr/bin/chromium")
             with mock.patch.object(wd.shutil, "which", return_value=None):
                 self.assertIsNone(wd.find_chromium())
+
+    def test_the_folders_of_a_newer_playwright_are_found_too(self):
+        base = self.browsers("chromium-1243/chrome-linux64/chrome", "chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell", "ffmpeg-1011/ffmpeg-linux")
+        with mock.patch.dict(os.environ, {"PLAYWRIGHT_BROWSERS_PATH": base}):
+            self.assertEqual(wd.find_chromium(), os.path.join(base, "chromium_headless_shell-1243", "chrome-headless-shell-linux64", "chrome-headless-shell"))
+        base = self.browsers("chromium-1243/chrome-linux64/chrome", "chromium_headless_shell-1243/chrome-headless-shell-linux64/README")
+        with mock.patch.dict(os.environ, {"PLAYWRIGHT_BROWSERS_PATH": base}):
+            self.assertEqual(wd.find_chromium(), os.path.join(base, "chromium-1243", "chrome-linux64", "chrome"), "a shell folder with no program in it is passed over")
 
     def test_a_browser_that_is_named_is_left_alone_and_none_found_changes_nothing(self):
         self.assertEqual(wd.browser_environment(self.path("w"), {"CHROME": "/mine/chrome"}), {"CHROME": "/mine/chrome"})

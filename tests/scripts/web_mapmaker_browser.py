@@ -33,7 +33,7 @@ Parts:
              reasons, Crop it to fit opens the screen with the frame (dragged with the mouse, pulled at a handle: wider is shorter by itself, the arrow keys, the readout counts from 0), Use this
              part gives a Classic map of the part; then a touch screen (390 x 844 and 844 x 390): the sheets are inside the screen with their buttons, every control is 44 pixels, the crop screen has
              no sideways scroll and its corners and buttons are 44 pixels;
-  * save     1280 x 800 and a touch screen (390 x 844, 844 x 390), Save as a new map and the drafts (the page's own list of maps is stood in for by a fake of /maps): the name offered is the next free
+  * save     1280 x 800 and a touch screen (390 x 844, 844 x 390), Save as a new map and the drafts (the page's own list of maps is stood in for by a fake of /maps/all): the name offered is the next free
              one; the open map's name, a draft's and a library map's are refused (capitals and blanks do not count) with the one-click next name; a free name is saved as a NEW draft in the browser's
              database (its bytes are the file's) and the saved map takes the screen, so the next Save offers the next number; a name that exists is never written over; drawing is kept in the
              browser's one slot (a reload asks to pick it up or throw it away, and the browser's own question is not asked while the work is safe); the question before a map is left offers Save as a
@@ -185,7 +185,15 @@ class Page:
         return wait_for(lambda: self.ev("!!document.getElementById('boot') && (document.getElementById('boot').hidden || document.getElementById('boot').textContent.length > 30)"), timeout, 0.3)
 
     def ready(self):
-        return bool(self.ev("!!document.getElementById('boot') && document.getElementById('boot').hidden && !document.querySelector('[data-act=check]').disabled"))
+        if not self.ev("!!document.getElementById('boot') && document.getElementById('boot').hidden && !document.querySelector('[data-act=check]').disabled"):
+            return False
+        # (the page opens its database after it has started, and until that is done it cannot keep a map ("This browser cannot keep maps"): a request of ours for the same database is answered after
+        # the page's own, so when it comes the page's store is open; a browser that keeps nothing has no database to ask)
+        try:
+            idb_read(self, "drafts", "")
+        except RuntimeError:
+            pass
+        return True
 
     def state(self):
         return json.loads(self.ev("""JSON.stringify({
@@ -424,11 +432,12 @@ def run_sprites(tab, args, check):
     check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.ksheetbox')")) and page.ev("document.querySelector('.dlg h2').textContent") == "Dirt: all its tiles", "the second tap opens Dirt: all its tiles")
     got = json.loads(page.ev("""JSON.stringify((function () {
         var d = document.querySelector('.dlg'), t = d.querySelectorAll('.gt:not(.mid)'), g = d.querySelectorAll('.kgroup h3');
-        return {chips: t.length, pictures: d.querySelectorAll('.gt canvas').length, heads: [].map.call(g, function (h) { return h.textContent; }), brush: [].map.call(d.querySelectorAll('.kbrush button'), function (b) { return b.textContent; }).join(''),
+        return {chips: t.length, pictures: d.querySelectorAll('.gt canvas').length, heads: [].map.call(g, function (h) { return h.textContent; }),
+                brush: [].map.call(d.querySelectorAll('.kbrush input[type=range]'), function (n) { return n.min + '-' + n.max + ':' + n.value + ':' + n.nextElementSibling.textContent; }).join('|') + '/' + document.getElementById('brush-range').value,
                 small: [].filter.call(t, function (b) { var r = b.querySelector('i').getBoundingClientRect(); return r.width < 51 || r.height < 51; }).length, on: d.querySelectorAll('.gt[aria-checked=true]').length};
     })())"""))
     check(got["chips"] == 1 + 3 * 8 and got["pictures"] == got["chips"] + 3 and got["heads"] == ["Plain dirt", "Dirt next to Gravel", "Dirt next to Slate", "Dirt next to Mud"], "the sheet: the plain tile and 3 x 8 edge pieces, each with its picture: %s" % got)
-    check(got["brush"] == "1359" and got["small"] == 0 and got["on"] == 1, "the brush row, chips of 52 pixels, and the chosen tile has the gold ring (%s)" % got)
+    check(got["brush"] == "1-9:1:1/1" and got["small"] == 0 and got["on"] == 1, "the brush row (the one slider, 1 to 9, as the page's own says), chips of 52 pixels, and the chosen tile has the gold ring (%s)" % got)
     page.shot(args.shots, "mapmaker-sprites-sheet-dirt")
     page.ev("document.querySelector('.dlg .gt[data-tile=\"541\"]').click()")              # dg03a: dirt next to gravel, the gravel on the north side
     check(page.ev("document.querySelector('.dlg .gt[aria-checked=true]').getAttribute('data-tile')") == "541", "a tile of the sheet is chosen")
@@ -533,7 +542,7 @@ def run_sprites(tab, args, check):
     check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.ksheetbox')")), "the chosen kind again opens its sheet")
     got = json.loads(page.ev("""JSON.stringify((function () {
         var d = document.querySelector('.dlg').getBoundingClientRect(), i = document.querySelector('.dlg-in'), t = document.querySelectorAll('.dlg .gt:not(.mid)'),
-            b = [].map.call(document.querySelectorAll('.dlg .kbrush button'), function (n) { var r = n.getBoundingClientRect(); return Math.min(r.width, r.height); }),
+            b = [].map.call(document.querySelectorAll('.dlg .kbrush input'), function (n) { var r = n.getBoundingClientRect(); return r.height; }),
             l = [].map.call(document.querySelectorAll('.dlg .gl'), function (n) { return n.getBoundingClientRect().height; });
         return {inside: d.top >= 0 && d.bottom <= window.innerHeight + 1 && d.left >= -1 && d.right <= window.innerWidth + 1, scrolls: i.scrollHeight > i.clientHeight, wide: document.documentElement.scrollWidth > window.innerWidth,
                 chip: Math.min.apply(null, [].map.call(t, function (n) { return n.querySelector('i').getBoundingClientRect().width; })), brush: Math.min.apply(null, b), look: Math.min.apply(null, l)};
@@ -690,6 +699,10 @@ def run_part(part, tab, args, check, tiny, junk):
         # the canvas
         page.tool("pan")
         check(page.ev("document.querySelector('[data-tool=pan]').getAttribute('aria-pressed')") == "true", "the Pan tool is chosen: a drag looks around")
+        # (the first time the pointer is over the map the status line has its words, and at 1280 pixels the bar under the map wraps to a second row: the canvas is 40 pixels lower than it was; the box is
+        # measured once the pointer is over the map, so that the layout is the one that a drag meets)
+        page.tab.mouse("mouseMoved", 600, 380, button="none")
+        time.sleep(0.3)
         box = page.box("#map")
         cx, cy = box["x"] + box["w"] / 2 + 7, box["y"] + box["h"] / 2 + 7           # (not on the edge between two tiles)
         page.tab.mouse("mouseMoved", cx, cy, button="none")
@@ -699,7 +712,7 @@ def run_part(part, tab, args, check, tiny, junk):
         time.sleep(0.2)
         page.tab.mouse("mouseMoved", cx - 200, cy - 120, button="none")
         time.sleep(0.2)
-        check(before.startswith("Row") and page.state()["where"] == before, "a drag takes the point under the pointer along with it (%s)" % before)
+        check(before.startswith("Row") and page.state()["where"] == before, "a drag takes the point under the pointer along with it (%s, now %s)" % (before, page.state()["where"]))
         scale = page.state()["scale"]
         page.wheel(cx, cy, -300)
         time.sleep(0.3)
@@ -1143,11 +1156,12 @@ def run_part(part, tab, args, check, tiny, junk):
         page = Page(tab, args.web)
         check(page.open() and page.ready(), "the page starts with its map core")
         gravel = page.color_of(485)
-        # (the anchor's cell has a dot in its middle: cells are read a little above and to the left of it)
+        # (the anchor's cell has a dot in its middle: it is read a little above and to the left of it; the marked box has a dark line that reaches 3.5 pixels into the cells round it, which a cell on its
+        # side shows at that spot when the tiles are as small as 18 pixels (the bar under the map is two rows high at 1280): such cells are read in their middle, where no dot is)
 
-        def at(r, c):
+        def at(r, c, middle=False):
             x, y = page.cell_point(r, c)
-            k = float(page.ev("document.getElementById('map').getAttribute('data-scale')")) * 0.3
+            k = 0 if middle else float(page.ev("document.getElementById('map').getAttribute('data-scale')")) * 0.3
             return page.pixel(x - k, y - k)
 
         def goldish(x, y, along):
@@ -1182,22 +1196,22 @@ def run_part(part, tab, args, check, tiny, junk):
         time.sleep(0.3)
         cells = [(r, c) for r in (9, 10) for c in range(8, 13)]
         check(all(at(r, c) == item for r, c in cells), "a click puts the object whole: its 10 cells are its color")
-        check(all(at(r, c) == gravel for r, c in ((8, 10), (11, 10), (10, 7), (10, 13), (9, 13))), "and nothing round it")
+        check(all(at(r, c, True) == gravel for r, c in ((8, 10), (11, 10), (10, 7), (10, 13), (9, 13))), "and nothing round it")
         check(not page.button_off("#undo-btn"), "Undo is on")
         page.shot(args.shots, "mapmaker-bigger-placed")
         page.key("e")
         page.tab.click(*page.cell_point(9, 12))
         time.sleep(0.2)
-        check(all(at(r, c) == gravel for r, c in cells), "the eraser on one cell takes the whole object away")
+        check(all(at(r, c, True) == gravel for r, c in cells), "the eraser on one cell takes the whole object away")
         page.ctrl_key("z", "KeyZ", 90)
         time.sleep(0.2)
-        check(all(at(r, c) == item for r, c in cells), "Control+Z gives it back whole")
+        check(all(at(r, c, True) == item for r, c in cells), "Control+Z gives it back whole")
         page.ctrl_key("z", "KeyZ", 90)
         time.sleep(0.2)
-        check(all(at(r, c) == gravel for r, c in cells), "and the next one takes it away")
+        check(all(at(r, c, True) == gravel for r, c in cells), "and the next one takes it away")
         page.ctrl_key("y", "KeyY", 89)
         time.sleep(0.2)
-        check(all(at(r, c) == item for r, c in cells), "Control+Y puts it back")
+        check(all(at(r, c, True) == item for r, c in cells), "Control+Y puts it back")
         # an opened map keeps its verdict
         page.choose_file(tiny)
         wait_for(lambda: page.state()["name"] == "TINY")
@@ -1429,7 +1443,7 @@ def run_part(part, tab, args, check, tiny, junk):
         tap_selector("[data-act=menu]")
         check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
         names = page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')")
-        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions|\u25b6 Play this map", "the menu: %s" % names)
+        check(names == "New|Open|My maps|Copy...|Save as new...|Properties...|Resize...|Download|Submit for approval...|My submissions|\u25b6 Play this map", "the menu: %s" % names)
         page.shot(args.shots, "mapmaker-props-phone-menu")
         page.ev("document.querySelectorAll('.menulist .btn')[5].click()")
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg.props')")), "Properties... opens the sheet")
@@ -1463,6 +1477,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.type_into(".cname input", "tiny")
         check(page.ev("!!document.querySelector('.cname .note.bad')") and page.button_off(".dlg-foot .btn:last-child"), "the open map's own name is refused (capitals do not matter) and Make new map is off")
         page.type_into(".cname input", "Little Tiny")
+        wait_for(lambda: not page.button_off(".dlg-foot .btn:last-child"))          # (a game map's name cannot be known until the site's list has come, or has failed to: the button waits for it)
         page.click_selector(".dlg-foot .btn:last-child")
         check(wait_for(lambda: page.state()["name"] == "Little Tiny"), "a copy of the same kind is open under the new name")
         s = page.state()
@@ -1602,7 +1617,7 @@ def run_part(part, tab, args, check, tiny, junk):
             page.ev("document.getElementById('crop-cancel').click()")
             check(wait_for(lambda: page.ev("!!document.querySelector('.creasons')")), "%d x %d: Cancel comes back to the reasons" % (w, h))
     elif part == "save":
-        fake = ("window.__real = window.fetch; window.fetch = function (u) { if (String(u) === '/maps') return Promise.resolve(new Response(JSON.stringify({format: 1, maps: [{file: 'POPcOrN.lvl'}, {file: 'TINY.LVL'}]}), {status: 200})); "
+        fake = ("window.__real = window.fetch; window.fetch = function (u) { if (String(u) === '/maps/all') return Promise.resolve(new Response(JSON.stringify({format: 1, maps: [{file: 'POPcOrN.lvl'}, {file: 'TINY.LVL'}]}), {status: 200})); "
                 "return window.__real.apply(this, arguments); };")
         blocked = "Object.defineProperty(window, 'indexedDB', { get: function () { throw new Error('blocked'); } });"
         title = lambda page: page.ev("(document.querySelector('.dlg h2') || {}).textContent || ''")
@@ -1614,7 +1629,7 @@ def run_part(part, tab, args, check, tiny, junk):
         check(page.open(fake) and page.ready(), "the page starts")
         wait_for(lambda: page.ev("!!window.__listed") or True)
         page.press_act("save")
-        check(dialog(page, "Save as a new map") and page.ev("document.querySelector('.cname input').value") == "My map 2", "Save as new... opens the dialog with the next free name (My map 2)")
+        check(dialog(page, "Save as a new map") and wait_for(lambda: page.ev("document.querySelector('.cname input').value") == "My map 2"), "Save as new... opens the dialog with the next free name (My map 2)")
         page.ev("document.querySelector('.dlg-foot .btn:first-child').click()")
         page.choose_file(tiny)
         check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
@@ -1836,7 +1851,7 @@ def run_part(part, tab, args, check, tiny, junk):
             check(page.open() and page.ready(), "the page starts")
             page.press_act("menu")
             check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "Menu opens")
-            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Download|Submit for approval...|My submissions|\u25b6 Play this map", "the Menu has My maps after Open, the two ways to send a map and then Play this map at its end")
+            check(page.ev("[].map.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent; }).join('|')") == "New|Open|My maps|Copy...|Save as new...|Properties...|Resize...|Download|Submit for approval...|My submissions|\u25b6 Play this map", "the Menu has My maps after Open, the two ways to send a map and then Play this map at its end")
             click_text(page, ".menulist .btn", "My maps")
             check(wait_for(lambda: shown(page) and len(rows(page)) >= 1 and page.ev("[].every.call(document.querySelectorAll('#mine-list .t3'), function (n) { return n.textContent.length > 0; })")), "My maps opens")
             bad = json.loads(page.ev("""JSON.stringify([].filter.call(document.querySelectorAll('#mine button'), function (b) { return b.offsetParent !== null; }).map(function (b) {
@@ -1864,7 +1879,7 @@ def run_part(part, tab, args, check, tiny, junk):
             function reply(status, json, html) { return Promise.resolve(new Response(html ? '<html><body>' + status + ' page of nginx</body></html>' : JSON.stringify(json), {status: status, headers: {'Content-Type': html ? 'text/html' : 'application/json'}})); }
             window.fetch = function (u, init) {
                 u = String(u); init = init || {};
-                if (u === '/maps') return reply(200, srv.mapsList);
+                if (u === '/maps/all') return reply(200, srv.mapsList);
                 if (u.indexOf('/submissions') !== 0) return real.apply(this, arguments);
                 var method = init.method || 'GET', auth = init.headers && init.headers.Authorization, body = init.body;
                 srv.log.push({method: method, url: u, auth: auth || '', type: (init.headers || {})['Content-Type'] || '', length: body ? body.length : 0, first: body ? body[0] : -1});
@@ -2219,9 +2234,10 @@ def run_part(part, tab, args, check, tiny, junk):
             page.tool("objects")
             check(page.ev("!document.getElementById('tile-btn').hidden && document.getElementById('palette').offsetParent === null"), "a phone has the one palette button and not the row of tiles")
             page.ev("document.getElementById('tile-btn').click()")
-            check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 11), "the button opens a sheet of the 11 objects")
+            check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 30), "the button opens a sheet of the 30 objects (6 rocks, 5 power-ups, the fire wall, 4 bombs, 5 clovers, 9 flowers)")
             names = page.ev("[].map.call(document.querySelectorAll('.pick'), function (b) { return b.textContent; }).join('|')")
-            check(names.startswith("Rock 1|Rock 2") and "Fire ant power-up" in names, "with their names: %s" % names)
+            check(names == "Rock 1|Rock 2|Rock 3|Rock 4|Rock 5|Rock 6|Combat ant power-up|Thief ant power-up|Bomber ant power-up|Swimmer ant power-up|Fire ant power-up|Fire wall|Black bomb|Blue bomb|Green bomb|Red bomb"
+                  "|Clover 1|Clover 2|Clover 3|Clover 4|Clover patch|Flower 1a|Flower 1b|Flower 2a|Flower 2b|Flower 3a|Flower 3b|Flower 3c|Daisy flower|Flower 1", "with their names: %s" % names)
             inside = page.ev("[].every.call(document.querySelectorAll('.dlg-foot button'), function (b) { var r = b.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && r.top >= -1; })")
             check(inside, "the sheet's Close button is on the screen (the tiles scroll inside it)")
             page.ev("document.querySelector('.pick[data-tile=\"304\"]').click()")
@@ -2229,7 +2245,8 @@ def run_part(part, tab, args, check, tiny, junk):
             if (w, h) in ((667, 375), (375, 667)):
                 page.shot(args.shots, "mapmaker-layout-%dx%d" % (w, h))
             # the sheets of Hills, Ants and Food: the teams, the stepper, the number that the button says
-            for tool, picks, stepper in (("bigger", 29, False), ("hills", 4, False), ("ants", 4, True), ("food", 0, True)):
+            # (the tool, the choices of its sheet, the buttons of its steppers: Ants one number, how many; Food three, the stages of the pile, its bites and the points of a bite, each a minus and a plus)
+            for tool, picks, stepper in (("bigger", 29, 0), ("hills", 4, 0), ("ants", 4, 2), ("food", 32, 6)):
                 page.tool(tool)
                 time.sleep(0.1)
                 page.ev("document.getElementById('tile-btn').click()")
@@ -2244,7 +2261,7 @@ def run_part(part, tab, args, check, tiny, junk):
                     });
                     return {picks: document.querySelectorAll('.pick').length, stepper: document.querySelectorAll('.stepper.sheet .stp').length, bad: bad, small: small, inside: dlg.bottom <= innerHeight + 1 && dlg.right <= innerWidth + 1 && dlg.left >= -1};
                 })())"""))
-                check(found["picks"] == picks and found["stepper"] == (2 if stepper else 0), "%d x %d: the sheet of %s has %d teams and %s stepper (%s)" % (w, h, tool, picks, "a" if stepper else "no", found))
+                check(found["picks"] == picks and found["stepper"] == stepper, "%d x %d: the sheet of %s has %d choices and %d stepper buttons (%s)" % (w, h, tool, picks, stepper, found))
                 check(found["small"] == [] and found["bad"] == [] and found["inside"], "%d x %d: the sheet of %s is inside the screen and its buttons are 44 pixels (%s %s)" % (w, h, tool, found["small"], found["bad"]))
                 if stepper:
                     page.ev("document.querySelector('.stepper.sheet .stp:last-child, .stepper.sheet .stbtns .stp:last-child').click()")

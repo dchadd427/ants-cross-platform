@@ -566,6 +566,7 @@ def site_config(conf, fs, cache, port):
     maps = os.path.join(fs, "srv", "community-maps")                                       # (the players' maps and pictures, served by /maps/previews/ and /maps/files/: outside the web root)
     text = conf.replace("/srv/community-maps", maps).replace("/usr/share/nginx/html", html).replace("/var/cache/nginx/ants_stats", stats).replace("/var/cache/nginx/ants_history", os.path.join(cache, "ants_history"))
     text = re.sub(r"access_log[ \t]+/dev/stdout[ \t]+\w+;", "access_log off;", text)                  # (the image logs the submission paths to its output; here nobody reads it)
+    text = re.sub(r"^([ \t]*resolver[ \t]+127\.0\.0\.11[^;]*;)", r"\1 resolver_timeout 1s;", text, flags=re.M)           # (Docker's own resolver is not here: the name of the game server fails in a second, as it does at once in the image, not after 30)
     text, moved = re.subn(r"^([ \t]*)listen[ \t]+80;[ \t]*$", r"\1listen 127.0.0.1:%d;" % port, text, flags=re.M)
     text = re.sub(r"^[ \t]*listen[ \t]+\[::\]:80;[ \t]*\n", "", text, flags=re.M)
     if moved != 1:
@@ -699,11 +700,14 @@ def find_chromium():
     check's fullscreen part), then a Chromium or a Chrome."""
     base = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or "/opt/pw-browsers"
     entries = sorted(os.listdir(base), reverse=True) if os.path.isdir(base) else []
-    for prefix, name in (("chromium_headless_shell-", "headless_shell"), ("chromium-", "chrome")):
+    # (Playwright's folders: chrome-linux with headless_shell and chrome in the older builds, chrome-headless-shell-linux64 and chrome-linux64 with chrome-headless-shell and chrome in the newer)
+    for prefix, folders in (("chromium_headless_shell-", (("chrome-linux", "headless_shell"), ("chrome-headless-shell-linux64", "chrome-headless-shell"))),
+                            ("chromium-", (("chrome-linux", "chrome"), ("chrome-linux64", "chrome")))):
         for entry in entries:
-            path = os.path.join(base, entry, "chrome-linux", name)
-            if entry.startswith(prefix) and os.access(path, os.X_OK):
-                return path
+            for folder, name in folders:
+                path = os.path.join(base, entry, folder, name)
+                if entry.startswith(prefix) and os.access(path, os.X_OK):
+                    return path
     for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge"):
         if shutil.which(name):
             return shutil.which(name)
