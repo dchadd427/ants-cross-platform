@@ -699,6 +699,10 @@ void run_event_tests() {
         a.loco.clip = movement::MotionClip{};
         w.impl.event_refresh(a);
         ASSERT_TRUE(none());
+        a.loco.clip = movement::MotionClip{};                          // two frames but no frame list: not a valid clip
+        a.loco.clip.count = 2;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
         a.loco.clip = w.multi;
         a.loco.next_ms = kNever;
         w.impl.event_refresh(a);
@@ -863,6 +867,107 @@ void run_event_tests() {
         ASSERT_TRUE(ties > 20);
     } TEST_END();
 
+    TEST_CASE("L4.6 Event heap: every function that writes the fields of the events leaves the heap as the fields say, called by itself on an ant that has events (animation play, release, pause start, cancel and fire, an action, the combat timer, the burn overlay, a retreat, a removal)") {
+        // a clip that is played over a pending animation frame: an invalid clip starts nothing, so nothing falls due any more
+        {
+            EventWorld w;
+            AntUnit& a = w.add(1);
+            w.loco(a, 40);
+            w.impl.loco_play(a, movement::MotionClip{}, 4);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(kNever - 1) == "none");
+            w.impl.loco_play(a, w.multi, 4);                             // a valid one: its start step runs, the next frame falls due
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(kNever - 1) != "none");
+        }
+        // released: no action, no pause, so no frame and no pause
+        {
+            EventWorld w;
+            AntUnit& a = w.add(1);
+            w.loco(a, 40);
+            w.pause(a, 30);
+            ASSERT_TRUE(w.next(100) == "0:P@30");
+            w.impl.loco_release(a);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(kNever - 1) == "none");
+        }
+        // a pause starts (the ant has an action; it ends 300 ms later), is cancelled, starts again and fires
+        {
+            EventWorld w;
+            AntUnit& a = w.add(1);
+            w.loco(a, 500);
+            w.impl.now_ms_ = 100;
+            w.impl.start_pause(a);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(1000) == "0:P@400");
+            w.impl.cancel_pause(a);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(1000) == "0:L@500");
+            w.impl.start_pause(a);
+            a.pause_saved_action = AntUnit::kActionIdle;
+            w.impl.pause_fire(a);                                        // the pause is over: the ant plays its idle clip again
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(!a.pause_active && w.next(1000).find(":P@") == std::string::npos);
+            w.impl.set_action(a, AntUnit::kActionWalk, 2, -1, -1, false);   // an action
+            w.impl.event_heap_verify();
+            w.impl.set_action(a, 0x30, 2, -1, -1, false);                // (an action that the switch does not know sets the field and plays nothing)
+            w.impl.event_heap_verify();
+        }
+        // the combat timer
+        {
+            EventWorld w;
+            AntUnit& b = w.add(2);
+            w.impl.now_ms_ = 1000;
+            w.impl.start_combat_timer(b, 250);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(1249) == "none" && w.next(1250) == "0:C@1250");
+            w.impl.cancel_combat_timer(b);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(kNever - 1) == "none");
+        }
+        // the burn overlay starts, and ends (an ant that is dying when its overlay ends: nothing after the end sets its events again)
+        {
+            EventWorld w;
+            AntUnit& b = w.add(2);
+            w.impl.anim_clock_ms_ = 2000;
+            w.impl.burn_overlay_start(b);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(b.burn_end_ms > 2000 && w.next(kNever - 1) == "0:B@" + std::to_string(b.burn_end_ms));
+            b.hp = 0;
+            b.loco_action = AntUnit::kActionDeath;
+            w.impl.event_refresh(b);
+            w.impl.burn_overlay_end(b);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(b.burn_end_ms == 0 && w.next(kNever - 1) == "none");
+        }
+        // a retreat: a 1 hp ant that has no action (what a released ant has) is put on action 0 by low_hp_check, and its leftover clip is an animation again
+        {
+            EventWorld w;
+            AntUnit& c = w.add(3);
+            w.loco(c, 40);
+            c.loco_action = AntUnit::kActionNone;
+            w.impl.event_refresh(c);
+            ASSERT_TRUE(w.next(100) == "none");
+            c.hp = 1;
+            ASSERT_TRUE(w.impl.low_hp_check(c));
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(c.loco_action == AntUnit::kActionIdle && w.next(100) == "0:L@40");
+        }
+        // a removal: every event of the ant is gone
+        {
+            EventWorld w;
+            AntUnit& d = w.add(4);
+            w.loco(d, 10);
+            w.pause(d, 20);
+            w.burn(d, 30);
+            w.combevt(d, 40);
+            ASSERT_TRUE(w.next(100) == "0:L@10");
+            w.impl.remove_ant(d);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(d.removed && w.next(kNever - 1) == "none");
+        }
+    } TEST_END();
+
     TEST_CASE("L4.5 Engine copy: a copy of an engine (construction, assignment, an assignment into a moved-from engine) has the heap of its source, plays on to the same state hash, and a restart empties the heap") {
         SimulationEngine a;
         a.init_test_world(60, 60, 5);
@@ -876,11 +981,16 @@ void run_event_tests() {
         for (size_t i = 0; i < 20; i += 4) c.ants.push_back(ids[i]);
         (void)a.apply_command(c);
         for (int t = 0; t < 40; ++t) a.tick();
+        const uint64_t verifies0 = lookup_shadow_event_verifies();
         SimulationEngine copy(a);                                        // (the shadow build checks the copy's heap against its ants inside the copy)
+        ASSERT_TRUE(lookup_shadow_event_verifies() == verifies0 + 1);
         SimulationEngine assigned;
         assigned = a;
+        ASSERT_TRUE(lookup_shadow_event_verifies() == verifies0 + 2);   // (and so is an assignment)
         SimulationEngine moved(std::move(a));
+        ASSERT_TRUE(lookup_shadow_event_verifies() == verifies0 + 2);   // (a move changes no ant: nothing to check)
         a = copy;                                                        // an assignment into the engine that was moved from
+        ASSERT_TRUE(lookup_shadow_event_verifies() == verifies0 + 3);
         for (int t = 0; t < 120; ++t) {
             a.tick();
             copy.tick();

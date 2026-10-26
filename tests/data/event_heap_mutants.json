@@ -44,32 +44,44 @@
   {
    "id": "version_not_bumped_when_not_pending",
    "file": "src/ants_sim/event_heap.hpp",
-   "old": "                ++r.version[k];                                   // the entry of the event that is gone is dead now\n",
+   "old": "            ++r.version[k];                                       // the entry of the event that is gone is dead now\n",
    "new": ""
   },
   {
    "id": "lazy_deleted_entry_popped_as_live",
    "file": "src/ants_sim/event_heap.hpp",
-   "old": "recs_[e.slot].version[e.kind] == e.version;\n    }",
-   "new": "true;\n    }"
+   "old": "e.slot < recs_.size() && recs_[e.slot].version[e.kind] == e.version;",
+   "new": "e.slot < recs_.size();"
   },
   {
-   "id": "entry_of_an_event_that_is_not_pending_selected",
+   "id": "pending_count_not_lowered",
    "file": "src/ants_sim/event_heap.hpp",
-   "old": "(recs_[e.slot].live & (1u << e.kind)) != 0 && recs_[e.slot].version[e.kind] == e.version;",
-   "new": "recs_[e.slot].version[e.kind] == e.version;"
+   "old": "            --live_;\n            return true;",
+   "new": "            return true;"
+  },
+  {
+   "id": "refresh_skips_the_last_kind",
+   "file": "src/ants_sim/event_queue.cpp",
+   "old": "    for (size_t k = 0; k < kAntEventKinds; ++k) {\n        const AntEventKind kind = static_cast<AntEventKind>(k);\n        uint32_t due = 0;\n        const bool pending = due_of(a, kind, due);",
+   "new": "    for (size_t k = 0; k + 1 < kAntEventKinds; ++k) {\n        const AntEventKind kind = static_cast<AntEventKind>(k);\n        uint32_t due = 0;\n        const bool pending = due_of(a, kind, due);"
+  },
+  {
+   "id": "refresh_sets_the_next_slot",
+   "file": "src/ants_sim/event_queue.cpp",
+   "old": "        changed = event_heap_.set(slot, kind, pending, due) || changed;",
+   "new": "        changed = event_heap_.set(slot + 1u, kind, pending, due) || changed;"
   },
   {
    "id": "new_time_of_a_pending_event_ignored",
    "file": "src/ants_sim/event_heap.hpp",
-   "old": "        if (was && r.due[k] == due) return;                       // already pending at that time, its entry is in the heap\n",
-   "new": "        if (was) return;\n"
+   "old": "        if (was && r.due[k] == due) return false;                 // already pending at that time, its entry is in the heap\n",
+   "new": "        if (was) return false;\n"
   },
   {
    "id": "event_that_is_not_pending_stays",
    "file": "src/ants_sim/event_heap.hpp",
-   "old": "        if (!pending) {\n            if (was) {",
-   "new": "        if (!pending) {\n            if (false) {"
+   "old": "        if (!pending) {\n            if (!was) return false;",
+   "new": "        if (!pending) {\n            return false;"
   },
   {
    "id": "dead_entries_stay_on_top",
@@ -222,12 +234,6 @@
    "new": "            found = p.time < t_end;"
   },
   {
-   "id": "entry_of_a_missing_ant_selected",
-   "file": "src/ants_sim/event_queue.cpp",
-   "old": "        AntUnit* const a = p.slot < ants_.size() ? ants_[p.slot].get() : nullptr;\n",
-   "new": "        AntUnit* const a = ants_[p.slot].get();\n"
-  },
-  {
    "id": "scan_reference_takes_the_later_tie",
    "file": "src/ants_sim/event_queue.cpp",
    "old": "        if (a && !a->removed && a->burn_end_ms != 0 && a->burn_end_ms <= t_end && a->burn_end_ms < best_t) {",
@@ -246,12 +252,6 @@
    "new": "int SimulationEngineImpl::loco_step(AntUnit& a, uint32_t now) {\n"
   },
   {
-   "id": "no_refresh_after_set_action",
-   "file": "src/ants_sim/movement_system.cpp",
-   "old": "void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, int16_t terr_a, int16_t terr_b, bool flag) {\n    const EventRefreshOnExit refresh_events(*this, a);               // the fields that decide the ant's events change here\n",
-   "new": "void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, int16_t terr_a, int16_t terr_b, bool flag) {\n"
-  },
-  {
    "id": "no_refresh_after_release",
    "file": "src/ants_sim/movement_system.cpp",
    "old": "    a.dive_flag = false;\n    event_refresh(a);\n}",
@@ -268,18 +268,6 @@
    "file": "src/ants_sim/movement_system.cpp",
    "old": "    a.pause_active = false;\n    event_refresh(a);\n}",
    "new": "    a.pause_active = false;\n}"
-  },
-  {
-   "id": "no_refresh_after_pause_fire",
-   "file": "src/ants_sim/movement_system.cpp",
-   "old": "void SimulationEngineImpl::pause_fire(AntUnit& a) {\n    const EventRefreshOnExit refresh_events(*this, a);               // the fields that decide the ant's events change here\n",
-   "new": "void SimulationEngineImpl::pause_fire(AntUnit& a) {\n"
-  },
-  {
-   "id": "no_refresh_at_the_start_of_the_tick",
-   "file": "src/ants_sim/movement_system.cpp",
-   "old": "        event_refresh(*up, this_slot);                      // (loco_sync writes some of the fields that decide the events)\n",
-   "new": ""
   },
   {
    "id": "no_refresh_after_the_low_hp_write",
@@ -316,12 +304,6 @@
    "file": "src/ants_sim/combat_system.cpp",
    "old": "    a.combevt_due_ms = 0;\n    event_refresh(a);\n}",
    "new": "    a.combevt_due_ms = 0;\n}"
-  },
-  {
-   "id": "task_ties_go_before_the_ant",
-   "file": "src/ants_sim/movement_system.cpp",
-   "old": "        if (anthillq_next_ms_ <= t_end && anthillq_next_ms_ < best_t) {",
-   "new": "        if (anthillq_next_ms_ <= t_end && anthillq_next_ms_ <= best_t) {"
   },
   {
    "id": "event_kind_mixed_up",

@@ -395,7 +395,6 @@ movement::MotionClip SimulationEngineImpl::pending_idle_clip(const AntUnit& a) c
 }
 
 void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, int16_t terr_a, int16_t terr_b, bool flag) {
-    const EventRefreshOnExit refresh_events(*this, a);               // the fields that decide the ant's events change here
     // The old action is cleaned up first (Ants.exe 0x101ade0): its world effects happen here, whatever ends it.
     if (a.loco_action != AntUnit::kActionNone && !action_cleanup(a, a.loco_action, action)) return;
     const bool same_action = (a.loco_action == action);
@@ -876,7 +875,6 @@ void SimulationEngineImpl::cancel_pause(AntUnit& a) {
 }
 
 void SimulationEngineImpl::pause_fire(AntUnit& a) {
-    const EventRefreshOnExit refresh_events(*this, a);               // the fields that decide the ant's events change here
     a.pause_active = false;
     const uint8_t saved_action = a.pause_saved_action;
     const uint8_t saved_dir = a.pause_saved_dir;
@@ -1591,7 +1589,7 @@ void SimulationEngineImpl::movement_tick() {
         if (!up) continue;
         up->arrived_this_tick = false;
         loco_sync(*up);
-        event_refresh(*up, this_slot);                      // (loco_sync writes some of the fields that decide the events)
+        event_catch_up(*up, this_slot);                     // (loco_sync writes some of the fields that decide the events)
     }
     // Animation steps and pause timers in exact due-time order (ties: the place in the table, the kind of event; the tasks after the ants).
     for (;;) {

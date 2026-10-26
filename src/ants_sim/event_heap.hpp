@@ -29,8 +29,9 @@ struct AntEventPick {
 ///
 /// It is a binary heap with lazy deletion. Every (ant slot, kind) has a RECORD: whether the event is pending, when it falls due, and a version that changes whenever the record
 /// does. `set` is the only writer of the records and the heap: it pushes an entry (time, slot, kind, version) when an event becomes pending or its time changes, and never
-/// looks for the old entry: an entry whose version is not its record's version is dead, and `top` throws dead entries away when they reach the top. So the heap holds at most one
-/// live entry for each pending event, plus dead ones that leave when their time comes (and the heap is made again from the records when the dead ones outnumber the live).
+/// looks for the old entry: an entry whose version is not its record's version is dead (the version also changes when an event stops being pending), and `top` throws dead
+/// entries away when they reach the top. So the heap holds one live entry for each pending event, plus dead ones that leave when their time comes (and the heap is made
+/// again from the records when the dead ones outnumber the live).
 ///
 /// It holds nothing of its own: the records say what the ants' fields say (SimulationEngineImpl::event_refresh writes them from the fields, after every change of the fields),
 /// it is never hashed and never sent, and a copy of the engine copies it with the ants (a slot is a place in the copied table). The copy operations are written out so that this
@@ -50,25 +51,25 @@ public:
         live_ = 0;
     }
 
-    /// The event `kind` of the ant in this slot is pending and falls due at `due` (`pending`), or is not pending. THE writer: a call that changes nothing changes nothing.
-    void set(uint32_t slot, AntEventKind kind, bool pending, uint32_t due) {
+    /// The event `kind` of the ant in this slot is pending and falls due at `due` (`pending`), or is not pending. THE writer: a call that changes nothing changes nothing, and
+    /// returns false; true: the heap changed.
+    bool set(uint32_t slot, AntEventKind kind, bool pending, uint32_t due) {
         const size_t k = static_cast<size_t>(kind);
         const uint8_t bit = static_cast<uint8_t>(1u << k);
         if (slot >= recs_.size()) {
-            if (!pending) return;
+            if (!pending) return false;
             recs_.resize(static_cast<size_t>(slot) + 1u);
         }
         Record& r = recs_[slot];
         const bool was = (r.live & bit) != 0;
         if (!pending) {
-            if (was) {
-                r.live = static_cast<uint8_t>(r.live & ~bit);
-                ++r.version[k];                                   // the entry of the event that is gone is dead now
-                --live_;
-            }
-            return;
+            if (!was) return false;
+            r.live = static_cast<uint8_t>(r.live & ~bit);
+            ++r.version[k];                                       // the entry of the event that is gone is dead now
+            --live_;
+            return true;
         }
-        if (was && r.due[k] == due) return;                       // already pending at that time, its entry is in the heap
+        if (was && r.due[k] == due) return false;                 // already pending at that time, its entry is in the heap
         if (!was) {
             r.live = static_cast<uint8_t>(r.live | bit);
             ++live_;
@@ -78,6 +79,7 @@ public:
         heap_.push_back(Entry{due, slot, r.version[k], static_cast<uint8_t>(k)});
         std::push_heap(heap_.begin(), heap_.end(), later);
         if (heap_.size() > 4u * static_cast<size_t>(live_) + 4096u) rebuild();
+        return true;
     }
 
     /// The earliest pending event, put in `out` (false: none); it stays in the heap, and is the earliest until `set` changes it (the handler of an event changes the ant, which
@@ -141,7 +143,7 @@ private:
         return a.kind > b.kind;
     }
     bool alive(const Entry& e) const noexcept {
-        return e.slot < recs_.size() && (recs_[e.slot].live & (1u << e.kind)) != 0 && recs_[e.slot].version[e.kind] == e.version;
+        return e.slot < recs_.size() && recs_[e.slot].version[e.kind] == e.version;
     }
     /// The heap again from the records: one live entry for each pending event, no dead ones
     void rebuild() {
