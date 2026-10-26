@@ -17,7 +17,6 @@ import os
 import re
 import shutil
 import socket
-import subprocess
 import sys
 import tempfile
 import threading
@@ -80,8 +79,15 @@ class Door(BaseHTTPRequestHandler):
 
 def stub(name):
     cls = type("Stub_" + name, (Door,), {"seen": [], "lock": threading.Lock(), "name": name})
-    port = maps.free_port()
-    server = quick_http.QuickThreadingHTTPServer(("127.0.0.1", port), cls)
+    for attempt in range(20):
+        port = maps.free_port()
+        try:
+            server = quick_http.QuickThreadingHTTPServer(("127.0.0.1", port), cls)
+        except OSError:                                                                        # (another test took the port between the choice and the bind: choose again)
+            if attempt == 19:
+                raise
+            continue
+        break
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return cls, server, port
 
@@ -103,7 +109,6 @@ class Rig:
             f.write(b"static file")
         with open(os.path.join(self.work, "trusted", "proxies.conf"), "w") as f:
             f.write(trusted)
-        self.port = maps.free_port()
         if real_ports is None:
             self.door, self.door_server, self.door_port = stub("door")
             self.replay, self.replay_server, self.replay_port = stub("replay")
@@ -120,7 +125,7 @@ class Rig:
         text = text.replace("set $ants_replays ants-server:4020;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
         text = text.replace("set $ants_replays ants-server:4002;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
         text = text.replace("set $ants_server ants-server:4002;", "set $ants_server 127.0.0.1:%d;" % self.replay_port)
-        text = text.replace("listen 80;", "listen 127.0.0.1:%d;" % self.port).replace("listen [::]:80;", "")
+        text = text.replace("listen [::]:80;", "")
         if relaxed:                                                                              # (the tests that send many requests are not the flood; the test of the allowance is)
             text = re.sub(r"(zone=ants_submit_post:1m rate=)10r/m", r"\g<1>100000r/s", text)
             text = re.sub(r"(zone=ants_submit_read:1m rate=)10r/s", r"\g<1>100000r/s", text)
@@ -130,19 +135,13 @@ class Rig:
         text = text.replace("access_log /dev/stdout ants_noquery;", ("access_log %s ants_noquery;" % self.log_file) if log else "access_log off;")          # (the image logs to its output)
         user = "user root;\n" if hasattr(os, "geteuid") and os.geteuid() == 0 else ""
         full = user + "pid %s/nginx.pid;\nerror_log %s/error.log;\nevents { worker_connections 256; }\nhttp {\n access_log off;\n client_body_temp_path %s/tmp/body;\n proxy_temp_path %s/tmp/proxy;\n fastcgi_temp_path %s/tmp/fcgi;\n uwsgi_temp_path %s/tmp/uwsgi;\n scgi_temp_path %s/tmp/scgi;\n%s\n}\n" % ((self.work,) * 7 + (text,))
-        conf = os.path.join(self.work, "nginx.conf")
-        with open(conf, "w") as f:
-            f.write(full)
-        test = subprocess.run(["nginx", "-t", "-p", self.work, "-c", conf], capture_output=True, text=True)
-        if test.returncode != 0:
-            raise AssertionError("nginx -t: " + test.stderr)
-        self.proc = subprocess.Popen(["nginx", "-p", self.work, "-c", conf, "-g", "daemon off;"], stderr=subprocess.DEVNULL)
-        for _ in range(100):
-            try:
-                socket.create_connection(("127.0.0.1", self.port), timeout=0.2).close()
-                break
-            except OSError:
-                time.sleep(0.05)
+
+        def write_conf(port):                                                                  # (the port of the site is chosen by maps.start_nginx, which waits for THIS nginx to hold it)
+            conf = os.path.join(self.work, "nginx.conf")
+            with open(conf, "w") as f:
+                f.write(full.replace("listen 80;", "listen 127.0.0.1:%d;" % port))
+            return conf
+        self.proc, self.port = maps.start_nginx(self.work, write_conf)
 
     def stop(self):
         self.proc.terminate()
@@ -180,6 +179,33 @@ class Rig:
 
 def names(headers, name):
     return [v for k, v in headers if k == name]
+
+
+def seen_after(stub, before, wait=10.0):
+    """The newest request that the fake door has recorded once it holds more than `before` of them: poll, with a deadline, instead of reading the list at once (the door writes down what it was
+    sent while it is answering, so the list is only ever ahead of the answer, but a read that does not wait is a read of whatever happened to be there)."""
+    deadline = time.monotonic() + wait
+    while True:
+        with stub.lock:
+            if len(stub.seen) > before:
+                return stub.seen[-1]
+        if time.monotonic() >= deadline:
+            raise AssertionError("the door has recorded %d requests, %d were expected within %.0f s" % (len(stub.seen), before + 1, wait))
+        time.sleep(0.02)
+
+
+def log_lines(rig, count, wait=10.0):
+    """The lines of the access log once there are at least `count` of them (the log is written when the answer has gone: wait for the last line, not for the first)."""
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            with open(rig.log_file, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            lines = []
+        if len(lines) >= count or time.monotonic() >= deadline:
+            return lines
+        time.sleep(0.02)
 
 
 class TheText(unittest.TestCase):
@@ -538,17 +564,17 @@ class TheRealAddress(unittest.TestCase):
         plain = Rig()
         try:
             plain.ask("GET", "/admin/api/me", {"X-Forwarded-For": "198.51.100.7"})
-            self.assertEqual(plain.door.seen[-1][2].get("x-client-address"), "127.0.0.1")        # (nothing is named: a header that anyone can write is not believed)
+            self.assertEqual(seen_after(plain.door, 0)[2].get("x-client-address"), "127.0.0.1")        # (nothing is named: a header that anyone can write is not believed)
         finally:
             plain.stop()
         proxied = Rig(trusted="set_real_ip_from 127.0.0.1;\nreal_ip_header X-Forwarded-For;\nreal_ip_recursive on;\n")
         try:
             proxied.ask("GET", "/admin/api/me", {"X-Forwarded-For": "198.51.100.7"})
-            self.assertEqual(proxied.door.seen[-1][2].get("x-client-address"), "198.51.100.7")
+            self.assertEqual(seen_after(proxied.door, 0)[2].get("x-client-address"), "198.51.100.7")
             proxied.ask("GET", "/admin/api/me", {"X-Forwarded-For": "1.2.3.4, 198.51.100.8"})     # (a visitor who put his own address first: the proxy's own entry is the last one)
-            self.assertEqual(proxied.door.seen[-1][2].get("x-client-address"), "198.51.100.8")
+            self.assertEqual(seen_after(proxied.door, 1)[2].get("x-client-address"), "198.51.100.8")
             proxied.ask("POST", "/submissions?kind=classic&name=Abc&maker=Mia", {"X-Forwarded-For": "198.51.100.9", "X-Client-Address": "6.6.6.6", "Content-Type": "application/octet-stream"}, b"m")
-            self.assertEqual(proxied.door.seen[-1][2].get("x-client-address"), "198.51.100.9")
+            self.assertEqual(seen_after(proxied.door, 2)[2].get("x-client-address"), "198.51.100.9")
         finally:
             proxied.stop()
 
@@ -580,15 +606,6 @@ class TheLogHasNoQuery(unittest.TestCase):
     def tearDownClass(cls):
         cls.rig.stop()
 
-    def lines(self):
-        for _ in range(50):                                                                    # (the log is written when the answer has gone: wait for the last line)
-            with open(self.rig.log_file, encoding="utf-8") as f:
-                lines = f.read().splitlines()
-            if lines:
-                return lines
-            time.sleep(0.05)
-        return []
-
     def test_a_note_a_name_and_a_maker_are_not_in_the_log_and_the_path_is(self):
         secret = "SecretNote%20from%20a%20player"
         self.assertEqual(self.rig.ask("POST", "/submissions?kind=classic&name=Secret%20Name&maker=Secret%20Maker&note=" + secret, {"Content-Type": "application/octet-stream"}, b"m" * 100)[0], 201)
@@ -596,8 +613,7 @@ class TheLogHasNoQuery(unittest.TestCase):
         self.assertEqual(self.rig.ask("GET", "/submissions/%s?x=QueryTwo" % ID)[0], 404)                  # (a query there is a 404: still logged without it)
         self.assertEqual(self.rig.ask("GET", "/admin/api/maps?state=QueryThree")[0], 200)
         self.assertEqual(self.rig.ask("POST", "/admin/api/maps/%s/decline?reason=QueryFour" % ID, {"Content-Type": "application/json"}, b"{}")[0], 201)
-        time.sleep(0.3)
-        text = "\n".join(self.lines())
+        text = "\n".join(log_lines(self.rig, 5))                                                          # (five requests, five lines: wait for the last one)
         for secret_word in ("Secret", "QueryOne", "QueryTwo", "QueryThree", "QueryFour", "kind=classic", "?"):
             self.assertNotIn(secret_word, text, secret_word)
         self.assertEqual(len(re.findall(r'"POST /submissions HTTP/1\.1" 201 ', text)), 1, text)
