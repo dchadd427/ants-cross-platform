@@ -104,7 +104,7 @@ def run_line(page, tab, args, check, env, edges_bytes, edges_js):
     time.sleep(0.2)
     # the next stroke is free again
     got1 = stroke(page, tab, (2, 2), [(2, 9, "shift")], edges_bytes, 1, DIRT)
-    got2 = stroke(page, tab, (12, 12), [(16, 15, "")], edges_bytes, 1, DIRT) - got1
+    got2 = stroke(page, tab, (12, 12), [(16, 15, "")], edges_bytes, 1, DIRT, interpolate=7) - got1       # (7 steps: 6 would put the pointer exactly on the edges between columns, 13.0, 14.0 and 15.0, and a rounding of the canvas size would decide the cell)
     check(got1 == row_of(2, 2, 9) and {(13, 13), (14, 14), (15, 15)} <= got2 and (12, 15) not in got2, "the next stroke begins free, whatever the one before did")
     for _ in range(2):
         page.ev("document.getElementById('undo-btn').click()")

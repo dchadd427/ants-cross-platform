@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.140 - 2026-10-26 - Map Maker: the bar under the map stays one row, and the tools fit
+
+**For players:**
+- **Map Maker: the map no longer jumps when the pointer first touches it, and a whole 60 x 60 map keeps its pictures.** The bar under the map wrapped to a second row as soon as it had words to show, which made the map 40 pixels lower and a whole map under 10 pixels a cell, where the page draws flat colors. The position ("Row 30, column 30", "Whole map") is now a small label in the top left corner of the map, so the bar stays one row.
+- On a desktop window under 861 pixels high (a 1280 x 800 screen, a laptop's 1366 x 768 or 1280 x 720) the tools column, with Ground, Objects, Hills or Food chosen, and the side panel with a long description are no longer cut off: the tool buttons are a little shorter and show the short note, the side panel leaves out the kind tags (the top bar shows them) and shows two lines of the description (all of it is in Edit).
+- On a phone held sideways the tile button (Gravel and the like) sits beside Pan and shows the picture and the arrow, so it is inside the tools card; the tile's name is in the sheet that it opens. A phone held upright looks as before. Map Maker v1.5.10.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/81c1cb10...HEAD)
+
 ## v0.12.138 - 2026-10-25 - Faster: the next ant to move is found at once
 
 **For players:**
@@ -526,25 +537,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...a65d54b7); how it works: [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
 
-## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
+## Older versions (v0.12.91 and before)
 
-**For players:**
-- Map maker: "Fix edges..." no longer doubles an edge. Where the map already has a piece on one side of a boundary, the other side gets none, so the original Treasure map needs no changes and the seam lines are gone. A second press changes nothing.
-
-**Rules / network:** none (protocol 21).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9bedadc0...4fefb548)
-
-## v0.12.90 - 2026-10-18 - Map maker: Play this map (against bots)
-
-**For players:**
-- Map maker: a gold "Play this map" button (the first of the top bar, and in a phone's Menu) starts a test game on the map you are drawing, against bots, in a new tab. Choose your color and the bots (Easy, Medium or Hard) or leave a color empty; at least one bot is needed. The game says "Not saved. Not counted." and "Back to editor" asks once and closes the tab: the map maker is as you left it, with its Undo history.
-- A map that cannot be played says why in plain words: an Extended map, or a map bigger than the game can play yet (more than 90 rows), a color without a hill or starting ants, or a problem that the check found.
-
-**Rules / network:** none (protocol 21).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6afbd600...5004dce3)
-
-## Older versions (v0.12.89 and before)
-
-Every release before v0.12.90, and the long notes of v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.92, and the long notes of v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
