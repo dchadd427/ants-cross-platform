@@ -367,8 +367,14 @@ def main():
                 if part != "csp":
                     time.sleep(0.3)
                     check(not VIOLATIONS, "%s: the browser refused nothing for the content security policy%s" % (part, " (%s)" % VIOLATIONS[:3] if VIOLATIONS else ""))
+            except (RuntimeError, TimeoutError) as e:
+                # (the page raised, or a call of the browser ran out of time: this part failed, the parts after it still run, each in a tab of its own)
+                check(False, "%s: the part broke down: %s" % (part, str(e)[:300]))
             finally:
-                tab.close()
+                try:
+                    tab.close()
+                except (RuntimeError, TimeoutError, ConnectionError, OSError):
+                    pass
     except NotReachable as e:
         if not count[0]:
             print("  SKIP: %s" % e)
@@ -1780,7 +1786,20 @@ def run_part(part, tab, args, check, tiny, junk):
         size = "%s x %s" % (page.state()["rows"], page.state()["columns"])
         page.press_act("save")
         dialog(page, "Save as a new map")
+        # the page asks the site for the names of the game's maps when it starts, and the dialog says "Checking the game's map names..." (with Save off) until the list has come: Save is pressed only
+        # after that, so a slow answer cannot swallow the press; the list also has to be a list (a name of the library is refused), which a server that does not answer /maps/all cannot show
+        # (tools/web_without_docker.py answers it from the maps of the image)
+        names = lambda: page.ev("(document.querySelector('.cname') || {textContent: ''}).textContent")
+        check(wait_for(lambda: "Checking the game" not in names(), 20, 0.1) and "could not be loaded" not in names(), "the page has the site's list of the game's maps before a name is typed (%s)" % names())
+        page.ev("window.__lib = undefined; fetch('/maps/all').then(function (r) { return r.json(); }).then(function (d) { window.__lib = d.maps.map(function (m) { return m.file; }).filter(function (f) { return /^[A-Za-z0-9 ]{3,30}\\.lvl$/i.test(f) && !/^(tiny|small|medium|gauntlet|treasure|islands)\\.lvl$/i.test(f); })[0] || ''; }).then(null, function () { window.__lib = ''; })")
+        wait_for(lambda: page.ev("window.__lib !== undefined"), 10, 0.1)
+        library = (page.ev("window.__lib") or "")[:-4]
+        check(library != "", "the site's list names a map that is not one of the six originals (%r): a server with no /maps/all cannot run this part" % library)
+        if library:
+            page.type_into(".cname input", library)
+            check(wait_for(lambda: page.ev("!!document.querySelector('.cname .note.bad')")) and page.button_off(".dlg-foot .btn:last-child"), "a library map's name (%s) is refused, with Save off, before any saving" % library)
         page.type_into(".cname input", "Mine A")
+        check(wait_for(lambda: not page.button_off(".dlg-foot .btn:last-child")), "a free name: Save is on")
         page.click_selector(".dlg-foot .btn:last-child")
         check(wait_for(lambda: page.state()["name"] == "Mine A"), "Mine A is saved")
         page.press_act("convert")

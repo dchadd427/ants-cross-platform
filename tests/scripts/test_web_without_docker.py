@@ -24,6 +24,7 @@ The tool replays the Dockerfile on this machine and serves the result with nginx
 import contextlib
 import http.client
 import io
+import json
 import os
 import re
 import shutil
@@ -33,6 +34,7 @@ import tarfile
 import tempfile
 import time
 import unittest
+import urllib.error
 import urllib.request
 from unittest import mock
 
@@ -568,6 +570,33 @@ class TheSiteConfiguration(Scratch):
         self.assertEqual(text.count("resolver_timeout 1s;"), text.count("resolver 127.0.0.11"), "a game server that is not there is not waited for for 30 seconds where Docker's resolver is not")
         self.assertEqual(text.count("access_log off;"), 4)           # (the four paths: the submissions, their single ids, the owner's API and the test maps)
 
+    def test_the_list_of_maps_is_answered_from_a_file_and_the_rest_of_the_conf_is_as_it_was(self):
+        plain = wd.site_config(read("docker", "nginx.conf"), "/w/fs", "/w/cache", 1234)
+        text = wd.site_config(read("docker", "nginx.conf"), "/w/fs", "/w/cache", 1234, "/w/nginx/maps_all.json")
+        start, end = wd.location_block(text, "location = /maps/all {")
+        block = text[start:end]
+        self.assertIn("alias /w/nginx/maps_all.json;", block)
+        self.assertNotIn("proxy_pass", block, "no game server is asked, so no name is resolved and no resolver times out")
+        self.assertIn("if ($request_method != GET) { return 405; }", block)
+        self.assertIn("if ($is_args) { return 404; }", block)
+        self.assertEqual(text[:start] + text[end:].lstrip("\n"), plain[:plain.index("location = /maps/all {")] + plain[wd.location_block(plain, "location = /maps/all {")[1]:].lstrip("\n"),
+                         "every other location is the image's own")
+        self.assertEqual(text.count("{"), text.count("}"), "the braces still match")
+        self.assertIsNone(wd.location_block("server { }", "location = /maps/all {"))
+        with self.assertRaises(wd.ToolError):
+            wd.site_config("server {\n    listen 80;\n}\n", "/w/fs", "/w/cache", 1, "/w/m.json")
+
+    def test_the_list_of_maps_has_the_originals_first_and_every_name_of_the_folder(self):
+        work = self.path("work")
+        folder = os.path.join(work, "fs", "srv", "community-maps", "files")
+        for name in ("zebra.lvl", "TINY.LVL", "Bob's.lvl", "a$b.lvl", "ISLANDS.LVL", "Popcorn.LVL", "notes.txt", "caf\u00e9.lvl", "a;b.lvl"):
+            write(os.path.join(folder, name), "x")
+        listed = wd.maps_list(os.path.join(work, "fs"))
+        self.assertEqual(listed["format"], 1)
+        self.assertEqual([m["file"] for m in listed["maps"]], ["ISLANDS.LVL", "TINY.LVL", "Popcorn.LVL", "zebra.lvl"], "the originals first, then the rest by name; a name that nginx or JSON would escape, and a file that is no map, are left out")
+        self.assertEqual([m.get("original") for m in listed["maps"]], [True, True, None, None])
+        self.assertEqual(wd.maps_list(self.path("none"))["maps"], [], "no folder: an empty list that is still a list")
+
     def test_a_file_that_the_tool_cannot_move_is_an_error(self):
         for conf, wanted in (("server {\n    listen 80;\n    listen 80;\n}\n", "exactly one `listen 80;`"), ("server {\n    root /usr/share/nginx/html;\n}\n", "exactly one `listen 80;`"),
                              ("server {\n    listen 80;\n    access_log /var/log/nginx/x.log;\n}\n", "/var/log/nginx/x.log"), ("server {\n    listen 80;\n    include /var/run/x.conf;\n}\n", "/var/run/x.conf")):
@@ -620,6 +649,29 @@ class TheSiteConfiguration(Scratch):
             self.assertEqual(f.read(), read("docker", "nginx.conf"), "the copy of the image's file is left as it is")
         server.stop()
         self.assertFalse(server.running())
+
+    def test_nginx_answers_the_list_of_maps_at_once_and_nothing_else_of_the_game_server(self):
+        self.nginx_ready()
+        work = self.fake_site()
+        write(os.path.join(work, "fs", "srv", "community-maps", "files", "TINY.LVL"), "x")
+        write(os.path.join(work, "fs", "srv", "community-maps", "files", "Popcorn.lvl"), "x")
+        server = wd.Nginx(work, wd.free_port())
+        self.addCleanup(server.stop)
+        url = server.start()
+        began = time.monotonic()
+        with urllib.request.urlopen(url + "maps/all", timeout=10) as answer:
+            body = json.loads(answer.read().decode("utf-8"))
+            self.assertEqual(answer.headers["Content-Type"], "application/json")
+        self.assertLess(time.monotonic() - began, 0.9, "the answer does not wait for the resolver (its time out is one second)")
+        self.assertEqual(body, {"format": 1, "maps": [{"file": "TINY.LVL", "original": True}, {"file": "Popcorn.lvl"}]})
+        for method, path, status in (("POST", "maps/all", 405), ("GET", "maps/all?x=1", 404)):
+            with self.subTest(method + " " + path):
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(urllib.request.Request(url + path, method=method, data=b"" if method == "POST" else None), timeout=10)
+                self.assertEqual(caught.exception.code, status)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(url + "maps", timeout=10)
+        self.assertEqual(caught.exception.code, 404, "the other list still has no game server behind it")
 
     def test_the_command_after_the_dashes_gets_the_address_and_its_status_is_the_exit_status(self):
         self.nginx_ready()
