@@ -64,13 +64,20 @@ SimulationEngine& SimulationEngine::operator=(SimulationEngine&&) noexcept = def
 // The copy of an engine is the copy of its impl, which the compiler writes member by member (sim_engine_impl.hpp: the ants, the path managers and the cached world state
 // copy themselves as they must). A moved-from source has no impl: its copy is a fresh engine, which is usable (a moved-from engine is not).
 SimulationEngine::SimulationEngine(const SimulationEngine& other)
-    : impl_(other.impl_ ? std::make_unique<SimulationEngineImpl>(*other.impl_) : std::make_unique<SimulationEngineImpl>()) {}
+    : impl_(other.impl_ ? std::make_unique<SimulationEngineImpl>(*other.impl_) : std::make_unique<SimulationEngineImpl>()) {
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    if (other.impl_) impl_->tile_ants_verify();   // the copy's lists are right at once (shadow build)
+#endif
+}
 
 SimulationEngine& SimulationEngine::operator=(const SimulationEngine& other) {
     if (this == &other) return *this;
     if (!impl_) impl_ = std::make_unique<SimulationEngineImpl>();
     if (other.impl_) *impl_ = *other.impl_;
     else *impl_ = SimulationEngineImpl();
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    if (other.impl_) impl_->tile_ants_verify();
+#endif
     return *this;
 }
 

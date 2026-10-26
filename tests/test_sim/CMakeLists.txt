@@ -356,7 +356,8 @@ target_include_directories(test_engine_lookups PRIVATE
 target_link_libraries(test_engine_lookups PRIVATE ants_test_paths)
 
 add_test(NAME test_engine_lookups COMMAND test_engine_lookups --all)
-set_tests_properties(test_engine_lookups PROPERTIES COST 60)
+# (the big worlds play a match with the scans, 3 x 40 s and 2 x 90 s on a quiet core: twice that on a busy runner; the limit is above the 900 s that ctest is given)
+set_tests_properties(test_engine_lookups PROPERTIES COST 400 TIMEOUT 1800)
 
 add_executable(test_game_mode
     test_game_mode.cpp

@@ -2,6 +2,7 @@ add_library(ants_sim STATIC
     grid.cpp
     ant_unit.cpp
     movement_system.cpp
+    occupancy.cpp
     action_system.cpp
     combat_system.cpp
     ability_system.cpp
