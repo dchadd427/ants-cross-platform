@@ -1014,7 +1014,7 @@ void test_pass_state(const assets::AssetArchive& arc) {
         check(differ(got[0], got[1], view) > 1000 && differ(got[0], got[2], view) > 1000 && differ(got[1], got[2], view) > 1000, "the three zooms are three different pictures");
     }
 
-    // the health numbers are text: one size at every zoom, colored and outlined, over the sprite's screen position; below the zoom 0.6 they are bigger than the ants and are left out
+    // the health numbers are text: one size at every zoom, colored and outlined, over the sprite's screen position; from the zoom 0.5 on (a 10 is no wider than the tile of its ant) and left out below it
     for (const Shape& shape : kShapes) {
         PixelRig hp_rig(arc, "GAUNTLET", shape.cw, shape.ch);
         if (!hp_rig.ok) continue;
@@ -1045,7 +1045,7 @@ void test_pass_state(const assets::AssetArchive& arc) {
         for (int32_t y = 0; y < ref.h; ++y)
             for (int32_t x = 0; x < ref.w; ++x) ref_count += is_ref(x, y) ? 1 : 0;
         check(ref_count > 100, std::string(shape.name) + ": the reference number has pixels (" + std::to_string(ref_count) + ")");
-        for (const float z : {0.5f, 1.0f, 2.0f}) {
+        for (const float z : {0.25f, 0.5f, 1.0f, 2.0f}) {
             const double ox = z == 2.0f ? 640.0 : (z == 1.0f ? 500.0 : 300.0);
             const double oy = z == 2.0f ? 560.0 : (z == 1.0f ? 400.0 : 100.0);
             hp_rig.look(ox, oy, z);
@@ -1054,7 +1054,7 @@ void test_pass_state(const assets::AssetArchive& arc) {
             const Picture with = hp_rig.shoot(-1, {}, -1, true);
             const Picture without = hp_rig.shoot(-1, {}, -1, false);
             // the screen position of the sprite's position (700, 650): the view's corner plus the world offset times the zoom; the number's first cell is 7 left of it and 31 world pixels (times the zoom) + 14 above
-            const int hpp = z == 0.5f ? 4 : z == 1.0f ? 2 : 1;                        // half pixels per screen pixel
+            const int hpp = z == 0.25f ? 8 : z == 0.5f ? 4 : z == 1.0f ? 2 : 1;                        // half pixels per screen pixel
             const int32_t sx = v.x + static_cast<int32_t>(fdiv_half(700 * 2 - o2x, hpp));
             const int32_t sy = v.y + static_cast<int32_t>(fdiv_half(650 * 2 - o2y, hpp));
             const int32_t nx = sx - 7;
@@ -1072,14 +1072,14 @@ void test_pass_state(const assets::AssetArchive& arc) {
                     if (differs) {
                         ++changed;
                         if (!same_as_ref) ++wrong;
-                    } else if (in_ref && z != 0.5f && !same_as_ref) {
+                    } else if (in_ref && z >= 0.5f && !same_as_ref) {
                         ++missing;                                                        // (a pixel of the number that the picture does not have)
                     }
                 }
             }
             const std::string at = std::string(shape.name) + " at " + zoom::level_name(z) + ": ";
-            if (z == 0.5f) {
-                check(changed == 0, at + "below the zoom 0.6 no number is drawn (" + std::to_string(changed) + " pixels)");
+            if (z < 0.5f) {
+                check(changed == 0, at + "below the zoom 0.5 no number is drawn (" + std::to_string(changed) + " pixels)");
             } else {
                 check(changed > ref_count * 9 / 10 && changed <= ref_count && wrong == 0 && missing == 0,
                       at + "the number is the fixed font's, green with a black outline, the same " + std::to_string(ref_count) + " pixels at every zoom, at the sprite's screen position (changed " + std::to_string(changed) + ", wrong " + std::to_string(wrong) + ", missing " + std::to_string(missing) + ")");

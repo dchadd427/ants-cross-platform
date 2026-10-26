@@ -2,7 +2,7 @@
 //   * the rule with no window: which ant wears a mark in each mode (the 10 hit points that every ant has at most, the boundary at 9 and 10, a dead or a frozen ant), the three colors and their
 //     edges (the selection ears' own), the size of the bar at every zoom and on a canvas that is shown small, the place of a bar and of a number, the words of the settings file;
 //   * the drawing on a real renderer over a map (the software renderer, the dummy video driver), every pixel against numbers written down here and not taken from the code that draws: a bar's
-//     frame, track and fill at the zoom 1, 2 and 0.5, the fill of 1 to 10 hit points in its color, a number in its font, colors and outline, the numbers left out below the zoom 0.6, the thicker bar
+//     frame, track and fill at the zoom 1, 2 and 0.5, the fill of 1 to 10 hit points in its color, a number in its font, colors and outline, the numbers left out below the zoom 0.5 (and shown at every level of the wheel's series from 1 to 0.5), the thicker bar
 //     on a canvas that is shown small, no mark in Off, hurt ants only in Hurt, an ant that is dead or frozen with none, the enemies' and the allies' marks, and Fog of War: an ant that the fog hides has none;
 //   * the zoom 1 pass drawn straight and through the offscreen target is the same picture with the marks on.
 // The setting's storage and Ctrl+L are in test_game_menu and test_pointer_model; the recording's and the spectator's frame in test_replay_app.
@@ -64,14 +64,17 @@ void test_rule() {
     const hm::Color green = hm::color(hm::Band::Green), amber = hm::color(hm::Band::Amber), red = hm::color(hm::Band::Red);
     check(green.r == 60 && green.g == 214 && green.b == 60 && amber.r == 255 && amber.g == 196 && amber.b == 24 && red.r == 236 && red.g == 44 && red.b == 44, "the three colors");
 
-    check(!hm::number_fits(0.59) && hm::number_fits(0.6) && hm::number_fits(2.0) && !hm::number_fits(0.4), "a number is left out below the zoom 0.6, and stays from it");
+    check(!hm::number_fits(0.49) && hm::number_fits(0.5) && hm::number_fits(0.59) && hm::number_fits(0.6) && hm::number_fits(2.0) && !hm::number_fits(0.4), "a number is left out below the zoom 0.5, and stays from it");
+    for (int k = 0; k >= -4; --k) check(hm::number_fits(static_cast<double>(zoom::series(k))), "the level " + std::to_string(zoom::series(k)) + " of the wheel's series (1 and the three steps out to 0.5) shows its numbers");
+    check(!hm::number_fits(static_cast<double>(zoom::series(-5))), "...and the step beyond 0.5 does not");
+    check(hm::kNumberMinZoom * 32.0 == 2.0 * hm::kCellW, "the edge is where a 10 (two cells) is as wide as a tile (16 of 32 pixels at this zoom)");
     check(!hm::thick_for(1.0) && !hm::thick_for(2.0) && hm::thick_for(2.01) && hm::thick_for(3.0), "a canvas shown at less than half its size (more than 2 picture pixels for a CSS pixel) gets thick bars");
 }
 
 void test_geometry() {
     std::printf("[geometry] the bar and the number on the screen\n");
     struct H { double zoom; int plain; int thick; };
-    for (const H& h : {H{0.3, 2, 3}, H{0.5, 2, 3}, H{0.59, 2, 3}, H{0.6, 3, 5}, H{0.84, 3, 5}, H{1.0, 3, 5}, H{1.49, 3, 5}, H{1.5, 5, 8}, H{2.0, 5, 8}}) {
+    for (const H& h : {H{0.3, 2, 3}, H{0.5, 2, 3}, H{0.5946, 2, 3}, H{0.59, 2, 3}, H{0.6, 3, 5}, H{0.84, 3, 5}, H{1.0, 3, 5}, H{1.49, 3, 5}, H{1.5, 5, 8}, H{2.0, 5, 8}}) {
         check(hm::bar_height(h.zoom, false) == h.plain && hm::bar_height(h.zoom, true) == h.thick, "the bar's height at the zoom " + std::to_string(h.zoom) + ": " + num(h.plain) + ", thick " + num(h.thick));
     }
     const hm::Bar b = hm::bar(100, 200, 5, 10, 1.0, false);
@@ -256,12 +259,12 @@ void test_bars(const assets::AssetArchive& arc) {
 }
 
 void test_numbers(const assets::AssetArchive& arc) {
-    std::printf("[numbers] a number, its font, its color and its outline; left out when it would be bigger than the ants\n");
+    std::printf("[numbers] a number, its font, its color and its outline; left out below the zoom 0.5\n");
     PixelRig rig(arc, "MEDIUM", kWideW, kWideH);
     check(rig.ok, "the rig is up");
     if (!rig.ok) return;
     rig.world.ants = {ant(1, 0, 600, 500, 7)};
-    for (const float z : {1.0f, 2.0f, 0.7f, 0.5f}) {
+    for (const float z : {1.0f, 2.0f, 0.7f, 0.5946f, 0.5f, 0.49f, 0.25f}) {
         rig.look(500.0, 400.0, z);
         int sx = 0, sy = 0;
         screen_of(rig, 600, 500, z, sx, sy);
@@ -292,8 +295,8 @@ void test_numbers(const assets::AssetArchive& arc) {
             }
         }
         const std::string at = "zoom " + std::to_string(z) + ": ";
-        if (z < 0.6f) {
-            check(changed == 0, at + "no number below the zoom 0.6 (" + num(changed) + " pixels)");
+        if (z < 0.5f) {
+            check(changed == 0, at + "no number below the zoom 0.5 (" + num(changed) + " pixels)");
         } else {
             check(ref_n > 40 && changed > ref_n * 9 / 10 && changed <= ref_n && wrong == 0 && amber > 10, at + "the number is the fixed font's 7, amber with a black outline, the same " + num(ref_n) + " pixels at every zoom, over the ant (changed " + num(changed) + ", wrong " + num(wrong) + ")");
         }
@@ -397,6 +400,47 @@ void test_thick_and_target(const assets::AssetArchive& arc) {
     }
 }
 
+// The zooms that a player is at: a match starts at the zoom 1 (Application::choose_zoom: no remembered zoom), and the wheel goes out one level a notch (view_zoom.hpp: the series 2^(k/4) and the map's own
+// limit). A number is on the picture at every one of them as far as numbers go, as the bar is.
+void test_play_zooms(const assets::AssetArchive& arc) {
+    std::printf("[play zooms] the number at the zoom that a match starts at and at every notch of the wheel out from it\n");
+    for (const char* map : {"MEDIUM", "GAUNTLET"}) {
+        PixelRig rig(arc, map, kWideW, kWideH);
+        check(rig.ok, std::string(map) + ": the rig is up");
+        if (!rig.ok) continue;
+        zoom::Fit fit;
+        fit.view_w = rig.layout.view().w;
+        fit.view_h = rig.layout.view().h;
+        fit.map_w = static_cast<int64_t>(rig.tiles_w) * 32;
+        fit.map_h = static_cast<int64_t>(rig.tiles_h) * 32;
+        const std::vector<float> levels = zoom::levels(fit, zoom::Limits::any());
+        float z = zoom::kNormal;
+        int notches = 0;
+        int drawn = 0;
+        rig.world.ants = {ant(1, 0, 600, 500, 7)};
+        for (;;) {
+            rig.look(500.0, 400.0, z);
+            int sx = 0, sy = 0;
+            screen_of(rig, 600, 500, static_cast<double>(z), sx, sy);
+            const Delta d = delta(rig.shoot_with(kOff), rig.shoot_with(kHurtNumber));
+            const std::string at = std::string(map) + ", notch " + num(notches) + " out from the start, zoom " + std::to_string(z) + ": ";
+            if (z >= 0.5f) {
+                ++drawn;
+                check(d.n > 40 && d.x0 >= sx - 8 && d.x1 <= sx + 8 && d.y1 < sy, at + "a 7 is on the picture over the ant (" + num(d.n) + " pixels)");
+            } else {
+                check(d.n == 0, at + "below 0.5 there is none (" + num(d.n) + " pixels)");
+            }
+            const float next = zoom::step(z, -1, fit, zoom::Limits::any());
+            if (next == z || notches >= 8) break;
+            z = next;
+            ++notches;
+        }
+        check(levels.size() >= 5 && drawn >= 5, std::string(map) + ": the map lets the wheel go out from 1 to 0.5 at least (levels " + num(static_cast<long long>(levels.size())) + ", with numbers " + num(drawn) + ")");
+        check(zoom::step(zoom::step(zoom::step(zoom::kNormal, -1, fit, zoom::Limits::any()), -1, fit, zoom::Limits::any()), -1, fit, zoom::Limits::any()) < 0.6f,
+              std::string(map) + ": the third notch out is below 0.6, the zoom where the numbers used to stop");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -417,6 +461,7 @@ int main(int argc, char* argv[]) {
     test_numbers(arc);
     test_which_ants(arc);
     test_thick_and_target(arc);
+    test_play_zooms(arc);
     std::printf("\nhealth marks: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

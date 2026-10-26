@@ -1272,6 +1272,90 @@
       "old": "write: function (v) { call('_ants_menu_set', row.id, v, 1); } };",
       "new": "write: function (v) { call('_ants_menu_set', row.id, v, 0); } };",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "wheel_cancelled_over_panel",
+      "file": "web/shell.html",
+      "old": " && !(panel && panel.contains(e.target) && !e.ctrlKey)) e.preventDefault();",
+      "new": ") e.preventDefault();",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "ctrl_wheel_over_panel_not_cancelled",
+      "file": "web/shell.html",
+      "old": "panel.contains(e.target) && !e.ctrlKey",
+      "new": "panel.contains(e.target)",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "wheel_over_bars_not_cancelled_in_fullscreen",
+      "file": "web/shell.html",
+      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(panel && panel.contains(e.target) && !e.ctrlKey))",
+      "new": "if (isFullscreen() && !boxElement.contains(e.target) && !(panel && !e.ctrlKey))",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "wheel_cancelled_when_windowed",
+      "file": "web/shell.html",
+      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(panel",
+      "new": "if (!boxElement.contains(e.target) && !(panel",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "wheel_over_the_game_cancelled",
+      "file": "web/shell.html",
+      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(panel",
+      "new": "if (isFullscreen() && !(panel",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "pane_does_not_scroll",
+      "file": "web/game_menu.css",
+      "old": "grid-area: pane; overflow-y: auto;",
+      "new": "grid-area: pane; overflow-y: visible;",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "pane_chains_its_scroll",
+      "file": "web/game_menu.css",
+      "old": "overflow-y: auto; overscroll-behavior: contain;",
+      "new": "overflow-y: auto; overscroll-behavior: auto;",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "pane_row_grows_with_its_rows",
+      "file": "web/game_menu.css",
+      "old": "grid-template-columns: 172px minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto;",
+      "new": "grid-template-columns: 172px minmax(0, 1fr) auto; grid-template-rows: auto auto auto;",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "phone_pane_row_grows_with_its_rows",
+      "file": "web/game_menu.css",
+      "old": "grid-template-rows: auto auto minmax(0, 1fr) auto auto;",
+      "new": "grid-template-rows: auto auto auto auto auto;",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "phone_panel_taller_than_the_screen",
+      "file": "web/game_menu.css",
+      "old": "width: 100%; height: 100%; padding: 14px;",
+      "new": "width: 100%; height: auto; padding: 14px;",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "landscape_panel_taller_than_the_screen",
+      "file": "web/game_menu.css",
+      "old": "gap: 8px 14px; height: 100%; padding: 10px 14px; }",
+      "new": "gap: 8px 14px; height: auto; padding: 10px 14px; }",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "wheel_over_the_dimmed_margin_not_cancelled",
+      "file": "web/shell.html",
+      "old": "!(panel && panel.contains(e.target) && !e.ctrlKey)",
+      "new": "!(menu && menu.contains(e.target) && !e.ctrlKey)",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
     }
   ]
 }

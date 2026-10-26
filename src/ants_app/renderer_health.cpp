@@ -29,7 +29,7 @@ void Renderer::draw_health_marks() {
     }
     const double zoom = static_cast<double>(camera_.zoom);
     const bool numbers = health_.style == health::Style::Number;
-    if (numbers && !health::number_fits(zoom)) {                 // (bigger than the ants: left out; the bars stay at every zoom)
+    if (numbers && !health::number_fits(zoom)) {                 // (wider than a tile: left out; the bars stay at every zoom)
         health_marks_.clear();
         return;
     }

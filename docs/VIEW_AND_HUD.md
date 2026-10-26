@@ -125,7 +125,7 @@ A bar or a number over an ant says how many of its hit points are left. Every an
 - **Who:** every ant that is drawn: own, allied and enemy, as the numbers always were. With Fog of War an enemy ant on unexplored ground is not drawn and has no mark. An ant with no hit points left (it is dying) or a frozen one has none.
 - **Colors:** the selection ears': 9 and 10 hit points green, 3 to 8 amber, 1 and 2 red.
 - **Bar:** 22 world pixels wide and 3 high at the zoom 1, in a black frame, its lower edge 31 pixels over the ant; the colored part is the hit points out of 10 of a dark track. It follows the zoom (5 high from the zoom 1.5, 2 and without a frame below 0.6, 22 times the zoom wide) and is one and a half times as thick on a canvas that the page shows at less than half its size (a phone held upright).
-- **Number:** the fixed font of the original (an 8 x 15 cell), in the bar's color with a black outline, over the ant, one size at every zoom and left out below the zoom 0.6, where it would be bigger than the ant.
+- **Number:** the fixed font of the original (an 8 x 15 cell), in the bar's color with a black outline, over the ant, one size at every zoom and left out below the zoom 0.5, where a 10 would be wider than the tile of its ant (at 0.5 it is as wide as one: 16 pixels of digits, 18 with the outline, on a 16 pixel tile; the four levels from 1 out to 0.5 show them).
 - Marks are drawn once the world is on the screen (after the copy at a zoom), over everything of the world, for the ants in view only. The code is `health_marks.hpp` (the rule and every size, no SDL) and `renderer_health.cpp`; they read the hit points that every client already has, so the simulation, the recordings, the hashes and the network are untouched.
 
 ## Minimap

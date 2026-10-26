@@ -8,7 +8,7 @@
 //     software renderer puts the picture of a level (the smallest whole-pixel rectangle that holds the exact one), and that the pass paints the margins around a small map itself. Group "fog":
 //     with Fog of War on every level draws what the zoom 1 draws (the fog over every unexplored tile, nothing that it hides), at every level of GAUNTLET and TINY. Ants of
 //     every type, effects, score bubbles, selection markers, the click marker, the fog of war, the hill's brackets, and the small maps (centred, black around them) all pass through it. The
-//     health numbers are one size at every zoom (and left out below 0.6); nothing is drawn outside the view.
+//     health numbers are one size at every zoom (and left out below 0.5); nothing is drawn outside the view.
 //   * HUD: the cursor, the clicks and orders (also at the first and the last pixel of the view), the rubber band, the minimap and the edge scroll follow the zoom, each against an
 //     independent computation; a dialog, a captured press and the panels do not zoom.
 //   * APPLICATION: the wheel (up zooms in, down out, one level a notch, natural scrolling, the precise deltas, over the map only, not during a drag or with a dialog open), the middle
