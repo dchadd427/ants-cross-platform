@@ -10,11 +10,6 @@ uint64_t mix(uint64_t h, uint64_t v) noexcept { return (h ^ v) * 0x100000001B3ul
 
 }  // namespace
 
-uint32_t FieldTask::count(FieldAction action) const noexcept {
-    const size_t i = static_cast<size_t>(action);
-    return i < sizeof(counts_) / sizeof(counts_[0]) ? counts_[i] : 0;
-}
-
 // The bot's ants (id and kind) and the power-ups on the map: a task that waits after giving up starts again when they change
 uint64_t FieldTask::sources(const BotView& view) const {
     uint64_t h = 0xcbf29ce484222325ull;
@@ -181,7 +176,6 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
     ordered_tile_ = ant.tile;
     ordered_hp_ = ant.hp;
     ordered_type_ = ant.type;
-    ++counts_[static_cast<size_t>(step.action)];
     last_ = step;
     switch (step.action) {
         case FieldAction::None:

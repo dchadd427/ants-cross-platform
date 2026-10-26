@@ -173,9 +173,8 @@ public:
     uint64_t cooldown_ticks_left() const noexcept;
     /// The predicted engine, up to date (a stale one is rebuilt first); only while active(). The player's orders go through submit(), never to this engine directly.
     sim::SimulationEngine& engine();
-    /// The tick that the predicted engine stands at, and how far it is ahead of the confirmed engine (0 when not active)
+    /// The tick that the predicted engine stands at (0 when not active)
     uint64_t display_tick() const noexcept { return running_ ? display_ : 0u; }
-    uint64_t ticks_ahead() const noexcept;
     /// True when a turn has shown that the predicted engine is wrong and it has not been rebuilt yet (it is, the next time it is asked for)
     bool stale() const noexcept { return running_ && stale_; }
     /// The own orders that no turn has carried yet

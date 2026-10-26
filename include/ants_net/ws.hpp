@@ -79,7 +79,6 @@ inline constexpr uint32_t kWsPingIntervalMs = 20000;            // a connection 
 inline constexpr size_t kWsMaxStatusBytes = 512;                // the body of the status answer (WsServerOptions::status_body)
 
 inline constexpr uint16_t kWsCloseNormal = 1000;
-inline constexpr uint16_t kWsCloseGoingAway = 1001;
 inline constexpr uint16_t kWsCloseProtocolError = 1002;
 inline constexpr uint16_t kWsCloseUnsupportedData = 1003;
 inline constexpr uint16_t kWsCloseNoStatus = 1005;              // never on the wire: "the close frame had no status"

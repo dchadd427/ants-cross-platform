@@ -168,7 +168,6 @@ public:
     void set_platform(uint8_t platform) noexcept { platform_ = valid_platform(platform) ? platform : native_platform(); }
     uint8_t platform() const noexcept { return platform_; }
     void set_create(const CreateBlock& block) { create_ = block; }
-    void clear_create() noexcept { create_.reset(); }
     const std::optional<CreateBlock>& create() const noexcept { return create_; }
     /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone. This works in every state of the way back: a machine whose link is up
     /// (during a pause too, when no Quit command would be sealed) says Leave; one that has no link cannot tell the server (its seat is held until the others vote or the cap drops it). The key is forgotten,

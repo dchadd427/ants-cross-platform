@@ -48,7 +48,6 @@ public:
     bool is_bool() const noexcept { return type_ == Type::Bool; }
     bool is_int() const noexcept { return type_ == Type::Int; }
     bool is_double() const noexcept { return type_ == Type::Double; }
-    bool is_number() const noexcept { return type_ == Type::Int || type_ == Type::Double; }
     bool is_string() const noexcept { return type_ == Type::String; }
     bool is_array() const noexcept { return type_ == Type::Array; }
     bool is_object() const noexcept { return type_ == Type::Object; }

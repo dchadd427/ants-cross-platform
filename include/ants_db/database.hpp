@@ -26,7 +26,6 @@ constexpr int kErrNewerSchema = -1;         // the file was made by a newer prog
 constexpr int kErrBadMigrations = -2;       // the list of migrations is not in order (a bug of the program)
 constexpr int kErrNested = -3;              // a transaction is open already
 constexpr int kErrNotOpen = -4;             // the database (or statement) is not open
-constexpr int kErrRange = -5;               // a column or parameter index out of range
 constexpr int kErrInterrupted = 9;          // SQLite's SQLITE_INTERRUPT: a statement stopped by the progress handler
 constexpr int kErrForeign = -6;             // a database that this program did not make (it has tables and no schema_version)
 

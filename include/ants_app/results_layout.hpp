@@ -142,8 +142,6 @@ inline constexpr ants::assets::ColorRGBA kArtShadow{19, 55, 47, 255};
 
 /// A text in that look: a copy in the shadow color at (x + 1, y + 1), a copy in the lit color at (x - 1, y - 1), then the fill at (x, y)
 void draw_art_text(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, FontSize size);
-/// A filled rectangle in that look: its shadow copy 1 px right and down, its lit copy 1 px left and up, then the fill
-void draw_art_rect(IRenderer& renderer, int32_t x, int32_t y, int32_t w, int32_t h);
 /// One shape that is made of several rectangles (a stroke and its shaft, the rows of an arrow's head) in that look: every part's shadow copy, then every part's lit copy, then every part's fill, so that the
 /// edges of one part never paint over the fill of another
 void draw_art_rects(IRenderer& renderer, const std::vector<LayoutRect>& parts);

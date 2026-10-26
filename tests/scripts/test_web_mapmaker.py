@@ -61,6 +61,30 @@ def read(*parts):
         return f.read()
 
 
+# The page names nothing private (AGENTS.md, rule 3), and this file is public too, so the words are kept as SHA-256 digests of their exact bytes (case counts) with their length, never spelled.
+# private_hits() slides a window of each length over a text and reports the offsets whose digest is on the list. The last entry is a harmless decoy that only the self-test uses.
+PRIVATE_DIGESTS = (
+    ("ee589f9ec0de40164a3c3bd6baf5ce74b776dc814f450c1c9b6049dd6a059663", 3),
+    ("7a7bd3f4b15b42e706bdee964a4f6b9bd2088bb079a9f9e564e6166c35935e93", 9),
+    ("41109810504e65405ce6c19dfe205f908b333cc4fd6fc4dc75edfefbc3d6d7e7", 9),
+    ("d3e1947934b34a8026f3672c86f0c8caea2578ac1eed19c71a1c91d067449501", 11),
+)
+DECOY_DIGEST = ("d5d901730b53c78fb8a636d50f3f40c447b28e1a503708ef7302dd9318720ec6", 9)
+
+
+def private_hits(text, digests=PRIVATE_DIGESTS):
+    """The offsets in text where a window has the digest and the length of an entry; the matched text is never returned."""
+    by_length = {}
+    for digest, length in digests:
+        by_length.setdefault(length, set()).add(digest)
+    hits = []
+    for length, wanted in sorted(by_length.items()):
+        for at in range(len(text) - length + 1):
+            if hashlib.sha256(text[at:at + length].encode("utf-8")).hexdigest() in wanted:
+                hits.append(at)
+    return sorted(hits)
+
+
 # The slowest run of one check that this file makes, alone on a four-core machine, is about 13 s (the whole Pick up check on the library); 600 s is a stall, not a slow runner. A run that passes this
 # limit fails with what it printed so far and the load of the machine (a 2 s check once took more than 300 s on a macOS runner and nothing said why).
 CHECK_LIMIT = 600
@@ -1062,8 +1086,17 @@ class ThePage(unittest.TestCase):
 
     def test_the_page_names_nothing_private(self):
         for name in ("mapmaker.html",) + tuple("front/" + n for n in SCRIPTS) + ("front/mapmaker.css",):
-            text = read("web", name)
-            self.assertNotRegex(text, r"BW_|ant model|MAP_MAKER|bigger-maps", name)
+            hits = private_hits(read("web", name))
+            self.assertEqual(hits, [], "%s names a private word at offset(s) %s" % (name, hits))
+
+    def test_the_private_words_scan_finds_a_window_of_each_length_and_nothing_else(self):
+        decoy = (DECOY_DIGEST,)
+        self.assertEqual(private_hits("xxdecoywordxx", decoy), [2], "the scan flags a window that has the digest, and reports its offset only")
+        self.assertEqual(private_hits("decoyword and decoyword", decoy), [0, 14])
+        self.assertEqual(private_hits("DECOYWORD, decoy word, decoywor", decoy), [], "case and spacing count: a near miss is not a hit")
+        self.assertEqual(private_hits("", decoy), [])
+        self.assertEqual(private_hits("decoyword", PRIVATE_DIGESTS), [], "the decoy is not on the real list")
+        self.assertEqual(private_hits("x" * 5000), [], "a page of nothing special is clean")
 
     def test_the_style_has_the_three_layouts_the_joined_tag_and_only_tokens_it_defines(self):
         self.assertIn("@media (max-width: 600px) {", self.css)
@@ -1385,7 +1418,8 @@ class TheGroundAndTheSprites(unittest.TestCase):
 
 class TheImageCarriesThePage(unittest.TestCase):
     def test_the_dockerfile_the_ci_and_the_local_build_have_it(self):
-        self.assertRegex(read("Dockerfile"), r"(?m)^COPY web/mapmaker\.html /usr/share/nginx/html/mapmaker\.html$")
+        self.assertRegex(read("Dockerfile"), r"(?m)^COPY --from=builder /src/mapmaker\.html /usr/share/nginx/html/mapmaker\.html$")
+        self.assertNotRegex(read("Dockerfile"), r"(?m)^COPY web/mapmaker\.html ")
         self.assertRegex(read(".github", "workflows", "ci.yml"), r"ls -l [^\n]*\bmapmaker\.html\b")
         self.assertRegex(read(".github", "workflows", "ci.yml"), r"ls -l [^\n]*\bfront/mapmaker_app\.js\b")
         self.assertIn('web/mapmaker.html', read("build_web.sh"))

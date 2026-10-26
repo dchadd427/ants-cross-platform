@@ -180,7 +180,7 @@ class MapInfo {
 class AntLedger { /* claim(ant, task), release(ant, task), release_all(task), owner(ant), count, ants_of, forget_missing(alive) */ };
 struct TaskContext { const BotView& view; Orders& orders; AntLedger& ledger; const Profile& profile; const MapInfo& map; uint8_t seat; };
 class Task { /* step(TaskContext&), on_command(command, fate, tick), finish(ledger); state() Running / Done / Failed */ };
-class HarvestTask final : public Task { /* failures(), ant_failures(), ants_sent(), orders_issued(), rescues(), stalls(), unplaced(), blacklisted(pile, tick), excluded(ant, pile, tick) */ };
+class HarvestTask final : public Task { /* failures(), ant_failures(), ants_sent(), rescues(), stalls(), unplaced(), blacklisted(pile, tick), excluded(ant, pile, tick) */ };
 class WorkerBot final : public Bot { /* kind() "worker"; harvest(), denials() */ };
 struct BaselineRow { /* solo_2min[4], solo_full[4], four_full[4], four_sum, pot */ };         // baselines.hpp
 BaselineRow measure_baseline(const assets::LevelData&, const std::string& map, Level, const std::string& kind = "worker");

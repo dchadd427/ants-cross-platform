@@ -251,7 +251,6 @@ public:
     void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
 
     // ---- for the tests and the reports ----
-    uint32_t keeper() const noexcept { return keeper_; }
     uint32_t walls_ordered() const noexcept { return walls_ordered_; }
     uint32_t renewals() const noexcept { return renewals_; }
     uint32_t failures() const noexcept { return failures_; }
@@ -490,7 +489,6 @@ public:
     int target() const noexcept { return target_; }
     uint32_t attacks_ordered() const noexcept { return attacks_ordered_; }
     uint32_t strikes_started() const noexcept { return strikes_started_; }
-    uint32_t calls_off() const noexcept { return calls_off_; }
 
 private:
     static constexpr uint64_t kPending = ~uint64_t{0};
@@ -510,7 +508,6 @@ private:
     uint64_t paused_until_{0};
     uint32_t attacks_ordered_{0};
     uint32_t strikes_started_{0};
-    uint32_t calls_off_{0};
 };
 
 // ---- rank 5: the rush ---------------------------------------------------------------------------------------------------------------------------------------
@@ -761,14 +758,10 @@ public:
     uint32_t ramp_unjams() const noexcept { return ramp_unjams_; }
     /// Times the gate stopped guiding because its clicks delivered nothing (Params::user_fail_limit)
     uint32_t pauses() const noexcept { return pauses_; }
-    uint32_t user() const noexcept { return user_; }
     /// (review experiment) the gate could guide at the last look: the hill has room at its doorstep
     bool usable() const noexcept { return usable_; }
     /// Whether the controller refused a click of this task onto the tile lately (Fate::Filtered): it is not chosen again before blocked_ticks are over
     bool blocked(sim::TileCoord t, uint64_t tick) const noexcept;
-    const std::deque<int>& exits() const noexcept { return exits_; }
-    /// The order in which the queue-row tiles (0, 1, 2) are used as slots, -1 for none
-    std::array<int, 3> slot_order() const noexcept { return {slot_order_[0], slot_order_[1], slot_order_[2]}; }
     const Params& params() const noexcept { return params_; }
     void set_params(const Params& params) { params_ = params; }
 
@@ -872,7 +865,6 @@ public:
     /// A click onto the entrance that the controller refused (Fate::Filtered: a power-up lies on it) stops the aid for 900 ticks
     void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
     uint32_t sent_home() const noexcept { return sent_home_; }
-    size_t watching() const noexcept { return aid_.size(); }
 
 private:
     struct Aid {

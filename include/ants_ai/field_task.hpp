@@ -51,10 +51,8 @@ public:
     /// The task has not given up for good (the map's own bombs are its work: the counters leave them alone while this holds)
     bool live() const noexcept { return !resting_; }
     uint32_t ant() const noexcept { return ant_; }
-    const FieldStep& last_step() const noexcept { return last_; }
     FieldWork work() const noexcept { return work_; }
     uint32_t orders() const noexcept { return orders_; }
-    uint32_t count(FieldAction action) const noexcept;
     uint32_t given_up() const noexcept { return given_up_; }
     uint64_t done_tick() const noexcept { return done_tick_; }
 
@@ -84,7 +82,6 @@ private:
     std::map<uint32_t, uint64_t> rest_until_;   // ants given up, and until when
     uint32_t given_up_{0};
     uint32_t orders_{0};
-    uint32_t counts_[11]{};
     uint64_t done_tick_{0};                 // when the work was first found done
     sim::TileCoord takes_[4]{{-1, -1}, {-1, -1}, {-1, -1}, {-1, -1}};   // the last power-ups taken, the latest first
     uint32_t repeats_{0};                   // the same order in a row with the ant unchanged

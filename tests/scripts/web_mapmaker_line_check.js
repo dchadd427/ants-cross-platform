@@ -221,6 +221,34 @@ function caseA() {
     p.down(30, 20); p.move(60, 20, 'c');
     check(p.where.textContent === 'Row 39, column 20', 'and past the bottom edge: ' + p.where.textContent);
     p.up(30, 20);
+    // the left and the top edge, the same ways (a row or a column below 0 is no cell: the line stops at 0, its status line and the place the stroke goes on from say so)
+    p.down(10, 8); p.move(10, -9, 's');
+    check(p.where.textContent === 'Row 10, column 0', 'past the left edge the status line says column 0, not a column below it: ' + p.where.textContent);
+    p.move(10, 3, 's');
+    check(p.where.textContent === 'Row 10, column 3', 'and follows it back from the left edge: ' + p.where.textContent);
+    p.move(10, -200, 'c');
+    check(p.where.textContent === 'Row 10, column 0', 'far past the left edge, with Ctrl: ' + p.where.textContent);
+    p.up(10, 0);
+    p.down(5, 20); p.move(-6, 20, 'c');
+    check(p.where.textContent === 'Row 0, column 20', 'past the top edge the status line says row 0, not a row below it: ' + p.where.textContent);
+    p.move(3, 20, 'c');
+    check(p.where.textContent === 'Row 3, column 20', 'and follows it back from the top edge: ' + p.where.textContent);
+    p.move(-200, 20, 's');
+    check(p.where.textContent === 'Row 0, column 20', 'far past the top edge, with Shift: ' + p.where.textContent);
+    p.up(0, 20);
+    // the line that stopped at the edge is where the stroke is: with the key let go the stroke goes on free from the edge cell (column 0, row 0), not from a place outside the map
+    for (const spec of STROKES) {
+        for (const [name, start, steps] of [
+            ['left', [10, 8], [[10, -9, 's'], [14, 3, '']]],
+            ['left, far', [10, 8], [[10, -300, 'c'], [6, 4, '']]],
+            ['top', [5, 20], [[-6, 20, 'c'], [3, 26, '']]],
+            ['top, far', [5, 20], [[-300, 20, 's'], [4, 14, '']]]
+        ]) {
+            const want = model(ROWS, COLUMNS, start, steps), got = Array.from(run(spec, start, steps).cells);
+            equal(got, want, spec.name + ': past the ' + name + ' edge with the key held, then free: the stroke goes on from the edge cell');
+            check(name.indexOf('left') === 0 ? got.indexOf('10,0') >= 0 : got.indexOf('0,20') >= 0, spec.name + ': past the ' + name + ' edge: the cell at the edge is painted');
+        }
+    }
     // free strokes are what they were: the longer way, a diagonal, off the map ignored
     for (const spec of STROKES) {
         const free = [[10, 10], [[13, 15], [14, 25], [60, 25], [20, 20]]], got = run(spec, free[0], free[1]).cells;
