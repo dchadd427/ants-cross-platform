@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/81c1cb10...HEAD)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...79aab92d)
 
 ## v0.12.139 - 2026-10-26 - Show health as: Number is the original's number
 
