@@ -270,6 +270,7 @@ bool SimulationEngineImpl::low_hp_check(AntUnit& a) {
         a.current_waypoint_idx = 0;
         ++a.move_serial;
         a.loco_action = AntUnit::kActionIdle;                                // raw write of action 0
+        event_refresh(a);
         const TileCoord home = team_entrance(a.player_id);
         if (home.x >= 0) {
             go_to(a, home, false, false);                                     // Order(&home, 0, 0, 0)
@@ -489,6 +490,7 @@ void SimulationEngineImpl::burn_overlay_start(AntUnit& a) {
     a.frozen = true;
     const movement::MotionClip clip = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(type_of(a)), 0, false);   // 0x1021ca6
     a.burn_end_ms = anim_clock_ms_ + clip.total_duration_ms();
+    event_refresh(a);
     world_state_dirty_ = true;
 }
 
@@ -496,6 +498,7 @@ void SimulationEngineImpl::burn_overlay_start(AntUnit& a) {
 void SimulationEngineImpl::burn_overlay_end(AntUnit& a) {
     a.frozen = false;
     a.burn_end_ms = 0;
+    event_refresh(a);
     stun_or_die(a);
 }
 
@@ -574,6 +577,7 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
     a.state = UnitState::Dead;
     a.death_status = (drowned ? DeathStatus::Drowned : DeathStatus::CombatKilled);
     a.loco_action = AntUnit::kActionNone;
+    event_refresh(a);
     a.waypoints.clear();
     ++a.move_serial;
     world_state_dirty_ = true;
@@ -596,12 +600,14 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
 // FUN_0101c152 CancelCombatTimer.
 void SimulationEngineImpl::cancel_combat_timer(AntUnit& a) {
     a.combevt_due_ms = 0;
+    event_refresh(a);
 }
 
 // FUN_0101c184 StartCombatTimer: the COMBEVT task fires once, after `ms`.
 void SimulationEngineImpl::start_combat_timer(AntUnit& a, uint32_t ms) {
     cancel_combat_timer(a);
     a.combevt_due_ms = now_ms_ + ms;
+    event_refresh(a);
 }
 
 // FUN_0101c0d5 CanAutoEngage: a combat ant that got no order for 2 s, is neither stunned, dying, drowning, engaged nor

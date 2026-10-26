@@ -9,6 +9,7 @@
 #include "ants_sim/effect_specs.hpp"
 #include "ants_sim/lookup_shadow.hpp"
 #include "tile_ants.hpp"
+#include "event_heap.hpp"
 #include <unordered_map>
 #include <memory>
 #include <algorithm>
@@ -395,6 +396,7 @@ public:
     uint32_t now_ms_{0};             // clock value of the event being processed
     std::vector<OccCell> occ_;
     TileAntIndex tile_ants_;         // derived from the ants' occ_tile (tile_ants.hpp): same size as occ_, never hashed
+    AntEventHeap event_heap_;        // derived from the ants' timed events (event_heap.hpp, event_queue.cpp): never hashed, rebuilt by event_refresh
     std::array<PathManager, MAX_PLAYERS> path_managers_{};          // one PATHMGR per player machine
     std::unordered_map<uint32_t, uint32_t> path_request_serial_;    // ant id -> move_serial at request
     bool loco_trace_enabled_{false};
@@ -430,6 +432,32 @@ public:
 #endif
     AntUnit* occupant_at(TileCoord t);
     bool tile_occupied(TileCoord t);
+
+    // the timed events of the ants (event_queue.cpp): the burn overlay's end, the combat timer, the next animation frame and the pause's end
+    /// The ONE writer of event_heap_: puts the four events of the ant in the heap as its fields say. Called after every change of a field that decides when an event falls due
+    /// or whether it is pending: burn_end_ms, combevt_due_ms, pause_active, pause_fire_ms, loco_action, removed, and loco.clip, loco.cursor and loco.next_ms (the sites are
+    /// listed in event_queue.cpp, and event_heap_verify checks that none was missed).
+    void event_refresh(const AntUnit& a);
+    void event_refresh(const AntUnit& a, uint32_t slot);
+    /// Calls event_refresh for the ant when it goes out of scope (a function with several returns that changes those fields)
+    class EventRefreshOnExit {
+    public:
+        EventRefreshOnExit(SimulationEngineImpl& e, const AntUnit& a) noexcept : e_(e), a_(a) {}
+        ~EventRefreshOnExit() { e_.event_refresh(a_); }
+        EventRefreshOnExit(const EventRefreshOnExit&) = delete;
+        EventRefreshOnExit& operator=(const EventRefreshOnExit&) = delete;
+    private:
+        SimulationEngineImpl& e_;
+        const AntUnit& a_;
+    };
+    /// The ant event that falls due first at or before `t_end` (false: none): the earliest time, ties by the place in the table, then by the kind of the event. From the heap;
+    /// next_ant_event_scan is the scan over every ant that this replaced (kept for the shadow build). The event stays in the heap while it runs: what its handler changes in
+    /// the ant is set again by event_refresh (a handler that changes nothing leaves it the next one again, as the scan would find it).
+    bool next_ant_event(uint32_t t_end, AntEventPick& out);
+    bool next_ant_event_scan(uint32_t t_end, AntEventPick& out);
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    void event_heap_verify() const;                                  // the heap against the ants' fields (stops the program on a difference)
+#endif
 
     // animation stepping (FUN_0102c0db / FUN_0102b95f / FUN_0102b997 / FUN_0101ee84)
     void loco_play(AntUnit& a, const movement::MotionClip& clip, uint8_t dir, uint16_t evt5_ms = 0);

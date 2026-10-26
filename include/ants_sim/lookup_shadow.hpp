@@ -1,5 +1,5 @@
-// Test-only shadow check of the simulation's O(1) lookups (SimulationEngineImpl::find_unit, PathManager::has_request_for, and the per-tile ant lists behind occ_scan and
-// blast). Without ANTS_SIM_LOOKUP_SHADOW (every product build) this header is empty and the lookups carry no check. The library ants_sim_shadow
+// Test-only shadow check of the simulation's lookups (SimulationEngineImpl::find_unit, PathManager::has_request_for, the per-tile ant lists behind occ_scan and
+// blast, and the event heap behind next_ant_event). Without ANTS_SIM_LOOKUP_SHADOW (every product build) this header is empty and the lookups carry no check. The library ants_sim_shadow
 // (tests/test_sim/CMakeLists.txt) compiles the simulation with it: every call then also runs the linear scan that the lookup replaced and stops the program when the two
 // answers differ; the lists themselves are rebuilt from the ants and compared as well; and a test can switch a thread to the scans alone (the old lookups) to play one
 // match with each and compare the state hashes.
@@ -56,6 +56,23 @@ constexpr size_t kFullCheckSize = 256;
 inline bool lookup_shadow_sample(size_t size) noexcept {
     static thread_local uint64_t calls = 0;
     return size <= kFullCheckSize || (++calls & 63u) == 0;
+}
+
+/// The selections of the next ant event that were compared with the scan over every ant (EVERY selection is, whatever the size of the table: the scan costs what the engine of
+/// the twin that runs on scans alone costs), and the checks of the whole heap against the ants' fields (at the start and end of every tick and after every copy): so that a test
+/// can show that the heap was asked and checked, not only that nothing differed
+inline uint64_t& lookup_shadow_event_checks() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+/// The events that the heap gave (in the compared selections), by kind (AntEventKind: burn, combat timer, animation frame, pause): so that a test can show that every kind was met
+inline uint64_t& lookup_shadow_event_picks(size_t kind) noexcept {
+    static thread_local uint64_t picks[4] = {0, 0, 0, 0};
+    return picks[kind & 3u];
+}
+inline uint64_t& lookup_shadow_event_verifies() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
 }
 
 [[noreturn]] inline void lookup_shadow_fail(const char* lookup, uint32_t id) {
