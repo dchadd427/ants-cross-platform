@@ -77,6 +77,7 @@ void SimulationEngineImpl::movement_reset() {
     now_ms_ = 0;
     occ_.assign(static_cast<size_t>(grid_.width()) * grid_.height(), OccCell{});
     tile_ants_.reset(occ_.size());
+    occ_dirty_.clear(); occ_in_tick_ = false;
     event_heap_.reset();
     for (auto& pm : path_managers_) pm.clear();
     path_request_serial_.clear();
@@ -1371,7 +1372,7 @@ bool SimulationEngineImpl::adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd) 
 // FUN_0101fc50: snap, idle, classify, adjust the goal and queue an asynchronous path request.
 bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool special) {
     if (user_cmd && !can_take_user_order(a)) return false;
-    occ_refresh();
+    occ_refresh_for_order();
     // Anthill clicked: own hill -> entrance; enemy hill -> raid tile for thieves, otherwise stop.
     for (const auto& ah : grid_.anthills()) {
         const int32_t bx = static_cast<int32_t>(ah.x);
@@ -1578,6 +1579,7 @@ void SimulationEngineImpl::loco_sync(AntUnit& a) {
 
 void SimulationEngineImpl::movement_tick() {
     occ_refresh();
+    const OccTickScope in_tick(*this);                      // from here every write of an ant's position or removal marks the ant (occ_note), and go_to refreshes the marked ants alone
     const uint32_t t_begin = anim_clock_ms_;
     const uint32_t t_end = t_begin + TICK_MS;
     now_ms_ = t_begin;
@@ -1672,7 +1674,7 @@ void SimulationEngineImpl::movement_tick() {
 #ifdef ANTS_SIM_LOOKUP_SHADOW
     static thread_local uint64_t ticks_run = 0;
     if (ants_.size() <= kFullCheckSize || (++ticks_run & 15u) == 0) tile_ants_verify();   // the whole lists against the ants (every tick while the table is small)
-    event_heap_verify();
+    event_heap_verify(); occ_dirty_verify();
 #endif
 }
 

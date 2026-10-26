@@ -573,6 +573,7 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
     }
     if (a.pending_victim != 0) deliver_pending_hit(a);
     a.removed = true;
+    occ_note(a);                                              // (a removed ant that is still registered is out of step: deliver_pending_hit above may have put it back)
     a.hp = 0;
     a.state = UnitState::Dead;
     a.death_status = (drowned ? DeathStatus::Drowned : DeathStatus::CombatKilled);

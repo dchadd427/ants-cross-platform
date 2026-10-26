@@ -1061,7 +1061,7 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
             }
         }
     }
-    impl_->ants_.push_back(std::move(unit));
+    impl_->add_ant(std::move(unit));
     if (unit_ptr->is_alive()) {
         // Register on the occupancy grid at once (the original registers every ant it places).
         impl_->occ_refresh();

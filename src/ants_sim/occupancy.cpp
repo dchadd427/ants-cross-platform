@@ -106,10 +106,15 @@ AntUnit* SimulationEngineImpl::occ_scan(TileCoord t, const AntUnit* exclude, uin
     return best;
 }
 
-// FUN_0100f17f: move the ant's registration from its old tile to nt.
+// FUN_0100f17f: move the ant's registration from its old tile to nt. The ONE writer of occ_tile: it ends by noting whether the ant is in step (occ_note), on every path.
 void SimulationEngineImpl::occ_move(AntUnit& a, TileCoord nt) {
-    const TileCoord old = a.occ_tile;
     const uint32_t slot = ant_slot(a);
+    occ_move_registration(a, nt, slot);
+    occ_note(a, slot);
+}
+
+void SimulationEngineImpl::occ_move_registration(AntUnit& a, TileCoord nt, uint32_t slot) {
+    const TileCoord old = a.occ_tile;
     if (old.x >= 0) {
         if (nt == old) return;
         const size_t old_index = occ_cell_index(old);
@@ -136,6 +141,31 @@ void SimulationEngineImpl::occ_move(AntUnit& a, TileCoord nt) {
     }
 }
 
+// ------------------------------------------------------------------------------------------------
+// Which ants occ_refresh may have to put right
+// ------------------------------------------------------------------------------------------------
+
+void SimulationEngineImpl::occ_note(const AntUnit& a) { occ_note(a, ant_slot(a)); }
+
+void SimulationEngineImpl::occ_note(const AntUnit& a, uint32_t slot) {
+    if (slot == TileAntIndex::kNone) return;                      // (not in the table: nothing refreshes it)
+    const size_t word = slot >> 6;
+    const uint64_t bit = uint64_t{1} << (slot & 63u);
+    if (occ_in_step(a)) {
+        if (word < occ_dirty_.size()) occ_dirty_[word] &= ~bit;
+    } else {
+        if (word >= occ_dirty_.size()) occ_dirty_.resize(word + 1, 0);
+        occ_dirty_[word] |= bit;
+    }
+}
+
+AntUnit* SimulationEngineImpl::add_ant(std::unique_ptr<AntUnit> unit) {
+    AntUnit* const ant = unit.get();
+    ants_.push_back(std::move(unit));
+    occ_note(*ant);                                               // (its occ_tile is (-1, -1): out of step until the caller registers it)
+    return ant;
+}
+
 // Remake: re-register ants whose pixel tile changed outside the movement system (teleports, knock-backs,
 // spawns, test set-ups) and drop dead or underground ones, before occupancy is consulted by an order.
 void SimulationEngineImpl::occ_refresh() {
@@ -148,15 +178,108 @@ void SimulationEngineImpl::occ_refresh() {
         }
     }
     for (auto& up : ants_) {
-        if (!up) continue;
-        AntUnit& a = *up;
-        if (!a.is_alive()) {
-            if (a.occ_tile.x >= 0) occ_move(a, TileCoord{-1, -1});
-        } else if (a.occ_tile != pixel_tile(a)) {
-            occ_move(a, pixel_tile(a));
-        }
+        if (up) occ_refresh_ant(*up);
+    }
+    occ_dirty_.clear();                                           // (every ant is in step now)
+}
+
+// What the refresh does to one ant: a removed ant that is still registered is unregistered, a live ant that is not registered on its pixel tile is moved there, any other ant
+// is left alone (occ_in_step). Both refreshes are this, so they cannot differ in the rule, only in which ants they visit.
+void SimulationEngineImpl::occ_refresh_ant(AntUnit& a) {
+    if (!a.is_alive()) {
+        if (a.occ_tile.x >= 0) occ_move(a, TileCoord{-1, -1});
+    } else if (a.occ_tile != pixel_tile(a)) {
+        occ_move(a, pixel_tile(a));
     }
 }
+
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+namespace {
+// Everything the refresh writes, so that the shadow build can run both refreshes from one state and compare
+struct OccState {
+    std::vector<SimulationEngineImpl::OccCell> cells;
+    std::vector<TileCoord> tiles;
+    TileAntIndex lists;
+    std::vector<uint64_t> dirty;
+};
+}
+#endif
+
+void SimulationEngineImpl::occ_refresh_for_order() {
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    if (lookup_shadow_linear_only()) return occ_refresh();         // (the engine of the scans alone is the code before the marks)
+#endif
+    if (!occ_in_tick_ || occ_.size() != static_cast<size_t>(grid_.width()) * grid_.height()) return occ_refresh();
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    ++lookup_shadow_go_to_calls();
+    const bool sample = lookup_shadow_sample(ants_.size());
+    bool any = false;
+    for (const uint64_t w : occ_dirty_) any = any || w != 0;
+    if (any) ++lookup_shadow_go_to_compares();
+    if (sample) {                                                  // the premise: an ant that the full refresh would change is marked
+        ++lookup_shadow_go_to_checks();
+        for (size_t i = 0; i < ants_.size(); ++i) {
+            if (ants_[i] && !occ_in_step(*ants_[i]) && !occ_marked(static_cast<uint32_t>(i))) lookup_shadow_fail("go_to refresh (an ant out of step is not marked)", ants_[i]->id);
+        }
+    }
+    OccState before;
+    if (any) {                                                     // marked ants to visit: the result is compared with the full refresh's, from the same state
+        before.cells = occ_;
+        before.lists = tile_ants_;
+        before.dirty = occ_dirty_;
+        for (const auto& up : ants_) before.tiles.push_back(up ? up->occ_tile : TileCoord{-1, -1});
+    }
+    uint32_t last_slot = TileAntIndex::kNone;
+#endif
+    for (size_t w = 0; w < occ_dirty_.size(); ++w) {
+        while (occ_dirty_[w] != 0) {
+            unsigned bit = 0;
+            while (((occ_dirty_[w] >> bit) & 1u) == 0) ++bit;      // the lowest marked slot of the word: the order of the table
+            const size_t slot = (w << 6) + bit;
+            occ_dirty_[w] &= ~(uint64_t{1} << bit);                // (occ_move notes the ant again, and finds it in step)
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+            if (last_slot != TileAntIndex::kNone && slot <= last_slot) lookup_shadow_fail("go_to refresh (the order of the table)", static_cast<uint32_t>(slot));
+            last_slot = static_cast<uint32_t>(slot);
+            ++lookup_shadow_go_to_dirty_ants();
+#endif
+            if (slot < ants_.size() && ants_[slot]) occ_refresh_ant(*ants_[slot]);
+        }
+    }
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    if (any) {
+        OccState by_marks;
+        by_marks.cells = occ_;
+        by_marks.lists = tile_ants_;
+        by_marks.dirty = occ_dirty_;
+        for (const auto& up : ants_) by_marks.tiles.push_back(up ? up->occ_tile : TileCoord{-1, -1});
+        occ_ = before.cells;                                       // the same state again, and the full refresh
+        tile_ants_ = before.lists;
+        occ_dirty_ = before.dirty;
+        for (size_t i = 0; i < ants_.size(); ++i) {
+            if (ants_[i]) ants_[i]->occ_tile = before.tiles[i];
+        }
+        occ_refresh();
+        bool same = occ_.size() == by_marks.cells.size() && tile_ants_ == by_marks.lists;
+        for (size_t i = 0; same && i < occ_.size(); ++i) same = occ_[i].ant == by_marks.cells[i].ant && occ_[i].multi == by_marks.cells[i].multi;
+        for (size_t i = 0; same && i < ants_.size(); ++i) same = !ants_[i] || ants_[i]->occ_tile == by_marks.tiles[i];
+        for (const uint64_t w : by_marks.dirty) same = same && w == 0;
+        if (!same) lookup_shadow_fail("go_to refresh (the marked ants against every ant)", 0);
+    } else if (sample) {
+        for (const auto& up : ants_) {
+            if (up && !occ_in_step(*up)) lookup_shadow_fail("go_to refresh (an ant left out of step)", up->id);
+        }
+    }
+#endif
+}
+
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+// Every ant that is out of step has its mark (a mark on an ant that is in step is harmless: the visit finds nothing to do)
+void SimulationEngineImpl::occ_dirty_verify() const {
+    for (size_t i = 0; i < ants_.size(); ++i) {
+        if (ants_[i] && !occ_in_step(*ants_[i]) && !occ_marked(static_cast<uint32_t>(i))) lookup_shadow_fail("occ marks (an ant out of step is not marked)", ants_[i]->id);
+    }
+}
+#endif
 
 // FUN_0100f421 (TileInfo mask 1): the tile's occupant, or nullptr.
 AntUnit* SimulationEngineImpl::occupant_at(TileCoord t) {

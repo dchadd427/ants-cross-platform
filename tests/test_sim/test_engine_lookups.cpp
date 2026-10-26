@@ -12,6 +12,7 @@
 //   ./test_engine_lookups          the quick tests (seconds): the lookups alone, the six shipped maps, big library maps, small packed and spread worlds
 //   ./test_engine_lookups --big    4 x 700 and 4 x 1,500 ants (packed in the corners, spread over the map, piled on shared tiles), 600 ticks (300 for the 1,500s; minutes: the engine that scans is the old, slow one)
 //   ./test_engine_lookups --all    both
+//   ./test_engine_lookups --go-to  only the tests of the go_to refresh (G1 - G4: the marks of the ants that are out of step)
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/lookup_shadow.hpp"
@@ -568,6 +569,282 @@ struct EventWorld {
         else a.loco.cursor = 0;
     }
 };
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// go_to refreshes only the ants that are marked (occupancy.cpp, occ_refresh_for_order): the marks and the refresh, by hand and at random
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// A world of 12 x 12 tiles with no engine around it, in which ants are made, moved and removed by the functions the simulation uses (add_ant, set_position, occ_move, remove_ant),
+// and orders are given by go_to. Two of them are played with the same operations: one as the simulation plays a tick (go_to refreshes the marked ants), one on the scans alone
+// (go_to refreshes every ant, as before the marks); `same` says whether they are the same.
+struct GoWorld {
+    SimulationEngineImpl impl;
+    GoWorld() { reset(12, 12); }
+    void reset(uint32_t w, uint32_t h) {
+        impl.ants_.clear();
+        impl.grid_.init_empty(w, h);
+        impl.movement_reset();
+        impl.next_ant_id_ = 1;
+        impl.grid_.set_anthill(0, TileCoord{0, 0});            // (a hill for each team: a retreating ant has a home to go to)
+        impl.grid_.set_anthill(1, TileCoord{static_cast<int32_t>(w) - 4, 0});
+        impl.grid_.set_anthill(2, TileCoord{0, static_cast<int32_t>(h) - 4});
+        impl.grid_.set_anthill(3, TileCoord{static_cast<int32_t>(w) - 4, static_cast<int32_t>(h) - 4});
+    }
+    // The ant joins the table as the simulation adds one (add_ant); `registered`: it is put on its tile at once (set_position), as a hatched ant is
+    AntUnit& spawn(uint8_t player, int32_t tx, int32_t ty, bool registered) {
+        AntUnit* a = impl.add_ant(std::make_unique<AntUnit>(impl.next_ant_id_++, static_cast<TeamId>(player & 3u), AntType::Worker, tx, ty));
+        a->player_id = player;
+        if (registered) impl.set_position(*a, tx * 32 + 16, ty * 32 + 16);
+        return *a;
+    }
+    bool marked(const AntUnit& a) const { return impl.occ_marked(impl.ant_slot(a)); }
+    bool anything_marked() const {
+        for (const uint64_t w : impl.occ_dirty_) {
+            if (w != 0) return true;
+        }
+        return false;
+    }
+    int32_t on(int32_t tx, int32_t ty) { const auto* c = impl.occ_cell(TileCoord{tx, ty}); return c ? c->ant : -2; }
+    // What a go_to does first, as a tick plays it
+    void refresh_in_tick() {
+        const SimulationEngineImpl::OccTickScope in_tick(impl);
+        impl.occ_refresh_for_order();
+    }
+};
+
+// What the two worlds differ in ("" when nothing): the grid, the lists, and every field that the refresh or an order writes
+std::string go_world_diff(GoWorld& x, GoWorld& y) {
+    SimulationEngineImpl& a = x.impl;
+    SimulationEngineImpl& b = y.impl;
+    if (a.ants_.size() != b.ants_.size()) return "the tables differ in size";
+    if (a.occ_.size() != b.occ_.size()) return "the grids differ in size";
+    for (size_t i = 0; i < a.occ_.size(); ++i) {
+        if (a.occ_[i].ant != b.occ_[i].ant || a.occ_[i].multi != b.occ_[i].multi) return "the cell " + std::to_string(i) + " differs";
+    }
+    if (!(a.tile_ants_ == b.tile_ants_)) return "the tile lists differ";
+    for (size_t i = 0; i < a.ants_.size(); ++i) {
+        const AntUnit& p = *a.ants_[i];
+        const AntUnit& q = *b.ants_[i];
+        const std::string who = "ant " + std::to_string(p.id) + ": ";
+        if (p.occ_tile != q.occ_tile) return who + "occ_tile";
+        if (p.pixel_x != q.pixel_x || p.pixel_y != q.pixel_y || p.removed != q.removed) return who + "position or removal";
+        if (p.orig_order != q.orig_order || p.orig_order_tile != q.orig_order_tile || p.final_dest != q.final_dest) return who + "order";
+        if (p.state != q.state || p.loco_action != q.loco_action || p.waypoints != q.waypoints || p.hp != q.hp) return who + "state or action";
+    }
+    return "";
+}
+
+void run_go_to_tests() {
+    TEST_CASE("G1.1 go_to refresh, each writer by hand: an ant that joins the table, a step that registers the ant on another tile than its own, a move, a removal each leave the ant marked or not as the full refresh needs, and the refresh visits it") {
+        GoWorld w;
+        AntUnit& a = w.spawn(0, 3, 3, false);                       // joins the table: out of step until registered
+        ASSERT_TRUE(w.marked(a) && a.occ_tile.x < 0);
+        w.impl.occ_move(a, TileCoord{3, 3});                         // registered on its own tile: in step, the mark goes
+        ASSERT_TRUE(!w.marked(a) && w.on(3, 3) == static_cast<int32_t>(a.id));
+        w.impl.occ_move(a, TileCoord{4, 3});                         // the step callback registers the ant on the tile it steps to, before set_position moves it: out of step
+        ASSERT_TRUE(w.marked(a));
+        w.refresh_in_tick();                                         // go_to puts it back on its pixel tile
+        ASSERT_TRUE(!w.marked(a) && a.occ_tile == (TileCoord{3, 3}) && w.on(4, 3) == -1 && w.on(3, 3) == static_cast<int32_t>(a.id));
+        w.impl.set_position(a, 5 * 32 + 16, 6 * 32 + 16);            // a knock-back or landing: pixel position and registration together
+        ASSERT_TRUE(!w.marked(a) && a.occ_tile == (TileCoord{5, 6}));
+        w.impl.set_position(a, 5 * 32 + 30, 6 * 32 + 2);             // a step inside the tile: no registration change, still in step
+        ASSERT_TRUE(!w.marked(a));
+        w.impl.occ_move(a, TileCoord{-1, -1});                       // unregistered while alive (the first half of remove_ant): out of step
+        ASSERT_TRUE(w.marked(a));
+        w.impl.occ_move(a, TileCoord{5, 6});
+        ASSERT_TRUE(!w.marked(a));
+        w.impl.remove_ant(a);                                        // removal: unregistered, removed: in step, whatever the mark was
+        ASSERT_TRUE(a.removed && a.occ_tile.x < 0 && !w.marked(a));
+        AntUnit& b = w.spawn(1, 2, 2, true);                         // a hatched ant: joins, is registered at once
+        ASSERT_TRUE(!w.marked(b) && w.on(2, 2) == static_cast<int32_t>(b.id));
+        w.impl.occ_move(b, TileCoord{-1, -1});
+        w.impl.occ_refresh();                                        // the public refresh is the full one and leaves nothing marked
+        ASSERT_TRUE(!w.anything_marked() && b.occ_tile == (TileCoord{2, 2}));
+        w.impl.occ_dirty_verify();
+        AntUnit& c = w.spawn(2, 7, 7, true);                         // marked, then put in step by hand (no writer notes it): the mark is stale until the full refresh clears it
+        w.impl.occ_move(c, TileCoord{8, 8});
+        ASSERT_TRUE(w.marked(c));
+        c.occ_tile = TileCoord{7, 7};
+        ASSERT_TRUE(w.marked(c) && w.impl.occ_in_step(c));
+        w.impl.occ_refresh();
+        ASSERT_TRUE(!w.anything_marked());
+    } TEST_END();
+
+    TEST_CASE("G1.2 go_to refresh: the marked ants are visited in the order of the table, one after the other (two ants put back on one tile: the first of the table is the tile's ant, the second makes it a pile)") {
+        GoWorld w;
+        AntUnit& a = w.spawn(0, 3, 3, true);
+        AntUnit& b = w.spawn(0, 3, 3, true);                         // both on tile (3, 3): a is the ant of the cell, b makes it a pile
+        ASSERT_TRUE(w.on(3, 3) == static_cast<int32_t>(a.id) && w.impl.occ_cell(TileCoord{3, 3})->multi);
+        w.impl.occ_move(b, TileCoord{7, 7});                         // both registered elsewhere, each alone, then (b first) ...
+        w.impl.occ_move(a, TileCoord{8, 8});
+        ASSERT_TRUE(w.marked(a) && w.marked(b) && !w.impl.occ_cell(TileCoord{3, 3})->multi && w.on(3, 3) == -1);
+        w.refresh_in_tick();                                         // a is visited first: it takes the empty cell, b joins it
+        ASSERT_TRUE(w.on(3, 3) == static_cast<int32_t>(a.id) && w.impl.occ_cell(TileCoord{3, 3})->multi);
+        ASSERT_TRUE(!w.anything_marked());
+    } TEST_END();
+
+    TEST_CASE("G1.3 go_to refresh: every marked ant is visited, in whatever word of the marks it is (slots 0, 63, 64, 130, 400), and an ant that is not marked is left alone") {
+        GoWorld w;
+        std::vector<AntUnit*> ants;
+        for (int i = 0; i < 401; ++i) ants.push_back(&w.spawn(static_cast<uint8_t>(i % 4), 1 + i % 10, 1 + (i / 10) % 10, true));
+        w.refresh_in_tick();                                         // (nothing is marked)
+        ASSERT_TRUE(!w.anything_marked());
+        const size_t out[] = {0, 63, 64, 130, 400};
+        for (const size_t i : out) w.impl.occ_move(*ants[i], TileCoord{-1, -1});
+        for (const size_t i : out) ASSERT_TRUE(w.marked(*ants[i]));
+        ASSERT_TRUE(!w.marked(*ants[1]) && !w.marked(*ants[65]));
+        const uint64_t visits = lookup_shadow_go_to_dirty_ants();
+        w.refresh_in_tick();
+        for (const size_t i : out) ASSERT_TRUE(ants[i]->occ_tile == (TileCoord{ants[i]->pixel_x / 32, ants[i]->pixel_y / 32}) && !w.marked(*ants[i]));
+        ASSERT_TRUE(lookup_shadow_go_to_dirty_ants() - visits == 5);  // five visits, not 401
+        w.impl.occ_dirty_verify();
+    } TEST_END();
+
+    TEST_CASE("G1.4 go_to refresh, death in the middle of an order: an ant that is removed while its victim retreats (the victim's go_to puts the dying ant back on its tile, then it is removed and still registered) is put right by the next go_to, as the full refresh does") {
+        auto play = [](bool marks) {
+            GoWorld w;
+            std::string log;
+            AntUnit& dying = w.spawn(0, 2, 2, true);
+            AntUnit& victim = w.spawn(1, 3, 2, true);
+            AntUnit& other = w.spawn(2, 9, 9, true);
+            victim.hp = 1;                                           // a 1 hp survivor goes home ahead of the queue: low_hp_check calls go_to
+            dying.pending_victim = victim.id;                        // the dying ant's pending hit is delivered by its removal
+            dying.pending_range = 1;
+            dying.pending_dir = 8;                                   // (cornered: no flight, the victim stuns or retreats)
+            dying.pending_tile = TileCoord{3, 2};
+            const SimulationEngineImpl::OccTickScope in_tick(w.impl);
+            w.impl.occ_in_tick_ = marks;                             // (false: the same play with the full refresh in every go_to)
+            w.impl.remove_ant(dying);
+            const bool registered_after_removal = dying.removed && dying.occ_tile.x >= 0;   // the quirk: the victim's go_to registered the dying ant, which was then removed
+            log += registered_after_removal ? "registered;" : "unregistered;";
+            w.impl.go_to(other, TileCoord{1, 1}, false, false);      // the next order refreshes: the removed ant is unregistered
+            log += dying.occ_tile.x < 0 ? "gone;" : "still;";
+            log += w.marked(dying) ? "marked" : "clear";
+            return log + "|" + std::to_string(w.on(2, 2));
+        };
+        const std::string by_marks = play(true);
+        const std::string by_full = play(false);
+        ASSERT_TRUE(by_marks == by_full);
+        ASSERT_TRUE(by_marks.rfind("registered;gone;clear|-1", 0) == 0);   // the quirk is real (the full refresh has it too), and the next order undoes it
+    } TEST_END();
+
+    TEST_CASE("G1.5 go_to refresh outside a tick is the full refresh: an ant moved or removed by hand (no writer noted it) is put right by the next order, a tick's scope ends with the tick, and a copy keeps the marks") {
+        GoWorld w;
+        AntUnit& a = w.spawn(0, 3, 3, true);
+        AntUnit& b = w.spawn(1, 6, 6, true);
+        a.set_pixel_pos(8 * 32 + 16, 8 * 32 + 16);                   // moved by hand: no writer, no mark
+        b.removed = true;
+        ASSERT_TRUE(!w.marked(a) && !w.marked(b) && !w.impl.occ_in_tick_);
+        w.impl.occ_refresh_for_order();                              // not in a tick: every ant is looked at
+        ASSERT_TRUE(a.occ_tile == (TileCoord{8, 8}) && b.occ_tile.x < 0);
+        // a copy of an engine in the middle of a refresh's premise: the marks are copied with the ants
+        AntUnit& c = w.spawn(0, 1, 1, true);
+        w.impl.occ_move(c, TileCoord{2, 2});
+        ASSERT_TRUE(w.marked(c));
+        SimulationEngineImpl copy(w.impl);
+        ASSERT_TRUE(copy.occ_dirty_ == w.impl.occ_dirty_ && copy.occ_marked(copy.ant_slot(*copy.ants_[2])));
+        {
+            const SimulationEngineImpl::OccTickScope in_tick(copy);
+            copy.occ_refresh_for_order();
+        }
+        ASSERT_TRUE(copy.ants_[2]->occ_tile == (TileCoord{1, 1}) && !copy.occ_marked(2) && w.impl.occ_marked(2));   // the copy's refresh did not touch the original
+        SimulationEngineImpl assigned;
+        assigned = w.impl;
+        ASSERT_TRUE(assigned.occ_dirty_ == w.impl.occ_dirty_);
+        // a new match: no marks, no scope
+        w.impl.occ_in_tick_ = true;
+        w.impl.ants_.clear();
+        w.impl.movement_reset();
+        ASSERT_TRUE(!w.anything_marked() && w.impl.occ_dirty_.empty() && !w.impl.occ_in_tick_);
+    } TEST_END();
+
+    TEST_CASE("G2.1 go_to refresh at random: two worlds play the same random operations (ants joining, set_position, steps onto another tile, removals with a retreating victim, orders, refreshes, copies, restarts, grids of another size, writes by hand outside a tick), one refreshes the marked ants in a tick, the other every ant: the grid, the lists and every ant are the same after every operation") {
+        uint32_t s = 20261026;
+        auto below = [&s](uint32_t n) { s = s * 1664525u + 1013904223u; return (s >> 8) % n; };
+        GoWorld marks, full;
+        std::vector<SimulationEngineImpl> spares_m, spares_f;
+        uint64_t go_tos = 0, with_marks = 0;
+        const uint64_t compares0 = lookup_shadow_go_to_compares();
+        auto both = [&](const std::function<void(GoWorld&)>& op) {
+            op(marks);
+            LinearOnly scans;
+            op(full);
+        };
+        for (int step = 0; step < 6000; ++step) {
+            const uint32_t op = below(100);
+            const bool in_tick = below(10) != 0;                     // now and then outside a tick
+            const uint32_t pick = below(1000);
+            static const uint16_t kHp[] = {1, 1, 5, 10};
+            const uint16_t hp = kHp[below(4)];
+            const uint32_t size_w = 8 + below(7), size_h = 8 + below(7);
+            const uint32_t x = below(16), y = below(16), px = below(12 * 32 + 80), py = below(12 * 32 + 80);
+            auto ant_of = [&](GoWorld& w) -> AntUnit* { return w.impl.ants_.empty() ? nullptr : w.impl.ants_[pick % w.impl.ants_.size()].get(); };
+            both([&](GoWorld& w) { w.impl.occ_in_tick_ = in_tick; });
+            if (op < 12 && marks.impl.ants_.size() < 150) {
+                const uint8_t team = static_cast<uint8_t>(below(4));
+                const bool reg = below(2) == 0;
+                both([&](GoWorld& w) { w.spawn(team, static_cast<int32_t>(x % 12), static_cast<int32_t>(y % 12), reg); });
+            } else if (op < 30) {
+                both([&](GoWorld& w) { if (AntUnit* a = ant_of(w)) { if (!a->removed) w.impl.set_position(*a, static_cast<int32_t>(px) - 40, static_cast<int32_t>(py) - 40); } });
+            } else if (op < 48) {
+                both([&](GoWorld& w) { if (AntUnit* a = ant_of(w)) { w.impl.occ_move(*a, TileCoord{static_cast<int32_t>(x) - 2, static_cast<int32_t>(y) - 2}); } });
+            } else if (op < 54) {
+                both([&](GoWorld& w) {
+                    AntUnit* a = ant_of(w);
+                    if (!a || a->removed) return;
+                    if (w.impl.ants_.size() > 1) {                   // its pending hit goes to another ant, which may have 1 hp (then it retreats by go_to)
+                        AntUnit& v = *w.impl.ants_[(pick / 7u) % w.impl.ants_.size()];
+                        if (&v != a && !v.removed) {
+                            v.hp = hp;
+                            a->pending_victim = v.id;
+                            a->pending_dir = 8;
+                            a->pending_tile = TileCoord{v.pixel_x / 32, v.pixel_y / 32};
+                        }
+                    }
+                    w.impl.remove_ant(*a);
+                });
+            } else if (op < 78) {
+                ++go_tos;
+                both([&](GoWorld& w) {
+                    AntUnit* a = ant_of(w);
+                    if (!a || a->removed) return;
+                    w.impl.go_to(*a, TileCoord{static_cast<int32_t>(x % 12), static_cast<int32_t>(y % 12)}, false, false);
+                });
+            } else if (op < 84) {
+                both([&](GoWorld& w) { w.impl.occ_refresh_for_order(); });
+            } else if (op < 87) {
+                both([&](GoWorld& w) { w.impl.occ_refresh(); });
+            } else if (op < 91) {
+                both([&](GoWorld& w) { if (AntUnit* a = ant_of(w)) { a->set_pixel_pos(static_cast<int32_t>(px), static_cast<int32_t>(py)); } });   // by hand: no writer is told (outside a tick the next refresh is the full one)
+                both([&](GoWorld& w) { w.impl.occ_in_tick_ = false; w.impl.occ_refresh_for_order(); });
+            } else if (op < 93) {
+                spares_m.push_back(marks.impl);
+                {
+                    LinearOnly scans;
+                    spares_f.push_back(full.impl);
+                }
+            } else if (op < 95 && !spares_m.empty()) {
+                const size_t k = pick % spares_m.size();
+                marks.impl = spares_m[k];
+                full.impl = spares_f[k];
+            } else if (op < 96 && below(3) == 0) {
+                both([&](GoWorld& w) { w.reset(size_w, size_h); });
+            } else if (op < 97 && below(2) == 0) {
+                both([&](GoWorld& w) { w.impl.grid_.init_empty(pick % 2 == 0 ? 13 : 12, 12); });   // another size: the next refresh starts the grid again
+            } else if (spares_m.size() > 5) {
+                spares_m.erase(spares_m.begin());
+                spares_f.erase(spares_f.begin());
+            }
+            if (marks.anything_marked()) ++with_marks;
+            const std::string why = go_world_diff(marks, full);
+            if (!why.empty()) std::cout << "\n        step " << step << ": " << why << "\n";
+            ASSERT_TRUE(why.empty());
+        }
+        std::cout << "\n        " << go_tos << " orders, " << (lookup_shadow_go_to_compares() - compares0) << " refreshes of marked ants compared with the full refresh, " << with_marks << " moments with marks   ... ";
+        ASSERT_TRUE(lookup_shadow_go_to_compares() - compares0 > 200);
+        ASSERT_TRUE(with_marks > 500);
+    } TEST_END();
+}
 
 void run_event_tests() {
     TEST_CASE("L4.1 Event heap alone: the order is (time, place, kind), an event whose time moves earlier or later, an event that is not pending any more or is done, a version that changes, the heap made again (answers worked out by hand)") {
@@ -1690,6 +1967,192 @@ void run_foreign_write_tests() {
     } TEST_END();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// go_to refreshes the marked ants in a tick: whole matches, the mass resume of combat ants, writes from outside
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// What the shadow check of the go_to refresh did since this was made (calls in a tick, checks, refreshes that visited marked ants and were compared with the full refresh,
+// the marked ants visited)
+struct GoMarks {
+    uint64_t calls{lookup_shadow_go_to_calls()}, checks{lookup_shadow_go_to_checks()}, compares{lookup_shadow_go_to_compares()}, visits{lookup_shadow_go_to_dirty_ants()};
+    uint64_t calls_since() const { return lookup_shadow_go_to_calls() - calls; }
+    uint64_t checks_since() const { return lookup_shadow_go_to_checks() - checks; }
+    uint64_t compares_since() const { return lookup_shadow_go_to_compares() - compares; }
+    uint64_t visits_since() const { return lookup_shadow_go_to_dirty_ants() - visits; }
+    std::string since() const {
+        return std::to_string(calls_since()) + " orders in a tick, " + std::to_string(checks_since()) + " checked, " + std::to_string(compares_since()) + " compared with the full refresh (" + std::to_string(visits_since()) + " marked ants visited)";
+    }
+};
+
+// `per_team` Combat ants of each team on distinct tiles of the middle of a width x width world (the start markers of a big player's map: every ant has enemies next door; at
+// 70 % of the tiles the combat ants end their reflex fights in the same ticks and each resumes its order in one tick)
+std::vector<std::vector<uint32_t>> populate_combat(SimulationEngine& e, uint32_t width, uint32_t per_team, uint32_t percent) {
+    std::vector<std::vector<uint32_t>> ids(4);
+    uint32_t s = 4242;
+    auto below = [&s](uint32_t n) { s = s * 1664525u + 1013904223u; return (s >> 8) % n; };
+    const uint32_t lo = 12, span = width - 24;
+    std::vector<uint8_t> used(static_cast<size_t>(width) * width, 0);
+    (void)percent;
+    for (uint8_t p = 0; p < 4; ++p) {
+        for (uint32_t i = 0; i < per_team; ++i) {
+            for (;;) {
+                const uint32_t x = lo + below(span);
+                const uint32_t y = lo + below(span);
+                if (used[static_cast<size_t>(y) * width + x] != 0) continue;
+                used[static_cast<size_t>(y) * width + x] = 1;
+                ids[p].push_back(e.spawn_unit(p, AntType::Combat, TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)}, true));
+                break;
+            }
+        }
+    }
+    return ids;
+}
+
+void run_go_to_match_tests(bool big) {
+    struct Case {
+        const char* name;
+        uint32_t width, per_team;
+        uint32_t ticks;
+        bool ordered;       // every ant sent across the map at tick 3 (in groups of 32)
+        uint64_t min_calls; // go_to calls in a tick that the case must have made (the mass resume)
+    };
+    std::vector<Case> cases;
+    if (!big) {
+        cases.push_back({"4 x 150 Combat ants, 56 x 56, standing", 56, 150, 400, false, 80});
+        cases.push_back({"4 x 150 Combat ants, 56 x 56, ordered across the map", 56, 150, 400, true, 80});
+    } else {
+        cases.push_back({"4 x 1,500 Combat ants, 120 x 120, standing", 120, 1500, 120, false, 1000});
+        cases.push_back({"4 x 1,500 Combat ants, 120 x 120, ordered across the map", 120, 1500, 120, true, 1000});
+    }
+    TEST_CASE(big ? "G3.2 The Mass Resume Of 4 x 1,500 Combat Ants: the hashes equal at every tick" : "G3.1 Combat Ants That End Their Reflex Fights Together And Each Resume Their Order In One Tick (small, dense worlds), copies of the engine in the middle: the hashes equal at every tick") {
+        for (const Case& c : cases) {
+            Twin t;
+            t.engine.init_test_world(c.width, c.width, 9);
+            const auto ids = populate_combat(t.engine, c.width, c.per_team, 70);
+            {
+                LinearOnly scans;
+                t.old_engine.init_test_world(c.width, c.width, 9);
+                ASSERT_TRUE(populate_combat(t.old_engine, c.width, c.per_team, 70) == ids);
+            }
+            const Script orders = [&](Twin&, uint32_t tick, std::vector<Command>& out) {
+                if (!c.ordered || tick != 3) return;
+                for (uint8_t p = 0; p < 4; ++p) {
+                    for (size_t i = 0; i < ids[p].size(); i += kMaxCommandAnts) {
+                        Command cmd;
+                        cmd.type = CommandType::GroupMove;
+                        cmd.issuer = p;
+                        cmd.tile_x = static_cast<int16_t>((p & 1) != 0 ? 6 : c.width - 7);
+                        cmd.tile_y = static_cast<int16_t>((p & 2) != 0 ? 6 : c.width - 7);
+                        for (size_t j = i; j < std::min(ids[p].size(), i + kMaxCommandAnts); ++j) cmd.ants.push_back(ids[p][j]);
+                        out.push_back(cmd);
+                    }
+                }
+            };
+            const GoMarks marks;
+            const uint32_t n = ANTS_LOOKUP_TEST_SANITIZED ? c.ticks / 2 : c.ticks;
+            uint64_t most_in_one_tick = 0, calls_before = lookup_shadow_go_to_calls();
+            std::string why;
+            Twin& tw = t;
+            std::vector<Command> cmds;
+            for (uint32_t i = 0; i < n && why.empty(); ++i) {
+                cmds.clear();
+                orders(tw, i, cmds);
+                for (const Command& cmd : cmds) {
+                    if (!tw.apply(cmd)) why = tw.failure;
+                }
+                if (!why.empty()) break;
+                if (!tw.tick()) why = tw.failure;
+                most_in_one_tick = std::max(most_in_one_tick, lookup_shadow_go_to_calls() - calls_before);
+                calls_before = lookup_shadow_go_to_calls();
+                t.engine.clear_audio_events();
+                t.old_engine.clear_audio_events();
+                t.engine.clear_news_events();
+                t.old_engine.clear_news_events();
+                if (i == n / 3) t.engine = SimulationEngine(t.engine);                 // copy construction, then move
+                if (i == 2 * n / 3) {
+                    SimulationEngine other(t.engine);
+                    t.engine = other;                                                  // copy assignment
+                    t.old_engine = SimulationEngine(t.old_engine);
+                }
+            }
+            std::cout << "\n        " << c.name << ": " << n << " ticks, " << most_in_one_tick << " orders in the busiest tick, " << marks.since() << "   ... ";
+            if (!why.empty()) std::cout << "\n        " << why << "\n";
+            ASSERT_TRUE(why.empty());
+            ASSERT_TRUE(most_in_one_tick >= c.min_calls);                              // the mass resume happened: many ants ended their fight and ordered themselves in one tick
+            ASSERT_TRUE(marks.checks_since() > 0);
+        }
+    } TEST_END();
+
+    TEST_CASE("G4.1 Writes of an ant's position and removal from outside, between ticks, each followed by an order with no tick in between: the order's refresh is the full one, so the state hash equals the scans' right after the command and at every tick") {
+        Twin t;
+        t.engine.init_test_world(60, 60, 9);
+        const Crowd crowd = populate(t.engine, 60, 24, Layout::Spread);
+        {
+            LinearOnly scans;
+            t.old_engine.init_test_world(60, 60, 9);
+            populate(t.old_engine, 60, 24, Layout::Spread);
+        }
+        const CountStale counting;                                     // (a removal written by hand is a write of the events' fields too: the nets of the heap count it)
+        uint32_t s = 0xB00B5u;
+        auto below = [&s](uint32_t n) { s = s * 1664525u + 1013904223u; return (s >> 8) % n; };
+        uint64_t pokes = 0;
+        for (int round = 0; round < 16; ++round) {
+            for (int k = 0; k < 6; ++k) ASSERT_TRUE(t.tick());
+            std::vector<uint32_t> poked;
+            for (int k = 0; k < 5; ++k) {
+                const uint8_t team = static_cast<uint8_t>(below(4));
+                const uint32_t id = crowd.ids[team][below(static_cast<uint32_t>(crowd.ids[team].size()))];
+                const int32_t px = static_cast<int32_t>(below(50 * 32)) + 64, py = static_cast<int32_t>(below(50 * 32)) + 64;
+                const bool kill = k == 4 && round % 2 == 1;
+                t.both([&](SimulationEngine& e) {
+                    AntUnit& u = e.get_unit(id);
+                    if (kill) u.removed = true; else u.set_pixel_pos(px, py);
+                });
+                poked.push_back(id);
+                ++pokes;
+            }
+            Command c;                                                 // an order for other ants, then Stop for a poked one: the refresh of each order sees the writes
+            c.type = CommandType::GroupMove;
+            c.issuer = 0;
+            c.tile_x = 30;
+            c.tile_y = static_cast<int16_t>(10 + round);
+            c.ants.push_back(crowd.ids[0][static_cast<size_t>(round)]);
+            ASSERT_TRUE(t.apply(c));
+            ASSERT_TRUE(t.old_engine.state_hash() == t.engine.state_hash());
+            Command stop;
+            stop.type = CommandType::Stop;
+            stop.issuer = 1;
+            stop.ants.push_back(crowd.ids[1][static_cast<size_t>(round)]);
+            ASSERT_TRUE(t.apply(stop));
+            ASSERT_TRUE(t.old_engine.state_hash() == t.engine.state_hash());
+            for (int k = 0; k < 4; ++k) {                              // writes by hand and then a tick at once: the tick starts with the full refresh
+                const uint32_t id = crowd.ids[static_cast<size_t>(below(4))][below(24)];
+                const int32_t px = static_cast<int32_t>(below(50 * 32)) + 64, py = static_cast<int32_t>(below(50 * 32)) + 64;
+                t.both([&](SimulationEngine& e) { e.get_unit(id).set_pixel_pos(px, py); });
+                ++pokes;
+            }
+            ASSERT_TRUE(t.tick());
+        }
+        ASSERT_TRUE(t.tick());
+        std::cout << "\n        " << pokes << " writes by hand   ... ";
+    } TEST_END();
+
+    TEST_CASE("G5.1 find_unit(0) is no ant: nullptr at once in a table of any size, never a fall back to the scan, and the other ids are as they were") {
+        GoWorld w;
+        const uint64_t fallbacks = lookup_shadow_fallbacks();
+        for (int i = 0; i < 300; ++i) w.spawn(static_cast<uint8_t>(i % 4), 1 + i % 10, 1 + (i / 10) % 10, true);
+        for (int i = 0; i < 500; ++i) ASSERT_TRUE(w.impl.find_unit(0) == nullptr);
+        ASSERT_TRUE(w.impl.find_unit(1) == w.impl.ants_[0].get() && w.impl.find_unit(300) == w.impl.ants_[299].get() && w.impl.find_unit(301) == nullptr);
+        ASSERT_TRUE(lookup_shadow_fallbacks() == fallbacks + 1);       // (only the id that was never handed out: 301)
+        SimulationEngine e;
+        e.init_test_world(30, 30, 9);
+        e.spawn_unit(0, AntType::Worker, TileCoord{5, 5}, false);
+        bool threw = false;
+        try { (void)e.get_unit(0); } catch (const std::runtime_error&) { threw = true; }
+        ASSERT_TRUE(threw);                                            // (get_unit of no ant says so, as before)
+    } TEST_END();
+}
+
 // A new match on an engine that played one (a room starts the next match on the same engine)
 void run_reinit_tests() {
     TEST_CASE("L2.3 init and init_test_world on an engine that was used: the ant ids restart at 1, the state is a fresh engine's, and the lookups go on answering") {
@@ -1753,29 +2216,42 @@ void run_reinit_tests() {
 int main(int argc, char* argv[]) {
     bool quick = true;
     bool big = false;
+    bool go_to_only = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--big") == 0) {
             quick = false;
             big = true;
+        } else if (std::strcmp(argv[i], "--go-to") == 0) {
+            go_to_only = true;
         } else if (std::strcmp(argv[i], "--all") == 0) {
             quick = true;
             big = true;
         } else {
-            std::cout << "usage: test_engine_lookups [--big | --all]\n";
+            std::cout << "usage: test_engine_lookups [--big | --all | --go-to]\n";
             return 2;
         }
     }
     std::cout << "\n=======================================================\n [ENGINE LOOKUPS SUITE] the indexes equal the scans they replaced (" << (quick ? "quick" : "") << (quick && big ? " + " : "")
               << (big ? "big" : "") << ")\n=======================================================\n";
+    if (go_to_only) {
+        run_go_to_tests();
+        run_go_to_match_tests(false);
+        quick = false;
+    }
     if (quick) {
         run_lookup_tests();
+        run_go_to_tests();
         run_map_tests();
         run_crowd_tests(false);
         run_event_tests();
         run_foreign_write_tests();
         run_reinit_tests();
+        run_go_to_match_tests(false);
     }
-    if (big) run_crowd_tests(true);
+    if (big) {
+        run_crowd_tests(true);
+        run_go_to_match_tests(true);
+    }
     std::cout << "\n=======================================================\n"
               << " ENGINE LOOKUPS TEST SUMMARY\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Passed:           " << (g_test_count - g_test_failures) << "\n Failed:           "

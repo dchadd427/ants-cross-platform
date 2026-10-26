@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.141 - 2026-10-26 - Faster: orders after a fight no longer look at every ant
+
+**For players:**
+- **Faster: the one slow moment of a huge map is about half as long.** When many combat ants end their fight in the same instant, each looks for its goal tile again, and each of them used to look at every ant of the map to do it. Measured here, slowest tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 66 and 35 on the desktop, 94 and 56 in the web build (run in Node here, not in a browser); 4 x 1,500 combat ants packed on 120 x 120: 31 and 11.5. The average tick of that map goes from 2.2 to 1.8.
+- That tick is still over the web build's 50 ms budget; the next step (a team-mate's claim on a tile is still found by looking at every ant) is a separate change.
+- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library and worlds of up to 6,000 ants play identically, in the desktop and the web build).
+
+**Rules / network:** none; the rules and network protocol 21 are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...HEAD)
+
 ## v0.12.139 - 2026-10-26 - Show health as: Number is the original's number
 
 **For players:**
@@ -527,24 +538,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9c3e784...6948051a)
 
-## v0.12.92 - 2026-10-19 - Map maker: place ants one at a time, and mix teams
+## Older versions (v0.12.92 and before)
 
-**For players:**
-- **Map maker: place ants one at a time.** Choose Ants, tap a cell and one ant of the picked team stands there; tap an ant (any team) and it is taken away. "Take one away" makes every tap a removal. Each team shows how many ants it has, with plain warnings (a team with none, too many for the file, ants packed too tight).
-- **Group** keeps the clump of before and adds **Mix**: pick the teams and how many ants for each, choose every cell or every other cell, drag a box and the teams are mixed cell by cell, with a preview and one Undo. Good for a "mosh pit" start.
-- **Clear (team) ants...** takes one team's ants away after asking, and says how many.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/810b6f01...a65d54b7); how it works: [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
-
-## v0.12.91 - 2026-10-19 - Map maker: Fix edges no longer doubles an edge
-
-**For players:**
-- Map maker: "Fix edges..." no longer doubles an edge. Where the map already has a piece on one side of a boundary, the other side gets none, so the original Treasure map needs no changes and the seam lines are gone. A second press changes nothing.
-
-**Rules / network:** none (protocol 21).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9bedadc0...4fefb548)
-
-## Older versions (v0.12.90 and before)
-
-Every release before v0.12.91, and the long notes of v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.93, and the long notes of v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
