@@ -3,7 +3,7 @@
 //     edges (the selection ears' own), the size of the bar at every zoom and on a canvas that is shown small, the place of a bar and of a number, the words of the settings file;
 //   * the drawing on a real renderer over a map (the software renderer, the dummy video driver), every pixel against numbers written down here and not taken from the code that draws: a bar's
 //     frame, track and fill at the zoom 1, 2 and 0.5, the fill of 1 to 10 hit points in its color, a number in its font, colors and outline, the numbers left out below the zoom 0.6, the thicker bar
-//     on a canvas that is shown small, no mark in Off, hurt ants only in Hurt, an ant that is dead or frozen with none, the enemies' marks, and Fog of War: an ant that the fog hides has none;
+//     on a canvas that is shown small, no mark in Off, hurt ants only in Hurt, an ant that is dead or frozen with none, the enemies' and the allies' marks, and Fog of War: an ant that the fog hides has none;
 //   * the zoom 1 pass drawn straight and through the offscreen target is the same picture with the marks on.
 // The setting's storage and Ctrl+L are in test_game_menu and test_pointer_model; the recording's and the spectator's frame in test_replay_app.
 // Usage: test_health_marks. Exit code 0 when every check passes.
@@ -343,6 +343,18 @@ void test_which_ants(const assets::AssetArchive& arc) {
     check(row(kAllBar) == "XXX...", "the tile of the enemy C explored: C wears its mark again, F (not explored) does not: " + row(kAllBar));
     rig.world.fog_of_war_enabled = false;
     check(row(kAllBar) == "XXX..X", "(the fog off: the marks as before)");
+
+    // an ally (the alliance holds both ways) is not an enemy: its hurt ants wear marks, with or without the fog; an alliance that one side does not return is none
+    rig.world.player_alliances = {1, 0, 4, 4};
+    rig.world.ants = {ant(1, 0, xs[0], 560, 4), ant(2, 1, xs[1], 560, 4), ant(3, 2, xs[2], 560, 4)};
+    check(row(kHurtBar) == "XXX...", "own, allied and other team's ants, 4 of 10: all three wear a bar: " + row(kHurtBar));
+    rig.world.fog_of_war_enabled = true;
+    rig.world.fog_revealed.assign(static_cast<size_t>(rig.world.width) * rig.world.height, 0);
+    check(row(kHurtBar) == "XX....", "under fog, nothing explored: the own and the allied ant wear a bar, the other team's does not: " + row(kHurtBar));
+    rig.world.player_alliances = {1, 4, 4, 4};
+    check(row(kHurtBar) == "X.....", "under fog, an alliance that team 1 does not return is none: its ant is hidden and wears no bar: " + row(kHurtBar));
+    rig.world.fog_of_war_enabled = false;
+    rig.world.player_alliances = {4, 4, 4, 4};
 
     // an ant whose most is not 10 (a rule that may come): hurt is below its own most
     rig.world.ants = {ant(1, 0, xs[0], 560, 10)};
