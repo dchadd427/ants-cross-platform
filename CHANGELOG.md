@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fe195f16...11af17b5)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...a3811168)
 
 ## v0.12.134 - 2026-10-25 - Health bars over the ants
 
