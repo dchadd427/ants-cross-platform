@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 - The wheel over the settings panel was cancelled by the fullscreen page's guard over the black bars; only the bars (and a Ctrl + wheel) are cancelled now.
 - The health numbers' lowest zoom was the bars' second size edge by accident (0.6); the two are separate now.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...PLACEHOLDER)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...51169738)
 
 ## v0.12.134 - 2026-10-25 - Health bars over the ants
 
