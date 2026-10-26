@@ -15,7 +15,6 @@ import os
 import re
 import shutil
 import sys
-import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -213,13 +212,7 @@ class TheLogHasNoQuery(unittest.TestCase):
         rig = Rig(log=True)
         try:
             self.assertEqual(rig.ask("POST", "/test-maps?kind=classic&name=Secret%20Name", MAP, b"m" * 100)[0], 201)
-            time.sleep(0.3)
-            for _ in range(50):
-                with open(rig.log_file, encoding="utf-8") as f:
-                    text = f.read()
-                if text:
-                    break
-                time.sleep(0.05)
+            text = "\n".join(rig_module.log_lines(rig, 1))                                                  # (the log is written when the answer has gone: wait for the line)
             self.assertNotIn("Secret", text)
             self.assertNotIn("?", text)
             self.assertIn('"POST /test-maps HTTP/1.1" 201 ', text)
