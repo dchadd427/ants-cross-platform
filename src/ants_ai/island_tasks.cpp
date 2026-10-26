@@ -295,14 +295,6 @@ bool IslandTask::scan_bridges(const BotView& view, uint64_t now) {
     return fresh;
 }
 
-int64_t IslandTask::tile_life(sim::TileCoord tile, uint64_t now) const noexcept {
-    if (width_ <= 0) return -1;
-    const auto it = seen_.find(tile.y * width_ + tile.x);
-    if (it == seen_.end()) return -1;
-    const int64_t left = static_cast<int64_t>(it->second) + static_cast<int64_t>(params_.life_ticks) - static_cast<int64_t>(interval_) - static_cast<int64_t>(now);
-    return left < 0 ? 0 : left;
-}
-
 std::vector<sim::TileCoord> IslandTask::chain() const { return builders_.empty() ? std::vector<sim::TileCoord>{} : builders_.begin()->second.chain; }
 
 // ---- the builders -----------------------------------------------------------------------------------------------------------------------------------------

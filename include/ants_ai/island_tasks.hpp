@@ -90,7 +90,6 @@ public:
     const IslandInfo& info() const noexcept { return info_; }
     /// Tiles ordered dug, tiles seen finished, chains finished, orders that failed
     uint32_t tiles_ordered() const noexcept { return tiles_ordered_; }
-    uint32_t tiles_finished() const noexcept { return tiles_finished_; }
     uint32_t chains_finished() const noexcept { return chains_finished_; }
     uint32_t failures() const noexcept { return failures_; }
     /// Ants called home because their pile was closed, ants sent off a bridge that was going, ants stopped on land because the way home would not last
@@ -110,21 +109,10 @@ public:
         const auto it = guarded_.find(ant);
         return it == guarded_.end() ? -1 : static_cast<int>(it->second.mode);
     }
-    /// The pile that the guard believes the ant works (the economy's order, or the last one: the engine's loop goes back there), -1 for none
-    int64_t last_pile(uint32_t ant) const noexcept {
-        const auto it = last_pile_.find(ant);
-        return it == last_pile_.end() ? -1 : static_cast<int64_t>(it->second);
-    }
-    /// The remaining life (ticks) the task counts for the finished bridge tile, -1 for a tile that is no finished bridge
-    int64_t tile_life(sim::TileCoord tile, uint64_t now) const noexcept;
-    /// The tiles of the chain the builder is working on (empty: none), and the ant
+    /// The tiles of the chain the builder is working on (empty: none)
     std::vector<sim::TileCoord> chain() const;
-    uint32_t builder() const noexcept { return builders_.empty() ? 0u : builders_.begin()->first; }
-    /// The shore tiles of the bridges that are hot now
-    size_t hot_entries() const noexcept { return hot_entries_.size(); }
     /// The chain the planner would dig now, for the tests: empty when nothing is wanted or nothing is possible
     const std::vector<sim::TileCoord>& planned() const noexcept { return plan_.tiles; }
-    uint32_t planned_pile() const noexcept { return plan_.pile; }
     /// The latency (ticks) that the task assumes between a look and the moment an order of it works (the profile's look interval, reaction delay and a margin)
     uint32_t latency() const noexcept { return latency_; }
 

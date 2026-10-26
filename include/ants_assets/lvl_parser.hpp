@@ -30,10 +30,6 @@ constexpr uint16_t LVL_BOMB_TILE_LAST = 132;
 // Hills and start markers are TILE IDS, never dictionary names (Ants.exe FUN_0100ecac, the table at 0x1002468): the color ids are 0 black, 1 blue, 2 red, 3 green, the hill of a color is
 // the layer-2 id 245 + color (245 black, 246 blue, 247 red, 248 green) and its start marker the block-1 id 152 + color (152 black, 153 blue, 154 green, 155 red). The remake numbers its teams
 // 0 green, 1 red, 2 blue, 3 black. Both functions answer -1 for any other id.
-constexpr uint16_t LVL_HILL_FIRST = 245;
-constexpr uint16_t LVL_HILL_LAST = 248;
-constexpr uint16_t LVL_START_MARKER_FIRST = 152;
-constexpr uint16_t LVL_START_MARKER_LAST = 155;
 constexpr int hill_team_of_id(uint16_t id) noexcept {
     return id == 245 ? 3 : id == 246 ? 2 : id == 247 ? 1 : id == 248 ? 0 : -1;
 }

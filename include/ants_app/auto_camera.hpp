@@ -110,8 +110,6 @@ public:
     bool target(Point& out) const;
     /// Is the camera locked on an action (it follows the ants of it)?
     bool locked() const noexcept { return locked_; }
-    /// The score of the action it is locked on (0 when it is not)
-    double lock_score() const noexcept { return locked_ ? lock_score_ : 0.0; }
     /// How long it has watched this action (viewer's milliseconds; 0 when it is not locked)
     double dwell_ms() const noexcept { return locked_ ? now_ms_ - lock_since_ms_ : 0.0; }
     /// How many times the camera has locked on an action since the match began (a switch to another place is a new lock)

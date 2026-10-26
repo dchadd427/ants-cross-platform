@@ -191,8 +191,6 @@ void draw_art_rects(IRenderer& renderer, const std::vector<LayoutRect>& parts) {
     for (const LayoutRect& r : parts) renderer.fill_rect(r.x, r.y, r.w, r.h, kArtFill);
 }
 
-void draw_art_rect(IRenderer& renderer, int32_t x, int32_t y, int32_t w, int32_t h) { draw_art_rects(renderer, std::vector<LayoutRect>{LayoutRect{x, y, w, h}}); }
-
 // The head of an arrow, one row after the other from its top: how far right of the shaft's column (the column's left edge) each row starts and how wide it is. The shaft is 2 px wide at +6, so the head is
 // a triangle of 11 px at its base and 1 px at its tip, symmetric about the shaft
 constexpr int32_t kArrowHead[10][2] = {{1, 11}, {2, 9}, {2, 9}, {3, 7}, {3, 7}, {4, 5}, {4, 5}, {5, 3}, {5, 3}, {6, 1}};

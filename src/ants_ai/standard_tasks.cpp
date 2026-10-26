@@ -2277,9 +2277,9 @@ uint32_t own_weight(sim::AntType type) noexcept { return type == sim::AntType::C
 
 // The strength of an enemy ant as far as a person can tell: a Combat Ant counts as much as an own one, an ant that was drawn in its attack clip lately fights, any other ant is taken
 // as one that would not fight back unless ordered (a quarter): the workers that queue at a gate are not an army
-uint32_t StrikeTask::enemy_weight(const AntView& e, uint64_t now) const {
+uint32_t StrikeTask::enemy_weight(const AntView& e, uint64_t /*now*/) const {
     if (e.type == sim::AntType::Combat) return 8u;
-    return tactics_.memory.fought_lately(e.id, 600) || e.state == sim::UnitState::Attacking ? 4u : (now != 0 ? 1u : 1u);
+    return tactics_.memory.fought_lately(e.id, 600) || e.state == sim::UnitState::Attacking ? 4u : 1u;
 }
 
 void StrikeTask::step(TaskContext& c) {

@@ -308,7 +308,6 @@ public:
     std::vector<std::string> take_notes();
 
     uint64_t used_bytes() const noexcept { return budget_.used(); }
-    uint64_t budget_bytes() const noexcept { return budget_.limit(); }
     size_t open_records() const noexcept { return open_; }
     /// Records that ended because a write or a limit failed, since the server started (the statistics of the control interface could show them)
     uint32_t records_failed() const noexcept { return failed_; }

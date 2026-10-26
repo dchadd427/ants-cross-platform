@@ -164,8 +164,7 @@ COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
 COPY web/game_menu.js /usr/share/nginx/html/game_menu.js
 COPY web/game_menu.css /usr/share/nginx/html/game_menu.css
 
-# The map maker (docs/MAP_EDITOR.md): web/mapmaker.html with its scripts and style in web/front/ (copied above) and the map core's module (lvl_core.js, lvl_core.wasm and lvl_core_api.js, copied above)
-COPY web/mapmaker.html /usr/share/nginx/html/mapmaker.html
+# The map maker (docs/MAP_EDITOR.md): web/mapmaker.html as the builder stage stamped it (build id, site label), with its scripts and style in web/front/ (copied above) and the map core's module (lvl_core.js, lvl_core.wasm and lvl_core_api.js, copied above)
 COPY --from=builder /src/mapmaker.html /usr/share/nginx/html/mapmaker.html
 
 # The map maker's sprite atlas (made in the builder stage; the page fetches it when the editor opens, and a few big toys one by one from /asset_catalog/sprites/, copied below): served at /mapmaker_atlas/

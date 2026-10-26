@@ -66,9 +66,7 @@ public:
     uint32_t duds() const noexcept { return duds_; }
     uint32_t extinguishes() const noexcept { return extinguishes_; }
     uint32_t defuses() const noexcept { return defuses_; }
-    uint32_t picks() const noexcept { return picks_; }
     uint32_t revivals() const noexcept { return revivals_; }
-    uint64_t first_goal_tick() const noexcept { return first_goal_; }
     /// Why the last attempt was given up ("step", "attempt", "clock", "ant", "stranded", "hurt"); empty before one was
     const char* last_failure() const noexcept { return why_; }
     bool exhausted() const noexcept { return phase_ == Phase::Exhausted; }
