@@ -63,7 +63,7 @@ constexpr bool shown(When when, int hp, int max_hp, bool frozen) noexcept {
 }
 
 /// The numbers are drawn at one size at every zoom, so below this zoom they would be wider than the tile that their ant stands on: a tile is 32 world pixels and the widest number, a 10, two cells of
-/// 8 pixels, so from the zoom 0.5 (16 / 32) a number never reaches over the neighbor's tile, and below it the numbers are left out (the bars stay at every zoom). The zoom levels are the series 2^(k/4),
+/// 8 pixels (18 with the outline), so from the zoom 0.5 (16 / 32) a number is about as wide as a tile (it reaches a pixel into the neighbors' over an ant that stands in the middle of its tile), and below it the numbers are left out (the bars stay at every zoom). The zoom levels are the series 2^(k/4),
 /// so the four levels from 1 down to 0.5 all show their numbers (an edge of 0.6 left out the third, 0.59).
 constexpr double kNumberMinZoom = 0.5;
 constexpr bool number_fits(double zoom) noexcept { return zoom >= kNumberMinZoom; }

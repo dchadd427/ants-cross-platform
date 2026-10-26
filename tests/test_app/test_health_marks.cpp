@@ -67,7 +67,7 @@ void test_rule() {
     check(!hm::number_fits(0.49) && hm::number_fits(0.5) && hm::number_fits(0.59) && hm::number_fits(0.6) && hm::number_fits(2.0) && !hm::number_fits(0.4), "a number is left out below the zoom 0.5, and stays from it");
     for (int k = 0; k >= -4; --k) check(hm::number_fits(static_cast<double>(zoom::series(k))), "the level " + std::to_string(zoom::series(k)) + " of the wheel's series (1 and the three steps out to 0.5) shows its numbers");
     check(!hm::number_fits(static_cast<double>(zoom::series(-5))), "...and the step beyond 0.5 does not");
-    check(hm::kNumberMinZoom * 32.0 == 2.0 * hm::kCellW, "the edge is where a 10 (two cells) is as wide as the 32 pixels of a tile");
+    check(hm::kNumberMinZoom * 32.0 == 2.0 * hm::kCellW, "the edge is where a 10 (two cells) is as wide as a tile (16 of 32 pixels at this zoom)");
     check(!hm::thick_for(1.0) && !hm::thick_for(2.0) && hm::thick_for(2.01) && hm::thick_for(3.0), "a canvas shown at less than half its size (more than 2 picture pixels for a CSS pixel) gets thick bars");
 }
 

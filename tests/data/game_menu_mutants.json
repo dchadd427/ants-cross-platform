@@ -1276,36 +1276,36 @@
     {
       "id": "wheel_cancelled_over_panel",
       "file": "web/shell.html",
-      "old": " && !(menu && menu.contains(e.target) && !e.ctrlKey)) e.preventDefault();",
+      "old": " && !(panel && panel.contains(e.target) && !e.ctrlKey)) e.preventDefault();",
       "new": ") e.preventDefault();",
       "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
     },
     {
       "id": "ctrl_wheel_over_panel_not_cancelled",
       "file": "web/shell.html",
-      "old": "menu.contains(e.target) && !e.ctrlKey",
-      "new": "menu.contains(e.target)",
+      "old": "panel.contains(e.target) && !e.ctrlKey",
+      "new": "panel.contains(e.target)",
       "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
     },
     {
       "id": "wheel_over_bars_not_cancelled_in_fullscreen",
       "file": "web/shell.html",
-      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(menu && menu.contains(e.target) && !e.ctrlKey))",
-      "new": "if (isFullscreen() && !boxElement.contains(e.target) && !(menu && !e.ctrlKey))",
+      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(panel && panel.contains(e.target) && !e.ctrlKey))",
+      "new": "if (isFullscreen() && !boxElement.contains(e.target) && !(panel && !e.ctrlKey))",
       "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
     },
     {
       "id": "wheel_cancelled_when_windowed",
       "file": "web/shell.html",
-      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(menu",
-      "new": "if (!boxElement.contains(e.target) && !(menu",
+      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(panel",
+      "new": "if (!boxElement.contains(e.target) && !(panel",
       "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
     },
     {
       "id": "wheel_over_the_game_cancelled",
       "file": "web/shell.html",
-      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(menu",
-      "new": "if (isFullscreen() && !(menu",
+      "old": "if (isFullscreen() && !boxElement.contains(e.target) && !(panel",
+      "new": "if (isFullscreen() && !(panel",
       "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
     },
     {
@@ -1348,6 +1348,13 @@
       "file": "web/game_menu.css",
       "old": "gap: 8px 14px; height: 100%; padding: 10px 14px; }",
       "new": "gap: 8px 14px; height: auto; padding: 10px 14px; }",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "wheel_over_the_dimmed_margin_not_cancelled",
+      "file": "web/shell.html",
+      "old": "!(panel && panel.contains(e.target) && !e.ctrlKey)",
+      "new": "!(menu && menu.contains(e.target) && !e.ctrlKey)",
       "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
     }
   ]

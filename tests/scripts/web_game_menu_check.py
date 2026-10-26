@@ -673,6 +673,12 @@ def scrolling(p, args, check):
     check(p.state()["fullscreen"] == "game-stage" and p.state()["open"], "fullscreen, the panel inside it")
     scroll_every_section(p, check, "fullscreen, a wheel", wheel)
     tab.save_shot(args.shots, "menu-scroll-2-fullscreen")
+    tab.ev("window.__wheels = []; document.addEventListener('wheel', function (e) { window.__wheels.push(e.defaultPrevented); }, { passive: true }); 1")      # (the document hears it after the stage's listener, which is the one that cancels)
+    m = p.pane()
+    p.wheel(6, 400, 120)                                                                    # the dimmed margin, outside the panel
+    p.wheel(m["x"] + 6, m["y"] + m["h"] / 2, 120)                                           # the pane
+    seen = tab.ev("JSON.stringify(window.__wheels)")
+    check(seen == "[true,false]", "in fullscreen a wheel over the dimmed margin around the panel is cancelled like one over a bar, and one over the panel is not (cancelled: %s)" % seen)
     tab.ev("document.exitFullscreen(); 1")
     wait_for(lambda: not p.state()["fullscreen"], 5, 0.2)
 

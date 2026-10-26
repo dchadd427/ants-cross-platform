@@ -170,17 +170,19 @@ class TheStyle(unittest.TestCase):
 WHEEL_RUN = r"""
 const fn = process.argv[2];
 const cases = [
-  ["a bar in fullscreen", true, true, { inBox: false, inMenu: false }, true],
-  ["a bar in fullscreen, no panel up", true, false, { inBox: false, inMenu: false }, true],
-  ["the game's box in fullscreen", true, true, { inBox: true, inMenu: false }, false],
-  ["the panel in fullscreen", true, true, { inBox: false, inMenu: true }, false],
-  ["ctrl + wheel over the panel in fullscreen", true, true, { inBox: false, inMenu: true, ctrlKey: true }, true],
-  ["a bar, windowed", false, true, { inBox: false, inMenu: false }, false],
-  ["the panel, windowed", false, true, { inBox: false, inMenu: true }, false],
+  ["a bar in fullscreen", true, true, { inBox: false, inMenu: false, inPanel: false }, true],
+  ["a bar in fullscreen, no panel up", true, false, { inBox: false, inMenu: false, inPanel: false }, true],
+  ["the game's box in fullscreen", true, true, { inBox: true, inMenu: false, inPanel: false }, false],
+  ["the panel in fullscreen", true, true, { inBox: false, inMenu: true, inPanel: true }, false],
+  ["the dimmed margin around the panel in fullscreen", true, true, { inBox: false, inMenu: true, inPanel: false }, true],
+  ["ctrl + wheel over the panel in fullscreen", true, true, { inBox: false, inMenu: true, inPanel: true, ctrlKey: true }, true],
+  ["a bar, windowed", false, true, { inBox: false, inMenu: false, inPanel: false }, false],
+  ["the panel, windowed", false, true, { inBox: false, inMenu: true, inPanel: true }, false],
 ];
 const out = [];
 for (const [name, fullscreen, panelUp, target, cancelled] of cases) {
-  const menu = { contains: (n) => !!n.inMenu };
+  const panel = { contains: (n) => !!n.inPanel };
+  const menu = { contains: (n) => !!n.inMenu, querySelector: (sel) => (sel === ".gm-panel" ? panel : null) };
   const listener = new Function("isFullscreen", "boxElement", "document", "return (" + fn + ");")(() => fullscreen, { contains: (n) => !!n.inBox }, { getElementById: (id) => (id === "game-menu" && panelUp ? menu : null) });
   let prevented = false;
   listener({ target, ctrlKey: !!target.ctrlKey, preventDefault() { prevented = true; } });
