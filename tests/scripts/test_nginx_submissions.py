@@ -424,7 +424,6 @@ class TheBlocksRun(unittest.TestCase):
 
     def test_the_owner_api_gets_the_normalized_path_and_only_plain_characters_pass(self):
         rig = self.rig
-        before = self.count(rig.door)
         for target in ("/admin/api/maps/%41%42/approve", "/admin/api/./maps", "/admin/api/maps//x"):          # (decoded and cleaned up by nginx: the game server sees the clean path)
             self.assertIn(rig.ask("GET", target)[0], (200, 404), target)
         method, path, seen, length = self.last(rig.door)

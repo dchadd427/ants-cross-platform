@@ -10,10 +10,8 @@ ants_test_paths (one tiny source that CMake generates per build folder) returns 
 import glob
 import json
 import os
-import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 

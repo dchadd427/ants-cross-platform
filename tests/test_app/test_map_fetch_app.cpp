@@ -142,7 +142,6 @@ public:
         s.state = State::Ready;
         return s;
     }
-    void set_source(fs::path source) { source_ = std::move(source); }
 
 private:
     fs::path source_;

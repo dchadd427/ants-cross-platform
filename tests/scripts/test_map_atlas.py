@@ -16,7 +16,6 @@ import json
 import os
 import re
 import struct
-import sys
 import tempfile
 import unittest
 import zlib
@@ -264,7 +263,7 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
 
     def test_a_plant_is_drawn_with_all_its_parts_as_the_game_draws_them(self):
         """flower1 (421) is a head, two stems, leaves and a shadow, not its head alone (the owner's report); the 14 plants of the editor and every other tile of several parts are put together, the last part first"""
-        items, w, rows = self.index["objects"]["items"], self.objects[0], self.objects[2]
+        items, rows = self.index["objects"]["items"], self.objects[2]
         self.assertEqual([len(self.parts(i)) for i in (404, 408, 410, 416, 420, 421)], [1, 1, 2, 2, 5, 5])
         self.assertEqual([s for s, _dx, _dy in self.parts(421)], [600, 591, 592, 596, 580], "flower1: head, top stem, leaves, bottom stem, shadow")
         head_w, head_h, _p = sprite_pixels(600)

@@ -1,7 +1,8 @@
-// Test-only shadow check of the simulation's O(1) lookups (SimulationEngineImpl::find_unit, PathManager::has_request_for). Without ANTS_SIM_LOOKUP_SHADOW (every
-// product build) this header is empty and the lookups carry no check. The library ants_sim_shadow (tests/test_sim/CMakeLists.txt) compiles the simulation with it:
-// every call then also runs the linear scan that the lookup replaced and stops the program when the two answers differ; and a test can switch a thread to the scans
-// alone (the old lookups) to play one match with each and compare the state hashes.
+// Test-only shadow check of the simulation's O(1) lookups (SimulationEngineImpl::find_unit, PathManager::has_request_for, and the per-tile ant lists behind occ_scan and
+// blast). Without ANTS_SIM_LOOKUP_SHADOW (every product build) this header is empty and the lookups carry no check. The library ants_sim_shadow
+// (tests/test_sim/CMakeLists.txt) compiles the simulation with it: every call then also runs the linear scan that the lookup replaced and stops the program when the two
+// answers differ; the lists themselves are rebuilt from the ants and compared as well; and a test can switch a thread to the scans alone (the old lookups) to play one
+// match with each and compare the state hashes.
 #pragma once
 
 #ifdef ANTS_SIM_LOOKUP_SHADOW
@@ -20,6 +21,25 @@ inline bool& lookup_shadow_linear_only() noexcept {
 
 /// The number of calls that were compared with the scan, so that a test can show that it checked something.
 inline uint64_t& lookup_shadow_checks() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+
+/// The calls of occ_scan and of blast that were compared with their scans, the ants that those blasts threw, and the checks of the whole lists against the ants: so that a
+/// test can show that piles of ants were met
+inline uint64_t& lookup_shadow_scan_checks() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+inline uint64_t& lookup_shadow_blast_checks() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+inline uint64_t& lookup_shadow_blast_ants() noexcept {
+    static thread_local uint64_t ants = 0;
+    return ants;
+}
+inline uint64_t& lookup_shadow_list_checks() noexcept {
     static thread_local uint64_t checks = 0;
     return checks;
 }

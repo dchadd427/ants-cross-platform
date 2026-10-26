@@ -21,7 +21,6 @@ Chrome, what the keyboard covers (the chat box is at the bottom of the picture a
 Exit status: 0 every check passed; 1 a check failed, or the browser or the page broke down; 3 the environment is not there (no browser, nothing at the page's address); 2 a bad command line.
 """
 import argparse
-import json
 import os
 import sys
 import time

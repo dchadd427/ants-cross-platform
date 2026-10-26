@@ -33,17 +33,6 @@ def sprite(number):
     return Image.open(CATALOG / SPRITES[number][3]).convert("RGBA")
 
 
-def key_clay(image):
-    """The clay behind a hand-lettered label or a button (and its pink dots) becomes transparent; the maroon edge of the picture stays."""
-    image = image.convert("RGBA")
-    pixels = image.load()
-    for y in range(image.height):
-        for x in range(image.width):
-            if pixels[x, y][:3] in (CLAY, CLAY_DOT):
-                pixels[x, y] = (0, 0, 0, 0)
-    return image
-
-
 # The clay of the pages (web/front/clay.png): the orange of the game's menus with a little noise and dirt, so that it is not so clean. The tile is made, not cut from a sprite (the original's tile is
 # a flat orange with a few pink dots), and it is the same tile every time: only random() of a seeded generator is used, whose sequence Python keeps for a seed. It repeats without a seam.
 CLAY_SIZE = 256

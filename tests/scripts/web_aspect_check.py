@@ -807,7 +807,6 @@ def main():
             tab.save_shot(args.shots, "download_failed_for_good")
             card = json.loads(tab.ev("JSON.stringify((function(){var c=document.getElementById('splash-overlay').getBoundingClientRect(),b=document.getElementById('status-text').querySelector('button').getBoundingClientRect();return {overlay:getComputedStyle(document.getElementById('splash-overlay')).pointerEvents, button:[b.x+b.width/2,b.y+b.height/2], inside:b.x>=c.x&&b.right<=c.right&&b.y>=c.y&&b.bottom<=c.bottom};})())"))
             check(card["overlay"] == "auto" and card["inside"], "the card takes clicks and its button is on the card (%s)" % card)
-            before = state["seen"]
             tab.call("Fetch.disable")
             tab.dt.handlers.remove(handler)
             tab.click(card["button"][0], card["button"][1])

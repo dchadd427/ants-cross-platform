@@ -179,7 +179,6 @@ class GuardSink final : public sim::CommandSink {
 public:
     explicit GuardSink(sim::SimulationEngine& sim) : sim_(sim) {}
     sim::CommandResult submit(const Command& c) override {
-        ++by_type[static_cast<size_t>(c.type)];
         log.emplace_back(sim_.current_tick(), c);
         if (c.type == CommandType::GroupMove) {
             const assets::AnthillSpawn* hill = sim_.grid().find_anthill(c.issuer);
@@ -193,8 +192,6 @@ public:
         }
         return sim_.apply_command(c);
     }
-    size_t count(CommandType t) const { return by_type[static_cast<size_t>(t)]; }
-    std::array<size_t, 16> by_type{};
     std::vector<std::pair<uint64_t, Command>> log;
     size_t carriers_sent_home{0};
     size_t carriers_sent_to_piles{0};
@@ -250,13 +247,9 @@ public:
             Command c = waiting_[i].command;
             waiting_.erase(waiting_.begin() + static_cast<std::ptrdiff_t>(i));
             c.issuer = seat_;
-            if (drop_) {
-                bot_->on_command(c, Bot::Fate::Expired, now);
-            } else {
-                sim_.apply_command(c);
-                sent.emplace_back(now, c);
-                bot_->on_command(c, Bot::Fate::Sent, now);
-            }
+            sim_.apply_command(c);
+            sent.emplace_back(now, c);
+            bot_->on_command(c, Bot::Fate::Sent, now);
         }
         if (now >= next_look_) {
             next_look_ = now + std::max<uint32_t>(1u, profile_.decision_interval);
@@ -278,10 +271,8 @@ public:
         bot_ = std::move(bot);
         bot_->start(BotContext{seat_, profile_, 1, &map_});
     }
-    Bot& bot() { return *bot_; }
     const WorkerBot* worker() const { return dynamic_cast<const WorkerBot*>(bot_.get()); }
     const MapInfo& map() const { return map_; }
-    void set_drop(bool drop) { drop_ = drop; }
     std::vector<std::pair<uint64_t, Command>> sent;      // (tick it left, command)
     std::vector<uint64_t> decided;                       // the ticks of the looks
 
@@ -297,7 +288,6 @@ private:
     std::unique_ptr<Bot> bot_;
     std::vector<Waiting> waiting_;
     uint64_t next_look_{1};
-    bool drop_{false};
 };
 
 Profile profile_with(Level level, uint32_t interval, uint32_t delay) {

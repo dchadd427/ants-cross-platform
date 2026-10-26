@@ -1902,6 +1902,11 @@ void test_keyboard() {
         f.hud.set_ant_health(health::Setting{health::When::Off, health::Style::Bar});
         key('l', KMOD_CTRL);
         check(f.hud.ant_health().when == health::When::All, "Ctrl+L from Off (chosen in the menu) brings back the last choice that was on: All ants");
+        f.hud.set_ant_health(health::Setting{health::When::Hurt, health::Style::Number});   // the menu moves from All ants to hurt ants
+        key('l', KMOD_CTRL);
+        check(f.hud.ant_health() == health::Setting{health::When::Off, health::Style::Number}, "from hurt ants (chosen in the menu): off");
+        key('l', KMOD_CTRL);
+        check(f.hud.ant_health() == health::Setting{health::When::Hurt, health::Style::Number}, "...and back to hurt ants, not to the earlier All ants");
         f.hud.set_ant_health(health::Setting{});
         // Ctrl+S: the stop order without flash, lock or deselect, only for own ants
         f.hud.select_ant(s.mine);

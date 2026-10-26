@@ -434,7 +434,6 @@ public:
     Client() = default;
     Client(const Client&) = delete;
     Client& operator=(const Client&) = delete;
-    Client(Client&& o) noexcept : fd_(o.fd_), receive_buffer_(o.receive_buffer_) { o.fd_ = kBadSock; }
     ~Client() { close(); }
 
     // Connects to 127.0.0.1:port (the connect itself is blocking: on the loopback interface it completes in the kernel at once)
@@ -531,7 +530,6 @@ public:
             fd_ = kBadSock;
         }
     }
-    bool valid() const { return fd_ != kBadSock; }
     // A kernel receive buffer of `bytes` from the next connect_to on (a client that never reads then fills it at once; 0 keeps the system's)
     void set_receive_buffer(int bytes) { receive_buffer_ = bytes; }
 

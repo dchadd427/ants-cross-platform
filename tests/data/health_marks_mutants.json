@@ -132,10 +132,20 @@
       "test": "./build/tests/test_app/test_health_marks"
     },
     {
-      "id": "number_min_zoom_half",
+      "id": "number_min_zoom_old_edge",
       "file": "include/ants_app/health_marks.hpp",
-      "old": "constexpr double kNumberMinZoom = 0.6;",
-      "new": "constexpr double kNumberMinZoom = 0.5;",
+      "old": "constexpr double kNumberMinZoom = 0.5;",
+      "new": "constexpr double kNumberMinZoom = 0.6;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_min_zoom_quarter",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "constexpr double kNumberMinZoom = 0.5;",
+      "new": "constexpr double kNumberMinZoom = 0.25;",
       "build": [
         "test_health_marks"
       ],
@@ -144,7 +154,7 @@
     {
       "id": "number_min_zoom_one",
       "file": "include/ants_app/health_marks.hpp",
-      "old": "constexpr double kNumberMinZoom = 0.6;",
+      "old": "constexpr double kNumberMinZoom = 0.5;",
       "new": "constexpr double kNumberMinZoom = 1.0;",
       "build": [
         "test_health_marks"
@@ -174,8 +184,8 @@
     {
       "id": "bar_tall_from_two",
       "file": "include/ants_app/health_marks.hpp",
-      "old": "const int32_t h = zoom >= 1.5 ? 5 : (zoom >= kNumberMinZoom ? 3 : 2);",
-      "new": "const int32_t h = zoom >= 2.0 ? 5 : (zoom >= kNumberMinZoom ? 3 : 2);",
+      "old": "const int32_t h = zoom >= 1.5 ? 5 : (zoom >= kBarMiddleFrom ? 3 : 2);",
+      "new": "const int32_t h = zoom >= 2.0 ? 5 : (zoom >= kBarMiddleFrom ? 3 : 2);",
       "build": [
         "test_health_marks"
       ],
@@ -184,8 +194,18 @@
     {
       "id": "bar_thin_never",
       "file": "include/ants_app/health_marks.hpp",
-      "old": "const int32_t h = zoom >= 1.5 ? 5 : (zoom >= kNumberMinZoom ? 3 : 2);",
+      "old": "const int32_t h = zoom >= 1.5 ? 5 : (zoom >= kBarMiddleFrom ? 3 : 2);",
       "new": "const int32_t h = zoom >= 1.5 ? 5 : 3;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "bar_middle_from_the_numbers_edge",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "constexpr double kBarMiddleFrom = 0.6;",
+      "new": "constexpr double kBarMiddleFrom = 0.5;",
       "build": [
         "test_health_marks"
       ],
@@ -517,6 +537,16 @@
       "file": "src/ants_app/renderer.cpp",
       "old": "        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);     // (the sprite's predicted position, as its ears: it moves when a frame ends; drawn after the world, renderer_health.cpp)\n",
       "new": "",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "allied_ants_wear_no_mark",
+      "file": "src/ants_app/renderer.cpp",
+      "old": "        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);",
+      "new": "        if (!allied || a.player_id == hud_team_id_) note_health_mark(a, a.px + pred.dx, a.py + pred.dy);",
       "build": [
         "test_health_marks"
       ],

@@ -67,7 +67,6 @@ TYPE_NAMES = ["worker", "bomber", "fire", "thief", "combat", "swimmer"]
 TYPE_LETTERS = "gbftcs"     # CHD name letter per ant type (agwg*, abwg*, ...)
 TERRAIN_NAMES = ["grass", "sand", "water", "mud", "dirt"]
 TERRAIN_LETTERS = "gswmd"   # walk-animation terrain letter / first letter of the tile names
-DIR_NAMES = ["N", "NE", "E", "SE", "S"]
 DIR_DIGITS = "78923"        # CHD name digit per stored direction (N=7, NE=8, E=9, SE=2, S=3)
 
 # ---------------------------------------------------------------------------------------------

@@ -8,6 +8,7 @@
 #include "ants_sim/movement_tables.hpp"
 #include "ants_sim/effect_specs.hpp"
 #include "ants_sim/lookup_shadow.hpp"
+#include "tile_ants.hpp"
 #include <unordered_map>
 #include <memory>
 #include <algorithm>
@@ -393,6 +394,7 @@ public:
     uint32_t anim_clock_ms_{0};      // animation clock ("timeGetTime()"), advances 50 ms per sim tick
     uint32_t now_ms_{0};             // clock value of the event being processed
     std::vector<OccCell> occ_;
+    TileAntIndex tile_ants_;         // derived from the ants' occ_tile (tile_ants.hpp): same size as occ_, never hashed
     std::array<PathManager, MAX_PLAYERS> path_managers_{};          // one PATHMGR per player machine
     std::unordered_map<uint32_t, uint32_t> path_request_serial_;    // ant id -> move_serial at request
     bool loco_trace_enabled_{false};
@@ -409,11 +411,23 @@ public:
     /// get_world_state shows it then (the original starts the clip when it creates the ant, 0x100ef18).
     movement::MotionClip pending_idle_clip(const AntUnit& a) const;
 
-    // occupancy (FUN_0100f17f / FUN_0100f2cd / FUN_0100f421 / FUN_0100f3ca)
+    // occupancy (FUN_0100f17f / FUN_0100f2cd / FUN_0100f421 / FUN_0100f3ca), occupancy.cpp
+    static constexpr size_t kNoCell = ~size_t{0};
+    size_t occ_cell_index(TileCoord t) const noexcept;               // the cell of occ_, or kNoCell off the grid
     OccCell* occ_cell(TileCoord t) noexcept;
+    uint32_t ant_slot(const AntUnit& a) const noexcept;              // the place of an ant in ants_ (TileAntIndex::kNone: it is not in the table)
     void occ_move(AntUnit& a, TileCoord nt);
     void occ_refresh();
+    /// The ants registered on t (not `exclude`, only those of teams 0..3), counted in `count`, and the default occupant: the answer of the scan over the whole table that
+    /// this replaced (occ_scan_scan, kept for a tile off the grid and as the reference of the shadow build), taken from the tile's list
     AntUnit* occ_scan(TileCoord t, const AntUnit* exclude, uint16_t* count);
+    AntUnit* occ_scan_scan(TileCoord t, const AntUnit* exclude, uint16_t* count);
+    /// The ants that blast() throws: every ant that is registered on the tile and not removed, in the order of the table (blast_victims_scan is the scan it replaced)
+    void blast_victims(TileCoord at, std::vector<AntUnit*>& out);
+    void blast_victims_scan(TileCoord at, std::vector<AntUnit*>& out);
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    void tile_ants_verify() const;                                   // every list against the ants' occ_tile (stops the program on a difference)
+#endif
     AntUnit* occupant_at(TileCoord t);
     bool tile_occupied(TileCoord t);
 
