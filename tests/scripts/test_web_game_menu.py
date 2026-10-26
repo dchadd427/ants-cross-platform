@@ -6,7 +6,8 @@ script can say without a browser is checked here:
     so in the toast, calls it with the pieces of the page that it needs, and has no key handler of its own for Esc (the game asks, through window.antsGameMenuAsk, when Esc has nothing to cancel);
   - the script: puts every text in with textContent (no markup is ever written), reads and writes the game only through the five exports of src/ants_app/application_game_menu.cpp, uses the numbers of
     game_menu.hpp for rows, facts and acts, handles by name only rows that the C++ table has, listens to nothing outside the panel's life, and leaves the lifts of keys to the game;
-  - the style: no button of the menu lies over the picture in fullscreen, on any device (the header, under-the-picture and replay-bar buttons are all that is left);
+  - the style: no button of the menu lies over the picture in fullscreen, on any device (the header, under-the-picture and replay-bar buttons are all that is left), and the list of a section scrolls
+    (the pane is the one box of the panel that is held to its row and scrolls), also in fullscreen, where the stage cancels the wheel over its bars (the stage's listener is run on fakes);
   - the table: the two JSON files that the page's check draws from (tests/data/game_menu_*.json, kept equal to the game's own text by test_game_menu) name exactly the rows of the C++ table;
   - the exports: the five of them are in the game, the page's EM_JS call and the HUD's Esc hook are there;
   - the image: carries the script and the style (Dockerfile, build_web.sh, the CI's list of files);
@@ -162,6 +163,93 @@ class TheStyle(unittest.TestCase):
             self.assertNotIn(name, script, "the script makes no button over the picture")
         self.assertNotIn("stage.appendChild(", re.sub(r"stage\.appendChild\(scrim\);", "", script), "only the panel's dimmed screen goes into the stage")
         self.assertNotIn("position: absolute", css.split("/* the dimmed screen and the panel */")[0], "no button of the menu is placed over the picture")
+
+
+# The stage's wheel listener (web/shell.html, "THE BARS"): in fullscreen it cancels the wheel over a bar so that nothing else happens there. The settings panel is a child of the stage, so its wheel was cancelled too
+# and the lower rows of a list (the Video section's last row) could not be reached with a wheel. The listener's own source is run on fakes of the stage's pieces.
+WHEEL_RUN = r"""
+const fn = process.argv[2];
+const cases = [
+  ["a bar in fullscreen", true, true, { inBox: false, inMenu: false }, true],
+  ["a bar in fullscreen, no panel up", true, false, { inBox: false, inMenu: false }, true],
+  ["the game's box in fullscreen", true, true, { inBox: true, inMenu: false }, false],
+  ["the panel in fullscreen", true, true, { inBox: false, inMenu: true }, false],
+  ["ctrl + wheel over the panel in fullscreen", true, true, { inBox: false, inMenu: true, ctrlKey: true }, true],
+  ["a bar, windowed", false, true, { inBox: false, inMenu: false }, false],
+  ["the panel, windowed", false, true, { inBox: false, inMenu: true }, false],
+];
+const out = [];
+for (const [name, fullscreen, panelUp, target, cancelled] of cases) {
+  const menu = { contains: (n) => !!n.inMenu };
+  const listener = new Function("isFullscreen", "boxElement", "document", "return (" + fn + ");")(() => fullscreen, { contains: (n) => !!n.inBox }, { getElementById: (id) => (id === "game-menu" && panelUp ? menu : null) });
+  let prevented = false;
+  listener({ target, ctrlKey: !!target.ctrlKey, preventDefault() { prevented = true; } });
+  out.push([name, prevented === cancelled]);
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def wheel_failures(page_text):
+    """the cases of the stage's wheel listener that the page's text gets wrong (an empty list: all right)"""
+    start = page_text.index("stageElement.addEventListener('wheel', ") + len("stageElement.addEventListener('wheel', ")
+    source = page_text[start:page_text.index(", { passive: false });", start)]
+    with tempfile.TemporaryDirectory() as tmp:
+        script = os.path.join(tmp, "wheel.js")
+        with open(script, "w", encoding="utf-8") as f:
+            f.write(WHEEL_RUN)
+        done = subprocess.run([shutil.which("node"), script, source], capture_output=True, text=True, timeout=60)
+    if done.returncode != 0:
+        return ["the listener could not be run: " + done.stderr[-300:]]
+    return [name for name, ok in json.loads(done.stdout) if not ok]
+
+
+def pane_failures(css_text):
+    """what the style must keep so that a section's list can be scrolled to its last row: the pane is the panel's one scrolling box, held to the row that is left (a row of `minmax(0, 1fr)`, so that the rows do
+    not push it taller than the panel) and the panel is held to the window, in every layout"""
+    bad = []
+    pane = re.search(r"\.gm-pane \{([^}]*)\}", css_text)
+    if not pane or not re.search(r"overflow-y:\s*auto", pane.group(1)):
+        bad.append("the pane does not scroll (overflow-y: auto)")
+    if pane and not re.search(r"overscroll-behavior:\s*contain", pane.group(1)):
+        bad.append("the pane's wheel and fingers chain to the page behind it (overscroll-behavior: contain)")
+    rows = re.findall(r"grid-template-rows:\s*([^;]*);", css_text)
+    if len(rows) != 3 or not all("minmax(0, 1fr)" in r for r in rows):
+        bad.append("one of the three layouts (computer, phone upright, phone on its side) does not hold the pane's row to what is left: %s" % rows)
+    heights = re.findall(r"\.gm-panel \{[^}]*?height:\s*([^;]*);", css_text)
+    if len(heights) != 3 or not all(("100%" in h) for h in heights):
+        bad.append("the panel is not held to the window in every layout: %s" % heights)
+    if not re.search(r"\.gm-panel \* \{ min-width: 0; \}", css_text):
+        bad.append("a row can widen the panel")
+    return bad
+
+
+class TheScrolling(unittest.TestCase):
+    """A section's list (the Video section is 54 px taller than the pane on a computer) can be scrolled to its last row: with a finger or a wheel in a window, and with a wheel in fullscreen (docs/GAME_MENU.md, "Scrolling")"""
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed: the stage's wheel listener was NOT run")
+    def test_the_stages_wheel_listener_lets_the_panel_scroll_in_fullscreen_and_still_cancels_the_bars(self):
+        self.assertEqual(wheel_failures(read(SHELL)), [])
+
+    def test_the_pane_is_the_one_scrolling_box_held_to_the_panel(self):
+        self.assertEqual(pane_failures(read(STYLE)), [])
+
+
+class TheScrollingMutants(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("node"), "node is not installed: the mutants of the scrolling were NOT run")
+    def test_the_checks_fail_on_every_broken_copy(self):
+        """the mutants of tests/data/game_menu_mutants.json that break the scrolling (tools/mutate.py runs the same ones against `TheScrolling`)"""
+        spec = json.loads(read(os.path.join(DATA, "game_menu_mutants.json")))
+        mine = [m for m in spec["mutants"] if m["file"] in ("web/shell.html", "web/game_menu.css")]
+        self.assertGreaterEqual(len(mine), 6)
+        for m in mine:
+            with self.subTest(m["id"]):
+                path = os.path.join(REPO, m["file"])
+                text = read(path)
+                self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in the file exactly once" % m["id"])
+                broken = text.replace(m["old"], m["new"])
+                found = wheel_failures(broken) if m["file"] == "web/shell.html" else pane_failures(broken)
+                self.assertTrue(found, "the check did not notice: " + m["id"])
 
 
 class TheTable(unittest.TestCase):

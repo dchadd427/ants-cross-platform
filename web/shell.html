@@ -2556,8 +2556,8 @@
             if (edgeForwarded) handLeaveToGame();
         }
         // (3) needs nothing: a click over a bar is the stage's (SDL listens on the canvas), and the wheel and the context menu over a bar are cancelled so that nothing else happens
-        // either (the browser's page zoom of a ctrl + wheel, its menu)
-        stageElement.addEventListener('wheel', function (e) { if (isFullscreen() && !boxElement.contains(e.target)) e.preventDefault(); }, { passive: false });
+        // either (the browser's page zoom of a ctrl + wheel, its menu). The settings panel (web/game_menu.js) is a child of the stage and no bar: its wheel scrolls its lists, so only a ctrl + wheel over it is cancelled
+        stageElement.addEventListener('wheel', function (e) { var menu = document.getElementById('game-menu'); if (isFullscreen() && !boxElement.contains(e.target) && !(menu && menu.contains(e.target) && !e.ctrlKey)) e.preventDefault(); }, { passive: false });
         stageElement.addEventListener('contextmenu', function (e) { if (isFullscreen()) e.preventDefault(); });
 
         // THE MARGIN OF A WINDOWED PAGE (requested: the mouse can go off the screen without breaking the scrolling; agreed: keep scrolling while the mouse is just past the game's edge, about an

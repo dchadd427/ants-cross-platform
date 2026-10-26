@@ -16,6 +16,8 @@ for tests/scripts/test_web_camera.sh) makes the parts that watch a replay run. N
   * a phone, 390 x 844 with touch: the button is under the picture (44 px), a tap opens the panel inside a gutter of 16 px, every button and slider is at least 44 px high, the text is at least 16 px
     (hints 13), the page does not scroll sideways, the touch model sees nothing of what is tapped on the panel, the cross closes it, the Controls list is the touch list, the question of Leave game fits;
     a phone on its side (844 x 390): the panel is the screen's height less the gutter and every button is on the screen; in fullscreen on a touch screen no Settings button is on the screen (there is no Esc either: fullscreen is left first), and it is back when it is left;
+  * scrolling: in every section whose list is taller than the pane, at 1280 x 720, 1024 x 600 and 800 x 500 with a wheel, in fullscreen with a wheel (the stage cancels the wheel over its bars: not over the panel),
+    and at 390 x 844 and 844 x 390 with a finger and a wheel, the pane can be moved to its end and the last row is then whole inside it (the Video section is taller than the pane on every computer);
   * a recording (play.html?replay=...): the button is in the bar, Esc opens the panel with no Game section, the replay goes on meanwhile, "Back to the matches" asks nothing and leaves for the list; in the
     frame of a match page (embed=1) there is no panel, no button and no script.
 
@@ -70,6 +72,18 @@ JSON.stringify((function () {
   [].forEach.call(menu.querySelectorAll('button, input'), function (b) { var r = b.getBoundingClientRect(); if (r.width > 0 && r.height < 43.5) small.push([b.className || b.tagName, r.height]); });
   [].forEach.call(menu.querySelectorAll('.gm-name, .gm-hint, .gm-note, .gm-ask-b'), function (b) { var r = b.getBoundingClientRect(); if (r.width > 0) text.push([b.className, parseFloat(getComputedStyle(b).fontSize)]); });
   return { small: small, text: text };
+})())"""
+
+
+PANE = r"""
+JSON.stringify((function () {
+  var pane = document.querySelector('.gm-pane'), panel = document.querySelector('.gm-panel');
+  if (!pane || !panel) return null;
+  var box = pane.getBoundingClientRect(), p = panel.getBoundingClientRect(), low = box.top;
+  [].forEach.call(pane.querySelectorAll('*'), function (e) { var r = e.getBoundingClientRect(); if (r.height > 0 && r.bottom > low) low = r.bottom; });
+  var rb = (document.querySelector('.gm-resume') || pane).getBoundingClientRect();
+  return { x: box.x, y: box.y, w: box.width, h: box.height, top: pane.scrollTop, resume: [rb.x, rb.y, rb.right, rb.bottom], over: pane.scrollHeight - pane.clientHeight, low: low, bottom: box.bottom - 2,
+           panel: [p.x, p.y, p.right, p.bottom], inner: [innerWidth, innerHeight] };
 })())"""
 
 
@@ -167,6 +181,23 @@ class Page:
         self.tab.click(x, y)
         time.sleep(0.4)
 
+    def wheel(self, x, y, delta):
+        self.tab.call("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y, "button": "none"})
+        self.tab.call("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": delta})
+        time.sleep(0.2)
+
+    def swipe_up(self, x, y_from, y_to, steps=12):
+        """a finger that goes up the screen: the list moves up with it"""
+        self.tab.call("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y_from}]})
+        for i in range(1, steps + 1):
+            self.tab.call("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y_from + (y_to - y_from) * i / steps}]})
+            time.sleep(0.016)
+        self.tab.call("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        time.sleep(0.7)                                                      # (the fling is over)
+
+    def pane(self):
+        return json.loads(self.tab.ev(PANE))
+
     def tab_to(self, section):
         self.tab.ev("document.getElementById('gm-tab-%s').click(); 1" % section)
         time.sleep(0.3)
@@ -179,11 +210,11 @@ def main():
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     ap.add_argument("--ready-timeout", type=float, default=180.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 180)")
-    ap.add_argument("--profile", default="all", help="desktop, phone, replay or all (default)")
+    ap.add_argument("--profile", default="all", help="desktop, phone, scroll, replay or all (default)")
     args = ap.parse_args()
     aspect.READY_TIMEOUT = args.ready_timeout
-    if args.profile not in ("all", "desktop", "phone", "replay"):
-        print("--profile is desktop, phone, replay or all")
+    if args.profile not in ("all", "desktop", "phone", "scroll", "replay"):
+        print("--profile is desktop, phone, scroll, replay or all")
         return 2
     failures = []
     count = [0]
@@ -208,6 +239,8 @@ def main():
                 computer(page, args, check)
             if args.profile in ("all", "phone"):
                 phone(page, args, check)
+            if args.profile in ("all", "scroll"):
+                scrolling(page, args, check)
             if args.profile in ("all", "replay"):
                 if args.replay and os.path.isfile(args.replay):
                     recording(page, args, check)
@@ -582,6 +615,79 @@ def phone(p, args, check):
     wait_for(lambda: not p.state()["fullscreen"], 5, 0.2)
     time.sleep(0.8)
     check(any_visible(tab), "(and the page's own Settings button is back when fullscreen is left)")
+
+
+def scroll_every_section(p, check, label, how):
+    """every section of the panel whose list is taller than the pane: moved to its end by `how` (a wheel or a finger), the last thing of the list is whole inside the pane. At least one list must be really cut
+    off before it is moved (else the check showed nothing)."""
+    tab = p.tab
+    cut = 0
+    for section in ("sound", "video", "controls", "game"):
+        p.tab_to(section)
+        tab.ev("document.querySelector('.gm-pane').scrollTop = 0; 1")
+        time.sleep(0.2)
+        m = p.pane()
+        check(m["panel"][0] >= -0.5 and m["panel"][1] >= -0.5 and m["panel"][2] <= m["inner"][0] + 0.5 and m["panel"][3] <= m["inner"][1] + 0.5 and m["y"] + m["h"] <= m["panel"][3] + 0.5 and m["resume"][3] <= m["panel"][3] + 0.5,
+              "%s, %s: the panel is inside the window and holds the pane and Resume (panel %s of %s, the pane ends at %s, Resume at %s)" % (label, section, [round(v) for v in m["panel"]], m["inner"], round(m["y"] + m["h"]), round(m["resume"][3])))
+        if m["over"] < 1:
+            continue
+        cut += 1 if m["low"] > m["bottom"] + 0.5 else 0
+        for _ in range(12):
+            how(m)
+            if p.pane()["top"] >= m["over"] - 1:
+                break
+        end = p.pane()
+        check(end["top"] >= m["over"] - 1 and end["low"] <= end["bottom"] + 0.5, "%s, %s: moved to its end, the last row is whole in the pane (moved %s of %s px, its foot at %s, the pane's at %s)" % (label, section, round(end["top"]), round(m["over"]), round(end["low"]), round(end["bottom"])))
+    check(cut >= 1, "%s: a list that was cut off before it was moved (%d of 4)" % (label, cut))
+
+
+def scrolling(p, args, check):
+    tab = p.tab
+    print("[web game menu] scrolling a section's list: a wheel in three windows and in fullscreen, a finger on a phone")
+
+    def wheel(m):
+        p.wheel(m["x"] + 6, m["y"] + m["h"] / 2, 240)
+
+    def finger(m):
+        p.swipe_up(m["x"] + 6, m["y"] + m["h"] - 24, m["y"] + 24)
+
+    p.open_game(LOCAL, 1280, 720)
+    check(p.start_match(), "a match is running")
+    wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown") and not p.buttons()["settings-btn"]["disabled"], 10)
+    tab.ev("document.getElementById('canvas').focus(); 1")
+    p.esc()
+    check(p.state()["open"], "Esc opens the panel")
+    for width, height in ((1280, 720), (1024, 600), (800, 500)):
+        tab.emulate(width, height, 1, touch=False)                          # (touch=False: a second "touch emulation off" makes the tab report `hover: none`, and the panel then leaves out the rows for a mouse)
+        time.sleep(0.8)
+        scroll_every_section(p, check, "%d x %d, a wheel" % (width, height), wheel)
+        if (width, height) == (1280, 720):
+            p.tab_to("video")
+            tab.save_shot(args.shots, "menu-scroll-1-video-end")
+    tab.emulate(1280, 720, 1, touch=False)
+    time.sleep(0.8)
+    p.tab_to("video")
+    p.click_text(".gm-act", "Enter fullscreen")
+    wait_for(lambda: p.state()["fullscreen"], 5, 0.2)
+    time.sleep(1.2)
+    check(p.state()["fullscreen"] == "game-stage" and p.state()["open"], "fullscreen, the panel inside it")
+    scroll_every_section(p, check, "fullscreen, a wheel", wheel)
+    tab.save_shot(args.shots, "menu-scroll-2-fullscreen")
+    tab.ev("document.exitFullscreen(); 1")
+    wait_for(lambda: not p.state()["fullscreen"], 5, 0.2)
+
+    p.open_game(LOCAL, 390, 844, mobile=True)
+    check(p.start_match(), "a match is running on a phone")
+    wait_for(lambda: p.buttons().get("settings-btn-narrow", {}).get("shown") and not p.buttons()["settings-btn-narrow"]["disabled"], 10)
+    p.tap_element("#settings-btn-narrow")
+    check(p.state()["open"], "a tap opens the panel")
+    scroll_every_section(p, check, "390 x 844, a finger", finger)
+    scroll_every_section(p, check, "390 x 844, a wheel", wheel)
+    tab.emulate(844, 390, 1, mobile=True)
+    time.sleep(1.0)
+    scroll_every_section(p, check, "844 x 390, a finger", finger)
+    scroll_every_section(p, check, "844 x 390, a wheel", wheel)
+    tab.save_shot(args.shots, "menu-scroll-3-phone-landscape-end")
 
 
 def recording(p, args, check):

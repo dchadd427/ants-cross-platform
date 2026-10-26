@@ -62,8 +62,10 @@ constexpr bool shown(When when, int hp, int max_hp, bool frozen) noexcept {
     return when == When::All || hp < max_hp;
 }
 
-/// The numbers are drawn at one size at every zoom, so below this zoom they would be bigger than the ants: they are left out (the bars stay at every zoom)
-constexpr double kNumberMinZoom = 0.6;
+/// The numbers are drawn at one size at every zoom, so below this zoom they would be wider than the tile that their ant stands on: a tile is 32 world pixels and the widest number, a 10, two cells of
+/// 8 pixels, so from the zoom 0.5 (16 / 32) a number never reaches over the neighbor's tile, and below it the numbers are left out (the bars stay at every zoom). The zoom levels are the series 2^(k/4),
+/// so the four levels from 1 down to 0.5 all show their numbers (an edge of 0.6 left out the third, 0.59).
+constexpr double kNumberMinZoom = 0.5;
 constexpr bool number_fits(double zoom) noexcept { return zoom >= kNumberMinZoom; }
 
 // ---- where and how big (screen pixels) --------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -85,8 +87,9 @@ constexpr double kSmallShownFrom = 2.0;     // shown at less than half of its si
 constexpr bool thick_for(double picture_px_per_css) noexcept { return picture_px_per_css > kSmallShownFrom; }
 
 /// The bar's height in pixels: 5 from the zoom 1.5, 3 from 0.6, 2 below; one and a half times that (rounded up) on a canvas that is shown small
+constexpr double kBarMiddleFrom = 0.6;      // (not the numbers' edge: the bars' sizes are what they were)
 constexpr int32_t bar_height(double zoom, bool thick) noexcept {
-    const int32_t h = zoom >= 1.5 ? 5 : (zoom >= kNumberMinZoom ? 3 : 2);
+    const int32_t h = zoom >= 1.5 ? 5 : (zoom >= kBarMiddleFrom ? 3 : 2);
     return thick ? (h * 3 + 1) / 2 : h;
 }
 
