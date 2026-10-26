@@ -238,6 +238,44 @@ def free_port():
         return s.getsockname()[1]
 
 
+def start_nginx(work, write_conf, attempts=6, wait=15.0):
+    """Start the program nginx on a free port and return (process, port) once THIS nginx listens there.
+
+    A port that free_port() hands out is free only for the moment: while the tests of several files run side by side (./run_tests.sh), another one can take it before nginx binds it, and a
+    wait that only connects to the port then talks to the other test's stand-in (its answer is a 404 or a 200 of a door that is not this rig's, and the rig's own door sees nothing). So the
+    wait is for nginx's own pid file, which it writes after it has bound its sockets; a master that exits (the port was taken) is started again on a new port, up to `attempts` times, each
+    with a deadline of `wait` seconds. `write_conf(port)` writes the configuration for that port and returns its path."""
+    pid_file = os.path.join(work, "nginx.pid")
+    why = ""
+    for _ in range(attempts):
+        port = free_port()
+        conf = write_conf(port)
+        test = subprocess.run(["nginx", "-t", "-p", work, "-c", conf], capture_output=True, text=True)
+        if test.returncode != 0:
+            raise AssertionError("nginx -t: " + test.stderr)
+        if os.path.exists(pid_file):
+            os.remove(pid_file)
+        proc = subprocess.Popen(["nginx", "-p", work, "-c", conf, "-g", "daemon off;"], stderr=subprocess.DEVNULL)
+        deadline = time.monotonic() + wait
+        while proc.poll() is None and time.monotonic() < deadline:
+            if os.path.exists(pid_file):
+                try:
+                    socket.create_connection(("127.0.0.1", port), timeout=1).close()
+                    return proc, port
+                except OSError:
+                    pass
+            time.sleep(0.02)
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
+        try:
+            with open(os.path.join(work, "error.log"), encoding="utf-8", errors="replace") as f:
+                why = f.read()[-400:]
+        except OSError:
+            why = "(no error log)"
+    raise AssertionError("nginx did not start in %d tries: %s" % (attempts, why))
+
+
 def make_config(workdir, port, stub_port, relaxed=False):
     """The real docker/nginx.conf with the folders, the port and the game server's address of the rig put in."""
     text = RAW
@@ -270,23 +308,16 @@ class Rig:
             f.write("SECRET")
         with open(os.path.join(self.work, "srv", "files", "secret.lvl"), "w") as f:
             f.write("SECRET2")
-        self.port = free_port()
         self.stub_port = free_port()
         self.stub = quick_http.QuickHTTPServer(("127.0.0.1", self.stub_port), StandIn)
         threading.Thread(target=self.stub.serve_forever, daemon=True).start()
-        conf = os.path.join(self.work, "nginx.conf")
-        with open(conf, "w") as f:
-            f.write(make_config(self.work, self.port, self.stub_port, relaxed))
-        test = subprocess.run(["nginx", "-t", "-p", self.work, "-c", conf], capture_output=True, text=True)
-        if test.returncode != 0:
-            raise AssertionError("nginx -t: " + test.stderr)
-        self.proc = subprocess.Popen(["nginx", "-p", self.work, "-c", conf, "-g", "daemon off;"], stderr=subprocess.DEVNULL)
-        for _ in range(100):
-            try:
-                socket.create_connection(("127.0.0.1", self.port), timeout=0.2).close()
-                break
-            except OSError:
-                time.sleep(0.05)
+
+        def write_conf(port):
+            conf = os.path.join(self.work, "nginx.conf")
+            with open(conf, "w") as f:
+                f.write(make_config(self.work, port, self.stub_port, relaxed))
+            return conf
+        self.proc, self.port = start_nginx(self.work, write_conf)
 
     def stop(self):
         self.proc.terminate()
@@ -507,18 +538,15 @@ class TheListWithoutADoor(unittest.TestCase):
         try:
             for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp"):
                 os.makedirs(os.path.join(work, sub))
-            port, dead = free_port(), free_port()
-            conf = os.path.join(work, "nginx.conf")
-            with open(conf, "w") as f:
-                f.write(make_config(work, port, dead))
-            proc = subprocess.Popen(["nginx", "-p", work, "-c", conf, "-g", "daemon off;"], stderr=subprocess.DEVNULL)
+            dead = free_port()
+
+            def write_conf(port):
+                conf = os.path.join(work, "nginx.conf")
+                with open(conf, "w") as f:
+                    f.write(make_config(work, port, dead))
+                return conf
+            proc, port = start_nginx(work, write_conf)
             try:
-                for _ in range(100):
-                    try:
-                        socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
-                        break
-                    except OSError:
-                        time.sleep(0.05)
                 conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
                 conn.request("GET", "/maps")
                 r = conn.getresponse()
