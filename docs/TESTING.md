@@ -6,7 +6,7 @@ Prerequisites and building: [`BUILD_AND_RUN.md`](BUILD_AND_RUN.md).
 
 ## The three tiers
 
-Quick (`./run_tests.sh --fast`, after every change), full (CI, for every pull request) and deep (mutation checks, AddressSanitizer, soak and browser runs, for changes to the network, the rules or fairness): what each one is, when it runs and what it costs is in [`WORKFLOW.md`](WORKFLOW.md) ("The three test tiers"). `./run_tests.sh --fast --list` names the suites of the quick tier. The quick tier's test time on a 10-core Mac is about 25 seconds in the default parallel run (100 serial), plus the build.
+Quick (`./run_tests.sh --fast`, after every change), full (CI, for every pull request) and deep (mutation checks, AddressSanitizer, soak and browser runs, for changes to the network, the rules or fairness): what each one is, when it runs and what it costs is in [`WORKFLOW.md`](WORKFLOW.md) ("The three test tiers"). `./run_tests.sh --fast --list` names the suites of the quick tier. The quick tier's test time on a 10-core Mac is about 25 seconds in parallel (100 serial), plus the build.
 
 ## Master Test Suite
 
@@ -18,9 +18,9 @@ To run all test suites:
 
 The parallel runner is described in [`WORKFLOW.md`](WORKFLOW.md#the-three-test-tiers) ("The three test tiers").
 
-It runs the same suites as the Linux and macOS jobs of CI. CI also builds on Windows and builds the web and server images ([Continuous Integration](#continuous-integration)).
+It runs the same suites as CI's Linux and macOS jobs. CI also builds on Windows and builds the web and server images ([Continuous Integration](#continuous-integration)).
 
-On Windows, `run_tests.bat` runs only a part of the suites (1, 1.2 - 1.5, 2, 2.1, 2.2, 3 and 4). The other test programs are built by the same CMake project, and `ctest -C Release --output-on-failure` in the build folder runs them all.
+On Windows, `run_tests.bat` runs only some of the suites (1, 1.2 - 1.5, 2, 2.1, 2.2, 3 and 4). The other test programs are built by the same project, and `ctest -C Release --output-on-failure` in the build folder runs them all.
 
 ## Running Specific Suites
 
@@ -47,7 +47,7 @@ A big suite is one binary of several sources, so that no file passes the line li
 
 ## What the Suites Cover
 
-The numbers are the ones `./run_tests.sh` prints; `./run_tests.sh --list` names every suite with its tier. A suite marked "full tier" is not in `--fast`. Section numbers (for example "section 5.32") are those of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md), where the original program's rule that a suite checks is written down.
+The numbers are `./run_tests.sh`'s; `--list` names every suite with its tier. A "full tier" suite is not in `--fast`. Section numbers (for example "section 5.32") are those of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md), where the original program's rule that a suite checks is written down.
 
 | Suite | What it checks |
 |---|---|
@@ -113,7 +113,7 @@ The numbers are the ones `./run_tests.sh` prints; `./run_tests.sh --list` names 
 | 2.30 Replay tool | `replay_tool --selftest`: the command line, `info`, `verify` and `orders` with their filters and the table for a spreadsheet, the exit codes, files that are damaged, cut, of other rules or not the match they claim to be, and a file that carries its map (`map`). |
 | 2.31 Database | `test_db`: the wrapper over SQLite (`ants_db`) on files in a temporary folder and in memory: open and close, `:memory:`, WAL with synchronous NORMAL and foreign keys on, every kind of value (int64 limits, double, text with a NUL and UTF-8, a blob with zero bytes, NULL) bound and read back, bad SQL and bad indexes as errors, a quoted word that is no string, a committed, rolled-back and abandoned transaction, no nesting, the busy timeout, a file that is no database or has a damaged header (refused with a clear error, its bytes unchanged, no file made beside it), the online backup (a readable copy, replaced by a second one, the source untouched); the migrations (a new file, again with no write, the partial step, a database of a newer program refused with the file unchanged, a failing migration rolled back whole, a list out of order); and the server's schema (`meta` with `created_at`; version 2: the three tables of the match history, an index for every filter and sort of the list, the checks that keep a bad row out, a database of version 1 brought to version 2 with its data; version 3: `map_plays`, brought from a database of version 2 with its history; version 4: `site_stats` and `site_stats_hours`, brought from version 3). `tests/scripts/test_ants_server.sh` (options part) adds the real program: `--db`, `--no-db`, the default file in `--results-dir` (schema version 5), the log line, a clean stop, a file that is no database stops it with status 1 and is left alone; and the match history's options (`--no-history`, the log lines, the three tables, the old `--history-dir` refused). |
 | 2.32 Map file tool | `lvl_tool --selftest`: the command line, `check`, `info`, `rewrite` and `blank` with their exit codes, cut and refused files, a map that does not play for a roster, the limits of a new map (90 rows, 130 columns), the checker per kind (`check --extended`), the Extended copy grown to a size (`convert --rows --columns`), a file larger than is read (a device without end too), a rewrite that cannot be written leaving nothing behind, no write into or over a map of the library or over the file it reads (a temporary copy of the layout: any case, `..`, a relative path, symbolic and hard links, `rewrite IN IN`), and no memory left ([`MAP_FORMAT.md`](MAP_FORMAT.md#lvl_tool)). |
-| 2.33 Engine lookups | `test_engine_lookups`: every lookup against its scan in whole plays, the same hashes every tick ([`ARCHITECTURE.md`](ARCHITECTURE.md#lookups-in-the-tick-loop)); 2.34 is `--big`, 2.35 `test_engine_event_heal` the product build. Mutants: `tests/data/event_heap_mutants.json`. |
+| 2.33 Engine lookups | `test_engine_lookups`: every lookup against its scan, the same hashes every tick, the marks of the go_to refresh (`--go-to` runs those alone; [`ARCHITECTURE.md`](ARCHITECTURE.md#lookups-in-the-tick-loop)); 2.34 is `--big`, 2.35 `test_engine_event_heal` the product build. Mutants: `tests/data/event_heap_mutants.json`, `go_to_dirty_mutants.json`. |
 | 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation, including the pointer on windows with black bars, the setup screen's hand-overs and the mouse grab. |
 | 3.1.1 File bombs, render | A bomb of a map file is drawn with the pixels of a bomb planted after the load, in its color, once (no ghost when it has gone off, whatever its dictionary entry), hidden in the fog like a planted one, and the minimap and the map picture show the terrain under it ([the report](reverse_engineering/map_file_bombs.md)). |
 | 3.1.2 Loader fidelity, render | The picture of a map file follows its tile ids, not the names of its dictionary: hills drawn from 245 .. 248 whatever the entries are called, and a fire wall of the file drawn from its cell and gone from the screen once a fire ant has put it out, whatever its entry says ([the report](reverse_engineering/map_loader_fidelity.md)). |

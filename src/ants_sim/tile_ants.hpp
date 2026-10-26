@@ -33,6 +33,9 @@ public:
         prev_.clear();
     }
 
+    /// The same lists in the same order (the shadow build compares two refreshes of one state)
+    bool operator==(const TileAntIndex& o) const { return head_ == o.head_ && next_ == o.next_ && prev_ == o.prev_; }
+
     size_t cells() const noexcept { return head_.size(); }
     uint32_t first(size_t cell) const noexcept { return head_[cell]; }
     uint32_t next(uint32_t slot) const noexcept { return next_[slot]; }

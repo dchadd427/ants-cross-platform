@@ -1,0 +1,159 @@
+{
+ "note": "Mutants of the go_to refresh and of find_unit(0) (SimulationEngineImpl::occ_refresh_for_order, occ_note, occ_dirty_, OccTickScope in src/ants_sim/occupancy.cpp, sim_engine_impl.hpp, movement_system.cpp, combat_system.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/go_to_dirty_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp (the G tests: `test_engine_lookups --go-to`; a mutant that makes the shadow check stop the program is caught by the program's exit): a writer that does not mark, a mark that is never set or never cleared, a wrong rule for 'in step', the marked ants visited in the wrong order or not all of them, a refresh in a tick that is taken outside it or after a grid of another size, the public refresh that no longer looks at every ant, a go_to that does not refresh, a tick that does not enter its scope or never leaves it, a restart that keeps marks or the scope, and find_unit(0) that answers an ant, falls back to the scan or answers nothing for id 1. Not here, because they change nothing that can be seen and each is argued in the pull request: the hatch and spawn_unit adding their ant with a plain push_back (the ant is registered by set_position / the full refresh that follows at once, which notes it), a copy of the engine that does not copy the marks (they are only read inside a tick, after the full refresh that starts it has emptied them), a pass that visits an ant that is in step (it finds nothing to do), and the full refresh that movement_tick starts with left out (loco_sync, the pass over every ant that follows in the same order, applies the same rule to every ant before any event can run, and reads nothing of the other ants; the refresh also builds the grid again for a map of another size, which only go_to's own check needs).",
+ "defaults": {
+  "build": "test_engine_lookups",
+  "test": "timeout 600 ./build/tests/test_sim/test_engine_lookups --go-to"
+ },
+ "mutants": [
+  {
+   "id": "occ_move_does_not_note",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    occ_move_registration(a, nt, slot);\n    occ_note(a, slot);\n}",
+   "new": "    occ_move_registration(a, nt, slot);\n}"
+  },
+  {
+   "id": "add_ant_does_not_note",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    occ_note(*ant);                                               // (its occ_tile is (-1, -1): out of step until the caller registers it)\n",
+   "new": ""
+  },
+  {
+   "id": "note_never_marks",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        occ_dirty_[word] |= bit;\n",
+   "new": ""
+  },
+  {
+   "id": "note_never_clears",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        if (word < occ_dirty_.size()) occ_dirty_[word] &= ~bit;\n",
+   "new": ""
+  },
+  {
+   "id": "a_removed_ant_is_always_in_step",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "a.removed ? a.occ_tile.x < 0 :",
+   "new": "a.removed ? true :"
+  },
+  {
+   "id": "in_step_ignores_the_row",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "a.occ_tile == TileCoord{a.pixel_x / 32, a.pixel_y / 32}",
+   "new": "a.occ_tile.x == a.pixel_x / 32"
+  },
+  {
+   "id": "remove_ant_does_not_note",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    occ_note(a);                                              // (a removed ant that is still registered is out of step: deliver_pending_hit above may have put it back)\n",
+   "new": ""
+  },
+  {
+   "id": "words_in_descending_order",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    for (size_t w = 0; w < occ_dirty_.size(); ++w) {\n        while (occ_dirty_[w] != 0) {",
+   "new": "    for (size_t w = occ_dirty_.size(); w-- > 0;) {\n        while (occ_dirty_[w] != 0) {"
+  },
+  {
+   "id": "highest_slot_of_a_word_first",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "            unsigned bit = 0;\n            while (((occ_dirty_[w] >> bit) & 1u) == 0) ++bit;",
+   "new": "            unsigned bit = 63;\n            while (((occ_dirty_[w] >> bit) & 1u) == 0) --bit;"
+  },
+  {
+   "id": "one_ant_of_each_word",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        while (occ_dirty_[w] != 0) {",
+   "new": "        if (occ_dirty_[w] != 0) {"
+  },
+  {
+   "id": "last_word_skipped",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    for (size_t w = 0; w < occ_dirty_.size(); ++w) {\n        while (occ_dirty_[w] != 0) {",
+   "new": "    for (size_t w = 0; w + 1 < occ_dirty_.size(); ++w) {\n        while (occ_dirty_[w] != 0) {"
+  },
+  {
+   "id": "marked_refresh_outside_a_tick",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    if (!occ_in_tick_ || occ_.size() !=",
+   "new": "    if (occ_.size() !="
+  },
+  {
+   "id": "marked_refresh_after_a_grid_of_another_size",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    if (!occ_in_tick_ || occ_.size() != static_cast<size_t>(grid_.width()) * grid_.height()) return occ_refresh();",
+   "new": "    if (!occ_in_tick_) return occ_refresh();"
+  },
+  {
+   "id": "public_refresh_visits_marked_ants_only",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        if (up) occ_refresh_ant(*up);\n    }\n    occ_dirty_.clear();",
+   "new": "        if (up && occ_marked(ant_slot(*up))) occ_refresh_ant(*up);\n    }\n    occ_dirty_.clear();"
+  },
+  {
+   "id": "public_refresh_keeps_the_marks",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    occ_dirty_.clear();                                           // (every ant is in step now)\n",
+   "new": ""
+  },
+  {
+   "id": "refresh_leaves_a_removed_ant_registered",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "    if (!a.is_alive()) {\n        if (a.occ_tile.x >= 0) occ_move(a, TileCoord{-1, -1});",
+   "new": "    if (!a.is_alive()) {"
+  },
+  {
+   "id": "go_to_does_not_refresh",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    occ_refresh_for_order();",
+   "new": ""
+  },
+  {
+   "id": "movement_tick_does_not_enter_the_scope",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    const OccTickScope in_tick(*this);",
+   "new": ""
+  },
+  {
+   "id": "restart_keeps_the_marks",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    occ_dirty_.clear(); occ_in_tick_ = false;",
+   "new": "    occ_in_tick_ = false;"
+  },
+  {
+   "id": "restart_keeps_the_scope",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    occ_dirty_.clear(); occ_in_tick_ = false;",
+   "new": "    occ_dirty_.clear();"
+  },
+  {
+   "id": "the_scope_never_ends",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "~OccTickScope() { e_.occ_in_tick_ = false; }",
+   "new": "~OccTickScope() { e_.occ_in_tick_ = true; }"
+  },
+  {
+   "id": "the_scope_never_begins",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "noexcept : e_(e) { e_.occ_in_tick_ = true; }",
+   "new": "noexcept : e_(e) { }"
+  },
+  {
+   "id": "find_unit_0_answers_the_first_ant",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "            return nullptr;\n        }\n        const size_t slot = static_cast<size_t>(id) - 1u;",
+   "new": "            return ants_.empty() ? nullptr : ants_[0].get();\n        }\n        const size_t slot = static_cast<size_t>(id) - 1u;"
+  },
+  {
+   "id": "find_unit_0_falls_back_to_the_scan",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "        if (id == 0) {                                      // 0 is",
+   "new": "        if (id == 0 && false) {                             // 0 is"
+  },
+  {
+   "id": "find_unit_1_answers_nothing",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "        if (id == 0) {                                      // 0 is",
+   "new": "        if (id == 1) {                                      // 0 is"
+  }
+ ]
+}

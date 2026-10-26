@@ -292,12 +292,18 @@ public:
 
     /// The ant with this id, or nullptr. The table only grows and an ant's id is `next_ant_id_++` at its push_back (and both restart at 1 in init), so ant n sits in slot
     /// n - 1: one look, no scan. The slot is checked, never trusted: a slot that does not hold the id (an id that was never handed out, or a table that stops being dense)
-    /// falls back to the scan that this lookup replaced, so the answer is the scan's in every state.
+    /// falls back to the scan that this lookup replaced, so the answer is the scan's in every state. Id 0 (no ant: ids start at 1) answers nullptr at once.
     AntUnit* find_unit(uint32_t id) {
 #ifdef ANTS_SIM_LOOKUP_SHADOW
         if (lookup_shadow_linear_only()) return find_unit_scan(id);
 #endif
-        const size_t slot = static_cast<size_t>(id) - 1u;   // (id 0 wraps to a slot that does not exist)
+        if (id == 0) {                                      // 0 is "no ant": ids start at 1 (`next_ant_id_++` is the only source of an id), so the scan could not find one
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+            if (lookup_shadow_sample(ants_.size()) && find_unit_scan(0) != nullptr) lookup_shadow_fail("find_unit", 0);
+#endif
+            return nullptr;
+        }
+        const size_t slot = static_cast<size_t>(id) - 1u;
         if (slot < ants_.size() && ants_[slot] && ants_[slot]->id == id) {
 #ifdef ANTS_SIM_LOOKUP_SHADOW
             if (lookup_shadow_sample(ants_.size())) {
@@ -309,7 +315,7 @@ public:
         }
         AntUnit* const found = find_unit_scan(id);
 #ifdef ANTS_SIM_LOOKUP_SHADOW
-        if (id != 0) ++lookup_shadow_fallbacks();   // (0 is "no ant": asked now and then, answered by the scan)
+        ++lookup_shadow_fallbacks();
 #endif
         return found;
     }
@@ -395,6 +401,11 @@ public:
     uint32_t anim_clock_ms_{0};      // animation clock ("timeGetTime()"), advances 50 ms per sim tick
     uint32_t now_ms_{0};             // clock value of the event being processed
     std::vector<OccCell> occ_;
+    // The ants that occ_refresh may have to put right, which go_to puts right alone during a tick (derived data, docs/ARCHITECTURE.md "Lookups in the tick loop"): a bit for each slot of
+    // ants_, set by occ_note whenever an ant is out of step (a live ant not registered on its pixel tile, a removed ant still registered). Never hashed, never sent; a copy of the
+    // engine copies it with the ants, a new match empties it. occ_in_tick_ is true from the full refresh at the start of movement_tick to its end (OccTickScope).
+    std::vector<uint64_t> occ_dirty_;
+    bool occ_in_tick_{false};
     TileAntIndex tile_ants_;         // derived from the ants' occ_tile (tile_ants.hpp): same size as occ_, never hashed
     AntEventHeap event_heap_;        // derived from the ants' timed events (event_heap.hpp, event_queue.cpp): never hashed, rebuilt by event_refresh
     std::array<PathManager, MAX_PLAYERS> path_managers_{};          // one PATHMGR per player machine
@@ -419,7 +430,32 @@ public:
     OccCell* occ_cell(TileCoord t) noexcept;
     uint32_t ant_slot(const AntUnit& a) const noexcept;              // the place of an ant in ants_ (TileAntIndex::kNone: it is not in the table)
     void occ_move(AntUnit& a, TileCoord nt);
+    void occ_move_registration(AntUnit& a, TileCoord nt, uint32_t slot);
+    /// The full refresh: every ant in the order of the table (the public contract: it also puts right what a test moved or removed by hand)
     void occ_refresh();
+    void occ_refresh_ant(AntUnit& a);
+    /// What go_to calls first. In a tick (occ_in_tick_) only the ants that the writers marked (occ_dirty_), in the order of the table: the ants that the full refresh would change are
+    /// all marked, and for every other ant it does nothing, so the result is the same. Outside a tick, and on the scans alone, the full refresh.
+    void occ_refresh_for_order();
+    /// True when the full refresh would leave the ant alone: a live ant is registered on its pixel tile, a removed ant is not registered
+    bool occ_in_step(const AntUnit& a) const noexcept { return a.removed ? a.occ_tile.x < 0 : a.occ_tile == TileCoord{a.pixel_x / 32, a.pixel_y / 32}; }
+    /// Marks the ant when it is out of step, and clears its mark when it is not. Called after EVERY write of what occ_in_step reads (the position: set_position through occ_move;
+    /// occ_tile: occ_move; removed: remove_ant) and when an ant joins the table (add_ant): those are the only writers.
+    bool occ_marked(uint32_t slot) const noexcept { return (slot >> 6) < occ_dirty_.size() && ((occ_dirty_[slot >> 6] >> (slot & 63u)) & 1u) != 0; }
+    void occ_note(const AntUnit& a);
+    void occ_note(const AntUnit& a, uint32_t slot);
+    /// An ant joins the table (the one place that adds one): it is out of step until it is registered
+    AntUnit* add_ant(std::unique_ptr<AntUnit> unit);
+    /// Holds occ_in_tick_ true while movement_tick runs
+    class OccTickScope {
+    public:
+        explicit OccTickScope(SimulationEngineImpl& e) noexcept : e_(e) { e_.occ_in_tick_ = true; }
+        ~OccTickScope() { e_.occ_in_tick_ = false; }
+        OccTickScope(const OccTickScope&) = delete;
+        OccTickScope& operator=(const OccTickScope&) = delete;
+    private:
+        SimulationEngineImpl& e_;
+    };
     /// The ants registered on t (not `exclude`, only those of teams 0..3), counted in `count`, and the default occupant: the answer of the scan over the whole table that
     /// this replaced (occ_scan_scan, kept for a tile off the grid and as the reference of the shadow build), taken from the tile's list
     AntUnit* occ_scan(TileCoord t, const AntUnit* exclude, uint16_t* count);
@@ -429,6 +465,7 @@ public:
     void blast_victims_scan(TileCoord at, std::vector<AntUnit*>& out);
 #ifdef ANTS_SIM_LOOKUP_SHADOW
     void tile_ants_verify() const;                                   // every list against the ants' occ_tile (stops the program on a difference)
+    void occ_dirty_verify() const;                                   // every ant that is out of step is marked (stops the program otherwise)
 #endif
     AntUnit* occupant_at(TileCoord t);
     bool tile_occupied(TileCoord t);

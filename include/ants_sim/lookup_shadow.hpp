@@ -1,5 +1,5 @@
 // Test-only shadow check of the simulation's lookups (SimulationEngineImpl::find_unit, PathManager::has_request_for, the per-tile ant lists behind occ_scan and
-// blast, and the event heap behind next_ant_event). Without ANTS_SIM_LOOKUP_SHADOW (every product build) this header is empty and the lookups carry no check. The library ants_sim_shadow
+// blast, and the event heap behind next_ant_event, and the marks of the ants that go_to refreshes). Without ANTS_SIM_LOOKUP_SHADOW (every product build) this header is empty and the lookups carry no check. The library ants_sim_shadow
 // (tests/test_sim/CMakeLists.txt) compiles the simulation with it: every call then also runs the linear scan that the lookup replaced and stops the program when the two
 // answers differ; the lists themselves are rebuilt from the ants and compared as well; and a test can switch a thread to the scans alone (the old lookups) to play one
 // match with each and compare the state hashes.
@@ -44,7 +44,7 @@ inline uint64_t& lookup_shadow_list_checks() noexcept {
     return checks;
 }
 
-/// The number of find_unit calls whose slot did not hold the id (they fell back to the scan; id 0 is not counted): none in a real match, so a test can show that the slot is what answers.
+/// The number of find_unit calls whose slot did not hold the id (they fell back to the scan; id 0 never falls back): none in a real match, so a test can show that the slot is what answers.
 inline uint64_t& lookup_shadow_fallbacks() noexcept {
     static thread_local uint64_t fallbacks = 0;
     return fallbacks;
@@ -78,6 +78,26 @@ inline uint64_t& lookup_shadow_event_verifies() noexcept {
 inline uint64_t& lookup_shadow_event_catch_ups() noexcept {
     static thread_local uint64_t checks = 0;
     return checks;
+}
+
+/// The refreshes that go_to made from the marked ants alone (in a tick), those of them that were checked (an ant out of step that is not marked, or one left out of step, stops
+/// the program), those that visited marked ants and were compared with the full refresh run from the same state, and the marked ants that they visited: so that a test can show
+/// that the marks had something to do
+inline uint64_t& lookup_shadow_go_to_calls() noexcept {
+    static thread_local uint64_t calls = 0;
+    return calls;
+}
+inline uint64_t& lookup_shadow_go_to_checks() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+inline uint64_t& lookup_shadow_go_to_compares() noexcept {
+    static thread_local uint64_t compares = 0;
+    return compares;
+}
+inline uint64_t& lookup_shadow_go_to_dirty_ants() noexcept {
+    static thread_local uint64_t ants = 0;
+    return ants;
 }
 
 [[noreturn]] inline void lookup_shadow_fail(const char* lookup, uint32_t id) {
