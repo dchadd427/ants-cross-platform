@@ -440,7 +440,8 @@ public:
     void event_refresh(const AntUnit& a);
     bool event_refresh(const AntUnit& a, uint32_t slot);                 // (true: it changed the heap)
     /// The pass over every ant at the start of a tick, which puts right whatever a writer that was left out would have missed (a product build); in the shadow build it stops the
-    /// program when it has anything to put right, so that the writers are proven complete rather than covered
+    /// program when it has anything to put right, so that the writers are proven complete rather than covered. It also keeps right a write from OUTSIDE the simulation (a test hook
+    /// that pokes an ant through get_unit() between two ticks; no production code does), which no writer here can follow.
     void event_catch_up(const AntUnit& a, uint32_t slot);
     /// Calls event_refresh for the ant when it goes out of scope (a function with several returns that changes those fields)
     class EventRefreshOnExit {

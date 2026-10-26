@@ -82,11 +82,21 @@ struct LinearOnly {
     LinearOnly& operator=(const LinearOnly&) = delete;
 };
 
+// Counts the stale events that the two nets of the heap put right instead of stopping the program, while it lives (lookup_shadow.hpp): for the tests that write the fields of the
+// events from outside on purpose
+struct CountStale {
+    CountStale() { lookup_shadow_count_stale_events() = true; }
+    ~CountStale() { lookup_shadow_count_stale_events() = false; }
+    CountStale(const CountStale&) = delete;
+    CountStale& operator=(const CountStale&) = delete;
+};
+
 // What the shadow checks of the tile lists did since this was made: the questions of occ_scan and the blasts that were compared with their scans, the ants those blasts threw,
 // and the lists that were rebuilt from the ants and compared (a test shows that it met piles of ants, not only that nothing differed)
 struct Marks {
     uint64_t scans{lookup_shadow_scan_checks()}, blasts{lookup_shadow_blast_checks()}, blast_ants{lookup_shadow_blast_ants()}, lists{lookup_shadow_list_checks()};
     uint64_t events{lookup_shadow_event_checks()}, heaps{lookup_shadow_event_verifies()}, catch_ups{lookup_shadow_event_catch_ups()};
+    uint64_t changes{lookup_shadow_event_catch_up_changes()}, stale{lookup_shadow_event_stale_entries()};
     uint64_t picks[4] = {lookup_shadow_event_picks(0), lookup_shadow_event_picks(1), lookup_shadow_event_picks(2), lookup_shadow_event_picks(3)};
     uint64_t scans_since() const { return lookup_shadow_scan_checks() - scans; }
     uint64_t blasts_since() const { return lookup_shadow_blast_checks() - blasts; }
@@ -95,6 +105,8 @@ struct Marks {
     uint64_t heaps_since() const { return lookup_shadow_event_verifies() - heaps; }
     uint64_t catch_ups_since() const { return lookup_shadow_event_catch_ups() - catch_ups; }
     uint64_t picks_since(size_t kind) const { return lookup_shadow_event_picks(kind) - picks[kind]; }
+    uint64_t changes_since() const { return lookup_shadow_event_catch_up_changes() - changes; }   // ants whose events only the start-of-tick pass put right
+    uint64_t stale_since() const { return lookup_shadow_event_stale_entries() - stale; }          // entries that a selection found the ant did not bear out
     std::string since() const {
         return std::to_string(scans_since()) + " tile questions, " + std::to_string(blasts_since()) + " blasts of " + std::to_string(blast_ants_since()) + " ants, " +
                std::to_string(lookup_shadow_list_checks() - lists) + " list checks, " + std::to_string(events_since()) + " event selections compared, events run: " + std::to_string(picks_since(0)) +
@@ -955,6 +967,21 @@ void run_event_tests() {
             w.impl.event_heap_verify();
             ASSERT_TRUE(c.loco_action == AntUnit::kActionIdle && w.next(100) == "0:L@40");
         }
+        // a pause that ends on an ant whose old action cannot be left (a death that is over: finish_death does nothing for a removed ant): set_action returns before it writes
+        // anything, and pause_fire has cleared pause_active all the same
+        {
+            EventWorld w;
+            AntUnit& a = w.add(1);
+            w.pause(a, 30);
+            a.removed = true;
+            a.loco_action = AntUnit::kActionDeath;
+            a.pause_saved_action = AntUnit::kActionIdle;
+            w.impl.event_refresh(a);
+            ASSERT_TRUE(w.next(100) == "0:P@30");
+            w.impl.pause_fire(a);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(!a.pause_active && w.next(kNever - 1).find(":P@") == std::string::npos);
+        }
         // a removal: every event of the ant is gone
         {
             EventWorld w;
@@ -1200,6 +1227,7 @@ void run_map_tests() {
             if (!why.empty()) std::cout << "\n        " << why << "\n";
             ASSERT_TRUE(why.empty());
             ASSERT_TRUE(checks > 1000);
+            ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);   // no ant needed the start-of-tick pass, no selection met a stale entry
         }
     } TEST_END();
 
@@ -1221,6 +1249,7 @@ void run_map_tests() {
             if (!why.empty()) std::cout << "\n        " << why << "\n";
             ASSERT_TRUE(why.empty());
             ASSERT_TRUE(checks > 1000);
+            ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);   // no ant needed the start-of-tick pass, no selection met a stale entry
         }
     } TEST_END();
 }
@@ -1510,12 +1539,154 @@ void run_crowd_tests(bool big) {
             ASSERT_TRUE(marks.scans_since() > 0);                       // the tile lists answered, and the checks compared them
             ASSERT_TRUE(marks.blasts_since() > 0);                      // piles of ants were thrown apart
             ASSERT_TRUE(marks.blast_ants_since() > marks.blasts_since());   // and some blast threw two ants or more
+            ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);               // no ant needed the start-of-tick pass, no selection met a stale entry
             ASSERT_TRUE(marks.catch_ups_since() > 1000);                                        // the start-of-tick pass ran over the ants, and (it stops the program otherwise) found nothing to put right
             ASSERT_TRUE(marks.events_since() > 1000 && marks.heaps_since() >= n);                // the heap chose events, and was checked against the ants at every tick
             for (size_t kind = 0; kind < 4; ++kind) ASSERT_TRUE(marks.picks_since(kind) > 0);    // events of every kind fell due: a burn overlay, a combat timer, a frame, a pause
             ASSERT_TRUE(g_seen.actions.count(AntUnit::kActionGetPow) != 0);                     // a power-up was taken
             ASSERT_TRUE(g_seen.actions.count(AntUnit::kActionBridgeBuild) != 0);                // a swimmer dug a bridge
         }
+    } TEST_END();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Writes from outside: what no writer of the heap follows, and the two nets of a product build that put it right
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// A test hook can write the fields of an ant between two ticks (get_unit); the heap does not hear of it. In a match the nets must never find such a thing (the shadow build stops
+// the program, and the tests above count 0 after every match); here the writes are made on purpose, with the nets set to count (CountStale), and the engine must play on as the
+// scans do (the twin, the hash at every tick).
+void run_foreign_write_tests() {
+    const uint32_t kFar = 3600000u;   // (a time that no test match reaches)
+    TEST_CASE("L4.8 Writes of the event fields from outside, between ticks: each one is counted by the start-of-tick pass (once in each engine of the twin), none is counted when nothing is written, and the hash equals the scans' at every tick") {
+        Twin t;
+        t.engine.init_test_world(90, 90, 9);
+        const Crowd crowd = populate(t.engine, 90, 12, Layout::Spread);
+        {
+            LinearOnly scans;
+            t.old_engine.init_test_world(90, 90, 9);
+            populate(t.old_engine, 90, 12, Layout::Spread);
+        }
+        const CountStale counting;
+        const Marks marks;
+        auto tick = [&](uint32_t n) -> int64_t {                         // n ticks; the ants whose events the pass had to put right in them (both engines); -1: the hashes differ
+            const uint64_t before = marks.changes_since();
+            for (uint32_t i = 0; i < n; ++i) {
+                if (!t.tick()) return -1;
+            }
+            return static_cast<int64_t>(marks.changes_since() - before);
+        };
+        auto poke = [&](uint32_t id, const std::function<void(AntUnit&)>& write) {
+            t.both([&](SimulationEngine& e) { write(e.get_unit(id)); });
+        };
+        auto now = [&] { return static_cast<uint32_t>(t.engine.current_tick()) * 50u; };
+        const uint32_t a = crowd.ids[0][0], b = crowd.ids[1][0], c = crowd.ids[2][0], d = crowd.ids[3][0], e = crowd.ids[0][1], f = crowd.ids[3][1];
+        ASSERT_TRUE(tick(3) == 0);                                       // quiet ticks: nothing to put right
+        poke(a, [&](AntUnit& u) { u.combevt_due_ms = kFar; });          // an event that was not pending is
+        ASSERT_TRUE(tick(1) == 2);
+        poke(a, [&](AntUnit& u) { u.combevt_due_ms = kFar + 1000u; });  // an event whose time moved
+        ASSERT_TRUE(tick(1) == 2);
+        poke(a, [&](AntUnit& u) { u.combevt_due_ms = 0; });             // an event that is not pending any more
+        ASSERT_TRUE(tick(1) == 2);
+        poke(b, [&](AntUnit& u) { u.burn_end_ms = kFar; });
+        ASSERT_TRUE(tick(1) == 2);
+        poke(b, [&](AntUnit& u) { u.burn_end_ms = 0; });
+        ASSERT_TRUE(tick(1) == 2);
+        ASSERT_TRUE(t.engine.get_unit(c).loco.clip.valid() && t.engine.get_unit(c).loco.cursor != 0 && t.engine.get_unit(c).loco.clip.count > 1 && t.engine.get_unit(c).loco_action != AntUnit::kActionNone);
+        poke(c, [&](AntUnit& u) { u.loco.next_ms = kFar; });            // the next frame of the animation moved
+        ASSERT_TRUE(tick(1) == 2);
+        ASSERT_TRUE(tick(20) == 0);                                      // nothing written, nothing found (the counting does not make the pass see more)
+        poke(d, [&](AntUnit& u) { u.burn_end_ms = now() + 100u; });     // events that fall due at once: the engine plays them as the scans do
+        poke(e, [&](AntUnit& u) { u.combevt_due_ms = now() + 100u; });
+        ASSERT_TRUE(tick(8) == 4);
+        Command go;                                                      // an ant on its way, and a pause that another system starts under it
+        go.type = CommandType::GroupMove;
+        go.issuer = 3;
+        go.tile_x = 80;
+        go.tile_y = 20;
+        go.ants.push_back(f);
+        ASSERT_TRUE(t.apply(go));
+        ASSERT_TRUE(tick(4) == 0);
+        poke(f, [&](AntUnit& u) { u.pause_active = true; u.pause_fire_ms = now() + 100u; });
+        ASSERT_TRUE(tick(6) == 2);
+        ASSERT_TRUE(tick(30) == 0);
+        ASSERT_TRUE(marks.stale_since() == 0);                           // (the selections met no stale entry: the pass had put everything right before them)
+    } TEST_END();
+
+    TEST_CASE("L4.9 A selection that meets an entry the ant does not bear out (a field written with no event_refresh): counted, the ant put right, and the answer is the scan's") {
+        EventWorld w;
+        AntUnit& a = w.add(1);
+        w.add(2);
+        w.impl.ants_.push_back(AntPtr());                              // a hole in the table
+        w.loco(a, 60);
+        w.burn(a, 30);
+        const CountStale counting;
+        const Marks marks;
+        a.burn_end_ms = 45;                                              // the heap says 30
+        ASSERT_TRUE(w.next(100) == "0:B@45" && marks.stale_since() == 1);
+        a.burn_end_ms = 0;                                               // the heap says 45
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 2);
+        w.impl.event_heap_.set(1, AntEventKind::Combevt, true, 10);      // an event of an ant that has none
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 3);
+        w.impl.event_heap_.set(2, AntEventKind::Pause, true, 10);        // an event of a hole of the table
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 4);
+        w.impl.event_heap_.set(9, AntEventKind::Loco, true, 10);         // an event of a place that is not in the table
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 5);
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 5);   // (the heap is right now: nothing more is found)
+        w.impl.event_heap_verify();
+    } TEST_END();
+
+    TEST_CASE("L3.3 Foreign writes of the state of ants (another system changes the label of an ant under the locomotion model's feet: loco_sync releases it, plays it idle or stops it), in a match with orders, bombs, fire, hatching and deaths: the hashes equal at every tick, and no net was needed") {
+        const uint32_t width = 90;
+        const uint32_t ticks = ANTS_LOOKUP_TEST_SANITIZED ? 300u : 600u;
+        g_seen = Seen{};
+        Twin t;
+        t.engine.init_test_world(width, width, 9);
+        Crowd crowd = populate(t.engine, width, 40, Layout::Spread);
+        add_hazards(t.engine, width, crowd);
+        {
+            LinearOnly scans;
+            t.old_engine.init_test_world(width, width, 9);
+            Crowd same = populate(t.old_engine, width, 40, Layout::Spread);
+            add_hazards(t.old_engine, width, same);
+            ASSERT_TRUE(same.ids == crowd.ids && same.pit == crowd.pit);
+        }
+        std::vector<uint32_t> all;
+        for (const auto& team : crowd.ids) all.insert(all.end(), team.begin(), team.end());
+        all.insert(all.end(), crowd.pit.begin(), crowd.pit.end());
+        const Script orders = hazard_script(crowd, width);
+        static const UnitState kStates[] = {UnitState::Idle, UnitState::Walking, UnitState::Attacking, UnitState::Flinch, UnitState::Knockback, UnitState::Stunned, UnitState::EnteringBase,
+                                            UnitState::Drowning, UnitState::GuardIdle, UnitState::Swimming, UnitState::Infiltrating, UnitState::CantGo};
+        uint32_t seed = 0x51A7E5u;
+        auto below = [&seed](uint32_t n) { seed = seed * 1664525u + 1013904223u; return (seed >> 8) % n; };
+        uint64_t pokes = 0, released = 0, stopped = 0;
+        std::vector<std::pair<uint32_t, uint8_t>> pending;                // the ants poked at the last tick, with the action they had
+        const Script script = [&](Twin& tw, uint32_t tick, std::vector<Command>& out) {
+            for (const auto& p : pending) {                               // what the poke of the last tick did to the ant
+                const AntUnit& u = tw.engine.get_unit(p.first);
+                if (u.is_alive() && u.loco_action == AntUnit::kActionNone && (p.second == AntUnit::kActionIdle || p.second == AntUnit::kActionWalk)) ++released;
+                if (u.is_alive() && p.second == AntUnit::kActionWalk && u.loco_action == AntUnit::kActionIdle) ++stopped;
+            }
+            pending.clear();
+            orders(tw, tick, out);
+            if (tick % 3 != 1) return;
+            const uint32_t id = all[below(static_cast<uint32_t>(all.size()))];
+            const UnitState to = kStates[below(static_cast<uint32_t>(sizeof kStates / sizeof kStates[0]))];
+            const AntUnit& u = tw.engine.get_unit(id);
+            if (!u.is_alive()) return;
+            pending.emplace_back(id, u.loco_action);
+            ++pokes;
+            tw.both([&](SimulationEngine& e) { e.get_unit(id).state = to; });
+        };
+        const Marks marks;
+        uint64_t checks = 0;
+        const std::string why = play(t, nullptr, 0x0F, ticks, script, &checks);
+        std::cout << "\n        " << t.ticks << " ticks, " << pokes << " states written, " << released << " ants released, " << stopped << " walkers stopped, " << marks.since() << "   ... ";
+        if (!why.empty()) std::cout << "\n        " << why << "\n";
+        ASSERT_TRUE(why.empty());
+        ASSERT_TRUE(pokes > 100 && released > 5);                          // loco_sync took its release path on ants that were walking or standing
+        ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);   // every one of those writes was followed by its own refresh: the nets had nothing to do
+        ASSERT_TRUE(marks.events_since() > 1000 && marks.heaps_since() >= ticks);
     } TEST_END();
 }
 
@@ -1601,6 +1772,7 @@ int main(int argc, char* argv[]) {
         run_map_tests();
         run_crowd_tests(false);
         run_event_tests();
+        run_foreign_write_tests();
         run_reinit_tests();
     }
     if (big) run_crowd_tests(true);

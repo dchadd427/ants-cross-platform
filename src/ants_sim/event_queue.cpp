@@ -13,10 +13,13 @@
 //
 // WHO CHANGES THEM. Every site that writes one of the fields above calls event_refresh afterwards (it is the one writer of the heap, as occ_move is of occ_tile): burn_overlay_start
 // and burn_overlay_end, start_combat_timer and cancel_combat_timer (combat_system.cpp), remove_ant (removed, loco_action), low_hp_check (a raw write of loco_action), loco_play,
-// loco_step, loco_release, start_pause and cancel_pause (movement_system.cpp), and the raw write of the combat timer in movement_tick. set_action (loco_action) and pause_fire
-// (pause_active) have no call of their own: every path of the first writes loco_action and then calls cancel_pause or loco_play, and every path of the second ends in start_pause
-// or set_action. loco_sync writes some of the fields too (the writes of an ant that is not alive, and of a stopped walker, which set_action follows): the pass over every ant at
-// the start of movement_tick (event_catch_up) is the net under all of them, and in the shadow build it must never find anything to do. An event that is run stays in the heap while
+// loco_step, loco_release, start_pause and cancel_pause (movement_system.cpp); pause_fire leaves with one too (set_action can return before it writes anything: the old action is a
+// death, or a flight that ends in one). The raw write of the combat timer in movement_tick is followed at once by resume_after_auto_engage, which starts with cancel_combat_timer.
+// set_action (loco_action) has no call of its own: every path of it that writes loco_action (one that returns early writes nothing) then calls cancel_pause or loco_play. loco_sync writes some of the fields too (the
+// writes of an ant that is not alive, and of a stopped walker, which set_action follows): the pass over every ant at the start of movement_tick (event_catch_up) is the net under
+// all of them, and in the shadow build it must never find anything to do in a match. It is also what keeps a write from OUTSIDE the simulation right: a test hook that pokes the
+// fields of an ant through get_unit() between two ticks (no production code does) leaves the heap stale, and the pass puts it right; without the pass the engine would play such a
+// poke differently from the scans (test_engine_event_heal, and L4.8 of test_engine_lookups, which counts what the pass finds). An event that is run stays in the heap while
 // its handler runs: what the handler changes is set again by the site that changes it. A copy of the engine copies the heap with the ants. The shadow build checks all of it
 // (lookup_shadow.hpp, event_heap_verify): the heap against the fields at the start and the end of every tick and after every copy, every selection against the scan.
 
@@ -66,7 +69,7 @@ void SimulationEngineImpl::event_catch_up(const AntUnit& a, uint32_t slot) {
     const bool changed = event_refresh(a, slot);
 #ifdef ANTS_SIM_LOOKUP_SHADOW
     ++lookup_shadow_event_catch_ups();
-    if (changed) lookup_shadow_fail("event heap (an ant whose events only the start of the tick put right)", a.id);
+    if (changed) lookup_shadow_stale_event(lookup_shadow_event_catch_up_changes(), "event heap (an ant whose events only the start of the tick put right)", a.id);
 #endif
     (void)changed;
 }
@@ -139,7 +142,7 @@ bool SimulationEngineImpl::next_ant_event(uint32_t t_end, AntEventPick& out) {
         // A live entry that the ant's fields do not bear out: a change of a field that no event_refresh followed. The shadow build stops here; a product build puts the ant right
         // and goes on (the entry is dead once the ant's events are set again, and a missing ant's entry is taken out).
 #ifdef ANTS_SIM_LOOKUP_SHADOW
-        lookup_shadow_fail("event heap (an entry that is not the ant's)", a ? a->id : 0u);
+        lookup_shadow_stale_event(lookup_shadow_event_stale_entries(), "event heap (an entry that is not the ant's)", a ? a->id : 0u);
 #endif
         if (a) event_refresh(*a, p.slot);
         else event_heap_.set(p.slot, p.kind, false, 0);

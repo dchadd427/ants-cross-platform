@@ -875,6 +875,7 @@ void SimulationEngineImpl::cancel_pause(AntUnit& a) {
 }
 
 void SimulationEngineImpl::pause_fire(AntUnit& a) {
+    const EventRefreshOnExit refresh_events(*this, a);               // pause_active is cleared here, and set_action may return before it writes anything
     a.pause_active = false;
     const uint8_t saved_action = a.pause_saved_action;
     const uint8_t saved_dir = a.pause_saved_dir;
@@ -1581,7 +1582,7 @@ void SimulationEngineImpl::movement_tick() {
     const uint32_t t_end = t_begin + TICK_MS;
     now_ms_ = t_begin;
 #ifdef ANTS_SIM_LOOKUP_SHADOW
-    event_heap_verify();                                    // the heap says what the ants say (after the last tick, the orders and any copy)
+    if (!lookup_shadow_count_stale_events()) event_heap_verify();   // the heap says what the ants say (after the last tick, the orders and any copy; not in the test that pokes the ants)
 #endif
     uint32_t slot = 0;
     for (auto& up : ants_) {
@@ -1649,8 +1650,7 @@ void SimulationEngineImpl::movement_tick() {
         } else if (best_is_burn) {
             burn_overlay_end(*best);
         } else if (best_is_combevt) {                       // COMBEVT (0x1024c69): the auto-engage timed out
-            best->combevt_due_ms = 0;
-            event_refresh(*best);
+            best->combevt_due_ms = 0;                       // (resume_after_auto_engage starts with cancel_combat_timer, which tells the heap)
             resume_after_auto_engage(*best);
         } else if (best_is_pause) {
             pause_fire(*best);
