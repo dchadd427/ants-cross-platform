@@ -13,7 +13,7 @@ Parts:
   * csp      1280 x 800, the page's content security policy (docker/nginx.conf; the check only judges a policy that the server sends, a plain folder has none): the policy is there with its
              frame, base and plug-in rules, the page starts (WebAssembly core, pictures, IndexedDB, downloads) with nothing refused, and the check really sees a refusal (an inline script that the
              page is made to add is blocked and counted); in every other part nothing may be refused either;
-  * draw     1280 x 800, the tools: a click and a drag of the mouse paint ground and objects (the canvas is read pixel by pixel), only the cells that changed are painted again, a brush of 3, Fill, Erase,
+  * draw     1280 x 800, the tools: a click and a drag of the mouse paint ground and objects (the canvas is read pixel by pixel), only the cells that changed are painted again, a brush of 3 (the one slider, moved with the arrow keys), Fill, Erase,
              undo and redo (the buttons and the keys), the Pan tool, the space key held down and the middle button pan instead of painting, the check of an opened map is run again after the eraser takes
              a hill away and again after undo, a map that was drawn on is handed over as the core writes it, the page asks before a map that was drawn on is left, and on a 512 x 512 map with the
              processor slowed down six times every frame of a stroke is only a few cells (its time is measured);
@@ -257,6 +257,17 @@ class Page:
     def tile(self, tile):
         """choose a tile's chip; a kind of ground that is chosen already is left alone (a second tap on it opens the sheet of its tiles)"""
         self.ev("(function () { var b = document.querySelector('[data-tile=\"%d\"]'); if (!(b.classList.contains('gk') && b.getAttribute('aria-checked') === 'true')) b.click(); })()" % tile)
+
+    def set_brush(self, size):
+        """the brush size, as a person sets it: the page has ONE range slider (1 to 9, #brush-range with its readout #brush-val); it takes the focus and the arrow keys move it a cell at a time; what it
+        reads and what its readout says afterwards are returned"""
+        self.ev("document.getElementById('brush-range').focus()")
+        for _ in range(9):
+            have = int(self.ev("document.getElementById('brush-range').value"))
+            if have == size:
+                break
+            self.key("ArrowRight" if have < size else "ArrowLeft")
+        return self.ev("[document.getElementById('brush-range').value, document.getElementById('brush-val').textContent, document.getElementById('brush-range').getAttribute('data-brush')]")
 
     def tap(self, tile):
         """a tap on a tile's chip, whatever is chosen (on a kind of ground that is chosen it opens the sheet of its tiles)"""
@@ -771,7 +782,7 @@ def run_part(part, tab, args, check, tiny, junk):
         check(page.pixel(*mid) == dirt, "Control+Shift+Z redoes")
         # a brush of 3 and water
         page.tile(476)
-        page.ev("document.querySelector('[data-brush=\"3\"]').click()")
+        check(page.set_brush(3) == ["3", "3", "3"], "the brush slider (the page's one brush control) is moved to 3 with the arrow keys, and its readout says 3")
         c = page.cell_point(10, 10)
         page.tab.click(*c)
         time.sleep(0.2)
@@ -781,7 +792,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.ev("document.getElementById('map').focus()")
         page.key("o")
         check(page.ev("document.querySelector('[data-tool=objects]').getAttribute('aria-pressed')") == "true", "the letter O chooses Objects")
-        page.ev("document.querySelector('[data-brush=\"1\"]').click()")
+        check(page.set_brush(1) == ["1", "1", "1"], "and back to 1 (a rock is one cell)")
         page.tile(302)
         r = page.cell_point(20, 5)
         page.tab.click(*r)

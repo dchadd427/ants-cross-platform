@@ -163,6 +163,20 @@
       "test": "node tests/scripts/web_mapmaker_line_check.js"
     },
     {
+      "id": "left_edge_not_clamped_across",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "column: Math.max(0, Math.min(file.columns - 1, column)) } : { row: Math.max",
+      "new": "column: Math.min(file.columns - 1, column) } : { row: Math.max",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
+      "id": "top_edge_not_clamped_down",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "{ row: Math.max(0, Math.min(file.rows - 1, row)), column: line.from.column };",
+      "new": "{ row: Math.min(file.rows - 1, row), column: line.from.column };",
+      "test": "node tests/scripts/web_mapmaker_line_check.js"
+    },
+    {
       "id": "past_the_edge_ignored",
       "file": "web/front/mapmaker_canvas.js",
       "old": "var row = Math.floor((p.y - h / 2) / view.scale + view.cy), column",
