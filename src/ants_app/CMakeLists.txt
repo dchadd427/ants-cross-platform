@@ -35,6 +35,7 @@ add_library(ants_app STATIC
     rejoin_store.cpp
     midi_player.cpp
     renderer.cpp
+    renderer_health.cpp
     renderer_world_image.cpp
     hud.cpp
     hud_input.cpp

@@ -32,7 +32,7 @@ constexpr PictureText picture_words() {
 constexpr PictureText kPictureWords = picture_words();
 
 // The table. Texts are plain ASCII with no markup (a skin puts them in with its text calls). The original's own names stay in the hints, so that a player who knows the options window finds them.
-constexpr std::array<Row, 14> kRows = {{
+constexpr std::array<Row, 15> kRows = {{
     {kMaster, "master", Section::Sound, Kind::Slider, 0, 99, 100, kBoth | kShowWatch | kShowLive | kShowNew, "Master volume", "Everything you hear", ""},
     {kMusic, "music", Section::Sound, Kind::Slider, 0, 99, 65, kBoth | kShowWatch, "Music volume", "The original's \"Music Volume\"", ""},
     {kEffects, "effects", Section::Sound, Kind::Slider, 0, 99, 100, kBoth | kShowWatch, "Sound effects volume", "The original's \"Sound Volume\"", ""},
@@ -40,7 +40,8 @@ constexpr std::array<Row, 14> kRows = {{
     {kFullscreen, "fullscreen", Section::Video, Kind::Button, 0, 0, 0, kBoth | kShowWatch | kShowPage, "Fullscreen", "Same as the Fullscreen button; Alt+Enter in the desktop app", "Enter fullscreen|Leave fullscreen"},
     {kPicture, "picture", Section::Video, Kind::Choice, 0, static_cast<int>(kAspectTable.size()) - 1, aspect_place(kWebDefaultAspect), kShowWeb | kShowWatch | kShowPage, "Picture shape", "The shape of the picture; the match goes on", kPictureWords.chars},
     {kLockMouse, "lockmouse", Section::Video, Kind::Choice, 0, 1, 0, kShowWeb | kShowWatch | kShowPage, "Fullscreen mouse", "Browser only; holds the mouse inside the picture", "Locked|Free"},
-    {kHpNumbers, "hp_numbers", Section::Video, Kind::Switch, 0, 1, 1, kBoth | kShowWatch | kShowNew, "Hit point numbers", "White numbers over every ant (Ctrl+L); remembered", "On|Off"},
+    {kAntHealth, "ant_health", Section::Video, Kind::Choice, 0, 2, static_cast<int>(health::When::Hurt), kBoth | kShowWatch | kShowNew, "Ant health", "Draws hit points over the ants. Every ant has 10 at most.", "Hurt ants|All ants|Off"},
+    {kHealthStyle, "ant_health_style", Section::Video, Kind::Choice, 0, 1, static_cast<int>(health::Style::Bar), kBoth | kShowWatch | kShowNew, "Show health as", "A small bar over the ant, or a number", "Bar|Number"},
     {kScroll, "scroll", Section::Video, Kind::Slider, 0, 99, 50, kBoth | kShowWatch, "Map scroll speed", "Edge scrolling; the original's \"Scroll Speed\"", ""},
     {kChat, "chat", Section::Game, Kind::Switch, 0, 1, 1, kBoth, "Participate in chat", "The original's option", "On|Off"},
     {kQuickHelpAtStart, "quickhelp_start", Section::Game, Kind::Switch, 0, 1, 1, kBoth, "Show quick help at startup", "The original's option", "On|Off"},
@@ -214,7 +215,8 @@ const char* MenuSettings::key(int row_id) noexcept {
     switch (row_id) {
         case kMaster:    return "master";
         case kMute:      return "mute";
-        case kHpNumbers: return "hp_numbers";
+        case kAntHealth: return "ant_health";
+        case kHealthStyle: return "ant_health_style";
         default:         return "";
     }
 }
@@ -222,14 +224,21 @@ const char* MenuSettings::key(int row_id) noexcept {
 void MenuSettings::load(const ConfigStore& store) {
     master = store.get_int(key(kMaster), 100, 0, kMasterMax + 1);                         // (0 .. 100: the original's reader takes [min, max), so max is one more)
     mute = store.get_string(key(kMute), "off", 8) == "on";
-    hp_numbers = store.get_string(key(kHpNumbers), "on", 8) != "off";
+    ant_health = health::Setting{};
+    if (store.has(key(kAntHealth))) {
+        health::parse(store.get_string(key(kAntHealth), "", 8), ant_health.when);          // (a word that is none of them: the default)
+    } else if (store.get_string("hp_numbers", "on", 8) == "off") {
+        ant_health.when = health::When::Off;                                                // (the old Hit point numbers, off: the player did not want the marks either)
+    }
+    health::parse(store.get_string(key(kHealthStyle), "", 8), ant_health.style);
 }
 
 void MenuSettings::write(ConfigStore& store, int row_id) const {
     switch (row_id) {
         case kMaster:    store.set_int(key(kMaster), master); break;
         case kMute:      store.set_string(key(kMute), mute ? "on" : "off"); break;
-        case kHpNumbers: store.set_string(key(kHpNumbers), hp_numbers ? "on" : "off"); break;
+        case kAntHealth: store.set_string(key(kAntHealth), health::word(ant_health.when)); break;
+        case kHealthStyle: store.set_string(key(kHealthStyle), health::word(ant_health.style)); break;
         default: break;
     }
 }

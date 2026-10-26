@@ -440,7 +440,6 @@ public:
     /// A pointer event that the match screen receives (the camera is at (0, 0) unless the scene moved it)
     void move(int32_t x, int32_t y) { hud.handle_mouse_motion(x, y, sim, camera); }
     void press(int32_t x, int32_t y) { hud.handle_mouse_down(x, y, SDL_BUTTON_LEFT, sim, camera); }
-    void release(int32_t x, int32_t y) { hud.handle_mouse_up(x, y, SDL_BUTTON_LEFT, sim, camera); }
 
     /// Renders the HUD at t = 0 (the pedestals' chains start: once per scene) and again at `at_ms` (the clock only goes forward within a scene); the last
     /// frame is the fingerprint

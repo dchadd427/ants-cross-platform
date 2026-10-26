@@ -17,7 +17,6 @@ builds nothing), so these tests run the real script on made-up suites and check 
 """
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys

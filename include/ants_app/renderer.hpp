@@ -30,6 +30,7 @@
   #endif
 #endif
 
+#include "ants_app/health_marks.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
 #include "ants_assets/asset_archive.hpp"
@@ -473,10 +474,11 @@ public:
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
     void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) override;
     void clear_clip_rect() override;
-    /// Ctrl+L (Ants.exe 0x101b866): every ant is followed by its hit points as a white number at its sprite position. The original draws it with
-    /// GDI TextOut and the stock SYSTEM_FIXED_FONT (the 8 x 15 raster "Fixedsys"), top left at the position, not antialiased.
-    void set_show_hp(bool show) noexcept { show_hp_ = show; }
-    /// The number in that fixed font: a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
+    /// The ant health marks (health_marks.hpp; renderer_health.cpp): which ants wear a bar or a number, and how many picture pixels stand for one CSS pixel of the page (a canvas that is shown
+    /// small gets thicker bars). A renderer draws none until it is asked (the application asks every frame); the original's own Ctrl+L numbers, white digits on the ant, are gone.
+    void set_health_marks(health::Setting setting, double picture_px_per_css = 1.0);
+    health::Setting health_marks() const noexcept { return health_; }
+    /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
     void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color);
     static constexpr int32_t kFixedCellW = 8;
     static constexpr int32_t kFixedCellH = 15;
@@ -656,7 +658,8 @@ private:
     int64_t hill_marker_start_ms_{0};
     std::string pending_screenshot_;
     uint8_t hud_team_id_{0};
-    bool show_hp_{false};
+    health::Setting health_{health::When::Off, health::Style::Bar};
+    bool health_thick_{false};
     ScreenLayout layout_{ScreenLayout::classic()};
     int32_t canvas_w_{CANVAS_WIDTH};
     int32_t canvas_h_{CANVAS_HEIGHT};
@@ -704,14 +707,16 @@ private:
         bool picture_inset{false};
         LayoutPoint origin{};
     } pass_;
-    /// The hit point digits of the pass: at a zoom they are drawn after the copy, on the canvas, at one size (a world position and the text)
-    struct DeferredDigits {
-        std::string text;
-        int32_t wx{0};
-        int32_t wy{0};
+    /// The ant health marks of the pass: the sprite position of every ant that wears one, drawn after the world is on the screen (renderer_health.cpp)
+    struct HealthMark {
+        int32_t x{0};
+        int32_t y{0};
+        int32_t hp{0};
+        int32_t max_hp{0};
     };
-    std::vector<DeferredDigits> deferred_digits_;
-    void draw_deferred_digits();
+    std::vector<HealthMark> health_marks_;
+    void note_health_mark(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y);
+    void draw_health_marks();
     std::vector<TransientEffect> transient_effects_{};
     uint32_t sub_tick_ms_{0};
 };

@@ -3121,8 +3121,8 @@ void Application::render_frame() {
     } else {
         sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
         const auto& world = view.get_world_state();
-        renderer_->set_show_hp(hud_.is_show_hp());
-        sync_game_menu_settings();                           // (Ctrl+L flipped it: remembered)
+        sync_game_menu_settings();                           // (Ctrl+L flipped the health marks: remembered)
+        renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css);
         renderer_->render_world(world, view.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,

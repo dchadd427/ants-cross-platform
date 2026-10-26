@@ -933,7 +933,6 @@ def main():
 
         def relock_checks():
             print("[web edge] the lock taken again by a click: only that click when the page held the lock before, an ordinary click when it never did; the free pointer is quiet after a release")
-            box = [0, 45, 1440, 810]
             quit_at = (899 + 23, 7 + 11)                                           # the Quit button of the 16:9 picture, its middle (the classic (579, 7, 46, 23) moved by 320)
             options_at = OPTIONS_BUTTON
             on_screen = lambda c: (c[0] * 1.5, 45 + c[1] * 1.5)

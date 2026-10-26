@@ -8,7 +8,6 @@ import ast
 import glob
 import http.client
 import os
-import re
 import socket
 import sys
 import threading

@@ -892,18 +892,6 @@ void Renderer::end_world_target() {
     }
 }
 
-// What the pass leaves for the screen: the hit point digits (one size at every zoom: the numbers of Ctrl+L are text, not world art), at the screen position of the sprite's position
-void Renderer::draw_deferred_digits() {
-    const LayoutRect view = layout_.view();
-    const double z = static_cast<double>(camera_.zoom);
-    for (const DeferredDigits& d : deferred_digits_) {
-        const int32_t sx = view.x + static_cast<int32_t>(std::floor((static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * z));
-        const int32_t sy = view.y + static_cast<int32_t>(std::floor((static_cast<double>(d.wy) - static_cast<double>(camera_.y)) * z));
-        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255});
-    }
-    deferred_digits_.clear();
-}
-
 void Renderer::render_world(const ants::sim::WorldState& world,
                             const ants::sim::Grid& grid,
                             int32_t selected_unit_id,
@@ -918,7 +906,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     sub_tick_ms_ = static_cast<uint32_t>(std::clamp(sub_tick_time, 0.0f, 0.0499f) * 1000.0f);
     render_queue_.clear();
     overlay_queue_.clear();
-    deferred_digits_.clear();
+    health_marks_.clear();
 
     // At a zoom the world is drawn into the offscreen target (begin_world_target); at the zoom 1 straight into the view, exactly as it always was. A renderer that cannot make the target
     // (none that SDL has: every one supports targets) draws the zoom 1 picture of the same origin instead of a broken one.
@@ -959,6 +947,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     collect_transient_sprites();
     collect_score_bubbles(world);
     draw_overlay_queue();
+    if (!target) draw_health_marks();                 // (a zoom 1 pass: over everything of the world; at a zoom they come after the copy)
 
     // 5. Tile Grid Overlay (if enabled): on the screen, after the copy of a zoomed world
     if (show_tile_grid && !target) {
@@ -970,7 +959,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
 
     if (target) {
         end_world_target();                       // the copy into the view (clipped to it)
-        draw_deferred_digits();
+        draw_health_marks();
         if (show_tile_grid) render_tile_grid(grid, mouse_x, mouse_y);
         restore_clip();
     }
@@ -1720,20 +1709,8 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
         // The sort key is the sprite's y: a thrown ant's key jumps with its position at the end of the first flight frame
         const AntClipPrediction pred = predict_ant_clip(a, ant_loco_sequence(a));
         item.sort_y = a.py + pred.dy;
-        item.draw_func = [this, a, pred](SDL_Renderer*, TextureCache&) {
-            this->draw_single_ant(a);
-            // FUN_0101b802 (which the display loop skips for a frozen ant) with [4b14] != 0: sprintf("%d", hp), white, at the sprite position (the predicted one: the sprite
-            // moves when a frame ends), in the fixed system font
-            if (show_hp_ && !a.frozen) {
-                if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {              // a zoomed world: the digits are text, not world art; they are drawn after the copy at one size (draw_deferred_digits)
-                    deferred_digits_.push_back(DeferredDigits{std::to_string(a.hp), a.px + pred.dx, a.py + pred.dy});
-                } else {
-                    const LayoutRect view = world_view();
-                    this->draw_fixed_text(std::to_string(a.hp), view.x + (a.px + pred.dx - static_cast<int32_t>(camera_.x)),
-                                          view.y + (a.py + pred.dy - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
-                }
-            }
-        };
+        item.draw_func = [this, a](SDL_Renderer*, TextureCache&) { this->draw_single_ant(a); };
+        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);     // (the sprite's predicted position, as its ears: it moves when a frame ends; drawn after the world, renderer_health.cpp)
         render_queue_.push_back(std::move(item));
     }
 }
@@ -1888,7 +1865,7 @@ void Renderer::collect_selection_markers(const ants::sim::WorldState& world, int
             st.hp = ant->hp;
             st.start_ms = std::max<int64_t>(1, now);
         }
-        const uint32_t ears_id = (ant->hp >= 9) ? 58u : (ant->hp <= 2) ? 61u : 60u;
+        const uint32_t ears_id = (ant->hp >= health::kGreenFrom) ? 58u : (ant->hp <= health::kRedUpTo) ? 61u : 60u;
         if (ears_id >= archive_->animation_count()) continue;
         const auto& seq = archive_->get_animation(ears_id);
         if (seq.subitems.empty()) continue;

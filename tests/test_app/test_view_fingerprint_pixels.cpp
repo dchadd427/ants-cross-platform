@@ -71,7 +71,7 @@ struct RendererRig {
     /// One frame of the world pass (the HUD is not drawn: the canvas outside the playfield stays black), recorded as a pixel hash
     void shoot(const std::string& name, int32_t selected_id = -1, const std::vector<uint32_t>& selected_ids = {}, int32_t base_team = -1, bool hp = false) {
         if (!wanted(name)) return;
-        renderer.set_show_hp(hp);
+        renderer.set_health_marks(hp ? health::Setting{health::When::All, health::Style::Number} : health::Setting{health::When::Off, health::Style::Bar});
         renderer.begin_frame();
         renderer.render_world(world, engine.grid(), selected_id, selected_ids, false, false, -1, -1, base_team, 0.0f);
         record_canvas(name, read_canvas(renderer.get_sdl_renderer()));
@@ -130,7 +130,7 @@ void world_pixel_scenarios(const assets::AssetArchive& arc) {
         populate_view(rig.world, arc, rig.cam_x(), rig.cam_y(), 60, 99u + static_cast<uint32_t>(o.first));
         rig.shoot(name);
     }
-    // Selection markers (the ears of every selected ant), the hill's brackets, the hit point digits, a crowd, the fog of war, the click marker
+    // Selection markers (the ears of every selected ant), the hill's brackets, the health numbers, a crowd, the fog of war, the click marker
     if (wanted_group("px.world.MEDIUM.selected")) {
         RendererRig rig(arc, "MEDIUM");
         if (rig.ok) {

@@ -127,7 +127,7 @@ class TheScript(unittest.TestCase):
 
     def test_the_rows_that_it_handles_by_name_are_rows_of_the_table(self):
         keys = set(table_keys())
-        self.assertEqual(len(keys), 14)
+        self.assertEqual(len(keys), 15)
         for name in re.findall(r"^\s{12}(\w+): \{$", self.script, re.M):
             self.assertIn(name, keys, "the page's own row %s is in the table" % name)
         for name in re.findall(r"row\.key === '(\w+)'", self.script):
@@ -179,7 +179,7 @@ class TheTable(unittest.TestCase):
 
     def test_the_new_rows_are_tagged_and_only_they(self):
         match = json.loads(read(os.path.join(DATA, "game_menu_match.json")))
-        self.assertEqual([r["key"] for r in match["rows"] if r["new"]], ["master", "mute", "hp_numbers"])
+        self.assertEqual([r["key"] for r in match["rows"] if r["new"]], ["master", "mute", "ant_health", "ant_health_style"])
         self.assertEqual([r["key"] for r in match["rows"] if r["page"]], ["fullscreen", "picture", "lockmouse"])
         self.assertEqual([r["key"] for r in match["rows"] if r["live"]], ["master"])
 

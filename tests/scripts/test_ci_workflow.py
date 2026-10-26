@@ -65,7 +65,6 @@ class RequiredChecks(unittest.TestCase):
 
     def test_msvc_2022_runs_for_pull_requests_main_and_manual_runs_and_2026_always(self):
         expression = [l for l in job_block("windows") if "fromJSON(" in l][0]
-        condition, alternatives = expression.split("&&", 1)[0], expression
         lists = re.findall(r"'(\[\{.*?\}\])'", expression)
         self.assertEqual(len(lists), 2)
         only_2026, both = lists
@@ -214,6 +213,17 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         windows = "\n".join(job_block("windows"))
         for needle in ("ctest --test-dir build", "map_sweep.exe --selftest", "bot_arena.exe --selftest", "replay_tool.exe --selftest", "lvl_tool.exe --selftest", "e2e_runner.exe --all"):
             self.assertIn(needle, windows)
+
+    def test_every_optional_tool_of_cmake_is_built_by_the_three_build_jobs_and_the_image_check_lists_the_map_makers_files(self):
+        tools = re.findall(r"add_executable\((\w+) EXCLUDE_FROM_ALL tools/", read(os.path.join(REPO, "CMakeLists.txt")))
+        self.assertGreaterEqual(len(tools), 6)
+        for job in ("linux", "macos", "windows"):
+            lines = [l for l in job_block(job) if "--target" in l]
+            self.assertEqual(len(lines), 1, job)
+            self.assertEqual(sorted(lines[0].split("--target", 1)[1].replace("-- -k 0", "").split()), sorted(tools), "%s builds the optional tools that CMake has" % job)
+        web = "\n".join(job_block("web"))
+        for name in sorted(os.path.basename(f) for f in glob.glob(os.path.join(REPO, "web", "front", "mapmaker_*.js"))):
+            self.assertTrue(("front/" + name) in web, "the image check does not list the map maker's script " + name)
 
     def test_the_commands_of_the_runners_script_and_python_suites_are_what_the_ci_runs(self):
         self.assertIn("python3 tests/scripts/run_python_tests.py", self.runner)

@@ -22,18 +22,21 @@ EM_JS(void, ants_ask_game_menu, (), {
 
 namespace ants::app {
 
-// The three new settings come back from the settings file; the hit point numbers are the HUD's flag (on, as ever, until a player turns them off)
+// The new settings come back from the settings file; the ant health marks are the HUD's (hurt ants with a bar, until a player chooses otherwise)
 void Application::load_game_menu_settings() {
     menu_settings_.load(config_store_);
-    hud_.set_show_hp(menu_settings_.hp_numbers);
+    hud_.set_ant_health(menu_settings_.ant_health);
     audio_mixer_.set_output_gain(menu_settings_.gain());
 }
 
-// Ctrl+L flips the HUD's flag: the menu's setting follows it, and is written, once a frame
+// Ctrl+L flips the HUD's marks: the menu's setting follows it, and what changed is written, once a frame
 void Application::sync_game_menu_settings() {
-    if (hud_.is_show_hp() == menu_settings_.hp_numbers) return;
-    menu_settings_.hp_numbers = hud_.is_show_hp();
-    menu_settings_.write(config_store_, game_menu::kHpNumbers);
+    const health::Setting now = hud_.ant_health();
+    const health::Setting before = menu_settings_.ant_health;
+    if (now == before) return;
+    menu_settings_.ant_health = now;
+    if (now.when != before.when) menu_settings_.write(config_store_, game_menu::kAntHealth);
+    if (now.style != before.style) menu_settings_.write(config_store_, game_menu::kHealthStyle);
 }
 
 // Esc found nothing to cancel (the HUD's rule): where there is a panel it opens: the page's in the browser (a page without one, or an embedded frame, leaves Esc what it was), the function that a skin
@@ -118,7 +121,8 @@ int Application::game_menu_get(int what) {
         case gm::kMusic:           return hud_.get_music_volume();
         case gm::kEffects:         return hud_.get_sound_volume();
         case gm::kMute:            return menu_settings_.mute ? 1 : 0;
-        case gm::kHpNumbers:       return hud_.is_show_hp() ? 1 : 0;
+        case gm::kAntHealth:       return static_cast<int>(hud_.ant_health().when);
+        case gm::kHealthStyle:     return static_cast<int>(hud_.ant_health().style);
         case gm::kScroll:          return hud_.get_scroll_speed();
         case gm::kChat:            return hud_.is_chat_enabled() ? 1 : 0;
         case gm::kQuickHelpAtStart: return hud_.is_quick_help_enabled() ? 1 : 0;
@@ -140,10 +144,17 @@ bool Application::game_menu_set(int id, int value, bool save) {
             menu_settings_.write(config_store_, id);
             audio_mixer_.set_output_gain(menu_settings_.gain());
             return true;
-        case gm::kHpNumbers:
-            hud_.set_show_hp(value != 0);
+        case gm::kAntHealth:
+        case gm::kHealthStyle: {
+            const gm::Row* row = gm::find_row(id);
+            if (value < row->min || value > row->max) return false;                    // (a word that the row does not have)
+            health::Setting setting = hud_.ant_health();
+            if (id == gm::kAntHealth) setting.when = static_cast<health::When>(value);
+            else setting.style = static_cast<health::Style>(value);
+            hud_.set_ant_health(setting);
             sync_game_menu_settings();
             return true;
+        }
         case gm::kMusic:           hud_.set_option(OptionSetting::MusicVolume, value); return true;
         case gm::kEffects:         hud_.set_option(OptionSetting::SoundVolume, value); return true;
         case gm::kScroll:          hud_.set_option(OptionSetting::ScrollSpeed, value); return true;
