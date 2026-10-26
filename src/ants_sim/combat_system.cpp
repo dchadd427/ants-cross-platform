@@ -343,10 +343,7 @@ void SimulationEngineImpl::blast(AntUnit& a, uint8_t dmg, uint8_t src, bool pile
     if (pile_up && a.player_id != viewing_player_id_) spawn_battle_cloud(at);
     bool excl[8] = {false, false, false, false, false, false, false, false};
     std::vector<AntUnit*> on_tile;
-    for (auto& up : ants_) {
-        AntUnit* x = up.get();
-        if (x && !x->removed && x->occ_tile == at) on_tile.push_back(x);
-    }
+    blast_victims(at, on_tile);
     for (AntUnit* x : on_tile) {
         const TileCoord dest = pick_landing(a, pixel_tile(*x), 1, false, excl, true);
         blast_hit(*x, pixel_tile(*x), dest, dmg, src);
