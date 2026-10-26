@@ -473,7 +473,7 @@ public:
     void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) override;
     void clear_clip_rect() override;
     /// The ant health marks (health_marks.hpp; renderer_health.cpp): which ants wear a bar or a number, and how many picture pixels stand for one CSS pixel of the page (a canvas that is shown
-    /// small gets thicker bars). A renderer draws none until it is asked (the application asks every frame); the original's own Ctrl+L numbers, white digits on the ant, are gone.
+    /// small gets thicker bars). A renderer draws none until it is asked (the application asks every frame). Style Number is the original's own Ctrl+L number: white digits at the ant's lower right.
     void set_health_marks(health::Setting setting, double picture_px_per_css = 1.0);
     health::Setting health_marks() const noexcept { return health_; }
     /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
@@ -713,7 +713,16 @@ private:
     };
     std::vector<HealthMark> health_marks_;
     void note_health_mark(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y);
-    void draw_health_marks();
+    void draw_health_marks();       // (the bars, and the numbers that a zoomed pass kept for the copy)
+    /// The original's hit point numbers (Show health as: Number) of a zoomed pass: text, not world art, so they are drawn after the copy, at one size, top left at the screen position of the sprite
+    struct DeferredDigits {
+        std::string text;
+        int32_t wx{0};
+        int32_t wy{0};
+    };
+    std::vector<DeferredDigits> deferred_digits_;
+    void draw_deferred_digits();
+    void draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y);
     std::vector<TransientEffect> transient_effects_{};
     uint32_t sub_tick_ms_{0};
 };

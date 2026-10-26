@@ -1,9 +1,10 @@
 // The ant health marks (include/ants_app/health_marks.hpp: the rule, the colors and the sizes; src/ants_app/renderer_health.cpp: the drawing; docs/VIEW_AND_HUD.md, "Ant health marks"):
-//   * the rule with no window: which ant wears a mark in each mode (the 10 hit points that every ant has at most, the boundary at 9 and 10, a dead or a frozen ant), the three colors and their
-//     edges (the selection ears' own), the size of the bar at every zoom and on a canvas that is shown small, the place of a bar and of a number, the words of the settings file;
+//   * the rule with no window: which ant wears a mark in each mode (the 10 hit points that every ant has at most, the boundary at 9 and 10, a dead or a frozen ant; a dying ant's "0" is the original's
+//     number only), the three colors and their edges (the selection ears' own), the size and the place of the bar at every zoom and on a canvas that is shown small, the words of the settings file;
 //   * the drawing on a real renderer over a map (the software renderer, the dummy video driver), every pixel against numbers written down here and not taken from the code that draws: a bar's
-//     frame, track and fill at the zoom 1, 2 and 0.5, the fill of 1 to 10 hit points in its color, a number in its font, colors and outline, the numbers left out below the zoom 0.5 (and shown at every level of the wheel's series from 1 to 0.5), the thicker bar
-//     on a canvas that is shown small, no mark in Off, hurt ants only in Hurt, an ant that is dead or frozen with none, the enemies' and the allies' marks, and Fog of War: an ant that the fog hides has none;
+//     frame, track and fill at the zoom 1, 2 and 0.5, the fill of 1 to 10 hit points in its color, the original's number (white digits of the fixed font, no outline, no color, the top left of the text at
+//     the ant's position, one size at every zoom and at every level of the wheel), the thicker bar on a canvas that is shown small, no mark in Off, hurt ants only in Hurt, an ant that is frozen with
+//     none, the enemies' and the allies' marks, and Fog of War: an ant that the fog hides has none;
 //   * the zoom 1 pass drawn straight and through the offscreen target is the same picture with the marks on.
 // The setting's storage and Ctrl+L are in test_game_menu and test_pointer_model; the recording's and the spectator's frame in test_replay_app.
 // Usage: test_health_marks. Exit code 0 when every check passes.
@@ -64,15 +65,19 @@ void test_rule() {
     const hm::Color green = hm::color(hm::Band::Green), amber = hm::color(hm::Band::Amber), red = hm::color(hm::Band::Red);
     check(green.r == 60 && green.g == 214 && green.b == 60 && amber.r == 255 && amber.g == 196 && amber.b == 24 && red.r == 236 && red.g == 44 && red.b == 44, "the three colors");
 
-    check(!hm::number_fits(0.49) && hm::number_fits(0.5) && hm::number_fits(0.59) && hm::number_fits(0.6) && hm::number_fits(2.0) && !hm::number_fits(0.4), "a number is left out below the zoom 0.5, and stays from it");
-    for (int k = 0; k >= -4; --k) check(hm::number_fits(static_cast<double>(zoom::series(k))), "the level " + std::to_string(zoom::series(k)) + " of the wheel's series (1 and the three steps out to 0.5) shows its numbers");
-    check(!hm::number_fits(static_cast<double>(zoom::series(-5))), "...and the step beyond 0.5 does not");
-    check(hm::kNumberMinZoom * 32.0 == 2.0 * hm::kCellW, "the edge is where a 10 (two cells) is as wide as a tile (16 of 32 pixels at this zoom)");
+    for (int max_hp : {10, 0}) {
+        for (int hp = -1; hp <= 12; ++hp) {
+            const bool hurt = hp < max_hp;
+            check(hm::shown_number(hm::When::Hurt, hp, max_hp, false) == hurt, "Hurt ants, a number: hp " + num(hp) + " of " + num(max_hp) + " is " + (hurt ? "marked" : "not marked"));
+            check(hm::shown_number(hm::When::All, hp, max_hp, false), "All ants, a number: hp " + num(hp) + " is marked (the original prints every ant's, the dying one's 0 too)");
+            check(!hm::shown_number(hm::When::Off, hp, max_hp, false) && !hm::shown_number(hm::When::Hurt, hp, max_hp, true) && !hm::shown_number(hm::When::All, hp, max_hp, true), "Off and a frozen ant: no number, hp " + num(hp));
+        }
+    }
     check(!hm::thick_for(1.0) && !hm::thick_for(2.0) && hm::thick_for(2.01) && hm::thick_for(3.0), "a canvas shown at less than half its size (more than 2 picture pixels for a CSS pixel) gets thick bars");
 }
 
 void test_geometry() {
-    std::printf("[geometry] the bar and the number on the screen\n");
+    std::printf("[geometry] the bar on the screen\n");
     struct H { double zoom; int plain; int thick; };
     for (const H& h : {H{0.3, 2, 3}, H{0.5, 2, 3}, H{0.5946, 2, 3}, H{0.59, 2, 3}, H{0.6, 3, 5}, H{0.84, 3, 5}, H{1.0, 3, 5}, H{1.49, 3, 5}, H{1.5, 5, 8}, H{2.0, 5, 8}}) {
         check(hm::bar_height(h.zoom, false) == h.plain && hm::bar_height(h.zoom, true) == h.thick, "the bar's height at the zoom " + std::to_string(h.zoom) + ": " + num(h.plain) + ", thick " + num(h.thick));
@@ -93,11 +98,6 @@ void test_geometry() {
     check(hm::bar(100, 200, 10, 10, 0.1, false).track.w == 6, "and never narrower than 6 pixels");
     check(hm::bar(100, 200, 10, 10, 1.0, true).track.h == 5 && hm::bar(100, 200, 10, 10, 0.5, true).framed, "thick: 5 pixels at the zoom 1, and the bar of the far zoom gets its frame");
 
-    const hm::Digits one = hm::number(100, 200, 7, 1.0);
-    const hm::Digits two = hm::number(100, 200, 10, 1.0);
-    check(one.x == 97 && one.y == 155 && two.x == 93 && two.y == 155, "a number is centered over the ant and 14 above the line 31 above it: one digit at 97, two at 93");
-    check(two.covers.w == 18 && two.covers.h == 17 && two.covers.x == 92 && two.covers.y == 154, "...with its outline it covers 18 x 17 pixels");
-    check(hm::number(100, 200, 10, 2.0).y == 200 - 62 - 14 && hm::number(100, 200, 10, 0.6).y == 200 - 19 - 14, "its height follows the zoom, its size does not");
     check(hm::overlaps(hm::Rect{0, 0, 10, 10}, hm::Rect{9, 9, 5, 5}) && !hm::overlaps(hm::Rect{0, 0, 10, 10}, hm::Rect{10, 0, 5, 5}) && !hm::overlaps(hm::Rect{0, 0, 10, 10}, hm::Rect{0, -5, 10, 5}), "overlap: touching is not overlapping");
 }
 
@@ -259,7 +259,7 @@ void test_bars(const assets::AssetArchive& arc) {
 }
 
 void test_numbers(const assets::AssetArchive& arc) {
-    std::printf("[numbers] a number, its font, its color and its outline; left out below the zoom 0.5\n");
+    std::printf("[numbers] the original's number: white digits of the fixed font at the ant's position, at every zoom\n");
     PixelRig rig(arc, "MEDIUM", kWideW, kWideH);
     check(rig.ok, "the rig is up");
     if (!rig.ok) return;
@@ -270,44 +270,39 @@ void test_numbers(const assets::AssetArchive& arc) {
         screen_of(rig, 600, 500, z, sx, sy);
         const Picture none = rig.shoot_with(kOff);
         const Picture with = rig.shoot_with(kHurtNumber);
-        // the reference: "7" in the fixed font, amber, outlined by black on the eight sides, alone on magenta
+        // the reference: "7" in the fixed font, white, alone on black (FUN_0101b802: TextOut, white, transparent, top left at the ant's position)
         rig.renderer.begin_frame();
-        rig.renderer.fill_rect(0, 0, kWideW, kWideH, ants::assets::ColorRGBA{255, 0, 255, 255});
-        for (int dy = -1; dy <= 1; ++dy)
-            for (int dx = -1; dx <= 1; ++dx)
-                if (dx != 0 || dy != 0) rig.renderer.draw_fixed_text("7", 100 + dx, 100 + dy, ants::assets::ColorRGBA{0, 0, 0, 255});
-        rig.renderer.draw_fixed_text("7", 100, 100, ants::assets::ColorRGBA{255, 196, 24, 255});
+        rig.renderer.fill_rect(0, 0, kWideW, kWideH, ants::assets::ColorRGBA{0, 0, 0, 255});
+        rig.renderer.draw_fixed_text("7", 100, 100, ants::assets::ColorRGBA{255, 255, 255, 255});
         const Picture ref = rig.read();
-        auto in_ref = [&](int x, int y) { return x >= 0 && y >= 0 && x < ref.w && y < ref.h && !is(ref, x, y, 255, 0, 255); };
+        auto in_ref = [&](int x, int y) { return x >= 0 && y >= 0 && x < ref.w && y < ref.h && is(ref, x, y, 255, 255, 255); };
         int ref_n = 0;
         for (int y = 0; y < ref.h; ++y)
             for (int x = 0; x < ref.w; ++x) ref_n += in_ref(x, y) ? 1 : 0;
-        const int nx = sx - 4 + 1;                                                          // one digit: centered, 4 left of the ant and one to the right
-        const int ny = sy - static_cast<int>(std::lround(31.0 * static_cast<double>(z))) - 14;
-        int changed = 0, wrong = 0, amber = 0;
+        int changed = 0, wrong = 0, missing = 0;
         for (int y = 0; y < with.h; ++y) {
             for (int x = 0; x < with.w; ++x) {
-                if (std::memcmp(with.at(x, y), none.at(x, y), 3) == 0) continue;
-                ++changed;
-                const int rx = x - nx + 100, ry = y - ny + 100;
-                if (!in_ref(rx, ry) || std::memcmp(with.at(x, y), ref.at(rx, ry), 3) != 0) ++wrong;
-                if (is(with, x, y, 255, 196, 24)) ++amber;
+                const int rx = x - sx + 100, ry = y - sy + 100;
+                const bool differs = std::memcmp(with.at(x, y), none.at(x, y), 3) != 0;
+                if (differs) {
+                    ++changed;
+                    if (!in_ref(rx, ry) || !is(with, x, y, 255, 255, 255)) ++wrong;      // (every pixel that it adds is a white one of the font: no outline, no color)
+                } else if (in_ref(rx, ry) && !is(with, x, y, 255, 255, 255)) {
+                    ++missing;
+                }
             }
         }
-        const std::string at = "zoom " + std::to_string(z) + ": ";
-        if (z < 0.5f) {
-            check(changed == 0, at + "no number below the zoom 0.5 (" + num(changed) + " pixels)");
-        } else {
-            check(ref_n > 40 && changed > ref_n * 9 / 10 && changed <= ref_n && wrong == 0 && amber > 10, at + "the number is the fixed font's 7, amber with a black outline, the same " + num(ref_n) + " pixels at every zoom, over the ant (changed " + num(changed) + ", wrong " + num(wrong) + ")");
-        }
+        check(ref_n > 10 && changed == ref_n && wrong == 0 && missing == 0,
+              "zoom " + std::to_string(z) + ": the number is the fixed font's white 7, the same " + num(ref_n) + " pixels at every zoom, its top left at the ant's screen position (changed " + num(changed) + ", wrong " + num(wrong) + ", missing " + num(missing) + ")");
+        check(ref_n > 0 && changed > 0, "zoom " + std::to_string(z) + ": and it is there (no zoom leaves it out)");
     }
-    // a number is a number even for an ant that a bar would show with one pixel: 10 shows two digits, each in the green of 9 and 10
+    // 10 hit points are two cells of the font, and stay to the lower right of the ant's position
     rig.world.ants = {ant(1, 0, 600, 500, 10)};
     rig.look(500.0, 400.0, 1.0f);
     int sx = 0, sy = 0;
     screen_of(rig, 600, 500, 1.0, sx, sy);
     const Delta ten = delta(rig.shoot_with(kOff), rig.shoot_with(hm::Setting{hm::When::All, hm::Style::Number}));
-    check(ten.n > 40 && ten.x0 >= sx - 8 && ten.x1 <= sx + 8 && ten.y1 <= sy - 31 && ten.y0 >= sy - 46, "All ants, Number: a 10 is two digits over the ant, inside 16 x 17 pixels");
+    check(ten.n > 20 && ten.x0 >= sx && ten.x1 < sx + 16 && ten.y0 >= sy && ten.y1 < sy + 15, "All ants, Number: a 10 is two digits at the lower right of the ant's position, inside its 16 x 15 cells: " + num(ten.x0 - sx) + ".." + num(ten.x1 - sx) + " x " + num(ten.y0 - sy) + ".." + num(ten.y1 - sy));
 }
 
 void test_which_ants(const assets::AssetArchive& arc) {
@@ -320,12 +315,15 @@ void test_which_ants(const assets::AssetArchive& arc) {
     const int32_t xs[6] = {540, 620, 700, 780, 860, 940};
     rig.world.ants = {ant(1, 0, xs[0], 560, 10), ant(2, 0, xs[1], 560, 4), ant(3, 1, xs[2], 560, 4), ant(4, 0, xs[3], 560, 0), ant(5, 0, xs[4], 560, 4, true), ant(6, 1, xs[5], 560, 10)};
     Picture none;
+    hm::Style style_of_row = hm::Style::Bar;
     auto marked = [&](const Picture& p, int i) {
         int sx = 0, sy = 0;
         screen_of(rig, xs[i], 560, 1.0, sx, sy);
-        return delta(none, p, sx - 14, sy - 40, sx + 14, sy - 28).n > 20;
+        const bool number = style_of_row == hm::Style::Number;
+        return (number ? delta(none, p, sx, sy, sx + 16, sy + 15) : delta(none, p, sx - 14, sy - 40, sx + 14, sy - 28)).n > (number ? 3 : 20);
     };
     auto row = [&](hm::Setting s) {
+        style_of_row = s.style;
         none = rig.shoot_with(kOff);                                                 // (the same scene without marks: with the fog, the fog's picture)
         const Picture p = rig.shoot_with(s);
         std::string out;
@@ -335,8 +333,10 @@ void test_which_ants(const assets::AssetArchive& arc) {
     check(row(kHurtBar) == ".XX...", "Hurt ants: the hurt ants, own and enemy; not the full ones, the dead or the frozen one: " + row(kHurtBar));
     check(row(kAllBar) == "XXX..X", "All ants: every living ant that is not frozen: " + row(kAllBar));
     check(row(kOff) == "......", "Off: none");
-    check(row(kHurtNumber) == ".XX...", "Hurt ants as numbers: the same ants: " + row(kHurtNumber));
-    check(row(hm::Setting{hm::When::All, hm::Style::Number}) == "XXX..X", "All ants as numbers: the same ants: " + row(hm::Setting{hm::When::All, hm::Style::Number}));
+    // the original's number: every ant that is drawn and not frozen, a dying ant's 0 included (docs/GAME_REVERSE_ENGINEERING.md, "The health number")
+    check(row(kHurtNumber) == ".XXX..", "Hurt ants as numbers: the hurt ants, the dying one's 0 too: " + row(kHurtNumber));
+    check(row(hm::Setting{hm::When::All, hm::Style::Number}) == "XXXX.X", "All ants as numbers: every ant that is not frozen: " + row(hm::Setting{hm::When::All, hm::Style::Number}));
+    check(row(hm::Setting{hm::When::Off, hm::Style::Number}) == "......", "Off as numbers: none");
 
     // Fog of War: the enemy ants on ground that is not explored are not drawn, and wear no mark; the player's own ants always do
     rig.world.fog_of_war_enabled = true;
@@ -382,7 +382,7 @@ void test_thick_and_target(const assets::AssetArchive& arc) {
     }
     const Delta shown_small = delta(none, rig.shoot_with(kHurtNumber, 4.0));
     const Delta shown_big = delta(none, rig.shoot_with(kHurtNumber, 1.0));
-    check(shown_small.n == shown_big.n && shown_small.n > 40, "a number is the same size whatever the page shows");
+    check(shown_small.n == shown_big.n && shown_small.n > 10, "a number is the same size whatever the page shows");
 
     // the zoom 1 pass drawn straight into the view and through the offscreen target
     sim::WorldState& world = rig.world;
@@ -401,7 +401,7 @@ void test_thick_and_target(const assets::AssetArchive& arc) {
 }
 
 // The zooms that a player is at: a match starts at the zoom 1 (Application::choose_zoom: no remembered zoom), and the wheel goes out one level a notch (view_zoom.hpp: the series 2^(k/4) and the map's own
-// limit). A number is on the picture at every one of them as far as numbers go, as the bar is.
+// limit). The number is on the picture at every one of them, as the bar is.
 void test_play_zooms(const assets::AssetArchive& arc) {
     std::printf("[play zooms] the number at the zoom that a match starts at and at every notch of the wheel out from it\n");
     for (const char* map : {"MEDIUM", "GAUNTLET"}) {
@@ -424,20 +424,14 @@ void test_play_zooms(const assets::AssetArchive& arc) {
             screen_of(rig, 600, 500, static_cast<double>(z), sx, sy);
             const Delta d = delta(rig.shoot_with(kOff), rig.shoot_with(kHurtNumber));
             const std::string at = std::string(map) + ", notch " + num(notches) + " out from the start, zoom " + std::to_string(z) + ": ";
-            if (z >= 0.5f) {
-                ++drawn;
-                check(d.n > 40 && d.x0 >= sx - 8 && d.x1 <= sx + 8 && d.y1 < sy, at + "a 7 is on the picture over the ant (" + num(d.n) + " pixels)");
-            } else {
-                check(d.n == 0, at + "below 0.5 there is none (" + num(d.n) + " pixels)");
-            }
+            ++drawn;
+            check(d.n > 10 && d.x0 >= sx && d.x1 < sx + 8 && d.y0 >= sy && d.y1 < sy + 15, at + "a 7 is on the picture at the lower right of the ant's position (" + num(d.n) + " pixels)");
             const float next = zoom::step(z, -1, fit, zoom::Limits::any());
             if (next == z || notches >= 8) break;
             z = next;
             ++notches;
         }
-        check(levels.size() >= 5 && drawn >= 5, std::string(map) + ": the map lets the wheel go out from 1 to 0.5 at least (levels " + num(static_cast<long long>(levels.size())) + ", with numbers " + num(drawn) + ")");
-        check(zoom::step(zoom::step(zoom::step(zoom::kNormal, -1, fit, zoom::Limits::any()), -1, fit, zoom::Limits::any()), -1, fit, zoom::Limits::any()) < 0.6f,
-              std::string(map) + ": the third notch out is below 0.6, the zoom where the numbers used to stop");
+        check(levels.size() >= 5 && drawn == static_cast<int>(notches) + 1, std::string(map) + ": every level of the wheel shows its number (levels " + num(static_cast<long long>(levels.size())) + ", with numbers " + num(drawn) + ")");
     }
 }
 

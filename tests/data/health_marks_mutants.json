@@ -1,11 +1,11 @@
 {
-  "note": "Mutants of the ant health marks for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rule, the colors, the sizes and the zoom thresholds of include/ants_app/health_marks.hpp, the drawing of src/ants_app/renderer_health.cpp, its hooks in renderer.cpp and the application against tests/test_app/test_health_marks.cpp (the pictures, pixel for pixel), test_render_parity (the predicted position, the ears' edges) and RA10.2 of test_replay_app (a recording's frame). Run from the checkout: tools/mutate.py tests/data/health_marks_mutants.json --keep-going --jobs 1; every mutant must be caught. The setting's storage and Ctrl+L have theirs in game_menu_mutants.json.",
+  "note": "Mutants of the ant health marks for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rule, the colors and the bar's sizes of include/ants_app/health_marks.hpp, the drawing of the bar and of the original's number (white digits, no outline, at the ant's position, at every zoom) in src/ants_app/renderer_health.cpp, its hooks in renderer.cpp and the application against tests/test_app/test_health_marks.cpp (the pictures, pixel for pixel), test_render_parity (the predicted position, the ears' edges) and RA10.2 of test_replay_app (a recording's frame). Run from the checkout: tools/mutate.py tests/data/health_marks_mutants.json --keep-going --jobs 1; every mutant must be caught. The setting's storage and Ctrl+L have theirs in game_menu_mutants.json.",
   "mutants": [
     {
       "id": "hurt_includes_full",
       "file": "include/ants_app/health_marks.hpp",
-      "old": "return when == When::All || hp < max_hp;",
-      "new": "return when == When::All || hp <= max_hp;",
+      "old": "    if (when == When::Off || frozen || hp <= 0) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    if (when == When::Off || frozen || hp <= 0) return false;\n    return when == When::All || hp <= max_hp;",
       "build": [
         "test_health_marks"
       ],
@@ -14,8 +14,8 @@
     {
       "id": "hurt_needs_two_hit_points_less",
       "file": "include/ants_app/health_marks.hpp",
-      "old": "return when == When::All || hp < max_hp;",
-      "new": "return when == When::All || hp < max_hp - 1;",
+      "old": "    if (when == When::Off || frozen || hp <= 0) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    if (when == When::Off || frozen || hp <= 0) return false;\n    return when == When::All || hp < max_hp - 1;",
       "build": [
         "test_health_marks"
       ],
@@ -24,8 +24,8 @@
     {
       "id": "hurt_mode_shows_every_ant",
       "file": "include/ants_app/health_marks.hpp",
-      "old": "return when == When::All || hp < max_hp;",
-      "new": "return when != When::Off || max_hp < 0;",
+      "old": "    if (when == When::Off || frozen || hp <= 0) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    if (when == When::Off || frozen || hp <= 0) return false;\n    return when != When::Off || max_hp < 0;",
       "build": [
         "test_health_marks"
       ],
@@ -126,56 +126,6 @@
       "file": "include/ants_app/health_marks.hpp",
       "old": "Color{236, 44, 44}",
       "new": "Color{200, 44, 44}",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_min_zoom_old_edge",
-      "file": "include/ants_app/health_marks.hpp",
-      "old": "constexpr double kNumberMinZoom = 0.5;",
-      "new": "constexpr double kNumberMinZoom = 0.6;",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_min_zoom_quarter",
-      "file": "include/ants_app/health_marks.hpp",
-      "old": "constexpr double kNumberMinZoom = 0.5;",
-      "new": "constexpr double kNumberMinZoom = 0.25;",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_min_zoom_one",
-      "file": "include/ants_app/health_marks.hpp",
-      "old": "constexpr double kNumberMinZoom = 0.5;",
-      "new": "constexpr double kNumberMinZoom = 1.0;",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_fits_below_min",
-      "file": "include/ants_app/health_marks.hpp",
-      "old": "constexpr bool number_fits(double zoom) noexcept { return zoom >= kNumberMinZoom; }",
-      "new": "constexpr bool number_fits(double zoom) noexcept { return zoom > 0.0; }",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_fits_only_above_min",
-      "file": "include/ants_app/health_marks.hpp",
-      "old": "return zoom >= kNumberMinZoom; }",
-      "new": "return zoom > kNumberMinZoom; }",
       "build": [
         "test_health_marks"
       ],
@@ -352,36 +302,6 @@
       "test": "./build/tests/test_app/test_health_marks"
     },
     {
-      "id": "number_one_cell_wide",
-      "file": "include/ants_app/health_marks.hpp",
-      "old": "const int32_t digits = hp >= 10 ? (hp >= 100 ? 3 : 2) : 1;",
-      "new": "const int32_t digits = 1;",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_not_lifted",
-      "file": "include/ants_app/health_marks.hpp",
-      "old": "constexpr int32_t kNumberLift = 14;",
-      "new": "constexpr int32_t kNumberLift = 0;",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_color_from_ten",
-      "file": "include/ants_app/health_marks.hpp",
-      "old": "d.color = color(band(hp));",
-      "new": "d.color = color(Band::Green);",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
       "id": "words_swapped",
       "file": "include/ants_app/health_marks.hpp",
       "old": "return when == When::All ? \"all\" : (when == When::Off ? \"off\" : \"hurt\");",
@@ -404,8 +324,8 @@
     {
       "id": "enemy_ants_skipped",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "    if (!health::shown(health_.when, ant.hp, ant.max_hp, ant.frozen)) return;",
-      "new": "    if (!health::shown(health_.when, ant.hp, ant.max_hp, ant.frozen) || ant.player_id != hud_team_id_) return;",
+      "old": "    if (health_.style != health::Style::Bar || !health::shown(health_.when, ant.hp, ant.max_hp, ant.frozen)) return;",
+      "new": "    if (health_.style != health::Style::Bar || !health::shown(health_.when, ant.hp, ant.max_hp, ant.frozen) || ant.player_id != hud_team_id_) return;",
       "build": [
         "test_health_marks"
       ],
@@ -422,60 +342,10 @@
       "test": "./build/tests/test_app/test_health_marks"
     },
     {
-      "id": "number_drawn_below_min_zoom",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "    if (numbers && !health::number_fits(zoom)) {",
-      "new": "    if (false) {",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "style_ignored_always_bars",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "    const bool numbers = health_.style == health::Style::Number;",
-      "new": "    const bool numbers = false;",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "style_ignored_always_numbers",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "    const bool numbers = health_.style == health::Style::Number;",
-      "new": "    const bool numbers = true;",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_without_outline",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "                    if (dx != 0 || dy != 0) draw_fixed_text(",
-      "new": "                    if (false) draw_fixed_text(",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
-      "id": "number_color_always_green",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "ants::assets::ColorRGBA{d.color.r, d.color.g, d.color.b, 255}",
-      "new": "ants::assets::ColorRGBA{60, 214, 60, 255}",
-      "build": [
-        "test_health_marks"
-      ],
-      "test": "./build/tests/test_app/test_health_marks"
-    },
-    {
       "id": "bar_without_frame",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "            if (b.framed) {",
-      "new": "            if (false) {",
+      "old": "        if (b.framed) {",
+      "new": "        if (false) {",
       "build": [
         "test_health_marks"
       ],
@@ -484,7 +354,7 @@
     {
       "id": "bar_track_without_fill",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "            const SDL_Rect f = placed(b.fill.x, b.fill.y, b.fill.w, b.fill.h);\n            SDL_RenderFillRect(renderer_, &f);",
+      "old": "        const SDL_Rect f = placed(b.fill.x, b.fill.y, b.fill.w, b.fill.h);\n        SDL_RenderFillRect(renderer_, &f);\n",
       "new": "",
       "build": [
         "test_health_marks"
@@ -535,7 +405,7 @@
     {
       "id": "no_hook_in_the_ant_collector",
       "file": "src/ants_app/renderer.cpp",
-      "old": "        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);     // (the sprite's predicted position, as its ears: it moves when a frame ends; drawn after the world, renderer_health.cpp)\n",
+      "old": "        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);\n",
       "new": "",
       "build": [
         "test_health_marks"
@@ -581,6 +451,177 @@
         "test_replay_app"
       ],
       "test": "ANTS_TEST_FILTER=RA10.2 ./build/tests/test_app/test_replay_app"
+    },
+    {
+      "id": "number_hurt_includes_full",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "    if (when == When::Off || frozen) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    if (when == When::Off || frozen) return false;\n    return when == When::All || hp <= max_hp;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_hurt_mode_shows_every_ant",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "    if (when == When::Off || frozen) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    if (when == When::Off || frozen) return false;\n    (void)hp; (void)max_hp;\n    return when != When::Off;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_off_still_draws",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "    if (when == When::Off || frozen) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    if (frozen) return false;\n    return when == When::All || hp < max_hp;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_frozen_ant_marked",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "    if (when == When::Off || frozen) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    (void)frozen;\n    if (when == When::Off) return false;\n    return when == When::All || hp < max_hp;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_dying_ant_dropped",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "    if (when == When::Off || frozen) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    if (when == When::Off || frozen || hp <= 0) return false;\n    return when == When::All || hp < max_hp;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_style_ignored",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "    if (health_.style != health::Style::Number || !health::shown_number(",
+      "new": "    if (!health::shown_number(",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "bar_drawn_in_number_style",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "    if (health_.style != health::Style::Bar || !health::shown(",
+      "new": "    if (!health::shown(",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_color_not_white",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});",
+      "new": "draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 196, 24, 255});",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_deferred_color_not_white",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255});",
+      "new": "        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{236, 44, 44, 255});",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_above_the_ant",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA",
+      "new": "view.y + (sprite_y - 31 - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_centered_on_the_ant",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y",
+      "new": "view.x + (sprite_x - 4 - static_cast<int32_t>(camera_.x)), view.y",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_at_the_tick_position",
+      "file": "src/ants_app/renderer.cpp",
+      "old": "this->draw_ant_number(a, a.px + pred.dx, a.py + pred.dy);",
+      "new": "this->draw_ant_number(a, a.px, a.py);",
+      "build": [
+        "test_health_marks",
+        "test_render_parity"
+      ],
+      "test": "./build/tests/test_app/test_render_parity"
+    },
+    {
+      "id": "number_not_drawn_at_zoom_one",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "        const LayoutRect view = world_view();\n        draw_fixed_text(std::to_string(ant.hp)",
+      "new": "        const LayoutRect view = world_view();\n        if (false) draw_fixed_text(std::to_string(ant.hp)",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_not_drawn_at_a_zoom",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "    draw_deferred_digits();\n    if (!renderer_ || health_marks_.empty()) {",
+      "new": "    if (!renderer_ || health_marks_.empty()) {",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_left_out_below_half",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "    if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {\n        deferred_digits_.push_back(",
+      "new": "    if (in_world_target_ && pass_.camera.zoom < 0.5f) return;\n    if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {\n        deferred_digits_.push_back(",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "number_deferred_not_scaled_by_zoom",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * z)",
+      "new": "static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * 1.0)",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "no_number_hook_in_the_ant_draw",
+      "file": "src/ants_app/renderer.cpp",
+      "old": " this->draw_ant_number(a, a.px + pred.dx, a.py + pred.dy); };",
+      "new": " };",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
     }
   ]
 }

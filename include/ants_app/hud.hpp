@@ -405,7 +405,7 @@ public:
         return (index < 4) ? options_.state().quick_chat[index] : empty;
     }
 
-    /// Ctrl+L (0x1026440): the original prints the hit points of every ant as text. Here it flips the ant health marks (health_marks.hpp: a bar or a number over the ants) between Off and the
+    /// Ctrl+L (0x1026440): the original prints the hit points of every ant as text. Here it flips the ant health marks (health_marks.hpp: a bar over the ants, or a number at the lower right of each) between Off and the
     /// mode they had before. A tweak of the original: marks on hurt ants are the default (the original starts with the numbers off).
     health::Setting ant_health() const noexcept { return health_; }
     void set_ant_health(health::Setting setting) noexcept {
