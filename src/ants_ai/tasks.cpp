@@ -676,7 +676,6 @@ void HarvestTask::step(TaskContext& c) {
         const size_t k = race_on ? race_order[i] : i;
         if (groups[k].empty()) continue;
         c.orders.move(groups[k], cands[k].click, Priority::Normal);
-        ++orders_issued_;
         ants_sent_ += static_cast<uint32_t>(groups[k].size());
     }
 }

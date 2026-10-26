@@ -364,7 +364,6 @@ void IslandTask::step_builder(TaskContext& c, uint32_t ant, Builder& b) {
     // the tiles that are finished already
     while (b.next < b.chain.size() && grid.get_cell(b.chain[b.next]).has_completed_bridge()) {
         ++b.next;
-        ++tiles_finished_;
         b.ordered = false;
     }
     // the plan, when there is no chain

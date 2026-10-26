@@ -358,7 +358,6 @@ private:
     uint32_t throttle_{0};                   // the ants that may be newly ordered at one look now: max_ants_per_look, halved at every jam the watchdog finds
     uint32_t stalls_{0};
     uint32_t ants_sent_{0};
-    uint32_t orders_issued_{0};
     size_t unplaced_{0};
 };
 

@@ -2271,7 +2271,7 @@ handler of `FUN_0100d791` does before it broadcasts.
   (`0x1024e66`) calls `FUN_0100f8bf` first (the splash effect, `0x100f983`) and creates the `bsputter` puff afterwards (`0x1024eb2`), so the puff is drawn over the splash (v0.0.57).
 
 * **Removed as invented** (v0.0.33): the physics engine (ballistic lerp, arcs, obstacle counting, 8 candidate directions), the bounce
-  and scuffle states, the attack cooldown, the pursuit AI, the guard post AI, the 12-tick stun after flights, the
+  and scuffle states, the attack cooldown, the pursuit AI, the guard post AI (`combat_ai.cpp`), the 12-tick stun after flights, the
   instant death and instant drowning, the flinch / stun tick timers, the melee immunity flags.
 
 * **Not yet ported**: the "attack your ally?" confirmation dialog, the pile-up cloud for remote teams (needs the network port), the

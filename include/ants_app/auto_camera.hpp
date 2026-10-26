@@ -194,7 +194,6 @@ private:
     // the lock
     bool locked_{false};
     Point anchor_;                              // the middle of the action that is watched, followed
-    double lock_score_{0.0};
     double lock_since_ms_{0.0};
     double quiet_since_ms_{-1.0};
     uint32_t locks_{0};

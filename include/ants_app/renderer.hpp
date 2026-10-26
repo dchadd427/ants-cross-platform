@@ -691,7 +691,6 @@ private:
     bool force_world_target_{false};
     bool fail_world_target_{false};
     bool fail_world_target_creation_{false};
-    bool smooth_upscale_{zoom::kSmoothUpscale};
     int32_t texture_side_override_{0};        // the test hook of set_texture_side_for_test()
     bool software_{false};                    // SDL's software renderer: it truncates the fractional rectangle of a copy (and cuts a scaled copy that a clip cuts with a rounding of its source)
     uint64_t world_target_passes_{0};

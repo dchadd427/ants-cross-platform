@@ -126,7 +126,6 @@ void GateGoalTask::plan(TaskContext& context) {
     seen_hp_ = 0;
     seen_bomb_ = false;
     ++attempts_;
-    if (first_goal_ == 0) first_goal_ = now;
 }
 
 void GateGoalTask::fetch(TaskContext& context) {
@@ -380,7 +379,6 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                 }
                 if (ant.idle() && may_order(now)) {
                     context.orders.pick_up(ant_, tile);
-                    ++picks_;
                     last_order_ = now;
                 }
                 return;
@@ -504,7 +502,6 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                 }
                 if (ant.idle() && may_order(now)) {
                     context.orders.pick_up(ant_, tile);
-                    ++picks_;
                     last_order_ = now;
                 }
                 return;

@@ -192,7 +192,6 @@ private:
     uint64_t next_refresh_{0};
     bool reask_{false};
     uint32_t tiles_ordered_{0};
-    uint32_t tiles_finished_{0};
     uint32_t chains_finished_{0};
     uint32_t failures_{0};
     uint32_t recalls_{0};

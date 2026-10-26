@@ -2367,7 +2367,6 @@ void StrikeTask::step(TaskContext& c) {
         const uint32_t need = active_ ? 100u : odds;
         if (cands.size() < plan.strike_min_force || static_cast<uint64_t>(own) * 100u < static_cast<uint64_t>(enemy_near) * need) {
             if (active_) {
-                ++calls_off_;
                 paused_until_ = now + 600u;
             }
             target = -1;                                                           // not winnable: no strike
@@ -2375,7 +2374,6 @@ void StrikeTask::step(TaskContext& c) {
     }
     if (target < 0) {
         if (active_) {
-            if (!wipe && !(st.behind)) ++calls_off_;
             disband(c);
         } else if (!force_.empty()) {
             disband(c);

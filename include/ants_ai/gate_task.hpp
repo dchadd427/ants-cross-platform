@@ -107,8 +107,6 @@ private:
     uint32_t duds_{0};
     uint32_t extinguishes_{0};
     uint32_t defuses_{0};
-    uint32_t picks_{0};
-    uint64_t first_goal_{0};
     // watched state of the ant, to tell progress and duds
     sim::TileCoord seen_tile_{-1, -1};
     uint8_t seen_hp_{0};
