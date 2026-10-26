@@ -117,6 +117,12 @@ def dialog_button(page, text):
     page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent.indexOf(%s) >= 0; })[0].click()" % json.dumps(text))
 
 
+def press_start(page):
+    """the press of a person on Start the game: a real mouse click, as the phone's tap is a real touch. A click that a script makes (`click()`) has no user activation, and a browser that blocks pop-ups
+    for a page that was not given one (Chromium's new headless mode does, its old headless shell does not) refuses the tab, which the page then says in a dialog of its own"""
+    page.click_selector(".dlg-foot .btn:last-child")
+
+
 def choose(page, name, value):
     """a click on an answer of a color's row, as a person does (the radio under the label is the click's target)"""
     page.click_selector(".pseat:nth-child(%d) .pc:nth-child(%d)" % (["Black", "Blue", "Green", "Red"].index(name) + 1, ["y", "e", "m", "h", "n"].index(value) + 1))
@@ -171,7 +177,7 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     page.shot(args.shots, shots_prefix + "-desktop-dialog")
     known = {t["targetId"] for t in pages_of(dt)}
     work_slot(page, mod)
-    dialog_button(page, "Start the game")
+    press_start(page)
     game = game_tab(mod, dt, known, (1280, 800))
     check(game is not None, "Start opens a tab of its own at the game page")
     if game is None:
@@ -265,7 +271,7 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     check(codes == "Be Bh Gn Ry", "you at Red, a Hard bot at Blue and an Easy one at Black: %s" % codes)
     check(page.ev("document.querySelector('.play-status').textContent") == "You and 2 bots.", "the dialog says so")
     known = {t["targetId"] for t in pages_of(dt)}
-    dialog_button(page, "Start the game")
+    press_start(page)
     game = game_tab(mod, dt, known, (1280, 800))
     check(game is not None and game.target is not None, "the second game opens its own tab")
     if game is None:
@@ -326,7 +332,7 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     page.ev("window.open = function () { return null; }")
     page.press_act("play")
     mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg.play')"), 10)
-    dialog_button(page, "Start the game")
+    press_start(page)
     check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'The test game could not open'"), 5) and "Allow pop-ups" in page.ev("document.querySelector('.dlg-in').textContent"), "a browser that does not open the tab is told so, in plain words")
     page.key("Escape")
 

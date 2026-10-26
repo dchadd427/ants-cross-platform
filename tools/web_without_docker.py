@@ -10,7 +10,7 @@ It replays the Dockerfile itself (FROM, ARG, ENV, WORKDIR, COPY with the .docker
 FROM, installed with emsdk when it is not there) and the ports that it needs (SDL2, SDL2_ttf, FreeType, HarfBuzz) are put in Emscripten's cache from git tags and Emscripten's own mirror,
 because a session may not download a GitHub archive. Then it writes an nginx.conf around docker/nginx.conf, starts nginx on 127.0.0.1:PORT (default 19980), runs COMMAND with ANTS_WEB_URL
 set (and CHROME, when it is not, to a script that starts a browser as the checks need it: Playwright's headless shell, else Chromium, with a desktop's mouse and, as root, --no-sandbox) and stops nginx. It does not run Docker and does not replace CI's `docker build`: that is the gate.
-It serves the pages and starts no game server: test_web_home.sh leaves out its parts that play, and test_web_hidden.sh, test_web_prediction.sh and test_web_rejoin.sh, which need one, say SKIP and exit 0 (no pass).
+It serves the pages and starts no game server (nginx answers the list of maps, /maps/all, at once from the maps of the image: the Map Maker waits for it): test_web_home.sh leaves out its parts that play, and test_web_hidden.sh, test_web_prediction.sh and test_web_rejoin.sh, which need one, say SKIP and exit 0 (no pass).
 
   --context DIR  the tree to build (default: the tree of this script; a git worktree of a branch works)     --work DIR  where everything goes (default: CONTEXT/scratch/web_without_docker)
   --emsdk DIR    the emsdk (default: $EMSDK when it has the right version, else ~/.cache/ants-web/emsdk-VERSION, made there when it is not)     --port N  nginx's port (0: a free one)
@@ -560,13 +560,47 @@ def prepare_ports(context, emsdk, env):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- nginx
 
-def site_config(conf, fs, cache, port):
-    """docker/nginx.conf for a machine without the image's folders: its paths under fs, the cache folder, and `listen` on 127.0.0.1:PORT."""
+def location_block(text, header):
+    """(start, end) of the location block that begins with `header` (e.g. `location = /maps/all {`) in text, braces of its `if` lines included; None when there is none."""
+    start = text.find(header)
+    if start < 0:
+        return None
+    depth, at = 0, start + len(header) - 1
+    while at < len(text):
+        depth += (text[at] == "{") - (text[at] == "}")
+        at += 1
+        if depth == 0:
+            return start, at
+    return None
+
+
+def maps_list(fs):
+    """The list that the game server sends for GET /maps/all (docs/SERVER.md, "The list of maps"), made from the folder of the maps that the image serves: every file name in it, the six originals first (the
+    page needs the names only). A name with a character that nginx or JSON would have to escape is left out: no map of the library has one that the page could not tell from another."""
+    folder = os.path.join(fs, "srv", "community-maps", "files")
+    try:
+        names = sorted(n for n in os.listdir(folder) if n.lower().endswith(".lvl") and re.fullmatch(r"[ -~]+", n) and not re.search(r"[\\\"'$;]", n))
+    except OSError:
+        names = []
+    originals = [n for n in names if n[:-4].lower() in ("tiny", "small", "medium", "gauntlet", "treasure", "islands")]
+    return {"format": 1, "maps": [{"file": n, "original": True} for n in originals] + [{"file": n} for n in names if n not in originals]}
+
+
+def site_config(conf, fs, cache, port, maps_file=None):
+    """docker/nginx.conf for a machine without the image's folders: its paths under fs, the cache folder, and `listen` on 127.0.0.1:PORT. With maps_file (a file that holds the list of maps, see maps_list),
+    `/maps/all` is answered at once from that file, as the image does with its game server behind it: no game server is here, and a request for it would wait for a name that nothing resolves (the
+    page asks for this list when it starts, and what it offers meanwhile, Save as a new map for one, waits for the answer)."""
     html, stats = os.path.join(fs, "usr", "share", "nginx", "html"), os.path.join(cache, "ants_stats")
     maps = os.path.join(fs, "srv", "community-maps")                                       # (the players' maps and pictures, served by /maps/previews/ and /maps/files/: outside the web root)
     text = conf.replace("/srv/community-maps", maps).replace("/usr/share/nginx/html", html).replace("/var/cache/nginx/ants_stats", stats).replace("/var/cache/nginx/ants_history", os.path.join(cache, "ants_history"))
     text = re.sub(r"access_log[ \t]+/dev/stdout[ \t]+\w+;", "access_log off;", text)                  # (the image logs the submission paths to its output; here nobody reads it)
     text = re.sub(r"^([ \t]*resolver[ \t]+127\.0\.0\.11[^;]*;)", r"\1 resolver_timeout 1s;", text, flags=re.M)           # (Docker's own resolver is not here: the name of the game server fails in a second, as it does at once in the image, not after 30)
+    if maps_file:
+        block = location_block(text, "location = /maps/all {")
+        if not block:
+            raise ToolError("docker/nginx.conf has no `location = /maps/all {` block: the tool cannot answer the list of maps")
+        text = text[:block[0]] + ("location = /maps/all {\n        if ($request_method != GET) { return 405; }\n        if ($is_args) { return 404; }\n        alias %s;\n        default_type application/json;\n"
+                                  "        add_header Cache-Control \"no-store\" always;\n    }") % maps_file + text[block[1]:]
     text, moved = re.subn(r"^([ \t]*)listen[ \t]+80;[ \t]*$", r"\1listen 127.0.0.1:%d;" % port, text, flags=re.M)
     text = re.sub(r"^[ \t]*listen[ \t]+\[::\]:80;[ \t]*\n", "", text, flags=re.M)
     if moved != 1:
@@ -621,6 +655,7 @@ class Nginx:
         self.pid_file = os.path.join(self.prefix, "nginx.pid")
         self.port = port
         self.error_log_switch = None        # whether this nginx has -e: asked with its first command
+        self.maps_file = os.path.join(self.prefix, "maps_all.json")
 
     def command(self, *extra):
         nginx = shutil.which("nginx") or "nginx"
@@ -633,8 +668,10 @@ class Nginx:
         fs = os.path.join(self.work, "fs")
         for sub in ("cache/ants_stats", "cache/ants_history", "tmp/client_body", "tmp/proxy", "tmp/fastcgi", "tmp/uwsgi", "tmp/scgi"):
             os.makedirs(os.path.join(self.prefix, sub), exist_ok=True)
+        with open(self.maps_file, "w", encoding="utf-8") as f:
+            json.dump(maps_list(fs), f)
         with open(self.site, "w", encoding="utf-8") as f:
-            f.write(site_config(read_text(os.path.join(fs, "etc", "nginx", "conf.d", "default.conf")), fs, os.path.join(self.prefix, "cache"), self.port))
+            f.write(site_config(read_text(os.path.join(fs, "etc", "nginx", "conf.d", "default.conf")), fs, os.path.join(self.prefix, "cache"), self.port, self.maps_file))
         with open(self.conf, "w", encoding="utf-8") as f:
             f.write(main_config(self.prefix, self.site, mime_types(), hasattr(os, "geteuid") and os.geteuid() == 0))
 
