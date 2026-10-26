@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/437c6f9b...4ba718d6)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/437c6f9b...2ea367ee)
 
 ## v0.12.136 - 2026-10-25 - Health numbers at every zoom, and the settings menu scrolls in fullscreen
 
