@@ -26,13 +26,13 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.141 - 2026-10-26 - Faster: orders after a fight no longer look at every ant
 
 **For players:**
-- **Faster: the one slow moment of a huge map is about half as long.** When many combat ants end their fight in the same instant, each looks for its goal tile again, and each of them used to look at every ant of the map to do it. Measured here, slowest tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 66 and 35 on the desktop, 94 and 56 in the web build (run in Node here, not in a browser); 4 x 1,500 combat ants packed on 120 x 120: 31 and 11.5. The average tick of that map goes from 2.2 to 1.8.
+- **Faster: the one slow moment of a huge map is about half as long.** When many combat ants end their fight in the same instant, each looks for its goal tile again, and each of them used to look at every ant of the map to do it. Measured here, slowest tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 67 and 36 on the desktop, 94 and 56 in the web build (run in Node here, not in a browser); 4 x 1,500 combat ants packed on 120 x 120: 31 and 11.5. The average tick of that map goes from 2.2 to 1.8.
 - That tick is still over the web build's 50 ms budget; the next step (a team-mate's claim on a tile is still found by looking at every ant) is a separate change.
 - Nothing about a match changes: every tick has the same state as before (all 540 maps of the library and worlds of up to 6,000 ants play identically, in the desktop and the web build).
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...f4549178)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...2e3cea5f)
 
 ## v0.12.140 - 2026-10-26 - Map Maker: the bar under the map stays one row, and the tools fit
 
