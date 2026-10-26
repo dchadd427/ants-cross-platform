@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/437c6f9b...76befa55)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/437c6f9b...b5001338)
 
 ## v0.12.137 - 2026-10-25 - Cleanup: unused code removed
 
