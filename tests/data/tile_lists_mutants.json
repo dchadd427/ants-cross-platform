@@ -18,7 +18,7 @@
    "new": "        if (old_index != kNoCell && slot != TileAntIndex::kNone && nt.x >= 0) tile_ants_.unlink(old_index, slot);\n"
   },
   {
-   "id": "wrong_tile_after_a_teleport",
+   "id": "wrong_tile_after_a_move",
    "file": "src/ants_sim/occupancy.cpp",
    "old": "    if (new_index != kNoCell && slot != TileAntIndex::kNone) tile_ants_.link(new_index, slot);\n",
    "new": "    if (new_index != kNoCell && slot != TileAntIndex::kNone) tile_ants_.link(occ_cell_index(old) != kNoCell ? occ_cell_index(old) : new_index, slot);\n"

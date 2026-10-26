@@ -429,7 +429,7 @@ void run_lookup_tests() {
                 }
             } else if (op < 80) {
                 if (AntUnit* a = any_ant()) {
-                    a->set_pixel_pos(static_cast<int32_t>(below(300)), static_cast<int32_t>(below(300)));   // moved by something that does not register it (a teleport): the refresh does
+                    a->set_pixel_pos(static_cast<int32_t>(below(300)), static_cast<int32_t>(below(300)));   // moved by something that does not register it (a knock-back, a landing): the refresh does
                 }
                 w.impl.occ_refresh();
             } else if (op < 85) {
@@ -612,7 +612,10 @@ void run_map_tests() {
         for (const char* file : {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "ISLANDS.LVL", "GAUNTLET.LVL", "TREASURE.LVL"}) {
             const auto& level = library_map(dir, file);
             Twin t;
-            t.old_engine.init(level, ++seed, 0x0F);
+            {
+                LinearOnly scans;   // (the twin is set up by the scans alone too, so that it shares nothing with the lists)
+                t.old_engine.init(level, ++seed, 0x0F);
+            }
             t.engine.init(level, seed, 0x0F);
             uint64_t checks = 0;
             const Marks marks;
@@ -630,7 +633,10 @@ void run_map_tests() {
         for (const char* file : {"WAR OF ALL ants.lvl", "GrassHopper.lvl", "ARMIES OF FATE.lvl", "AnTsCaStLe.lvl", "Jungle.lvl", "OCEAN.LVL", "4cornersn3.lvl"}) {
             const auto& level = library_map(dir, file);
             Twin t;
-            t.old_engine.init(level, ++seed, 0x0F);
+            {
+                LinearOnly scans;   // (the twin is set up by the scans alone too, so that it shares nothing with the lists)
+                t.old_engine.init(level, ++seed, 0x0F);
+            }
             t.engine.init(level, seed, 0x0F);
             uint64_t checks = 0;
             const Marks marks;
@@ -808,12 +814,16 @@ Script hazard_script(const Crowd& crowd, uint32_t width) {
 
 std::string play_crowd(uint32_t width, uint32_t per_team, Layout layout, uint32_t ticks, uint64_t* checks, uint64_t* pending_seen) {
     Twin t;
-    t.old_engine.init_test_world(width, width, 9);
     t.engine.init_test_world(width, width, 9);
     Crowd crowd = populate(t.engine, width, per_team, layout);
-    Crowd same = populate(t.old_engine, width, per_team, layout);
     add_hazards(t.engine, width, crowd);
-    add_hazards(t.old_engine, width, same);
+    Crowd same;
+    {
+        LinearOnly scans;   // (the twin is set up by the scans alone too)
+        t.old_engine.init_test_world(width, width, 9);
+        same = populate(t.old_engine, width, per_team, layout);
+        add_hazards(t.old_engine, width, same);
+    }
     if (same.ids != crowd.ids || same.special != crowd.special) return "the two worlds hold different ants";
     const std::string why = play(t, nullptr, 0x0F, ticks, hazard_script(crowd, width), checks);
     *pending_seen = t.pending_seen;
@@ -867,31 +877,51 @@ void run_reinit_tests() {
         const std::string dir = std::string(ORIGINAL_ASSETS_DIR) + "/Maps";
         const auto& level = library_map(dir, "TINY.LVL");
         Twin t;
-        t.old_engine.init(level, 91, 0x0F);
+        {
+            LinearOnly scans;   // (what the old engine is given here, it is given by the scans alone)
+            t.old_engine.init(level, 91, 0x0F);
+        }
         t.engine.init(level, 91, 0x0F);
         ASSERT_TRUE(play(t, &level, 0x0F, 120, nullptr).empty());
         for (int i = 0; i < 6; ++i) {                                // more ants than a fresh match has: the id counter is well past its start
-            ASSERT_TRUE(t.old_engine.spawn_unit(0, AntType::Worker, TileCoord{8 + i, 8}, false) == t.engine.spawn_unit(0, AntType::Worker, TileCoord{8 + i, 8}, false));
+            uint32_t id_old;
+            {
+                LinearOnly scans;
+                id_old = t.old_engine.spawn_unit(0, AntType::Worker, TileCoord{8 + i, 8}, false);
+            }
+            ASSERT_TRUE(id_old == t.engine.spawn_unit(0, AntType::Worker, TileCoord{8 + i, 8}, false));
         }
         // a map again: the engine that was used equals one that was never used, and its first new ant has the id that the fresh one's has
         SimulationEngine fresh;
         fresh.init(level, 92, 0x0F);
-        t.old_engine.init(level, 92, 0x0F);
+        {
+            LinearOnly scans;
+            t.old_engine.init(level, 92, 0x0F);
+        }
         t.engine.init(level, 92, 0x0F);
         ASSERT_TRUE(t.engine.state_hash() == fresh.state_hash() && t.old_engine.state_hash() == fresh.state_hash());
         const uint32_t first_id = fresh.spawn_unit(1, AntType::Worker, TileCoord{9, 9}, false);
         ASSERT_TRUE(first_id == t.engine.spawn_unit(1, AntType::Worker, TileCoord{9, 9}, false));
-        ASSERT_TRUE(first_id == t.old_engine.spawn_unit(1, AntType::Worker, TileCoord{9, 9}, false));
+        {
+            LinearOnly scans;
+            ASSERT_TRUE(first_id == t.old_engine.spawn_unit(1, AntType::Worker, TileCoord{9, 9}, false));
+        }
         ASSERT_TRUE(t.engine.state_hash() == fresh.state_hash());
         ASSERT_TRUE(play(t, &level, 0x0F, 120, nullptr).empty());   // (find_unit never falls back to the scan: the slot of an id is its id - 1)
         // a test world on the engine that was used
         SimulationEngine fresh_world;
         fresh_world.init_test_world(90, 90, 9);
-        t.old_engine.init_test_world(90, 90, 9);
+        {
+            LinearOnly scans;
+            t.old_engine.init_test_world(90, 90, 9);
+        }
         t.engine.init_test_world(90, 90, 9);
         ASSERT_TRUE(t.engine.state_hash() == fresh_world.state_hash() && t.old_engine.state_hash() == fresh_world.state_hash());
         const Crowd crowd = populate(t.engine, 90, 12, Layout::Spread);
-        ASSERT_TRUE(populate(t.old_engine, 90, 12, Layout::Spread).ids == crowd.ids);
+        {
+            LinearOnly scans;
+            ASSERT_TRUE(populate(t.old_engine, 90, 12, Layout::Spread).ids == crowd.ids);
+        }
         ASSERT_TRUE(populate(fresh_world, 90, 12, Layout::Spread).ids == crowd.ids);
         ASSERT_TRUE(crowd.ids[0][0] == 1 && crowd.ids[3].back() == 48);
         ASSERT_TRUE(t.engine.state_hash() == fresh_world.state_hash());
