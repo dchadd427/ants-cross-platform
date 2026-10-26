@@ -187,6 +187,17 @@ class Project(unittest.TestCase):
             os.kill(pid, signal.SIGKILL)
         self.assertFalse(alive, "the process that the test command started is still running after the time limit")
 
+    def test_a_test_command_that_is_ended_by_its_own_timeout_is_no_verdict_and_not_caught(self):
+        spec = self.spec([{"id": "loop", "file": "calc.py", "old": "a + b", "new": "a - b", "test": "timeout 1 sleep 30"},
+                          {"id": "plain-failure", "file": "calc.py", "old": "a + b", "new": "a - b", "test": "timeout 20 python3 check.py"}], baseline=self.TRUE)
+        result = self.run_tool(spec, "--keep-going")
+        by = self.by_id()
+        self.assertEqual(by["loop"]["status"], "timeout")
+        self.assertEqual(by["loop"]["exit_code"], 124)
+        self.assertEqual(by["plain-failure"]["status"], "caught")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(self.calc_text(), self.original)
+
     def test_only_runs_the_named_mutants(self):
         spec = self.spec([{"id": "a", "file": "calc.py", "old": "a + b", "new": "a - b", "test": "python3 check.py"},
                           {"id": "b", "file": "calc.py", "old": "x * 2", "new": "x * 3", "test": "python3 check.py"}])

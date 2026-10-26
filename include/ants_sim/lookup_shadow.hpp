@@ -74,6 +74,11 @@ inline uint64_t& lookup_shadow_event_verifies() noexcept {
     static thread_local uint64_t checks = 0;
     return checks;
 }
+/// The ants that the start-of-tick pass looked at (it must find nothing to do on every one of them: it stops the program otherwise)
+inline uint64_t& lookup_shadow_event_catch_ups() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
 
 [[noreturn]] inline void lookup_shadow_fail(const char* lookup, uint32_t id) {
     std::fprintf(stderr, "lookup shadow check failed: %s(%u) differs from the linear scan\n", lookup, static_cast<unsigned>(id));

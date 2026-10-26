@@ -65,6 +65,7 @@ bool SimulationEngineImpl::event_refresh(const AntUnit& a, uint32_t slot) {
 void SimulationEngineImpl::event_catch_up(const AntUnit& a, uint32_t slot) {
     const bool changed = event_refresh(a, slot);
 #ifdef ANTS_SIM_LOOKUP_SHADOW
+    ++lookup_shadow_event_catch_ups();
     if (changed) lookup_shadow_fail("event heap (an ant whose events only the start of the tick put right)", a.id);
 #endif
     (void)changed;

@@ -86,19 +86,21 @@ struct LinearOnly {
 // and the lists that were rebuilt from the ants and compared (a test shows that it met piles of ants, not only that nothing differed)
 struct Marks {
     uint64_t scans{lookup_shadow_scan_checks()}, blasts{lookup_shadow_blast_checks()}, blast_ants{lookup_shadow_blast_ants()}, lists{lookup_shadow_list_checks()};
-    uint64_t events{lookup_shadow_event_checks()}, heaps{lookup_shadow_event_verifies()};
+    uint64_t events{lookup_shadow_event_checks()}, heaps{lookup_shadow_event_verifies()}, catch_ups{lookup_shadow_event_catch_ups()};
     uint64_t picks[4] = {lookup_shadow_event_picks(0), lookup_shadow_event_picks(1), lookup_shadow_event_picks(2), lookup_shadow_event_picks(3)};
     uint64_t scans_since() const { return lookup_shadow_scan_checks() - scans; }
     uint64_t blasts_since() const { return lookup_shadow_blast_checks() - blasts; }
     uint64_t blast_ants_since() const { return lookup_shadow_blast_ants() - blast_ants; }
     uint64_t events_since() const { return lookup_shadow_event_checks() - events; }
     uint64_t heaps_since() const { return lookup_shadow_event_verifies() - heaps; }
+    uint64_t catch_ups_since() const { return lookup_shadow_event_catch_ups() - catch_ups; }
     uint64_t picks_since(size_t kind) const { return lookup_shadow_event_picks(kind) - picks[kind]; }
     std::string since() const {
         return std::to_string(scans_since()) + " tile questions, " + std::to_string(blasts_since()) + " blasts of " + std::to_string(blast_ants_since()) + " ants, " +
                std::to_string(lookup_shadow_list_checks() - lists) + " list checks, " + std::to_string(events_since()) + " event selections compared, events run: " + std::to_string(picks_since(0)) +
                " burn, " + std::to_string(picks_since(1)) + " combat timer, " + std::to_string(picks_since(2)) + " frame, " + std::to_string(picks_since(3)) + " pause, " +
-               std::to_string(heaps_since()) + " heap checks";
+               std::to_string(heaps_since()) + " heap checks, " + std::to_string(catch_ups_since()) +
+               " ants looked at by the start-of-tick pass (it found nothing to do on any)";
     }
 };
 
@@ -1508,6 +1510,7 @@ void run_crowd_tests(bool big) {
             ASSERT_TRUE(marks.scans_since() > 0);                       // the tile lists answered, and the checks compared them
             ASSERT_TRUE(marks.blasts_since() > 0);                      // piles of ants were thrown apart
             ASSERT_TRUE(marks.blast_ants_since() > marks.blasts_since());   // and some blast threw two ants or more
+            ASSERT_TRUE(marks.catch_ups_since() > 1000);                                        // the start-of-tick pass ran over the ants, and (it stops the program otherwise) found nothing to put right
             ASSERT_TRUE(marks.events_since() > 1000 && marks.heaps_since() >= n);                // the heap chose events, and was checked against the ants at every tick
             for (size_t kind = 0; kind < 4; ++kind) ASSERT_TRUE(marks.picks_since(kind) > 0);    // events of every kind fell due: a burn overlay, a combat timer, a frame, a pause
             ASSERT_TRUE(g_seen.actions.count(AntUnit::kActionGetPow) != 0);                     // a power-up was taken
