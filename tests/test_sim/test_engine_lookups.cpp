@@ -844,6 +844,60 @@ void run_go_to_tests() {
         ASSERT_TRUE(lookup_shadow_go_to_compares() - compares0 > 200);
         ASSERT_TRUE(with_marks > 500);
     } TEST_END();
+
+    TEST_CASE("G2.2 go_to refresh at the scale of the mass resume: 2,400 ants on 60 x 60 tiles, 2,000 orders in a tick, each after a few steps onto another tile or a removal that leave marked ants, in two worlds (marks, and the full refresh): every refresh of marked ants is compared with the full refresh and the worlds are the same after every order") {
+        uint32_t s = 0x6007u;
+        auto below = [&s](uint32_t n) { s = s * 1664525u + 1013904223u; return (s >> 8) % n; };
+        GoWorld marks, full;
+        {
+            marks.reset(60, 60);
+            LinearOnly scans;
+            full.reset(60, 60);
+        }
+        std::vector<uint8_t> used(60 * 60, 0);
+        for (int i = 0; i < 2400; ++i) {                              // distinct tiles, four teams mixed
+            uint32_t x, y;
+            do { x = below(60); y = below(60); } while (used[y * 60 + x] != 0);
+            used[y * 60 + x] = 1;
+            const uint8_t team = static_cast<uint8_t>(i % 4);
+            marks.spawn(team, static_cast<int32_t>(x), static_cast<int32_t>(y), true);
+            LinearOnly scans;
+            full.spawn(team, static_cast<int32_t>(x), static_cast<int32_t>(y), true);
+        }
+        marks.impl.occ_in_tick_ = true;                               // one tick: the orders of a mass resume follow one another
+        const uint64_t compares0 = lookup_shadow_go_to_compares(), visits0 = lookup_shadow_go_to_dirty_ants();
+        uint64_t compared_orders = 0;
+        for (int step = 0; step < 2000; ++step) {
+            const uint32_t steps = below(4);                          // 0 - 3 ants stepped onto another tile or removed since the last order
+            std::vector<std::pair<uint32_t, TileCoord>> moves;
+            for (uint32_t k = 0; k < steps; ++k) moves.emplace_back(below(2400), TileCoord{static_cast<int32_t>(below(60)), static_cast<int32_t>(below(60))});
+            const bool kill = below(20) == 0;
+            const uint32_t victim = below(2400), who = below(2400);
+            const TileCoord goal{static_cast<int32_t>(below(60)), static_cast<int32_t>(below(60))};
+            auto play = [&](GoWorld& w) {
+                for (const auto& m : moves) {
+                    AntUnit& a = *w.impl.ants_[m.first];
+                    if (!a.removed) w.impl.occ_move(a, m.second);
+                }
+                if (kill && !w.impl.ants_[victim]->removed) w.impl.remove_ant(*w.impl.ants_[victim]);
+                AntUnit& a = *w.impl.ants_[who];
+                if (!a.removed) w.impl.go_to(a, goal, false, false);
+            };
+            const uint64_t before = lookup_shadow_go_to_compares();
+            play(marks);
+            if (lookup_shadow_go_to_compares() != before) ++compared_orders;
+            {
+                LinearOnly scans;
+                play(full);
+            }
+            const std::string why = go_world_diff(marks, full);
+            if (!why.empty()) std::cout << "\n        order " << step << ": " << why << "\n";
+            ASSERT_TRUE(why.empty());
+        }
+        std::cout << "\n        " << compared_orders << " of 2,000 orders refreshed marked ants and were compared with the full refresh (" << (lookup_shadow_go_to_dirty_ants() - visits0) << " marked ants visited)   ... ";
+        ASSERT_TRUE(lookup_shadow_go_to_compares() - compares0 > 1000);
+        ASSERT_TRUE(lookup_shadow_go_to_dirty_ants() - visits0 > 1500);
+    } TEST_END();
 }
 
 void run_event_tests() {
