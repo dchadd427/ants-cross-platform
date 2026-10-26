@@ -1684,7 +1684,7 @@ void run_foreign_write_tests() {
         std::cout << "\n        " << t.ticks << " ticks, " << pokes << " states written, " << released << " ants released, " << stopped << " walkers stopped, " << marks.since() << "   ... ";
         if (!why.empty()) std::cout << "\n        " << why << "\n";
         ASSERT_TRUE(why.empty());
-        ASSERT_TRUE(pokes > 100 && released > 5);                          // loco_sync took its release path on ants that were walking or standing
+        ASSERT_TRUE(pokes >= ticks / 8 && released > 5);                        // loco_sync took its release path on ants that were walking or standing
         ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);   // every one of those writes was followed by its own refresh: the nets had nothing to do
         ASSERT_TRUE(marks.events_since() > 1000 && marks.heaps_since() >= ticks);
     } TEST_END();

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the event heap of the simulation (AntEventHeap, next_ant_event and the sites that set the events of an ant, src/ants_sim/event_heap.hpp and event_queue.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/event_heap_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp: a thread of the scans alone that reads the heap, a wrong tie-break at each level of the key (time, place in the table, kind of event), a version that is not bumped, a dead entry taken for a live one, a stale entry after a change of time or of order, a removed ant's event, an event that is not pending any more but is still in the heap, an off-by-one tick, a heap that is not copied, assigned, moved or emptied on a restart, and every site that changes an ant's events without telling the heap (pause_fire among them), the two nets that count what they put right when a test writes the fields from outside (a counter that is not counted, a change of the heap that is not reported), and, in the product build (the last two: they are caught by tests/test_sim/test_engine_event_heal.cpp), a start-of-tick pass that puts nothing right and a selection that takes an entry of another time.",
+ "note": "Mutants of the event heap of the simulation (AntEventHeap, next_ant_event and the sites that set the events of an ant, src/ants_sim/event_heap.hpp and event_queue.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/event_heap_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp: a thread of the scans alone that reads the heap, a wrong tie-break at each level of the key (time, place in the table, kind of event), a version that is not bumped, a dead entry taken for a live one, a stale entry after a change of time or of order, a removed ant's event, an event that is not pending any more but is still in the heap, an off-by-one tick, a heap that is not copied, assigned, moved or emptied on a restart, and every site that changes an ant's events without telling the heap (pause_fire among them), the two nets that count what they put right when a test writes the fields from outside (a counter that is not counted, a change of the heap that is not reported), and, in the product build (the last two: they are caught by tests/test_sim/test_engine_event_heal.cpp), a start-of-tick pass that puts nothing right and a selection that takes an entry of another time; and a writer that the heap never hears of (loco_sync clearing a combat timer or a pause), which only the shadow build's stop at the start-of-tick pass finds.",
  "defaults": {
   "build": "test_engine_lookups",
   "test": "timeout 600 ./build/tests/test_sim/test_engine_lookups"
@@ -345,7 +345,7 @@
    "id": "start_of_tick_pass_heals_nothing_in_the_product",
    "file": "src/ants_sim/event_queue.cpp",
    "old": "    const bool changed = event_refresh(a, slot);\n",
-   "new": "    const bool changed = false;\n",
+   "new": "    (void)a;\n    (void)slot;\n    const bool changed = false;\n",
    "build": "test_engine_event_heal",
    "test": "timeout 600 ./build/tests/test_sim/test_engine_event_heal"
   },
@@ -356,6 +356,18 @@
    "new": "        if (a && due_of(*a, p.kind, due)) {",
    "build": "test_engine_event_heal",
    "test": "timeout 600 ./build/tests/test_sim/test_engine_event_heal"
+  },
+  {
+   "id": "loco_sync_clears_a_combat_timer_without_telling_the_heap",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "void SimulationEngineImpl::loco_sync(AntUnit& a) {\n    if (!a.is_alive()) {",
+   "new": "void SimulationEngineImpl::loco_sync(AntUnit& a) {\n    if (a.id % 3 == 0) a.combevt_due_ms = 0;\n    if (!a.is_alive()) {"
+  },
+  {
+   "id": "loco_sync_clears_a_pause_without_telling_the_heap",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "void SimulationEngineImpl::loco_sync(AntUnit& a) {\n    if (!a.is_alive()) {",
+   "new": "void SimulationEngineImpl::loco_sync(AntUnit& a) {\n    if (a.id % 3 == 0) a.pause_active = false;\n    if (!a.is_alive()) {"
   }
  ]
 }
