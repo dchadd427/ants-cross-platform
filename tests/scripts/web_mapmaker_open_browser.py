@@ -12,10 +12,8 @@ Exit status 0: every check passed; 1: a check failed or something broke; 3: the 
 """
 import argparse
 import hashlib
-import json
 import os
 import sys
-import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)

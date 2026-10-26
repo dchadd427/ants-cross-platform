@@ -24,7 +24,6 @@ Exit status 0: every check passed; 1: a check failed, or the browser or the page
 """
 import argparse
 import json
-import math
 import os
 import sys
 import time

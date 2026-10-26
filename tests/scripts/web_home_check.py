@@ -1874,7 +1874,7 @@ def main():
             tab.click(x, y)
             time.sleep(0.4)
             check(value("document.getElementById('lock-on').getAttribute('aria-checked') + '/' + localStorage.getItem('ants.pointerlock')") == "true/on", "Locked clicked again: pressed in, remembered \"on\"")
-            marker = tab.ev("window.antsMarker = 7; 1")
+            tab.ev("window.antsMarker = 7; 1")
             aspect.choose_shape(tab, "4:3")
             time.sleep(1.0)
             chosen = json.loads(value("JSON.stringify([document.querySelector('#aspect-select-list [aria-selected=true]').getAttribute('data-shape'), localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))

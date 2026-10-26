@@ -11,7 +11,6 @@ usage: flaky_proxy.py LISTEN_PORT TARGET_PORT [REFUSE_SECONDS]
 It prints "listening PORT" when it is ready and "dropped N" for every cut, one line each, flushed. It exists for tests/scripts/test_ants_server.sh: a native game client
 connects through it, the script cuts the link, and the server's status shows the room pause for the player that was lost.
 """
-import os
 import signal
 import socket
 import sys

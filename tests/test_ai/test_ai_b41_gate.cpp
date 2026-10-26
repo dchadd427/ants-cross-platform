@@ -143,7 +143,6 @@ public:
         }
         inner_->on_command(c, fate, tick);
     }
-    const StandardBot& inner() const { return *inner_; }
 
 private:
     std::unique_ptr<StandardBot> inner_;

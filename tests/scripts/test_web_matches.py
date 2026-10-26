@@ -11,7 +11,6 @@ docs/REPLAYS.md "The match pages" says what they do; the way to them from the ot
     and that the game page asks for the stats only of a replay of the server's own store;
   - tests/scripts/test_web_matches.sh (opt-in) shows the same in a real browser against a fake door.
 """
-import json
 import os
 import re
 import shutil

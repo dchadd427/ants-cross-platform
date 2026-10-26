@@ -38,7 +38,6 @@ check could not be made because the environment is not there (no browser, nothin
 """
 import argparse
 import json
-import math
 import os
 import re
 import sys
@@ -336,9 +335,6 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
     g = game.scroll_to_box()
     box = g["box"]
     shot("match")
-
-    def pic_per_css():
-        return CANVAS_W / game.geometry()["box"][2]
 
     # ------------------------------------------------------------------------------------------------------------------------------------------------------------
     # the page's guards

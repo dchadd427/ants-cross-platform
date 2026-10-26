@@ -115,18 +115,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
         } \
     } while (0)
 
-#undef ASSERT_NEAR
-#define ASSERT_NEAR(a, b, eps) \
-    do { \
-        ++g_assert_count; \
-        if (std::fabs((a) - (b)) > (eps)) { \
-            std::cout << "FAILED!\n    Assertion failed: |" #a " - " #b "| <= " #eps \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
-
 static std::string locate_assets_dir() {
     std::vector<std::string> candidates = {
 #ifdef ORIGINAL_ASSETS_DIR

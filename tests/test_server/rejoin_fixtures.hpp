@@ -208,7 +208,6 @@ public:
         mgr.reset();
         listener_.reset();
     }
-    bool running() const noexcept { return mgr != nullptr; }
     uint16_t port() const noexcept { return port_; }
     uint32_t now(uint32_t world_now) const { return world_now + offset_; }
 
