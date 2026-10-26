@@ -12,11 +12,8 @@ import json
 import os
 import shlex
 import shutil
-import socket
-import subprocess
 import sys
 import tempfile
-import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -101,20 +98,12 @@ class Rig(maps.Asking):
             os.makedirs(os.path.join(self.work, sub), exist_ok=True)
         for name, path in image_files().items():
             shutil.copyfile(path, os.path.join(self.work, "srv", "files", name))
-        self.port = maps.free_port()
-        conf = os.path.join(self.work, "nginx.conf")
-        with open(conf, "w") as f:
-            f.write(maps.make_config(self.work, self.port, replay_port, relaxed=True))
-        test = subprocess.run(["nginx", "-t", "-p", self.work, "-c", conf], capture_output=True, text=True)
-        if test.returncode != 0:
-            raise AssertionError("nginx -t: " + test.stderr)
-        self.proc = subprocess.Popen(["nginx", "-p", self.work, "-c", conf, "-g", "daemon off;"], stderr=subprocess.DEVNULL)
-        for _ in range(100):
-            try:
-                socket.create_connection(("127.0.0.1", self.port), timeout=0.2).close()
-                break
-            except OSError:
-                time.sleep(0.05)
+        def write_conf(port):
+            conf = os.path.join(self.work, "nginx.conf")
+            with open(conf, "w") as f:
+                f.write(maps.make_config(self.work, port, replay_port, relaxed=True))
+            return conf
+        self.proc, self.port = maps.start_nginx(self.work, write_conf)
 
     def stop(self):
         self.proc.terminate()
