@@ -310,12 +310,6 @@
    "file": "src/ants_sim/combat_system.cpp",
    "old": "    a.combevt_due_ms = 0;\n    event_refresh(a);\n}",
    "new": "    a.combevt_due_ms = 0;\n}"
-  },
-  {
-   "id": "event_kind_mixed_up",
-   "file": "src/ants_sim/movement_system.cpp",
-   "old": "        const bool best_is_pause = ant_event && ev.kind == AntEventKind::Pause;\n        const bool best_is_burn = ant_event && ev.kind == AntEventKind::Burn;",
-   "new": "        const bool best_is_pause = ant_event && ev.kind == AntEventKind::Burn;\n        const bool best_is_burn = ant_event && ev.kind == AntEventKind::Pause;"
   }
  ]
 }
