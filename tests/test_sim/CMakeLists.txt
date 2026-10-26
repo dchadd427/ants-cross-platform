@@ -359,6 +359,25 @@ add_test(NAME test_engine_lookups COMMAND test_engine_lookups --all)
 # (the big worlds play a match with the scans, 3 x 40 s and 2 x 90 s on a quiet core: twice that on a busy runner; the limit is above the 900 s that ctest is given)
 set_tests_properties(test_engine_lookups PROPERTIES COST 400 TIMEOUT 1800)
 
+# The product build of the same heap: the nets under its writers (the start-of-tick pass and the selection of the next event) put right what a test hook wrote from outside, and
+# the engine that is not told plays as the engine that is (no shadow check here: that program stops at the first thing a net has to put right)
+add_executable(test_engine_event_heal
+    test_engine_event_heal.cpp
+)
+
+target_link_libraries(test_engine_event_heal PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_engine_event_heal PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common
+)
+
+add_test(NAME test_engine_event_heal COMMAND test_engine_event_heal)
+set_tests_properties(test_engine_event_heal PROPERTIES COST 20)
+
 add_executable(test_game_mode
     test_game_mode.cpp
 )

@@ -632,6 +632,7 @@ public:
     void record_player_stat(uint8_t player_id, StatType stat, uint32_t value);
 
 private:
+    friend struct SimulationEngineTestAccess;   // (defined by tests/test_sim/test_engine_event_heal.cpp only: it reaches the heap of the next timed events of an engine)
     uint32_t group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool special, uint32_t* needed);
     std::unique_ptr<SimulationEngineImpl> impl_;
 };

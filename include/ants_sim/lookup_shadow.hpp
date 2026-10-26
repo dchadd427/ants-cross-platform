@@ -1,5 +1,5 @@
-// Test-only shadow check of the simulation's O(1) lookups (SimulationEngineImpl::find_unit, PathManager::has_request_for, and the per-tile ant lists behind occ_scan and
-// blast). Without ANTS_SIM_LOOKUP_SHADOW (every product build) this header is empty and the lookups carry no check. The library ants_sim_shadow
+// Test-only shadow check of the simulation's lookups (SimulationEngineImpl::find_unit, PathManager::has_request_for, the per-tile ant lists behind occ_scan and
+// blast, and the event heap behind next_ant_event). Without ANTS_SIM_LOOKUP_SHADOW (every product build) this header is empty and the lookups carry no check. The library ants_sim_shadow
 // (tests/test_sim/CMakeLists.txt) compiles the simulation with it: every call then also runs the linear scan that the lookup replaced and stops the program when the two
 // answers differ; the lists themselves are rebuilt from the ants and compared as well; and a test can switch a thread to the scans alone (the old lookups) to play one
 // match with each and compare the state hashes.
@@ -58,9 +58,55 @@ inline bool lookup_shadow_sample(size_t size) noexcept {
     return size <= kFullCheckSize || (++calls & 63u) == 0;
 }
 
+/// The selections of the next ant event that were compared with the scan over every ant (EVERY selection is, whatever the size of the table: the scan costs what the engine of
+/// the twin that runs on scans alone costs), and the checks of the whole heap against the ants' fields (at the start and end of every tick and after every copy): so that a test
+/// can show that the heap was asked and checked, not only that nothing differed
+inline uint64_t& lookup_shadow_event_checks() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+/// The events that the heap gave (in the compared selections), by kind (AntEventKind: burn, combat timer, animation frame, pause): so that a test can show that every kind was met
+inline uint64_t& lookup_shadow_event_picks(size_t kind) noexcept {
+    static thread_local uint64_t picks[4] = {0, 0, 0, 0};
+    return picks[kind & 3u];
+}
+inline uint64_t& lookup_shadow_event_verifies() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+/// The ants that the start-of-tick pass looked at (it must find nothing to do on any of them: it stops the program otherwise)
+inline uint64_t& lookup_shadow_event_catch_ups() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+
 [[noreturn]] inline void lookup_shadow_fail(const char* lookup, uint32_t id) {
     std::fprintf(stderr, "lookup shadow check failed: %s(%u) differs from the linear scan\n", lookup, static_cast<unsigned>(id));
     std::abort();
+}
+
+/// The two nets that a product build has under the writers of the events (the start-of-tick pass, and the selection of the next event that finds an entry the ant does not bear
+/// out) stop the program here, because in a match nothing may ever have to use them. One test writes the fields of the events from OUTSIDE the simulation on purpose (a test hook
+/// that pokes an ant between two ticks, as no production code does), and sets this to true for the thread: the nets then count what they put right (the two counters below) and the
+/// program goes on, so that the test shows that they see it and that the engine plays on as the scans do. The heap is still checked against the ants at the END of every tick
+/// (not at the start, nor at a copy): what the nets left wrong stops the program.
+inline bool& lookup_shadow_count_stale_events() noexcept {
+    static thread_local bool count = false;
+    return count;
+}
+/// The ants whose events the start-of-tick pass had to put right, and the entries of the heap that a selection found the ant did not bear out (both are 0 after every ordinary match)
+inline uint64_t& lookup_shadow_event_catch_up_changes() noexcept {
+    static thread_local uint64_t changes = 0;
+    return changes;
+}
+inline uint64_t& lookup_shadow_event_stale_entries() noexcept {
+    static thread_local uint64_t entries = 0;
+    return entries;
+}
+/// Counts one such thing, and stops the program unless the test above asked to have them counted
+inline void lookup_shadow_stale_event(uint64_t& counter, const char* lookup, uint32_t id) {
+    ++counter;
+    if (!lookup_shadow_count_stale_events()) lookup_shadow_fail(lookup, id);
 }
 
 } // namespace ants::sim

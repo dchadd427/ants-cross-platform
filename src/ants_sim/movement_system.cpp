@@ -77,6 +77,7 @@ void SimulationEngineImpl::movement_reset() {
     now_ms_ = 0;
     occ_.assign(static_cast<size_t>(grid_.width()) * grid_.height(), OccCell{});
     tile_ants_.reset(occ_.size());
+    event_heap_.reset();
     for (auto& pm : path_managers_) pm.clear();
     path_request_serial_.clear();
     anthillq_next_ms_ = 200;
@@ -190,6 +191,7 @@ bool SimulationEngineImpl::has_pending_path(uint32_t ant_id) const noexcept {
 // FUN_0102c0db + FUN_0102c1fc: play a clip; ants are on the display list (running bit set), so the
 // start step runs immediately.
 void SimulationEngineImpl::loco_play(AntUnit& a, const movement::MotionClip& clip, uint8_t dir, uint16_t evt5_ms) {
+    const EventRefreshOnExit refresh_events(*this, a);               // the fields that decide the ant's events change here
     if (a.audio_tracked) {                              // FUN_0102c0db: the clip that is replaced has the track flag (bit 5): StopTracked cuts what the sprite started
         stop_audio_owner(a.id);
         a.audio_tracked = false;
@@ -215,6 +217,7 @@ void SimulationEngineImpl::loco_update(AntUnit& a, uint32_t now) {
 // when it ends; if the step callback starts a new clip (which runs its own start step), the new first
 // frame's duration is booked a second time (re-entrancy quirk of the original).
 int SimulationEngineImpl::loco_step(AntUnit& a, uint32_t now) {
+    const EventRefreshOnExit refresh_events(*this, a);               // the fields that decide the ant's events change here
     auto& p = a.loco;
     if (!p.clip.valid()) return 0;
     StepEvt e{};
@@ -829,6 +832,7 @@ void SimulationEngineImpl::loco_release(AntUnit& a) {
     a.loco_action = AntUnit::kActionNone;
     a.pause_active = false;
     a.dive_flag = false;
+    event_refresh(a);
 }
 
 // FUN_010214d9 (message 0x13, handled synchronously) -> FUN_01021664
@@ -862,13 +866,16 @@ void SimulationEngineImpl::start_pause(AntUnit& a) {
     a.pause_fire_ms = now_ms_ + kPauseMs;
     a.pause_saved_action = a.loco_action;
     a.pause_saved_dir = static_cast<uint8_t>(a.facing);
+    event_refresh(a);
 }
 
 void SimulationEngineImpl::cancel_pause(AntUnit& a) {
     a.pause_active = false;
+    event_refresh(a);
 }
 
 void SimulationEngineImpl::pause_fire(AntUnit& a) {
+    const EventRefreshOnExit refresh_events(*this, a);               // pause_active is cleared here, and set_action may return before it writes anything
     a.pause_active = false;
     const uint8_t saved_action = a.pause_saved_action;
     const uint8_t saved_dir = a.pause_saved_dir;
@@ -1574,52 +1581,27 @@ void SimulationEngineImpl::movement_tick() {
     const uint32_t t_begin = anim_clock_ms_;
     const uint32_t t_end = t_begin + TICK_MS;
     now_ms_ = t_begin;
+#ifdef ANTS_SIM_LOOKUP_SHADOW
+    if (!lookup_shadow_count_stale_events()) event_heap_verify();   // the heap says what the ants say (after the last tick, the orders and any copy; not in the test that pokes the ants)
+#endif
+    uint32_t slot = 0;
     for (auto& up : ants_) {
+        const uint32_t this_slot = slot++;
         if (!up) continue;
         up->arrived_this_tick = false;
         loco_sync(*up);
+        event_catch_up(*up, this_slot);                     // (loco_sync writes some of the fields that decide the events)
     }
-    // Animation steps and pause timers in exact due-time order (ties: ant id = display-list order).
+    // Animation steps and pause timers in exact due-time order (ties: the place in the table, the kind of event; the tasks after the ants).
     for (;;) {
-        AntUnit* best = nullptr;
-        uint32_t best_t = std::numeric_limits<uint32_t>::max();
-        bool best_is_pause = false;
-        bool best_is_burn = false;
-        bool best_is_combevt = false;
+        AntEventPick ev;
+        const bool ant_event = next_ant_event(t_end, ev);   // the earliest ant event (the heap; the scan over every ant is next_ant_event_scan)
+        AntUnit* best = ant_event ? ev.ant : nullptr;
+        uint32_t best_t = ant_event ? ev.time : std::numeric_limits<uint32_t>::max();
+        const bool best_is_pause = ant_event && ev.kind == AntEventKind::Pause;
+        const bool best_is_burn = ant_event && ev.kind == AntEventKind::Burn;
+        const bool best_is_combevt = ant_event && ev.kind == AntEventKind::Combevt;
         int task = 0;                                       // 1 ANTHILLQ, 2..5 HATCHTSK of team 0..3
-        for (auto& up : ants_) {
-            AntUnit* a = up.get();
-            if (a && !a->removed && a->burn_end_ms != 0 && a->burn_end_ms <= t_end && a->burn_end_ms < best_t) {
-                best = a;
-                best_t = a->burn_end_ms;
-                best_is_pause = false;
-                best_is_burn = true;
-                best_is_combevt = false;
-            }
-            if (a && !a->removed && a->combevt_due_ms != 0 && a->combevt_due_ms <= t_end && a->combevt_due_ms < best_t) {
-                best = a;
-                best_t = a->combevt_due_ms;
-                best_is_pause = false;
-                best_is_burn = false;
-                best_is_combevt = true;
-            }
-            if (!a || a->loco_action == AntUnit::kActionNone) continue;
-            const auto& p = a->loco;
-            if (p.clip.valid() && p.cursor != 0 && p.clip.count > 1 && p.next_ms <= t_end && p.next_ms < best_t) {
-                best = a;
-                best_t = p.next_ms;
-                best_is_pause = false;
-                best_is_burn = false;
-                best_is_combevt = false;
-            }
-            if (a->pause_active && a->pause_fire_ms <= t_end && a->pause_fire_ms < best_t) {
-                best = a;
-                best_t = a->pause_fire_ms;
-                best_is_pause = true;
-                best_is_burn = false;
-                best_is_combevt = false;
-            }
-        }
         if (anthillq_next_ms_ <= t_end && anthillq_next_ms_ < best_t) {
             best = nullptr;
             best_t = anthillq_next_ms_;
@@ -1668,7 +1650,7 @@ void SimulationEngineImpl::movement_tick() {
         } else if (best_is_burn) {
             burn_overlay_end(*best);
         } else if (best_is_combevt) {                       // COMBEVT (0x1024c69): the auto-engage timed out
-            best->combevt_due_ms = 0;
+            best->combevt_due_ms = 0;                       // (resume_after_auto_engage starts with cancel_combat_timer, which tells the heap)
             resume_after_auto_engage(*best);
         } else if (best_is_pause) {
             pause_fire(*best);
@@ -1690,6 +1672,7 @@ void SimulationEngineImpl::movement_tick() {
 #ifdef ANTS_SIM_LOOKUP_SHADOW
     static thread_local uint64_t ticks_run = 0;
     if (ants_.size() <= kFullCheckSize || (++ticks_run & 15u) == 0) tile_ants_verify();   // the whole lists against the ants (every tick while the table is small)
+    event_heap_verify();
 #endif
 }
 
