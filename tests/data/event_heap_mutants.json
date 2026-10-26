@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the event heap of the simulation (AntEventHeap, next_ant_event and the sites that set the events of an ant, src/ants_sim/event_heap.hpp and event_queue.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/event_heap_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp: a wrong tie-break at each level of the key (time, place in the table, kind of event), a version that is not bumped, a dead entry taken for a live one, a stale entry after a change of time or of order, a removed ant's event, an event that is not pending any more but is still in the heap, an off-by-one tick, a heap that is not copied, assigned, moved or emptied on a restart, and every site that changes an ant's events without telling the heap.",
+ "note": "Mutants of the event heap of the simulation (AntEventHeap, next_ant_event and the sites that set the events of an ant, src/ants_sim/event_heap.hpp and event_queue.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/event_heap_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_lookups.cpp: a thread of the scans alone that reads the heap, a wrong tie-break at each level of the key (time, place in the table, kind of event), a version that is not bumped, a dead entry taken for a live one, a stale entry after a change of time or of order, a removed ant's event, an event that is not pending any more but is still in the heap, an off-by-one tick, a heap that is not copied, assigned, moved or emptied on a restart, and every site that changes an ant's events without telling the heap.",
  "defaults": {
   "build": "test_engine_lookups",
   "test": "timeout 600 ./build/tests/test_sim/test_engine_lookups"
@@ -220,6 +220,12 @@
    "file": "src/ants_sim/event_queue.cpp",
    "old": "            due = a.pause_fire_ms;\n",
    "new": "            due = a.loco.next_ms;\n"
+  },
+  {
+   "id": "scans_alone_still_use_the_heap",
+   "file": "src/ants_sim/event_queue.cpp",
+   "old": "    if (lookup_shadow_linear_only()) return next_ant_event_scan(t_end, out);\n",
+   "new": ""
   },
   {
    "id": "off_by_one_tick_late",

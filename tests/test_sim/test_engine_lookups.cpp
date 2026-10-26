@@ -968,6 +968,32 @@ void run_event_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("L4.7 Scans alone: a thread switched to the scans (LinearOnly) takes the next event from the scan, whatever the heap says (a heap that is wrong on purpose), and keeps the heap as the writers leave it") {
+        EventWorld w;
+        AntUnit& a = w.add(1);
+        w.add(2);
+        w.loco(a, 60);
+        w.impl.event_heap_.set(0, AntEventKind::Loco, true, 5);          // the heap says 5; the ant says 60
+        w.impl.event_heap_.set(1, AntEventKind::Burn, true, 7);          // and an event of an ant that has none
+        {
+            LinearOnly scans;
+            AntEventPick p;
+            ASSERT_TRUE(w.impl.next_ant_event(100, p) && p.slot == 0 && p.time == 60 && p.kind == AntEventKind::Loco);
+            ASSERT_TRUE(!w.impl.next_ant_event(59, p));
+            a.loco.cursor = 0;                                           // a writer in the scan engine: the heap is kept in step (the check and the copies need it)
+            w.impl.event_refresh(a);
+            ASSERT_TRUE(!w.impl.next_ant_event(100, p));
+        }
+        w.impl.event_heap_ = AntEventHeap();                             // the engine of the scans never reads it: it is empty here, and the answer is still the scan's
+        w.loco(a, 80);
+        {
+            LinearOnly scans;
+            w.impl.event_heap_ = AntEventHeap();
+            AntEventPick p;
+            ASSERT_TRUE(w.impl.next_ant_event(100, p) && p.time == 80);
+        }
+    } TEST_END();
+
     TEST_CASE("L4.5 Engine copy: a copy of an engine (construction, assignment, an assignment into a moved-from engine) has the heap of its source, plays on to the same state hash, and a restart empties the heap") {
         SimulationEngine a;
         a.init_test_world(60, 60, 5);
