@@ -10,7 +10,7 @@ the game is really played for a while; then the way back.
              game gets are the bytes of the slot (the map maker's own file as it is, not a copy that a script wrote again), the roster is Red, Blue and Black; back in the editor the view, the tool,
              the check line, the unsaved work and the history are as they were: Undo takes the stroke back and the file is TINY again, byte for byte (what Download hands over);
   * control  the same page counts a game that was not started from the map maker (a normal game on this computer asks the server to count it), so the check of "not counted" can see a request;
-  * refusal  a blank map (no color has a hill) is refused in plain words, an Extended map of 100 x 100 is "bigger than the game can play yet" with a way to a Classic copy and no Start; a browser
+  * refusal  a blank map (no color has a hill) is refused in plain words, a blank Extended map of 100 x 100 is refused for its colors and not for its size (an Extended map plays up to 512 x 512), with OK only; a browser
              that does not open the tab is told so, and nothing is kept;
   * phone    390 x 844, a touch screen: Menu has "Play this map" (gold), the sheet's answers and buttons are 44 pixels, inside the screen, no sideways scroll; a tap starts the game in its tab, whose
              strip has a 44 pixel way back and does not scroll sideways, and the way back closes it.
@@ -74,14 +74,19 @@ def start_the_game(mod, tab):
     """the game's own START on the quick help (the page's picture is a canvas: the button is at the lower right of the picture's box); then wait for the dialog that opens the match to be gone"""
     time.sleep(1.5)                      # (the quick help is drawn a moment after the game is ready)
     box = json.loads(tab.ev("JSON.stringify((function () { var r = document.getElementById('game-container').getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height}; })())"))
-    tab.click(box["x"] + box["w"] * 0.93, box["y"] + box["h"] * 0.94)
-    ok = mod.wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 20, 0.3)
+    ok = False
+    for height in (0.90, 0.94, 0.90, 0.94, 0.90):        # (where START is depends on the picture's shape and the page's size: 0.90 of the canvas's height now, 0.94 before; a click that misses it does nothing, and the next one is made only while the match does not run)
+        tab.click(box["x"] + box["w"] * 0.93, box["y"] + box["h"] * height)
+        ok = mod.wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 5, 0.3)
+        if ok:
+            break
     return ok and mod.wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 25, 0.3), box
 
 
 def clock_picture(tab, box):
-    """a picture of the time on the game's screen (its upper left corner), as text: it differs when the time has moved"""
-    clip = {"x": box["x"], "y": box["y"], "width": max(box["w"] * 0.16, 40), "height": max(box["h"] * 0.05, 14), "scale": 1}
+    """a picture of the top band of the game's screen (the time, the names and the scores: only the time moves in a game that nobody plays), as text: it differs when the time has moved (the picture is
+    not as wide as the canvas, so the clock is not in a corner of the canvas but of the picture)"""
+    clip = {"x": box["x"], "y": box["y"], "width": max(box["w"], 40), "height": max(box["h"] * 0.06, 14), "scale": 1}
     return tab.call("Page.captureScreenshot", {"format": "png", "clip": clip})["data"]
 
 
@@ -306,13 +311,14 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     dialog_button(page, "OK")
     mod.make_extended(page, 100, 100)
     page.press_act("play")
-    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')"), 10) and "This map is bigger than the game can play yet." in page.ev("document.querySelector('.dlg-in').textContent"), "an Extended map of 100 x 100: \"This map is bigger than the game can play yet.\"")
+    # (an Extended map plays up to 512 x 512: a blank one of 100 x 100 is refused for its colors, as a blank Classic map is, not for its size; no Extended map that the editor makes is bigger than the game plays)
+    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')"), 10) and page.ev("document.querySelector('.dlg h2').textContent") == "This map cannot be played yet", "a blank Extended map of 100 x 100 is refused")
+    text = page.ev("document.querySelector('.dlg-in').textContent")
+    check("bigger than the game can play" not in text and "Green has no hill" in text and "Black has no starting ants" in text, "for its colors, not for its size: the check's own sentences are there and nothing about a map that is too big")
     names = page.ev("[].map.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent; })")
-    check(names == ["Make a Classic copy...", "OK"] and not page.ev("!!document.querySelector('.pseat')"), "with a way to a Classic copy and OK, and no Start: %s" % names)
+    check(names == ["OK"] and not page.ev("!!document.querySelector('.pseat')"), "with OK only (no way to a Classic copy, which is for a map that is too big), and no Start: %s" % names)
     page.shot(args.shots, shots_prefix + "-desktop-refusal-extended")
-    dialog_button(page, "Make a Classic copy")
-    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent !== 'This map cannot be played yet' || !document.getElementById('crop').hidden"), 8), "the way leads into the editor's own conversion")
-    page.key("Escape")
+    dialog_button(page, "OK")
     # a browser that does not open the tab
     page.choose_file(tiny_path)
     leave_unsaved(page, mod)
@@ -379,7 +385,7 @@ def run_play_phone(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     page.press_act("menu")
     mod.wait_for(lambda: page.ev("!!document.querySelector('.menulist')"), 5)
     page.ev("[].filter.call(document.querySelectorAll('.menulist .btn'), function (b) { return b.textContent.indexOf('Play this map') >= 0; })[0].click()")
-    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')"), 10) and "bigger than the game can play yet" in page.ev("document.querySelector('.dlg-in').textContent"), "an Extended map of 100 x 100 is refused on a phone too")
+    check(mod.wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')"), 10) and page.ev("document.querySelector('.dlg h2').textContent") == "This map cannot be played yet" and "bigger than the game can play" not in page.ev("document.querySelector('.dlg-in').textContent"), "a blank Extended map of 100 x 100 is refused on a phone too, for its colors")
     small = page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (n) { return n.getBoundingClientRect().height < 43.5; }).length")
     check(small == 0 and not page.ev("document.documentElement.scrollWidth > innerWidth"), "its buttons are 44 pixels, no sideways scroll")
     page.shot(args.shots, shots_prefix + "-phone-refusal")
