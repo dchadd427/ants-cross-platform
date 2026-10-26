@@ -466,7 +466,7 @@
       "id": "number_hurt_mode_shows_every_ant",
       "file": "include/ants_app/health_marks.hpp",
       "old": "    if (when == When::Off || frozen) return false;\n    return when == When::All || hp < max_hp;",
-      "new": "    if (when == When::Off || frozen) return false;\n    return when != When::Off;",
+      "new": "    if (when == When::Off || frozen) return false;\n    (void)hp; (void)max_hp;\n    return when != When::Off;",
       "build": [
         "test_health_marks"
       ],
@@ -486,7 +486,7 @@
       "id": "number_frozen_ant_marked",
       "file": "include/ants_app/health_marks.hpp",
       "old": "    if (when == When::Off || frozen) return false;\n    return when == When::All || hp < max_hp;",
-      "new": "    if (when == When::Off) return false;\n    return when == When::All || hp < max_hp;",
+      "new": "    (void)frozen;\n    if (when == When::Off) return false;\n    return when == When::All || hp < max_hp;",
       "build": [
         "test_health_marks"
       ],
@@ -568,9 +568,10 @@
       "old": "this->draw_ant_number(a, a.px + pred.dx, a.py + pred.dy);",
       "new": "this->draw_ant_number(a, a.px, a.py);",
       "build": [
-        "test_health_marks"
+        "test_health_marks",
+        "test_render_parity"
       ],
-      "test": "./build/tests/test_app/test_health_marks"
+      "test": "./build/tests/test_app/test_render_parity"
     },
     {
       "id": "number_not_drawn_at_zoom_one",

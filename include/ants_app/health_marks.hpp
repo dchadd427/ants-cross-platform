@@ -77,7 +77,7 @@ struct Rect {
 };
 constexpr bool overlaps(const Rect& a, const Rect& b) noexcept { return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h; }
 
-/// A mark stands over the ant's head: its lower edge is this many world pixels above the ant's position (scaled by the zoom)
+/// The bar stands over the ant's head (the number is at the ant's lower right, renderer_health.cpp): its lower edge is this many world pixels above the ant's position (scaled by the zoom)
 constexpr int32_t kHeadAbove = 31;
 constexpr int32_t kBarWorldWidth = 22;      // a bar is 22 world pixels wide (scaled by the zoom; at least kBarMinWidth)
 constexpr int32_t kBarMinWidth = 6;
