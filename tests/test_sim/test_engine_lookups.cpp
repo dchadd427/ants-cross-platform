@@ -82,16 +82,37 @@ struct LinearOnly {
     LinearOnly& operator=(const LinearOnly&) = delete;
 };
 
+// Counts the stale events that the two nets of the heap put right instead of stopping the program, while it lives (lookup_shadow.hpp): for the tests that write the fields of the
+// events from outside on purpose
+struct CountStale {
+    CountStale() { lookup_shadow_count_stale_events() = true; }
+    ~CountStale() { lookup_shadow_count_stale_events() = false; }
+    CountStale(const CountStale&) = delete;
+    CountStale& operator=(const CountStale&) = delete;
+};
+
 // What the shadow checks of the tile lists did since this was made: the questions of occ_scan and the blasts that were compared with their scans, the ants those blasts threw,
 // and the lists that were rebuilt from the ants and compared (a test shows that it met piles of ants, not only that nothing differed)
 struct Marks {
     uint64_t scans{lookup_shadow_scan_checks()}, blasts{lookup_shadow_blast_checks()}, blast_ants{lookup_shadow_blast_ants()}, lists{lookup_shadow_list_checks()};
+    uint64_t events{lookup_shadow_event_checks()}, heaps{lookup_shadow_event_verifies()}, catch_ups{lookup_shadow_event_catch_ups()};
+    uint64_t changes{lookup_shadow_event_catch_up_changes()}, stale{lookup_shadow_event_stale_entries()};
+    uint64_t picks[4] = {lookup_shadow_event_picks(0), lookup_shadow_event_picks(1), lookup_shadow_event_picks(2), lookup_shadow_event_picks(3)};
     uint64_t scans_since() const { return lookup_shadow_scan_checks() - scans; }
     uint64_t blasts_since() const { return lookup_shadow_blast_checks() - blasts; }
     uint64_t blast_ants_since() const { return lookup_shadow_blast_ants() - blast_ants; }
+    uint64_t events_since() const { return lookup_shadow_event_checks() - events; }
+    uint64_t heaps_since() const { return lookup_shadow_event_verifies() - heaps; }
+    uint64_t catch_ups_since() const { return lookup_shadow_event_catch_ups() - catch_ups; }
+    uint64_t picks_since(size_t kind) const { return lookup_shadow_event_picks(kind) - picks[kind]; }
+    uint64_t changes_since() const { return lookup_shadow_event_catch_up_changes() - changes; }   // ants whose events only the start-of-tick pass put right
+    uint64_t stale_since() const { return lookup_shadow_event_stale_entries() - stale; }          // entries that a selection found the ant did not bear out
     std::string since() const {
         return std::to_string(scans_since()) + " tile questions, " + std::to_string(blasts_since()) + " blasts of " + std::to_string(blast_ants_since()) + " ants, " +
-               std::to_string(lookup_shadow_list_checks() - lists) + " list checks";
+               std::to_string(lookup_shadow_list_checks() - lists) + " list checks, " + std::to_string(events_since()) + " event selections compared, events run: " + std::to_string(picks_since(0)) +
+               " burn, " + std::to_string(picks_since(1)) + " combat timer, " + std::to_string(picks_since(2)) + " frame, " + std::to_string(picks_since(3)) + " pause, " +
+               std::to_string(heaps_since()) + " heap checks, " + std::to_string(catch_ups_since()) +
+               " ants looked at by the start-of-tick pass (it found nothing to do on any)";
     }
 };
 
@@ -468,6 +489,588 @@ void run_lookup_tests() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
+// The event heap (src/ants_sim/event_heap.hpp, event_queue.cpp): the next timed event of the ants without a scan of every ant
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+constexpr uint32_t kNever = 0xFFFFFFFFu;
+
+// "slot:K@time" for an event (K: B burn, C combat timer, L animation frame, P pause), "none" for no event
+std::string event_text(bool found, const AntEventPick& p) {
+    if (!found) return "none";
+    return std::to_string(p.slot) + ":" + "BCLP"[static_cast<size_t>(p.kind) & 3u] + "@" + std::to_string(p.time);
+}
+
+// The event that `top` gave is done: not pending any more
+void drop(AntEventHeap& h, const AntEventPick& p) { h.set(p.slot, p.kind, false, 0); }
+
+// An engine with no map at all and ants that are made by hand: the fields that decide the events are written the way the simulation writes them (a field, then event_refresh)
+struct EventWorld {
+    SimulationEngineImpl impl;
+    movement::MotionClip multi, single;   // a clip of several frames, a clip of one frame
+    EventWorld() {
+        impl.grid_.init_empty(8, 8);
+        impl.movement_reset();
+        for (size_t i = 0; i < movement::clip_count(); ++i) {
+            const movement::MotionClip c = movement::clip_at(i);
+            if (c.valid() && c.count > 1 && !multi.valid()) multi = c;
+            if (c.valid() && c.count == 1 && !single.valid()) single = c;
+        }
+    }
+    // An ant in the next slot of the table, with this id (not necessarily slot + 1)
+    AntUnit& add(uint32_t id) {
+        impl.ants_.push_back(std::make_unique<AntUnit>(id, TeamId::Black, AntType::Worker, 0, 0));
+        return *impl.ants_.back();
+    }
+    void loco(AntUnit& a, uint32_t next_ms) {
+        a.loco_action = AntUnit::kActionWalk;
+        a.loco.clip = multi;
+        a.loco.cursor = 1;
+        a.loco.next_ms = next_ms;
+        impl.event_refresh(a);
+    }
+    void pause(AntUnit& a, uint32_t fire_ms) {
+        a.loco_action = AntUnit::kActionWalk;
+        a.pause_active = true;
+        a.pause_fire_ms = fire_ms;
+        impl.event_refresh(a);
+    }
+    void burn(AntUnit& a, uint32_t ms) {
+        a.burn_end_ms = ms;
+        impl.event_refresh(a);
+    }
+    void combevt(AntUnit& a, uint32_t ms) {
+        a.combevt_due_ms = ms;
+        impl.event_refresh(a);
+    }
+    // The next event at or before t_end by the heap (which the shadow build also compares with the scan), and by the scan alone: they must be the same
+    std::string next(uint32_t t_end) {
+        AntEventPick p, s;
+        const bool found = impl.next_ant_event(t_end, p);
+        const bool scan_found = impl.next_ant_event_scan(t_end, s);
+        const std::string by_heap = event_text(found, p), by_scan = event_text(scan_found, s);
+        if (by_heap != by_scan || (found && p.ant != s.ant)) return "heap " + by_heap + " but scan " + by_scan;
+        return by_heap;
+    }
+    // Runs the next event the way movement_tick does: its handler changes the ant (here: `handler`), and the ant's events are set again by whoever changed its fields
+    std::string run(uint32_t t_end, const std::function<void(AntUnit&, AntEventKind)>& handler) {
+        AntEventPick p;
+        const std::string text = next(t_end);
+        if (!impl.next_ant_event(t_end, p)) return text;
+        handler(*p.ant, p.kind);
+        impl.event_refresh(*p.ant);
+        return text;
+    }
+    // The handler of a finished event: its field goes back to "no event"
+    static void finish(AntUnit& a, AntEventKind kind) {
+        if (kind == AntEventKind::Burn) a.burn_end_ms = 0;
+        else if (kind == AntEventKind::Combevt) a.combevt_due_ms = 0;
+        else if (kind == AntEventKind::Pause) a.pause_active = false;
+        else a.loco.cursor = 0;
+    }
+};
+
+void run_event_tests() {
+    TEST_CASE("L4.1 Event heap alone: the order is (time, place, kind), an event whose time moves earlier or later, an event that is not pending any more or is done, a version that changes, the heap made again (answers worked out by hand)") {
+        AntEventHeap h;
+        AntEventPick p;
+        ASSERT_TRUE(!h.top(p) && h.pending() == 0 && h.entries() == 0);
+        // seven events: two of one ant and one of another at the same time, an earlier one of a later ant, and a late one
+        h.set(5, AntEventKind::Loco, true, 100);
+        h.set(2, AntEventKind::Pause, true, 100);
+        h.set(2, AntEventKind::Burn, true, 100);
+        h.set(2, AntEventKind::Combevt, true, 100);
+        h.set(7, AntEventKind::Burn, true, 90);
+        h.set(0, AntEventKind::Loco, true, 200);
+        h.set(3, AntEventKind::Loco, true, 0);                       // (an ant whose time is 0: a time like any other)
+        ASSERT_TRUE(h.pending() == 7 && h.entries() == 7);
+        const std::vector<std::string> by_hand = {"3:L@0", "7:B@90", "2:B@100", "2:C@100", "2:P@100", "5:L@100", "0:L@200"};   // (time, slot, kind)
+        {
+            AntEventHeap c = h;                                       // a copy gives the same order, and takes nothing from the original
+            for (const std::string& want : by_hand) {
+                ASSERT_TRUE(c.top(p));
+                ASSERT_TRUE(event_text(true, p) == want);
+                drop(c, p);
+            }
+            ASSERT_TRUE(!c.top(p) && c.pending() == 0);
+            ASSERT_TRUE(h.pending() == 7 && h.consistent());
+        }
+        // the time of an event moves earlier: the new entry is first and the old one is dead; later: the old one is dead and the event is behind the others; away: gone
+        h.set(0, AntEventKind::Loco, true, 50);
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "3:L@0");
+        h.set(3, AntEventKind::Loco, true, 300);                     // later
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "0:L@50");
+        h.set(0, AntEventKind::Loco, false, 0);                      // not pending any more
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "7:B@90");
+        h.set(7, AntEventKind::Burn, true, 95);                      // later, still before the ties at 100
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "7:B@95");
+        h.set(7, AntEventKind::Burn, true, 100);                     // later still: the tie at 100 goes to the lower place
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "2:B@100");
+        // the same time again changes nothing (no second entry), the old time again after another time is one live entry
+        const size_t entries = h.entries();
+        h.set(7, AntEventKind::Burn, true, 100);
+        ASSERT_TRUE(h.entries() == entries);
+        h.set(5, AntEventKind::Loco, true, 60);
+        h.set(5, AntEventKind::Loco, true, 100);                     // 100, 60, 100: the entry of the first 100 and of the second are two, one of them dead
+        ASSERT_TRUE(h.pending() == 6 && h.consistent());
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "2:B@100");
+        // an event that is done: it is out, it is pending again only when it is set; set at the same time it is the next one again
+        ASSERT_TRUE(h.top(p));
+        drop(h, p);
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "2:C@100" && h.pending() == 5);
+        h.set(2, AntEventKind::Burn, true, 100);
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "2:B@100" && h.pending() == 6 && h.consistent());
+        // a long run of moves of one event leaves one live entry: the heap is made again from the records when the dead entries outnumber the live ones, and nothing is lost
+        for (uint32_t t = 1000; t < 21000; ++t) h.set(9, AntEventKind::Loco, true, t);
+        ASSERT_TRUE(h.pending() == 7 && h.entries() <= 4u * 7u + 4096u + 1u && h.consistent());
+        ASSERT_TRUE(h.top(p) && event_text(true, p) == "2:B@100");
+        std::vector<std::string> order;
+        while (h.top(p)) {
+            order.push_back(event_text(true, p));
+            drop(h, p);
+        }
+        ASSERT_TRUE(order == (std::vector<std::string>{"2:B@100", "2:C@100", "2:P@100", "5:L@100", "7:B@100", "3:L@300", "9:L@20999"}));
+        // a copy, an assignment over a heap that holds other events, a move (the source is left empty and usable) and an assignment into the moved-from one
+        AntEventHeap a, b;
+        a.set(1, AntEventKind::Loco, true, 10);
+        a.set(4, AntEventKind::Pause, true, 5);
+        b.set(2, AntEventKind::Burn, true, 1);
+        AntEventHeap copy(a);
+        b = a;
+        ASSERT_TRUE(copy.consistent() && b.consistent() && copy.pending() == 2 && b.pending() == 2);
+        ASSERT_TRUE(b.top(p) && event_text(true, p) == "4:P@5");
+        AntEventHeap moved(std::move(a));
+        ASSERT_TRUE(moved.pending() == 2 && moved.top(p) && event_text(true, p) == "4:P@5");
+        a = copy;                                                    // into the moved-from heap
+        ASSERT_TRUE(a.pending() == 2 && a.consistent() && a.top(p) && event_text(true, p) == "4:P@5");
+        a.reset();
+        ASSERT_TRUE(!a.top(p) && a.pending() == 0 && a.slots() == 0);
+    } TEST_END();
+
+    TEST_CASE("L4.2 Next ant event: the earliest by time, then by place in the table (not by id), then by kind; at or before the end of the tick only (answers worked out by hand)") {
+        EventWorld w;
+        AntUnit& s0 = w.add(10);                                     // ids that are not the place in the table: 10, 5, 99, 1, 7, 8
+        AntUnit& s1 = w.add(5);
+        AntUnit& s2 = w.add(99);
+        AntUnit& s3 = w.add(1);
+        AntUnit& s4 = w.add(7);
+        AntUnit& s5 = w.add(8);
+        ASSERT_TRUE(w.next(1000) == "none");
+        w.combevt(s0, 100);
+        w.loco(s1, 100);
+        w.pause(s1, 100);
+        w.burn(s2, 100);
+        w.loco(s3, 100);
+        w.loco(s4, 60);
+        w.burn(s5, 130);
+        ASSERT_TRUE(w.next(59) == "none");                           // nothing is due before 60
+        ASSERT_TRUE(w.next(60) == "4:L@60");
+        ASSERT_TRUE(w.next(99) == "4:L@60");
+        // run them all: by time, then the place (slot 0 before 1 before 2 before 3, though ant 1 is in slot 3), then the kind (the animation frame before the pause)
+        std::vector<std::string> ran;
+        for (int guard = 0; guard < 20; ++guard) {
+            const std::string text = w.run(150, EventWorld::finish);
+            if (text == "none") break;
+            ran.push_back(text);
+        }
+        ASSERT_TRUE(ran == (std::vector<std::string>{"4:L@60", "0:C@100", "1:L@100", "1:P@100", "2:B@100", "3:L@100", "5:B@130"}));
+        ASSERT_TRUE(w.next(kNever - 1) == "none");
+        // an event after the end of the tick stays; the tick that reaches it takes it
+        w.loco(s2, 151);
+        ASSERT_TRUE(w.next(150) == "none" && w.next(151) == "2:L@151");
+        // handler that leaves the event as it was: the event is next again (the scan would take it again); one that moves it later: it goes behind the others
+        w.loco(s1, 200);
+        w.loco(s3, 200);
+        ASSERT_TRUE(w.run(300, [](AntUnit&, AntEventKind) {}) == "2:L@151");                              // (nothing changed: the same event is next)
+        ASSERT_TRUE(w.next(300) == "2:L@151");
+        ASSERT_TRUE(w.run(300, [](AntUnit& a, AntEventKind) { a.loco.next_ms = 250; }) == "2:L@151");   // later than the others
+        ASSERT_TRUE(w.next(300) == "1:L@200");
+        ASSERT_TRUE(w.run(300, [](AntUnit& a, AntEventKind) { a.loco.next_ms = 150; }) == "1:L@200");   // earlier than the others
+        ASSERT_TRUE(w.next(300) == "1:L@150");
+        w.loco(s0, 150);                                              // a tie of two ants at 150: the lower place first
+        ASSERT_TRUE(w.next(300) == "0:L@150");
+    } TEST_END();
+
+    TEST_CASE("L4.3 Next ant event: what makes an event pending, one condition at a time (a removed ant keeps its animation and pause, a clip of one frame or a cursor of 0 has no frame due, an event at the largest time never falls due)") {
+        EventWorld w;
+        AntUnit& a = w.add(1);
+        auto none = [&w]() { return w.next(kNever - 1) == "none" && w.next(kNever) == "none"; };
+        // the animation frame: the action, a valid clip, a clip of more than one frame, a cursor that is not 0, a time that is not the largest number
+        w.loco(a, 40);
+        ASSERT_TRUE(w.next(40) == "0:L@40");
+        a.loco_action = AntUnit::kActionNone;                          // no action: no frame, and no pause either
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        a.loco_action = AntUnit::kActionIdle;                          // action 0 is an action
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(w.next(40) == "0:L@40");
+        a.loco.cursor = 0;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        a.loco.cursor = 2;
+        a.loco.clip = w.single;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        a.loco.clip = movement::MotionClip{};
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        a.loco.clip = movement::MotionClip{};                          // two frames but no frame list: not a valid clip
+        a.loco.clip.count = 2;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        a.loco.clip = w.multi;
+        a.loco.next_ms = kNever;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        a.loco.next_ms = kNever - 1;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(w.next(kNever - 1) == "0:L@4294967294" && w.next(kNever - 2) == "none");
+        a.loco.next_ms = 0;                                            // the time 0 is a time, for the animation (the burn and the combat timer use 0 for "none")
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(w.next(0) == "0:L@0");
+        w.loco(a, 40);
+        // the pause
+        a.loco.cursor = 0;
+        w.pause(a, 70);
+        ASSERT_TRUE(w.next(70) == "0:P@70" && w.next(69) == "none");
+        a.pause_active = false;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        w.pause(a, kNever);
+        ASSERT_TRUE(none());
+        w.pause(a, 0);                                                 // a pause fires at 0 too
+        ASSERT_TRUE(w.next(0) == "0:P@0");
+        a.loco_action = AntUnit::kActionNone;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        a.pause_active = false;
+        // the burn overlay and the combat timer: not 0, not the largest number, and the ant not removed
+        w.burn(a, 55);
+        w.combevt(a, 65);
+        ASSERT_TRUE(w.next(54) == "none" && w.next(55) == "0:B@55" && w.next(1000) == "0:B@55");
+        w.burn(a, 0);
+        ASSERT_TRUE(w.next(1000) == "0:C@65");
+        w.combevt(a, 0);
+        ASSERT_TRUE(none());
+        w.burn(a, kNever);
+        w.combevt(a, kNever);
+        ASSERT_TRUE(none());
+        w.burn(a, 55);
+        w.combevt(a, 65);
+        a.removed = true;                                              // removed: the burn and the combat timer are gone ...
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(none());
+        w.loco(a, 40);                                                 // ... the animation frame and the pause are not looked at for removed (the scan did not)
+        w.pause(a, 30);
+        ASSERT_TRUE(w.next(100) == "0:P@30");
+        a.removed = false;
+        w.impl.event_refresh(a);
+        ASSERT_TRUE(w.next(100) == "0:P@30");                          // (30 is the earliest of the four)
+        // an ant that is not in the table has no event; an ant in the table that was copied keeps no link to the heap of the original
+        AntUnit stray(77, TeamId::Black, AntType::Worker, 0, 0);
+        stray.burn_end_ms = 1;
+        w.impl.event_refresh(stray);
+        ASSERT_TRUE(w.next(100) == "0:P@30");
+    } TEST_END();
+
+    TEST_CASE("L4.4 Event heap: after every change of a field, copy, assignment, move, restart and growth of the table the heap equals the ants' fields and the next event the scan's (random operations, ties, ids that are not the place, holes)") {
+        uint32_t s = 20260;
+        auto below = [&s](uint32_t n) { s = s * 1664525u + 1013904223u; return (s >> 8) % n; };
+        auto time_of = [&below]() { const uint32_t r = below(20); return r == 0 ? kNever : r == 1 ? 0u : below(7) * 50u; };   // few times: many ties
+        EventWorld w;
+        std::vector<SimulationEngineImpl> spares;
+        uint64_t compared = 0, ties = 0;
+        uint32_t next_id = 1;
+        auto add_ant = [&]() {
+            const uint32_t id = below(3) == 0 ? 1000u + below(100000) : next_id++;      // ids of every kind (some are not the place in the table)
+            w.add(id);
+        };
+        for (int i = 0; i < 12; ++i) add_ant();
+        auto any_ant = [&]() -> AntUnit* {
+            for (uint32_t tries = 0; tries < 8; ++tries) {
+                const uint32_t i = below(static_cast<uint32_t>(w.impl.ants_.size() + 1));
+                if (i < w.impl.ants_.size() && w.impl.ants_[i]) return w.impl.ants_[i].get();
+            }
+            return nullptr;
+        };
+        for (int step = 0; step < 6000; ++step) {
+            const uint32_t op = below(100);
+            if (op < 40) {                                               // a field changes, as in the simulation: the field, then event_refresh
+                if (AntUnit* a = any_ant()) {
+                    switch (below(5)) {
+                        case 0: a->burn_end_ms = time_of(); break;
+                        case 1: a->combevt_due_ms = time_of(); break;
+                        case 2:
+                            a->loco_action = below(4) == 0 ? AntUnit::kActionNone : (below(2) == 0 ? AntUnit::kActionWalk : AntUnit::kActionIdle);
+                            a->loco.clip = below(5) == 0 ? movement::MotionClip{} : (below(4) == 0 ? w.single : w.multi);
+                            a->loco.cursor = static_cast<uint16_t>(below(3));
+                            a->loco.next_ms = time_of();
+                            break;
+                        case 3:
+                            a->pause_active = below(3) != 0;
+                            a->pause_fire_ms = time_of();
+                            if (below(3) == 0) a->loco_action = AntUnit::kActionNone;
+                            break;
+                        default:
+                            a->removed = below(2) == 0;
+                            if (a->removed && below(2) == 0) a->loco_action = AntUnit::kActionNone;
+                            break;
+                    }
+                    w.impl.event_refresh(*a);
+                }
+            } else if (op < 70) {                                        // the tick's loop: the next event runs, its handler changes the ant, the ant is set again
+                const uint32_t t_end = below(8) == 0 ? kNever : below(7) * 50u;
+                AntEventPick p;
+                if (w.impl.next_ant_event(t_end, p)) {
+                    AntUnit& a = *p.ant;
+                    switch (below(4)) {
+                        case 0: EventWorld::finish(a, p.kind); break;
+                        case 1: if (p.kind == AntEventKind::Loco) a.loco.next_ms += below(3) * 50u; else if (p.kind == AntEventKind::Pause) a.pause_fire_ms += 50; else EventWorld::finish(a, p.kind); break;
+                        case 2: if (p.kind == AntEventKind::Loco && a.loco.next_ms >= 50) a.loco.next_ms -= 50; break;
+                        default: break;                                  // the event is left as it was: it is next again
+                    }
+                    w.impl.event_refresh(a);
+                }
+            } else if (op < 78) {
+                if (w.impl.ants_.size() < 50) {
+                    if (below(8) == 0) w.impl.ants_.push_back(AntPtr());   // a hole
+                    else add_ant();
+                }
+            } else if (op < 83) {
+                spares.push_back(w.impl);                                // copy construction: the copy answers as the original
+                SimulationEngineImpl& c = spares.back();
+                c.event_heap_verify();
+                const uint32_t t_end = below(7) * 50u;
+                AntEventPick pa, pc;
+                const bool fa = w.impl.next_ant_event(t_end, pa), fc = c.next_ant_event(t_end, pc);
+                ASSERT_TRUE(fa == fc && (!fa || (pa.slot == pc.slot && pa.time == pc.time && pa.kind == pc.kind && pc.ant == c.ants_[pc.slot].get())));
+            } else if (op < 87 && !spares.empty()) {
+                w.impl = spares[below(static_cast<uint32_t>(spares.size()))];   // copy assignment over an engine that has ants and events of its own
+            } else if (op < 90) {
+                SimulationEngineImpl moved(std::move(w.impl));          // move, and back
+                w.impl = std::move(moved);
+            } else if (op < 92 && !spares.empty()) {
+                SimulationEngineImpl source(spares.back());             // an engine that was moved from, assigned to: it is a whole engine again
+                SimulationEngineImpl taker(std::move(source));
+                source = spares[below(static_cast<uint32_t>(spares.size()))];
+                source.event_heap_verify();
+                w.impl = std::move(source);
+                (void)taker;
+            } else if (op < 93 && below(2) == 0) {
+                w.impl.ants_.clear();                                    // a new match: no ants, the heap starts again
+                w.impl.movement_reset();
+                next_id = 1;
+                for (int i = 0; i < 4; ++i) add_ant();
+            } else if (spares.size() > 6) {
+                spares.erase(spares.begin());
+            }
+            w.impl.event_heap_verify();                                   // every ant's four events against the heap, and the heap's own order
+            for (const uint32_t t_end : {0u, 100u, 175u, 300u, kNever - 1, kNever}) {
+                const std::string text = w.next(t_end);                   // (the heap against the scan, and the pick itself)
+                ASSERT_TRUE(text.compare(0, 4, "heap") != 0);
+                ++compared;
+            }
+            if (step % 7 == 0) {
+                size_t at_100 = 0;
+                for (const auto& up : w.impl.ants_) at_100 += (up && ((up->burn_end_ms == 100 && !up->removed) || up->pause_fire_ms == 100)) ? 1u : 0u;
+                ties += at_100 > 1 ? 1u : 0u;
+            }
+        }
+        for (SimulationEngineImpl& sp : spares) sp.event_heap_verify();
+        std::cout << "\n        " << compared << " selections compared with the scan, " << ties << " moments with ties at 100   ... ";
+        ASSERT_TRUE(compared > 30000);
+        ASSERT_TRUE(ties > 20);
+    } TEST_END();
+
+    TEST_CASE("L4.6 Event heap: every function that writes the fields of the events leaves the heap as the fields say, called by itself on an ant that has events (animation play, release, pause start, cancel and fire, an action, the combat timer, the burn overlay, a retreat, a removal)") {
+        // a clip that is played over a pending animation frame: an invalid clip starts nothing, so nothing falls due any more
+        {
+            EventWorld w;
+            AntUnit& a = w.add(1);
+            w.loco(a, 40);
+            w.impl.loco_play(a, movement::MotionClip{}, 4);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(kNever - 1) == "none");
+            w.impl.loco_play(a, w.multi, 4);                             // a valid one: its start step runs, the next frame falls due
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(kNever - 1) != "none");
+        }
+        // released: no action, no pause, so no frame and no pause
+        {
+            EventWorld w;
+            AntUnit& a = w.add(1);
+            w.loco(a, 40);
+            w.pause(a, 30);
+            ASSERT_TRUE(w.next(100) == "0:P@30");
+            w.impl.loco_release(a);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(kNever - 1) == "none");
+        }
+        // a pause starts (the ant has an action; it ends 300 ms later), is cancelled, starts again and fires
+        {
+            EventWorld w;
+            AntUnit& a = w.add(1);
+            w.loco(a, 500);
+            w.impl.now_ms_ = 100;
+            w.impl.start_pause(a);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(1000) == "0:P@400");
+            w.impl.cancel_pause(a);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(1000) == "0:L@500");
+            w.impl.start_pause(a);
+            a.pause_saved_action = AntUnit::kActionIdle;
+            w.impl.pause_fire(a);                                        // the pause is over: the ant plays its idle clip again
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(!a.pause_active && w.next(1000).find(":P@") == std::string::npos);
+            w.impl.set_action(a, AntUnit::kActionWalk, 2, -1, -1, false);   // an action
+            w.impl.event_heap_verify();
+            w.impl.set_action(a, 0x30, 2, -1, -1, false);                // (an action that the switch does not know sets the field and plays nothing)
+            w.impl.event_heap_verify();
+        }
+        // the combat timer
+        {
+            EventWorld w;
+            AntUnit& b = w.add(2);
+            w.impl.now_ms_ = 1000;
+            w.impl.start_combat_timer(b, 250);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(1249) == "none" && w.next(1250) == "0:C@1250");
+            w.impl.cancel_combat_timer(b);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(w.next(kNever - 1) == "none");
+        }
+        // the burn overlay starts, and ends (an ant that is dying when its overlay ends: nothing after the end sets its events again)
+        {
+            EventWorld w;
+            AntUnit& b = w.add(2);
+            w.impl.anim_clock_ms_ = 2000;
+            w.impl.burn_overlay_start(b);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(b.burn_end_ms > 2000 && w.next(kNever - 1) == "0:B@" + std::to_string(b.burn_end_ms));
+            b.hp = 0;
+            b.loco_action = AntUnit::kActionDeath;
+            w.impl.event_refresh(b);
+            w.impl.burn_overlay_end(b);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(b.burn_end_ms == 0 && w.next(kNever - 1) == "none");
+        }
+        // a retreat: a 1 hp ant that has no action (what a released ant has) is put on action 0 by low_hp_check, and its leftover clip is an animation again
+        {
+            EventWorld w;
+            AntUnit& c = w.add(3);
+            w.loco(c, 40);
+            c.loco_action = AntUnit::kActionNone;
+            w.impl.event_refresh(c);
+            ASSERT_TRUE(w.next(100) == "none");
+            c.hp = 1;
+            ASSERT_TRUE(w.impl.low_hp_check(c));
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(c.loco_action == AntUnit::kActionIdle && w.next(100) == "0:L@40");
+        }
+        // a pause that ends on an ant whose old action cannot be left (a death that is over: finish_death does nothing for a removed ant): set_action returns before it writes
+        // anything, and pause_fire has cleared pause_active all the same
+        {
+            EventWorld w;
+            AntUnit& a = w.add(1);
+            w.pause(a, 30);
+            a.removed = true;
+            a.loco_action = AntUnit::kActionDeath;
+            a.pause_saved_action = AntUnit::kActionIdle;
+            w.impl.event_refresh(a);
+            ASSERT_TRUE(w.next(100) == "0:P@30");
+            w.impl.pause_fire(a);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(!a.pause_active && w.next(kNever - 1).find(":P@") == std::string::npos);
+        }
+        // a removal: every event of the ant is gone
+        {
+            EventWorld w;
+            AntUnit& d = w.add(4);
+            w.loco(d, 10);
+            w.pause(d, 20);
+            w.burn(d, 30);
+            w.combevt(d, 40);
+            ASSERT_TRUE(w.next(100) == "0:L@10");
+            w.impl.remove_ant(d);
+            w.impl.event_heap_verify();
+            ASSERT_TRUE(d.removed && w.next(kNever - 1) == "none");
+        }
+    } TEST_END();
+
+    TEST_CASE("L4.7 Scans alone: a thread switched to the scans (LinearOnly) takes the next event from the scan, whatever the heap says (a heap that is wrong on purpose), and keeps the heap as the writers leave it") {
+        EventWorld w;
+        AntUnit& a = w.add(1);
+        w.add(2);
+        w.loco(a, 60);
+        w.impl.event_heap_.set(0, AntEventKind::Loco, true, 5);          // the heap says 5; the ant says 60
+        w.impl.event_heap_.set(1, AntEventKind::Burn, true, 7);          // and an event of an ant that has none
+        {
+            LinearOnly scans;
+            AntEventPick p;
+            ASSERT_TRUE(w.impl.next_ant_event(100, p) && p.slot == 0 && p.time == 60 && p.kind == AntEventKind::Loco);
+            ASSERT_TRUE(!w.impl.next_ant_event(59, p));
+            a.loco.cursor = 0;                                           // a writer in the scan engine: the heap is kept in step (the check and the copies need it)
+            w.impl.event_refresh(a);
+            ASSERT_TRUE(!w.impl.next_ant_event(100, p));
+        }
+        w.impl.event_heap_ = AntEventHeap();                             // the engine of the scans never reads it: it is empty here, and the answer is still the scan's
+        w.loco(a, 80);
+        {
+            LinearOnly scans;
+            w.impl.event_heap_ = AntEventHeap();
+            AntEventPick p;
+            ASSERT_TRUE(w.impl.next_ant_event(100, p) && p.time == 80);
+        }
+    } TEST_END();
+
+    TEST_CASE("L4.5 Engine copy: a copy of an engine (construction, assignment, an assignment into a moved-from engine) has the heap of its source, plays on to the same state hash, and a restart empties the heap") {
+        SimulationEngine a;
+        a.init_test_world(60, 60, 5);
+        std::vector<uint32_t> ids;
+        for (int i = 0; i < 40; ++i) ids.push_back(a.spawn_unit(static_cast<uint8_t>(i % 4), i % 7 == 0 ? AntType::Combat : AntType::Worker, TileCoord{10 + i % 20, 10 + i / 20 * 3}, false));
+        Command c;
+        c.type = CommandType::GroupMove;
+        c.issuer = 0;
+        c.tile_x = 40;
+        c.tile_y = 40;
+        for (size_t i = 0; i < 20; i += 4) c.ants.push_back(ids[i]);
+        (void)a.apply_command(c);
+        for (int t = 0; t < 40; ++t) a.tick();
+        const uint64_t verifies0 = lookup_shadow_event_verifies();
+        SimulationEngine copy(a);                                        // (the shadow build checks the copy's heap against its ants inside the copy)
+        ASSERT_TRUE(lookup_shadow_event_verifies() == verifies0 + 1);
+        SimulationEngine assigned;
+        assigned = a;
+        ASSERT_TRUE(lookup_shadow_event_verifies() == verifies0 + 2);   // (and so is an assignment)
+        SimulationEngine moved(std::move(a));
+        ASSERT_TRUE(lookup_shadow_event_verifies() == verifies0 + 2);   // (a move changes no ant: nothing to check)
+        a = copy;                                                        // an assignment into the engine that was moved from
+        ASSERT_TRUE(lookup_shadow_event_verifies() == verifies0 + 3);
+        for (int t = 0; t < 120; ++t) {
+            a.tick();
+            copy.tick();
+            assigned.tick();
+            moved.tick();
+            ASSERT_TRUE(a.state_hash() == copy.state_hash() && copy.state_hash() == assigned.state_hash() && assigned.state_hash() == moved.state_hash());
+        }
+        // restart: the same match again from the start on an engine that played one equals a fresh engine's
+        moved.init_test_world(60, 60, 5);
+        SimulationEngine fresh;
+        fresh.init_test_world(60, 60, 5);
+        ASSERT_TRUE(moved.state_hash() == fresh.state_hash());
+        for (int i = 0; i < 6; ++i) {
+            moved.spawn_unit(static_cast<uint8_t>(i % 4), AntType::Worker, TileCoord{10 + i, 10}, false);
+            fresh.spawn_unit(static_cast<uint8_t>(i % 4), AntType::Worker, TileCoord{10 + i, 10}, false);
+        }
+        for (int t = 0; t < 30; ++t) {
+            moved.tick();
+            fresh.tick();
+            ASSERT_TRUE(moved.state_hash() == fresh.state_hash());
+        }
+    } TEST_END();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
 // Two engines, one match
 // ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -624,6 +1227,7 @@ void run_map_tests() {
             if (!why.empty()) std::cout << "\n        " << why << "\n";
             ASSERT_TRUE(why.empty());
             ASSERT_TRUE(checks > 1000);
+            ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);   // no ant needed the start-of-tick pass, no selection met a stale entry
         }
     } TEST_END();
 
@@ -645,6 +1249,7 @@ void run_map_tests() {
             if (!why.empty()) std::cout << "\n        " << why << "\n";
             ASSERT_TRUE(why.empty());
             ASSERT_TRUE(checks > 1000);
+            ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);   // no ant needed the start-of-tick pass, no selection met a stale entry
         }
     } TEST_END();
 }
@@ -658,6 +1263,7 @@ enum class Layout { Packed, Spread, Piled };
 struct Crowd {
     std::vector<std::vector<uint32_t>> ids{4};        // the ants of each team, in the order they were made
     std::vector<std::vector<uint32_t>> special{4};    // the typed ants that add_hazards made (bombers, fire ants, thieves, combat ants, swimmers), also in order
+    std::vector<uint32_t> pit;                        // the ants beside the bombs (40, team i % 4), beside the power-ups (8) and the river (8 swimmers), then the combat ants and workers of the melees
     uint32_t side{0};
 };
 
@@ -751,6 +1357,25 @@ void add_hazards(SimulationEngine& e, uint32_t width, Crowd& crowd) {
     for (int32_t y = mid + 6; y < mid + 12; ++y) {
         for (int32_t x = mid + 6; x < mid + 12; ++x) e.set_terrain(x, y, 2);   // water
     }
+    for (int32_t y = mid - 12; y <= mid - 10; ++y) {
+        for (int32_t x = mid - 10; x <= mid + 6; ++x) e.set_terrain(x, y, 2);  // a river that the swimmers bridge
+    }
+    for (int32_t i = 0; i < 8; ++i) e.grid_mut().place_powerup(mid - 16 + 3 * i, mid + 8, static_cast<uint8_t>(i % 5));   // power-ups on a row below the middle
+    for (int32_t i = 0; i < 40; ++i) {                                          // a row of bombs, each with an ant two tiles below it: sent onto its bomb, 20 % of the bombs are duds (the ant burns)
+        const uint8_t p = static_cast<uint8_t>(i % 4);
+        e.grid_mut().place_bomb(static_cast<uint32_t>(mid - 20 + i), static_cast<uint32_t>(mid + 14), static_cast<uint8_t>((p + 1) % 4));
+        crowd.pit.push_back(e.spawn_unit(p, AntType::Worker, TileCoord{mid - 20 + i, mid + 16}, false));
+    }
+    for (int32_t i = 0; i < 8; ++i) {                                           // workers two tiles from the power-ups, sent onto them
+        crowd.pit.push_back(e.spawn_unit(static_cast<uint8_t>(i % 4), AntType::Worker, TileCoord{mid - 16 + 3 * i, mid + 10}, false));
+    }
+    for (int32_t i = 0; i < 8; ++i) {                                           // swimmers on the bank of the river, sent to dig into it (a bridge)
+        crowd.pit.push_back(e.spawn_unit(static_cast<uint8_t>(i % 4), AntType::Swimmer, TileCoord{mid - 8 + 2 * i, mid - 9}, false));
+    }
+    for (int32_t k = 0; k < 4; ++k) {                                           // melees: a combat ant of team 0 beside a worker of team 1 (the combat ant strikes by its own reflex, the combat timer)
+        crowd.pit.push_back(e.spawn_unit(0, AntType::Combat, TileCoord{mid - 30 + 4 * k, mid - 24}, false));
+        crowd.pit.push_back(e.spawn_unit(1, AntType::Worker, TileCoord{mid - 28 + 4 * k, mid - 24}, false));
+    }
     const AntType kinds[] = {AntType::Bomber, AntType::Fire, AntType::Thief, AntType::Combat, AntType::Swimmer};
     for (uint8_t p = 0; p < 4; ++p) {
         int32_t i = 0;
@@ -762,14 +1387,60 @@ void add_hazards(SimulationEngine& e, uint32_t width, Crowd& crowd) {
     }
 }
 
+// The loco actions that the typed ants and the ants of the pit were seen in (so that a test shows that power-ups were taken and bridges dug)
+struct Seen {
+    std::set<uint8_t> actions;
+};
+Seen g_seen;
+
 // What happens besides the orders of crowd_script (the same calls in both engines): a fire wall across the middle of the world at tick 30 and bombs beside it at tick 31 (ants
-// that walk or are thrown onto them), the typed ants sent to the middle at tick 5 and given special orders at tick 220, an egg hatched for each team every 45 ticks, a third
-// of the ants of team 1 killed at tick 200 (a mass death) and team 2 leaving the match at tick 270 (all its ants die)
+// that walk or are thrown onto them, two ants of a team sent to each bomb at tick 33: some bombs are duds, the ant burns), the typed ants sent to the middle at tick 5, the
+// swimmers ordered onto the river at ticks 25 and 125 (a bridge, then it is torn down) and, the typed ants of the crowd, at 60 and 160, the workers of the pit onto the power-ups at tick 20, special orders at tick 220, an
+// egg hatched for each team every 45 ticks, a third of the ants of team 1 killed at tick 200 (a mass death) and team 2 leaving the match at tick 270 (all its ants die)
 Script hazard_script(const Crowd& crowd, uint32_t width) {
     const Script orders = crowd_script(crowd, width);
     return [crowd, width, orders](Twin& t, uint32_t tick, std::vector<Command>& out) {
         orders(t, tick, out);
         const int32_t mid = static_cast<int32_t>(width / 2);
+        std::vector<uint32_t> watched = crowd.pit;
+        for (uint8_t p = 0; p < 4; ++p) watched.insert(watched.end(), crowd.special[p].begin(), crowd.special[p].end());
+        for (const uint32_t id : watched) {
+            const AntUnit& u = t.engine.get_unit(id);
+            if (u.is_alive()) g_seen.actions.insert(u.loco_action);
+        }
+        auto some = [&](uint8_t p, const std::vector<uint32_t>& ids, size_t from, size_t count, CommandType type, int32_t x, int32_t y) {
+            Command c;
+            c.type = type;
+            c.issuer = p;
+            c.tile_x = static_cast<int16_t>(x);
+            c.tile_y = static_cast<int16_t>(y);
+            for (size_t j = from; j < from + count && j < ids.size(); ++j) c.ants.push_back(ids[j]);
+            if (!c.ants.empty()) out.push_back(c);
+        };
+        if (tick == 15) {
+            for (size_t i = 0; i < 40 && i < crowd.pit.size(); ++i) {
+                some(static_cast<uint8_t>(i % 4), crowd.pit, i, 1, CommandType::GroupMove, mid - 20 + static_cast<int32_t>(i), mid + 14);
+            }
+        }
+        if (tick == 20) {
+            for (size_t i = 0; i < 8 && 40 + i < crowd.pit.size(); ++i) {
+                some(static_cast<uint8_t>(i % 4), crowd.pit, 40 + i, 1, CommandType::GroupMove, mid - 16 + 3 * static_cast<int32_t>(i), mid + 8);
+            }
+        }
+        if (tick == 33) {
+            for (int32_t j = 0; j < 15; ++j) some(static_cast<uint8_t>(j % 4), crowd.ids[static_cast<size_t>(j % 4)], static_cast<size_t>(2 * (j / 4)), 2, CommandType::GroupMove, mid - 14 + 2 * j, mid - 4);
+        }
+        if (tick == 25 || tick == 125) {
+            for (size_t i = 0; i < 8 && 48 + i < crowd.pit.size(); ++i) {
+                some(static_cast<uint8_t>(i % 4), crowd.pit, 48 + i, 1, CommandType::GroupSpecial, mid - 8 + 2 * static_cast<int32_t>(i), mid - 10);
+            }
+        }
+        if (tick == 60 || tick == 160) {
+            for (uint8_t p = 0; p < 4; ++p) {
+                const std::vector<uint32_t>& sp = crowd.special[p];
+                if (sp.size() >= 50) some(p, sp, 40, 10, CommandType::GroupSpecial, mid - 8 + 4 * p, mid - 11);
+            }
+        }
         auto special_group = [&](uint8_t p, CommandType type, int32_t x, int32_t y) {
             const std::vector<uint32_t>& ids = crowd.special[p];
             for (size_t i = 0; i < ids.size(); i += kMaxCommandAnts) {
@@ -813,6 +1484,7 @@ Script hazard_script(const Crowd& crowd, uint32_t width) {
 }
 
 std::string play_crowd(uint32_t width, uint32_t per_team, Layout layout, uint32_t ticks, uint64_t* checks, uint64_t* pending_seen) {
+    g_seen = Seen{};
     Twin t;
     t.engine.init_test_world(width, width, 9);
     Crowd crowd = populate(t.engine, width, per_team, layout);
@@ -824,7 +1496,7 @@ std::string play_crowd(uint32_t width, uint32_t per_team, Layout layout, uint32_
         same = populate(t.old_engine, width, per_team, layout);
         add_hazards(t.old_engine, width, same);
     }
-    if (same.ids != crowd.ids || same.special != crowd.special) return "the two worlds hold different ants";
+    if (same.ids != crowd.ids || same.special != crowd.special || same.pit != crowd.pit) return "the two worlds hold different ants";
     const std::string why = play(t, nullptr, 0x0F, ticks, hazard_script(crowd, width), checks);
     *pending_seen = t.pending_seen;
     return why;
@@ -867,7 +1539,154 @@ void run_crowd_tests(bool big) {
             ASSERT_TRUE(marks.scans_since() > 0);                       // the tile lists answered, and the checks compared them
             ASSERT_TRUE(marks.blasts_since() > 0);                      // piles of ants were thrown apart
             ASSERT_TRUE(marks.blast_ants_since() > marks.blasts_since());   // and some blast threw two ants or more
+            ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);               // no ant needed the start-of-tick pass, no selection met a stale entry
+            ASSERT_TRUE(marks.catch_ups_since() > 1000);                                        // the start-of-tick pass ran over the ants, and (it stops the program otherwise) found nothing to put right
+            ASSERT_TRUE(marks.events_since() > 1000 && marks.heaps_since() >= n);                // the heap chose events, and was checked against the ants at every tick
+            for (size_t kind = 0; kind < 4; ++kind) ASSERT_TRUE(marks.picks_since(kind) > 0);    // events of every kind fell due: a burn overlay, a combat timer, a frame, a pause
+            ASSERT_TRUE(g_seen.actions.count(AntUnit::kActionGetPow) != 0);                     // a power-up was taken
+            ASSERT_TRUE(g_seen.actions.count(AntUnit::kActionBridgeBuild) != 0);                // a swimmer dug a bridge
         }
+    } TEST_END();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Writes from outside: what no writer of the heap follows, and the two nets of a product build that put it right
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// A test hook can write the fields of an ant between two ticks (get_unit); the heap does not hear of it. In a match the nets must never find such a thing (the shadow build stops
+// the program, and the tests above count 0 after every match); here the writes are made on purpose, with the nets set to count (CountStale), and the engine must play on as the
+// scans do (the twin, the hash at every tick).
+void run_foreign_write_tests() {
+    const uint32_t kFar = 3600000u;   // (a time that no test match reaches)
+    TEST_CASE("L4.8 Writes of the event fields from outside, between ticks: each one is counted by the start-of-tick pass (once in each engine of the twin), none is counted when nothing is written, and the hash equals the scans' at every tick") {
+        Twin t;
+        t.engine.init_test_world(90, 90, 9);
+        const Crowd crowd = populate(t.engine, 90, 12, Layout::Spread);
+        {
+            LinearOnly scans;
+            t.old_engine.init_test_world(90, 90, 9);
+            populate(t.old_engine, 90, 12, Layout::Spread);
+        }
+        const CountStale counting;
+        const Marks marks;
+        auto tick = [&](uint32_t n) -> int64_t {                         // n ticks; the ants whose events the pass had to put right in them (both engines); -1: the hashes differ
+            const uint64_t before = marks.changes_since();
+            for (uint32_t i = 0; i < n; ++i) {
+                if (!t.tick()) return -1;
+            }
+            return static_cast<int64_t>(marks.changes_since() - before);
+        };
+        auto poke = [&](uint32_t id, const std::function<void(AntUnit&)>& write) {
+            t.both([&](SimulationEngine& e) { write(e.get_unit(id)); });
+        };
+        auto now = [&] { return static_cast<uint32_t>(t.engine.current_tick()) * 50u; };
+        const uint32_t a = crowd.ids[0][0], b = crowd.ids[1][0], c = crowd.ids[2][0], d = crowd.ids[3][0], e = crowd.ids[0][1], f = crowd.ids[3][1];
+        ASSERT_TRUE(tick(3) == 0);                                       // quiet ticks: nothing to put right
+        poke(a, [&](AntUnit& u) { u.combevt_due_ms = kFar; });          // an event that was not pending is
+        ASSERT_TRUE(tick(1) == 2);
+        poke(a, [&](AntUnit& u) { u.combevt_due_ms = kFar + 1000u; });  // an event whose time moved
+        ASSERT_TRUE(tick(1) == 2);
+        poke(a, [&](AntUnit& u) { u.combevt_due_ms = 0; });             // an event that is not pending any more
+        ASSERT_TRUE(tick(1) == 2);
+        poke(b, [&](AntUnit& u) { u.burn_end_ms = kFar; });
+        ASSERT_TRUE(tick(1) == 2);
+        poke(b, [&](AntUnit& u) { u.burn_end_ms = 0; });
+        ASSERT_TRUE(tick(1) == 2);
+        ASSERT_TRUE(t.engine.get_unit(c).loco.clip.valid() && t.engine.get_unit(c).loco.cursor != 0 && t.engine.get_unit(c).loco.clip.count > 1 && t.engine.get_unit(c).loco_action != AntUnit::kActionNone);
+        poke(c, [&](AntUnit& u) { u.loco.next_ms = kFar; });            // the next frame of the animation moved
+        ASSERT_TRUE(tick(1) == 2);
+        ASSERT_TRUE(tick(20) == 0);                                      // nothing written, nothing found (the counting does not make the pass see more)
+        poke(d, [&](AntUnit& u) { u.burn_end_ms = now() + 100u; });     // events that fall due at once: the engine plays them as the scans do
+        poke(e, [&](AntUnit& u) { u.combevt_due_ms = now() + 100u; });
+        ASSERT_TRUE(tick(8) == 4);
+        Command go;                                                      // an ant on its way, and a pause that another system starts under it
+        go.type = CommandType::GroupMove;
+        go.issuer = 3;
+        go.tile_x = 80;
+        go.tile_y = 20;
+        go.ants.push_back(f);
+        ASSERT_TRUE(t.apply(go));
+        ASSERT_TRUE(tick(4) == 0);
+        poke(f, [&](AntUnit& u) { u.pause_active = true; u.pause_fire_ms = now() + 100u; });
+        ASSERT_TRUE(tick(6) == 2);
+        ASSERT_TRUE(tick(30) == 0);
+        ASSERT_TRUE(marks.stale_since() == 0);                           // (the selections met no stale entry: the pass had put everything right before them)
+    } TEST_END();
+
+    TEST_CASE("L4.9 A selection that meets an entry the ant does not bear out (a field written with no event_refresh): counted, the ant put right, and the answer is the scan's") {
+        EventWorld w;
+        AntUnit& a = w.add(1);
+        w.add(2);
+        w.impl.ants_.push_back(AntPtr());                              // a hole in the table
+        w.loco(a, 60);
+        w.burn(a, 30);
+        const CountStale counting;
+        const Marks marks;
+        a.burn_end_ms = 45;                                              // the heap says 30
+        ASSERT_TRUE(w.next(100) == "0:B@45" && marks.stale_since() == 1);
+        a.burn_end_ms = 0;                                               // the heap says 45
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 2);
+        w.impl.event_heap_.set(1, AntEventKind::Combevt, true, 10);      // an event of an ant that has none
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 3);
+        w.impl.event_heap_.set(2, AntEventKind::Pause, true, 10);        // an event of a hole of the table
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 4);
+        w.impl.event_heap_.set(9, AntEventKind::Loco, true, 10);         // an event of a place that is not in the table
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 5);
+        ASSERT_TRUE(w.next(100) == "0:L@60" && marks.stale_since() == 5);   // (the heap is right now: nothing more is found)
+        w.impl.event_heap_verify();
+    } TEST_END();
+
+    TEST_CASE("L3.3 Foreign writes of the state of ants (another system changes the label of an ant under the locomotion model's feet: loco_sync releases it, plays it idle or stops it), in a match with orders, bombs, fire, hatching and deaths: the hashes equal at every tick, and no net was needed") {
+        const uint32_t width = 90;
+        const uint32_t ticks = ANTS_LOOKUP_TEST_SANITIZED ? 300u : 600u;
+        g_seen = Seen{};
+        Twin t;
+        t.engine.init_test_world(width, width, 9);
+        Crowd crowd = populate(t.engine, width, 40, Layout::Spread);
+        add_hazards(t.engine, width, crowd);
+        {
+            LinearOnly scans;
+            t.old_engine.init_test_world(width, width, 9);
+            Crowd same = populate(t.old_engine, width, 40, Layout::Spread);
+            add_hazards(t.old_engine, width, same);
+            ASSERT_TRUE(same.ids == crowd.ids && same.pit == crowd.pit);
+        }
+        std::vector<uint32_t> all;
+        for (const auto& team : crowd.ids) all.insert(all.end(), team.begin(), team.end());
+        all.insert(all.end(), crowd.pit.begin(), crowd.pit.end());
+        const Script orders = hazard_script(crowd, width);
+        static const UnitState kStates[] = {UnitState::Idle, UnitState::Walking, UnitState::Attacking, UnitState::Flinch, UnitState::Knockback, UnitState::Stunned, UnitState::EnteringBase,
+                                            UnitState::Drowning, UnitState::GuardIdle, UnitState::Swimming, UnitState::Infiltrating, UnitState::CantGo};
+        uint32_t seed = 0x51A7E5u;
+        auto below = [&seed](uint32_t n) { seed = seed * 1664525u + 1013904223u; return (seed >> 8) % n; };
+        uint64_t pokes = 0, released = 0, stopped = 0;
+        std::vector<std::pair<uint32_t, uint8_t>> pending;                // the ants poked at the last tick, with the action they had
+        const Script script = [&](Twin& tw, uint32_t tick, std::vector<Command>& out) {
+            for (const auto& p : pending) {                               // what the poke of the last tick did to the ant
+                const AntUnit& u = tw.engine.get_unit(p.first);
+                if (u.is_alive() && u.loco_action == AntUnit::kActionNone && (p.second == AntUnit::kActionIdle || p.second == AntUnit::kActionWalk)) ++released;
+                if (u.is_alive() && p.second == AntUnit::kActionWalk && u.loco_action == AntUnit::kActionIdle) ++stopped;
+            }
+            pending.clear();
+            orders(tw, tick, out);
+            if (tick % 3 != 1) return;
+            const uint32_t id = all[below(static_cast<uint32_t>(all.size()))];
+            const UnitState to = kStates[below(static_cast<uint32_t>(sizeof kStates / sizeof kStates[0]))];
+            const AntUnit& u = tw.engine.get_unit(id);
+            if (!u.is_alive()) return;
+            pending.emplace_back(id, u.loco_action);
+            ++pokes;
+            tw.both([&](SimulationEngine& e) { e.get_unit(id).state = to; });
+        };
+        const Marks marks;
+        uint64_t checks = 0;
+        const std::string why = play(t, nullptr, 0x0F, ticks, script, &checks);
+        std::cout << "\n        " << t.ticks << " ticks, " << pokes << " states written, " << released << " ants released, " << stopped << " walkers stopped, " << marks.since() << "   ... ";
+        if (!why.empty()) std::cout << "\n        " << why << "\n";
+        ASSERT_TRUE(why.empty());
+        ASSERT_TRUE(pokes >= ticks / 8 && released > 5);                        // loco_sync took its release path on ants that were walking or standing
+        ASSERT_TRUE(marks.changes_since() == 0 && marks.stale_since() == 0);   // every one of those writes was followed by its own refresh: the nets had nothing to do
+        ASSERT_TRUE(marks.events_since() > 1000 && marks.heaps_since() >= ticks);
     } TEST_END();
 }
 
@@ -952,6 +1771,8 @@ int main(int argc, char* argv[]) {
         run_lookup_tests();
         run_map_tests();
         run_crowd_tests(false);
+        run_event_tests();
+        run_foreign_write_tests();
         run_reinit_tests();
     }
     if (big) run_crowd_tests(true);

@@ -66,7 +66,7 @@ SimulationEngine& SimulationEngine::operator=(SimulationEngine&&) noexcept = def
 SimulationEngine::SimulationEngine(const SimulationEngine& other)
     : impl_(other.impl_ ? std::make_unique<SimulationEngineImpl>(*other.impl_) : std::make_unique<SimulationEngineImpl>()) {
 #ifdef ANTS_SIM_LOOKUP_SHADOW
-    if (other.impl_) impl_->tile_ants_verify();   // the copy's lists are right at once (shadow build)
+    if (other.impl_) { impl_->tile_ants_verify(); impl_->event_heap_verify(); }   // the copy's lists and heap are right at once (shadow build)
 #endif
 }
 
@@ -76,7 +76,7 @@ SimulationEngine& SimulationEngine::operator=(const SimulationEngine& other) {
     if (other.impl_) *impl_ = *other.impl_;
     else *impl_ = SimulationEngineImpl();
 #ifdef ANTS_SIM_LOOKUP_SHADOW
-    if (other.impl_) impl_->tile_ants_verify();
+    if (other.impl_) { impl_->tile_ants_verify(); impl_->event_heap_verify(); }
 #endif
     return *this;
 }

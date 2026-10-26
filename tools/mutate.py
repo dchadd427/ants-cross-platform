@@ -19,7 +19,8 @@ command of the mutants is used.
 For each mutant, one at a time: the file is changed, the targets are built (cmake --build BUILD_DIR --target ...), the test command runs, and the file is
 restored, ALWAYS: after an error, a timeout, Ctrl-C or SIGTERM too (a backup FILE.mutbak is kept while a file is changed, and put back by the next start if this
 program was killed outright). Results: caught, caught-elsewhere, survived (the tests did not notice: a gap), build-error (the mutant does not compile: not a
-valid mutant), timeout, error (a mutant that cannot be applied). A table is printed and a JSON report is written (default SPEC.report.json, after every mutant).
+valid mutant), timeout (nothing decided: no verdict in --timeout seconds, or a test command that starts with `timeout N` was ended by it, exit 124: a mutant that
+hangs is not a mutant that a test caught), error (a mutant that cannot be applied). A table is printed and a JSON report is written (default SPEC.report.json, after every mutant).
 
 BASELINES. A stale object of an earlier mutant (make compares file times in whole seconds on a Mac: a file restored within the second in which its mutant was
 built is not built again) makes every later mutant "fail" or "crash" and nothing says so. So the unmutated tree is built and tested before the first mutant, after
@@ -316,6 +317,8 @@ def judge(root, m, args):
         status, output = run(m["test"], root, deadline - time.monotonic())
         if status is None:
             result.update(status="timeout", detail="no verdict within %d s (the mutant may loop; the command was killed)" % args.timeout, output_tail=tail(output))
+        elif status == 124 and m["test"].lstrip().startswith("timeout "):
+            result.update(status="timeout", exit_code=124, detail="the test command's own `timeout` ended it (the mutant may loop): a hang is no verdict", output_tail=tail(output))
         elif status == 0:
             result.update(status="survived", exit_code=0, detail="the test command passed: nothing noticed the change", output_tail=tail(output))
         else:
