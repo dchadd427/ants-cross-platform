@@ -523,6 +523,16 @@
       "test": "./build/tests/test_app/test_health_marks"
     },
     {
+      "id": "allied_ants_wear_no_mark",
+      "file": "src/ants_app/renderer.cpp",
+      "old": "        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);",
+      "new": "        if (!allied || a.player_id == hud_team_id_) note_health_mark(a, a.px + pred.dx, a.py + pred.dy);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
       "id": "ears_green_from_ten",
       "file": "src/ants_app/renderer.cpp",
       "old": "(ant->hp >= health::kGreenFrom) ? 58u",

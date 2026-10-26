@@ -1243,6 +1243,16 @@
       "test": "./build/tests/test_app/test_pointer_model"
     },
     {
+      "id": "health_menu_only_all_resumed",
+      "file": "include/ants_app/hud.hpp",
+      "old": "        if (setting.when != health::When::Off) health_resume_ = setting.when;\n",
+      "new": "        if (setting.when == health::When::All) health_resume_ = setting.when;\n",
+      "build": [
+        "test_pointer_model"
+      ],
+      "test": "./build/tests/test_app/test_pointer_model"
+    },
+    {
       "id": "page_game_choice_read_nothing",
       "file": "web/game_menu.js",
       "old": "var mine = { read: function () { return get(row.id); },",
