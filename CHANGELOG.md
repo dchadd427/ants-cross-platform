@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.137 - 2026-10-25 - Cleanup: unused code removed
+
+**For players:**
+- Cleanup: nothing you can see changes. Unused code is gone and the server's map-submission options are documented.
+
+**Rules / network:** none: the rules, replays and network protocol 21 are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/32ad1087...f3847677)
+
 ## v0.12.136 - 2026-10-25 - Health numbers at every zoom, and the settings menu scrolls in fullscreen
 
 **For players:**

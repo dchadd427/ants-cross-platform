@@ -1418,7 +1418,8 @@ class TheGroundAndTheSprites(unittest.TestCase):
 
 class TheImageCarriesThePage(unittest.TestCase):
     def test_the_dockerfile_the_ci_and_the_local_build_have_it(self):
-        self.assertRegex(read("Dockerfile"), r"(?m)^COPY web/mapmaker\.html /usr/share/nginx/html/mapmaker\.html$")
+        self.assertRegex(read("Dockerfile"), r"(?m)^COPY --from=builder /src/mapmaker\.html /usr/share/nginx/html/mapmaker\.html$")
+        self.assertNotRegex(read("Dockerfile"), r"(?m)^COPY web/mapmaker\.html ")
         self.assertRegex(read(".github", "workflows", "ci.yml"), r"ls -l [^\n]*\bmapmaker\.html\b")
         self.assertRegex(read(".github", "workflows", "ci.yml"), r"ls -l [^\n]*\bfront/mapmaker_app\.js\b")
         self.assertIn('web/mapmaker.html', read("build_web.sh"))

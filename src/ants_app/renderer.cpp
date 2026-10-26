@@ -792,7 +792,7 @@ bool Renderer::begin_world_target(int64_t map_w_px, int64_t map_h_px) {
     if (!renderer_ || in_world_target_ || fail_world_target_) return false;
     if (!world_target_error_.empty()) return false;               // (a failure that lasts: no new attempt at every frame; retry_world_target is the way back)
     const LayoutRect view = layout_.view();
-    const zoom::Pass plan = zoom::plan(static_cast<double>(camera_.x), static_cast<double>(camera_.y), camera_.zoom, view.w, view.h, map_w_px, map_h_px, smooth_upscale_);
+    const zoom::Pass plan = zoom::plan(static_cast<double>(camera_.x), static_cast<double>(camera_.y), camera_.zoom, view.w, view.h, map_w_px, map_h_px, zoom::kSmoothUpscale);
     if (plan.w <= 0 || plan.h <= 0) return false;                 // (nothing of the map is in the view: the zoom 1 picture of the same origin, which is that as well)
     const bool direct_zoom_out = !software_ && camera_.zoom < zoom::kNormal;
     const int needed_depth = direct_zoom_out ? 0 : plan.depth;

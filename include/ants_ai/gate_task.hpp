@@ -66,9 +66,7 @@ public:
     uint32_t duds() const noexcept { return duds_; }
     uint32_t extinguishes() const noexcept { return extinguishes_; }
     uint32_t defuses() const noexcept { return defuses_; }
-    uint32_t picks() const noexcept { return picks_; }
     uint32_t revivals() const noexcept { return revivals_; }
-    uint64_t first_goal_tick() const noexcept { return first_goal_; }
     /// Why the last attempt was given up ("step", "attempt", "clock", "ant", "stranded", "hurt"); empty before one was
     const char* last_failure() const noexcept { return why_; }
     bool exhausted() const noexcept { return phase_ == Phase::Exhausted; }
@@ -109,8 +107,6 @@ private:
     uint32_t duds_{0};
     uint32_t extinguishes_{0};
     uint32_t defuses_{0};
-    uint32_t picks_{0};
-    uint64_t first_goal_{0};
     // watched state of the ant, to tell progress and duds
     sim::TileCoord seen_tile_{-1, -1};
     uint8_t seen_hp_{0};

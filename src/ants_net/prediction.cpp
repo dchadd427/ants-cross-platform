@@ -146,12 +146,6 @@ void Prediction::update_lead() {
     }
 }
 
-uint64_t Prediction::ticks_ahead() const noexcept {
-    if (!running_) return 0;
-    const uint64_t c = confirmed_tick();
-    return display_ > c ? display_ - c : 0u;
-}
-
 std::vector<Prediction::PredictedAudio> Prediction::take_audio() {
     std::vector<PredictedAudio> out;
     out.swap(audio_);

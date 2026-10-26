@@ -400,8 +400,6 @@ public:
     bool zoomed() const noexcept { return camera_.zoom != zoom::kNormal; }
     /// A test hook: draw the world through the offscreen target at the zoom 1 too (the result must be the picture that the direct path draws, pixel for pixel)
     void set_force_world_target(bool force) noexcept { force_world_target_ = force; }
-    /// Do the levels between 1 and 2 use the linear filter or the nearest (the default, zoom::kSmoothUpscale = false)? 1 and 2 are always nearest, 1 the exact copy; the zoom-out is always linear.
-    void set_smooth_upscale(bool smooth) noexcept { smooth_upscale_ = smooth; }
     /// The most world pixels on one axis that the offscreen target can hold (the device's texture size less the margins of the pass), 0 when the renderer does not say: the limit of the zoom-out
     /// of a map that is bigger than a texture (view_zoom.hpp Fit::max_world)
     int32_t max_world_extent() const noexcept;
@@ -693,7 +691,6 @@ private:
     bool force_world_target_{false};
     bool fail_world_target_{false};
     bool fail_world_target_creation_{false};
-    bool smooth_upscale_{zoom::kSmoothUpscale};
     int32_t texture_side_override_{0};        // the test hook of set_texture_side_for_test()
     bool software_{false};                    // SDL's software renderer: it truncates the fractional rectangle of a copy (and cuts a scaled copy that a clip cuts with a rounding of its source)
     uint64_t world_target_passes_{0};

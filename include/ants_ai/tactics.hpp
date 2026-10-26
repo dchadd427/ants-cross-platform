@@ -493,8 +493,6 @@ public:
     bool plays(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS && seen_moving_[team] != 0; }
     /// The tick of the first look that saw a wall on the tile (0: no wall there now); the wall burns out 3,600 ticks after it was lit, which is at or before this tick plus 3,600
     uint64_t wall_seen(sim::TileCoord tile) const noexcept;
-    /// The own ant's hit points at the previous look (0: it was not in that view)
-    uint8_t hp_before(uint32_t ant) const noexcept;
     /// The most ants of `team` that were in sight at one look (0 for the own team): a team that shows few ants now and has shown many has LOST them
     uint32_t ants_peak(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS ? peak_ants_[team] : 0u; }
     /// What the bot has seen of the flower dropper whose drop tile is `drop` (nullptr: no droplet of it has been seen yet)

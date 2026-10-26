@@ -103,9 +103,6 @@ public:
     /// The task ends (or the bot stops): its ants are free again
     virtual void finish(AntLedger& ledger) { ledger.release_all(id_); }
 
-protected:
-    void set_state(State state) noexcept { state_ = state; }
-
 private:
     TaskId id_;
     State state_{State::Running};
@@ -254,8 +251,6 @@ public:
     uint32_t ant_failures() const noexcept { return ant_failures_; }
     /// Ants sent to a pile (not commands: one command names a group)
     uint32_t ants_sent() const noexcept { return ants_sent_; }
-    /// Group orders put into Orders
-    uint32_t orders_issued() const noexcept { return orders_issued_; }
     /// Ants that hold an order of this task now (pending, on their way or at work)
     size_t working() const noexcept { return recs_.size(); }
     /// Whether the pile is blacklisted at `tick`
@@ -363,7 +358,6 @@ private:
     uint32_t throttle_{0};                   // the ants that may be newly ordered at one look now: max_ants_per_look, halved at every jam the watchdog finds
     uint32_t stalls_{0};
     uint32_t ants_sent_{0};
-    uint32_t orders_issued_{0};
     size_t unplaced_{0};
 };
 

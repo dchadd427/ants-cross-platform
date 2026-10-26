@@ -307,7 +307,6 @@ void AutoCamera::lock_on(const Point& at, const Point& cam) {
     target_ = at;
     has_target_ = true;
     locked_ = true;
-    lock_score_ = has_best_ ? best_.score : 0.0;
     lock_since_ms_ = now_ms_;
     quiet_since_ms_ = -1.0;
     ++locks_;
@@ -342,7 +341,6 @@ void AutoCamera::look(const Point& cam) {
         anchor_.y += (here.cy - anchor_.y) * kFollow;
         here = disc(anchor_.x, anchor_.y);
     }
-    lock_score_ = here.score;
     if (here.score < kQuietScore) {
         if (quiet_since_ms_ < 0.0) quiet_since_ms_ = now_ms_;
     } else {

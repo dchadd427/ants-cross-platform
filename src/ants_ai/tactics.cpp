@@ -420,11 +420,6 @@ uint64_t Memory::wall_seen(sim::TileCoord tile) const noexcept {
     return it != wall_seen_.end() ? it->second : 0u;
 }
 
-uint8_t Memory::hp_before(uint32_t ant) const noexcept {
-    const auto it = own_.find(ant);
-    return it != own_.end() ? it->second.hp : uint8_t{0};
-}
-
 void Memory::update(const BotView& v, const MapInfo& map) {
     now_ = v.tick();
     hits_.clear();

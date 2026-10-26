@@ -81,8 +81,6 @@ struct ScreenLayout {
     static constexpr int32_t kPanelY = 22;
     static constexpr int32_t kPanelW = 160;
     static constexpr int32_t kPanelH = 458;
-    /// The score slots of the original: slot 0 is the local team's (the top bar), slots 1 .. 3 are the other teams' (the bottom strip)
-    static constexpr size_t kClassicScoreSlots = 4;
     /// The bottom strip (x17y461) of a wider picture is widened at THREE plain cuts of its art (shell_layout.hpp: its piece columns 15, 188 and 346), one left of each score box, and the
     /// extra width dx is shared between them in thirds (the leftmost takes the remainder), so that the three boxes are spread evenly over the strip instead of sitting together at its right
     /// end (requested: expand between the scores so they are not all offset to the right). At 960 x 540 (dx = 320) the cuts add 108, 106 and 106 and the boxes sit at x 213, 468
