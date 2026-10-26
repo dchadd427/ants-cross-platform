@@ -994,8 +994,8 @@ void test_subtick_locomotion(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
-// The selection marker and the health number follow the sprite, which the real-time player moves when a frame ends: they use the predicted position as well (the audit's LA NEW-3
-// found them at the tick's position, 50 ms behind a thrown ant). The display loop skips a frozen ant, its number included (FUN_0101b802 is what draws both).
+// The selection marker and the health bar and number follow the sprite, which the real-time player moves when a frame ends: they use the predicted position as well (not the tick's, 50 ms behind a
+// thrown ant). The display loop skips a frozen ant, its number included (FUN_0101b802 is what draws both).
 void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc) {
     std::printf("[ears] the marker and the health bar of a walking ant follow its predicted position\n");
     assets::LevelData level;
@@ -1028,9 +1028,9 @@ void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc
         a.frozen = frozen;
         return a;
     };
-    auto render = [&](const sim::AntSnapshot& ant, const std::vector<uint32_t>& selected, bool show_hp, float sub_s) {
+    auto render = [&](const sim::AntSnapshot& ant, const std::vector<uint32_t>& selected, bool show_hp, float sub_s, health::Style style = health::Style::Bar) {
         r.pin_animation_clock(0);
-        r.set_health_marks(health::Setting{show_hp ? health::When::All : health::When::Off, health::Style::Bar});
+        r.set_health_marks(health::Setting{show_hp ? health::When::All : health::When::Off, style});
         sim::WorldState ws;
         ws.width = level.width;
         ws.height = level.height;
@@ -1079,18 +1079,41 @@ void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc
         check(outside == 0, "the health bar is drawn at the predicted position (300, 204), 31 pixels up, not at the tick's (300, 200): " + std::to_string(outside) + " pixels outside");
         check(wrong_color == 0, "a full bar is green (60, 214, 60) from end to end: " + std::to_string(wrong_color) + " pixels differ");
     }
+    // the original's number: the white pixels that it adds are those of the fixed font at the predicted position
+    {
+        const Image plain = render(snapshot(false), {}, false, 0.020f, health::Style::Number);
+        const Image with = render(snapshot(false), {}, true, 0.020f, health::Style::Number);
+        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
+        SDL_RenderClear(sr);
+        r.draw_fixed_text("10", PLAYFIELD_X + 300, PLAYFIELD_Y + 204, assets::ColorRGBA{255, 255, 255, 255});
+        const Image digits = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+        long added = 0, expected = 0, wrong = 0;
+        for (int y = 0; y < PLAYFIELD_H; ++y) {
+            for (int x = 0; x < PLAYFIELD_W; ++x) {
+                const bool is_new = std::memcmp(plain.at(x, y), with.at(x, y), 3) != 0;
+                const bool white = digits.at(x, y)[0] == 255 && digits.at(x, y)[1] == 255 && digits.at(x, y)[2] == 255;
+                if (is_new) ++added;
+                if (white) ++expected;
+                if (is_new != white) ++wrong;
+            }
+        }
+        check(added > 0 && expected > 0, "the health number adds pixels");
+        check(wrong == 0, "the health number is the fixed font's white digits, top left at the predicted position (300, 204): " + std::to_string(wrong) + " pixels differ");
+    }
     // a frozen ant is skipped by the display loop: no mark either (only its burn overlay is drawn)
     {
         sim::AntSnapshot frozen = snapshot(true);
         frozen.burn_elapsed_ms = 0;
-        const Image plain = render(frozen, {}, false, 0.0f);
-        const Image with = render(frozen, {}, true, 0.0f);
-        check(same_image(plain, with), "a frozen ant shows no health bar");
+        for (const health::Style style : {health::Style::Bar, health::Style::Number}) {
+            const Image plain = render(frozen, {}, false, 0.0f, style);
+            const Image with = render(frozen, {}, true, 0.0f, style);
+            check(same_image(plain, with), std::string("a frozen ant shows no health ") + (style == health::Style::Bar ? "bar" : "number"));
+        }
     }
 }
 
 // A dying ant plays death1 .. death4 on its own sprite (Ants.exe 0x101b3fd SetAction(0xC)): the renderer draws the ant through that clip, with the same sub-tick stepping as any
-// other, and wears no health mark (no hit points are left). There is no separate effect any more.
+// other, and keeps its hit-point number until it is removed (the number is drawn by the ant's own draw function; a bar has nothing to show). There is no separate effect any more.
 void test_dying_ant(Renderer& r, const assets::AssetArchive& arc) {
     std::printf("[ants] a dying ant is drawn through its own death clip\n");
     assets::LevelData level;
@@ -1116,8 +1139,8 @@ void test_dying_ant(Renderer& r, const assets::AssetArchive& arc) {
         {"death4", 0, 60, 0.0f},
         {"death4", 1, 5, 0.049f},           // frame 1 ends after 5 ms, frame 2 (80 ms) outlasts the tick
     };
-    auto render = [&](const Case& c, int32_t clip, bool show_hp) {
-        r.set_health_marks(health::Setting{show_hp ? health::When::All : health::When::Off, health::Style::Number});
+    auto render = [&](const Case& c, int32_t clip, bool show_hp, health::Style style = health::Style::Number) {
+        r.set_health_marks(health::Setting{show_hp ? health::When::All : health::When::Off, style});
         sim::WorldState ws;
         ws.width = level.width;
         ws.height = level.height;
@@ -1157,12 +1180,28 @@ void test_dying_ant(Renderer& r, const assets::AssetArchive& arc) {
             for (int x = 0; x < PLAYFIELD_W && same; ++x) same = std::memcmp(plain.at(x, y), full.at(x, y), 3) == 0;
         check(same, std::string(c.clip) + " frame " + std::to_string(c.frame) + " with " + std::to_string(c.left_ms) + " ms left, +" + std::to_string(c.sub_s * 1000.0f) + " ms: frame " + std::to_string(frame));
 
-        // a dying ant has no hit points left: it wears no mark even when every ant does (the picture is the same, number or not)
+        // a dying ant keeps its hit-point number ("0") until it is removed, as the original's: the pixels that it adds are the fixed font's at the ant's position
         const Image with = render(c, chd, true);
+        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
+        SDL_RenderClear(sr);
+        r.draw_fixed_text("0", PLAYFIELD_X + 300, PLAYFIELD_Y + 200, assets::ColorRGBA{255, 255, 255, 255});
+        const Image digit = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+        long added = 0, wrong = 0;
+        for (int y = 0; y < PLAYFIELD_H; ++y) {
+            for (int x = 0; x < PLAYFIELD_W; ++x) {
+                const bool is_new = std::memcmp(plain.at(x, y), with.at(x, y), 3) != 0;
+                const bool white = digit.at(x, y)[0] == 255 && digit.at(x, y)[1] == 255 && digit.at(x, y)[2] == 255;
+                if (is_new) ++added;
+                if (is_new != white && !(white && std::memcmp(plain.at(x, y), digit.at(x, y), 3) == 0)) ++wrong;   // (a number pixel over a white pixel of the art changes nothing)
+            }
+        }
+        check(added > 0 && wrong == 0, std::string(c.clip) + ": a dying ant still shows its hit-point number (" + std::to_string(wrong) + " wrong pixels)");
+        // ... but no hit points are left for a bar: it wears none
+        const Image bar = render(c, chd, true, health::Style::Bar);
         bool unmarked = true;
         for (int y = 0; y < PLAYFIELD_H && unmarked; ++y)
-            for (int x = 0; x < PLAYFIELD_W && unmarked; ++x) unmarked = std::memcmp(plain.at(x, y), with.at(x, y), 3) == 0;
-        check(unmarked, std::string(c.clip) + ": a dying ant wears no health number");
+            for (int x = 0; x < PLAYFIELD_W && unmarked; ++x) unmarked = std::memcmp(plain.at(x, y), bar.at(x, y), 3) == 0;
+        check(unmarked, std::string(c.clip) + ": a dying ant wears no health bar");
     }
     r.unpin_animation_clock();
 }

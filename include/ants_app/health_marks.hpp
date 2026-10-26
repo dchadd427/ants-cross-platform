@@ -7,9 +7,10 @@
 
 namespace ants::app::health {
 
-// The ant health marks (docs/VIEW_AND_HUD.md, "Ant health marks"): a small bar or a number over an ant, drawn after the world pass from the hit points that every client already has. This file is
-// the whole rule with no window and no SDL (so that a test can run it): when an ant wears a mark, its color, and where and how big the bar or the number is on the screen. Renderer::draw_health_marks
-// (src/ants_app/renderer_health.cpp) only draws what these functions say. Drawing only: nothing here is read by the simulation, a recording or the network.
+// The ant health marks (docs/VIEW_AND_HUD.md, "Ant health marks"): a small bar over an ant, or the original's own hit point number (white digits of its fixed font at the ant's lower right), drawn from the
+// hit points that every client already has. This file is the rule with no window and no SDL (so that a test can run it): which ants wear a mark, the bar's color, and where and how big the bar is on the
+// screen. Renderer::draw_health_marks (src/ants_app/renderer_health.cpp) draws the bars, the number is drawn where the original draws it, after its ant. Drawing only: nothing here is read by the
+// simulation, a recording or the network.
 
 /// When an ant wears a mark. The values are the menu row's.
 enum class When : uint8_t { Hurt = 0, All = 1, Off = 2 };
@@ -62,11 +63,12 @@ constexpr bool shown(When when, int hp, int max_hp, bool frozen) noexcept {
     return when == When::All || hp < max_hp;
 }
 
-/// The numbers are drawn at one size at every zoom, so below this zoom they would be wider than the tile that their ant stands on: a tile is 32 world pixels and the widest number, a 10, two cells of
-/// 8 pixels (18 with the outline), so from the zoom 0.5 (16 / 32) a number is about as wide as a tile (it reaches a pixel into the neighbors' over an ant that stands in the middle of its tile), and below it the numbers are left out (the bars stay at every zoom). The zoom levels are the series 2^(k/4),
-/// so the four levels from 1 down to 0.5 all show their numbers (an edge of 0.6 left out the third, 0.59).
-constexpr double kNumberMinZoom = 0.5;
-constexpr bool number_fits(double zoom) noexcept { return zoom >= kNumberMinZoom; }
+/// Does the ant wear a NUMBER? The same choice of ants, but the number is the original's own (Ctrl+L: after every ant that is drawn, and not a frozen one, its hit points, a dying ant's "0" included),
+/// so only Off and a frozen ant leave it out; Hurt ants is the ants that have fewer than their own most.
+constexpr bool shown_number(When when, int hp, int max_hp, bool frozen) noexcept {
+    if (when == When::Off || frozen) return false;
+    return when == When::All || hp < max_hp;
+}
 
 // ---- where and how big (screen pixels) --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -79,8 +81,6 @@ constexpr bool overlaps(const Rect& a, const Rect& b) noexcept { return a.x < b.
 constexpr int32_t kHeadAbove = 31;
 constexpr int32_t kBarWorldWidth = 22;      // a bar is 22 world pixels wide (scaled by the zoom; at least kBarMinWidth)
 constexpr int32_t kBarMinWidth = 6;
-constexpr int32_t kNumberLift = 14;         // the number's cell (8 x 15) starts this far above the head line, so that its digits stand on it
-constexpr int32_t kCellW = 8;               // the fixed font's cell, as Renderer::kFixedCellW
 
 /// The picture pixels that stand for one CSS pixel of the page (the canvas is shown smaller than it is: a phone). From this many on, the bars are made thicker, so that they stay seen.
 constexpr double kSmallShownFrom = 2.0;     // shown at less than half of its size
@@ -116,24 +116,6 @@ inline Bar bar(int32_t sx, int32_t sy, int hp, int max_hp, double zoom, bool thi
     b.fill = Rect{x0, y0, fw, h};
     b.color = color(band(hp));
     return b;
-}
-
-/// The number's place: the top left of its first cell, and the rectangle that it covers with its outline (for the cull)
-struct Digits {
-    int32_t x{0};
-    int32_t y{0};
-    Rect covers{};
-    Color color{};
-};
-inline Digits number(int32_t sx, int32_t sy, int hp, double zoom) noexcept {
-    Digits d;
-    const int32_t digits = hp >= 10 ? (hp >= 100 ? 3 : 2) : 1;
-    const int32_t width = digits * kCellW;
-    d.x = sx - width / 2 + 1;
-    d.y = sy + static_cast<int32_t>(std::lround(static_cast<double>(-kHeadAbove) * zoom)) - kNumberLift;
-    d.covers = Rect{d.x - 1, d.y - 1, width + 2, 15 + 2};
-    d.color = color(band(hp));
-    return d;
 }
 
 }  // namespace ants::app::health

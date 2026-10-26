@@ -1,9 +1,13 @@
-// The ant health marks, drawn (the rule, the colors and the sizes: include/ants_app/health_marks.hpp; docs/VIEW_AND_HUD.md, "Ant health marks"). Drawing only: they read the hit points that the
+// The ant health marks, drawn (the rule, the bar's color and sizes: include/ants_app/health_marks.hpp; docs/VIEW_AND_HUD.md, "Ant health marks"). Drawing only: they read the hit points that the
 // snapshot of every client already has, nothing is sent and nothing of the simulation, a recording or a hash is touched.
 //
-// Every ant that the world pass draws (so never one that fog of war hides) is offered to note_health_mark while the pass collects them; the marks that are worn are kept as world positions and
-// drawn once the world is on the screen (draw_health_marks), over everything of the world, so that a mark is never hidden by a neighbor and, at a zoom, is drawn on the canvas at its own size.
+// Show health as: Bar. Every ant that the world pass draws (so never one that fog of war hides) is offered to note_health_mark while the pass collects them; the bars that are worn are kept as world
+// positions and drawn once the world is on the screen (draw_health_marks), over everything of the world, so that a bar is never hidden by a neighbor and, at a zoom, is drawn on the canvas at its own size.
+//
+// Show health as: Number. The original's own Ctrl+L numbers (docs/GAME_REVERSE_ENGINEERING.md, "The health number"): right after an ant is drawn (draw_ant_number, called by the ant's draw), its hit points
+// in white, in the fixed system font (8 x 15 cells, not antialiased), the top left of the text at the sprite's position, so the digits hang to the lower right of it. No outline, no color.
 
+#include <cmath>
 #include <string>
 
 #include "ants_app/health_marks.hpp"
@@ -16,58 +20,66 @@ void Renderer::set_health_marks(health::Setting setting, double picture_px_per_c
     health_thick_ = health::thick_for(picture_px_per_css);
 }
 
-// (the sprite's own, predicted position: the mark follows the ant the way its ears do)
+// (the sprite's own, predicted position: the bar follows the ant the way its ears do)
 void Renderer::note_health_mark(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y) {
-    if (!health::shown(health_.when, ant.hp, ant.max_hp, ant.frozen)) return;
+    if (health_.style != health::Style::Bar || !health::shown(health_.when, ant.hp, ant.max_hp, ant.frozen)) return;
     health_marks_.push_back(HealthMark{sprite_x, sprite_y, static_cast<int32_t>(ant.hp), static_cast<int32_t>(ant.max_hp)});
 }
 
 void Renderer::draw_health_marks() {
+    draw_deferred_digits();
     if (!renderer_ || health_marks_.empty()) {
         health_marks_.clear();
         return;
     }
     const double zoom = static_cast<double>(camera_.zoom);
-    const bool numbers = health_.style == health::Style::Number;
-    if (numbers && !health::number_fits(zoom)) {                 // (wider than a tile: left out; the bars stay at every zoom)
-        health_marks_.clear();
-        return;
-    }
     const LayoutRect view = layout_.view();
     const health::Rect screen{view.x, view.y, view.w, view.h};
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     for (const HealthMark& m : health_marks_) {
         int32_t sx = 0;
         int32_t sy = 0;
-        camera_.world_to_screen(m.x, m.y, sx, sy);               // (its answer, whether the ant itself is in view, is not asked: the mark stands above it)
-        if (numbers) {
-            const health::Digits d = health::number(sx, sy, m.hp, zoom);
-            if (!health::overlaps(d.covers, screen)) continue;
-            const std::string text = std::to_string(m.hp);
-            for (int32_t dy = -1; dy <= 1; ++dy) {
-                for (int32_t dx = -1; dx <= 1; ++dx) {
-                    if (dx != 0 || dy != 0) draw_fixed_text(text, d.x + dx, d.y + dy, ants::assets::ColorRGBA{0, 0, 0, 255});
-                }
-            }
-            draw_fixed_text(text, d.x, d.y, ants::assets::ColorRGBA{d.color.r, d.color.g, d.color.b, 255});
-        } else {
-            const health::Bar b = health::bar(sx, sy, m.hp, m.max_hp, zoom, health_thick_);
-            if (!health::overlaps(b.framed ? b.outline : b.track, screen)) continue;
-            if (b.framed) {
-                SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 230);
-                const SDL_Rect o = placed(b.outline.x, b.outline.y, b.outline.w, b.outline.h);
-                SDL_RenderFillRect(renderer_, &o);
-            }
-            SDL_SetRenderDrawColor(renderer_, 40, 40, 40, b.framed ? 255 : 170);
-            const SDL_Rect t = placed(b.track.x, b.track.y, b.track.w, b.track.h);
-            SDL_RenderFillRect(renderer_, &t);
-            SDL_SetRenderDrawColor(renderer_, b.color.r, b.color.g, b.color.b, 255);
-            const SDL_Rect f = placed(b.fill.x, b.fill.y, b.fill.w, b.fill.h);
-            SDL_RenderFillRect(renderer_, &f);
+        camera_.world_to_screen(m.x, m.y, sx, sy);               // (its answer, whether the ant itself is in view, is not asked: the bar stands above it)
+        const health::Bar b = health::bar(sx, sy, m.hp, m.max_hp, zoom, health_thick_);
+        if (!health::overlaps(b.framed ? b.outline : b.track, screen)) continue;
+        if (b.framed) {
+            SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 230);
+            const SDL_Rect o = placed(b.outline.x, b.outline.y, b.outline.w, b.outline.h);
+            SDL_RenderFillRect(renderer_, &o);
         }
+        SDL_SetRenderDrawColor(renderer_, 40, 40, 40, b.framed ? 255 : 170);
+        const SDL_Rect t = placed(b.track.x, b.track.y, b.track.w, b.track.h);
+        SDL_RenderFillRect(renderer_, &t);
+        SDL_SetRenderDrawColor(renderer_, b.color.r, b.color.g, b.color.b, 255);
+        const SDL_Rect f = placed(b.fill.x, b.fill.y, b.fill.w, b.fill.h);
+        SDL_RenderFillRect(renderer_, &f);
     }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
     health_marks_.clear();
+}
+
+// FUN_0101b802 draws the number after the ant (the display loop skips a frozen ant), at the sprite's position (the predicted one: the sprite moves when a frame ends). At the zoom 1 it is drawn here,
+// in the ant's place in the draw order; at a zoom it is text, not world art, so it waits for the copy (draw_deferred_digits) and keeps its one size.
+void Renderer::draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y) {
+    if (health_.style != health::Style::Number || !health::shown_number(health_.when, ant.hp, ant.max_hp, ant.frozen)) return;
+    if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {
+        deferred_digits_.push_back(DeferredDigits{std::to_string(ant.hp), sprite_x, sprite_y});
+    } else {
+        const LayoutRect view = world_view();
+        draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
+    }
+}
+
+// What a zoomed pass leaves for the screen: the numbers (one size at every zoom), top left at the screen position of the sprite
+void Renderer::draw_deferred_digits() {
+    const LayoutRect view = layout_.view();
+    const double z = static_cast<double>(camera_.zoom);
+    for (const DeferredDigits& d : deferred_digits_) {
+        const int32_t sx = view.x + static_cast<int32_t>(std::floor((static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * z));
+        const int32_t sy = view.y + static_cast<int32_t>(std::floor((static_cast<double>(d.wy) - static_cast<double>(camera_.y)) * z));
+        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255});
+    }
+    deferred_digits_.clear();
 }
 
 }  // namespace ants::app

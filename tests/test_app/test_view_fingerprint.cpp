@@ -339,7 +339,7 @@ const Golden kGoldens[] = {
     {"px.world.MEDIUM.origin_1477_1479", 0x83195aeec913dc75, 307200},
     {"px.world.MEDIUM.origin_733_1", 0xa0360a8a2eba817f, 307200},
     {"px.world.MEDIUM.selected", 0x24d1c6b333ffe89f, 307200},
-    {"px.world.MEDIUM.selected_hp", 0x5fa3fa710901367b, 307200},
+    {"px.world.MEDIUM.selected_hp", 0x0cc19ed7e1ebe2eb, 307200},
     {"px.world.MEDIUM.hill_selected", 0x43240c98f09c3a36, 307200},
     {"px.world.MEDIUM.crowd", 0x581384e8758e49ec, 307200},
     {"px.world.MEDIUM.fog", 0xe028297bde386974, 307200},

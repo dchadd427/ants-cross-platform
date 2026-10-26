@@ -2850,8 +2850,8 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD
   `FUN_01029145` the quit flow `FUN_0102648f` (the confirm dialog while playing); **S** `FUN_01028a60` the stop order when the panel is 3 or 4. Ctrl+Space / `.` / `>` need the command-line flag `[4ae4]` (debug
   pause and step). **Everything else does nothing** (Space, arrows, Tab, digits, Home / End, PgUp / PgDn, Ctrl+B / C / F / M / T ...).
 
-* **Ctrl+L** (`FUN_0101b802`, the ant draw): with `[4b14] != 0` every ant is followed by `sprintf("%d", hp)` (the word at +0x74) drawn with `FUN_0102feda` -> `FUN_0102d193`: GDI `TextOut` of the default GUI
-  font at the ant's sprite position (+0x38, +0x3a) converted to the screen, color 0xffffff, transparent background, top-left aligned.
+* **Ctrl+L** (`FUN_0101b802`, the ant draw): with `[4b14] != 0` every ant is followed by `sprintf("%d", hp)` (the word at +0x74) drawn with `FUN_0102feda` -> `FUN_0102d193`: GDI `TextOut` in the fixed font of
+  5.14 at the ant's sprite position (+0x38, +0x3a) converted to the screen, color 0xffffff, transparent background, top-left aligned.
 
 * **Dialog keys**: quit dialog Y = Yes, N and Esc = No, Enter does nothing; quick help C, X, Enter and Esc close it; options Enter closes it, Esc does not; the start ("get ready") dialog takes everything.
 

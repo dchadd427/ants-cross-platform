@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.139 - 2026-10-26 - Show health as: Number is the original's number
+
+**For players:**
+- **Show health as: Number is now the original's number:** white digits in the original's own small fixed font, at the lower right of the ant, as its Ctrl+L prints them. The colored, outlined numbers of v0.12.134 are gone; the numbers are as they were before it, at every zoom and one size (small on a phone, as in the original).
+- **Ant health still says which ants** (Hurt ants, All ants, Off; Ctrl+L flips it), and a dying ant shows its 0 as it does in the original. The bar and its three colors are as they were.
+
+**Rules / network:** none: drawing only; the rules, replays and network protocol 21 are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e36d1f6...HEAD)
+
 ## v0.12.137 - 2026-10-25 - Cleanup: unused code removed
 
 **For players:**
@@ -533,21 +543,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6afbd600...5004dce3)
 
-## v0.12.89 - 2026-10-18 - Safer player text on the server: descriptions, maker names, logs, page headers (injection hardening, server)
+## Older versions (v0.12.89 and before)
 
-**For players:**
-- Maps sent for approval: the server now cleans the map's description before it is stored or listed (odd characters become "?", blanks are tidied, at most 100 characters); the map file itself is not changed.
-- A maker's name can no longer pass for the owner or the site ("Owner", "Admin", "System", "Root" and the like, also written with look-alike letters, accents or digits such as 0wner), and a note or a maker's name cannot hold a web address or three backticks. The map maker tells you while you type.
-- The map maker page is now sent with a strict content security policy and cannot be put inside another page.
-
-**Rules / network:** none (protocol 21).
-
-**Fixes:**
-- The web server's log no longer copies the name, maker and note of a sent map (it logs the path only).
-- `lvl_tool info` prints a map's description escaped.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
-
-## Older versions (v0.12.88 and before)
-
-Every release before v0.12.89, and the long notes of v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.90, and the long notes of v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

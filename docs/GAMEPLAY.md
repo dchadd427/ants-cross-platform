@@ -201,7 +201,7 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 
 ## Death & Burning
 
-- A dying ant plays `death1` to `death4` on its own sprite until it is removed. Meanwhile it keeps its minimap dot (and no health mark: it has no hit points left).
+- A dying ant plays `death1` to `death4` on its own sprite until it is removed. Meanwhile it keeps its minimap dot and, with Show health as: Number, its hit-point number 0 (a bar has nothing to show).
 - A dead ant drops the food it carries as a lunchbox when it dies on free land (one that drowns loses it), and a typed ant drops its power-up on a free neighbour tile.
 - One bomb in five is a dud. The ant that set it off burns where it stands, frozen under the flames of the `?bu` clip, and is stunned when they end.
 - The flames are a sprite of the view container: they are drawn over every ant and hidden only on unexplored ground.
