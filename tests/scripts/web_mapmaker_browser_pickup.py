@@ -146,6 +146,34 @@ class Pick:
         x1, y1 = self.point(r1, c1)
         self.drag_points(x0, y0, x1, y1)
 
+    def drag_cells_settled(self, r0, c0, r1, c1, steps=6):
+        """a drag whose end is aimed after the drag has begun: a press on a thing that is not picked picks it, and with the first move the bar comes and the view settles (a map that is whole on the screen moves by a
+        part of a cell), so the centre of the last cell is looked for where it is then, as a hand that sees the map does, not where it was before the press (the aim of a knife edge: the shift decides the row)"""
+        x0, y0 = self.point(r0, c0)
+
+        def send(kind, x, y):
+            if self.touch:
+                self.tab.call("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [] if kind == "touchEnd" else [{"x": x, "y": y, "id": 1, "radiusX": 8, "radiusY": 8, "force": .5}]})
+            elif kind == "touchStart":
+                self.tab.mouse("mouseMoved", x, y, button="none")
+                self.tab.mouse("mousePressed", x, y)
+            elif kind == "touchMove":
+                self.tab.mouse("mouseMoved", x, y, buttons=1)
+            else:
+                self.tab.mouse("mouseReleased", x, y)
+        send("touchStart", x0, y0)
+        time.sleep(0.05)
+        x1, y1 = self.point(r1, c1)
+        x, y = x0 + (x1 - x0) / steps, y0 + (y1 - y0) / steps
+        send("touchMove", x, y)                           # (the first step of the hand)
+        time.sleep(0.5)
+        x1, y1 = self.point(r1, c1)                       # (the map as it is now)
+        for i in range(1, steps + 1):
+            send("touchMove", x + (x1 - x) * i / steps, y + (y1 - y) * i / steps)
+            time.sleep(0.03)
+        send("touchEnd", x1, y1)
+        time.sleep(0.35)
+
     def bar(self):
         return self.page.ev("(function () { var b = document.querySelector('.pk-bar'); return b && !b.hidden ? b.textContent : ''; })()")
 
@@ -692,7 +720,7 @@ def run_pickup_drag(page, tab, args, check, env, edges_bytes, edges_js, name, to
     undo()
     check(data() == mosh_pit(), "%s: ONE Undo takes it back, byte for byte" % name)
     # 2. a drag that starts on a thing that is not picked picks it and puts it down too
-    h.drag_cells(6, 6, 12, 12)
+    h.drag_cells_settled(6, 6, 12, 12)
     check(layer2_tile(data(), 11, 11) == RED_HILL, "%s: a press on a thing that is not picked, a drag and a lift: down" % name)
     undo()
     # 3. a red place: the lift puts the thing back where it was picked up (nothing is written, no Undo step) and the bar says why

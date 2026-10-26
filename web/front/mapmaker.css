@@ -129,6 +129,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .cvbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 8px 12px; font-size: 14px; color: var(--cream); background: #0b1612; border-top: 2px solid var(--rule); }
 .editbar, .undoredo, .drawopts { display: inline-flex; align-items: center; gap: 6px; }
 #where { white-space: nowrap; }
+@media (min-width: 601px) { #where { position: absolute; left: 6px; top: 6px; padding: 2px 8px; font-size: 12.5px; background: rgba(5, 10, 8, .85); border-radius: 3px; pointer-events: none; } #where:empty { display: none; } }
 .brushes { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
 .brushes .bl { font-size: 13px; color: var(--muted); margin-right: 2px; }
 .brange { width: 88px; min-height: 34px; margin: 0 2px; padding: 0; accent-color: var(--gold); cursor: pointer; touch-action: manipulation; }
@@ -282,8 +283,9 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .crside { display: grid; gap: 12px; } .crread { padding: 14px 16px; } .crbig { margin: 4px 0 8px; font-size: 24px; line-height: 1.2; color: var(--gold); } .crcells { margin-top: 6px; }
 .crside .note.warn { border-left-color: var(--warn); background: #2a2208; } .crbtns { display: grid; gap: 10px; } .crbtns .btn.ghost { background: #0d1b16; box-shadow: none; border-color: var(--frame-hi); } .convertbox { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; } .convertbox .link { min-height: 0; text-align: left; line-height: 1.25; }
 
-/* a desktop that is not tall: the note under the palette goes (the palette and the tools need the room) */
-@media (min-width: 601px) and (min-height: 451px) and (max-height: 780px) { .side { gap: 8px; } .toolnote { display: none; } .tools { padding: 8px 10px; gap: 4px; } .toolbtns { gap: 4px; } .tool { min-height: 34px; padding: 4px 10px; } .swatch.team { min-height: 28px; } }
+/* a desktop that is not tall: shorter tools, the short note, no kind tags, a 2-line description; under 781 px the note goes */
+@media (min-width: 601px) and (min-height: 451px) and (max-height: 860px) { .tools { padding: 8px 10px; gap: 4px; } .toolbtns { gap: 4px; } .tool { min-height: 34px; padding: 4px 10px; } .toolnote .dsk, .side .sidetags { display: none; } .toolnote .mob { display: inline; } .sumbox .desc { -webkit-line-clamp: 2; } }
+@media (min-width: 601px) and (min-height: 451px) and (max-height: 780px) { .side { gap: 8px; } .toolnote { display: none; } .swatch.team { min-height: 28px; } }
 
 /* a narrow desktop window (601 to 1200 pixels): the top bar wraps, the name box on a line of its own, so no button is cut and none covers the name (eight buttons since Submit for approval) */
 @media (min-width: 1221px) and (max-width: 1480px) { .edmenu { gap: 4px; } .edmenu .btn.sm { padding-left: 6px; padding-right: 6px; font-size: 14px; } }
@@ -347,11 +349,11 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .edlogo { width: 54px; }
     .edname .nm { min-height: 44px; font-size: 16px; min-width: 150px; padding: 3px 10px; }
     .edbody { grid-template-columns: 152px minmax(0, 1fr) 150px; gap: 10px; padding: 4px 16px 12px; }
-    .tools { padding: 6px; gap: 4px; }
+    .tools { padding: 6px; gap: 4px; display: grid; grid-template-columns: 1fr 1fr; align-content: start; }
     .tools h3 { display: none; }
-    .toolbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    .toolbtns { display: contents; }
     .palette { display: none; }
-    .tilebtn:not([hidden]) { display: flex; }
+    .tilebtn:not([hidden]) { display: flex; padding: 4px 6px; } #tile-name { display: none; } .tilebtn::after { margin-left: 4px; }
     #auto-edges-mob { display: none; }
     .toolnote { display: none; }
     .tool { justify-content: center; min-height: 32px; font-size: 12px; padding: 2px; text-align: center; } .tool:not([disabled]) { min-height: 44px; } .tool i { display: none; }
@@ -361,8 +363,6 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .side .kv { font-size: 13px; gap: 1px 8px; } .side .meter-cap { font-size: 12px; } .side .checkline { font-size: 13px; padding: 5px 8px; }
     .side h3 { display: none; }
     .cvbar { padding: 4px 8px; font-size: 13px; flex-wrap: wrap; gap: 4px 6px; } .cvbar .sp { flex: 1 1 0; } .zoom button { width: 44px; height: 44px; } .editbar { display: contents; } .undoredo, .drawopts { gap: 3px; } .brushes { margin-left: 2px; gap: 3px; }
-    #where { position: absolute; left: 6px; top: 6px; padding: 2px 8px; font-size: 12.5px; background: rgba(5, 10, 8, .85); border-radius: 3px; pointer-events: none; }
-    #where:empty { display: none; }
     .btn.sm, .edmenu .btn.sm { min-height: 44px; padding: 4px 12px; font-size: 14px; }
     .scrim { padding: 8px 14px; }
     .pfield { margin-bottom: 8px; } .pfield > label, .pfield > .lg { margin-bottom: 2px; font-size: 14px; } .pfield .help { display: none; } .ant { min-height: 44px; } .pfield textarea { font-size: 16px; padding: 4px 10px; } .dlg.props .lead { margin-bottom: 8px; }
