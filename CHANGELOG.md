@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...HEAD)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...f4549178)
 
 ## v0.12.140 - 2026-10-26 - Map Maker: the bar under the map stays one row, and the tools fit
 
