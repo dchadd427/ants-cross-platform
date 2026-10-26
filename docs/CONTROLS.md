@@ -256,7 +256,7 @@ The original's keys (`Ants.exe` `FUN_0102609a`, [`GAME_REVERSE_ENGINEERING.md`](
 | **`Ctrl + N` / `Ctrl + P`** | Select the next / previous ant (from the lowest selected one) and scroll just far enough to show it. |
 | **`Ctrl + S`** | Stop the selected ants (no flash, no lock, no deselect). |
 | **`Ctrl + O` / `Ctrl + Q`** | Options / quit dialog (quit dialog: `Y` yes, `N` or `Esc` no). |
-| **`Ctrl + L`** | Turn the [ant health marks](VIEW_AND_HUD.md#ant-health-marks) off, or on again as they were (Hurt ants or All ants, a bar or a number). The original prints every ant's hit points as white numbers with this key and forgets; here the marks are **on by default** (a bar on hurt ants) and the choice is remembered (`ant_health`), a deliberate difference ([`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md#differences-made-on-purpose)). |
+| **`Ctrl + L`** | Turn the [ant health marks](VIEW_AND_HUD.md#ant-health-marks) off, or on again as they were (Hurt ants or All ants, a bar or a number). The original prints every ant's hit points as white numbers with this key and forgets (Show health as: Number is that number); here the marks are **on by default** (a bar on hurt ants) and the choice is remembered (`ant_health`), a deliberate difference ([`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md#differences-made-on-purpose)). |
 | *In a team dialog* | The offer to team up (section 5.42): `A` accepts, `D` / `Esc` declines; while you wait for the answer: `W` / `Esc` withdraws the offer; "Doing this will break your team": `Y` yes, `N` / `Esc` no. A dialog takes every key and click until it is answered ([`VIEW_AND_HUD.md`](VIEW_AND_HUD.md#alliance-texts--chat-log) has the texts). |
 
 The mouse wheel, by device:

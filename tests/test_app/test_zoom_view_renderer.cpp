@@ -1014,7 +1014,7 @@ void test_pass_state(const assets::AssetArchive& arc) {
         check(differ(got[0], got[1], view) > 1000 && differ(got[0], got[2], view) > 1000 && differ(got[1], got[2], view) > 1000, "the three zooms are three different pictures");
     }
 
-    // the health numbers are text: one size at every zoom, colored and outlined, over the sprite's screen position; from the zoom 0.5 on (a 10 is no wider than the tile of its ant) and left out below it
+    // the hit point digits are text: one size at every zoom, at the sprite's screen position
     for (const Shape& shape : kShapes) {
         PixelRig hp_rig(arc, "GAUNTLET", shape.cw, shape.ch);
         if (!hp_rig.ok) continue;
@@ -1030,22 +1030,27 @@ void test_pass_state(const assets::AssetArchive& arc) {
         a.hp = 10;
         a.max_hp = 10;
         a.state = sim::UnitState::Idle;
-        a.loco_clip = 0x7FFE;                                         // no sprite: only the number is drawn
+        a.loco_clip = 0x7FFE;                                         // no sprite: only the digits of the health number are drawn
         hp_rig.world.ants.push_back(a);
-        // the number "10" as a reference: the fixed font's 8 x 15 cells in green, outlined in black by the eight neighbors, drawn alone on a magenta frame at the zoom 1
+        // the digits "10" as a reference: drawn alone on a black frame at the zoom 1 (the fixed font's 8 x 15 cells)
         hp_rig.renderer.begin_frame();
-        hp_rig.renderer.fill_rect(0, 0, shape.cw, shape.ch, ants::assets::ColorRGBA{255, 0, 255, 255});
-        for (int dy = -1; dy <= 1; ++dy)
-            for (int dx = -1; dx <= 1; ++dx)
-                if (dx != 0 || dy != 0) hp_rig.renderer.draw_fixed_text("10", 100 + dx, 100 + dy, ants::assets::ColorRGBA{0, 0, 0, 255});
-        hp_rig.renderer.draw_fixed_text("10", 100, 100, ants::assets::ColorRGBA{60, 214, 60, 255});
+        hp_rig.renderer.draw_fixed_text("10", 100, 100, ants::assets::ColorRGBA{255, 255, 255, 255});
         const Picture ref = hp_rig.read();
-        auto is_ref = [&](int32_t x, int32_t y) { return x >= 0 && y >= 0 && x < ref.w && y < ref.h && !(ref.at(x, y)[0] == 255 && ref.at(x, y)[1] == 0 && ref.at(x, y)[2] == 255); };
         int ref_count = 0;
-        for (int32_t y = 0; y < ref.h; ++y)
-            for (int32_t x = 0; x < ref.w; ++x) ref_count += is_ref(x, y) ? 1 : 0;
-        check(ref_count > 100, std::string(shape.name) + ": the reference number has pixels (" + std::to_string(ref_count) + ")");
-        for (const float z : {0.25f, 0.5f, 1.0f, 2.0f}) {
+        int ref_x0 = 1 << 30, ref_y0 = 1 << 30, ref_x1 = -1, ref_y1 = -1;
+        for (int32_t y = 0; y < ref.h; ++y) {
+            for (int32_t x = 0; x < ref.w; ++x) {
+                if (ref.at(x, y)[0] == 255 && ref.at(x, y)[1] == 255 && ref.at(x, y)[2] == 255) {
+                    ++ref_count;
+                    ref_x0 = std::min(ref_x0, x);
+                    ref_y0 = std::min(ref_y0, y);
+                    ref_x1 = std::max(ref_x1, x);
+                    ref_y1 = std::max(ref_y1, y);
+                }
+            }
+        }
+        check(ref_count > 30 && ref_x1 - ref_x0 == 13 && ref_y1 - ref_y0 == 9, std::string(shape.name) + ": the reference digits are 14 x 10 pixels of white (two 8 x 15 cells of the fixed font)");
+        for (const float z : {0.5f, 1.0f, 2.0f}) {
             const double ox = z == 2.0f ? 640.0 : (z == 1.0f ? 500.0 : 300.0);
             const double oy = z == 2.0f ? 560.0 : (z == 1.0f ? 400.0 : 100.0);
             hp_rig.look(ox, oy, z);
@@ -1053,37 +1058,34 @@ void test_pass_state(const assets::AssetArchive& arc) {
             const int64_t o2y = static_cast<int64_t>(std::llround(hp_rig.cam().y * 2.0));
             const Picture with = hp_rig.shoot(-1, {}, -1, true);
             const Picture without = hp_rig.shoot(-1, {}, -1, false);
-            // the screen position of the sprite's position (700, 650): the view's corner plus the world offset times the zoom; the number's first cell is 7 left of it and 31 world pixels (times the zoom) + 14 above
-            const int hpp = z == 0.25f ? 8 : z == 0.5f ? 4 : z == 1.0f ? 2 : 1;                        // half pixels per screen pixel
+            // the screen position of the sprite's position (700, 650): the view's corner plus the world offset times the zoom
+            const int hpp = z == 0.5f ? 4 : z == 1.0f ? 2 : 1;                        // half pixels per screen pixel
             const int32_t sx = v.x + static_cast<int32_t>(fdiv_half(700 * 2 - o2x, hpp));
             const int32_t sy = v.y + static_cast<int32_t>(fdiv_half(650 * 2 - o2y, hpp));
-            const int32_t nx = sx - 7;
-            const int32_t ny = sy - static_cast<int32_t>(std::lround(31.0 * static_cast<double>(z))) - 14;
-            int changed = 0;
-            int missing = 0;
-            int wrong = 0;
+            int count = 0;
+            int x0 = 1 << 30, y0 = 1 << 30, x1 = -1, y1 = -1;
+            bool same_as_text = true;
             for (int32_t y = 0; y < with.h; ++y) {
                 for (int32_t x = 0; x < with.w; ++x) {
-                    const int32_t rx = x - nx + 100;
-                    const int32_t ry = y - ny + 100;
-                    const bool in_ref = is_ref(rx, ry);
-                    const bool differs = std::memcmp(with.at(x, y), without.at(x, y), 3) != 0;
-                    const bool same_as_ref = in_ref && std::memcmp(with.at(x, y), ref.at(rx, ry), 3) == 0;
-                    if (differs) {
-                        ++changed;
-                        if (!same_as_ref) ++wrong;
-                    } else if (in_ref && z >= 0.5f && !same_as_ref) {
-                        ++missing;                                                        // (a pixel of the number that the picture does not have)
+                    const bool changed = std::memcmp(with.at(x, y), without.at(x, y), 3) != 0;
+                    if (changed) {
+                        ++count;
+                        x0 = std::min(x0, x);
+                        y0 = std::min(y0, y);
+                        x1 = std::max(x1, x);
+                        y1 = std::max(y1, y);
+                        // the same pixel of the reference text, moved from (100, 100) to the sprite's screen position
+                        const int32_t rx = x - sx + 100;
+                        const int32_t ry = y - sy + 100;
+                        const bool white = rx >= 0 && ry >= 0 && rx < ref.w && ry < ref.h && ref.at(rx, ry)[0] == 255 && ref.at(rx, ry)[1] == 255 && ref.at(rx, ry)[2] == 255;
+                        if (!white || with.at(x, y)[0] != 255) same_as_text = false;
                     }
                 }
             }
             const std::string at = std::string(shape.name) + " at " + zoom::level_name(z) + ": ";
-            if (z < 0.5f) {
-                check(changed == 0, at + "below the zoom 0.5 no number is drawn (" + std::to_string(changed) + " pixels)");
-            } else {
-                check(changed > ref_count * 9 / 10 && changed <= ref_count && wrong == 0 && missing == 0,
-                      at + "the number is the fixed font's, green with a black outline, the same " + std::to_string(ref_count) + " pixels at every zoom, at the sprite's screen position (changed " + std::to_string(changed) + ", wrong " + std::to_string(wrong) + ", missing " + std::to_string(missing) + ")");
-            }
+            check(count == ref_count && same_as_text, at + "the digits are the fixed font's, the same " + std::to_string(ref_count) + " white pixels at every zoom (" + std::to_string(count) + ")");
+            check(x0 == sx + (ref_x0 - 100) && y0 == sy + (ref_y0 - 100) && x1 - x0 == ref_x1 - ref_x0 && y1 - y0 == ref_y1 - ref_y0,
+                  at + "at the screen position of the sprite, one size: top left (" + std::to_string(x0) + ", " + std::to_string(y0) + ") expected (" + std::to_string(sx + ref_x0 - 100) + ", " + std::to_string(sy + ref_y0 - 100) + ")");
         }
     }
 

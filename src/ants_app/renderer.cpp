@@ -906,7 +906,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     sub_tick_ms_ = static_cast<uint32_t>(std::clamp(sub_tick_time, 0.0f, 0.0499f) * 1000.0f);
     render_queue_.clear();
     overlay_queue_.clear();
-    health_marks_.clear();
+    health_marks_.clear(), deferred_digits_.clear();
 
     // At a zoom the world is drawn into the offscreen target (begin_world_target); at the zoom 1 straight into the view, exactly as it always was. A renderer that cannot make the target
     // (none that SDL has: every one supports targets) draws the zoom 1 picture of the same origin instead of a broken one.
@@ -1709,8 +1709,8 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
         // The sort key is the sprite's y: a thrown ant's key jumps with its position at the end of the first flight frame
         const AntClipPrediction pred = predict_ant_clip(a, ant_loco_sequence(a));
         item.sort_y = a.py + pred.dy;
-        item.draw_func = [this, a](SDL_Renderer*, TextureCache&) { this->draw_single_ant(a); };
-        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);     // (the sprite's predicted position, as its ears: it moves when a frame ends; drawn after the world, renderer_health.cpp)
+        item.draw_func = [this, a, pred](SDL_Renderer*, TextureCache&) { this->draw_single_ant(a); this->draw_ant_number(a, a.px + pred.dx, a.py + pred.dy); };    // (the original's number follows its ant: renderer_health.cpp)
+        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);
         render_queue_.push_back(std::move(item));
     }
 }
