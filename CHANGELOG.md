@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: drawing only; the rules, replays and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e36d1f6...HEAD)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e36d1f6...89f64530)
 
 ## v0.12.137 - 2026-10-25 - Cleanup: unused code removed
 
