@@ -21,6 +21,13 @@
 using namespace ants::sim;
 using namespace ants::sim::twin_test;
 
+namespace ants::sim {
+// What SimulationEngine names as its friend: the engine's inside, for the tests of this program
+struct SimulationEngineTestAccess {
+    static SimulationEngineImpl& impl(SimulationEngine& e) { return *e.impl_; }
+};
+}  // namespace ants::sim
+
 static int g_test_count = 0;
 static int g_test_failures = 0;
 static int g_assert_count = 0;
@@ -188,10 +195,14 @@ void run_claim_tests() {
             w.impl.claims_catch_up_all();                            // nothing more to put right
             ASSERT_TRUE(marks.changes_since() == 1);
         }
-        b.removed = true;                                            // a removal by hand, and a tile by hand
+        AntUnit& c = w.spawn(0, 4, 4);
+        w.order(c, AntUnit::kOrderMove, TileCoord{9, 9});
+        ASSERT_TRUE(w.list_of(9, 9) == std::vector<uint32_t>{w.slot(c)});
+        b.removed = true;                                            // a removal by hand (of an ant that claims nothing and of one that does), and a tile by hand
+        c.removed = true;
         a.orig_order_tile = TileCoord{8, 8};
         w.impl.claims_catch_up_all();
-        ASSERT_TRUE(marks.changes_since() == 2 && w.list_of(7, 7).empty() && w.list_of(8, 8) == std::vector<uint32_t>{w.slot(a)});
+        ASSERT_TRUE(marks.changes_since() == 3 && w.list_of(7, 7).empty() && w.list_of(9, 9).empty() && w.list_of(8, 8) == std::vector<uint32_t>{w.slot(a)});
         ASSERT_CLAIMS_OK(w, 4);
     } TEST_END();
 
@@ -209,6 +220,20 @@ void run_claim_tests() {
         copy.claims_verify();
         w.impl.claims_verify();
         ASSERT_TRUE(!(copy.claim_ants_ == w.impl.claim_ants_));
+        {
+            ClaimWorld other;                                        // an engine of its own with other ants and other claims: assignment replaces its lists whole
+            for (int i = 0; i < 25; ++i) {
+                AntUnit& a = other.spawn(static_cast<uint8_t>((i + 1) % 4), 2 + i % 9, 2 + i / 9);
+                other.order(a, i % 2 == 0 ? AntUnit::kOrderHome : AntUnit::kOrderMove, TileCoord{static_cast<int32_t>(10 - i % 7), static_cast<int32_t>(11 - i % 5)});
+            }
+            other.impl.remove_ant(*other.impl.ants_[4]);
+            ASSERT_CLAIMS_OK(other, 6);
+            ASSERT_TRUE(!(other.impl.claim_ants_ == w.impl.claim_ants_));
+            other.impl = w.impl;
+            other.impl.claims_verify();
+            ASSERT_TRUE(other.impl.claim_ants_ == w.impl.claim_ants_ && other.impl.claim_cell_ == w.impl.claim_cell_);
+            ASSERT_CLAIMS_OK(other, 7);
+        }
         SimulationEngineImpl assigned;
         assigned = w.impl;
         assigned.claims_verify();
@@ -252,6 +277,7 @@ void run_claim_tests() {
             {"blast_hit", [](ClaimWorld& w, AntUnit& a) { w.impl.blast_hit(a, TileCoord{2, 2}, TileCoord{3, 2}, 1, 0); }},
             {"drown", [](ClaimWorld& w, AntUnit& a) { w.impl.drown(a, TileCoord{2, 2}); }},
             {"bomb_victim", [](ClaimWorld& w, AntUnit& a) { w.impl.bomb_victim(a, TileCoord{2, 2}, TileCoord{3, 2}); }},
+            {"bridge_gone_scan of an attacking swimmer on the tile (its path and order are reset)", [](ClaimWorld& w, AntUnit& a) { a.type = AntType::Swimmer; w.impl.set_action(a, AntUnit::kActionAttack, 2, -1, -1, false); w.order(a, AntUnit::kOrderMove, TileCoord{8, 8}); w.impl.bridge_gone_scan(TileCoord{2, 2}); }},
             {"attack_tile", [](ClaimWorld& w, AntUnit& a) { w.impl.attack_tile(a, TileCoord{3, 2}); }},
             {"attack_clip_end", [](ClaimWorld& w, AntUnit& a) { w.impl.attack_clip_end(a); }},
             {"stop_at", [](ClaimWorld& w, AntUnit& a) { w.impl.stop_at(a, TileCoord{2, 2}); }},
@@ -301,6 +327,61 @@ void run_claim_tests() {
                 ASSERT_TRUE(why.empty());
                 ++run;
             }
+        }
+    } TEST_END();
+
+    TEST_CASE("C1.6 Claim lists and the Cancel order of a player (SimulationEngine::issue_order resets the path and the order of an ant that is walking to a tile): the ants leave their lists at once, and the engine plays on as one on the scans") {
+        Twin t;
+        t.engine.init_test_world(40, 40, 11);
+        const Crowd crowd = populate(t.engine, 40, 12, Layout::Spread);
+        {
+            LinearOnly scans;
+            t.old_engine.init_test_world(40, 40, 11);
+            populate(t.old_engine, 40, 12, Layout::Spread);
+        }
+        AntOrder go;
+        go.type = OrderType::Move;
+        go.target_x = 30;
+        go.target_y = 30;
+        for (uint8_t team = 0; team < 4; ++team) {
+            for (size_t i = 0; i < crowd.ids[team].size(); ++i) {
+                go.ant_id = crowd.ids[team][i];
+                t.both([&](SimulationEngine& e) { e.issue_order(go); });
+            }
+        }
+        for (int k = 0; k < 3; ++k) ASSERT_TRUE(t.tick());
+        SimulationEngineImpl& impl = SimulationEngineTestAccess::impl(t.engine);
+        auto claimants = [&impl]() { size_t n = 0; for (const auto& up : impl.ants_) n += up && !up->removed && impl.claim_key_of(*up) != TileAntIndex::kNone; return n; };
+        ASSERT_TRUE(claimants() >= 40);                                  // they are walking: they claim their tiles
+        AntOrder stop;
+        stop.type = OrderType::Cancel;
+        for (uint8_t team = 0; team < 4; ++team) {
+            for (size_t i = 0; i < crowd.ids[team].size(); i += 2) {
+                stop.ant_id = crowd.ids[team][i];
+                t.both([&](SimulationEngine& e) { e.issue_order(stop); });
+            }
+        }
+        impl.claims_verify();                                            // between the command and the next tick the lists are already right
+        ASSERT_TRUE(claimants() <= 28);
+        for (int k = 0; k < 20; ++k) ASSERT_TRUE(t.tick());
+        SimulationEngine other;                                          // an engine with another match and other live claims is assigned the one above: its lists are replaced whole
+        other.init_test_world(40, 40, 12);
+        const Crowd crowd2 = populate(other, 40, 9, Layout::Spread);
+        AntOrder go2 = go;
+        for (uint8_t team = 0; team < 4; ++team) {
+            for (size_t i = 0; i < crowd2.ids[team].size(); ++i) {
+                go2.ant_id = crowd2.ids[team][i];
+                other.issue_order(go2);
+            }
+        }
+        for (int k = 0; k < 3; ++k) other.tick();
+        ASSERT_TRUE(!(SimulationEngineTestAccess::impl(other).claim_ants_ == impl.claim_ants_));
+        other = t.engine;
+        ASSERT_TRUE(SimulationEngineTestAccess::impl(other).claim_ants_ == impl.claim_ants_ && SimulationEngineTestAccess::impl(other).claim_cell_ == impl.claim_cell_);
+        for (int k = 0; k < 10; ++k) {
+            other.tick();
+            ASSERT_TRUE(t.tick());
+            ASSERT_TRUE(other.state_hash() == t.engine.state_hash());
         }
     } TEST_END();
 

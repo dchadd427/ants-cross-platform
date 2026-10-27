@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the claim lists of the simulation (src/ants_sim/order_claims.cpp: claim_note, claim_key_of, claimed_by_mate, claims_catch_up_all, claim_rebuild, and the sites that write an order) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/claims_index_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_claims.cpp, or the one named (a mutant that makes the shadow check stop the program is caught by the program's exit): a setter that does not tell the lists, a wrong key (a removed ant, only one of Move and Home, every order), a note that never leaves or never joins a list or forgets the ant's list, a question that ignores the team or counts the asker or asks the lists outside a tick, a start-of-tick pass that notes nothing or is not run (in the shadow build; in the product build the pass that does not heal is caught by tests/test_sim/test_engine_event_heal.cpp, H3), a rebuild that keeps old cells or skips ants, a restart or a grid of another size that keeps the lists, a removal that does not tell them, a can_enter that scans, and one mutant for each of the 65 sites that write an order, putting the direct write back (the lists are then not told; the test of these mutants is the claims program AND tests/scripts/test_order_writers.py, which fails for every one of them; the pull request that added them lists, for each site, whether the claims program alone kills it, and why the others change nothing that can be seen: a note computes the key from the whole state, so a write that is followed by a setter on the same ant before anything can ask is repaired by it). Not here, because they change nothing that can be seen and each is argued in the pull request: add_ant not noting a new ant (its order is none: it claims nothing), the question that leaves out the check of the tile (the cell of an order tile on the grid is that tile's alone), the pass that leaves out its own rebuild for a grid of another size (claim_note rebuilds), a visit of a list member that is not a claimant (the lists are exact), and the shadow comparison of an answer switched off (a checker whose failure is the program's stop: with exact lists nothing observes it, and the check of the whole lists that runs beside it stops on the same state).",
+ "note": "Mutants of the claim lists of the simulation (src/ants_sim/order_claims.cpp: claim_note, claim_key_of, claimed_by_mate, claims_catch_up_all, claim_rebuild, and the sites that write an order) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/claims_index_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_claims.cpp, or the one named (a mutant that makes the shadow check stop the program is caught by the program's exit): a setter that does not tell the lists, a wrong key (a removed ant, only one of Move and Home, every order), a note that never leaves or never joins a list or forgets the ant's list, a question that ignores the team or counts the asker or asks the lists outside a tick, a start-of-tick pass that notes nothing or is not run (in the shadow build; in the product build the pass that does not heal is caught by tests/test_sim/test_engine_event_heal.cpp, H3), a rebuild that keeps old cells or skips ants, a restart or a grid of another size that keeps the lists, a removal that does not tell them, a can_enter that scans, and one mutant for each of the 65 sites that write an order and for the two callers of clear_path (the Cancel order, bridge_gone_scan), putting the direct write back (the lists are then not told; the test of these mutants is the claims program AND tests/scripts/test_order_writers.py, which fails for every one of them; the pull request that added them lists, for each site, whether the claims program alone kills it, and why the others change nothing that can be seen: a note computes the key from the whole state, so a write that is followed by a setter on the same ant before anything can ask is repaired by it). Not here, because they change nothing that can be seen and each is argued in the pull request: add_ant not noting a new ant (its order is none: it claims nothing), the question that leaves out the check of the tile (the cell of an order tile on the grid is that tile's alone), the pass that leaves out its own rebuild for a grid of another size (claim_note rebuilds), a visit of a list member that is not a claimant (the lists are exact), and the shadow comparison of an answer switched off (a checker whose failure is the program's stop: with exact lists nothing observes it, and the check of the whole lists that runs beside it stops on the same state).",
  "defaults": {
   "build": "test_engine_claims",
   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims"
@@ -94,6 +94,30 @@
    "file": "src/ants_sim/order_claims.cpp",
    "old": "        if (claim_note(*ants_[slot], static_cast<uint32_t>(slot))) lookup_shadow_stale_event(",
    "new": "        if (false && claim_note(*ants_[slot], static_cast<uint32_t>(slot))) lookup_shadow_stale_event("
+  },
+  {
+   "id": "cancel_command_writes_directly",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "            impl_->clear_path_of(*unit);",
+   "new": "            unit->clear_path();"
+  },
+  {
+   "id": "bridge_gone_scan_writes_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "                clear_path_of(*a);                                                    // 0x101ab56",
+   "new": "                a->clear_path();                                                    // 0x101ab56"
+  },
+  {
+   "id": "engine_assignment_keeps_the_old_claim_lists",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    if (other.impl_) *impl_ = *other.impl_;\n    else *impl_ = SimulationEngineImpl();",
+   "new": "    if (other.impl_) { auto keep = impl_->claim_ants_; auto keep_cell = impl_->claim_cell_; *impl_ = *other.impl_; impl_->claim_ants_ = keep; impl_->claim_cell_ = keep_cell; }\n    else *impl_ = SimulationEngineImpl();"
+  },
+  {
+   "id": "pass_skips_removed_ants",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    for (size_t slot = 0; slot < ants_.size(); ++slot) {\n        if (!ants_[slot]) continue;\n#ifdef ANTS_SIM_LOOKUP_SHADOW\n        ++lookup_shadow_claim_catch_ups();",
+   "new": "    for (size_t slot = 0; slot < ants_.size(); ++slot) {\n        if (!ants_[slot] || ants_[slot]->removed) continue;\n#ifdef ANTS_SIM_LOOKUP_SHADOW\n        ++lookup_shadow_claim_catch_ups();"
   },
   {
    "id": "pass_does_not_heal_in_the_product_build",
