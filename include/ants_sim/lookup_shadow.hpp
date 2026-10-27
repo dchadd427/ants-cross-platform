@@ -100,16 +100,46 @@ inline uint64_t& lookup_shadow_go_to_dirty_ants() noexcept {
     return ants;
 }
 
+/// The questions "does a team-mate claim this tile?" that the claim lists answered in a tick (calls), the ones whose answer was yes, those compared with the scan over every ant, the
+/// checks of the whole lists against the ants' orders (at the end of a tick and after a copy), and the ants that the start-of-tick pass looked at; and the ants whose order the lists
+/// had not been told of (0 after every ordinary match: the pass stops the program otherwise, unless a test that writes orders from outside counts them): so that a test can show that
+/// the lists were asked, both answers were met, and nothing was put right by the net
+inline uint64_t& lookup_shadow_claim_calls() noexcept {
+    static thread_local uint64_t calls = 0;
+    return calls;
+}
+inline uint64_t& lookup_shadow_claim_hits() noexcept {
+    static thread_local uint64_t hits = 0;
+    return hits;
+}
+inline uint64_t& lookup_shadow_claim_checks() noexcept {
+    static thread_local uint64_t checks = 0;
+    return checks;
+}
+inline uint64_t& lookup_shadow_claim_verifies() noexcept {
+    static thread_local uint64_t verifies = 0;
+    return verifies;
+}
+inline uint64_t& lookup_shadow_claim_catch_ups() noexcept {
+    static thread_local uint64_t ants = 0;
+    return ants;
+}
+inline uint64_t& lookup_shadow_claim_catch_up_changes() noexcept {
+    static thread_local uint64_t changes = 0;
+    return changes;
+}
+
 [[noreturn]] inline void lookup_shadow_fail(const char* lookup, uint32_t id) {
     std::fprintf(stderr, "lookup shadow check failed: %s(%u) differs from the linear scan\n", lookup, static_cast<unsigned>(id));
     std::abort();
 }
 
 /// The two nets that a product build has under the writers of the events (the start-of-tick pass, and the selection of the next event that finds an entry the ant does not bear
-/// out) stop the program here, because in a match nothing may ever have to use them. One test writes the fields of the events from OUTSIDE the simulation on purpose (a test hook
-/// that pokes an ant between two ticks, as no production code does), and sets this to true for the thread: the nets then count what they put right (the two counters below) and the
-/// program goes on, so that the test shows that they see it and that the engine plays on as the scans do. The heap is still checked against the ants at the END of every tick
-/// (not at the start, nor at a copy): what the nets left wrong stops the program.
+/// out) stop the program here, because in a match nothing may ever have to use them. Two tests write the fields of the events (and one the orders) from OUTSIDE the simulation on purpose (a test hook
+/// that pokes an ant between two ticks, as no production code does), and set this to true for the thread: the nets then count what they put right (the counters below) and the
+/// program goes on, so that the test shows that they see it and that the engine plays on as the scans do. The heap is still checked against the ants at the END of every tick: what
+/// the nets left wrong stops the program. A COPY of an engine is checked strictly whatever this says (the copy's constructor verifies the heap and the lists against the ants), so a
+/// test in this mode takes its copies after a tick has put its writes right, never between a write and the tick.
 inline bool& lookup_shadow_count_stale_events() noexcept {
     static thread_local bool count = false;
     return count;

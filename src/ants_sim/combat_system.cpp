@@ -210,9 +210,9 @@ void SimulationEngineImpl::start_knock_flight(AntUnit& t, uint8_t kdir, uint8_t 
     } else if (range == 4) {
         set_action(t, AntUnit::kActionBlown, face, -1, -1, false);
     }
-    t.orig_order_tile = land;
+    set_order_tile(t, land);
     t.flight_tile = land;
-    t.orig_order = 0x0C;
+    set_order_kind(t, 0x0C);
     t.knock_flag = (kdir == 8);
 }
 
@@ -296,8 +296,8 @@ bool SimulationEngineImpl::stun_or_die(AntUnit& a) {
         return true;
     }
     set_action(a, AntUnit::kActionStun, static_cast<uint8_t>(a.facing), -1, -1, false);
-    a.orig_order = AntUnit::kOrderNone;
-    a.orig_order_tile = no_order_tile();
+    set_order_kind(a, AntUnit::kOrderNone);
+    set_order_tile(a, no_order_tile());
     a.waypoints.clear();
     a.current_waypoint_idx = 0;
     ++a.move_serial;
@@ -328,8 +328,8 @@ void SimulationEngineImpl::blast_hit(AntUnit& a, TileCoord at, TileCoord dest, u
     if (dmg) take_hit(a, src);
     set_position(a, centre_x(at), centre_y(at));
     set_action(a, AntUnit::kActionHit, d, -1, -1, false);
-    a.orig_order = 0x0C;
-    a.orig_order_tile = dest;
+    set_order_kind(a, 0x0C);
+    set_order_tile(a, dest);
     a.flight_tile = dest;
     a.knock_flag = (at == dest);
 }
@@ -400,8 +400,8 @@ void SimulationEngineImpl::tick_battle_clouds() {
 void SimulationEngineImpl::drown(AntUnit& a, TileCoord t) {
     set_position(a, centre_x(t), centre_y(t));
     set_action(a, AntUnit::kActionDrown, static_cast<uint8_t>(a.facing), -1, -1, false);
-    a.orig_order = AntUnit::kOrderNone;
-    a.orig_order_tile = t;
+    set_order_kind(a, AntUnit::kOrderNone);
+    set_order_tile(a, t);
     a.waypoints.clear();
     a.current_waypoint_idx = 0;
     ++a.move_serial;
@@ -434,7 +434,7 @@ void SimulationEngineImpl::bridge_gone_scan(TileCoord t) {
             spawn_tile_effect("dsplash", t.x, t.y, effect_spec::kDsplashMs);
             uint8_t act = orig_action_of(*a);
             if (act == AntUnit::kActionAttack) {
-                a->clear_path();                                                    // 0x101ab56
+                clear_path_of(*a);                                                    // 0x101ab56
                 act = AntUnit::kActionIdle;
             }
             // (A swimmer in its death or drowning clip is left alone: restarting those clips would start the death effect a second time,
@@ -477,7 +477,7 @@ void SimulationEngineImpl::bomb_victim(AntUnit& a, TileCoord at, TileCoord to) {
     set_position(a, centre_x(at), centre_y(at));
     a.flight_tile = to;
     a.knock_flag = (at == to);
-    a.orig_order = AntUnit::kOrderBomb;
+    set_order_kind(a, AntUnit::kOrderBomb);
     set_action(a, AntUnit::kActionBlast, d, -1, -1, false);
     const uint32_t boom_owner = new_audio_owner();                            // the explosion sprite owns bombexp.wav (1144 ms) and is removed after 680 ms
     spawn_tile_effect("bombex", at.x, at.y, effect_spec::kBombexMs, boom_owner);
@@ -573,6 +573,7 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
     }
     if (a.pending_victim != 0) deliver_pending_hit(a);
     a.removed = true;
+    claim_note(a);                                            // (a removed ant claims nothing)
     occ_note(a);                                              // (a removed ant that is still registered is out of step: deliver_pending_hit above may have put it back)
     a.hp = 0;
     a.state = UnitState::Dead;
@@ -671,8 +672,8 @@ void SimulationEngineImpl::attack_tile(AntUnit& a, TileCoord target) {
         resume_after_auto_engage(a);
         return;
     }
-    a.orig_order = 0x0F;
-    a.orig_order_tile = next;
+    set_order_kind(a, 0x0F);
+    set_order_tile(a, next);
     a.orig_target_team = victim->player_id;
     a.orig_target_ant = victim->id;
     apply_path(a, std::vector<TileCoord>{me, next});

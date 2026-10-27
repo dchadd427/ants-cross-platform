@@ -163,6 +163,7 @@ AntUnit* SimulationEngineImpl::add_ant(std::unique_ptr<AntUnit> unit) {
     AntUnit* const ant = unit.get();
     ants_.push_back(std::move(unit));
     occ_note(*ant);                                               // (its occ_tile is (-1, -1): out of step until the caller registers it)
+    claim_note(*ant);
     return ant;
 }
 
@@ -176,6 +177,7 @@ void SimulationEngineImpl::occ_refresh() {
         for (auto& up : ants_) {
             if (up) up->occ_tile = TileCoord{-1, -1};
         }
+        claim_rebuild();                                          // (the claim lists have a cell for each cell of the grid too)
     }
     for (auto& up : ants_) {
         if (up) occ_refresh_ant(*up);

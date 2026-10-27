@@ -15,6 +15,7 @@ add_library(ants_sim STATIC
     start_teams.cpp
     mode_187.cpp
     event_queue.cpp
+    order_claims.cpp
 )
 
 target_include_directories(ants_sim PUBLIC

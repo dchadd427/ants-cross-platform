@@ -15,7 +15,7 @@
 // and burn_overlay_end, start_combat_timer and cancel_combat_timer (combat_system.cpp), remove_ant (removed, loco_action), low_hp_check (a raw write of loco_action), loco_play,
 // loco_step, loco_release, start_pause and cancel_pause (movement_system.cpp); pause_fire leaves with one too (set_action can return before it writes anything: the old action is a
 // death, or a flight that ends in one). The raw write of the combat timer in movement_tick is followed at once by resume_after_auto_engage, which starts with cancel_combat_timer.
-// set_action (loco_action) has no call of its own: every path of it that writes loco_action (one that returns early writes nothing) then calls cancel_pause or loco_play. loco_sync writes some of the fields too (the
+// set_action (loco_action) has no call of its own: every path of it that writes loco_action then calls cancel_pause or loco_play (an early return, when the cleanup of the old action ends the call, leaves loco_action as it was; what that cleanup writes to the fields above is done by the sites listed here). loco_sync writes some of the fields too (the
 // writes of an ant that is not alive, and of a stopped walker, which set_action follows): the pass over every ant at the start of movement_tick (event_catch_up) is the net under
 // all of them, and in the shadow build it must never find anything to do in a match. It is also what keeps a write from OUTSIDE the simulation right: a test hook that pokes the
 // fields of an ant through get_unit() between two ticks (no production code does) leaves the heap stale, and the pass puts it right; without the pass the engine would play such a

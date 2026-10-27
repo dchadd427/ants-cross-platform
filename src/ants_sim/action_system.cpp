@@ -150,10 +150,10 @@ bool SimulationEngineImpl::action_cleanup(AntUnit& a, uint8_t old_action, uint8_
 void SimulationEngineImpl::enter_hill(AntUnit& a) {
     if (a.hp == 0) a.hp = 1;                                   // burn survivor
     set_action(a, AntUnit::kActionEnter, static_cast<uint8_t>(a.facing), -1, -1, false);
-    a.orig_order = AntUnit::kOrderHome;                        // +0xa8 = 2
+    set_order_kind(a, AntUnit::kOrderHome);                        // +0xa8 = 2
     a.waypoints.clear();                                       // ClearPath: +0xac stays the "no target" sentinel
     a.current_waypoint_idx = 0;
-    a.orig_order_tile = no_order_tile();
+    set_order_tile(a, no_order_tile());
     a.final_dest = TileCoord{-1, -1};
 }
 
@@ -266,8 +266,8 @@ void SimulationEngineImpl::hatch_run(uint8_t team) {
     const uint8_t dir = static_cast<uint8_t>(prng_.rand() % 7u + 1u);
     set_action(*n, AntUnit::kActionIdle, dir, -1, -1, false);
     set_action(*n, AntUnit::kActionHatch, dir, -1, -1, false);
-    n->orig_order = AntUnit::kOrderHome;
-    n->orig_order_tile = ent;
+    set_order_kind(*n, AntUnit::kOrderHome);
+    set_order_tile(*n, ent);
     n->final_dest = TileCoord{-1, -1};
     audio_queue_.push_back(AudioEvent{SoundID::ExitHill, centre_x(ent), centre_y(ent), 1, team});
     post_news(team, strings::kHatched);
@@ -311,8 +311,8 @@ void SimulationEngineImpl::start_raid(AntUnit& a, uint8_t victim, int32_t amount
     const TileCoord tile{static_cast<int32_t>(hill->x) + 3, static_cast<int32_t>(hill->y) + 2};
     set_action(a, AntUnit::kActionRaid, static_cast<uint8_t>(a.facing), -1, -1, false);
     a.orig_target_team = victim;                                            // +0xb0
-    a.orig_order_tile = tile;                                               // +0xac
-    a.orig_order = AntUnit::kOrderRaid;                                     // +0xa8 = 0xb
+    set_order_tile(a, tile);                                               // +0xac
+    set_order_kind(a, AntUnit::kOrderRaid);                                     // +0xa8 = 0xb
     a.raid_amount = amount;                                                 // +0xf8
     a.target_team_id = victim;
     a.waypoints.clear();                                                    // ClearPath
@@ -382,9 +382,9 @@ void SimulationEngineImpl::start_harvest(AntUnit& a, TileCoord food_tile, uint16
     const int32_t first = grid_.food_object_first_at(food_tile);
     const uint8_t dir = dir_from_to(approach, food_tile);
     set_action(a, AntUnit::kActionHarvest, dir, -1, -1, false);
-    a.orig_order_tile = food_tile;                                // +0xac
+    set_order_tile(a, food_tile);                                // +0xac
     a.orig_food_tile = food_tile;                                 // +0xb4
-    a.orig_order = AntUnit::kOrderHarvest;                        // +0xa8 = 5
+    set_order_kind(a, AntUnit::kOrderHarvest);                        // +0xa8 = 5
     a.orig_food_id = first;                                       // +0xb0
     a.harvest_amount = amount;                                    // +0xb8
     a.waypoints.clear();                                          // FUN_0101ab56
