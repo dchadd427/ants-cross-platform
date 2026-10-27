@@ -711,8 +711,8 @@
   {
    "id": "sprites_old_atlas_without_facings_is_a_crash",
    "file": "web/front/mapmaker_sprites.js",
-   "old": "b === 4 || !index.faces ? 0",
-   "new": "b === 4 ? 0",
+   "old": "b === 4 || !index.faces ||",
+   "new": "b === 4 ||",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   },
   {
