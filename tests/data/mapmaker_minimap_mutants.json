@@ -123,15 +123,15 @@
   {
    "id": "hill_centre_is_first_cell",
    "file": "web/front/mapmaker_minimap.js",
-   "old": "out.push({ team: sum[id].team, x: sum[id].x / sum[id].n, y: sum[id].y / sum[id].n });",
-   "new": "out.push({ team: sum[id].team, x: sum[id].x / sum[id].n - 1.5, y: sum[id].y / sum[id].n });",
+   "old": "out.push({ team: s.team, x: s.x / s.n, y: s.y / s.n });",
+   "new": "out.push({ team: s.team, x: s.x / s.n - 1.5, y: s.y / s.n });",
    "test": "node tests/scripts/web_mapmaker_minimap_check.js"
   },
   {
    "id": "hill_centre_in_wrong_axis",
    "file": "web/front/mapmaker_minimap.js",
-   "old": "s.x += i % file.columns + 0.5; s.y += (i / file.columns | 0) + 0.5;",
-   "new": "s.x += (i / file.columns | 0) + 0.5; s.y += i % file.columns + 0.5;",
+   "old": "s.x += i % w + 0.5; s.y += (i / w | 0) + 0.5; s.n++;",
+   "new": "s.x += (i / w | 0) + 0.5; s.y += i % w + 0.5; s.n++;",
    "test": "node tests/scripts/web_mapmaker_minimap_check.js"
   },
   {
@@ -249,8 +249,8 @@
   {
    "id": "stored_place_not_a_number_taken",
    "file": "web/front/mapmaker_minimap.js",
-   "old": "if (isFinite(v[0]) && isFinite(v[1]) && v[0] !== null && v[1] !== null)",
-   "new": "if (v[0] !== null && v[1] !== null)",
+   "old": "typeof v[0] === 'number' && typeof v[1] === 'number' && isFinite(v[0]) && isFinite(v[1])",
+   "new": "isFinite(v[0]) && isFinite(v[1])",
    "test": "node tests/scripts/web_mapmaker_minimap_check.js"
   },
   {
@@ -524,6 +524,55 @@
    "file": "web/front/mapmaker_minimap.js",
    "old": "b = sizeOf(box.hidden && env.show ? env.show : box),",
    "new": "b = sizeOf(box),",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hills_of_a_team_far_apart_merged",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "for (r = -1; r < 2; r++) for (q = -1; q < 2; q++) {",
+   "new": "for (r = -3; r < 4; r++) for (q = -3; q < 4; q++) {",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_corners_not_touching",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "c = i + r * w + q;",
+   "new": "c = r && q ? -1 : i + r * w + q;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "row_end_joins_next_row",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (i % w + q >= 0 && i % w + q < w && cells[c] === id)",
+   "new": "if (cells[c] === id)",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hills_of_two_teams_joined",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "cells[c] === id) { cells[c] = 0;",
+   "new": "cells[c]) { cells[c] = 0;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_group_not_marked_used",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "id = cells[k]; s = { team: TEAMS[id - 245], x: 0, y: 0, n: 0 }; todo = [+k]; cells[k] = 0;",
+   "new": "id = cells[k]; s = { team: TEAMS[id - 245], x: 0, y: 0, n: 0 }; todo = [+k];",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_group_averaged_by_one",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "out.push({ team: s.team, x: s.x / s.n, y: s.y / s.n });",
+   "new": "out.push({ team: s.team, x: s.x, y: s.y });",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "stored_boolean_place_taken",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "typeof v[0] === 'number' && typeof v[1] === 'number' && isFinite(v[0])",
+   "new": "isFinite(v[0])",
    "test": "node tests/scripts/web_mapmaker_minimap_check.js"
   }
  ]

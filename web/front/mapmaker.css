@@ -127,7 +127,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .minimap #mini-cap { font-size: 12px; color: var(--muted); padding: 3px 2px 0; }
 .mmbar { display: flex; align-items: center; gap: 4px; padding-bottom: 4px; }
 .mmgrip, .mmbtn, .mmshow { position: relative; font: inherit; font-size: 12px; color: var(--cream); background: #123a2d; border: 1px solid var(--frame); border-radius: 4px; min-height: 28px; padding: 0 6px; touch-action: none; }
-.mmgrip { flex: 1 1 0; min-width: 0; text-align: left; cursor: grab; } .mmgrip.locked { cursor: default; opacity: .55; } .mmbtn[aria-pressed="true"] { background: var(--gold); }
+.mmgrip { flex: 1 1 0; min-width: 0; text-align: left; cursor: grab; } .mmgrip.locked { cursor: default; opacity: .55; } .mmbtn[aria-pressed="true"] { background: var(--gold); color: #1b1608; }
 .mmbtn::after { content: ""; position: absolute; inset: -8px -2px; }
 .mmshow { position: absolute; right: 12px; top: 12px; z-index: 2; min-height: 44px; padding: 0 12px; } .mmshow[hidden] { display: none; }
 .mmgrip:focus-visible, .mmbtn:focus-visible, .mmshow:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }

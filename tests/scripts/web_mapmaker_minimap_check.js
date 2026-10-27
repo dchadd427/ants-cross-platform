@@ -46,6 +46,17 @@ function caseA() {
     equal(list.map((h) => h.team), ['black', 'green', 'red'], 'the teams that have a hill');
     equal(list.map((h) => [h.x, h.y]), [[22, 12], [32, 42], [2, 2]], 'the middle of each hill, in cells');
     equal(Mini.hills(fakeFile(30, 30, [])), [], 'no hill, no mark');
+    // several hills of one team (a legal map may have them: the checker only warns): one square for each group of touching cells
+    const two = Mini.hills(fakeFile(60, 60, [hillBlock(246, 5, 5), hillBlock(246, 40, 40)]));
+    equal(two.map((h) => [h.team, h.x, h.y]), [['blue', 7, 7], ['blue', 42, 42]], 'two hills of a team far apart: two marks');
+    equal(Mini.hills(fakeFile(60, 60, [hillBlock(246, 10, 10), hillBlock(246, 14, 14)])).length, 1, 'cells that touch at a corner are one hill');
+    equal(Mini.hills(fakeFile(60, 60, [hillBlock(246, 10, 10), hillBlock(246, 16, 16)])).length, 2, 'two hills two cells apart are two hills');
+    equal(Mini.hills(fakeFile(60, 60, [hillBlock(246, 10, 56), hillBlock(246, 14, 0)])).length, 2, 'the end of a row and the start of the next are not touching');
+    equal(Mini.hills(fakeFile(60, 60, [hillBlock(246, 10, 10), hillBlock(247, 14, 14)])).map((h) => h.team).sort(), ['blue', 'red'], 'touching hills of two teams stay two');
+    equal(Mini.hills(fakeFile(60, 60, [{ tile: 248, cells: [[1, 1], [1, 2], [2, 1]] }])).map((h) => [h.x, h.y]), [[1.8333333333333333, 1.8333333333333333]], 'a hill that is part of one: the middle of the cells it has');
+    equal(Mini.hills(fakeFile(60, 60, [{ tile: 248, cells: [[0, 0], [59, 59], [0, 59], [59, 0]] }])).length, 4, 'cells at the four corners of the map are four hills');
+    const ctx2 = recorder(); Mini.marks(ctx2, fakeFile(60, 60, [hillBlock(246, 5, 5), hillBlock(246, 40, 40)]), Mini.hills(fakeFile(60, 60, [hillBlock(246, 5, 5), hillBlock(246, 40, 40)])), 156, 1);
+    check(ctx2.rects.length === 4, 'a mark for each of two hills of a team (' + ctx2.rects.length + ' rectangles)');
     equal(Mini.hills(fakeFile(30, 30, [{ tile: 244, cells: [[1, 1]] }, { tile: 249, cells: [[2, 2]] }])), [], 'the tiles next to the hills are not hills');
     const real = File.parse(new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', 'GAUNTLET.LVL'))));
     check(real.ok && Mini.hills(real).length === 4 && ['black', 'blue', 'green', 'red'].every((t) => Mini.hills(real).some((h) => h.team === t)), 'a library map has four hills, one for each team (read only)');
@@ -123,6 +134,9 @@ function caseB() {
     check(page({ store: { [KEEP]: '"abcd"' } }).mini.state().off === false, 'a text is ignored');
     check(page({ store: { [KEEP]: '{"2":1,"3":1,"length":4}' } }).mini.state().off === false, 'an object that looks like a list is ignored');
     check(page({ store: { [KEEP]: '[0,0,1]' } }).mini.state().off === false, 'a list of three is ignored');
+    const odd = page({ store: { [KEEP]: '[true,false,1,1]' } });
+    check(odd.mini.state().x === null && odd.mini.state().off === true && odd.mini.state().lock === true, 'booleans are not a place (the flags are read)');
+    check(page({ store: { [KEEP]: '["12","34",0,0]' } }).mini.state().x === null, 'numbers in quotes are not a place');
     const n = page({ noStorage: true });
     n.mini.update(true); n.hide.fire('click', {}); n.lock.fire('click', {});
     check(n.mini.state().off === true && n.mini.state().lock === true && n.box.hidden, 'a storage that throws changes nothing for this visit');

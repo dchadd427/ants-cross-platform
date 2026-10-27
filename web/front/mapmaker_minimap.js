@@ -10,14 +10,25 @@
     var KEY = 'ants_mapmaker_minimap', STEP = 16, TAP = 6, HILL = 10, DOT = 5;
     var FILL = { green: '#5dff2e', red: '#ff2d86', blue: '#3d9bff', black: '#161616' }, TEAMS = ['black', 'blue', 'red', 'green'];
 
-    // Each team's hill: the middle of its cells of layer 2 (tiles 245 to 248), in cells
+    // Each hill: the middle of a group of touching cells of layer 2 with one of the four hill tiles (245 to 248), in cells (a map may have several hills of a team)
     function hills(file) {
-        var b = file.bytes, i, id, s, sum = {}, out = [];
-        for (i = 0; i < file.rows * file.columns; i++) {
+        var b = file.bytes, w = file.columns, cells = {}, out = [], i, k, id, s, todo, r, q, c;
+        for (i = 0; i < file.rows * w; i++) {
             id = b[file.layer2 + 6 * i] | (b[file.layer2 + 6 * i + 1] << 8);
-            if (id > 244 && id < 249) { s = sum[id] = sum[id] || { team: TEAMS[id - 245], x: 0, y: 0, n: 0 }; s.x += i % file.columns + 0.5; s.y += (i / file.columns | 0) + 0.5; s.n++; }
+            if (id > 244 && id < 249) cells[i] = id;
         }
-        for (id in sum) out.push({ team: sum[id].team, x: sum[id].x / sum[id].n, y: sum[id].y / sum[id].n });
+        for (k in cells) {
+            if (!cells[k]) continue;
+            id = cells[k]; s = { team: TEAMS[id - 245], x: 0, y: 0, n: 0 }; todo = [+k]; cells[k] = 0;
+            while (todo.length) {
+                i = todo.pop(); s.x += i % w + 0.5; s.y += (i / w | 0) + 0.5; s.n++;
+                for (r = -1; r < 2; r++) for (q = -1; q < 2; q++) {
+                    c = i + r * w + q;
+                    if (i % w + q >= 0 && i % w + q < w && cells[c] === id) { cells[c] = 0; todo.push(c); }
+                }
+            }
+            out.push({ team: s.team, x: s.x / s.n, y: s.y / s.n });
+        }
         return out;
     }
 
@@ -48,7 +59,7 @@
         function store() { try { env.win.localStorage.setItem(KEY, JSON.stringify([st.pos && st.pos.x, st.pos && st.pos.y, +st.off, +st.lock])); } catch (e) { /* this visit only */ } }
         try {
             var v = JSON.parse(env.win.localStorage.getItem(KEY));
-            if (Array.isArray(v) && v.length === 4) { st.off = v[2] === 1; st.lock = v[3] === 1; if (isFinite(v[0]) && isFinite(v[1]) && v[0] !== null && v[1] !== null) st.pos = { x: +v[0], y: +v[1] }; }
+            if (Array.isArray(v) && v.length === 4) { st.off = v[2] === 1; st.lock = v[3] === 1; if (typeof v[0] === 'number' && typeof v[1] === 'number' && isFinite(v[0]) && isFinite(v[1])) st.pos = { x: v[0], y: v[1] }; }
         } catch (e) { /* none kept */ }
         function sizeOf(n) { return { w: n.offsetWidth || 0, h: n.offsetHeight || 0 }; }
         function room() { var p = box.parentNode; return p && p.clientWidth ? { w: p.clientWidth, h: p.clientHeight } : null; }

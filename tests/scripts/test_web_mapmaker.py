@@ -1378,7 +1378,7 @@ class TheGroundAndTheSprites(unittest.TestCase):
         """tests/data/mapmaker_minimap_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check"""
         with open(os.path.join(REPO, "tests", "data", "mapmaker_minimap_mutants.json"), encoding="utf-8") as f:
             spec = json.load(f)
-        self.assertGreaterEqual(len(spec["mutants"]), 70)
+        self.assertGreaterEqual(len(spec["mutants"]), 80)
         ids = [m["id"] for m in spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         with tempfile.TemporaryDirectory() as tmp:
@@ -1409,7 +1409,8 @@ class TheGroundAndTheSprites(unittest.TestCase):
         css = read("web", "front", "mapmaker.css")
         self.assertRegex(css, r"\.mmgrip \{[^}]*cursor: grab", "the grip is the one thing that drags")
         self.assertRegex(css, r"\.mmgrip, \.mmbtn, \.mmshow \{[^}]*touch-action: none", "a finger on the grip drags the box, not the page")
-        self.assertRegex(css, r"\.mmbtn::after \{[^}]*inset: -8px", "the small buttons have a 44 pixel target")
+        self.assertRegex(css, r"\.mmbtn::after \{[^}]*inset: -8px", "the small buttons are 44 pixels high to a finger (their width is what the box leaves)")
+        self.assertRegex(css, r"\.mmbtn\[aria-pressed=\"true\"\] \{[^}]*color: #1b1608", "the locked button has dark text on its gold")
         self.assertRegex(css, r"\.mmshow \{[^}]*min-height: 44px", "the Show map button is 44 pixels")
         self.assertRegex(css, r"\.mmgrip:focus-visible, \.mmbtn:focus-visible, \.mmshow:focus-visible \{ outline: 2px solid var\(--gold\)", "a visible focus")
         mini = read("web", "front", "mapmaker_minimap.js")

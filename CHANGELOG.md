@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.144 - 2026-10-27 - Map Maker: clearer hills on the small map, and a small map you can hide, move and lock
 
 **For players:**
-- **The hills on the small map are easy to see.** Each team's hill is a square of its own brighter color with a 1 pixel edge (black, or white for the black team), at least 10 pixels wide on any map, so it no longer disappears on dirt, mud or water or on a 480 x 480 map. The starting ants are small squares, left out beside their own hill.
+- **The hills on the small map are easy to see.** Each team's hill is a square with a 1 pixel edge (black, or white for the black team) and a bright fill for green, red and blue (the black team keeps a dark fill), at least 10 pixels wide on any map, so it no longer disappears on dirt, mud or water or on a 480 x 480 map. The starting ants are small squares, left out beside their own hill.
 - **Hide it.** A Hide button on the small map takes it away and leaves a small Show map button in its place, so the corner of the map can be reached. A phone's small map is smaller too (108 pixels, no caption).
 - **Move it.** Drag the grip (the dots at the top left of the small map) anywhere inside the map, with a mouse or a finger; the arrow keys move it 16 pixels from the grip, Home or a double tap puts it back in the corner. A smaller window brings it back inside.
 - **Lock it.** The lock button next to Hide keeps the small map where it is: it cannot be dragged or moved by the keys until it is unlocked. Hide and Show still work. The place, the lock and the hiding are remembered in this browser. Map Maker v1.6.0.

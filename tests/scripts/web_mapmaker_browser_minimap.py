@@ -3,7 +3,7 @@ stays under the limit of lines. On a 100 x 100 map zoomed in, so that the small 
 is read pixel by pixel); Hide takes the box away and leaves a Show map button in its place, where the map under it can be reached, and what is chosen is kept for the next visit; the grip drags the box
 (mouse, and a finger on a phone) and keeps it inside the map, a drag starts no stroke and does not look around, the arrow keys move it 16 pixels, Home and two quick taps bring it back to the corner;
 Lock stops all of that and is kept; a window that is smaller brings the box inside again, a locked box too; a stored place that does not fit is dropped; on a phone the box is 108 pixels wide and its
-small buttons have a 44 pixel target. The page helpers of the main file (wait_for, the Page class) are handed in by `run_minimap`."""
+small buttons are 44 pixels high to a finger. The page helpers of the main file (wait_for, the Page class) are handed in by `run_minimap`."""
 import json
 import time
 
@@ -197,7 +197,7 @@ def run_minimap(page, tab, args, check, env, edges_bytes, edges_js):
         for sel in ("#mini-hide", "#mini-lock"):
             b = box(page, sel)
             cx, cy = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
-            check(all(page.ev("document.elementFromPoint(%s, %s) === document.querySelector(%s)" % (cx + dx, cy + dy, json.dumps(sel))) for dx, dy in ((0, -20), (0, 20))), "%s: %s can be hit within 20 pixels above and below its middle (a 44 pixel target)" % (name, sel))
+            check(all(page.ev("document.elementFromPoint(%s, %s) === document.querySelector(%s)" % (cx + dx, cy + dy, json.dumps(sel))) for dx, dy in ((0, -20), (0, 20))), "%s: %s can be hit within 20 pixels above and below its middle (44 pixels high)" % (name, sel))
         px = red_pixels(page)
         check(px["fill"] >= 64 * 4 and px["edge"] >= 8, "%s: the red hill is at least 10 CSS pixels wide (%s)" % (name, px))
         g = box(page, "#mini-grip")
