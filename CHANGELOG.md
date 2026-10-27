@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.145 - 2026-10-27 - Map Maker: clearer hills on the small map, and a small map you can hide, move and lock
+
+**For players:**
+- **The hills on the small map are easy to see.** Each team's hill is a square with a 1 pixel edge (black, or white for the black team) and a bright fill for green, red and blue (the black team keeps a dark fill), at least 10 pixels wide on any map, so it no longer disappears on dirt, mud or water or on a 480 x 480 map. The starting ants are small squares, left out beside their own hill.
+- **Hide it.** A Hide button on the small map takes it away and leaves a small Show map button in its place, so the corner of the map can be reached. A phone's small map is smaller too (108 pixels, no caption).
+- **Move it.** Drag the grip (the dots at the top left of the small map) anywhere inside the map, with a mouse or a finger; the arrow keys move it 16 pixels from the grip, Home or a double tap puts it back in the corner. A smaller window brings it back inside.
+- **Lock it.** The lock button next to Hide keeps the small map where it is: it cannot be dragged or moved by the keys until it is unlocked. Hide and Show still work. The place, the lock and the hiding are remembered in this browser. Map Maker v1.6.0.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only). No map of the library changes.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bbf956a1...3b60fa2f)
+
 ## v0.12.144 - 2026-10-27 - Big selections: the ants nearest the click are ordered first
 
 **For players:**
@@ -523,21 +535,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5f3d19d9...a3ed04cb)
 
-## v0.12.99 - 2026-10-21 - Pre-placed neutral bombs and fire walls in Map Maker
+## Older versions (v0.12.99 and before)
 
-**For players:**
-- **Pre-placed neutral bombs and fire walls in the Map Maker (`v1.4.3`).** The **Objects** palette in the Map Maker now includes a permanent **Fire wall** (`134`, `wallup04`) and the four colored **Bombs** (`129..132`: `Black bomb`, `Blue bomb`, `Green bomb`, `Red bomb`), matching `POPcOrN.lvl`. Pre-placed bombs are written and kept with a neutral owner word (`0x0101`) in both Classic (`v8`) and Extended (`v9`) maps so every team can step on them and no team receives kill credit or auto-avoids them.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/077a66c7...3a39dc50)
-
-## v0.12.98 - 2026-10-21 - Serve and play approved Extended maps on the server, web lobby, and Map Maker
-
-**For players:**
-- **Approved Extended maps in the web lobby, match history, and Map Maker (`v1.4.2`).** Approved Extended maps (`version == 9`, up to `512 x 512` / `262,144` cells / 4 MiB) now appear with an **Extended** badge and preview thumbnail in the web lobby's **Choose a map** picker, the match history and live pages, and the Map Maker's **Open a map** library dialog (`GET /maps/all`, `format: 2`), while `GET /maps` (`format: 1`) remains Classic-only for older cached pages.
-- **Online rooms and downloads for approved Extended maps.** The dedicated game server (`ants_server`) serves `.lvl` files (`/maps/files/<name>.lvl`) and PNG preview pictures (`/maps/previews/<name>.png`) for approved Extended maps and loads and validates Extended maps when starting online rooms.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2336f325...a6f4a2d4)
-
-## Older versions (v0.12.97 and before)
-
-Every release before v0.12.98, and the long notes of v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.100, and the long notes of v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -5,9 +5,9 @@
 // the marked square left and came to) are painted again, never the whole frame. A browser script (it needs a document).
 (function (root, factory) {
     'use strict';
-    if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_view.js'));
-    else root.MapCanvas = factory(root.MapView);
-})(this, function (View) {
+    if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_view.js'), require('./mapmaker_minimap.js'));
+    else root.MapCanvas = factory(root.MapView, root.MapMini);
+})(this, function (View, Mini) {
     'use strict';
 
     var STEP = 1.5;                 // what a press of + or - zooms by
@@ -18,7 +18,7 @@
     // env: {doc, win, canvas, minimap (the box), mini (its canvas), miniCap, where (the status line), zoomIn, zoomOut (the buttons), onCursor(cell)}
     function create(env) {
         var doc = env.doc, win = env.win, canvas = env.canvas, file = null, view = null, cursor = null, hover = null, w = 0, h = 0, dpr = 1, frame = 0;
-        var scratch = doc.createElement('canvas'), mini = null, pointers = {}, drag = null, pinch = null;
+        var mm = Mini.create(env, redraw), scratch = doc.createElement('canvas'), mini = null, pointers = {}, drag = null, pinch = null;
         var painter = null, stroke = null, pending = null, line = null, spaceHeld = false, full = null, dirty = [], lastRect = null, sprites = null;       // (sprites: the game's pictures, once loaded: mapmaker_sprites.js)
 
         function makeCanvas(cw, ch) { var c = doc.createElement('canvas'); c.width = cw; c.height = ch; return c; }
@@ -41,14 +41,9 @@
             canvas.setAttribute('data-view', view.cy.toFixed(3) + ',' + view.cx.toFixed(3) + ',' + view.scale.toFixed(4));          // (what a test reads, exactly: the map point in the middle and the size of a tile)
             env.zoomIn.disabled = view.scale >= View.MAX_SCALE - 0.001;
             env.zoomOut.disabled = view.scale <= View.minScale(file, w, h) + 0.001;
-            var partial = !View.isWhole(view, file, w, h);
-            env.minimap.hidden = !partial;
-            if (!partial || !mini) return;
-            var m = env.mini, ctx = m.getContext('2d');
-            if (m.width !== mini.width || m.height !== mini.height) { m.width = mini.width; m.height = mini.height; }
-            ctx.drawImage(mini, 0, 0);
-            var f = View.miniFrame(view, file, w, h, mini.width, mini.height);
-            ctx.strokeStyle = '#fbfbff'; ctx.lineWidth = 1; ctx.strokeRect(Math.floor(f.x) + 0.5, Math.floor(f.y) + 0.5, Math.max(1, Math.round(f.w) - 1), Math.max(1, Math.round(f.h) - 1));
+            if (!mm.update(!View.isWhole(view, file, w, h)) || !mini) return;
+            var p = mm.paint(mini, file), f = View.miniFrame(view, file, w, h, p.w, p.h), k = p.px;
+            p.ctx.strokeStyle = '#fbfbff'; p.ctx.lineWidth = 2 * k; p.ctx.strokeRect(Math.floor(f.x) + k, Math.floor(f.y) + k, Math.max(1, Math.round(f.w) - 2 * k), Math.max(1, Math.round(f.h) - 2 * k));
         }
 
         function brushNow() { return painter ? painter.size() : 0; }
@@ -110,9 +105,9 @@
             cursor = null; hover = null; setStroke(null); pending = null; full = null; dirty = []; lastRect = null;
             if (sprites) sprites.reset();
             measure();
-            if (!file) { env.minimap.hidden = true; mini = null; return; }
+            if (!file) { mm.update(false); mini = null; return; }
             view = View.create(file, w, h);
-            mini = View.miniBase(file, 168, 168, makeCanvas);
+            mini = View.miniBase(file, 168, 168, makeCanvas, true);
             env.miniCap.textContent = 'Whole map: ' + file.rows + ' x ' + file.columns;
             paint();
         }
@@ -323,9 +318,9 @@
         return {
             setFile: setFile, redraw: redraw,
             // The same map with other bytes (the dictionary grew, or the map was resized): the view stays where it is
-            swapFile: function (next) { file = next; full = null; if (sprites) sprites.reset(); if (view) View.clamp(view, file, w, h); if (cursor && (cursor.row >= file.rows || cursor.column >= file.columns)) cursor = null; if (hover && (hover.row >= file.rows || hover.column >= file.columns)) hover = null; mini = View.miniBase(file, 168, 168, makeCanvas); env.miniCap.textContent = 'Whole map: ' + file.rows + ' x ' + file.columns; redraw(); },
+            swapFile: function (next) { file = next; full = null; if (sprites) sprites.reset(); if (view) View.clamp(view, file, w, h); if (cursor && (cursor.row >= file.rows || cursor.column >= file.columns)) cursor = null; if (hover && (hover.row >= file.rows || hover.column >= file.columns)) hover = null; mini = View.miniBase(file, 168, 168, makeCanvas, true); env.miniCap.textContent = 'Whole map: ' + file.rows + ' x ' + file.columns; redraw(); },
             // The small map again, after a stroke or an undo
-            refreshMini: function () { if (file) { mini = View.miniBase(file, 168, 168, makeCanvas); redraw(); } },
+            refreshMini: function () { if (file) { mini = View.miniBase(file, 168, 168, makeCanvas, true); redraw(); } },
             // The painter (mapmaker_tools.js): {size() -> the brush in cells, 0 when the tool does not paint, shape() -> the box of a bigger object or null, ghost() -> the tile id of a bigger object whose picture follows the pointer or 0, begin(cell) -> true when a drag goes on, extend(from, to), end(), cancel()}
             setPainter: function (p) { painter = p; cursorStyle(); },
             // The cells (indexes, row * columns + column) that changed: they are painted again in the next frame
