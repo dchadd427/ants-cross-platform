@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/8e9acca0...b4ed4635)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/10bc34ae...6bd2e893)
 
 ## v0.12.146 - 2026-10-27 - Map Maker: the game's pictures at every zoom
 
