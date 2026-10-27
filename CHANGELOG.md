@@ -26,13 +26,14 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.142 - 2026-10-27 - Faster: team-mates' claims on a tile found at once
 
 **For players:**
-- **Faster: the one slow moment of a huge map is gone.** When many combat ants end their fight in the same instant, each looks for a free goal tile, and each used to look at every ant of the map to see whether a team-mate had already claimed that tile. The game now keeps a list of the ants that claim each tile. Measured here, slowest tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 31 and 4.2 on the desktop, 54 and 8.7 in the web build (run in Node here, not in a browser); 4 x 1,500 combat ants on 120 x 120: 11.8 and 5.8. The average tick of that map goes from 3.3 to 2.1 on the desktop.
-- In the web build, no tick of the first 100 seconds of that map went over 7 ms in two runs (the budget is 50).
-- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library play identically on the desktop build, and the web build gives the same state as the desktop on the 6,000-ant map and big combat worlds).
+- **Faster ticks on a huge map.** When many combat ants end a fight in the same instant, each looks for a free goal tile, and each used to look at every ant of the map to see whether a team-mate had already claimed that tile. The game now keeps a list of the ants that claim each tile. Measured here, worst tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 31 and 4.2 on the desktop, 54 and 8.7 in the web build run in Node (not a browser); 4 x 1,500 combat ants on 120 x 120: 11.8 and 5.8. The average tick of that map goes from 3.3 to 2.1 on the desktop.
+- Not changed: an order given by command, outside the tick, still looks at every ant (in bot play about half of the questions come that way), and a mass order to thousands of ants still takes seconds in the command phase (probably the path planner, not scans).
+- In the web build run in Node (not a browser), no tick of the first 100 seconds of that map went over 7 ms in two runs (the budget is 50).
+- Nothing about a match changes: the state is the same as before at every tick that was compared (big worlds and dozens of maps), and the state of all 540 maps of the library is the same at ticks 0, 200 and 2,400; the web build gives the same state as the desktop on the 6,000-ant map and big combat worlds.
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea2c4cc5...034ecbf2)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea2c4cc5...26810844)
 
 ## v0.12.141 - 2026-10-26 - Faster: orders after a fight no longer look at every ant
 
