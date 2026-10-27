@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/305c793f...305c793f)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/305c793f...4f724792)
 
 ## v0.12.145 - 2026-10-27 - Map Maker: clearer hills on the small map, and a small map you can hide, move and lock
 
