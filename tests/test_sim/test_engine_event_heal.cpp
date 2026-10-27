@@ -8,6 +8,7 @@
 // its heap is right by construction, and the shadow build has proved that a heap that follows the fields chooses what the scans choose (test_engine_lookups). The two engines play
 // the same match, the state hash is compared at every tick, and so are the heaps (what is pending, and when). Without the nets the engine that is not told plays such a write
 // differently from the scans: an event that became pending is not in the heap, an event that is not pending any more is run.
+// H3 does the same for the claim lists (order_claims.cpp): orders written from outside are put in the lists by claims_catch_up_all, whose product-build branch is the one that heals.
 //
 //   ./test_engine_event_heal
 #include "ants_sim/command.hpp"
@@ -285,6 +286,39 @@ void run_tests() {
             ASSERT_TRUE(writes.pause > 10 && writes.burn > 10 && writes.combat > 10 && writes.action > 10 && writes.frame > 5 && writes.label > 10);
             ASSERT_TRUE(stale > 20);                                         // the writes did leave the heap wrong: the nets had something to put right
         }
+    } TEST_END();
+
+    TEST_CASE("H3 Orders written from outside, between ticks (claim lists, order_claims.cpp): the pass at the start of a tick puts them in the lists, and the lists then answer as the scan does") {
+        SimulationEngine e;
+        e.init_test_world(40, 40, 7);
+        std::vector<uint32_t> ids;
+        for (uint8_t team = 0; team < 4; ++team) {
+            for (int i = 0; i < 12; ++i) ids.push_back(e.spawn_unit(team, AntType::Worker, TileCoord{2 + 3 * i, 3 + 8 * team}, true));
+        }
+        e.tick();
+        for (size_t k = 0; k < ids.size(); k += 2) {                       // every other ant is given an order to a tile of its own, with no word to the lists
+            AntUnit& u = e.get_unit(ids[k]);
+            u.orig_order = (k % 4 == 0) ? AntUnit::kOrderMove : AntUnit::kOrderHome;
+            u.orig_order_tile = TileCoord{5 + static_cast<int32_t>(k % 30), 30 + static_cast<int32_t>(k / 30) * 3};
+        }
+        e.tick();                                                           // (the product build puts them right here)
+        SimulationEngineImpl& impl = inside(e);
+        const SimulationEngineImpl::OccTickScope in_tick(impl);
+        size_t claimants = 0, asked = 0;
+        for (const auto& up : impl.ants_) {
+            const AntUnit* c = up.get();
+            if (!c || c->removed || (c->orig_order != AntUnit::kOrderMove && c->orig_order != AntUnit::kOrderHome)) continue;
+            ++claimants;
+            for (const auto& bp : impl.ants_) {
+                if (!bp || bp->removed) continue;
+                const bool lists = impl.claimed_by_mate(*bp, c->orig_order_tile), scan = impl.claimed_by_mate_scan(*bp, c->orig_order_tile);
+                ++asked;
+                if (lists != scan) std::cout << "\n        ant " << bp->id << " asks about the tile of ant " << c->id << ": lists " << lists << ", scan " << scan << "\n";
+                ASSERT_TRUE(lists == scan);
+            }
+        }
+        std::cout << "\n        " << claimants << " ants claim a tile, " << asked << " questions answered as the scan does   ... ";
+        ASSERT_TRUE(claimants >= 20 && asked > 1000);
     } TEST_END();
 }
 

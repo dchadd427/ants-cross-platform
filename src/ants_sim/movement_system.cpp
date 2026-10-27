@@ -78,6 +78,7 @@ void SimulationEngineImpl::movement_reset() {
     occ_.assign(static_cast<size_t>(grid_.width()) * grid_.height(), OccCell{});
     tile_ants_.reset(occ_.size());
     occ_dirty_.clear(); occ_in_tick_ = false;
+    claim_ants_.reset(occ_.size()); claim_cell_.clear();
     event_heap_.reset();
     for (auto& pm : path_managers_) pm.clear();
     path_request_serial_.clear();
@@ -342,8 +343,8 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
                 set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
                 a.waypoints.clear();
                 a.current_waypoint_idx = 0;
-                a.orig_order = AntUnit::kOrderNone;
-                a.orig_order_tile = no_order_tile();
+                set_order_kind(a, AntUnit::kOrderNone);
+                set_order_tile(a, no_order_tile());
                 set_idle_label(a);
                 if (is_special_base_tile(pixel_tile(a))) {
                     const auto* ah = grid_.find_anthill(a.player_id);
@@ -374,8 +375,8 @@ void SimulationEngineImpl::attack_clip_end(AntUnit& a) {
         a.waypoints.clear();
         a.current_waypoint_idx = 0;
         ++a.move_serial;
-        a.orig_order = AntUnit::kOrderNone;
-        a.orig_order_tile = no_order_tile();
+        set_order_kind(a, AntUnit::kOrderNone);
+        set_order_tile(a, no_order_tile());
         a.final_dest = TileCoord{-1, -1};
     }
 }
@@ -444,7 +445,7 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
             return;
         }
         case AntUnit::kActionCantGo:
-            a.orig_order_tile = no_order_tile();
+            set_order_tile(a, no_order_tile());
             loco_play(a, movement::cant_go_clip(type, carrying), dir);
             return;
         case AntUnit::kActionHarvest:                                // ?gf: grab food
@@ -500,7 +501,7 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
             a.state = UnitState::Infiltrating;
             return;
         case AntUnit::kActionAttack:                                 // 0x101aff7: the target tile is cleared, clip ?at
-            a.orig_order_tile = no_order_tile();
+            set_order_tile(a, no_order_tile());
             loco_play(a, movement::action_clip(movement::ActionClip::Attack, type, dir, false), dir);
             a.state = UnitState::Attacking;
             return;
@@ -570,8 +571,8 @@ void SimulationEngineImpl::walk_step(AntUnit& a, StepEvt& e) {
     // B. a bomb on the tile (any ant, own or enemy bomb): the bomb order ends the (empty) path through ARRIVE,
     //    which sets the bomb off.
     if ((e.event == 3 || stationary_end) && grid_.has_bomb_at(cur)) {
-        a.orig_order = AntUnit::kOrderBomb;
-        a.orig_order_tile = cur;
+        set_order_kind(a, AntUnit::kOrderBomb);
+        set_order_tile(a, cur);
         e.dx = 0;
         e.dy = 0;
         arrive(a, e, cur);
@@ -686,8 +687,8 @@ void SimulationEngineImpl::arrive(AntUnit& a, StepEvt& e, TileCoord cur) {
     const TileCoord t5a = (a.occ_tile.x >= 0) ? a.occ_tile : pixel_tile(a);
     const bool on_bomb = grid_.has_bomb_at(t5a);
     if (on_bomb) {
-        a.orig_order = AntUnit::kOrderBomb;
-        a.orig_order_tile = t5a;
+        set_order_kind(a, AntUnit::kOrderBomb);
+        set_order_tile(a, t5a);
         e.dx = 0;
         e.dy = 0;
         a.current_waypoint_idx = a.waypoints.size();
@@ -721,7 +722,7 @@ void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
     const TileCoord order_tile = a.orig_order_tile;            // +0xac, saved before it is cleared (0x101ccc4)
     const bool was_home = (a.home_state == 1);                 // heading for the waiting ring in front of the hill
     a.home_state = 0;                                          // 0x101cd04: +0x68 = 0
-    a.orig_order_tile = no_order_tile();
+    set_order_tile(a, no_order_tile());
     a.arrived_this_tick = true;
     if (order == AntUnit::kOrderHome) {
         // case 2 (0x101cdc5): message 7 makes the ant play the enter clip on the entrance tile; the step's snap delta
@@ -851,8 +852,8 @@ void SimulationEngineImpl::stop_at(AntUnit& a, TileCoord t) {
     set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
     a.waypoints.clear();                                   // SetPath(0, ...)
     a.current_waypoint_idx = 0;
-    a.orig_order = AntUnit::kOrderNone;
-    a.orig_order_tile = no_order_tile();
+    set_order_kind(a, AntUnit::kOrderNone);
+    set_order_tile(a, no_order_tile());
     a.final_dest = TileCoord{-1, -1};
     set_idle_label(a);
 }
@@ -937,7 +938,7 @@ int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
     set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
     a.waypoints.clear();
     a.current_waypoint_idx = 0;
-    a.orig_order_tile = no_order_tile();
+    set_order_tile(a, no_order_tile());
     a.home_state = 0;
     const uint8_t order = a.orig_order;
     if (is_final && (order == 6 || order == 7 || order == 8 || order == 9 || order == 0x0D || order == 0x0E ||
@@ -1064,13 +1065,7 @@ claims:
                 if (x && !x->removed && x != &a && x->player_id == a.player_id && x->home_state == 2) return false;
             }
         }
-        for (const auto& up : ants_) {
-            const AntUnit* x = up.get();
-            if (!x || x->removed || x == &a || x->player_id != a.player_id) continue;
-            if ((x->orig_order == AntUnit::kOrderMove || x->orig_order == AntUnit::kOrderHome) && x->orig_order_tile == t) {
-                return false;
-            }
-        }
+        if (claimed_by_mate(a, t)) return false;
     }
     // R7 own / allied bombs
     if (flags & kIgnoreBombs) return true;
@@ -1275,9 +1270,9 @@ void SimulationEngineImpl::classify_order(AntUnit& a, TileCoord t, bool special,
     }
     if (hill_team >= 0) {
         if (hill_team == a.player_id) {
-            a.orig_order = AntUnit::kOrderHome;
+            set_order_kind(a, AntUnit::kOrderHome);
         } else {
-            a.orig_order = AntUnit::kOrderRaid;
+            set_order_kind(a, AntUnit::kOrderRaid);
             a.orig_target_team = static_cast<uint8_t>(hill_team);
         }
     } else if (special) {
@@ -1286,17 +1281,17 @@ void SimulationEngineImpl::classify_order(AntUnit& a, TileCoord t, bool special,
         // and combat ants keep order 0 (the original leaves +0xa8 unchanged after SetPath(0)).
         switch (type_of(a)) {                                                                        // 0x10206bb: the getter
             case AntType::Bomber:
-                a.orig_order = AntUnit::kOrderPlant;
-                if (!valid_ground(t, true) && valid_bomb(t)) a.orig_order = AntUnit::kOrderDefuse;
+                set_order_kind(a, AntUnit::kOrderPlant);
+                if (!valid_ground(t, true) && valid_bomb(t)) set_order_kind(a, AntUnit::kOrderDefuse);
                 break;
             case AntType::Fire:
-                a.orig_order = AntUnit::kOrderIgnite;
-                if (!valid_ground(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_fire()) a.orig_order = AntUnit::kOrderExtinguish;
+                set_order_kind(a, AntUnit::kOrderIgnite);
+                if (!valid_ground(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_fire()) set_order_kind(a, AntUnit::kOrderExtinguish);
                 break;
             case AntType::Swimmer:
-                a.orig_order = AntUnit::kOrderBridgeBuild;
+                set_order_kind(a, AntUnit::kOrderBridgeBuild);
                 if (!valid_water(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_completed_bridge()) {
-                    a.orig_order = AntUnit::kOrderBridgeDemolish;
+                    set_order_kind(a, AntUnit::kOrderBridgeDemolish);
                 }
                 break;
             default:
@@ -1307,25 +1302,25 @@ void SimulationEngineImpl::classify_order(AntUnit& a, TileCoord t, bool special,
         // An ally's ant opens the "attack your ally?" dialog in the original (FUN_0101ffab); the remake has
         // no dialog and treats the click as a move next to the ally.
         if (!occ || occ->player_id == a.player_id || !user_cmd || stats_.are_allies(a.player_id, occ->player_id)) {
-            a.orig_order = AntUnit::kOrderMove;
+            set_order_kind(a, AntUnit::kOrderMove);
         } else {
-            a.orig_order = AntUnit::kOrderAttack;
+            set_order_kind(a, AntUnit::kOrderAttack);
             a.orig_target_team = occ->player_id;
             a.orig_target_ant = occ->id;
         }
     } else if (food_object_at(t) >= 0) {
-        a.orig_order = AntUnit::kOrderHarvest;
+        set_order_kind(a, AntUnit::kOrderHarvest);
         a.orig_food_id = food_object_at(t);
         const FoodObject& fo = grid_.food_objects()[static_cast<size_t>(a.orig_food_id)];
         a.orig_food_tile = TileCoord{static_cast<int32_t>(fo.col), static_cast<int32_t>(fo.row)};   // +0xb4: the object's anchor
     } else if (grid_.in_bounds(t) && grid_.get_cell(t).has_powerup() && user_cmd) {
-        a.orig_order = AntUnit::kOrderPowerUp;
+        set_order_kind(a, AntUnit::kOrderPowerUp);
     } else if (grid_.has_bomb_at(t)) {
-        a.orig_order = AntUnit::kOrderBomb;
+        set_order_kind(a, AntUnit::kOrderBomb);
     } else {
-        a.orig_order = AntUnit::kOrderMove;
+        set_order_kind(a, AntUnit::kOrderMove);
     }
-    a.orig_order_tile = t;
+    set_order_tile(a, t);
 }
 
 // FUN_010202e7(t, userCmd, 1, 1, 5)
@@ -1394,8 +1389,8 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
     cancel_pause(a);
     a.waypoints.clear();                                                                    // SetPath(0, ...)
     a.current_waypoint_idx = 0;
-    a.orig_order = AntUnit::kOrderNone;
-    a.orig_order_tile = no_order_tile();
+    set_order_kind(a, AntUnit::kOrderNone);
+    set_order_tile(a, no_order_tile());
     cancel_combat_timer(a);                                                                 // FUN_0101c152
     a.last_order_ms = now_ms_;                                                              // +0x98 = now
     const TileCoord requested = t;
@@ -1422,8 +1417,8 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
             a.waypoints.clear();
             a.current_waypoint_idx = 0;
             ++a.move_serial;
-            a.orig_order = AntUnit::kOrderNone;
-            a.orig_order_tile = no_order_tile();
+            set_order_kind(a, AntUnit::kOrderNone);
+            set_order_tile(a, no_order_tile());
             post_news(a.player_id, strings::kCantDoThat);
             ok = false;
         }
@@ -1493,7 +1488,7 @@ void SimulationEngineImpl::apply_path(AntUnit& a, const std::vector<TileCoord>& 
     set_action(a, a.loco_action, static_cast<uint8_t>(a.facing), -1, -1, false);  // idle restarts
     a.waypoints = path;                                   // FUN_0101ab87: [start .. goal], index 0
     a.current_waypoint_idx = 0;
-    a.orig_order_tile = path.back();
+    set_order_tile(a, path.back());
 }
 
 void SimulationEngineImpl::trace_loco(LocoTraceEvent::Kind kind, const AntUnit& a, int32_t dx, int32_t dy) {
@@ -1557,8 +1552,8 @@ void SimulationEngineImpl::loco_sync(AntUnit& a) {
             // Another system stopped a walking ant: drop the rest of the path and the order (SetPath(0)).
             a.waypoints.clear();
             a.current_waypoint_idx = 0;
-            a.orig_order = AntUnit::kOrderNone;
-            a.orig_order_tile = no_order_tile();
+            set_order_kind(a, AntUnit::kOrderNone);
+            set_order_tile(a, no_order_tile());
             a.pause_active = false;
             set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
         } else if (a.loco_action != AntUnit::kActionIdle) {
@@ -1572,13 +1567,14 @@ void SimulationEngineImpl::loco_sync(AntUnit& a) {
         // actions are still the remake's knock-back code, which ends the walk and its order as before.
         a.waypoints.clear();
         a.current_waypoint_idx = 0;
-        a.orig_order = AntUnit::kOrderNone;
-        a.orig_order_tile = no_order_tile();
+        set_order_kind(a, AntUnit::kOrderNone);
+        set_order_tile(a, no_order_tile());
     }
 }
 
 void SimulationEngineImpl::movement_tick() {
     occ_refresh();
+    claims_catch_up_all();
     const OccTickScope in_tick(*this);                      // from here every write of an ant's position or removal marks the ant (occ_note), and go_to refreshes the marked ants alone
     const uint32_t t_begin = anim_clock_ms_;
     const uint32_t t_end = t_begin + TICK_MS;
@@ -1675,6 +1671,7 @@ void SimulationEngineImpl::movement_tick() {
     static thread_local uint64_t ticks_run = 0;
     if (ants_.size() <= kFullCheckSize || (++ticks_run & 15u) == 0) tile_ants_verify();   // the whole lists against the ants (every tick while the table is small)
     event_heap_verify(); occ_dirty_verify();
+    if (ants_.size() <= kFullCheckSize || (ticks_run & 15u) == 0) claims_verify();
 #endif
 }
 

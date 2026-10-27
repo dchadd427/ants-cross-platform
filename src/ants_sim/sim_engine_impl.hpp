@@ -406,6 +406,12 @@ public:
     // engine copies it with the ants, a new match empties it. occ_in_tick_ is true from the full refresh at the start of movement_tick to its end (OccTickScope).
     std::vector<uint64_t> occ_dirty_;
     bool occ_in_tick_{false};
+    // The ants that claim a tile (order Move or Home to it, not removed), by the tile, as lists through the table of ants (the same class as tile_ants_, one list for each cell of
+    // occ_): what can_enter asks (claimed_by_mate). claim_cell_ is the list that each slot is in (TileAntIndex::kNone: none). Derived data: never hashed or sent, copied with the
+    // ants, emptied by a new match, kept by claim_note after EVERY write of an order (set_order_kind, set_order_tile, clear_path_of: the only writers, order_claims.cpp), a removal
+    // and add_ant. Asked only inside a tick, after movement_tick has put right what a write from outside left (claims_catch_up_all).
+    TileAntIndex claim_ants_;
+    std::vector<uint32_t> claim_cell_;
     TileAntIndex tile_ants_;         // derived from the ants' occ_tile (tile_ants.hpp): same size as occ_, never hashed
     AntEventHeap event_heap_;        // derived from the ants' timed events (event_heap.hpp, event_queue.cpp): never hashed, rebuilt by event_refresh
     std::array<PathManager, MAX_PLAYERS> path_managers_{};          // one PATHMGR per player machine
@@ -444,6 +450,22 @@ public:
     bool occ_marked(uint32_t slot) const noexcept { return (slot >> 6) < occ_dirty_.size() && ((occ_dirty_[slot >> 6] >> (slot & 63u)) & 1u) != 0; }
     void occ_note(const AntUnit& a);
     void occ_note(const AntUnit& a, uint32_t slot);
+
+    // The orders that claim tiles (order_claims.cpp). EVERY write of orig_order, orig_order_tile or of the path-and-order reset goes through these three (the hygiene test
+    // tests/scripts/test_order_writers.py fails for a direct write in src, include or tools); each ends in claim_note.
+    void set_order_kind(AntUnit& a, uint8_t kind);
+    void set_order_tile(AntUnit& a, TileCoord tile);
+    void clear_path_of(AntUnit& a);                                  // AntUnit::clear_path() (the walk, the order and its tile) and the note
+    /// The list of the ant's claim: the cell of its order tile when it is not removed and its order is Move or Home to a tile of the grid, else kNone
+    uint32_t claim_key_of(const AntUnit& a) const noexcept;
+    /// Puts the ant in the list that claim_key_of says (and out of the one it was in); true when that changed anything
+    bool claim_note(const AntUnit& a);
+    bool claim_note(const AntUnit& a, uint32_t slot);
+    void claim_rebuild();                                            // every list again from the ants (a grid of another size)
+    void claims_catch_up_all();                                      // the start of a tick: puts right what a write from outside left (the shadow build stops at any)
+    /// Whether another live ant of the ant's team has a Move or Home order to t: the answer of the scan over every ant (claimed_by_mate_scan), from the list of the tile in a tick
+    bool claimed_by_mate(const AntUnit& a, TileCoord t);
+    bool claimed_by_mate_scan(const AntUnit& a, TileCoord t) const;
     /// An ant joins the table (the one place that adds one): it is out of step until it is registered
     AntUnit* add_ant(std::unique_ptr<AntUnit> unit);
     /// Holds occ_in_tick_ true while movement_tick runs
@@ -466,6 +488,7 @@ public:
 #ifdef ANTS_SIM_LOOKUP_SHADOW
     void tile_ants_verify() const;                                   // every list against the ants' occ_tile (stops the program on a difference)
     void occ_dirty_verify() const;                                   // every ant that is out of step is marked (stops the program otherwise)
+    void claims_verify() const;                                      // every list against the ants' orders (stops the program on a difference)
 #endif
     AntUnit* occupant_at(TileCoord t);
     bool tile_occupied(TileCoord t);

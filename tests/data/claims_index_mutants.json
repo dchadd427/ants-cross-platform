@@ -1,0 +1,628 @@
+{
+ "note": "Mutants of the claim lists of the simulation (src/ants_sim/order_claims.cpp: claim_note, claim_key_of, claimed_by_mate, claims_catch_up_all, claim_rebuild, and the sites that write an order) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder named build: python3 tools/mutate.py tests/data/claims_index_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by tests/test_sim/test_engine_claims.cpp, or the one named (a mutant that makes the shadow check stop the program is caught by the program's exit): a setter that does not tell the lists, a wrong key (a removed ant, only one of Move and Home, every order), a note that never leaves or never joins a list or forgets the ant's list, a question that ignores the team or counts the asker or asks the lists outside a tick, a start-of-tick pass that notes nothing or is not run (in the shadow build; in the product build the pass that does not heal is caught by tests/test_sim/test_engine_event_heal.cpp, H3), a rebuild that keeps old cells or skips ants, a restart or a grid of another size that keeps the lists, a removal that does not tell them, a can_enter that scans, and one mutant for each of the 65 sites that write an order and for the two callers of clear_path (the Cancel order, bridge_gone_scan), putting the direct write back (the lists are then not told; the test of these mutants is the claims program AND tests/scripts/test_order_writers.py, which fails for every one of them; the pull request that added them lists, for each site, whether the claims program alone kills it, and why the others change nothing that can be seen: a note computes the key from the whole state, so a write that is followed by a setter on the same ant before anything can ask is repaired by it). Not here, because they change nothing that can be seen and each is argued in the pull request: add_ant not noting a new ant (its order is none: it claims nothing), the question that leaves out the check of the tile (the cell of an order tile on the grid is that tile's alone), the pass that leaves out its own rebuild for a grid of another size (claim_note rebuilds), a visit of a list member that is not a claimant (the lists are exact), and the shadow comparison of an answer switched off (a checker whose failure is the program's stop: with exact lists nothing observes it, and the check of the whole lists that runs beside it stops on the same state).",
+ "defaults": {
+  "build": "test_engine_claims",
+  "test": "timeout 600 ./build/tests/test_sim/test_engine_claims"
+ },
+ "mutants": [
+  {
+   "id": "set_order_kind_does_not_note",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    a.orig_order = kind;\n    claim_note(a);",
+   "new": "    a.orig_order = kind;"
+  },
+  {
+   "id": "set_order_tile_does_not_note",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    a.orig_order_tile = tile;\n    claim_note(a);",
+   "new": "    a.orig_order_tile = tile;"
+  },
+  {
+   "id": "clear_path_of_does_not_note",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    a.clear_path();\n    claim_note(a);",
+   "new": "    a.clear_path();"
+  },
+  {
+   "id": "a_removed_ant_still_claims",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    if (a.removed || (a.orig_order != AntUnit::kOrderMove",
+   "new": "    if ((a.orig_order != AntUnit::kOrderMove"
+  },
+  {
+   "id": "a_home_order_does_not_claim",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "(a.orig_order != AntUnit::kOrderMove && a.orig_order != AntUnit::kOrderHome)",
+   "new": "(a.orig_order != AntUnit::kOrderMove)"
+  },
+  {
+   "id": "a_move_order_does_not_claim",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "(a.orig_order != AntUnit::kOrderMove && a.orig_order != AntUnit::kOrderHome)",
+   "new": "(a.orig_order != AntUnit::kOrderHome)"
+  },
+  {
+   "id": "every_order_claims",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "a.removed || (a.orig_order != AntUnit::kOrderMove && a.orig_order != AntUnit::kOrderHome)",
+   "new": "a.removed"
+  },
+  {
+   "id": "note_never_leaves_a_list",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    if (have != TileAntIndex::kNone) claim_ants_.unlink(have, slot);\n",
+   "new": ""
+  },
+  {
+   "id": "note_never_joins_a_list",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    if (want != TileAntIndex::kNone) claim_ants_.link(want, slot);\n",
+   "new": ""
+  },
+  {
+   "id": "note_does_not_say_it_changed",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    claim_cell_[slot] = want;\n    return true;",
+   "new": "    claim_cell_[slot] = want;\n    return false;"
+  },
+  {
+   "id": "note_forgets_the_cell_of_the_ant",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    claim_cell_[slot] = want;\n    return true;",
+   "new": "    return true;"
+  },
+  {
+   "id": "question_ignores_the_team",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "x != &a && x->player_id == a.player_id && x->orig_order_tile == t",
+   "new": "x != &a && x->orig_order_tile == t"
+  },
+  {
+   "id": "question_counts_the_asker",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "x && x != &a && x->player_id == a.player_id",
+   "new": "x && x->player_id == a.player_id"
+  },
+  {
+   "id": "question_asks_the_lists_outside_a_tick",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "if (!occ_in_tick_ || cell == kNoCell ||",
+   "new": "if (cell == kNoCell ||"
+  },
+  {
+   "id": "pass_does_not_note",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "        if (claim_note(*ants_[slot], static_cast<uint32_t>(slot))) lookup_shadow_stale_event(",
+   "new": "        if (false && claim_note(*ants_[slot], static_cast<uint32_t>(slot))) lookup_shadow_stale_event("
+  },
+  {
+   "id": "cancel_command_writes_directly",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "            impl_->clear_path_of(*unit);",
+   "new": "            unit->clear_path();"
+  },
+  {
+   "id": "bridge_gone_scan_writes_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "                clear_path_of(*a);                                                    // 0x101ab56",
+   "new": "                a->clear_path();                                                    // 0x101ab56"
+  },
+  {
+   "id": "engine_assignment_keeps_the_old_claim_lists",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    if (other.impl_) *impl_ = *other.impl_;\n    else *impl_ = SimulationEngineImpl();",
+   "new": "    if (other.impl_) { auto keep = impl_->claim_ants_; auto keep_cell = impl_->claim_cell_; *impl_ = *other.impl_; impl_->claim_ants_ = keep; impl_->claim_cell_ = keep_cell; }\n    else *impl_ = SimulationEngineImpl();"
+  },
+  {
+   "id": "pass_skips_removed_ants",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    for (size_t slot = 0; slot < ants_.size(); ++slot) {\n        if (!ants_[slot]) continue;\n#ifdef ANTS_SIM_LOOKUP_SHADOW\n        ++lookup_shadow_claim_catch_ups();",
+   "new": "    for (size_t slot = 0; slot < ants_.size(); ++slot) {\n        if (!ants_[slot] || ants_[slot]->removed) continue;\n#ifdef ANTS_SIM_LOOKUP_SHADOW\n        ++lookup_shadow_claim_catch_ups();"
+  },
+  {
+   "id": "pass_does_not_heal_in_the_product_build",
+   "file": "src/ants_sim/order_claims.cpp",
+   "build": "test_engine_event_heal",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_event_heal",
+   "old": "#else\n        claim_note(*ants_[slot], static_cast<uint32_t>(slot));\n#endif",
+   "new": "#else\n#endif"
+  },
+  {
+   "id": "rebuild_keeps_the_old_cells_of_ants",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "    claim_cell_.assign(ants_.size(), TileAntIndex::kNone);",
+   "new": "    claim_cell_.resize(ants_.size(), TileAntIndex::kNone);"
+  },
+  {
+   "id": "rebuild_skips_every_other_ant",
+   "file": "src/ants_sim/order_claims.cpp",
+   "old": "        if (!ants_[slot]) continue;\n        const uint32_t key = claim_key_of",
+   "new": "        if (!ants_[slot] || (slot & 1u)) continue;\n        const uint32_t key = claim_key_of"
+  },
+  {
+   "id": "remove_ant_does_not_note_the_claim",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    claim_note(a);                                            // (a removed ant claims nothing)\n",
+   "new": ""
+  },
+  {
+   "id": "restart_keeps_the_claim_lists",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    claim_ants_.reset(occ_.size()); claim_cell_.clear();\n",
+   "new": ""
+  },
+  {
+   "id": "tick_does_not_start_with_the_pass",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    claims_catch_up_all();\n",
+   "new": ""
+  },
+  {
+   "id": "can_enter_scans_as_before",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        if (claimed_by_mate(a, t)) return false;",
+   "new": "        if (claimed_by_mate_scan(a, t)) return false;"
+  },
+  {
+   "id": "grid_of_another_size_keeps_the_claim_lists",
+   "file": "src/ants_sim/occupancy.cpp",
+   "old": "        claim_rebuild();                                          // (the claim lists have a cell for each cell of the grid too)\n",
+   "new": ""
+  },
+  {
+   "id": "site_ability_system_76_writes_the_kind_directly",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    ++a.move_serial;\n    set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "    ++a.move_serial;\n    a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_ability_system_77_writes_the_tile_directly",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    set_order_kind(a, AntUnit::kOrderNone);\n    set_order_tile(a, no_order_tile());",
+   "new": "    set_order_kind(a, AntUnit::kOrderNone);\n    a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_ability_system_122_writes_the_kind_directly",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    set_position(a, centre_x(approach), centre_y(approach));\n    set_order_kind(a, AntUnit::kOrderPlant);",
+   "new": "    set_position(a, centre_x(approach), centre_y(approach));\n    a.orig_order = AntUnit::kOrderPlant;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_ability_system_156_writes_the_kind_directly",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    set_position(a, centre_x(approach), centre_y(approach));\n    set_order_kind(a, AntUnit::kOrderDefuse);",
+   "new": "    set_position(a, centre_x(approach), centre_y(approach));\n    a.orig_order = AntUnit::kOrderDefuse;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_ability_system_187_writes_the_kind_directly",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    set_position(a, centre_x(approach), centre_y(approach));\n    set_order_kind(a, AntUnit::kOrderIgnite);",
+   "new": "    set_position(a, centre_x(approach), centre_y(approach));\n    a.orig_order = AntUnit::kOrderIgnite;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_ability_system_221_writes_the_kind_directly",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    set_position(a, centre_x(approach), centre_y(approach));\n    set_order_kind(a, AntUnit::kOrderExtinguish);",
+   "new": "    set_position(a, centre_x(approach), centre_y(approach));\n    a.orig_order = AntUnit::kOrderExtinguish;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_ability_system_251_writes_the_kind_directly",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    set_action(a, AntUnit::kActionBridgeBuild, dir, -1, -1, false);\n    set_order_kind(a, AntUnit::kOrderBridgeBuild);",
+   "new": "    set_action(a, AntUnit::kActionBridgeBuild, dir, -1, -1, false);\n    a.orig_order = AntUnit::kOrderBridgeBuild;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_ability_system_303_writes_the_kind_directly",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    set_action(a, AntUnit::kActionBridgeDemolish, dir, -1, -1, false);\n    set_order_kind(a, AntUnit::kOrderBridgeDemolish);",
+   "new": "    set_action(a, AntUnit::kActionBridgeDemolish, dir, -1, -1, false);\n    a.orig_order = AntUnit::kOrderBridgeDemolish;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_action_system_153_writes_the_kind_directly",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    set_action(a, AntUnit::kActionEnter, static_cast<uint8_t>(a.facing), -1, -1, false);\n    set_order_kind(a, AntUnit::kOrderHome);                        // +0xa8 = 2",
+   "new": "    set_action(a, AntUnit::kActionEnter, static_cast<uint8_t>(a.facing), -1, -1, false);\n    a.orig_order = AntUnit::kOrderHome;                        // +0xa8 = 2",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_action_system_156_writes_the_tile_directly",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    a.current_waypoint_idx = 0;\n    set_order_tile(a, no_order_tile());",
+   "new": "    a.current_waypoint_idx = 0;\n    a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_action_system_269_writes_the_kind_directly",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    set_action(*n, AntUnit::kActionHatch, dir, -1, -1, false);\n    set_order_kind(*n, AntUnit::kOrderHome);",
+   "new": "    set_action(*n, AntUnit::kActionHatch, dir, -1, -1, false);\n    n->orig_order = AntUnit::kOrderHome;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_action_system_270_writes_the_tile_directly",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    set_order_kind(*n, AntUnit::kOrderHome);\n    set_order_tile(*n, ent);",
+   "new": "    set_order_kind(*n, AntUnit::kOrderHome);\n    n->orig_order_tile = ent;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_action_system_314_writes_the_tile_directly",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    a.orig_target_team = victim;                                            // +0xb0\n    set_order_tile(a, tile);                                               // +0xac",
+   "new": "    a.orig_target_team = victim;                                            // +0xb0\n    a.orig_order_tile = tile;                                               // +0xac",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_action_system_315_writes_the_kind_directly",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    set_order_tile(a, tile);                                               // +0xac\n    set_order_kind(a, AntUnit::kOrderRaid);                                     // +0xa8 = 0xb",
+   "new": "    set_order_tile(a, tile);                                               // +0xac\n    a.orig_order = AntUnit::kOrderRaid;                                     // +0xa8 = 0xb",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_action_system_385_writes_the_tile_directly",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    set_action(a, AntUnit::kActionHarvest, dir, -1, -1, false);\n    set_order_tile(a, food_tile);                                // +0xac",
+   "new": "    set_action(a, AntUnit::kActionHarvest, dir, -1, -1, false);\n    a.orig_order_tile = food_tile;                                // +0xac",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_action_system_387_writes_the_kind_directly",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    a.orig_food_tile = food_tile;                                 // +0xb4\n    set_order_kind(a, AntUnit::kOrderHarvest);                        // +0xa8 = 5",
+   "new": "    a.orig_food_tile = food_tile;                                 // +0xb4\n    a.orig_order = AntUnit::kOrderHarvest;                        // +0xa8 = 5",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_213_writes_the_tile_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    }\n    set_order_tile(t, land);",
+   "new": "    }\n    t.orig_order_tile = land;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_215_writes_the_kind_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    t.flight_tile = land;\n    set_order_kind(t, 0x0C);",
+   "new": "    t.flight_tile = land;\n    t.orig_order = 0x0C;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_299_writes_the_kind_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    set_action(a, AntUnit::kActionStun, static_cast<uint8_t>(a.facing), -1, -1, false);\n    set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "    set_action(a, AntUnit::kActionStun, static_cast<uint8_t>(a.facing), -1, -1, false);\n    a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_300_writes_the_tile_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    set_order_kind(a, AntUnit::kOrderNone);\n    set_order_tile(a, no_order_tile());",
+   "new": "    set_order_kind(a, AntUnit::kOrderNone);\n    a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_331_writes_the_kind_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    set_action(a, AntUnit::kActionHit, d, -1, -1, false);\n    set_order_kind(a, 0x0C);",
+   "new": "    set_action(a, AntUnit::kActionHit, d, -1, -1, false);\n    a.orig_order = 0x0C;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_332_writes_the_tile_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    set_order_kind(a, 0x0C);\n    set_order_tile(a, dest);",
+   "new": "    set_order_kind(a, 0x0C);\n    a.orig_order_tile = dest;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_403_writes_the_kind_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    set_action(a, AntUnit::kActionDrown, static_cast<uint8_t>(a.facing), -1, -1, false);\n    set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "    set_action(a, AntUnit::kActionDrown, static_cast<uint8_t>(a.facing), -1, -1, false);\n    a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_404_writes_the_tile_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    set_order_kind(a, AntUnit::kOrderNone);\n    set_order_tile(a, t);",
+   "new": "    set_order_kind(a, AntUnit::kOrderNone);\n    a.orig_order_tile = t;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_480_writes_the_kind_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    a.knock_flag = (at == to);\n    set_order_kind(a, AntUnit::kOrderBomb);",
+   "new": "    a.knock_flag = (at == to);\n    a.orig_order = AntUnit::kOrderBomb;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_675_writes_the_kind_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    }\n    set_order_kind(a, 0x0F);",
+   "new": "    }\n    a.orig_order = 0x0F;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_combat_system_676_writes_the_tile_directly",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "    set_order_kind(a, 0x0F);\n    set_order_tile(a, next);",
+   "new": "    set_order_kind(a, 0x0F);\n    a.orig_order_tile = next;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_346_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "                a.current_waypoint_idx = 0;\n                set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "                a.current_waypoint_idx = 0;\n                a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_347_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "                set_order_kind(a, AntUnit::kOrderNone);\n                set_order_tile(a, no_order_tile());",
+   "new": "                set_order_kind(a, AntUnit::kOrderNone);\n                a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_378_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        ++a.move_serial;\n        set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "        ++a.move_serial;\n        a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_379_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        ++a.move_serial;\n        set_order_kind(a, AntUnit::kOrderNone);\n        set_order_tile(a, no_order_tile());",
+   "new": "        ++a.move_serial;\n        set_order_kind(a, AntUnit::kOrderNone);\n        a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_448_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        case AntUnit::kActionCantGo:\n            set_order_tile(a, no_order_tile());",
+   "new": "        case AntUnit::kActionCantGo:\n            a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_504_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        case AntUnit::kActionAttack:                                 // 0x101aff7: the target tile is cleared, clip ?at\n            set_order_tile(a, no_order_tile());",
+   "new": "        case AntUnit::kActionAttack:                                 // 0x101aff7: the target tile is cleared, clip ?at\n            a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_574_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    if ((e.event == 3 || stationary_end) && grid_.has_bomb_at(cur)) {\n        set_order_kind(a, AntUnit::kOrderBomb);",
+   "new": "    if ((e.event == 3 || stationary_end) && grid_.has_bomb_at(cur)) {\n        a.orig_order = AntUnit::kOrderBomb;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_575_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        set_order_kind(a, AntUnit::kOrderBomb);\n        set_order_tile(a, cur);",
+   "new": "        set_order_kind(a, AntUnit::kOrderBomb);\n        a.orig_order_tile = cur;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_690_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    if (on_bomb) {\n        set_order_kind(a, AntUnit::kOrderBomb);",
+   "new": "    if (on_bomb) {\n        a.orig_order = AntUnit::kOrderBomb;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_691_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        set_order_kind(a, AntUnit::kOrderBomb);\n        set_order_tile(a, t5a);",
+   "new": "        set_order_kind(a, AntUnit::kOrderBomb);\n        a.orig_order_tile = t5a;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_725_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    a.home_state = 0;                                          // 0x101cd04: +0x68 = 0\n    set_order_tile(a, no_order_tile());",
+   "new": "    a.home_state = 0;                                          // 0x101cd04: +0x68 = 0\n    a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_855_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    a.waypoints.clear();                                   // SetPath(0, ...)\n    a.current_waypoint_idx = 0;\n    set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "    a.waypoints.clear();                                   // SetPath(0, ...)\n    a.current_waypoint_idx = 0;\n    a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_856_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    a.waypoints.clear();                                   // SetPath(0, ...)\n    a.current_waypoint_idx = 0;\n    set_order_kind(a, AntUnit::kOrderNone);\n    set_order_tile(a, no_order_tile());",
+   "new": "    a.waypoints.clear();                                   // SetPath(0, ...)\n    a.current_waypoint_idx = 0;\n    set_order_kind(a, AntUnit::kOrderNone);\n    a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_941_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    a.current_waypoint_idx = 0;\n    set_order_tile(a, no_order_tile());",
+   "new": "    a.current_waypoint_idx = 0;\n    a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1273_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        if (hill_team == a.player_id) {\n            set_order_kind(a, AntUnit::kOrderHome);",
+   "new": "        if (hill_team == a.player_id) {\n            a.orig_order = AntUnit::kOrderHome;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1275_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        } else {\n            set_order_kind(a, AntUnit::kOrderRaid);",
+   "new": "        } else {\n            a.orig_order = AntUnit::kOrderRaid;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1284_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "            case AntType::Bomber:\n                set_order_kind(a, AntUnit::kOrderPlant);",
+   "new": "            case AntType::Bomber:\n                a.orig_order = AntUnit::kOrderPlant;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1285_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "                set_order_kind(a, AntUnit::kOrderPlant);\n                if (!valid_ground(t, true) && valid_bomb(t)) set_order_kind(a, AntUnit::kOrderDefuse);",
+   "new": "                set_order_kind(a, AntUnit::kOrderPlant);\n                if (!valid_ground(t, true) && valid_bomb(t)) a.orig_order = AntUnit::kOrderDefuse;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1288_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "            case AntType::Fire:\n                set_order_kind(a, AntUnit::kOrderIgnite);",
+   "new": "            case AntType::Fire:\n                a.orig_order = AntUnit::kOrderIgnite;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1289_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "                set_order_kind(a, AntUnit::kOrderIgnite);\n                if (!valid_ground(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_fire()) set_order_kind(a, AntUnit::kOrderExtinguish);",
+   "new": "                set_order_kind(a, AntUnit::kOrderIgnite);\n                if (!valid_ground(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_fire()) a.orig_order = AntUnit::kOrderExtinguish;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1292_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "            case AntType::Swimmer:\n                set_order_kind(a, AntUnit::kOrderBridgeBuild);",
+   "new": "            case AntType::Swimmer:\n                a.orig_order = AntUnit::kOrderBridgeBuild;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1294_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "                if (!valid_water(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_completed_bridge()) {\n                    set_order_kind(a, AntUnit::kOrderBridgeDemolish);",
+   "new": "                if (!valid_water(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_completed_bridge()) {\n                    a.orig_order = AntUnit::kOrderBridgeDemolish;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1305_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        if (!occ || occ->player_id == a.player_id || !user_cmd || stats_.are_allies(a.player_id, occ->player_id)) {\n            set_order_kind(a, AntUnit::kOrderMove);",
+   "new": "        if (!occ || occ->player_id == a.player_id || !user_cmd || stats_.are_allies(a.player_id, occ->player_id)) {\n            a.orig_order = AntUnit::kOrderMove;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1307_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        } else {\n            set_order_kind(a, AntUnit::kOrderAttack);",
+   "new": "        } else {\n            a.orig_order = AntUnit::kOrderAttack;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1312_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    } else if (food_object_at(t) >= 0) {\n        set_order_kind(a, AntUnit::kOrderHarvest);",
+   "new": "    } else if (food_object_at(t) >= 0) {\n        a.orig_order = AntUnit::kOrderHarvest;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1317_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    } else if (grid_.in_bounds(t) && grid_.get_cell(t).has_powerup() && user_cmd) {\n        set_order_kind(a, AntUnit::kOrderPowerUp);",
+   "new": "    } else if (grid_.in_bounds(t) && grid_.get_cell(t).has_powerup() && user_cmd) {\n        a.orig_order = AntUnit::kOrderPowerUp;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1319_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    } else if (grid_.has_bomb_at(t)) {\n        set_order_kind(a, AntUnit::kOrderBomb);",
+   "new": "    } else if (grid_.has_bomb_at(t)) {\n        a.orig_order = AntUnit::kOrderBomb;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1321_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    } else {\n        set_order_kind(a, AntUnit::kOrderMove);",
+   "new": "    } else {\n        a.orig_order = AntUnit::kOrderMove;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1323_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    }\n    set_order_tile(a, t);",
+   "new": "    }\n    a.orig_order_tile = t;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1392_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    a.waypoints.clear();                                                                    // SetPath(0, ...)\n    a.current_waypoint_idx = 0;\n    set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "    a.waypoints.clear();                                                                    // SetPath(0, ...)\n    a.current_waypoint_idx = 0;\n    a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1393_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    a.waypoints.clear();                                                                    // SetPath(0, ...)\n    a.current_waypoint_idx = 0;\n    set_order_kind(a, AntUnit::kOrderNone);\n    set_order_tile(a, no_order_tile());",
+   "new": "    a.waypoints.clear();                                                                    // SetPath(0, ...)\n    a.current_waypoint_idx = 0;\n    set_order_kind(a, AntUnit::kOrderNone);\n    a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1420_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "            ++a.move_serial;\n            set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "            ++a.move_serial;\n            a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1421_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "            ++a.move_serial;\n            set_order_kind(a, AntUnit::kOrderNone);\n            set_order_tile(a, no_order_tile());",
+   "new": "            ++a.move_serial;\n            set_order_kind(a, AntUnit::kOrderNone);\n            a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1491_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    a.current_waypoint_idx = 0;\n    set_order_tile(a, path.back());",
+   "new": "    a.current_waypoint_idx = 0;\n    a.orig_order_tile = path.back();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1555_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "            a.current_waypoint_idx = 0;\n            set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "            a.current_waypoint_idx = 0;\n            a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1556_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "            a.current_waypoint_idx = 0;\n            set_order_kind(a, AntUnit::kOrderNone);\n            set_order_tile(a, no_order_tile());",
+   "new": "            a.current_waypoint_idx = 0;\n            set_order_kind(a, AntUnit::kOrderNone);\n            a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1570_writes_the_kind_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        a.current_waypoint_idx = 0;\n        set_order_kind(a, AntUnit::kOrderNone);",
+   "new": "        a.current_waypoint_idx = 0;\n        a.orig_order = AntUnit::kOrderNone;",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  },
+  {
+   "id": "site_movement_system_1571_writes_the_tile_directly",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        a.current_waypoint_idx = 0;\n        set_order_kind(a, AntUnit::kOrderNone);\n        set_order_tile(a, no_order_tile());",
+   "new": "        a.current_waypoint_idx = 0;\n        set_order_kind(a, AntUnit::kOrderNone);\n        a.orig_order_tile = no_order_tile();",
+   "test": "timeout 600 ./build/tests/test_sim/test_engine_claims && python3 tests/scripts/test_order_writers.py"
+  }
+ ]
+}

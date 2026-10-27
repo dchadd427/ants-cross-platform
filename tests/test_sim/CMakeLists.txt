@@ -359,6 +359,27 @@ add_test(NAME test_engine_lookups COMMAND test_engine_lookups --all)
 # (the big worlds play a match with the scans, 3 x 40 s and 2 x 90 s on a quiet core: twice that on a busy runner; the limit is above the 900 s that ctest is given)
 set_tests_properties(test_engine_lookups PROPERTIES COST 400 TIMEOUT 1800)
 
+# The claim lists (order_claims.cpp) against the scan of every ant that they replaced, on the same shadow library: hand-made worlds for each writer of an order, random operations, and
+# whole matches on the scans alone and on the lists with the state hash compared at every tick
+add_executable(test_engine_claims
+    test_engine_claims.cpp
+)
+
+target_link_libraries(test_engine_claims PRIVATE
+    ants_sim_shadow
+    ants_assets
+)
+
+target_include_directories(test_engine_claims PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common
+)
+
+target_link_libraries(test_engine_claims PRIVATE ants_test_paths)
+
+add_test(NAME test_engine_claims COMMAND test_engine_claims)
+set_tests_properties(test_engine_claims PROPERTIES COST 60 TIMEOUT 900)
+
 # The product build of the same heap: the nets under its writers (the start-of-tick pass and the selection of the next event) put right what a test hook wrote from outside, and
 # the engine that is not told plays as the engine that is (no shadow check here: that program stops at the first thing a net has to put right)
 add_executable(test_engine_event_heal

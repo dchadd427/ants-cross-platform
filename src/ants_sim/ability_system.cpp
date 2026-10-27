@@ -73,8 +73,8 @@ void SimulationEngineImpl::end_walk_to_idle(AntUnit& a) {
     a.waypoints.clear();
     a.current_waypoint_idx = 0;
     ++a.move_serial;
-    a.orig_order = AntUnit::kOrderNone;
-    a.orig_order_tile = no_order_tile();
+    set_order_kind(a, AntUnit::kOrderNone);
+    set_order_tile(a, no_order_tile());
     a.final_dest = TileCoord{-1, -1};
 }
 
@@ -119,7 +119,7 @@ void SimulationEngineImpl::start_plant(AntUnit& a, TileCoord target, TileCoord a
     ++a.move_serial;
     set_action(a, AntUnit::kActionPlant, dir, -1, -1, false);
     set_position(a, centre_x(approach), centre_y(approach));
-    a.orig_order = AntUnit::kOrderPlant;
+    set_order_kind(a, AntUnit::kOrderPlant);
     a.orig_special_tile = target;
     grid_.set_layer2(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), TILE_RESERVED, a.player_id);
     world_state_dirty_ = true;
@@ -153,7 +153,7 @@ void SimulationEngineImpl::start_defuse(AntUnit& a, TileCoord target, TileCoord 
     ++a.move_serial;
     set_action(a, AntUnit::kActionDefuse, dir, -1, -1, false);
     set_position(a, centre_x(approach), centre_y(approach));
-    a.orig_order = AntUnit::kOrderDefuse;
+    set_order_kind(a, AntUnit::kOrderDefuse);
     a.orig_special_tile = target;
     world_state_dirty_ = true;
 }
@@ -184,7 +184,7 @@ void SimulationEngineImpl::start_ignite(AntUnit& a, TileCoord target, TileCoord 
     set_action(a, AntUnit::kActionIgnite, dir, -1, -1, false);
     post_news(a.player_id, strings::kStartingFire);
     set_position(a, centre_x(approach), centre_y(approach));
-    a.orig_order = AntUnit::kOrderIgnite;
+    set_order_kind(a, AntUnit::kOrderIgnite);
     a.orig_special_tile = target;
     grid_.set_layer2(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), TILE_RESERVED, a.player_id);
     world_state_dirty_ = true;
@@ -218,7 +218,7 @@ void SimulationEngineImpl::start_extinguish(AntUnit& a, TileCoord target, TileCo
     ++a.move_serial;
     set_action(a, AntUnit::kActionExtinguish, dir, -1, -1, false);
     set_position(a, centre_x(approach), centre_y(approach));
-    a.orig_order = AntUnit::kOrderExtinguish;
+    set_order_kind(a, AntUnit::kOrderExtinguish);
     a.orig_special_tile = target;
     world_state_dirty_ = true;
 }
@@ -248,7 +248,7 @@ void SimulationEngineImpl::start_bridge_build(AntUnit& a, TileCoord target, Tile
     a.current_waypoint_idx = 0;
     ++a.move_serial;
     set_action(a, AntUnit::kActionBridgeBuild, dir, -1, -1, false);
-    a.orig_order = AntUnit::kOrderBridgeBuild;
+    set_order_kind(a, AntUnit::kOrderBridgeBuild);
     a.orig_special_tile = target;
     a.orig_b4 = TILE_BRIDGE1;
     grid_.set_layer2(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), TILE_BRIDGE1, a.player_id);
@@ -300,7 +300,7 @@ void SimulationEngineImpl::start_bridge_demolish(AntUnit& a, TileCoord target, T
     a.current_waypoint_idx = 0;
     ++a.move_serial;
     set_action(a, AntUnit::kActionBridgeDemolish, dir, -1, -1, false);
-    a.orig_order = AntUnit::kOrderBridgeDemolish;
+    set_order_kind(a, AntUnit::kOrderBridgeDemolish);
     a.orig_special_tile = target;
     a.orig_b4 = TILE_BRIDGE4;
     set_bridge_stage(target.x, target.y, TILE_BRIDGE4, a.player_id);   // the collapse timer keeps running until the tile is destroyed
