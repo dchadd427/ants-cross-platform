@@ -549,7 +549,7 @@ void run_online_limit_tests() {
     } TEST_END();
 
     TEST_CASE("S3.220 The Start Ants Of A Map Are Its Start Markers Of The Four Colors Added Up, Counted From The File That The Server Loaded: 0, 2,400 (Not Heavy), 2,401 (Heavy), One Color With All Of Them, 6,000; A Plant Is No Ant") {
-        ASSERT_TRUE(OnlineLimits::kHeavyStartAnts == 2400u && !OnlineLimits::heavy(0) && !OnlineLimits::heavy(2399) && !OnlineLimits::heavy(2400) && !OnlineLimits::heavy(2772) && OnlineLimits::heavy(2401) && OnlineLimits::heavy(6000));
+        ASSERT_TRUE(OnlineLimits::kHeavyStartAnts == 2400u && !OnlineLimits::heavy(0) && !OnlineLimits::heavy(2399) && !OnlineLimits::heavy(2400) && OnlineLimits::heavy(2401) && OnlineLimits::heavy(2772) && OnlineLimits::heavy(6000));
         const auto counted = [](const std::array<uint32_t, 4>& per_color) -> int64_t {
             const std::string bytes = tiny_with_ants(per_color);
             ants::assets::LevelData level;
