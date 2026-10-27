@@ -136,6 +136,14 @@
    "new": "submit_in_chunks(sim, cmd, !attack ? targets : nearest_first(targets, sim.get_world_state().ants, tile));",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "attack_beyond_the_budget_not_sorted",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "submit_in_chunks(sim, cmd, (attack && targets.size() > kMaxAntsPerClick) ? targets : nearest_first(targets, sim.get_world_state().ants, tile));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   }
  ]
 }

@@ -389,7 +389,7 @@ void test_big_selection() {
     // the attack's budget: 1,600 combat ants, an attack on an enemy worker: 48 commands, the same line
     {
         Fixture f;
-        spawn_own(f, 1600, AntType::Combat);
+        const std::vector<uint32_t> fighters = spawn_own(f, 1600, AntType::Combat);
         f.spawn(1, AntType::Worker, 58, 58);
         f.settle();
         ScriptedSink sink;
@@ -399,6 +399,19 @@ void test_big_selection() {
         size_t sent = 0;
         for (const auto& c : sink.log) sent += c.type == sim::CommandType::GroupAttack ? c.ants.size() : size_t{0};
         check(sink.log.size() == 48 && sent == 1536 && f.hud.status_line().text() == "Only 1536 ants ordered.", "an attack of 1,600 ants: 48 commands, 1,536 ants, the same line");
+        const std::vector<uint32_t> nearest = by_distance(f, fighters, 58, 58);
+        check(ants_sent(sink.log) == std::vector<uint32_t>(nearest.begin(), nearest.begin() + 1536), "an attack of 1,600 ants names the 1,536 nearest the target, nearest first: the 64 farthest are left out");
+    }
+    // the same for a move by the pointer (a right click): 1,600 workers, the click on free ground below them
+    {
+        Fixture f;
+        const std::vector<uint32_t> ids = spawn_own(f, 1600, AntType::Worker);
+        ScriptedSink sink;
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.click_tile(5, 40, SDL_BUTTON_RIGHT);
+        const std::vector<uint32_t> nearest = by_distance(f, ids, 5, 40);
+        check(sink.log.size() == 48 && ants_sent(sink.log) == std::vector<uint32_t>(nearest.begin(), nearest.begin() + 1536), "a right click with 1,600 ants: the 1,536 nearest the clicked tile, nearest first; the 64 farthest are left out");
     }
     // a SPECIAL order of 1,600 ants is one command of 32 and no line (it is not a click that left ants out: the one-at-a-time order)
     {
