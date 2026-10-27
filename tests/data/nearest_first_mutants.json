@@ -1,0 +1,149 @@
+{
+ "note": "Mutants of the order in which a click on a big selection names the ants (docs/TESTING.md, 'Mutation checks'): ants_app/group_order_sort.hpp (the key: Chebyshev, the pixel position, the sort direction, stability, the 32-ant shortcut, an unknown ant) and its use in src/ants_app/hud_input.cpp (the sort before the split and before the budget, special orders and Stop left alone), against tests/test_app/test_pointer_model_big.cpp. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/nearest_first_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "sort_descending",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "return a.first < b.first;",
+   "new": "return a.first > b.first;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "sort_by_euclid",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "static_cast<uint32_t>(std::max(dr, dc)) << 4;",
+   "new": "static_cast<uint32_t>(dr * dr + dc * dc) << 4;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "sort_by_sum_of_distances",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "static_cast<uint32_t>(std::max(dr, dc)) << 4;",
+   "new": "static_cast<uint32_t>(dr + dc) << 4;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "unstable_ties",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "std::stable_sort(keyed.begin()",
+   "new": "std::sort(keyed.begin()",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "ties_by_id_descending",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "return a.first < b.first;",
+   "new": "return a.first != b.first ? a.first < b.first : a.second > b.second;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "sort_after_the_split_only_inside_a_block",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "nearest_first(targets, sim.get_world_state().ants, tile)",
+   "new": "[&] { const auto& wa = sim.get_world_state().ants; std::vector<uint32_t> o = targets; for (size_t i = 0; i < o.size(); i += sim::kMaxCommandAnts) { const size_t e = std::min(o.size(), i + sim::kMaxCommandAnts); std::stable_sort(o.begin() + static_cast<std::ptrdiff_t>(i), o.begin() + static_cast<std::ptrdiff_t>(e), [&](uint32_t x, uint32_t y) { uint32_t kx = 0, ky = 0; for (const auto& a : wa) { if (a.id == x) kx = group_order_distance(a.px, a.py, tile); if (a.id == y) ky = group_order_distance(a.px, a.py, tile); } return kx < ky; }); } return o; }()",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "sort_applied_to_special_orders",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), sim::kMaxCommandAnts)));",
+   "new": "const std::vector<uint32_t> sorted_targets = nearest_first(targets, sim.get_world_state().ants, tile);\n        cmd.ants.assign(sorted_targets.begin(), sorted_targets.begin() + static_cast<std::ptrdiff_t>(std::min(sorted_targets.size(), sim::kMaxCommandAnts)));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "cap_drops_the_nearest",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "const auto first = ants.begin() + static_cast<std::ptrdiff_t>(from);",
+   "new": "const auto first = ants.begin() + static_cast<std::ptrdiff_t>(from + (ants.size() - sendable));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "cap_before_the_sort",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "submit_in_chunks(sim, cmd, nearest_first(std::vector<uint32_t>(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), kMaxAntsPerClick))), sim.get_world_state().ants, tile));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "sixteen_or_fewer_are_not_sorted",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "if (selection.size() <= sim::kMaxCommandAnts) return selection;",
+   "new": "if (selection.size() <= 16) return selection;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "exactly_32_is_sorted",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "if (selection.size() <= sim::kMaxCommandAnts) return selection;",
+   "new": "if (selection.size() < sim::kMaxCommandAnts) return selection;",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "position_from_the_snapshot_tile",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "group_order_distance(a.px, a.py, target)",
+   "new": "group_order_distance(a.tile_x * 32, a.tile_y * 32, target)",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "pixel_is_not_divided_by_32",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "std::abs(py / 32 - target.y)",
+   "new": "std::abs(py - target.y)",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "unknown_ant_first",
+   "file": "include/ants_app/group_order_sort.hpp",
+   "old": "key_of.emplace(id, UINT32_MAX)",
+   "new": "key_of.emplace(id, 0u)",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "stop_sorted_by_distance",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "submit_in_chunks(sim, cmd, own);",
+   "new": "submit_in_chunks(sim, cmd, nearest_first(own, sim.get_world_state().ants, sim::TileCoord{0, 0}));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "attack_not_sorted",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "submit_in_chunks(sim, cmd, attack ? targets : nearest_first(targets, sim.get_world_state().ants, tile));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "move_not_sorted",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "submit_in_chunks(sim, cmd, !attack ? targets : nearest_first(targets, sim.get_world_state().ants, tile));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  },
+  {
+   "id": "attack_beyond_the_budget_not_sorted",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "submit_in_chunks(sim, cmd, (attack && targets.size() > kMaxAntsPerClick) ? targets : nearest_first(targets, sim.get_world_state().ants, tile));",
+   "build": "test_pointer_model",
+   "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
+  }
+ ]
+}
