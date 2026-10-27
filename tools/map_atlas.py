@@ -10,7 +10,7 @@ them (the last stored part first: a flower is its head, its stems, its leaves an
 (docs/MAP_EDITOR.md, "Sprites"). Writes, with the Python standard library only (zlib, struct: the image build has no more than that):
 
   ground.png    the 239 ground tiles (ids 431 to 669, all 32 x 32, offset 0,0), 16 to a row, a 256-color PNG
-  objects.png   the pictures of the objects that the editor offers (rocks, power-ups, bombs, hills, food, the bigger objects, the starting ant) and the commonest small ones, packed, 256 colors
+  objects.png   the pictures of the objects that the editor offers (rocks, power-ups, bombs, hills, food, the bigger objects, the starting ants: the standing worker and the five specialists, each facing NE, E, SE and S in four team colors) and the commonest small ones, packed, 256 colors
   atlas.json    the index: where each picture is in its sheet, its offset, its average color; for every other animation of one part the number of the sprite file (the page fetches
                 those from /asset_catalog/sprites/ when a map shows them) with its offset and average color; and `names`, the name of every animation by its number (1,344 of them): the page
                 resolves a tile of a map through the map's own dictionary the way the game does (Renderer::set_level: a dictionary entry that is not the name of the animation of its own number
@@ -30,6 +30,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 GROUND_FIRST, GROUND_LAST, GROUND_COLUMNS, TILE = 431, 669, 16, 32
 ANT = 811                                        # agst301: the standing worker ant (the starting ants' picture)
 ANT_TYPES = {62: 897, 63: 1085, 64: 774, 65: 963, 66: 676}      # the 5 specialist standing ants (Combat, Thief, Bomber, Swimmer, Fire) for Block-3 default ant types
+ANT_FACES = {811: (813, 814, 815), 897: (899, 900, 896), 1085: (1087, 1088, 1084), 774: (776, 777, 773), 963: (965, 966, 962), 676: (678, 679, 675)}      # (NE, E, SE) of the standing ant of each type, whose south picture is the key; the west pictures are these turned round
 ANT_RAMPS = {                                    # the 14-step palette ramps (+0 black, +20 blue, +40 red, +60 green) for the standing worker ant
     "black": [(23, 23, 27), (39, 23, 51), (47, 27, 59), (47, 31, 51), (55, 35, 71), (67, 51, 71), (71, 51, 83), (87, 71, 91), (87, 71, 99), (107, 95, 111), (135, 131, 139), (167, 159, 171), (195, 195, 207), (251, 255, 247)],
     "blue": [(15, 19, 35), (31, 31, 59), (35, 35, 71), (23, 27, 55), (39, 43, 83), (35, 39, 79), (51, 59, 99), (47, 47, 103), (71, 79, 115), (75, 75, 135), (107, 107, 167), (147, 147, 199), (195, 195, 231), (239, 243, 255)],
@@ -39,9 +40,10 @@ ANT_RAMPS = {                                    # the 14-step palette ramps (+0
 FOOD_STAGES = list(range(253, 287)) + list(range(340, 344)) + list(range(356, 377)) + list(range(378, 389)) + list(range(390, 404)) + list(range(1331, 1334))        # the stages of all 32 food items that the Food tool puts (mapmaker_blocks.js)
 PLANTS = [404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421]     # the 14 top-layer plants (clovers and flowers, walk-under canopy and power-up droppers)
 BIGGER = [1323, 1324, 1321, 1322, 1320, 1326, 301, 237, 1329, 1327, 242, 346, 329, 236, 238, 350, 326, 418, 417, 289, 325, 409, 324, 349, 315, 345, 292, 354, 352]      # mapmaker_palette.js BIGGER
+ANT_FACE_IDS = [i for faces in ANT_FACES.values() for i in faces]
 PARTED = [300, 328]      # the two other objects of a library map whose picture has several parts (medrock8, stick2a): fetched one by one they would show their first part only, so they are in the sheet
 COMMON_SMALL = [134, 317, 318, 294, 336, 344, 309, 341, 340, 302, 303, 305]      # small and in the most library maps (the power-ups and rocks above are the others)
-IN_THE_SHEET = sorted(set(list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + list(ANT_TYPES.values()) + FOOD_STAGES + PLANTS + BIGGER + COMMON_SMALL + PARTED))
+IN_THE_SHEET = sorted(set(list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + list(ANT_TYPES.values()) + ANT_FACE_IDS + FOOD_STAGES + PLANTS + BIGGER + COMMON_SMALL + PARTED))
 # every other animation of one part (a sprite): fetched one by one when a map shows it. A tile of a map is the animation of its dictionary name (docs/MAP_EDITOR.md, "Sprites"), so any of the
 # 1,344 can be one, and the page cannot know which before it reads the map; an animation of several parts that the sheet does not hold (a menu screen, a piece of an ant) is left out
 FAR_RANGES = [(0, 1343)]
@@ -251,7 +253,7 @@ def build(sprites, catalog_path, out):
             found = (None, dx, dy)
         else:
             w, h, rgba = sprite(found[0])
-        if ident == ANT or ident in ANT_TYPES.values():
+        if ident == ANT or ident in ANT_TYPES.values() or ident in ANT_FACE_IDS:
             ant_rgbas[ident] = (w, h, rgba)
         order.append((h, w, ident, found, rgba))
     for h, w, ident, found, rgba in sorted(order, key=lambda t: (-t[0], -t[1], t[2])):
@@ -278,6 +280,10 @@ def build(sprites, catalog_path, out):
         entry = recolor_ant(aident)
         entry["id"] = aident
         ant_types[str(ptile)] = entry
+    ant_faces = {}
+    for south, faces in sorted(ANT_FACES.items()):
+        for ident in faces:
+            ant_faces[str(ident)] = recolor_ant(ident)
 
     far = {}
     for lo, hi in FAR_RANGES:
@@ -302,6 +308,8 @@ def build(sprites, catalog_path, out):
         "ant": ANT,
         "ants": ants,
         "antTypes": ant_types,
+        "faces": {str(k): list(v) for k, v in ANT_FACES.items()},
+        "antFaces": ant_faces,
     }
     text = json.dumps(index, sort_keys=True, separators=(",", ":"))
     with open(os.path.join(out, "atlas.json"), "w", encoding="utf-8") as f:

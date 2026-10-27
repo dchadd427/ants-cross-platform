@@ -366,6 +366,7 @@
                 panel.appendChild(tgrid);
             }
             panel.appendChild(el('p', 'am-total', num(sum.total) + (sum.total === 1 ? ' ant' : ' ants') + ' in all'));
+            panel.appendChild(el('p', 'am-note am-face', 'The game picks a random facing at the start of each match; the editor shows an example.'));
             var about = env.about ? env.about() : null;
             if (about) {
                 var same = el('p', 'am-note', 'Same for every team: ' + about.ant + ', ' + plural(about.eggs, 'egg', 'eggs') + ' each. ');

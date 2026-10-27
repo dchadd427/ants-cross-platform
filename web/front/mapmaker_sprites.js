@@ -13,6 +13,13 @@
 
     var CELL = 32, EMPTY2 = 0x7FFE, TINY = 4, MAX_TEXTURED = 12000, ANT_FROM = 12, REACH = 8, BACK = '#0b1612', MAX_CACHED = 3, MAX_DIRTY = 60000, SETTLE = 140;
 
+    // How a start ant faces on the screen: 1 to 7 (NE, E, SE, S, SW, W, NW; never north), made up from its cell. The game picks it at random when a match starts, so a map has none: an example, never saved.
+    function face(row, column) {
+        var x = row * 65536 + column + 1;
+        x = Math.imul(x ^ x >>> 16, 0x45d9f3b); x = Math.imul(x ^ x >>> 16, 0x45d9f3b);
+        return ((x ^ x >>> 16) >>> 0) % 7 + 1;
+    }
+
     // The tile of the stage that each food pile of block 2 shows, by the index of its anchor cell (the last stage whose units are not below the pile's own: mapmaker_file.js reads the same list)
     function foodTiles(file) {
         var b = file.bytes, a = file.blocksAt, n, i, m, s, food = {};
@@ -238,7 +245,12 @@
                 ctx.fillStyle = Tiles.TEAMS[m.team]; ctx.globalAlpha = 0.28; ctx.fill(); ctx.globalAlpha = 1;
                 if (m.team === 'black') { ctx.strokeStyle = '#f4ece2'; ctx.lineWidth = line + 2; ctx.stroke(); }
                 ctx.strokeStyle = Tiles.TEAMS[m.team]; ctx.lineWidth = line; ctx.stroke();
-                ctx.drawImage(objectsImg, src[0], src[1], it[2], it[3], cx + it[4] * k, ay + it[5] * k, it[2] * k, it[3] * k);
+                var sid = mSpec && index.objects.items[mSpec.id] ? mSpec.id : (defSpec ? defSpec.id : index.ant), d = face(m.row, m.column), b = d > 4 ? 8 - d : d;
+                var fid = b === 4 || !index.faces ? 0 : index.faces[sid][b - 1], fit = fid ? index.objects.items[fid] : it, fsrc = fid ? index.antFaces[fid][m.team] : src;
+                if (d > 4 && fid) {          // (turned round, one pixel right of the mirrored origin, as the game does)
+                    ctx.save(); ctx.translate(cx + (1 - fit[4]) * k, 0); ctx.scale(-1, 1);
+                    ctx.drawImage(objectsImg, fsrc[0], fsrc[1], fit[2], fit[3], 0, ay + fit[5] * k, fit[2] * k, fit[3] * k); ctx.restore();
+                } else ctx.drawImage(objectsImg, fsrc[0], fsrc[1], fit[2], fit[3], cx + fit[4] * k, ay + fit[5] * k, fit[2] * k, fit[3] * k);
             }
         }
 
@@ -301,5 +313,5 @@
         };
     }
 
-    return { create: create, TINY: TINY, MAX_TEXTURED: MAX_TEXTURED, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
+    return { create: create, face: face, TINY: TINY, MAX_TEXTURED: MAX_TEXTURED, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
 });

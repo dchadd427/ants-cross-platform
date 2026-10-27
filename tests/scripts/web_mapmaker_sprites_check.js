@@ -15,8 +15,10 @@
 //      pictures reach) and not before; another map, a reset, a new size or a zoom beyond a third paints it all
 //   E  a zoom that changes a little is the last picture stretched (one draw), and a crisp frame follows when it rests
 //   F  a toy that is not in the sheet is fetched alone from /asset_catalog/sprites/ the first time, drawn when it is there, and a 404 draws nothing and breaks nothing
-//   G  the starting ants: the ant and a ring in the team's color at 12 pixels a cell and up, a dot below; the ghost of a bigger object is see-through
+//   G  the starting ants: the ant and a ring in the team's color at 12 pixels a cell and up, a dot below, each ant facing the way its cell says (J), the ghost of a bigger object is see-through
 //   H  chips: a picture fitted in a canvas for a ground tile and for an object, nothing for a tile that has none
+//   J  the facing of a start ant: made up from its cell alone (1 to 7: never north, evenly spread, the same every time), the picture of that facing from the sheet in the ant's type and team color,
+//      the west three turned round about the ant's middle (one pixel right of the mirrored origin, as the game's blitter does), nothing of it saved in the map, an atlas without the facings draws the south picture
 //   I  the open map's dictionary: a tile is the picture of the animation that its entry names (as the game's renderer does), "." draws nothing, a changed name paints the layer again, the flat colors, the
 //      ghost of a bigger object, a plant, a pile and a thing picked up, and the ground tile of the edges' before and after (tests/scripts/web_mapmaker_names_check.js holds the rule to the 540 maps)
 // Exit status 0 when everything passes, 1 otherwise.
@@ -52,20 +54,22 @@ function pngSize(file) { const b = fs.readFileSync(file); return [b.readUInt32BE
 function environment(opts) {
     opts = opts || {};
     const log = [], images = [], timers = [], clock = { t: 1000 };
-    const state = { alpha: 1 };
+    const state = { alpha: 1, tx: 0, flip: 1 };
     function makeCtx(owner) {
         const ctx = { owner, imageSmoothingEnabled: true, imageSmoothingQuality: 'low', fillStyle: '', strokeStyle: '', lineWidth: 1 };
         Object.defineProperty(ctx, 'globalAlpha', { get: () => state.alpha, set: (v) => { state.alpha = v; } });
         const stack = [];
-        ctx.save = () => { stack.push(state.alpha); log.push({ op: 'save', owner, a: [] }); };
-        ctx.restore = () => { if (stack.length) state.alpha = stack.pop(); log.push({ op: 'restore', owner, a: [] }); };
+        ctx.save = () => { stack.push([state.alpha, state.tx, state.flip]); log.push({ op: 'save', owner, a: [] }); };
+        ctx.restore = () => { if (stack.length) [state.alpha, state.tx, state.flip] = stack.pop(); log.push({ op: 'restore', owner, a: [] }); };
+        ctx.translate = (x) => { state.tx += x * state.flip; };          // (only a turn round about a vertical line is made: translate, then scale(-1, 1))
+        ctx.scale = (x) => { state.flip *= x; };
         for (const op of ['beginPath', 'rect', 'clip', 'fill', 'stroke', 'setTransform', 'ellipse', 'arc', 'moveTo', 'lineTo', 'strokeRect']) ctx[op] = (...a) => { log.push({ op, owner, a }); };
         ctx.fillRect = (...a) => { log.push({ op: 'fillRect', owner, a, fill: ctx.fillStyle }); };
         ctx.drawImage = (img, ...a) => {
             // an object's picture is scaled once into a canvas of its own and put on the layer as it is: the scaling is not a draw of the map, the put is (written as the draw of the whole picture that it stands for)
             if (img && img.url && /objects\.png|sprite_/.test(img.url) && a.length === 8 && a[4] === 0 && a[5] === 0 && owner.scaledFrom === undefined) { owner.scaledFrom = { img, src: a.slice(0, 4), size: [a[6], a[7]] }; return; }
             if (img && img.scaledFrom && a.length === 2) { log.push({ op: 'drawImage', owner, img: img.scaledFrom.img, a: img.scaledFrom.src.concat([a[0], a[1], img.scaledFrom.size[0], img.scaledFrom.size[1]]), alpha: state.alpha }); return; }
-            log.push({ op: 'drawImage', owner, img, a, alpha: state.alpha });
+            log.push({ op: 'drawImage', owner, img, a, alpha: state.alpha, tx: state.tx, flip: state.flip });
         };
         ctx.createImageData = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(4 * w * h) });
         ctx.putImageData = (img, x, y) => { log.push({ op: 'putImageData', owner, img, a: [x, y] }); }; ctx.getImageData = () => ({ data: [0, 0, 0, 0] });
@@ -100,7 +104,7 @@ function environment(opts) {
             if (opts.fetchFails) return Promise.reject(new Error('offline'));
             if (opts.missing && name === opts.missing) return Promise.resolve({ ok: false, json: () => Promise.reject(new Error('404')) });
             const text = fs.readFileSync(path.join(ATLAS, name), 'utf8');
-            return Promise.resolve({ ok: true, json: () => Promise.resolve(opts.badIndex ? Object.assign(JSON.parse(text), { v: 2 }) : JSON.parse(text)) });
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(opts.badIndex ? Object.assign(JSON.parse(text), { v: 2 }) : opts.oldIndex ? (() => { const j = JSON.parse(text); delete j.faces; delete j.antFaces; return j; })() : JSON.parse(text)) });
         }
     };
     return { log, doc, win, settle, timers, clock, makeCanvas, images };
@@ -134,6 +138,13 @@ const fromSheet = (calls, name) => calls.filter((c) => c.op === 'drawImage' && c
 // a tile of the ground (drawn from a canvas: the scaled sheet or the atlas's own picture), the layer put on the canvas (2 numbers, or the whole of it stretched), a picture of an object
 const isTile = (c, w, h) => c.op === 'drawImage' && c.a.length === 8 && !(c.img && c.img.width === c.a[2] && c.a[2] === w && c.a[3] === h && c.a[0] === 0 && c.a[1] === 0) && !(c.img && c.img.url);          // (the pictures that come from a file: objects, far toys, and the sheet while a tile is first scaled)
 const isObject = (c) => c.op === 'drawImage' && c.img && c.img.url && /objects\.png/.test(c.img.url);
+// the pictures of the standing ants of every type, facing and team color (where each is in the sheet), and a draw of one of them
+const ANT_SOURCES = new Set();
+for (const id of [String(INDEX.ant)].concat(Object.keys(INDEX.faces).map(String)).concat(Object.values(INDEX.faces).reduce((a, b) => a.concat(b), []).map(String)).concat(Object.values(INDEX.antTypes).map((t) => String(t.id)))) {
+    ANT_SOURCES.add(INDEX.objects.items[id][0] + ',' + INDEX.objects.items[id][1]);
+    for (const team of ['blue', 'red', 'green']) { const at = (INDEX.antFaces[id] || (id === String(INDEX.ant) ? INDEX.ants : null) || Object.values(INDEX.antTypes).find((t) => String(t.id) === id) || {})[team]; if (at) ANT_SOURCES.add(at[0] + ',' + at[1]); }
+}
+const isAnt = (c) => isObject(c) && ANT_SOURCES.has(c.a[0] + ',' + c.a[1]);
 
 async function caseA() {
     const r = await ready();
@@ -177,8 +188,7 @@ async function caseB() {
     equal(wrong, 0, 'each one is the tile of its cell, from the right place of the sheet');
     check(Math.abs(area - cells * T * T) < 1, 'the cells tile the view with no gap and no overlap (' + area + ' pixels)');
     // the objects: only anchors, in row order, each at its cell's corner plus the picture's offset, followed by the top-layer plants of Block 1
-    const antXs = new Set(Object.values(INDEX.ants).map((a) => a[0]));
-    const all = out.calls.filter(isObject), drawn = all.filter((c) => !(c.a[2] === 23 && c.a[3] === 40 && antXs.has(c.a[0])));      // (the starting ants come last: their own check is G)
+    const all = out.calls.filter(isObject), drawn = all.filter((c) => !isAnt(c));      // (the starting ants come last: their own check is G)
     const items = INDEX.objects.items, k = view.scale / 32;
     const expected = [];
     for (let r = Math.max(0, vis.r0 - 8); r <= Math.min(f.rows - 1, vis.r1 + 8); r++) for (let c = Math.max(0, vis.c0 - 8); c <= Math.min(f.columns - 1, vis.c1 + 8); c++) {
@@ -296,7 +306,7 @@ async function caseD() {
     const first = frame(rig, f, view, w, h), isGround = (c) => isTile(c, w, h);
     const base = first.calls.filter(isGround).length;
     const same = frame(rig, f, view, w, h);
-    check(same.calls.filter(isGround).length === 0 && same.calls.filter(isObject).filter((c) => c.a[2] !== 23).length === 0, 'the same view again paints no cell and no object (but the ants, which go over the layer): the layer is kept');
+    check(same.calls.filter(isGround).length === 0 && same.calls.filter(isObject).filter((c) => !isAnt(c)).length === 0, 'the same view again paints no cell and no object (but the ants, which go over the layer): the layer is kept');
     check(same.calls.some((c) => c.op === 'drawImage' && c.a.length === 2), 'it only puts the layer on the canvas');
     // a pan of 7 pixels to the left (the map moves left): the strip on the right is new, the rest is the layer moved
     const panned = { scale: T, cx: 30 + 7 / T, cy: 30 };
@@ -399,6 +409,19 @@ async function caseF() {
     check(after.calls.filter((c) => c.op === 'drawImage' && c.img && c.img.url === mineUrl).length === 0 && lost.env.images.filter((i) => i.url === mineUrl).length === 0, 'a missing picture draws nothing and is not asked for again');
 }
 
+// where the game's pictures say that the start ant `m` of `file` is drawn in `view` (a w x h canvas): the picture in the sheet, its box, and whether it is turned round (then the origin moves by `tx`)
+const ANT_TYPE_OF = { 1: 64, 2: 66, 3: 63, 4: 62, 5: 65 };
+function expectedAnt(file, m, view, w, h, index) {
+    index = index || INDEX;
+    const spec = m.antType && index.antTypes[ANT_TYPE_OF[m.antType]], def = file.defaultType && index.antTypes[file.defaultType];
+    const sid = String(spec ? spec.id : (def ? def.id : index.ant)), group = spec || def || index.ants;
+    const d = Sprites.face(m.row, m.column), b = d > 4 ? 8 - d : d, fid = b === 4 || !index.faces ? sid : String(index.faces[sid][b - 1]);
+    const it = index.objects.items[fid], at = fid === sid ? group[m.team] : index.antFaces[fid][m.team], s = view.scale, k = s / 32;
+    const cx = w / 2 - view.cx * s + (m.column + 0.5) * s, ay = h / 2 - view.cy * s + (m.row + 0.5) * s, flip = d > 4 && fid !== sid;
+    return flip ? { a: [at[0], at[1], it[2], it[3], 0, ay + it[5] * k, it[2] * k, it[3] * k], tx: cx + (1 - it[4]) * k, flip: -1 } : { a: [at[0], at[1], it[2], it[3], cx + it[4] * k, ay + it[5] * k, it[2] * k, it[3] * k], tx: 0, flip: 1 };
+}
+const sameDraw = (c, e) => c.flip === e.flip && Math.abs(c.tx - e.tx) < 1e-6 && c.a.length === 8 && c.a.every((v, i) => Math.abs(v - e.a[i]) < 1e-6);
+
 async function caseG() {
     const rig = await ready(), f = treasure(), w = 600, h = 400;
     check(f.markers.length === 24, 'Treasure has 24 starting ants (' + f.markers.length + ')');
@@ -407,23 +430,23 @@ async function caseG() {
     const view = { scale: 24, cx: f.columns / 2, cy: f.rows / 2 };
     View.clamp(view, f, w, h);
     const vis = View.visible(view, f, w, h), inView = f.markers.filter((m) => m.row >= vis.r0 && m.row <= vis.r1 && m.column >= vis.c0 && m.column <= vis.c1);
-    const big = frame(rig, f, view, w, h), ants = big.calls.filter((c) => c.op === 'drawImage' && antXs.has(c.a[0]) && c.a[2] === 23 && c.a[3] === 40);
+    const big = frame(rig, f, view, w, h), ants = big.calls.filter(isAnt);
     check(inView.length > 6 && ants.length === inView.length, 'at 24 pixels a cell each ant in view is drawn in its team color: ' + ants.length + ' of ' + inView.length);
+    check(inView.every((m) => ants.filter((c) => sameDraw(c, expectedAnt(f, m, view, w, h))).length === 1), 'each one is the picture of its type, facing and team color, at its cell\'s middle plus the picture\'s offset (turned round for the west three)');
     const rings = big.calls.filter((c) => c.op === 'ellipse');
     check(rings.length === inView.length, 'with a ring at its feet');
     const strokes = big.calls.filter((c) => c.op === 'stroke').length, blacks = inView.filter((m) => m.team === 'black').length;
     check(blacks > 0 && strokes === inView.length + blacks, 'in the color of its team, and the black one with a thin white edge (' + strokes + ' lines for ' + inView.length + ' rings and ' + blacks + ' black ones)');
     const small = frame(rig, f, { scale: 11, cx: f.columns / 2, cy: f.rows / 2 }, w, h);
-    check(small.calls.filter((c) => c.op === 'drawImage' && antXs.has(c.a[0]) && c.a[2] === 23).length === 0 && small.calls.filter((c) => c.op === 'arc').length >= 20, 'below 12 pixels a cell the ants are dots in the team\'s color');
+    check(small.calls.filter(isAnt).length === 0 && small.calls.filter((c) => c.op === 'arc').length >= 20, 'below 12 pixels a cell the ants are dots in the team\'s color');
     for (const [scale, radius] of [[1, 1], [3, 1.2], [4.9, 1.96], [5, 1.5], [8, 2.4]]) {
         const dots = frame(rig, f, { scale, cx: f.columns / 2, cy: f.rows / 2 }, w, h).calls.filter((c) => c.op === 'arc');
         check(dots.length >= 20 && dots.every((c) => Math.abs(c.a[2] - radius) < 1e-9), 'at ' + scale + ' pixels a cell a start dot has the radius ' + radius + ' (smaller where a cell is under 5 pixels, so that it is not a blob over the cells): ' + (dots[0] ? dots[0].a[2] : 'none'));
     }
     // when the map has a specialist Default Ant Type (e.g. 64 Bomber ant), starting ants draw that specialist sprite in each team's color
-    const bomberMap = Object.assign({}, f, { defaultType: 64 }), bomberEntry = INDEX.antTypes['64'];
-    const bomberXs = new Set(['black', 'blue', 'red', 'green'].map((t) => bomberEntry[t][0])), bomberSample = INDEX.objects.items[String(bomberEntry.id)];
-    const bomberFrame = frame(rig, bomberMap, view, w, h), bomberDraws = bomberFrame.calls.filter((c) => c.op === 'drawImage' && bomberXs.has(c.a[0]) && c.a[2] === bomberSample[2] && c.a[3] === bomberSample[3] && Number.isFinite(c.a[4]) && Number.isFinite(c.a[5]) && c.a[6] > 0 && c.a[7] > 0);
-    check(bomberSample[2] > 0 && bomberSample[3] > 0 && bomberDraws.length === inView.length, 'with defaultType=64 (Bomber ant), every starting ant in view is drawn with the team-colored Bomber sprite: ' + bomberDraws.length);
+    const bomberMap = Object.assign({}, f, { defaultType: 64 }), bomberEntry = INDEX.antTypes['64'], bomberSample = INDEX.objects.items[String(bomberEntry.id)];
+    const bomberDraws = frame(rig, bomberMap, view, w, h).calls.filter(isAnt);
+    check(bomberSample[2] > 0 && bomberSample[3] > 0 && bomberDraws.length === inView.length && inView.every((m) => bomberDraws.filter((c) => sameDraw(c, expectedAnt(bomberMap, m, view, w, h))).length === 1) && Sprites.face(30, 30) >= 1, 'with defaultType=64 (Bomber ant), every starting ant in view is drawn with the team-colored Bomber sprite, facing its way: ' + bomberDraws.length);
     const ghosted = frame(rig, f, view, w, h, { ghost: { id: 346, row: 30, column: 30 } }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1);
     check(ghosted.length === 1 && ghosted[0].a[2] === INDEX.objects.items['346'][2], 'the ghost of a bigger object is its own picture, see-through (' + (ghosted[0] || { alpha: 'none' }).alpha + ')');
     const plain = frame(rig, f, view, w, h, { ghost: null }).calls.filter((c) => c.op === 'drawImage' && c.alpha < 1);
@@ -454,6 +477,48 @@ async function caseH() {
     check(rig.sprites.chip({ style: {}, appendChild() {} }, true, 410, 30) === true && rig.sprites.chip({ style: {}, appendChild() {} }, true, 99, 30) === false && rig.sprites.chip({ style: {}, appendChild() {} }, false, 300, 30) === false && rig.sprites.chip({ style: {}, appendChild() {} }, true, 347, 30) === false, 'a plant has a chip in the sheet; no chip for a tile that has no picture in the sheet');
     const cold = Sprites.create({ doc: rig.env.doc, win: rig.env.win });
     check(cold.chip({ style: {}, appendChild() {} }, false, 485, 30) === false, 'and none before the atlas is in');
+}
+
+async function caseJ() {
+    // the facing: 1 to 7, never north (0) or 8, the same every time, evenly spread, and not the same as its neighbors' (a made-up example, not a pattern)
+    const counts = new Array(9).fill(0);
+    let sameAcross = 0, sameDown = 0, total = 0;
+    for (let r = 0; r < 120; r++) for (let c = 0; c < 120; c++) {
+        const d = Sprites.face(r, c);
+        check(Number.isInteger(d) && d >= 1 && d <= 7 && d === Sprites.face(r, c), 'the facing of (' + r + ', ' + c + ') is a whole number from 1 to 7 and the same every time: ' + d);
+        counts[d]++; total++;
+        if (c < 119 && d === Sprites.face(r, c + 1)) sameAcross++;
+        if (r < 119 && d === Sprites.face(r + 1, c)) sameDown++;
+    }
+    check(counts[0] === 0 && counts[8] === 0 && counts.slice(1, 8).every((n) => n > total / 7 * 0.9 && n < total / 7 * 1.1), 'the seven facings are evenly spread over 14,400 cells: ' + counts.slice(1, 8).join(' '));
+    check(sameAcross / total < 0.17 && sameDown / total < 0.17 && sameAcross / total > 0.11 && sameDown / total > 0.11, 'a neighbor has the same facing about one time in seven (' + (sameAcross / total).toFixed(3) + ' across, ' + (sameDown / total).toFixed(3) + ' down)');
+    check(Sprites.face(0, 0) !== undefined && [0, 1, 2, 3].map((c) => Sprites.face(5, c)).join('') !== '4444', 'it is not one facing for every ant');
+    // every type, team and facing is drawn from its picture, the west three turned round, and no frame changes the map or the markers
+    const rig = await ready(), f = treasure(), w = 600, h = 400, view = { scale: 24, cx: 30, cy: 30 };
+    View.clamp(view, f, w, h);
+    const vis = View.visible(view, f, w, h), seen = new Set(), types = [undefined, 1, 2, 3, 4, 5];
+    for (const type of types) {
+        const markers = f.markers.map((m, i) => Object.assign({}, m, type ? { antType: type } : {}, { column: m.column }));
+        const file = Object.assign({}, f, { markers });
+        const out = frame(rig, file, view, w, h), ants = out.calls.filter(isAnt), inView = markers.filter((m) => m.row >= vis.r0 && m.row <= vis.r1 && m.column >= vis.c0 && m.column <= vis.c1);
+        check(ants.length === inView.length && inView.length > 6 && inView.every((m) => ants.filter((c) => sameDraw(c, expectedAnt(file, m, view, w, h))).length === 1), 'type ' + (type || 'default') + ': each ant in view is its own facing\'s picture in its team color (' + ants.length + ' of ' + inView.length + ')');
+        for (const m of inView) seen.add(Sprites.face(m.row, m.column));
+        if (type === 3) check(ants.some((c) => c.flip === -1) && ants.some((c) => c.flip === 1), 'some are turned round (the west three) and some are not');
+    }
+    check(seen.size >= 5, 'the ants of one map face at least five ways (' + Array.from(seen).sort().join(',') + ')');
+    const before = Buffer.from(f.bytes).toString('hex'), mk = JSON.stringify(f.markers);
+    frame(rig, f, view, w, h); frame(rig, f, { scale: 40, cx: 20, cy: 20 }, w, h);
+    check(Buffer.from(f.bytes).toString('hex') === before && JSON.stringify(f.markers) === mk, 'drawing the facings changes nothing in the map: the file bytes and the markers are as they were, nothing is stored');
+    // a flipped draw is put one pixel right of the mirrored origin and restored (the next picture is not turned round)
+    const out = frame(rig, f, view, w, h), calls = out.calls;
+    let depth = 0, bad = 0;
+    for (const c of calls) { if (c.op === 'save') depth++; if (c.op === 'restore') depth--; if (depth < 0) bad++; }
+    check(depth === 0 && bad === 0 && calls.filter((c) => c.op === 'drawImage' && c.flip === -1 && c.tx === 0).length === 0 && calls.filter((c) => c.op === 'drawImage' && c.flip === 1 && c.tx !== 0).length === 0, 'every turned-round draw is inside its own save and restore, with its origin moved');
+    // an atlas that has no facings (an old one) draws the south picture of each type, as before
+    const old = await ready({ oldIndex: true }), oldIndex = Object.assign({}, INDEX); delete oldIndex.faces; delete oldIndex.antFaces;
+    check(old.sprites.ready(), 'an atlas without the facings loads');
+    const oldOut = frame(old, f, view, w, h), oldAnts = oldOut.calls.filter(isAnt), inView = f.markers.filter((m) => m.row >= vis.r0 && m.row <= vis.r1 && m.column >= vis.c0 && m.column <= vis.c1);
+    check(oldAnts.length === inView.length && oldAnts.every((c) => c.flip === 1 && c.a[2] === 23 && c.a[3] === 40), 'it draws the south worker for every ant: ' + oldAnts.length);
 }
 
 async function caseI() {
@@ -553,7 +618,7 @@ async function caseI() {
 }
 
 (async function () {
-    for (const [name, fn] of [['A loading', caseA], ['B a whole frame', caseB], ['C pictures and flat colors', caseC], ['D the layer kept between frames', caseD], ['E the zoom', caseE], ['F a toy that is fetched alone', caseF], ['G the ants and the ghost', caseG], ['H chips', caseH], ['I the open map\'s dictionary', caseI]]) {
+    for (const [name, fn] of [['A loading', caseA], ['B a whole frame', caseB], ['C pictures and flat colors', caseC], ['D the layer kept between frames', caseD], ['E the zoom', caseE], ['F a toy that is fetched alone', caseF], ['G the ants and the ghost', caseG], ['J the facing of a start ant', caseJ], ['H chips', caseH], ['I the open map\'s dictionary', caseI]]) {
         const before = failures;
         console.log('RUNNING: ' + name + ' ...');
         try { await fn(); } catch (e) { failures++; console.log('    CRASHED: ' + (e && e.stack || e)); }
