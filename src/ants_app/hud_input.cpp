@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 
+#include "ants_app/group_order_sort.hpp"
 #include "ants_net/sequencer.hpp"
 #include "ants_sim/game_strings.hpp"
 
@@ -294,7 +295,7 @@ uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bo
 }
 
 // The ants of a MOVE, a group ATTACK or a STOP go out as commands of at most kMaxCommandAnts each (a command names no more: the engine, the recording and the wire refuse a longer
-// list), in the selection order, all in this call: they reach the same turn (the sequencer keeps a player's commands in the order they came) and run one after the other. A selection of
+// list), (a move or an attack: nearest the clicked tile first, see nearest_first; Stop: the selection order), all in this call: they reach the same turn (the sequencer keeps a player's commands in the order they came) and run one after the other. A selection of
 // at most kMaxCommandAnts is one command, exactly the one that was always sent. The engine decides what each ant does with its order (an ant that finds no free tile stops).
 HUD::ChunkedResult HUD::submit_in_chunks(sim::SimulationEngine& sim, sim::Command proto, const std::vector<uint32_t>& ants) {
     static_assert(kMaxCommandsPerClick < net::Sequencer::Config{}.max_commands_per_turn, "a click must leave room in the turn for the player's other commands");
@@ -336,7 +337,9 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
         result.needing_order = one.needing_order;
         result.ack_ant = one.ack_ant;
     } else {
-        result = submit_in_chunks(sim, cmd, targets);
+        // The engine orders the ants of one command nearest first, so the whole selection is sorted nearest first before it is cut into commands (and before the budget cuts it: the ants
+        // left out are the farthest ones). Stable: ants at the same distance keep the selection order. At most 32 ants: untouched.
+        result = submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));
     }
     const uint32_t ack = result.ack_ant;
     // FUN_010287b5 (0x1028929 .. 0x1028a07): nothing happens when every ant already carries out this click; otherwise the closest ant's GoTo decides the voice (a refusal is

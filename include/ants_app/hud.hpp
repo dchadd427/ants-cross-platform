@@ -320,7 +320,7 @@ public:
 
     /// The most commands that one click or Stop sends: a move, a group attack or a Stop of more than sim::kMaxCommandAnts ants goes out as several commands in one go. The sequencer takes
     /// 64 commands from a player in a turn (net::Sequencer::Config::max_commands_per_turn), shared with the player's other commands of that turn; a click stays well below it. Ants beyond
-    /// kMaxAntsPerClick are not ordered, and the status line says so. A special order (steal, bomb, fire, bridge) is never chunked: one command, as the original gives it.
+    /// kMaxAntsPerClick are not ordered (for a move or an attack the selection is sorted nearest the clicked tile first before the budget cuts it, so those are the farthest), and the status line says so. A special order (steal, bomb, fire, bridge) is never chunked: one command, as the original gives it.
     static constexpr size_t kMaxCommandsPerClick = 48;
     static constexpr size_t kMaxAntsPerClick = kMaxCommandsPerClick * sim::kMaxCommandAnts;
     /// The group order of the original (FUN_010287b5) for the selected own ants: `special` and `attack` are its two flags. Returns the ant that
