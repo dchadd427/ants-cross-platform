@@ -58,7 +58,7 @@
             });
         }
         function sync() {
-            if (env.lock) { env.lock.setAttribute('aria-pressed', '' + st.lock); env.lock.setAttribute('aria-label', st.lock ? 'Unlock minimap position' : 'Lock minimap position'); env.lock.textContent = st.lock ? '🔒' : '🔓'; }
+            if (env.lock) { env.lock.setAttribute('aria-pressed', '' + st.lock); env.lock.setAttribute('aria-label', st.lock ? 'Unlock minimap position' : 'Lock minimap position'); env.lock.textContent = st.lock ? '\uD83D\uDD12' : '\uD83D\uDD13'; }
             if (env.grip) { env.grip.setAttribute('aria-disabled', '' + st.lock); env.grip.classList.toggle('locked', st.lock); }
         }
         function move(p, keep) { st.pos = p; put(); if (!keep) store(); }
