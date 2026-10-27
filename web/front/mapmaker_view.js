@@ -142,8 +142,8 @@
         for (i = 0; i < file.markers.length; i++) {
             var m = file.markers[i];
             if (!inside(m)) continue;
-            ctx.beginPath(); ctx.arc(x0 + (m.column + 0.5) * s, y0 + (m.row + 0.5) * s, Math.max(1.5, s * 0.3), 0, 6.2832);
-            ctx.fillStyle = Tiles.TEAMS[m.team]; ctx.fill(); ctx.strokeStyle = '#f4ece2'; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.beginPath(); ctx.arc(x0 + (m.column + 0.5) * s, y0 + (m.row + 0.5) * s, s < 5 ? Math.max(1, s * 0.4) : Math.max(1.5, s * 0.3), 0, 6.2832);
+            ctx.fillStyle = Tiles.TEAMS[m.team]; ctx.fill(); ctx.strokeStyle = '#f4ece2'; ctx.lineWidth = s < 5 ? 0.8 : 1.5; ctx.stroke();
         }
     }
 
@@ -212,7 +212,10 @@
     function table(file) { return Tiles.tableOf(file); }
 
     // Are the game's pictures drawn at this zoom (the atlas is loaded and a tile is at least 10 pixels: mapmaker_sprites.js)?
-    function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= sprites.FROM; }
+    function useSprites(view, sprites, file, w, h) {
+        var v = sprites && sprites.ready() && file ? visible(view, file, w, h) : null;
+        return !!sprites && sprites.ready() && (!v || (v.r1 - v.r0 + 1) * (v.c1 - v.c0 + 1) <= sprites.MAX_CELLS);
+    }
 
     // One frame. `opts`: scratch (a canvas for the pixel way), cursor ({row, column} or null), brush (the size of the brush on the cursor), sprites (mapmaker_sprites.js, when loaded), dpr, ghost ({id, row,
     // column}: a bigger object's picture under the pointer). Returns {rects, pixels, sprites}: what was drawn, for the tests.
@@ -221,7 +224,7 @@
         ctx.fillStyle = '#0b1612'; ctx.fillRect(0, 0, w, h);
         var vis = visible(view, file, w, h), done = { rects: 0, pixels: 0, sprites: 0 };
         if (!vis) return done;
-        if (useSprites(view, opts.sprites)) {
+        if (useSprites(view, opts.sprites, file, w, h)) {
             opts.sprites.draw(ctx, view, file, w, h, vis, opts);
             if (view.scale < opts.sprites.ANT_FROM) drawMarks(ctx, view, file, w, h, vis, true);
             done.sprites = 1;

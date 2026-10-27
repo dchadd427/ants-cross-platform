@@ -12,7 +12,7 @@
 })(this, function (Tiles) {
     'use strict';
 
-    var CELL = 32, EMPTY2 = 0x7FFE, FROM = 10, ANT_FROM = 12, REACH = 8, BACK = '#0b1612', MAX_CACHED = 3, MAX_DIRTY = 60000, SETTLE = 140;
+    var CELL = 32, EMPTY2 = 0x7FFE, MAX_CELLS = 12000, TINY = 4, ANT_FROM = 12, REACH = 8, BACK = '#0b1612', MAX_CACHED = 3, MAX_DIRTY = 60000, SETTLE = 140;
 
     // The tile of the stage that each food pile of block 2 shows, by the index of its anchor cell (the last stage whose units are not below the pile's own: mapmaker_file.js reads the same list)
     function foodTiles(file) {
@@ -94,7 +94,8 @@
         function groundCell(lctx, file, st, sheet, r, c) {
             var b = file.bytes, id = b[file.layer1 + 6 * (r * file.columns + c)] | (b[file.layer1 + 6 * (r * file.columns + c) + 1] << 8), g = index.ground, a = groundAnim(file, st.tab, r, c), k = a - g.first;
             var xa = st.ox + Math.round(c * st.S), xb = st.ox + Math.round((c + 1) * st.S), ya = st.oy + Math.round(r * st.S), yb = st.oy + Math.round((r + 1) * st.S);
-            if (k >= 0 && k < g.count) {
+            if (st.S < TINY) { lctx.fillStyle = Tiles.css(id, EMPTY2, st.tab); lctx.fillRect(xa, ya, xb - xa, yb - ya); }          // (under 4 pixels a cell the ground's own texture only makes a lattice: its smooth average color, with the pictures of the objects on it)
+            else if (k >= 0 && k < g.count) {
                 if (sheet) { if (!sheet.done[k]) prepare(sheet, k); lctx.drawImage(sheet.canvas, (k % g.columns) * st.T, ((k / g.columns) | 0) * st.T, st.T, st.T, xa, ya, xb - xa, yb - ya); }
                 else lctx.drawImage(groundImg, (k % g.columns) * CELL, ((k / g.columns) | 0) * CELL, CELL, CELL, xa, ya, xb - xa, yb - ya);
             } else if (st.tab) {          // (the dictionary draws nothing here, or a picture that is not a ground tile: over the black that the game leaves)
@@ -237,7 +238,13 @@
                 ctx.fillStyle = Tiles.TEAMS[m.team]; ctx.globalAlpha = 0.28; ctx.fill(); ctx.globalAlpha = 1;
                 if (m.team === 'black') { ctx.strokeStyle = '#f4ece2'; ctx.lineWidth = line + 2; ctx.stroke(); }
                 ctx.strokeStyle = Tiles.TEAMS[m.team]; ctx.lineWidth = line; ctx.stroke();
-                ctx.drawImage(objectsImg, src[0], src[1], it[2], it[3], cx + it[4] * k, ay + it[5] * k, it[2] * k, it[3] * k);
+                var sid = mSpec && index.objects.items[mSpec.id] ? mSpec.id : (defSpec ? defSpec.id : index.ant), x = m.row * 65536 + m.column + 1, d, b;
+                x = Math.imul(x ^ x >>> 16, 0x45d9f3b); x = Math.imul(x ^ x >>> 16, 0x45d9f3b); d = ((x ^ x >>> 16) >>> 0) % 7 + 1; b = d > 4 ? 8 - d : d;          // (a facing from the cell alone: 1 to 7, never north, as the game draws it; nothing is saved)
+                var fid = b === 4 || !index.faces ? 0 : index.faces[sid][b - 1], fit = fid ? index.objects.items[fid] : it, fsrc = fid ? (m.team === 'black' ? fit : index.antFaces[fid][m.team]) : src;
+                if (d > 4 && fid) {          // (the west ones are the east ones turned round, as the game does: the part is put one pixel right of its mirrored origin)
+                    ctx.save(); ctx.translate(cx + (1 - fit[4]) * k, 0); ctx.scale(-1, 1);
+                    ctx.drawImage(objectsImg, fsrc[0], fsrc[1], fit[2], fit[3], 0, ay + fit[5] * k, fit[2] * k, fit[3] * k); ctx.restore();
+                } else ctx.drawImage(objectsImg, fsrc[0], fsrc[1], fit[2], fit[3], cx + fit[4] * k, ay + fit[5] * k, fit[2] * k, fit[3] * k);
             }
         }
 
@@ -282,7 +289,7 @@
         }
 
         return {
-            load: load, FROM: FROM, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
+            load: load, MAX_CELLS: MAX_CELLS, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
             ready: function () { return ready; }, failed: function () { return failed; },
             // A ground tile's picture drawn s by s pixels at (x, y) of a canvas (the before and after of Fix edges: mapmaker_edges.js); false when there is none
             // `tab`: the table of the dictionary of the map that the tile is in (Tiles.tableOf(file), asked for once by the caller, not here for each tile); `placing`: the tile is about to be put (Tiles.place), else it is a cell of the map (Tiles.ground)
@@ -300,5 +307,5 @@
         };
     }
 
-    return { create: create, FROM: FROM, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
+    return { create: create, MAX_CELLS: MAX_CELLS, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
 });
