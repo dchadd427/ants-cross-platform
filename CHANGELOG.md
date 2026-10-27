@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f011f5c1...4e924444)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f011f5c1...3970dcf6)
 
 ## v0.12.142 - 2026-10-27 - Faster: team-mates' claims on a tile found at once
 
