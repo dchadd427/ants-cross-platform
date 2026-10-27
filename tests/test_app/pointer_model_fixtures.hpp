@@ -97,3 +97,4 @@ private:
 };
 
 void test_big_selection();      // test_pointer_model_big.cpp
+void test_nearest_first();      // test_pointer_model_big.cpp

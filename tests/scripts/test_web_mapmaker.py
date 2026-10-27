@@ -51,7 +51,8 @@ EDGES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edges_check.j
 ANTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ants_check.js")
 PICKUP_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_pickup_check.js")
 LINE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_line_check.js")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+MINIMAP_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_minimap_check.js")
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_minimap.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
 LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js", "mapmaker_ants.js", "mapmaker_pickup.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
 ALL_SCRIPTS = SCRIPTS + LAZY_SCRIPTS
 
@@ -1367,6 +1368,54 @@ class TheGroundAndTheSprites(unittest.TestCase):
                     finally:
                         shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
                     self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_small_map_passes_its_checks(self):
+        done = run_check(script=MINIMAP_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout[-3000:] + done.stderr[-2000:])
+        self.assertRegex(done.stdout, r"\d+ checks, 0 failed")
+
+    def test_the_checks_can_fail_on_the_broken_copies_of_the_small_map(self):
+        """tests/data/mapmaker_minimap_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_minimap_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 80)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, MINIMAP_CHECK, [])
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_small_map_has_its_buttons_and_its_script_before_the_canvas(self):
+        tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
+        self.assertLess(tags.index("front/mapmaker_minimap.js"), tags.index("front/mapmaker_canvas.js"), "the canvas builds the box when it is made")
+        for ident in ("mini-grip", "mini-lock", "mini-hide", "mini-show"):
+            self.assertIn('id="%s"' % ident, self.page)
+            self.assertIn("$('%s')" % ident, self.app, "the app hands the canvas the button " + ident)
+        self.assertRegex(self.page, r'id="mini-hide"[^>]*aria-label="Hide the small map"')
+        self.assertRegex(self.page, r'id="mini-lock"[^>]*aria-pressed="false"[^>]*aria-label="Lock minimap position"')
+        self.assertRegex(self.page, r'<button type="button" class="mmshow" id="mini-show" hidden>Show map</button>')
+        css = read("web", "front", "mapmaker.css")
+        self.assertRegex(css, r"\.mmgrip \{[^}]*cursor: grab", "the grip is the one thing that drags")
+        self.assertRegex(css, r"\.mmgrip, \.mmbtn, \.mmshow \{[^}]*touch-action: none", "a finger on the grip drags the box, not the page")
+        self.assertRegex(css, r"\.mmbtn::after \{[^}]*inset: -8px", "the small buttons are 44 pixels high to a finger (their width is what the box leaves)")
+        self.assertRegex(css, r"\.mmbtn\[aria-pressed=\"true\"\] \{[^}]*color: #1b1608", "the locked button has dark text on its gold")
+        self.assertRegex(css, r"\.mmshow \{[^}]*min-height: 44px", "the Show map button is 44 pixels")
+        self.assertRegex(css, r"\.mmgrip:focus-visible, \.mmbtn:focus-visible, \.mmshow:focus-visible \{ outline: 2px solid var\(--gold\)", "a visible focus")
+        mini = read("web", "front", "mapmaker_minimap.js")
+        self.assertNotRegex(mini, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function", "the box puts no markup in")
+        self.assertRegex(mini, r"^[\x00-\x7f]*$", "ASCII only (the lock and the unlock are escapes)")
 
     def test_the_pick_up_tool_is_loaded_on_demand_with_its_style_and_the_tool_hands_it_the_canvas(self):
         tags = re.findall(r'<script src="([^"]+)"></script>', self.page)

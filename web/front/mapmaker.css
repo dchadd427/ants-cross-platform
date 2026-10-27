@@ -124,8 +124,14 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .bootmsg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; color: var(--cream); background: #0b1612; font-size: 17px; line-height: 1.4; }
 .minimap { position: absolute; right: 12px; top: 12px; width: 168px; padding: 4px; background: rgba(5, 10, 8, .88); border: 2px solid var(--frame); border-radius: 4px; box-shadow: 2px 3px 0 var(--shadow); }
 .minimap canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; cursor: pointer; touch-action: none; }
-.minimap div { font-size: 12px; color: var(--muted); padding: 3px 2px 0; }
-@media (min-width: 601px) { .minimap.tiny { width: 120px; top: 6px; right: 6px; } .minimap.tiny div { display: none; } }
+.minimap #mini-cap { font-size: 12px; color: var(--muted); padding: 3px 2px 0; }
+.mmbar { display: flex; align-items: center; gap: 4px; padding-bottom: 4px; }
+.mmgrip, .mmbtn, .mmshow { position: relative; font: inherit; font-size: 12px; color: var(--cream); background: #123a2d; border: 1px solid var(--frame); border-radius: 4px; min-height: 28px; padding: 0 6px; touch-action: none; }
+.mmgrip { flex: 1 1 0; min-width: 0; text-align: left; cursor: grab; } .mmgrip.locked { cursor: default; opacity: .55; } .mmbtn[aria-pressed="true"] { background: var(--gold); color: #1b1608; }
+.mmbtn::after { content: ""; position: absolute; inset: -8px -2px; }
+.mmshow { position: absolute; right: 12px; top: 12px; z-index: 2; min-height: 44px; padding: 0 12px; } .mmshow[hidden] { display: none; }
+.mmgrip:focus-visible, .mmbtn:focus-visible, .mmshow:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+@media (min-width: 601px) { .minimap.tiny { width: 108px; top: 6px; right: 6px; } .minimap.tiny #mini-cap, .minimap.tiny .mmgrip span { display: none; } .minimap.tiny .mmbtn { padding: 0 4px; } }
 .cvbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 8px 12px; font-size: 14px; color: var(--cream); background: #0b1612; border-top: 2px solid var(--rule); }
 .editbar, .undoredo, .drawopts { display: inline-flex; align-items: center; gap: 6px; }
 #where { white-space: nowrap; }
@@ -323,7 +329,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .side .phone-row { display: flex; width: 100%; align-items: center; gap: 10px; justify-content: space-between; font-size: 17px; }
     .side .phsum { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; }
     .phsum .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .phsum .link { min-width: 56px; min-height: 44px; font-size: 17px; }
-    .minimap { width: 112px; right: 8px; top: 8px; }
+    .minimap { width: 108px; right: 8px; top: 8px; } .minimap #mini-cap, .mmgrip span { display: none; } .mmbtn { padding: 0 4px; } .mmshow { right: 8px; top: 8px; }
     .ants { grid-template-columns: 1fr 1fr; } .two { grid-template-columns: 1fr; } .dlg.props { width: 100%; }
     .dlg-in { padding: 16px 16px 6px; }
     .dlg h2 { font-size: 24px; }

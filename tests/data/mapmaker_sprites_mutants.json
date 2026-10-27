@@ -756,6 +756,13 @@
    "old": "(defSpec ? defSpec.id : index.ant)",
    "new": "index.ant",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_atlas_missing_a_type_of_facings_is_a_crash",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "|| !index.faces[sid] ? 0",
+   "new": "? 0",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   }
  ]
 }

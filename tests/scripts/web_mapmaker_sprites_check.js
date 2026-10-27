@@ -104,7 +104,7 @@ function environment(opts) {
             if (opts.fetchFails) return Promise.reject(new Error('offline'));
             if (opts.missing && name === opts.missing) return Promise.resolve({ ok: false, json: () => Promise.reject(new Error('404')) });
             const text = fs.readFileSync(path.join(ATLAS, name), 'utf8');
-            return Promise.resolve({ ok: true, json: () => Promise.resolve(opts.badIndex ? Object.assign(JSON.parse(text), { v: 2 }) : opts.oldIndex ? (() => { const j = JSON.parse(text); delete j.faces; delete j.antFaces; return j; })() : JSON.parse(text)) });
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(opts.badIndex ? Object.assign(JSON.parse(text), { v: 2 }) : opts.oldIndex ? (() => { const j = JSON.parse(text); delete j.faces; delete j.antFaces; return j; })() : opts.noBomber ? (() => { const j = JSON.parse(text); delete j.faces[String(j.antTypes['64'].id)]; return j; })() : JSON.parse(text)) });
         }
     };
     return { log, doc, win, settle, timers, clock, makeCanvas, images };
@@ -518,6 +518,9 @@ async function caseJ() {
     const old = await ready({ oldIndex: true }), oldIndex = Object.assign({}, INDEX); delete oldIndex.faces; delete oldIndex.antFaces;
     check(old.sprites.ready(), 'an atlas without the facings loads');
     const oldOut = frame(old, f, view, w, h), oldAnts = oldOut.calls.filter(isAnt), inView = f.markers.filter((m) => m.row >= vis.r0 && m.row <= vis.r1 && m.column >= vis.c0 && m.column <= vis.c1);
+    // an atlas that has facings but none for one type (the Bomber): that type is drawn facing south, the others as usual
+    const part = await ready({ noBomber: true }), bomberFile = Object.assign({}, f, { defaultType: 64 }), partAnts = frame(part, bomberFile, view, w, h).calls.filter(isAnt);
+    check(partAnts.length === inView.length && partAnts.every((c) => c.flip === 1 && c.a[2] === INDEX.objects.items[String(INDEX.antTypes['64'].id)][2]), 'an atlas with no facings for one type draws that type facing south, and does not crash: ' + partAnts.length);
     check(oldAnts.length === inView.length && oldAnts.every((c) => c.flip === 1 && c.a[2] === 23 && c.a[3] === 40), 'it draws the south worker for every ant: ' + oldAnts.length);
 }
 

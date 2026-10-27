@@ -246,7 +246,7 @@
                 if (m.team === 'black') { ctx.strokeStyle = '#f4ece2'; ctx.lineWidth = line + 2; ctx.stroke(); }
                 ctx.strokeStyle = Tiles.TEAMS[m.team]; ctx.lineWidth = line; ctx.stroke();
                 var sid = mSpec && index.objects.items[mSpec.id] ? mSpec.id : (defSpec ? defSpec.id : index.ant), d = face(m.row, m.column), b = d > 4 ? 8 - d : d;
-                var fid = b === 4 || !index.faces ? 0 : index.faces[sid][b - 1], fit = fid ? index.objects.items[fid] : it, fsrc = fid ? index.antFaces[fid][m.team] : src;
+                var fid = b === 4 || !index.faces || !index.faces[sid] ? 0 : index.faces[sid][b - 1], fit = fid ? index.objects.items[fid] : it, fsrc = fid ? index.antFaces[fid][m.team] : src;
                 if (d > 4 && fid) {          // (turned round, one pixel right of the mirrored origin, as the game does)
                     ctx.save(); ctx.translate(cx + (1 - fit[4]) * k, 0); ctx.scale(-1, 1);
                     ctx.drawImage(objectsImg, fsrc[0], fsrc[1], fit[2], fit[3], 0, ay + fit[5] * k, fit[2] * k, fit[3] * k); ctx.restore();

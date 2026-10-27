@@ -58,7 +58,10 @@
     <main class="panel canvaswrap">
         <div class="cv" id="cv">
             <canvas class="map" id="map" tabindex="0" role="application" aria-label="The map. Arrow keys move the marked square, Enter paints it with the chosen tool, plus and minus zoom, zero shows the whole map." aria-describedby="where"></canvas>
-            <div class="minimap" id="minimap" hidden><canvas id="mini" role="img" aria-label="Small map of the whole map. Click or tap it to look somewhere else."></canvas><div id="mini-cap"></div></div>
+            <div class="minimap" id="minimap" hidden>
+                <div class="mmbar"><button type="button" class="mmgrip" id="mini-grip" aria-label="Move the small map: drag here, or use the arrow keys. Home puts it back in its corner.">&#8942;<span> Map</span></button><button type="button" class="mmbtn" id="mini-lock" aria-pressed="false" aria-label="Lock minimap position">&#128275;</button><button type="button" class="mmbtn" id="mini-hide" aria-label="Hide the small map">Hide</button></div>
+                <canvas id="mini" role="img" aria-label="Small map of the whole map. Click or tap it to look somewhere else."></canvas><div id="mini-cap"></div></div>
+            <button type="button" class="mmshow" id="mini-show" hidden>Show map</button>
             <div class="atlasnote" id="atlas-note" role="status" hidden></div>
             <div class="bootmsg" id="boot" role="status">Loading the map code&hellip;</div>
         </div>
@@ -90,7 +93,7 @@
         <div class="phsum"><span class="t" id="phone-sum"></span><button class="link" type="button" data-act="props" disabled>Edit</button></div>
     </aside>
 </div>
-<footer class="bar edfoot" id="edfoot"><span id="mapmaker-site"></span>Map Maker <span id="mapmaker-version">v1.5.12</span>&#8197;&bull;&#8197;<span id="mapmaker-build">local</span>&#8197;&bull;&#8197;<a href="/">Lobby</a>&#8197;&bull;&#8197;<a href="matches.html">Match history</a>&#8197;&bull;&#8197;<a href="changelog.html">Changelog</a>&#8197;&bull;&#8197;<a href="legal.html">Legal</a></footer>
+<footer class="bar edfoot" id="edfoot"><span id="mapmaker-site"></span>Map Maker <span id="mapmaker-version">v1.6.2</span>&#8197;&bull;&#8197;<span id="mapmaker-build">local</span>&#8197;&bull;&#8197;<a href="/">Lobby</a>&#8197;&bull;&#8197;<a href="matches.html">Match history</a>&#8197;&bull;&#8197;<a href="changelog.html">Changelog</a>&#8197;&bull;&#8197;<a href="legal.html">Legal</a></footer>
 <div id="dialogs"></div>
 <section class="mine" id="mine" hidden aria-labelledby="mine-title">
     <header class="mhead"><a class="edlogo" href="/" aria-label="ants! - the front page"><img src="/front/logo.png" alt="ants!" width="581" height="218"></a><h1 class="banner gold" id="mine-title" tabindex="-1">My maps</h1></header>
@@ -140,6 +143,7 @@
 <script src="front/mapmaker_store.js"></script>
 <script src="front/mapmaker_mine.js"></script>
 <script src="front/mapmaker_convert.js"></script>
+<script src="front/mapmaker_minimap.js"></script>
 <script src="front/mapmaker_canvas.js"></script>
 <script src="front/mapmaker_tools.js"></script>
 <script src="front/mapmaker_app.js"></script>
