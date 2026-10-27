@@ -5,7 +5,7 @@
 //
 // WHO WRITES THEM. Every write of orig_order and orig_order_tile in the simulation is a call of set_order_kind or set_order_tile (and AntUnit::clear_path, which writes both, is called
 // through clear_path_of); each ends in claim_note, which puts the ant in the list of the tile it claims, or in none. A removal (remove_ant) and add_ant call claim_note too. So the lists
-// are exact after every operation of the simulation, with no healing in the query. tests/scripts/test_order_writers.py fails for a direct write anywhere in src/ants_sim, so that a
+// are exact after every operation of the simulation, with no healing in the query. tests/scripts/test_order_writers.py fails for a direct write anywhere in src, include or tools, so that a
 // new writer cannot be left out. What no writer can follow is a write FROM OUTSIDE (a test hook that pokes an ant through get_unit(); no production code does): the lists are used
 // only inside a tick, and movement_tick starts by putting right every ant (claims_catch_up_all), so a poke is put right before the first question; outside a tick can_enter scans.
 

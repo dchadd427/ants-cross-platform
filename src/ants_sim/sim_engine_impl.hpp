@@ -452,7 +452,7 @@ public:
     void occ_note(const AntUnit& a, uint32_t slot);
 
     // The orders that claim tiles (order_claims.cpp). EVERY write of orig_order, orig_order_tile or of the path-and-order reset goes through these three (the hygiene test
-    // tests/scripts/test_order_writers.py fails for a direct write in src/ants_sim); each ends in claim_note.
+    // tests/scripts/test_order_writers.py fails for a direct write in src, include or tools); each ends in claim_note.
     void set_order_kind(AntUnit& a, uint8_t kind);
     void set_order_tile(AntUnit& a, TileCoord tile);
     void clear_path_of(AntUnit& a);                                  // AntUnit::clear_path() (the walk, the order and its tile) and the note
