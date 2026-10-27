@@ -1,5 +1,6 @@
 // Pointer model tests: a click or Stop on more ants than one command holds (sim::kMaxCommandAnts = 32). Ctrl+A or a drag selects every own ant; a move, a group attack and Stop name ALL of
-// them as several commands of the same kind in the selection order (HUD::submit_in_chunks, docs/CONTROLS.md, "A big selection"), at most HUD::kMaxCommandsPerClick of them, and the engine decides
+// them as several commands of the same kind, the ants nearest the clicked tile first across the whole selection (nearest_first, ants_app/group_order_sort.hpp; HUD::submit_in_chunks, docs/CONTROLS.md,
+// "A big selection"), at most HUD::kMaxCommandsPerClick of them (the ants left out are the farthest), and the engine decides
 // what each ant does (the original's logic: an ant that finds no free tile stops). A SPECIAL order (steal, bomb, ...) is never chunked: one command of at most 32 ants, as before. A click of at
 // most 32 ants sends what it always sent. The voice and the pedestal feedback follow the click as a whole.
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "ants_app/group_order_sort.hpp"
 #include "pointer_model_fixtures.hpp"
 
 namespace {
@@ -47,6 +49,24 @@ void make_walk(Fixture& f, const std::vector<uint32_t>& ids) {
         if (!pending && t > 5) break;
     }
     for (int t = 0; t < 3; ++t) f.settle();
+}
+
+// The order in which a move or an attack on tile (tx, ty) names the ants `ids`: nearest first by 16 x the Chebyshev distance between the tile of the ant's pixel position and (tx, ty), ants at the same
+// distance in the order of `ids`. Written here by hand (an insertion sort is stable), not with the HUD's function.
+uint32_t key_of(Fixture& f, uint32_t id, int32_t tx, int32_t ty) {
+    const int32_t dx = std::abs(f.unit(id).pixel_x / 32 - tx);
+    const int32_t dy = std::abs(f.unit(id).pixel_y / 32 - ty);
+    return static_cast<uint32_t>(dx > dy ? dx : dy) * 16u;
+}
+
+std::vector<uint32_t> by_distance(Fixture& f, const std::vector<uint32_t>& ids, int32_t tx, int32_t ty) {
+    std::vector<uint32_t> out;
+    for (uint32_t id : ids) {
+        size_t at = out.size();
+        while (at > 0 && key_of(f, out[at - 1], tx, ty) > key_of(f, id, tx, ty)) --at;
+        out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), id);
+    }
+    return out;
 }
 
 std::vector<uint8_t> bytes_of(const sim::Command& c) {
@@ -137,7 +157,7 @@ void test_big_selection() {
         f.hud.order_selected(f.sim, TileCoord{41, 41}, false, false);
         check(shaped(sink.log, sim::CommandType::GroupMove, 200), "200 ants: seven group moves, 32 ants but the last (8)");
         check(!sink.log.empty() && sink.log[0].tile_x == 41 && sink.log[0].tile_y == 41, "of the clicked tile");
-        check(ants_sent(sink.log) == ids, "together they name every selected ant once, in the selection order");
+        check(ants_sent(sink.log) == by_distance(f, ids, 41, 41), "together they name every selected ant once, the nearest the clicked tile first");
         size_t raiding = 0;
         for (uint32_t id : ids) raiding += f.unit(id).orig_order == sim::AntUnit::kOrderRaid ? size_t{1} : size_t{0};
         check(raiding == 200, "every one of the 200 ants raids (" + std::to_string(raiding) + ")");
@@ -184,7 +204,7 @@ void test_big_selection() {
         f.hud.set_command_sink(&sink);
         select_all(f);
         f.hud.order_selected(f.sim, TileCoord{21, 21}, false, false);
-        check(shaped(sink.log, sim::CommandType::GroupMove, 200) && ants_sent(sink.log) == ids, "own hill: all 200 named in seven commands");
+        check(shaped(sink.log, sim::CommandType::GroupMove, 200) && ants_sent(sink.log) == by_distance(f, ids, 21, 21), "own hill: all 200 named in seven commands");
         check(f.hud.status_line().text().find("Only") == std::string::npos && f.hud.status_line().text().find("walk here") == std::string::npos, "and no line about a limit");
     }
     // 80 workers and a move click (the right button, by the cursor): three commands and every ant has the order
@@ -219,7 +239,7 @@ void test_big_selection() {
         f.hud.set_command_sink(&sink);
         select_all(f);
         f.click_tile(30, 30, SDL_BUTTON_RIGHT);
-        check(shaped(sink.log, sim::CommandType::GroupMove, 200) && ants_sent(sink.log) == ids, "200 workers: seven commands name every ant, in the selection order");
+        check(shaped(sink.log, sim::CommandType::GroupMove, 200) && ants_sent(sink.log) == by_distance(f, ids, 30, 30), "200 workers: seven commands name every ant, the nearest the clicked tile first");
         size_t new_goal = 0, stopped = 0, kept = 0;
         for (size_t i = 0; i < ids.size(); ++i) {
             const sim::AntUnit& u = f.unit(ids[i]);
@@ -228,7 +248,7 @@ void test_big_selection() {
             kept += u.orig_order == sim::AntUnit::kOrderMove && u.orig_order_tile == goal[i] ? size_t{1} : size_t{0};
         }
         check(new_goal > 0 && new_goal <= 81 && stopped == 200 - new_goal && kept == 0, "the engine's result: " + std::to_string(new_goal) + " take a tile around the click (at most 81), the other " + std::to_string(stopped) + " stop, none is left alone");
-        for (const sim::Command& c : hand_chunks(sim::CommandType::GroupMove, 30, 30, same)) g.sim.apply_command(c);
+        for (const sim::Command& c : hand_chunks(sim::CommandType::GroupMove, 30, 30, by_distance(g, same, 30, 30))) g.sim.apply_command(c);
         bool equal = f.sim.state_hash() == g.sim.state_hash();
         for (int t = 0; t < 40 && equal; ++t) {
             f.settle();
@@ -251,7 +271,7 @@ void test_big_selection() {
         g.hud.order_selected(g.sim, TileCoord{30, 30}, false, true);
         size_t attacking = 0;
         for (uint32_t id : fighters) attacking += g.unit(id).orig_order == sim::AntUnit::kOrderAttack ? size_t{1} : size_t{0};
-        check(shaped(gsink.log, sim::CommandType::GroupAttack, 100) && ants_sent(gsink.log) == fighters && attacking == 100, "100 walking combat ants: four attack commands name all 100 and every ant attacks (" + std::to_string(attacking) + ")");
+        check(shaped(gsink.log, sim::CommandType::GroupAttack, 100) && ants_sent(gsink.log) == by_distance(g, fighters, 30, 30) && attacking == 100, "100 walking combat ants: four attack commands name all 100 and every ant attacks (" + std::to_string(attacking) + ")");
     }
     // at most 32 ants: one command, byte for byte the one that was always sent (a move, a special order, an attack and Stop)
     for (size_t n : {size_t{1}, size_t{10}, size_t{32}}) {
@@ -349,15 +369,16 @@ void test_big_selection() {
         select_all(f);
         f.hud.order_selected(f.sim, TileCoord{41, 41}, false, false);
         check(HUD::kMaxCommandsPerClick == 48 && HUD::kMaxAntsPerClick == 1536, "the budget is 48 commands of 32 ants");
-        check(sink.log.size() == 48 && ants_sent(sink.log) == std::vector<uint32_t>(ids.begin(), ids.begin() + 1536), "a click sends 48 commands naming the first 1,536 ants in the selection order");
+        const std::vector<uint32_t> nearest = by_distance(f, ids, 41, 41);
+        check(sink.log.size() == 48 && ants_sent(sink.log) == std::vector<uint32_t>(nearest.begin(), nearest.begin() + 1536), "a click sends 48 commands naming the 1,536 ants nearest the clicked tile, nearest first");
         size_t ordered = 0;
-        bool prefix = true;
-        for (size_t i = 0; i < ids.size(); ++i) {
-            const bool has = f.unit(ids[i]).orig_order == sim::AntUnit::kOrderRaid;
+        bool nearest_only = true;
+        for (size_t i = 0; i < nearest.size(); ++i) {
+            const bool has = f.unit(nearest[i]).orig_order == sim::AntUnit::kOrderRaid;
             ordered += has ? size_t{1} : size_t{0};
-            prefix = prefix && has == (i < 1536);
+            nearest_only = nearest_only && has == (i < 1536);
         }
-        check(ordered == 1536 && prefix, "the first 1,536 ants carry the order and no other (" + std::to_string(ordered) + ")");
+        check(ordered == 1536 && nearest_only, "the 1,536 nearest ants carry the order and no other: the 64 farthest are left out (" + std::to_string(ordered) + ")");
         const std::string said = f.hud.status_line().text();
         check(said == "Only 1536 ants ordered.", "the status line says how many were ordered: '" + said + "'");
         check(fits_status_box(said), "and it fits the status box (139 px: the box clips at 139 px, the shipped font needs about 112 for this one)");
@@ -457,5 +478,243 @@ void test_big_selection() {
         check(click(false, {answer(2, 0), answer(5, ids[40]), answer(0, 0)}) == 0 && f.sounds.size() == 1, "the first command with ants in need is refused (no ack): no voice, the click sound only");
         check(click(false, {answer(0, 0), answer(5, ids[40]), answer(3, ids[64])}) == ids[40] && f.sounds.size() == 2, "a move: the voice is that of the first command with ants in need");
         check(click(true, {answer(0, 0), answer(5, ids[40]), answer(3, ids[64])}) == ids[40] && sink.log.size() == 3 && f.sounds.size() == 2, "an attack of 65 ants: three commands, the voice of the first command with ants in need");
+    }
+}
+
+namespace {
+
+sim::AntSnapshot snap(uint32_t id, int32_t px, int32_t py) {
+    sim::AntSnapshot a{};
+    a.id = id;
+    a.px = px;
+    a.py = py;
+    a.tile_x = px / 32;
+    a.tile_y = py / 32;
+    return a;
+}
+
+// A world of `n` ants with ids 100.. at random pixels of a 60 x 60 tile map, and a random order of (some of) them as the selection
+struct RandomGroup {
+    std::vector<sim::AntSnapshot> world;
+    std::vector<uint32_t> selection;
+};
+
+RandomGroup random_group(uint32_t seed, size_t n, int32_t span_tiles) {
+    uint32_t state = seed * 2654435761u + 12345u;
+    const auto next = [&state](uint32_t bound) {
+        state = state * 1664525u + 1013904223u;
+        return (state >> 8) % bound;
+    };
+    RandomGroup g;
+    for (size_t i = 0; i < n; ++i) g.world.push_back(snap(static_cast<uint32_t>(100 + i), static_cast<int32_t>(next(static_cast<uint32_t>(span_tiles * 32))), static_cast<int32_t>(next(static_cast<uint32_t>(span_tiles * 32)))));
+    for (const auto& a : g.world) g.selection.push_back(a.id);
+    for (size_t i = g.selection.size(); i > 1; --i) std::swap(g.selection[i - 1], g.selection[next(static_cast<uint32_t>(i))]);
+    return g;
+}
+
+uint32_t world_key(const std::vector<sim::AntSnapshot>& world, uint32_t id, TileCoord t) {
+    for (const auto& a : world) {
+        if (a.id == id) return static_cast<uint32_t>(std::max(std::abs(a.py / 32 - t.y), std::abs(a.px / 32 - t.x))) * 16u;
+    }
+    return UINT32_MAX;
+}
+
+}  // namespace
+
+void test_nearest_first() {
+    g_group = "nearest first";
+    std::printf("[pointer] a move or an attack on a big selection names the ants nearest the clicked tile first across the whole selection (stable, the engine's key); at most 32 ants, a special order and Stop are as they were\n");
+    // the key is the engine's: 16 x Chebyshev of the tiles of the pixel positions
+    check(group_order_distance(0, 0, TileCoord{0, 0}) == 0 && group_order_distance(31, 31, TileCoord{0, 0}) == 0, "the key of an ant on the clicked tile is 0, wherever it is in the tile");
+    check(group_order_distance(32, 0, TileCoord{0, 0}) == 16 && group_order_distance(63, 0, TileCoord{0, 0}) == 16 && group_order_distance(64, 0, TileCoord{0, 0}) == 32, "16 per tile, by the tile of the pixel (pixel / 32)");
+    check(group_order_distance(96, 96, TileCoord{0, 0}) == 48 && group_order_distance(96, 160, TileCoord{0, 0}) == 80 && group_order_distance(160, 96, TileCoord{0, 0}) == 80, "the larger of the two distances (Chebyshev), not their sum or their root");
+    check(group_order_distance(0, 0, TileCoord{3, 5}) == 80 && group_order_distance(10 * 32, 9 * 32, TileCoord{3, 5}) == 112, "the clicked tile can be anywhere");
+    // Chebyshev, not Euclid: 33 ants in a row at distance 4 and one on the diagonal at (3, 3), which is farther by Euclid (4.2) and nearer by Chebyshev (3)
+    {
+        std::vector<sim::AntSnapshot> world;
+        std::vector<uint32_t> sel;
+        for (uint32_t i = 0; i < 33; ++i) {
+            world.push_back(snap(i + 1, (10 + 4) * 32, 10 * 32));          // (14, 10): 4 east of the click at (10, 10)
+            sel.push_back(i + 1);
+        }
+        world.push_back(snap(500, 13 * 32, 13 * 32));                       // (13, 13): 3 and 3
+        sel.push_back(500);
+        const std::vector<uint32_t> out = nearest_first(sel, world, TileCoord{10, 10});
+        check(out.size() == 34 && out[0] == 500, "the ant at (3, 3) is nearer than the ones at 4 (Chebyshev)");
+    }
+    // the position is the pixel position, whatever the snapshot's tile says (the engine reads pixel / 32)
+    {
+        std::vector<sim::AntSnapshot> world;
+        std::vector<uint32_t> sel;
+        for (uint32_t i = 0; i < 40; ++i) {
+            world.push_back(snap(i + 1, 40 * 32, 40 * 32));
+            sel.push_back(i + 1);
+        }
+        world[39] = snap(40, 11 * 32, 10 * 32);
+        world[39].tile_x = 50;                                              // a tile that disagrees with the pixels
+        world[39].tile_y = 50;
+        check(nearest_first(sel, world, TileCoord{10, 10})[0] == 40, "the ant is placed by its pixels");
+    }
+    // at most 32 ants: returned as they are, whatever their distances (random groups of 0 .. 32 ants)
+    {
+        bool same = true;
+        for (uint32_t seed = 1; seed <= 300; ++seed) {
+            const size_t n = seed % 33;
+            const RandomGroup g = random_group(seed, n, 60);
+            const TileCoord t{static_cast<int32_t>(seed % 60), static_cast<int32_t>((seed * 7) % 60)};
+            same = same && nearest_first(g.selection, g.world, t) == g.selection;
+        }
+        check(same, "300 random groups of 0 .. 32 ants: the list comes back as it was");
+    }
+    // 33 ants and more: a permutation, nearest first, ties in the selection order (random groups; few distinct distances on a small map give many ties)
+    {
+        bool permutation = true, ascending = true, ties = true, unchanged_input = true;
+        for (uint32_t seed = 1; seed <= 200; ++seed) {
+            const size_t n = 33 + seed * 7 % 400;
+            const RandomGroup g = random_group(seed, n, seed % 2 == 0 ? 8 : 60);
+            const TileCoord t{static_cast<int32_t>(seed % 8), static_cast<int32_t>((seed * 3) % 8)};
+            const std::vector<uint32_t> before = g.selection;
+            const std::vector<uint32_t> out = nearest_first(g.selection, g.world, t);
+            unchanged_input = unchanged_input && g.selection == before;
+            std::vector<uint32_t> a = out, b = g.selection;
+            std::sort(a.begin(), a.end());
+            std::sort(b.begin(), b.end());
+            permutation = permutation && a == b;
+            std::vector<size_t> rank(1000, 0);
+            for (size_t i = 0; i < g.selection.size(); ++i) rank[g.selection[i] - 100] = i;
+            for (size_t i = 1; i < out.size(); ++i) {
+                const uint32_t k0 = world_key(g.world, out[i - 1], t), k1 = world_key(g.world, out[i], t);
+                ascending = ascending && k0 <= k1;
+                ties = ties && (k0 != k1 || rank[out[i - 1] - 100] < rank[out[i] - 100]);
+            }
+        }
+        check(permutation && unchanged_input, "200 random selections of 33 .. 439 ants: the same ants once each, the input untouched");
+        check(ascending, "and never a farther ant before a nearer one");
+        check(ties, "ants at the same distance keep the selection order (a stable sort)");
+    }
+    // an id that the world does not hold goes last
+    {
+        std::vector<sim::AntSnapshot> world;
+        std::vector<uint32_t> sel{999};
+        for (uint32_t i = 0; i < 40; ++i) {
+            world.push_back(snap(i + 1, static_cast<int32_t>(30 + i % 5) * 32, 30 * 32));
+            sel.push_back(i + 1);
+        }
+        const std::vector<uint32_t> out = nearest_first(sel, world, TileCoord{30, 30});
+        check(out.size() == 41 && out.back() == 999, "an ant that is not in the world is named last");
+    }
+    // a click on a big selection through the HUD: the whole command list is nearest first, and so is each block
+    for (const bool attack : {false, true}) {
+        Fixture f;
+        const std::vector<uint32_t> ids = spawn_own(f, 600, attack ? AntType::Combat : AntType::Worker);
+        f.spawn(1, AntType::Worker, 30, 17);
+        f.settle();
+        RecordingSink sink(f.sim);
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.hud.order_selected(f.sim, TileCoord{30, 17}, false, attack);
+        const sim::CommandType type = attack ? sim::CommandType::GroupAttack : sim::CommandType::GroupMove;
+        const std::string what = attack ? "attack" : "move";
+        check(shaped(sink.log, type, 600), "600 ants, a " + what + ": eighteen commands of 32 and one of 24");
+        const std::vector<uint32_t> sent = ants_sent(sink.log);
+        check(sent == by_distance(f, ids, 30, 17), "a " + what + ": the commands name the ants in the order of their distance to the clicked tile, from the first ant of the first command to the last of the last");
+        bool global = true, per_block = true;
+        for (size_t i = 1; i < sent.size(); ++i) global = global && key_of(f, sent[i - 1], 30, 17) <= key_of(f, sent[i], 30, 17);
+        for (const auto& c : sink.log) {
+            for (size_t i = 1; i < c.ants.size(); ++i) per_block = per_block && key_of(f, c.ants[i - 1], 30, 17) <= key_of(f, c.ants[i], 30, 17);
+        }
+        check(global && per_block, "a " + what + ": nearest first across the whole list and inside each command");
+        // the 50 ants of the last row (one tile from the click) were the last ants of the selection: the old order named them in the last two commands
+        check(key_of(f, sink.log[0].ants[0], 30, 17) == 16 && key_of(f, sink.log.back().ants.back(), 30, 17) > key_of(f, sink.log[0].ants[31], 30, 17), "the nearest ant leads the first command and the farthest ends the last");
+        check(sink.log[0].ants != std::vector<uint32_t>(ids.begin(), ids.begin() + 32), "the first command is no longer the first 32 selected ants");
+        check(sink.log.size() == 19 && std::all_of(sink.log.begin(), sink.log.end(), [&](const sim::Command& c) { return c.tile_x == 30 && c.tile_y == 17 && c.issuer == 0; }), "every command has the clicked tile and the issuer");
+    }
+    // the same through the pointer (a right click on the ground, which a touch tap and the keyboard's order go through as well)
+    {
+        Fixture f;
+        const std::vector<uint32_t> ids = spawn_own(f, 300, AntType::Worker);
+        RecordingSink sink(f.sim);
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.click_tile(8, 50, SDL_BUTTON_RIGHT);
+        check(shaped(sink.log, sim::CommandType::GroupMove, 300) && ants_sent(sink.log) == by_distance(f, ids, 8, 50), "a right click: nearest the clicked tile first");
+    }
+    // at most 32 ants through the HUD, random groups in a random order, move and attack: ONE command with the ants exactly in the selection order (the bytes that were always sent)
+    {
+        Fixture f;
+        const std::vector<uint32_t> all = spawn_own(f, 120, AntType::Worker);
+        ScriptedSink sink;
+        f.hud.set_command_sink(&sink);
+        bool identical = true;
+        for (uint32_t seed = 1; seed <= 120; ++seed) {
+            const RandomGroup g = random_group(seed, all.size(), 4);
+            const size_t n = 1 + seed % 32;
+            std::vector<uint32_t> group;
+            for (size_t i = 0; i < n; ++i) group.push_back(all[g.selection[i] - 100]);
+            f.hud.set_selected_ant_ids(group);
+            const int16_t tx = static_cast<int16_t>(5 + seed % 50), ty = static_cast<int16_t>(5 + (seed * 11) % 50);
+            for (const bool attack : {false, true}) {
+                sink.log.clear();
+                f.hud.order_selected(f.sim, TileCoord{tx, ty}, false, attack);
+                identical = identical && sink.log.size() == 1 && bytes_of(sink.log[0]) == bytes_of(make_cmd(attack ? sim::CommandType::GroupAttack : sim::CommandType::GroupMove, tx, ty, group));
+            }
+        }
+        check(identical, "120 random groups of 1 .. 32 ants, a move and an attack each: one command with the bytes of the old click");
+    }
+    // a special order is the first 32 SELECTED ants, not the nearest (the click is on the far end of the rows), and Stop names the selection in its own order
+    {
+        Fixture f;
+        const std::vector<uint32_t> ids = spawn_own(f, 300, AntType::Bomber);
+        ScriptedSink sink;
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.hud.order_selected(f.sim, TileCoord{30, 54}, true, false);
+        check(sink.log.size() == 1 && bytes_of(sink.log[0]) == bytes_of(old_special(ids, 30, 54)), "300 bombers, a special order far from the first ones: the first 32 selected ants, in the selection order");
+        sink.log.clear();
+        press_stop(f);
+        check(sink.log.size() == 10 && ants_sent(sink.log) == ids, "Stop: the selection order, 300 ants in ten commands");
+    }
+    // the budget: 1,600 ants (rows 5 to 36), the click at the bottom left: the 64 left out are the 64 farthest (the top row), not the last 64 selected, and every ant that is ordered is nearer than every ant that is not
+    {
+        Fixture f;
+        f.sim.grid_mut().set_anthill(1, TileCoord{40, 40});
+        const std::vector<uint32_t> ids = spawn_own(f, 1600, AntType::Thief);
+        ScriptedSink sink;
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        f.hud.order_selected(f.sim, TileCoord{5, 36}, false, false);
+        const std::vector<uint32_t> sent = ants_sent(sink.log);
+        std::vector<uint32_t> left = ids;
+        left.erase(std::remove_if(left.begin(), left.end(), [&](uint32_t id) { return std::find(sent.begin(), sent.end(), id) != sent.end(); }), left.end());
+        uint32_t far_sent = 0, near_left = UINT32_MAX;
+        for (uint32_t id : sent) far_sent = std::max(far_sent, key_of(f, id, 5, 36));
+        for (uint32_t id : left) near_left = std::min(near_left, key_of(f, id, 5, 36));
+        check(sent.size() == 1536 && left.size() == 64 && far_sent <= near_left, "1,536 ordered and 64 left out, and the ones left out are not nearer than any ordered ant");
+        const std::vector<uint32_t> nearest = by_distance(f, ids, 5, 36);
+        check(sent == std::vector<uint32_t>(nearest.begin(), nearest.begin() + 1536), "the ordered ants are the 1,536 nearest, nearest first");
+        check(f.hud.status_line().text() == "Only 1536 ants ordered.", "and the line is the one it was");
+    }
+    // 600 walking workers, the click on the tile of one of them in the crowd: the ants at the click come before the ants ten tiles away, in whatever block they were
+    {
+        Fixture f;
+        const std::vector<uint32_t> ids = spawn_own(f, 600, AntType::Worker);
+        make_walk(f, ids);
+        RecordingSink sink(f.sim);
+        f.hud.set_command_sink(&sink);
+        select_all(f);
+        const int32_t tx = f.unit(ids[300]).pixel_x / 32, ty = f.unit(ids[300]).pixel_y / 32;
+        f.hud.order_selected(f.sim, TileCoord{tx, ty}, false, false);
+        const std::vector<uint32_t> sent = ants_sent(sink.log);
+        size_t last_near = 0, first_far = sent.size();
+        bool any_far = false;
+        for (size_t i = 0; i < sent.size(); ++i) {
+            const uint32_t k = key_of(f, sent[i], tx, ty);
+            if (k <= 16) last_near = i;
+            if (k >= 160 && !any_far) {
+                any_far = true;
+                first_far = i;
+            }
+        }
+        check(any_far && last_near < first_far && sent == by_distance(f, ids, tx, ty), "the ants at the click come before the ants ten tiles away, in whatever block they were");
     }
 }
