@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only). No map of the library changes.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c119406e...HEAD)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c119406e...491cf5a8)
 
 ## v0.12.143 - 2026-10-27 - Big-map warning moves from 300 to 2,400 starting ants
 
