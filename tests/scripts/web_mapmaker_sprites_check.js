@@ -10,7 +10,7 @@
 //   A  loading: the index and the two sheets come in, the average colors replace the flat ones, a missing file, a bad index and a picture that does not load each leave the page flat (onFail)
 //   B  a whole frame: every visible cell has its ground tile from the right place of the sheet, the cells tile the view without a gap, the objects come only from anchor cells, in row order,
 //      each at its cell's corner plus the picture's own offset; hills and the other objects of the game's order; nothing is drawn for an id that has no picture
-//   C  the pictures show from 10 pixels a cell up and not below; a frame without the atlas is the flat one
+//   C  the pictures show at every zoom (the ground only as its smooth average color under 4 device pixels a cell or with more than 12,000 cells in view, the objects always pictures); a frame without the atlas is the flat one
 //   D  a pan moves the layer and paints only the strip that came into view; the same view again paints nothing; a stroke paints again only the part round its cells (with the margin that the
 //      pictures reach) and not before; another map, a reset, a new size or a zoom beyond a third paints it all
 //   E  a zoom that changes a little is the last picture stretched (one draw), and a crisp frame follows when it rests
@@ -122,13 +122,14 @@ function put2(f, r, c, id, flags) { const at = f.layer2 + 6 * (r * f.columns + c
 function tile1(f, r, c) { const at = f.layer1 + 6 * (r * f.columns + c); return f.bytes[at] | (f.bytes[at + 1] << 8); }
 
 // the frame of a view at `scale` over the cells (cx, cy), in a w x h canvas; returns the log of the calls that it made
-function frame(rig, file, view, w, h, extra) {
+function frameOf(rig, file, view, w, h, extra) {
     const ctx = rig.env.makeCanvas().getContext('2d');
     ctx.owner.name = 'main';
     rig.env.log.length = 0;
     const done = View.draw(ctx, view, file, w, h, Object.assign({ sprites: rig.sprites, dpr: 1, scratch: rig.env.makeCanvas() }, extra || {}));
     return { calls: rig.env.log.slice(), done, ctx };
 }
+function frame(rig, file, view, w, h, extra) { return frameOf(rig, file, view, w, h, extra); }
 const fromSheet = (calls, name) => calls.filter((c) => c.op === 'drawImage' && c.img && c.img.url && c.img.url.indexOf(name) >= 0);
 // a tile of the ground (drawn from a canvas: the scaled sheet or the atlas's own picture), the layer put on the canvas (2 numbers, or the whole of it stretched), a picture of an object
 const isTile = (c, w, h) => c.op === 'drawImage' && c.a.length === 8 && !(c.img && c.img.width === c.a[2] && c.a[2] === w && c.a[3] === h && c.a[0] === 0 && c.a[1] === 0) && !(c.img && c.img.url);          // (the pictures that come from a file: objects, far toys, and the sheet while a tile is first scaled)
@@ -137,7 +138,7 @@ const isObject = (c) => c.op === 'drawImage' && c.img && c.img.url && /objects\.
 async function caseA() {
     const r = await ready();
     check(r.sprites.ready() && r.events.ready === 1 && r.events.fail === 0, 'the atlas loads: ready once, no failure');
-    equal([r.sprites.FROM, r.sprites.ANT_FROM], [10, 12], 'pictures from 10 pixels a cell, the ant from 12');
+    equal([Sprites.TINY, Sprites.MAX_TEXTURED, Sprites.ANT_FROM], [4, 12000, 12], 'smooth ground under 4 pixels a cell or over 12,000 cells, the ant from 12 pixels');
     Tiles.setAverages('000000'.repeat(239), {});     // (put the flat colors away, then load again below to see the averages come from the atlas)
     const again = await ready();
     check(Tiles.css(485, EMPTY2) === '#' + INDEX.ground.avg.substr((485 - 431) * 6, 6), 'the average colors of the pictures replace the flat ones: ' + Tiles.css(485, EMPTY2));
@@ -227,19 +228,61 @@ async function caseB() {
     }
 }
 
+// a made-up map of rows x columns cells, all gravel with nothing on layer 2 (only what the pictures' layer reads of a file), with the dictionary of `like`
+function bigFile(like, rows, columns) {
+    const cells = rows * columns, layer1 = like.layer1, layer2 = layer1 + 6 * cells, bytes = new Uint8Array(layer2 + 6 * cells + 16);
+    bytes.set(like.bytes.subarray(0, layer1));
+    for (let i = 0; i < cells; i++) { bytes[layer1 + 6 * i] = 485 & 255; bytes[layer1 + 6 * i + 1] = 485 >> 8; bytes[layer2 + 6 * i] = EMPTY2 & 255; bytes[layer2 + 6 * i + 1] = EMPTY2 >> 8; }
+    return Object.assign({}, like, { bytes, rows, columns, cells, layer1, layer2, blocksAt: layer2 + 6 * cells, markers: [], food: [], plants: [] });
+}
+
 async function caseC() {
-    const rig = await ready(), f = treasure(), w = 600, h = 400;
-    for (const [scale, sprites] of [[48, true], [20, true], [12, true], [10, true], [9.99, false], [8, false], [6, false], [5, false], [3, false]]) {
-        const view = { scale, cx: f.columns / 2, cy: f.rows / 2 }, out = frame(rig, f, view, w, h);
-        check((out.done.sprites === 1) === sprites && (sprites ? out.done.rects + out.done.pixels === 0 : out.done.rects + out.done.pixels > 0), scale + ' pixels a cell: ' + (sprites ? 'pictures' : 'flat colors') + ' (' + JSON.stringify(out.done) + ')');
+    const rig = await ready(), f = treasure(), w = 600, h = 400, tab = Tiles.tableOf(f);
+    const frame = (r, file, view, W, H, extra) => { r.env.clock.t += 1000; return frameOf(r, file, view, W, H, extra); };          // (a second later: a frame that follows a zoom closely would be the last one stretched)
+    const layerFills = (out) => out.calls.filter((c) => c.op === 'fillRect' && c.owner !== out.ctx.owner && c.fill !== Tiles.BACK);          // (a smooth cell: a rectangle of the ground's average color on the kept layer)
+    const tiles = (out) => out.calls.filter((c) => isTile(c, w, h)).length, cellsOf = (file, view, W, H) => { const v = View.visible(view, file, W, H); return (v.r1 - v.r0 + 1) * (v.c1 - v.c0 + 1); };
+    for (const scale of [48, 20, 12, 10, 9.99, 8, 6, 5, 4, 3.99, 3, 1.5, 1]) {
+        const view = { scale, cx: f.columns / 2, cy: f.rows / 2 }, out = frame(rig, f, view, w, h), smooth = scale < 4, cells = cellsOf(f, view, w, h);
+        check(out.done.sprites === 1 && out.done.rects + out.done.pixels === 0, scale + ' pixels a cell: the frame is the pictures at every zoom (' + JSON.stringify(out.done) + ')');
         const squares = out.calls.filter((c) => (c.op === 'fillRect' && c.fill === Tiles.FOOD) || c.op === 'strokeRect').length;
-        check(sprites || scale < 6 ? squares === 0 : squares > 0, scale + ' pixels a cell: ' + (sprites ? 'no gold square for the food pile (the picture shows it)' : (scale >= 6 ? 'the food pile is its gold square' : 'no square at all')));
-        if (sprites && scale === 20) {
+        check(squares === 0, scale + ' pixels a cell: no gold square for the food pile (its picture shows it)');
+        if (smooth) {
+            const fills = layerFills(out), want = {};
+            for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.columns; c++) want[Tiles.css(tile1(f, r, c), EMPTY2, tab)] = 1;
+            const area = fills.reduce((t, c) => t + c.a[2] * c.a[3], 0);
+            check(Math.abs(area - cells * scale * scale) < 0.005 * cells * scale * scale, scale + ' pixels a cell: the smooth cells tile the view with no gap and no overlap (' + area + ' pixels of ' + cells * scale * scale + ')');
+            check(tiles(out) === 0 && fills.length === cells && fills.every((c) => want[c.fill]), scale + ' pixels a cell: the ground is the smooth average color of each cell (' + fills.length + ' of ' + cells + ' cells, ' + tiles(out) + ' tile pictures)');
+        } else check(tiles(out) === cells && layerFills(out).length === 0, scale + ' pixels a cell: the ground is the tile pictures (' + tiles(out) + ' of ' + cells + ' cells)');
+        check(out.calls.filter(isObject).length > 10 || scale <= 1.5, scale + ' pixels a cell: the objects are still pictures');
+        if (scale === 20) {
             const T = 20, g = INDEX.ground, prepared = new Set(out.calls.filter((c) => c.op === 'drawImage' && c.img && c.img.url && /ground\.png/.test(c.img.url)).map((c) => (c.a[5] / T) * g.columns + c.a[4] / T));
             const used = new Set(out.calls.filter((c) => isTile(c, w, h)).map((c) => (c.a[1] / T) * g.columns + c.a[0] / T));
             check(used.size > 3 && Array.from(used).every((k) => prepared.has(k)), 'every tile of the scaled sheet that is drawn from was scaled first (' + used.size + ' tiles)');
         }
     }
+    // the smooth ground is counted in device pixels: a phone at 3 times shows 1.5 pixels a cell as 4.5, and 1.3 as 3.9
+    for (const [scale, dpr, smooth] of [[1.5, 3, false], [1.3, 3, true], [1.9, 2, true], [2, 2, false]]) {
+        const out = frame(rig, f, { scale, cx: 30, cy: 30 }, w, h, { dpr });
+        check(smooth ? tiles(out) === 0 : tiles(out) > 0, scale + ' pixels a cell at ' + dpr + 'x: ' + (smooth ? 'smooth' : 'the tile pictures') + ' (' + tiles(out) + ' tile pictures)');
+    }
+    // more than 12,000 cells in the canvas AND in the map: smooth too, however big a tile is; the canvas of a small map never counts beyond the map
+    const big = bigFile(f, 130, 100), W = 1400, H = 900;
+    const above = frame(rig, big, { scale: 10, cx: 50, cy: 65 }, W, H), below = frame(rig, big, { scale: 11, cx: 50, cy: 65 }, W, H);
+    check(tiles(above) === 0 && layerFills(above).length === 9000, 'a 13,000-cell map in a 1400 x 900 canvas at 10 pixels (12,600 cells in the canvas, 9,000 of them map): smooth ground (' + layerFills(above).length + ' rectangles, ' + tiles(above) + ' tile pictures)');
+    check(tiles(below) === cellsOf(big, { scale: 11, cx: 50, cy: 65 }, W, H) && layerFills(below).length === 0, 'at 11 pixels (10,413 cells in the canvas): the tile pictures (' + tiles(below) + ')');
+    const small = frame(rig, f, { scale: 10, cx: 30, cy: 30 }, W, H);
+    check(tiles(small) === 3600, 'a 3,600-cell map in the same big canvas stays on the tile pictures (' + tiles(small) + ')');
+    // a pan keeps the way of the layer, so that no strip of one kind is put beside the other
+    const huge = bigFile(f, 200, 200), first = frame(rig, huge, { scale: 5, cx: 100, cy: 100 }, 700, 450), panned = frame(rig, huge, { scale: 5, cx: 100 + 10 / 5, cy: 100 }, 700, 450);
+    check(layerFills(first).length > 12000 && tiles(panned) === 0 && layerFills(panned).length > 0 && layerFills(panned).length < 400, 'a pan paints only the strip that came into view, in the same smooth way (' + layerFills(first).length + ' rectangles, then ' + layerFills(panned).length + ')');
+    // the smooth color follows the dictionary's names, as the pictures do
+    const named = bigFile(f, 40, 40), t2 = Tiles.tableOf(named), before = Tiles.css(485, EMPTY2, t2), other = [431, 520, 571, 640, 669].find((k) => INDEX.ground.avg.substr((k - 431) * 6, 6) !== INDEX.ground.avg.substr((485 - 431) * 6, 6));
+    setName(named, 485, INDEX.names[other]);
+    const after = Tiles.css(485, EMPTY2, Tiles.tableOf(named)), smoothNamed = frame(rig, named, { scale: 3, cx: 20, cy: 20 }, w, h), renamed = layerFills(smoothNamed);
+    check(before !== after && renamed.length > 0 && renamed.every((c) => c.fill === after), 'a tile named for another ground has that ground\'s smooth color (' + after + ' not ' + before + ')');
+    setName(named, 485, '.');
+    const blank = frame(rig, named, { scale: 3, cx: 20, cy: 20 }, w, h);
+    check(blank.calls.filter((c) => c.op === 'fillRect' && c.owner !== blank.ctx.owner && c.fill === Tiles.BACK).length >= 1600 && layerFills(blank).length === 0, 'and "." is the black that the game leaves, as with the pictures');
     const flat = Sprites.create({ doc: rig.env.doc, win: rig.env.win });
     const out = frame({ env: rig.env, sprites: flat }, f, { scale: 20, cx: 30, cy: 30 }, w, h);
     check(out.done.sprites === 0 && out.done.rects > 0, 'before the atlas is in (or when it is not), the frame is the flat one');
@@ -372,6 +415,10 @@ async function caseG() {
     check(blacks > 0 && strokes === inView.length + blacks, 'in the color of its team, and the black one with a thin white edge (' + strokes + ' lines for ' + inView.length + ' rings and ' + blacks + ' black ones)');
     const small = frame(rig, f, { scale: 11, cx: f.columns / 2, cy: f.rows / 2 }, w, h);
     check(small.calls.filter((c) => c.op === 'drawImage' && antXs.has(c.a[0]) && c.a[2] === 23).length === 0 && small.calls.filter((c) => c.op === 'arc').length >= 20, 'below 12 pixels a cell the ants are dots in the team\'s color');
+    for (const [scale, radius] of [[1, 1], [3, 1.2], [4.9, 1.96], [5, 1.5], [8, 2.4]]) {
+        const dots = frame(rig, f, { scale, cx: f.columns / 2, cy: f.rows / 2 }, w, h).calls.filter((c) => c.op === 'arc');
+        check(dots.length >= 20 && dots.every((c) => Math.abs(c.a[2] - radius) < 1e-9), 'at ' + scale + ' pixels a cell a start dot has the radius ' + radius + ' (smaller where a cell is under 5 pixels, so that it is not a blob over the cells): ' + (dots[0] ? dots[0].a[2] : 'none'));
+    }
     // when the map has a specialist Default Ant Type (e.g. 64 Bomber ant), starting ants draw that specialist sprite in each team's color
     const bomberMap = Object.assign({}, f, { defaultType: 64 }), bomberEntry = INDEX.antTypes['64'];
     const bomberXs = new Set(['black', 'blue', 'red', 'green'].map((t) => bomberEntry[t][0])), bomberSample = INDEX.objects.items[String(bomberEntry.id)];
@@ -465,8 +512,8 @@ async function caseI() {
     // the flat colors follow the names
     setName(f, 340, 'smlrock1');
     put2(f, 20, 25, 340, 1);
-    const flat = frame(rig, f, { scale: 6, cx: 30, cy: 30 }, w, h), s6 = 6, fx = Math.round(w / 2 - 30 * s6 + 25 * s6), fy = Math.round(h / 2 - 30 * s6 + 20 * s6);
-    check(flat.calls.some((c) => c.op === 'fillRect' && c.a[0] === fx && c.a[1] === fy && c.fill === Tiles.css(0, 302, null)), 'at 6 pixels a cell the rectangle of a tile named smlrock1 is that rock\'s color: ' + Tiles.css(0, 302, null));
+    const flat = frame({ env: rig.env, sprites: null }, f, { scale: 6, cx: 30, cy: 30 }, w, h), s6 = 6, fx = Math.round(w / 2 - 30 * s6 + 25 * s6), fy = Math.round(h / 2 - 30 * s6 + 20 * s6);
+    check(flat.calls.some((c) => c.op === 'fillRect' && c.a[0] === fx && c.a[1] === fy && c.fill === Tiles.css(0, 302, null)), 'with no pictures at 6 pixels a cell the rectangle of a tile named smlrock1 is that rock\'s color: ' + Tiles.css(0, 302, null));
     const rockColor = Tiles.css(0, 302, null), rockPacked = Tiles.hexToPacked(rockColor), scratch = rig.env.makeCanvas(), small = { scale: 3, cx: 30, cy: 30 };
     View.draw(rig.env.makeCanvas().getContext('2d'), small, f, w, h, { scratch, sprites: null });
     const kept = scratch.keptImage, px = new Uint32Array(kept.data.buffer), pxAt = (r, c) => px[Math.round(h / 2 - 30 * 3 + r * 3 + 1) * kept.width + Math.round(w / 2 - 30 * 3 + c * 3 + 1)];

@@ -59,7 +59,7 @@ Parts:
              paints (a tool), a tap paints a cell, two fingers do not paint;
   * sprites  1280 x 800, a touch screen (390 x 844), the game's own pictures (the other parts run with the atlas refused, so that their pixel checks read the flat colors): the atlas comes in, a gravel cell
              shows a texture, the Ground tool has five chips (Gravel, Dirt, Slate, Mud, Water), a second tap on a kind opens "all its tiles" (the plain tile and 3 x 8 edge pieces, the brush row, the gold ring),
-             a tile of the sheet paints, Undo takes it back, a map under 10 pixels a cell is drawn in the pictures' average colors, a 512 x 512 map is panned with the processor 4 times slower and frames keep
+             a tile of the sheet paints, Undo takes it back, a map under 10 pixels a cell still shows the pictures and one under 4 pixels a cell has the smooth average color of the ground, a 512 x 512 map is panned with the processor 4 times slower and frames keep
              the screen's pace; with the atlas refused the page says so in a plain line and draws flat colors; the tools column has no scrollbar; a phone has the sheets with 52 pixel chips and 44 pixel buttons;
   * layer    the kept layer of the sprite canvas against a frame made from nothing, pixel for pixel (also run alone by the mutants of tests/data/mapmaker_sprites_mutants.json);
   * edges    1280 x 800, Fix edges on a copy of the original map MEDIUM (60 x 60) with its edge pieces put back to plain tiles, then on the originals TREASURE (nothing to change) and ISLANDS (its two gaps), in the real browser, with the atlas: the button is on when the lazy scripts are there; the dialog offers the part you can see
@@ -416,7 +416,7 @@ def make_extended(page, rows, columns):
 
 
 def run_sprites(tab, args, check):
-    """the game's own pictures (docs/MAP_EDITOR.md, "Sprites"): the atlas loads, the canvas draws pictures from 10 pixels a cell up and average colors below, the Ground tool has five kinds and a sheet of every
+    """the game's own pictures (docs/MAP_EDITOR.md, "Sprites"): the atlas loads, the canvas draws pictures at every zoom (the ground as its average color under 4 pixels a cell), the Ground tool has five kinds and a sheet of every
     tile of a kind, the page works and says so when the atlas does not load, a phone has the sheets, the tools column has no scrollbar, and a pan of a big map does not stutter"""
     print("[web map maker] sprites, 1280 x 800")
     tab.emulate(1280, 800, 1)
@@ -465,14 +465,14 @@ def run_sprites(tab, args, check):
     page.tab.mouse("mouseMoved", bx["x"] + 300, bx["y"] + 300, button="none")
     time.sleep(0.4)
     page.shot(args.shots, "mapmaker-sprites-bigger-ghost")
-    # a map that is whole at under 10 pixels a cell is drawn in the pictures' average colors
+    # a map that is whole at under 10 pixels a cell is still drawn in the pictures (a gravel cell has its texture)
     page.tool("ground")
     page.tile(485)
     check(make_extended(page, 100, 100), "an Extended map of 100 x 100 is made")
     time.sleep(0.4)
     s = page.state()
     check(s["scale"] < 10, "whole, it is under 10 pixels a cell (%s)" % s["scale"])
-    check(spread(page, 50, 50, 4) == 1 and page.pixel(*page.cell_point(50, 50)) == page.color_of(485), "so it is drawn in the average color of the picture, one color for a gravel cell")
+    check(spread(page, 50, 50, 4) >= 3, "so it is drawn in the pictures, a texture for a gravel cell and not one flat color (%s pixels a cell)" % s["scale"])
     page.shot(args.shots, "mapmaker-sprites-zoomed-out")
     page.ev("document.querySelector('[data-act=zoom-in]').click()"); page.ev("document.querySelector('[data-act=zoom-in]').click()")
     time.sleep(0.4)
@@ -480,6 +480,11 @@ def run_sprites(tab, args, check):
     check(s["scale"] >= 10 and spread(page, 50, 50) >= 3, "zoomed in again it draws the pictures (%s pixels a cell)" % s["scale"])
     # a map of 512 x 512, panned: frames come at the screen's pace even with the processor slowed down 4 times
     check(make_extended(page, 512, 512), "an Extended map of 512 x 512 is made")
+    for _ in range(12):
+        page.ev("document.querySelector('[data-act=zoom-out]').click()")
+    time.sleep(0.8)
+    s = page.state()
+    check(s["scale"] < 4 and spread(page, 256, 256, 4) == 1 and page.pixel(*page.cell_point(256, 256)) == page.color_of(485), "whole, under 4 pixels a cell (%s), the ground is the smooth average color of its picture, one color for a gravel cell" % s["scale"])
     page.ev("document.getElementById('map').focus()")
     page.ev("window.__fr = []; (function () { var l = performance.now(); function f(n) { window.__fr.push(n - l); l = n; requestAnimationFrame(f); } requestAnimationFrame(f); })()")
     page.tab.call("Emulation.setCPUThrottlingRate", {"rate": 4})

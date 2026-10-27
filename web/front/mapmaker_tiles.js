@@ -1,5 +1,5 @@
 // The colors that stand for the tiles on the map maker's canvas (docs/MAP_EDITOR.md): one color for a kind of ground and a few for the kinds of object. They are what the canvas shows while the
-// game's pictures are not loaded (the atlas, mapmaker_sprites.js) and, once they are, the average color of each picture for tiles smaller than 10 pixels (setAverages). The kinds follow the tile
+// game's pictures are not loaded (the atlas, mapmaker_sprites.js) and, once they are, the average color of each picture (setAverages), for the smooth ground, the start dots and the page with no atlas. The kinds follow the tile
 // ids of docs/MAP_FORMAT.md and the names of Table 4 of ants.chd: layer 1 ids 431 to 669 are ground, and the first letter of a tile's name is its kind: g Gravel, d Dirt, s Slate, m and M Mud,
 // w Water (mapmaker_ground.js lists every tile); layer 2 holds the objects. It also holds the game's own way from a tile of a map to its picture (the animation: tableOf and the rules below,
 // docs/MAP_EDITOR.md, "Sprites"): the map's dictionary decides, as in the game's renderer. A plain ES5 script that a page and node can load.
