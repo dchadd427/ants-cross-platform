@@ -19,7 +19,7 @@
     var TEAM_CODES = { hill_missing: 1, hill_without_entrance: 1, hills_several: 1, starting_ants_missing: 1 };      // the findings that are about one color's start (their `team` says which)
     var KEPT = 3;                                                                       // the hand-overs that this tab keeps (a game tab that is reloaded asks for its own again)
     var TOAST_MS = 7000;
-    var HEAVY_START_ANTS = 300;                                                         // above this many start ants (all colors together) a map is heavy: the server's OnlineLimits::kHeavyStartAnts (include/ants_server/online_limits.hpp), which a test keeps equal to this
+    var HEAVY_START_ANTS = 2400;                                                        // above this many start ants (all colors together) a map is heavy: the server's OnlineLimits::kHeavyStartAnts (include/ants_server/online_limits.hpp), which a test keeps equal to this
 
     function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
     // The one warning for a heavy map, in both tabs: a warning only, nothing is refused and no button is turned off

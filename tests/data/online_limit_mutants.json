@@ -793,10 +793,10 @@
    "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
   },
   {
-   "id": "heavy_from_301_up_is_300",
+   "id": "heavy_from_2401_up_is_2400",
    "file": "include/ants_server/online_limits.hpp",
-   "old": "static constexpr uint32_t kHeavyStartAnts = 300;",
-   "new": "static constexpr uint32_t kHeavyStartAnts = 301;",
+   "old": "static constexpr uint32_t kHeavyStartAnts = 2400;",
+   "new": "static constexpr uint32_t kHeavyStartAnts = 2401;",
    "build": [
     "test_map_list",
     "test_server"
@@ -804,10 +804,10 @@
    "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
   },
   {
-   "id": "heavy_from_299",
+   "id": "heavy_from_2399",
    "file": "include/ants_server/online_limits.hpp",
-   "old": "static constexpr uint32_t kHeavyStartAnts = 300;",
-   "new": "static constexpr uint32_t kHeavyStartAnts = 299;",
+   "old": "static constexpr uint32_t kHeavyStartAnts = 2400;",
+   "new": "static constexpr uint32_t kHeavyStartAnts = 2399;",
    "build": [
     "test_map_list",
     "test_server"

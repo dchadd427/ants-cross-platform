@@ -59,10 +59,10 @@ function verdictChecks() {
     let v = verdictOf();
     check(v.ok && v.seats.length === 4 && usable(v) === '1111', 'four colors with ants and a hill: all four can play');
     check(v.ants === 12 && v.heavy === false, 'the ants are the start markers of the four colors added up (12 here), and 12 is not heavy');
-    v = verdictOf({ teams: [[100, 16], [100, 16], [100, 16], [1, 0]] });
-    check(v.ok && usable(v) === '1110' && v.ants === 301 && v.heavy === true, 'a color that cannot play (no hill) still has its start markers counted, as the server counts them: 301 is heavy');
-    v = verdictOf({ teams: [[100, 16], [100, 16], [100, 16], [0, 16]] });
-    check(v.ok && v.ants === 300 && v.heavy === false, '300 is not heavy');
+    v = verdictOf({ teams: [[800, 16], [800, 16], [800, 16], [1, 0]] });
+    check(v.ok && usable(v) === '1110' && v.ants === 2401 && v.heavy === true, 'a color that cannot play (no hill) still has its start markers counted, as the server counts them: 2,401 is heavy');
+    v = verdictOf({ teams: [[800, 16], [800, 16], [800, 16], [0, 16]] });
+    check(v.ok && v.ants === 2400 && v.heavy === false, '2,400 is not heavy');
     v = verdictOf();
     equal(v.seats.map((s) => [s.seat, s.name, s.ants, s.hills]), [[0, 'Green', 3, 1], [1, 'Red', 3, 1], [2, 'Blue', 3, 1], [3, 'Black', 3, 1]], 'the seats are the game\'s own: Green 0, Red 1, Blue 2, Black 3, with their ants and hills');
     check(verdictOf({ rows: 90 }).ok && !verdictOf({ rows: 91 }).ok, 'Classic: ninety rows play, ninety-one do not');
@@ -456,11 +456,11 @@ function dialogChecks() {
     check(rrec && rrec.name === 'Mosh Pit' && digest(rrec.bytes) === before && rrec.bytes !== bytes, 'the lobby tab receives a copy of the open map bytes');
     const warnings = (p, panel) => all(p, panel + ' .play-status').filter((n) => n.textContent.indexOf('may run slowly') >= 0);
     equal([warnings(p, '.play-panel-bots').length, warnings(p, '.play-panel-friends').length], [0, 0], 'a map of 12 ants has no word about ants in either panel');
-    // a map of more than 300 start ants (all colors together): a warning in both tabs, under the intro, nothing refused and nothing turned off; 300 is not heavy
-    for (const [ants, heavy] of [[300, false], [301, true], [6000, true]]) {
+    // a map of more than 2,400 start ants (all colors together): a warning in both tabs, under the intro, nothing refused and nothing turned off; 2,400 is not heavy
+    for (const [ants, heavy] of [[2400, false], [2401, true], [6000, true]]) {
         const per = [Math.floor(ants / 4), Math.floor(ants / 4), Math.floor(ants / 4), ants - 3 * Math.floor(ants / 4)];
         const big = answers({ teams: per.map((n) => [n, 16]) });
-        const count = ants === 6000 ? '6,000' : String(ants);
+        const count = ants === 6000 ? '6,000' : ants === 2400 ? '2,400' : '2,401';
         const word = 'This map starts with ' + count + ' ants, so a game may run slowly, especially on phones and older computers.';
         p = pageOf();
         Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } }));
@@ -486,7 +486,7 @@ function dialogChecks() {
         startButton(p).click();
         check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: the game against bots opens the game page');
     }
-    check(Play.HEAVY_START_ANTS === 300 && Play.heavyText(1234567) === 'This map starts with 1,234,567 ants, so a game may run slowly, especially on phones and older computers.', 'the threshold is 300 and the words write the number with thousands separators');
+    check(Play.HEAVY_START_ANTS === 2400 && Play.heavyText(1234567) === 'This map starts with 1,234,567 ants, so a game may run slowly, especially on phones and older computers.', 'the threshold is 2,400 and the words write the number with thousands separators');
     equal(digest(bytes), before, 'at the end the open file is still as it was');
 }
 

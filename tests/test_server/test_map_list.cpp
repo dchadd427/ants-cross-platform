@@ -566,7 +566,7 @@ int main() {
         ASSERT_TRUE(std::string(net::kNoticeMapTooBig).find("65,536 cells") != std::string::npos && std::string(net::kNoticeMapTooBig).size() <= net::kMaxChatChars);
     } TEST_END();
 
-    TEST_CASE("ML4.5 The start ants of a map: counted from the file (the start markers of the four colors added up), 300 is not heavy and 301 is; the 540 maps of the library start at most 248, so none is marked; the list says \"ants\" and \"heavy\" of a heavy map only (the newest list); and nothing is refused for them: the lobby may choose a map of 6,000 ants") {
+    TEST_CASE("ML4.5 The start ants of a map: counted from the file (the start markers of the four colors added up), 2,400 is not heavy and 2,401 is; the 540 maps of the library start at most 248, so none is marked; the list says \"ants\" and \"heavy\" of a heavy map only (the newest list); and nothing is refused for them: the lobby may choose a map of 6,000 ants") {
         MapStore store(maps_dir(), community_dir());
         store.scan();
         uint64_t most = 0;
@@ -586,7 +586,7 @@ int main() {
         ASSERT_EQ(heavy, size_t{0});                                                           // (no map of the library is heavy today)
         ASSERT_EQ(most, uint64_t{248});
         ASSERT_TRUE(store.list_json(nullptr, true).find("\"heavy\"") == std::string::npos && store.list_json(nullptr, true).find("\"ants\"") == std::string::npos);
-        ASSERT_TRUE(OnlineLimits::kHeavyStartAnts == 300u && !OnlineLimits::heavy(300) && OnlineLimits::heavy(301) && !OnlineLimits::heavy(0));
+        ASSERT_TRUE(OnlineLimits::kHeavyStartAnts == 2400u && !OnlineLimits::heavy(2400) && OnlineLimits::heavy(2401) && !OnlineLimits::heavy(0));
         TempDir dir;
         const auto keep = [&](const std::string& name, const std::array<uint32_t, 4>& per_color, const char* kind = "classic") {
             const std::string bytes = tiny_with_ants(per_color);
@@ -606,42 +606,42 @@ int main() {
             net::hash_file(a.path, a.hash);
             return a;
         };
-        store.set_approved({keep("Ants 300.lvl", {75, 75, 75, 75}), keep("Ants 301.lvl", {75, 75, 75, 76}), keep("Ext 300.lvl", {75, 75, 75, 75}, "extended"), keep("Ext 301.lvl", {75, 75, 75, 76}, "extended"),
+        store.set_approved({keep("Ants 2400.lvl", {600, 600, 600, 600}), keep("Ants 2401.lvl", {600, 600, 600, 601}), keep("Ext 2400.lvl", {600, 600, 600, 600}, "extended"), keep("Ext 2401.lvl", {600, 600, 600, 601}, "extended"),
                             keep("Uneven 6000.lvl", {1, 1, 1, 5997}), keep("Huge 6000.lvl", {1500, 1500, 1500, 1500}, "extended")});
         const ctl::JsonValue newest = parse_text(store.list_json(nullptr, true));
-        for (const auto& [file, ants] : std::vector<std::pair<const char*, int64_t>>{{"Ants 301.lvl", 301}, {"Ext 301.lvl", 301}, {"Uneven 6000.lvl", 6000}, {"Huge 6000.lvl", 6000}}) {
+        for (const auto& [file, ants] : std::vector<std::pair<const char*, int64_t>>{{"Ants 2401.lvl", 2401}, {"Ext 2401.lvl", 2401}, {"Uneven 6000.lvl", 6000}, {"Huge 6000.lvl", 6000}}) {
             const ctl::JsonValue* e = entry_of(newest, file);
             ASSERT_TRUE(e != nullptr);
             ASSERT_TRUE(e->get("heavy").as_bool_or(false) && e->get("ants").as_int_or(0) == ants);      // (the four colors are added up, whatever their share)
         }
-        for (const char* fine : {"Ants 300.lvl", "Ext 300.lvl", "TINY.LVL", "TREASURE.LVL"}) {
+        for (const char* fine : {"Ants 2400.lvl", "Ext 2400.lvl", "TINY.LVL", "TREASURE.LVL"}) {
             const ctl::JsonValue* e = entry_of(newest, fine);
             ASSERT_TRUE(e != nullptr && e->get("heavy").is_null() && e->get("ants").is_null());
         }
-        ASSERT_TRUE(entry_of(newest, "Ants 301.lvl")->get("online").is_null() && entry_of(newest, "Huge 6000.lvl")->get("online").is_null());       // (no refusal: "online" is about the size of the grid only)
+        ASSERT_TRUE(entry_of(newest, "Ants 2401.lvl")->get("online").is_null() && entry_of(newest, "Huge 6000.lvl")->get("online").is_null());       // (no refusal: "online" is about the size of the grid only)
         ASSERT_TRUE(store.list_json(nullptr, false).find("heavy") == std::string::npos);      // (the old list has the same maps and no new keys)
         // nothing is refused: every one of them is chosen as any other, in any letter case
-        for (const char* name : {"Ants 300.lvl", "Ants 301.lvl", "Ext 301.lvl", "ext 301.LVL", "Uneven 6000.lvl", "Huge 6000.lvl", "huge 6000.LVL"}) {
+        for (const char* name : {"Ants 2400.lvl", "Ants 2401.lvl", "Ext 2401.lvl", "ext 2401.LVL", "Uneven 6000.lvl", "Huge 6000.lvl", "huge 6000.LVL"}) {
             ASSERT_TRUE(!store.listed_name(name).empty());
             ASSERT_FALSE(store.too_big_online(name));
         }
         MapEntry entry;
         ASSERT_TRUE(store.find("Huge 6000.lvl", entry));
         // a take-down: the map that is gone is not listed
-        store.set_approved({keep("Ants 300.lvl", {75, 75, 75, 75})});
-        ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, true)), "Ants 301.lvl") == nullptr);
+        store.set_approved({keep("Ants 2400.lvl", {600, 600, 600, 600})});
+        ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, true)), "Ants 2401.lvl") == nullptr);
         {   // the same count for a map of the community folder that maps.json describes as for one that it does not (both are loaded)
             TempDir folder;
             fs::create_directories(folder.path / "maps");
             fs::create_directories(folder.path / "players");
-            const std::string heavy_map = tiny_with_ants({100, 100, 100, 100});
+            const std::string heavy_map = tiny_with_ants({700, 700, 700, 700});
             { std::ofstream out(folder.path / "maps" / "TINY.LVL", std::ios::binary); out << heavy_map; }
             { std::ofstream out(folder.path / "players" / "Plain.lvl", std::ios::binary); out << heavy_map; }
             MapStore own((folder.path / "maps").string(), (folder.path / "players").string());
             own.scan();
             const ctl::JsonValue shown = parse_text(own.list_json(nullptr, true));
-            ASSERT_TRUE(entry_of(shown, "TINY.LVL")->get("heavy").as_bool_or(false) && entry_of(shown, "TINY.LVL")->get("ants").as_int_or(0) == 400);        // (an original is counted like any map: the list says what the file holds)
-            ASSERT_TRUE(entry_of(shown, "Plain.lvl")->get("heavy").as_bool_or(false) && entry_of(shown, "Plain.lvl")->get("ants").as_int_or(0) == 400);
+            ASSERT_TRUE(entry_of(shown, "TINY.LVL")->get("heavy").as_bool_or(false) && entry_of(shown, "TINY.LVL")->get("ants").as_int_or(0) == 2800);        // (an original is counted like any map: the list says what the file holds)
+            ASSERT_TRUE(entry_of(shown, "Plain.lvl")->get("heavy").as_bool_or(false) && entry_of(shown, "Plain.lvl")->get("ants").as_int_or(0) == 2800);
             ASSERT_EQ(own.listed_name("Plain.lvl"), std::string("Plain.lvl"));
             ASSERT_EQ(own.listed_name("TINY.LVL"), std::string("TINY.LVL"));
         }
@@ -668,20 +668,20 @@ int main() {
             return a;
         };
         const auto ants = [&]() { const ctl::JsonValue list = parse_text(store.list_json(nullptr, true)); const ctl::JsonValue* e = entry_of(list, "Kept.lvl"); return e == nullptr ? int64_t{-1} : e->get("ants").as_int_or(0); };       // (0: not heavy, no count in the list)
-        const std::string first = tiny_with_ants({75, 75, 75, 76});                     // 301
-        const std::string second = tiny_with_ants({75, 75, 75, 77});                    // 302: another size
-        const std::string third = with_one_marker_made_a_plant(second);                 // 301: the size of the second, other bytes
+        const std::string first = tiny_with_ants({600, 600, 600, 601});                     // 2401
+        const std::string second = tiny_with_ants({600, 600, 600, 602});                    // 2402: another size
+        const std::string third = with_one_marker_made_a_plant(second);                 // 2401: the size of the second, other bytes
         ASSERT_TRUE(!first.empty() && !second.empty() && first.size() != second.size() && third.size() == second.size() && third != second);
         store.set_approved({put(first)});
-        ASSERT_EQ(ants(), int64_t{301});
+        ASSERT_EQ(ants(), int64_t{2401});
         store.set_approved({put(second)});
-        ASSERT_EQ(ants(), int64_t{302});                                                    // (the same path, another size)
+        ASSERT_EQ(ants(), int64_t{2402});                                                    // (the same path, another size)
         const ApprovedMap same_size = put(third);
         store.set_approved({same_size});
-        ASSERT_EQ(ants(), int64_t{301});                                                    // (the same path and size, another hash)
+        ASSERT_EQ(ants(), int64_t{2401});                                                    // (the same path and size, another hash)
         fs::remove(dir.path / "kept.bin");                                                  // (an unchanged file is not loaded again: its count is kept, though the file is gone)
         store.set_approved({same_size});
-        ASSERT_EQ(ants(), int64_t{301});
+        ASSERT_EQ(ants(), int64_t{2401});
         store.set_approved({});                                                             // (the file is no longer held: forgotten, so a file that comes back is counted from the disk, where there is none)
         ASSERT_EQ(ants(), int64_t{-1});
         store.set_approved({same_size});
