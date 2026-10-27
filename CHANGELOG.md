@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.144 - 2026-10-27 - Map Maker: the game's pictures at every zoom
+
+**For players:**
+- **The Map Maker now draws the game's pictures at every zoom.** Before, a map under 10 pixels a cell (a whole 60 x 60 map on a short window or a phone, every 81 x 100 map, any big Extended map zoomed out) turned into flat colored squares. Now the grass, rocks, toys, food and hills stay pictures at any size, up to a whole 512 x 512 map.
+- Under 4 pixels a cell, or when more than 12,000 cells are in view, the ground itself is its smooth average color (a tile's texture in 2 or 3 pixels is only a lattice, and a picture for every cell costs time); the objects are still pictures on it. Start ants are small team-colored dots under 12 pixels a cell, a little smaller under 5.
+- Speed, measured in a slow test browser with no graphics card (no real phone was tried): a whole 81 x 100 map takes about 100 ms to draw (4 ms before) and a whole 480 x 480 map about 250 to 300 ms (30 before); panning stays cheap. Maps of 40 x 40 or smaller never went under 10 pixels, so they look as before.
+- Only the picture on the screen changes: no map, file or game rule is touched. Map Maker v1.5.11.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c119406e...c119406e)
+
 ## v0.12.143 - 2026-10-27 - Big-map warning moves from 300 to 2,400 starting ants
 
 **For players:**
@@ -526,14 +538,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2336f325...a6f4a2d4)
 
-## v0.12.97 - 2026-10-20 - Play Extended maps up to 512 x 512 and out-of-grid order-tile marker
+## Older versions (v0.12.97 and before)
 
-**For players:**
-- **Playable Extended maps up to `512 x 512`.** Extended maps (`version == 9`) up to `512 x 512` (`262,144` cells, up to `1,024` a side, 4 MiB) now load and play in the game, map selector previews, replay player, `bot_arena`, and the Map Maker's **Play this map** (`v1.4.1`).
-- **Ordering to tile `(120, 90)` on wide and tall Extended maps.** Replaced the `(120, 90)` "no order tile" sentinel in `AntUnit::orig_order_tile` with an out-of-grid marker `(-1, -1)` (`kNoOrderTileX`, `kNoOrderTileY`), so ordering an ant directly to tile `(120, 90)` on an Extended map wider than 120 columns and taller than 90 rows works like any other tile while preserving all Classic and `rules == 1` state hashes on the 540-map library.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/30b8fe77...04a4e570)
-
-## Older versions (v0.12.96 and before)
-
-Every release before v0.12.97, and the long notes of v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.98, and the long notes of v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

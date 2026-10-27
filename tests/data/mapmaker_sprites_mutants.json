@@ -240,13 +240,6 @@
    "test": "node tests/scripts/web_mapmaker_edit_check.js"
   },
   {
-   "id": "sprites_from_12",
-   "file": "web/front/mapmaker_sprites.js",
-   "old": "FROM = 10,",
-   "new": "FROM = 12,",
-   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
-  },
-  {
    "id": "sprites_ant_from_10",
    "file": "web/front/mapmaker_sprites.js",
    "old": "ANT_FROM = 12,",
@@ -445,7 +438,7 @@
   {
    "id": "view_pictures_from_5",
    "file": "web/front/mapmaker_view.js",
-   "old": "function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= sprites.FROM; }",
+   "old": "function useSprites(view, sprites) { return !!sprites && sprites.ready(); }",
    "new": "function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= 5; }",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   },
@@ -532,6 +525,111 @@
    "old": "env.minimap.classList.toggle('tiny', h < 300);",
    "new": "env.minimap.classList.toggle('tiny', h < 0);",
    "test": "node tests/scripts/web_mapmaker_edit_check.js"
+  },
+  {
+   "id": "sprites_only_from_10_pixels",
+   "file": "web/front/mapmaker_view.js",
+   "old": "function useSprites(view, sprites) { return !!sprites && sprites.ready(); }",
+   "new": "function useSprites(view, sprites) { return !!sprites && sprites.ready() && view.scale >= 10; }",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_before_the_atlas_is_ready",
+   "file": "web/front/mapmaker_view.js",
+   "old": "function useSprites(view, sprites) { return !!sprites && sprites.ready(); }",
+   "new": "function useSprites(view, sprites) { return !!sprites; }",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_tiny_is_8",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "TINY = 4, MAX_TEXTURED = 12000,",
+   "new": "TINY = 8, MAX_TEXTURED = 12000,",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_tiny_is_2",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "TINY = 4, MAX_TEXTURED = 12000,",
+   "new": "TINY = 2, MAX_TEXTURED = 12000,",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_max_textured_ten_times_more",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "TINY = 4, MAX_TEXTURED = 12000,",
+   "new": "TINY = 4, MAX_TEXTURED = 120000,",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_max_textured_ten_times_less",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "TINY = 4, MAX_TEXTURED = 12000,",
+   "new": "TINY = 4, MAX_TEXTURED = 1200,",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_no_smooth_ground_under_tiny",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "smooth: S < TINY ||",
+   "new": "smooth: false ||",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_no_smooth_ground_over_the_cells",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "|| Math.min(lw * lh / (S * S), file.columns * file.rows) > MAX_TEXTURED,",
+   "new": "|| false,",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_cells_of_the_canvas_only",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "Math.min(lw * lh / (S * S), file.columns * file.rows)",
+   "new": "lw * lh / (S * S)",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_cells_of_the_map_only",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "Math.min(lw * lh / (S * S), file.columns * file.rows)",
+   "new": "file.columns * file.rows",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_tiny_in_css_pixels_not_device_pixels",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "smooth: S < TINY ||",
+   "new": "smooth: view.scale < TINY ||",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_smooth_color_ignores_the_dictionary",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "lctx.fillStyle = Tiles.css(id, EMPTY2, st.tab); lctx.fillRect(xa, ya, xb - xa, yb - ya); }",
+   "new": "lctx.fillStyle = Tiles.css(id, EMPTY2, null); lctx.fillRect(xa, ya, xb - xa, yb - ya); }",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_smooth_cells_leave_gaps",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "lctx.fillRect(xa, ya, xb - xa, yb - ya); }\n            else if",
+   "new": "lctx.fillRect(xa, ya, st.T, st.T); }\n            else if",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_start_dot_not_smaller_when_tiny",
+   "file": "web/front/mapmaker_view.js",
+   "old": "s < 5 ? Math.max(1, s * 0.4) : Math.max(1.5, s * 0.3)",
+   "new": "s < 5 ? Math.max(1.5, s * 0.3) : Math.max(1.5, s * 0.3)",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_start_dot_small_only_under_3",
+   "file": "web/front/mapmaker_view.js",
+   "old": "s < 5 ? Math.max(1, s * 0.4)",
+   "new": "s < 3 ? Math.max(1, s * 0.4)",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   }
  ]
 }

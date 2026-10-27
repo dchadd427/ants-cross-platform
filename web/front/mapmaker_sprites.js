@@ -2,8 +2,7 @@
 // web image is built from the public decoded sprites and the animation table) is fetched when the editor opens; this script loads it, draws with it, and says when it is ready. A cell is a
 // 32 pixel picture: the picture of a tile is frame 0 of its animation drawn at the cell's top-left corner plus the frame's own x/y offset, and the animation is the one that the OPEN MAP'S DICTIONARY names for the cell's number, as in the game (mapmaker_tiles.js: tableOf, ground, object, stage; docs/MAP_EDITOR.md, "Sprites"). The ground is drawn first, from a layer kept
 // between frames with the objects on it (a pan moves it and paints only the strip that came into view; a stroke repaints only the part round its cells; one scaled copy of the 239 tiles
-// for each zoom); the objects are drawn only from their anchor cells (the flagged ones), in row order, as the game draws them; then, over the layer, the starting ants. From 10 pixels a cell up the pictures are drawn; below that the canvas keeps its
-// flat colors (mapmaker_view.js), which are the pictures' average colors once the atlas is in (mapmaker_tiles.js). A few big toys are not in the sheet: each is fetched alone from
+// for each zoom); the objects are drawn only from their anchor cells (the flagged ones), in row order, as the game draws them; then, over the layer, the starting ants. The pictures are drawn at every zoom; the flat colors (mapmaker_view.js) are for a page whose atlas did not load. A few big toys are not in the sheet: each is fetched alone from
 // /asset_catalog/sprites/ the first time a map shows it. A browser script (it needs a document); a failed atlas leaves the page with the flat colors.
 (function (root, factory) {
     'use strict';
@@ -12,7 +11,7 @@
 })(this, function (Tiles) {
     'use strict';
 
-    var CELL = 32, EMPTY2 = 0x7FFE, FROM = 10, ANT_FROM = 12, REACH = 8, BACK = '#0b1612', MAX_CACHED = 3, MAX_DIRTY = 60000, SETTLE = 140;
+    var CELL = 32, EMPTY2 = 0x7FFE, TINY = 4, MAX_TEXTURED = 12000, ANT_FROM = 12, REACH = 8, BACK = '#0b1612', MAX_CACHED = 3, MAX_DIRTY = 60000, SETTLE = 140;
 
     // The tile of the stage that each food pile of block 2 shows, by the index of its anchor cell (the last stage whose units are not below the pile's own: mapmaker_file.js reads the same list)
     function foodTiles(file) {
@@ -94,7 +93,8 @@
         function groundCell(lctx, file, st, sheet, r, c) {
             var b = file.bytes, id = b[file.layer1 + 6 * (r * file.columns + c)] | (b[file.layer1 + 6 * (r * file.columns + c) + 1] << 8), g = index.ground, a = groundAnim(file, st.tab, r, c), k = a - g.first;
             var xa = st.ox + Math.round(c * st.S), xb = st.ox + Math.round((c + 1) * st.S), ya = st.oy + Math.round(r * st.S), yb = st.oy + Math.round((r + 1) * st.S);
-            if (k >= 0 && k < g.count) {
+            if (st.smooth && k >= 0 && k < g.count) { lctx.fillStyle = Tiles.css(id, EMPTY2, st.tab); lctx.fillRect(xa, ya, xb - xa, yb - ya); }
+            else if (k >= 0 && k < g.count) {
                 if (sheet) { if (!sheet.done[k]) prepare(sheet, k); lctx.drawImage(sheet.canvas, (k % g.columns) * st.T, ((k / g.columns) | 0) * st.T, st.T, st.T, xa, ya, xb - xa, yb - ya); }
                 else lctx.drawImage(groundImg, (k % g.columns) * CELL, ((k / g.columns) | 0) * CELL, CELL, CELL, xa, ya, xb - xa, yb - ya);
             } else if (st.tab) {          // (the dictionary draws nothing here, or a picture that is not a ground tile: over the black that the game leaves)
@@ -128,10 +128,11 @@
             if (xe > x && ye > y) paintRect(lctx, file, st, sheet, vis, x, y, xe - x, ye - y);
         }
 
-        // Bring the layer up to date for this view: whole when the map, the zoom or the size changed (or it is the first time), else moved and mended
+        // Bring the layer up to date for this view: whole when the map, the zoom or the size changed (or it is the first time), else moved and mended. The ground is each cell's tile, but its smooth
+        // average color under TINY device pixels a cell (a texture in 2 or 3 pixels is a lattice) or with over MAX_TEXTURED cells (a draw each); the objects stay pictures. Zoom and canvas decide it.
         function groundLayer(file, tab, view, w, h, dpr, vis) {
             var lw = Math.max(1, Math.round(w * dpr)), lh = Math.max(1, Math.round(h * dpr)), S = view.scale * dpr, T = Math.max(1, Math.round(S));
-            var st = { file: file, tab: tab, stamp: tab ? tab.stamp : 0, S: S, T: T, lw: lw, lh: lh, ox: Math.round((w / 2 - view.cx * view.scale) * dpr), oy: Math.round((h / 2 - view.cy * view.scale) * dpr) };
+            var st = { smooth: S < TINY || Math.min(lw * lh / (S * S), file.columns * file.rows) > MAX_TEXTURED, file: file, tab: tab, stamp: tab ? tab.stamp : 0, S: S, T: T, lw: lw, lh: lh, ox: Math.round((w / 2 - view.cx * view.scale) * dpr), oy: Math.round((h / 2 - view.cy * view.scale) * dpr) };
             if (!layer) layer = el('canvas');
             if (state && state.S !== S) { pics = {}; picCount = 0; }
             if (layer.width !== lw || layer.height !== lh) { layer.width = lw; layer.height = lh; state = null; }
@@ -282,7 +283,7 @@
         }
 
         return {
-            load: load, FROM: FROM, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
+            load: load, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
             ready: function () { return ready; }, failed: function () { return failed; },
             // A ground tile's picture drawn s by s pixels at (x, y) of a canvas (the before and after of Fix edges: mapmaker_edges.js); false when there is none
             // `tab`: the table of the dictionary of the map that the tile is in (Tiles.tableOf(file), asked for once by the caller, not here for each tile); `placing`: the tile is about to be put (Tiles.place), else it is a cell of the map (Tiles.ground)
@@ -300,5 +301,5 @@
         };
     }
 
-    return { create: create, FROM: FROM, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
+    return { create: create, TINY: TINY, MAX_TEXTURED: MAX_TEXTURED, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
 });
