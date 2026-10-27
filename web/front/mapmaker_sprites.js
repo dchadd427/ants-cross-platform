@@ -12,7 +12,7 @@
 })(this, function (Tiles) {
     'use strict';
 
-    var CELL = 32, EMPTY2 = 0x7FFE, MAX_CELLS = 12000, TINY = 4, ANT_FROM = 12, REACH = 8, BACK = '#0b1612', MAX_CACHED = 3, MAX_DIRTY = 60000, SETTLE = 140;
+    var CELL = 32, EMPTY2 = 0x7FFE, MAX_TEXTURED = 12000, TINY = 4, ANT_FROM = 12, REACH = 8, BACK = '#0b1612', MAX_CACHED = 3, MAX_DIRTY = 60000, SETTLE = 140;
 
     // The tile of the stage that each food pile of block 2 shows, by the index of its anchor cell (the last stage whose units are not below the pile's own: mapmaker_file.js reads the same list)
     function foodTiles(file) {
@@ -94,7 +94,7 @@
         function groundCell(lctx, file, st, sheet, r, c) {
             var b = file.bytes, id = b[file.layer1 + 6 * (r * file.columns + c)] | (b[file.layer1 + 6 * (r * file.columns + c) + 1] << 8), g = index.ground, a = groundAnim(file, st.tab, r, c), k = a - g.first;
             var xa = st.ox + Math.round(c * st.S), xb = st.ox + Math.round((c + 1) * st.S), ya = st.oy + Math.round(r * st.S), yb = st.oy + Math.round((r + 1) * st.S);
-            if (st.S < TINY) { lctx.fillStyle = Tiles.css(id, EMPTY2, st.tab); lctx.fillRect(xa, ya, xb - xa, yb - ya); }          // (under 4 pixels a cell the ground's own texture only makes a lattice: its smooth average color, with the pictures of the objects on it)
+            if (st.smooth) { lctx.fillStyle = Tiles.css(id, EMPTY2, st.tab); lctx.fillRect(xa, ya, xb - xa, yb - ya); }          // (under 4 pixels a cell, or with more than 12,000 cells in view, the ground is its smooth average color (its texture only makes a lattice and costs a draw for every cell), with the pictures of the objects on it)
             else if (k >= 0 && k < g.count) {
                 if (sheet) { if (!sheet.done[k]) prepare(sheet, k); lctx.drawImage(sheet.canvas, (k % g.columns) * st.T, ((k / g.columns) | 0) * st.T, st.T, st.T, xa, ya, xb - xa, yb - ya); }
                 else lctx.drawImage(groundImg, (k % g.columns) * CELL, ((k / g.columns) | 0) * CELL, CELL, CELL, xa, ya, xb - xa, yb - ya);
@@ -132,7 +132,7 @@
         // Bring the layer up to date for this view: whole when the map, the zoom or the size changed (or it is the first time), else moved and mended
         function groundLayer(file, tab, view, w, h, dpr, vis) {
             var lw = Math.max(1, Math.round(w * dpr)), lh = Math.max(1, Math.round(h * dpr)), S = view.scale * dpr, T = Math.max(1, Math.round(S));
-            var st = { file: file, tab: tab, stamp: tab ? tab.stamp : 0, S: S, T: T, lw: lw, lh: lh, ox: Math.round((w / 2 - view.cx * view.scale) * dpr), oy: Math.round((h / 2 - view.cy * view.scale) * dpr) };
+            var st = { smooth: S < TINY || Math.min(lw * lh / (S * S), file.columns * file.rows) > MAX_TEXTURED, file: file, tab: tab, stamp: tab ? tab.stamp : 0, S: S, T: T, lw: lw, lh: lh, ox: Math.round((w / 2 - view.cx * view.scale) * dpr), oy: Math.round((h / 2 - view.cy * view.scale) * dpr) };
             if (!layer) layer = el('canvas');
             if (state && state.S !== S) { pics = {}; picCount = 0; }
             if (layer.width !== lw || layer.height !== lh) { layer.width = lw; layer.height = lh; state = null; }
@@ -289,7 +289,7 @@
         }
 
         return {
-            load: load, MAX_CELLS: MAX_CELLS, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
+            load: load, ANT_FROM: ANT_FROM, draw: draw, chip: chip, ghost: ghost,
             ready: function () { return ready; }, failed: function () { return failed; },
             // A ground tile's picture drawn s by s pixels at (x, y) of a canvas (the before and after of Fix edges: mapmaker_edges.js); false when there is none
             // `tab`: the table of the dictionary of the map that the tile is in (Tiles.tableOf(file), asked for once by the caller, not here for each tile); `placing`: the tile is about to be put (Tiles.place), else it is a cell of the map (Tiles.ground)
@@ -307,5 +307,5 @@
         };
     }
 
-    return { create: create, MAX_CELLS: MAX_CELLS, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
+    return { create: create, ANT_FROM: ANT_FROM, foodTiles: foodTiles, objectAnim: objectAnim, groundAnim: groundAnim };
 });

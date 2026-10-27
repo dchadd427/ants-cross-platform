@@ -211,11 +211,8 @@
     function stamp(file) { var tab = Tiles.tableOf(file); return tab ? tab.stamp : 0; }
     function table(file) { return Tiles.tableOf(file); }
 
-    // Are the game's pictures drawn at this zoom (the atlas is loaded and a tile is at least 10 pixels: mapmaker_sprites.js)?
-    function useSprites(view, sprites, file, w, h) {
-        var v = sprites && sprites.ready() && file ? visible(view, file, w, h) : null;
-        return !!sprites && sprites.ready() && (!v || (v.r1 - v.r0 + 1) * (v.c1 - v.c0 + 1) <= sprites.MAX_CELLS);
-    }
+    // Are the game's pictures drawn at this zoom (the atlas is loaded: mapmaker_sprites.js)?
+    function useSprites(view, sprites) { return !!sprites && sprites.ready(); }
 
     // One frame. `opts`: scratch (a canvas for the pixel way), cursor ({row, column} or null), brush (the size of the brush on the cursor), sprites (mapmaker_sprites.js, when loaded), dpr, ghost ({id, row,
     // column}: a bigger object's picture under the pointer). Returns {rects, pixels, sprites}: what was drawn, for the tests.
@@ -224,7 +221,7 @@
         ctx.fillStyle = '#0b1612'; ctx.fillRect(0, 0, w, h);
         var vis = visible(view, file, w, h), done = { rects: 0, pixels: 0, sprites: 0 };
         if (!vis) return done;
-        if (useSprites(view, opts.sprites, file, w, h)) {
+        if (useSprites(view, opts.sprites)) {
             opts.sprites.draw(ctx, view, file, w, h, vis, opts);
             if (view.scale < opts.sprites.ANT_FROM) drawMarks(ctx, view, file, w, h, vis, true);
             done.sprites = 1;

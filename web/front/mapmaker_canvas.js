@@ -81,7 +81,7 @@
             if (!file) return;
             var t0 = win.performance ? win.performance.now() : 0, ctx = canvas.getContext('2d'), brush = brushNow(), cell = markedCell(), shape = shapeNow(), rect = View.cursorRect(file, cell, brush || 1, shape), kind = 'full', count = 0;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            var list = sameAsFull() && !View.useSprites(view, sprites, file, w, h) ? cellsToPaint(rect) : null;          // (pictures reach beyond their cells: the sprite frame is always a whole one)
+            var list = sameAsFull() && !View.useSprites(view, sprites) ? cellsToPaint(rect) : null;          // (pictures reach beyond their cells: the sprite frame is always a whole one)
             if (list && list.length <= MANY && (view.scale >= SMALL_TILE || scratch.keptImage)) {
                 var vis = View.visible(view, file, w, h), pixels = view.scale < SMALL_TILE, box = { x0: 1e9, y0: 1e9, x1: -1, y1: -1 }, tab = View.table(file);
                 for (var i = 0; i < list.length; i++) {
