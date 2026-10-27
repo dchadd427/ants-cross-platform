@@ -209,14 +209,14 @@ function rig(options) {
             rext.picker.open(''); await settle();
             same('an Extended map has the Extended badge', [rext.rows()[0].querySelector('.pk-badge.pk-ext').textContent, rext.rows()[0].querySelectorAll('.pk-meta')[0].textContent], ['Extended', '4 players · 10 min · 256×256']);
         }
-        {   // a heavy map (the server's "heavy": true: more than 300 start ants) is marked with a warning chip; a map of 300 ants or fewer and an original have none, and the heavy map can be picked as any other
-            const rheavy = rig({ answer: () => Promise.resolve(response({ format: 2, maps: [M('Tiny.lvl', { original: true }), M('Fine.lvl', {}), M('Many.lvl', { heavy: true, ants: 6000 }), M('Edge.lvl', { heavy: true, ants: 301 }), M('Wide.lvl', { online: false, kind: 'extended', width: 400, height: 400 })] })) });
+        {   // a heavy map (the server's "heavy": true: more than 2,400 start ants) is marked with a warning chip; a map of 2,400 ants or fewer and an original have none, and the heavy map can be picked as any other
+            const rheavy = rig({ answer: () => Promise.resolve(response({ format: 2, maps: [M('Tiny.lvl', { original: true }), M('Fine.lvl', {}), M('Many.lvl', { heavy: true, ants: 6000 }), M('Edge.lvl', { heavy: true, ants: 2401 }), M('Wide.lvl', { online: false, kind: 'extended', width: 400, height: 400 })] })) });
             rheavy.picker.open(''); await settle();
             const marks = {};
             rheavy.rows().forEach((n) => { const b = n.querySelector('.pk-badge.pk-heavy'); marks[n.querySelector('.pk-nm').textContent.replace(/(Many ants: may run slowly|Original|Extended)/g, '').trim().toLowerCase()] = b ? b.textContent : ''; });
             same('the heavy rows are marked, in plain words (a warning, not a refusal), and only they', Object.keys(marks).sort().map((k) => [k, marks[k]]), [['edge', 'Many ants: may run slowly'], ['fine', ''], ['many', 'Many ants: may run slowly'], ['tiny', ''], ['wide', '']]);
             same('a marked map can still be picked', rheavy.rows().length, 5);
-            same('the parts: the flag is read as it is, and a missing or odd flag means a map that is not heavy', P.parseList({ format: 2, maps: [M('a.lvl', { heavy: true, ants: 301 }), M('b.lvl', {}), M('c.lvl', { heavy: 'yes' }), M('d.lvl', { heavy: false })] }).map((m) => m.heavy), [true, false, false, false]);
+            same('the parts: the flag is read as it is, and a missing or odd flag means a map that is not heavy', P.parseList({ format: 2, maps: [M('a.lvl', { heavy: true, ants: 2401 }), M('b.lvl', {}), M('c.lvl', { heavy: 'yes' }), M('d.lvl', { heavy: false })] }).map((m) => m.heavy), [true, false, false, false]);
             same('the words', P.HEAVY_TEXT, 'Many ants: may run slowly');
         }
     }

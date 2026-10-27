@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.143 - 2026-10-27 - Big-map warning moves from 300 to 2,400 starting ants
+
+**For players:**
+- **The big-map warning now starts at 2,400 starting ants, not 300.** The amber "Many ants: may run slowly" chip on a map in the map picker, and the one warning line in the Map Maker's Play this map dialog (both tabs), now show only when a map starts more than 2,400 ants (the start markers of the four colors added up). A map with more than 2,400 ants still warns, and no map is refused for its ants.
+- No map of the library changes: the most that any of the 540 starts is 248, so none was marked before and none is now. Only maps made in the Map Maker (or uploaded) with 301 to 2,400 ants lose the warning.
+- Why: in a real headless Chromium (software rendering, no real GPU) a 2,772-ant map ran with a worst tick of 9 to 11 ms (the budget is 50), and the 6,000-ant map now has a worst tick of 14 to 19 ms after v0.12.141 and v0.12.142.
+- What that did not cover: no phone and no real graphics card, no match between people (lockstep), and not what a match costs the server. The runs were 60 seconds of passive play plus one mass order.
+
+**Rules / network:** none; the rules and network protocol 21 are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f011f5c1...3970dcf6)
+
 ## v0.12.142 - 2026-10-27 - Faster: team-mates' claims on a tile found at once
 
 **For players:**
@@ -522,22 +534,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/30b8fe77...04a4e570)
 
-## v0.12.96 - 2026-10-20 - Play Extended maps up to 256 x 256 and open game maps in Map Maker v1.4.0
+## Older versions (v0.12.96 and before)
 
-**For players:**
-- **Playable Extended maps (`256 x 256`).** Extended maps (`version == 9`) up to `256 x 256` (`65,536` cells) now load and play in the game, map selector previews, replay player, `bot_arena`, and the Map Maker's **Play this map**, and resizing an Extended map past 90 rows or 256 columns in the Map Maker upgrades its rules word so ants can cross row 90.
-- **Map Maker v1.4.0 — Open a map from the game's library.** Clicking **Open** in the Map Maker now opens the **Open a map** dialog, where you can either open a `.lvl` file from your device or search, sort (`Originals, then plays`, `Most played`, `Name`, `Size`), and pick any existing game map (the 6 Originals and 530+ Community maps, with preview thumbnails and metadata) and click **Use as starting point** to open it under a free numbered copy name (`"Treasure 2"`, etc.).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ca107726...320c9e0b); how it works: [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md), [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
-
-## v0.12.95 - 2026-10-20 - Extended maps: per-ant starting ant types and Map Maker v1.3.0
-
-**For players:**
-- **Extended maps: per-ant starting ant types.** In Extended maps (`version == 9`), each starting ant can now be placed as any specialist type (Default / Worker, Combat, Thief, Bomber, Swimmer, or Fire), and spawns with that type when the match starts. Classic maps (`version == 8`) continue to use a single map-wide Default Ant Type.
-- **Map Maker v1.3.0:** The **Starting ants** panel adds a 2 x 3 **Ant type** selector with sprite thumbnails on Extended maps (for **One at a time**, **Clump**, and **Mix**), a one-click button to switch a Classic map to an Extended map for per-ant types, and per-ant specialist sprite rendering in each team's color on the map canvas.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/7a583081...9266739e); how it works: [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md), [`docs/MAP_EDITOR.md`](docs/MAP_EDITOR.md)
-
-## Older versions (v0.12.94 and before)
-
-Every release before v0.12.95, and the long notes of v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.97, and the long notes of v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
