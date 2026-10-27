@@ -259,6 +259,20 @@
       "old": "if (file.rows > 90)",
       "new": "if (file.rows > 9000)",
       "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "facing_note_missing",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "The game picks a random facing at the start of each match; the editor shows an example.",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "facing_note_says_the_editor_knows",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "The game picks a random facing at the start of each match; the editor shows an example.",
+      "new": "The ants start facing the way the editor shows them.",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
     }
   ]
 }

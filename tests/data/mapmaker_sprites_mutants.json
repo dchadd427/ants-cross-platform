@@ -630,6 +630,139 @@
    "old": "s < 5 ? Math.max(1, s * 0.4)",
    "new": "s < 3 ? Math.max(1, s * 0.4)",
    "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_may_be_north",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": ">>> 0) % 7 + 1;",
+   "new": ">>> 0) % 8;",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_may_be_eight",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": ">>> 0) % 7 + 1;",
+   "new": ">>> 0) % 8 + 1;",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_changes_every_frame",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "var x = row * 65536 + column + 1;",
+   "new": "var x = row * 65536 + column + 1 + (Math.random() * 1e9 | 0);",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_ignores_the_row",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "var x = row * 65536 + column + 1;",
+   "new": "var x = column + 1;",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_ignores_the_column",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "var x = row * 65536 + column + 1;",
+   "new": "var x = row * 65536 + 1;",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_not_scrambled",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "        x = Math.imul(x ^ x >>> 16, 0x45d9f3b); x = Math.imul(x ^ x >>> 16, 0x45d9f3b);\n",
+   "new": "\n",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_west_origin_not_moved_by_a_pixel",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "ctx.translate(cx + (1 - fit[4]) * k, 0);",
+   "new": "ctx.translate(cx + (0 - fit[4]) * k, 0);",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_west_not_turned_round",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "ctx.scale(-1, 1);",
+   "new": "ctx.scale(1, 1);",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_west_turn_not_undone",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "fit[3] * k); ctx.restore();\n",
+   "new": "fit[3] * k);\n",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_west_takes_the_wrong_east",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "b = d > 4 ? 8 - d : d;",
+   "new": "b = d > 4 ? d - 4 : d;",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_picture_off_by_one",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "index.faces[sid][b - 1]",
+   "new": "index.faces[sid][3 - b]",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_old_atlas_without_facings_is_a_crash",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "b === 4 || !index.faces ||",
+   "new": "b === 4 ||",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_picture_in_black_only",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "index.antFaces[fid][m.team]",
+   "new": "index.antFaces[fid].black",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_picture_with_the_south_box",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "fit = fid ? index.objects.items[fid] : it",
+   "new": "fit = it",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_saved_in_the_marker",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "d = face(m.row, m.column), b =",
+   "new": "d = m.facing = face(m.row, m.column), b =",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_facing_written_into_the_file",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "d = face(m.row, m.column), b =",
+   "new": "d = face(m.row, m.column) + 0 * (file.bytes[5] ^= 1), b =",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_every_type_is_the_worker",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "var sid = mSpec && index.objects.items[mSpec.id] ? mSpec.id : (defSpec ? defSpec.id : index.ant)",
+   "new": "var sid = index.ant",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_default_type_has_no_facing",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "(defSpec ? defSpec.id : index.ant)",
+   "new": "index.ant",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
+  },
+  {
+   "id": "sprites_atlas_missing_a_type_of_facings_is_a_crash",
+   "file": "web/front/mapmaker_sprites.js",
+   "old": "|| !index.faces[sid] ? 0",
+   "new": "? 0",
+   "test": "node tests/scripts/web_mapmaker_sprites_check.js"
   }
  ]
 }

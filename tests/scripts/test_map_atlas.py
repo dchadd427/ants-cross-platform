@@ -261,6 +261,38 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
             for b in boxes[i + 1:]:
                 self.assertTrue(a[3] + 1 <= b[1] or b[3] + 1 <= a[1] or a[4] + 1 <= b[2] or b[4] + 1 <= a[2], "pictures %s and %s are a pixel apart at least" % (a[0], b[0]))
 
+    def test_every_type_of_standing_ant_has_the_pictures_of_the_four_directions_a_start_ant_can_face(self):
+        """a start ant faces NE, E, SE, S, SW, W or NW (the game never starts one facing North, and the west three are the east three turned round): the standing pictures `?st801`, `?st901`, `?st201` and `?st301` of each of the six types, in the four team colors, as the standing worker is (the Map Maker picks a facing for display only)"""
+        items, w, h = self.index["objects"]["items"], self.objects[0], self.objects[1]
+        rows, faces, boxes = self.objects[2], self.index["faces"], []
+        self.assertEqual(sorted(faces), sorted(str(k) for k in map_atlas.ANT_FACES))
+        self.assertEqual(sorted(map_atlas.ANT_FACES), sorted([811] + list(map_atlas.ANT_TYPES.values())), "all six types: the worker and the five specialists")
+        for south, ids in faces.items():
+            name = self.table[int(south)]["name"]
+            self.assertTrue(name.endswith("st301"), name)
+            self.assertEqual([self.table[i]["name"] for i in ids], [name[:-5] + "st801", name[:-5] + "st901", name[:-5] + "st201"], "%s: north-east, east, south-east" % name)
+            for ident in ids:
+                self.assertIn(str(ident), items)
+                self.assertEqual(sorted(self.index["antFaces"][str(ident)]), ["black", "blue", "green", "red"])
+                it = items[str(ident)]
+                self.assertEqual(self.index["antFaces"][str(ident)]["black"], it[:2], "the black one is the picture itself")
+                _sw, _sh, pixels = sprite_pixels(self.frame0(ident)[0])
+                self.assertEqual(it[2:4], [_sw, _sh])
+                for team in ("blue", "red", "green"):
+                    ax, ay = self.index["antFaces"][str(ident)][team]
+                    remap = dict(zip(map_atlas.ANT_RAMPS["black"], map_atlas.ANT_RAMPS[team]))
+                    self.assertTrue(ax >= 1 and ay >= 1 and ax + it[2] + 1 <= w and ay + it[3] + 1 <= h)
+                    for row in range(it[3]):
+                        for col in range(it[2]):
+                            want, got = pixels[row][col], rows[ay + row][ax + col]
+                            self.assertEqual(got[3] == 0, want[3] < 128)
+                            if want[3] >= 128:
+                                self.assertEqual(got[:3], remap.get(want[:3], want[:3]), "%s %s pixel %d,%d" % (name, team, row, col))
+                    boxes.append(("%d_%s" % (ident, team), ax, ay, ax + it[2], ay + it[3]))
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1:]:
+                self.assertTrue(a[3] + 1 <= b[1] or b[3] + 1 <= a[1] or a[4] + 1 <= b[2] or b[4] + 1 <= a[2], "pictures %s and %s are a pixel apart at least" % (a[0], b[0]))
+
     def test_a_plant_is_drawn_with_all_its_parts_as_the_game_draws_them(self):
         """flower1 (421) is a head, two stems, leaves and a shadow, not its head alone (the owner's report); the 14 plants of the editor and every other tile of several parts are put together, the last part first"""
         items, rows = self.index["objects"]["items"], self.objects[2]
@@ -317,9 +349,9 @@ console.log(JSON.stringify({ objects: pick(P.OBJECTS), plants: pick(P.PLANTS), b
 
     def test_the_files_are_small_and_the_same_every_time(self):
         self.assertLess(self.sizes["ground.png"], 40000, "ground.png (about 35 KB)")
-        self.assertLess(self.sizes["objects.png"], 305000, "objects.png (about 298 KB: the plants with all their parts are bigger than their heads)")
-        self.assertLess(self.sizes["atlas.json"], 41000, "atlas.json (about 39 KB: 9 KB of the sheet's index, 13 KB of the 1,344 animation names, 17 KB for the 654 sprites that are fetched alone, one for every animation of one part)")
-        self.assertLess(sum(self.sizes.values()), 375000, "the whole atlas (about 372 KB: the page fetches all of it at start)")
+        self.assertLess(self.sizes["objects.png"], 335000, "objects.png (about 332 KB: the plants with all their parts are bigger than their heads, and the standing ants face four ways in four colors)")
+        self.assertLess(self.sizes["atlas.json"], 42500, "atlas.json (about 41 KB: 9 KB of the sheet's index, 13 KB of the 1,344 animation names, 17 KB for the 654 sprites that are fetched alone, one for every animation of one part)")
+        self.assertLess(sum(self.sizes.values()), 410000, "the whole atlas (about 408 KB: the page fetches all of it at start)")
         with tempfile.TemporaryDirectory() as again:
             map_atlas.build(SPRITES, CATALOG, again)
             for name in ("ground.png", "objects.png", "atlas.json"):

@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.147 - 2026-10-27 - Map Maker: each start ant faces its own way
+
+**For players:**
+- **Map Maker: each start ant now faces its own way.** Before, every starting ant on the map stood facing south. In the game each one starts facing one of seven directions picked at random when a match begins (never north), so the Map Maker now shows each ant facing one of those seven, for every ant type (worker, combat, thief, bomber, swimmer, fire) and team color.
+- **It is an example, not what the match will do.** The game picks the facings again for every match, so the map has none; the editor makes one up from each ant's cell (the same every time, so nothing jumps when you put other ants or pan), and the Ants box says so in one line. Nothing is saved in the map: the file is byte for byte what it was.
+- The page fetches 36 KB more of pictures when it opens (the extra standing ants), cached after the first visit. Map Maker v1.6.2.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/10bc34ae...6bd2e893)
+
 ## v0.12.146 - 2026-10-27 - Map Maker: the game's pictures at every zoom
 
 **For players:**
@@ -524,15 +535,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e7d33a22...6dd7e251)
 
-## v0.12.102 - 2026-10-22 - Map maker: a friends room that cannot silently become Treasure
+## Older versions (v0.12.102 and before)
 
-**For players:**
-- **"Play this map" with other players no longer turns into a Treasure room.** If the map cannot be sent to the server (sending maps is switched off on that server, too many test maps were sent just now, or the editor tab was closed), no room is made at all. The strip at the top of the page says why in plain words and tells you to go back to the editor, instead of quietly showing an ordinary room with the Treasure map.
-- **A room made again keeps your map.** When the page has to make your room again (the room was closed, the server restarted, or the connection was lost for a long time), the test map is sent to the new room again, so it does not fall back to Treasure.
-- **The line at the foot of the page is true in a test room.** In a room that plays a test map from the Map Maker, it now says that the match is not recorded and that no result or name is kept.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a780efc...8de56d9f)
-
-## Older versions (v0.12.101 and before)
-
-Every release before v0.12.102, and the long notes of v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.103, and the long notes of v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

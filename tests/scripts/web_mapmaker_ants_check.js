@@ -191,6 +191,7 @@ for (const rel of MAPS) {
     part.show(true);
     const btn = (k) => part.panel.querySelector('[data-k="' + k + '"]');
     check(!part.panel.hidden && part.mine() && part.painter.tapOnly(), 'page: the box shows, One at a time takes the tap and a drag looks around');
+    check(part.panel.textContent.indexOf('The game picks a random facing at the start of each match; the editor shows an example.') >= 0, 'page: the one line that says the facing is an example (the game picks it at random for every ant at the start of a match)');
     check(btn('t2') && btn('t3') && /Black/.test(part.panel.textContent) && /Same for every team: Combat ants by default, 2 eggs each/.test(part.panel.textContent), 'page: four team buttons with counts, and what is the same for every team');
     const [c] = free(ed.file, 1, ed.file.columns * 5 + 5), n0 = count(ed.file);
     btn('t3').click(); team = 3;
