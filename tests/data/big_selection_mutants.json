@@ -180,24 +180,24 @@
   {
    "id": "move_capped_again",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "result = submit_in_chunks(sim, cmd, targets);",
-   "new": "result = submit_in_chunks(sim, cmd, attack ? targets : std::vector<uint32_t>(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(targets.size(), 81))));",
+   "old": "result = submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "{ const std::vector<uint32_t> sorted = nearest_first(targets, sim.get_world_state().ants, tile); result = submit_in_chunks(sim, cmd, attack ? sorted : std::vector<uint32_t>(sorted.begin(), sorted.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(sorted.size(), 81)))); }",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
   {
    "id": "move_capped_at_32",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "result = submit_in_chunks(sim, cmd, targets);",
-   "new": "result = submit_in_chunks(sim, cmd, attack ? targets : std::vector<uint32_t>(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(targets.size(), 32))));",
+   "old": "result = submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "{ const std::vector<uint32_t> sorted = nearest_first(targets, sim.get_world_state().ants, tile); result = submit_in_chunks(sim, cmd, attack ? sorted : std::vector<uint32_t>(sorted.begin(), sorted.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(sorted.size(), 32)))); }",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
   {
    "id": "attack_capped",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "result = submit_in_chunks(sim, cmd, targets);",
-   "new": "result = submit_in_chunks(sim, cmd, !attack ? targets : std::vector<uint32_t>(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(targets.size(), 81))));",
+   "old": "result = submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "{ const std::vector<uint32_t> sorted = nearest_first(targets, sim.get_world_state().ants, tile); result = submit_in_chunks(sim, cmd, !attack ? sorted : std::vector<uint32_t>(sorted.begin(), sorted.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(sorted.size(), 81)))); }",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },
@@ -268,8 +268,8 @@
   {
    "id": "thief_exemption_back",
    "file": "src/ants_app/hud_input.cpp",
-   "old": "result = submit_in_chunks(sim, cmd, targets);",
-   "new": "{ std::vector<uint32_t> named = targets; const assets::AnthillSpawn* hill = hill_at(sim.get_world_state(), tile.x, tile.y); if (!attack && hill != nullptr && hill->team_id != local_player_id_ && named.size() > sim::kMaxCommandAnts) named.resize(sim::kMaxCommandAnts); result = submit_in_chunks(sim, cmd, named); }",
+   "old": "result = submit_in_chunks(sim, cmd, nearest_first(targets, sim.get_world_state().ants, tile));",
+   "new": "{ std::vector<uint32_t> named = nearest_first(targets, sim.get_world_state().ants, tile); const assets::AnthillSpawn* hill = hill_at(sim.get_world_state(), tile.x, tile.y); if (!attack && hill != nullptr && hill->team_id != local_player_id_ && named.size() > sim::kMaxCommandAnts) named.resize(sim::kMaxCommandAnts); result = submit_in_chunks(sim, cmd, named); }",
    "build": "test_pointer_model",
    "test": "timeout 600 ./build/tests/test_app/test_pointer_model"
   },

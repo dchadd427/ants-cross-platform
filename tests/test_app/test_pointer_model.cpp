@@ -2265,6 +2265,7 @@ int main(int argc, char* argv[]) {
     test_buttons();
     test_pillarbox();
     test_big_selection();
+    test_nearest_first();
     std::printf("pointer model: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

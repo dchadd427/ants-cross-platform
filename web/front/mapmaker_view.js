@@ -234,13 +234,13 @@
     }
 
     // The small map of the whole map (the minimap): a picture of the map at most `width` pixels wide and `height` high (never bigger than one pixel a tile), made once for a file,
-    // with the visible part drawn over it for each frame. `makeCanvas(w, h)` makes a canvas.
+    // with the visible part drawn over it for each frame. `makeCanvas(w, h)` makes a canvas; `plain`: the small map of the page, without the hills and the starting ants (mapmaker_minimap.js draws them at the size it is shown).
     function miniSize(file, width, height) {
         var k = Math.min(1, width / file.columns, height / file.rows);
         return { w: Math.max(1, Math.round(file.columns * k)), h: Math.max(1, Math.round(file.rows * k)) };
     }
 
-    function miniBase(file, width, height, makeCanvas) {
+    function miniBase(file, width, height, makeCanvas, plain) {
         var size = miniSize(file, width, height), rw = size.w, rh = size.h, canvas = makeCanvas(rw, rh), ctx = canvas.getContext('2d');
         var scratch = makeCanvas(rw, rh), sctx = scratch.getContext('2d'), image = sctx.createImageData(rw, rh), px = new Uint32Array(image.data.buffer);
         var t = Tiles.miniTables(), b = file.bytes, l1 = file.layer1, l2 = file.layer2, mapW = file.columns, mapH = file.rows;
@@ -250,7 +250,7 @@
             for (x = 0; x < rw; x++) {
                 var cx = Math.min(mapW - 1, Math.floor(x * mapW / rw)), at = 6 * (base + cx);
                 rng = (Math.imul(rng, 214013) + 2531011) >>> 0;
-                var sp = ((rng >>> 16) & 0x7FFF) % 5, o = t.objects[b[l2 + at] | (b[l2 + at + 1] << 8)];
+                var sp = ((rng >>> 16) & 0x7FFF) % 5, id = b[l2 + at] | (b[l2 + at + 1] << 8), o = plain && id > 244 && id < 249 ? 0 : t.objects[id];
                 px[row + x] = o !== 0 ? o : t.ground[(b[l1 + at] | (b[l1 + at + 1] << 8)) * 5 + sp];
             }
         }
@@ -267,7 +267,7 @@
         }
         for (i = 0; file.food && i < file.food.length; i++) dot(file.food[i].column * 32 + 16, file.food[i].row * 32 + 16, Tiles.MINI_FOOD, 2, 1);
         for (i = 0; file.plants && i < file.plants.length; i++) dot(file.plants[i].column * 32 + 16, file.plants[i].row * 32 + 16, Tiles.MINI_PLANT, 2, 0);
-        for (i = 0; i < file.markers.length; i++) { var m = file.markers[i]; dot(m.column * 32 + 16, m.row * 32 + 16, Tiles.MINI_ANTS[m.team], 1, 2); }
+        for (i = 0; !plain && i < file.markers.length; i++) { var m = file.markers[i]; dot(m.column * 32 + 16, m.row * 32 + 16, Tiles.MINI_ANTS[m.team], 1, 2); }
         return canvas;
     }
 

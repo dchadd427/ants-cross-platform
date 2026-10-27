@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var doc = document, win = window;
-    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCrop', 'MapConvert', 'MapStore', 'MapMine', 'MapCanvas', 'MapTools'];
+    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCrop', 'MapConvert', 'MapStore', 'MapMine', 'MapMini', 'MapCanvas', 'MapTools'];
     var GROUND = 485, EGGS = 6, MINUTES = 10;          // a new map: plain grass (docs/MAP_FORMAT.md, "The blank map"), 6 eggs a team, 10 minutes
     var NEW_NAME = 'My map';
 
@@ -454,7 +454,7 @@
         sentStore = MapStore.createSent({ idb: idb });
         mine = MapMine.create(mineEnv());
         canvas = MapCanvas.create({
-            doc: doc, win: win, canvas: $('map'), minimap: $('minimap'), mini: $('mini'), miniCap: $('mini-cap'), where: $('where'),
+            doc: doc, win: win, canvas: $('map'), minimap: $('minimap'), mini: $('mini'), miniCap: $('mini-cap'), grip: $('mini-grip'), lock: $('mini-lock'), hide: $('mini-hide'), show: $('mini-show'), where: $('where'),
             zoomIn: doc.querySelector('[data-act="zoom-in"]'), zoomOut: doc.querySelector('[data-act="zoom-out"]'),
             onCursor: function (cell) { $('announce').textContent = cell ? 'Row ' + cell.row + ', column ' + cell.column : ''; }       // (said once for a key or a tap, not for every move of a mouse)
         });

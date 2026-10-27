@@ -991,8 +991,8 @@
     {
       "id": "app_play_needed_at_start",
       "file": "web/front/mapmaker_app.js",
-      "old": "'MapStore', 'MapMine', 'MapCanvas', 'MapTools'];",
-      "new": "'MapStore', 'MapMine', 'MapCanvas', 'MapTools', 'MapPlay'];",
+      "old": "'MapStore', 'MapMine', 'MapMini', 'MapCanvas', 'MapTools'];",
+      "new": "'MapStore', 'MapMine', 'MapMini', 'MapCanvas', 'MapTools', 'MapPlay'];",
       "test": "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"
     },
     {

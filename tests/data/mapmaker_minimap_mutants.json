@@ -1,0 +1,579 @@
+{
+ "note": "Mutants of the map maker's small map (docs/MAP_EDITOR.md, 'The small map': the hills drawn at the size it is shown, Hide and Show, Lock, the place of the box) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/front/mapmaker_minimap.js against tests/scripts/web_mapmaker_minimap_check.js. Run from the checkout: tools/mutate.py tests/data/mapmaker_minimap_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+ "mutants": [
+  {
+   "id": "hill_without_edge",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "ctx.fillStyle = team === 'black' ? '#fff' : '#000'; ctx.fillRect(l, t, s, s);",
+   "new": "ctx.fillStyle = team === 'black' ? '#fff' : '#000';",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_edge_colors_swapped",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "ctx.fillStyle = team === 'black' ? '#fff' : '#000'; ctx.fillRect(l, t, s, s);",
+   "new": "ctx.fillStyle = team === 'black' ? '#000' : '#fff'; ctx.fillRect(l, t, s, s);",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "black_team_black_edge",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "ctx.fillStyle = team === 'black' ? '#fff' : '#000'; ctx.fillRect(l, t, s, s);",
+   "new": "ctx.fillStyle = '#000'; ctx.fillRect(l, t, s, s);",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_minimum_too_small",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "var KEY = 'ants_mapmaker_minimap', STEP = 16, TAP = 6, HILL = 10, DOT = 5;",
+   "new": "var KEY = 'ants_mapmaker_minimap', STEP = 16, TAP = 6, HILL = 8, DOT = 5;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_minimum_in_device_pixels",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "s = Math.max(HILL * px, Math.round(4 * k))",
+   "new": "s = Math.max(HILL, Math.round(4 * k))",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_no_minimum",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "s = Math.max(HILL * px, Math.round(4 * k))",
+   "new": "s = Math.round(4 * k)",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_always_minimum",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "s = Math.max(HILL * px, Math.round(4 * k))",
+   "new": "s = HILL * px",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_off_centre",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "var l = Math.round(x - s / 2), t = Math.round(y - s / 2);",
+   "new": "var l = Math.round(x), t = Math.round(y - s / 2);",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_off_centre_down",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "var l = Math.round(x - s / 2), t = Math.round(y - s / 2);",
+   "new": "var l = Math.round(x - s / 2), t = Math.round(y);",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_edge_two_pixels_not_one",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "ctx.fillRect(l + px, t + px, s - 2 * px, s - 2 * px);",
+   "new": "ctx.fillRect(l + 2 * px, t + 2 * px, s - 4 * px, s - 4 * px);",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "green_color_changed",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "green: '#5dff2e'",
+   "new": "green: '#4cd62a'",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "red_color_changed",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "red: '#ff2d86'",
+   "new": "red: '#e8197d'",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "blue_color_changed",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "blue: '#3d9bff'",
+   "new": "blue: '#2f7be0'",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "black_color_changed",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "black: '#161616' }",
+   "new": "black: '#2a2a2a' }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "teams_swapped_in_scan",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "TEAMS = ['black', 'blue', 'red', 'green']",
+   "new": "TEAMS = ['black', 'blue', 'green', 'red']",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_tiles_start_late",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (id > 244 && id < 249)",
+   "new": "if (id > 245 && id < 249)",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_tiles_end_early",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (id > 244 && id < 249)",
+   "new": "if (id > 244 && id < 248)",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_centre_is_first_cell",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "out.push({ team: s.team, x: s.x / s.n, y: s.y / s.n });",
+   "new": "out.push({ team: s.team, x: s.x / s.n - 1.5, y: s.y / s.n });",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_centre_in_wrong_axis",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "s.x += i % w + 0.5; s.y += (i / w | 0) + 0.5; s.n++;",
+   "new": "s.x += (i / w | 0) + 0.5; s.y += i % w + 0.5; s.n++;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "ant_beside_own_hill_drawn",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "return h.team === m.team && Math.abs(h.x * k - x) < s && Math.abs(h.y * k - y) < s;",
+   "new": "return false;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "ant_beside_any_hill_left_out",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "return h.team === m.team && Math.abs(h.x * k - x) < s",
+   "new": "return Math.abs(h.x * k - x) < s",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "ant_size_wrong",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "DOT = 5;",
+   "new": "DOT = 3;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "box_not_hidden_by_hide",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "box.hidden = !part || st.off;",
+   "new": "box.hidden = !part;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "box_hidden_without_a_part",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "box.hidden = !part || st.off;",
+   "new": "box.hidden = st.off;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "show_button_missing_when_hidden",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (env.show) env.show.hidden = !(part && st.off);",
+   "new": "if (env.show) env.show.hidden = true;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "show_button_always_there",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (env.show) env.show.hidden = !(part && st.off);",
+   "new": "if (env.show) env.show.hidden = !st.off;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hide_not_remembered",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "st.off = v[2] === 1;",
+   "new": "st.off = false;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "lock_ignored_when_stored",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "st.lock = v[3] === 1;",
+   "new": "st.lock = false;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hide_never_kept",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "JSON.stringify([st.pos && st.pos.x, st.pos && st.pos.y, +st.off, +st.lock])",
+   "new": "JSON.stringify([st.pos && st.pos.x, st.pos && st.pos.y, 0, +st.lock])",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "lock_never_kept",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "JSON.stringify([st.pos && st.pos.x, st.pos && st.pos.y, +st.off, +st.lock])",
+   "new": "JSON.stringify([st.pos && st.pos.x, st.pos && st.pos.y, +st.off, 0])",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "place_never_kept",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "JSON.stringify([st.pos && st.pos.x, st.pos && st.pos.y,",
+   "new": "JSON.stringify([null, null,",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "focus_not_moved_to_show",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "(st.off ? env.show : env.hide).focus();",
+   "new": "void 0;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "no_new_frame_after_hide",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "place(); if (again) again(); }",
+   "new": "place(); }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "storage_error_breaks",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "catch (e) { /* this visit only */ }",
+   "new": "catch (e) { throw e; }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "rubbish_storage_taken",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (Array.isArray(v) && v.length === 4) {",
+   "new": "if (v) {",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "stored_place_not_a_number_taken",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "typeof v[0] === 'number' && typeof v[1] === 'number' && isFinite(v[0]) && isFinite(v[1])",
+   "new": "isFinite(v[0]) && isFinite(v[1])",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "lock_label_not_changed",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "env.lock.setAttribute('aria-label', st.lock ? 'Unlock minimap position' : 'Lock minimap position');",
+   "new": "env.lock.setAttribute('aria-label', 'Lock minimap position');",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "lock_not_pressed",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "env.lock.setAttribute('aria-pressed', '' + st.lock);",
+   "new": "env.lock.setAttribute('aria-pressed', 'false');",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "lock_grip_look_missing",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "env.grip.classList.toggle('locked', st.lock);",
+   "new": "void 0;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "drag_works_while_locked",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (st.lock || e.button > 0) return;",
+   "new": "if (e.button > 0) return;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "right_button_drags",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (st.lock || e.button > 0) return;",
+   "new": "if (st.lock) return;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "arrows_work_while_locked",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (!st.lock && r) move(fit({ x: p.x",
+   "new": "if (r) move(fit({ x: p.x",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "home_works_while_locked",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "function reset() { if (!st.lock) move(null); }",
+   "new": "function reset() { move(null); }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "snap_back_skipped_when_locked",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "else if (p && other(p, st.pos)) move(p, true);",
+   "new": "else if (!st.lock && p && other(p, st.pos)) move(p, true);",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "snap_back_never",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "else if (p && other(p, st.pos)) move(p, true);",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "snap_back_kept_as_choice",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "else if (p && other(p, st.pos)) move(p, true);",
+   "new": "else if (p && other(p, st.pos)) move(p);",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "stored_place_used_outside_room",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (p && other(p, st.pos)) st.pos = null; put(); }",
+   "new": "put(); }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "stored_place_not_applied",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (p && other(p, st.pos)) st.pos = null; put(); }",
+   "new": "if (p && other(p, st.pos)) st.pos = null; }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "no_clamp_right",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "return { x: Math.max(0, Math.min(p.x, room.w - box.w)), y: Math.max(0, Math.min(p.y, room.h - box.h)) };",
+   "new": "return { x: Math.max(0, p.x), y: Math.max(0, Math.min(p.y, room.h - box.h)) };",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "no_clamp_bottom",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "return { x: Math.max(0, Math.min(p.x, room.w - box.w)), y: Math.max(0, Math.min(p.y, room.h - box.h)) };",
+   "new": "return { x: Math.max(0, Math.min(p.x, room.w - box.w)), y: Math.max(0, p.y) };",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "no_clamp_left_top",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "return { x: Math.max(0, Math.min(p.x, room.w - box.w)), y: Math.max(0, Math.min(p.y, room.h - box.h)) };",
+   "new": "return { x: Math.min(p.x, room.w - box.w), y: Math.min(p.y, room.h - box.h) };",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "fits_ignores_size",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "function other(a, b) { return a.x !== b.x || a.y !== b.y; }",
+   "new": "function other(a, b) { return a.x < 0 || a.y < 0; }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "fits_allows_negative",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "function other(a, b) { return a.x !== b.x || a.y !== b.y; }",
+   "new": "function other(a, b) { return a.x > b.x || a.y > b.y; }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "drag_not_clamped",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (down.moved && r) move(fit({ x: down.from.x + dx, y: down.from.y + dy }, r, sizeOf(box)), true);",
+   "new": "if (down.moved && r) move({ x: down.from.x + dx, y: down.from.y + dy }, true);",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "drag_origin_wrong",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "from: here(), moved: false };",
+   "new": "from: { x: 0, y: 0 }, moved: false };",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "drag_ends_unkept",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (moved) { store(); tapAt = 0; }",
+   "new": "if (moved) { tapAt = 0; }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "drag_follows_other_pointers",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (!down || e.pointerId !== down.id) return;\n                var dx",
+   "new": "if (!down) return;\n                var dx",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "cancel_does_not_end_drag",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "env.grip.addEventListener('pointercancel', function () { down = null; });",
+   "new": "env.grip.addEventListener('pointercancel', function () { });",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "tap_threshold_zero",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "TAP = 6,",
+   "new": "TAP = 0,",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "tap_threshold_huge",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "TAP = 6,",
+   "new": "TAP = 600,",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "two_taps_do_not_reset",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (now - tapAt < 400) { reset(); tapAt = 0; } else tapAt = now;",
+   "new": "if (now - tapAt < 400) { tapAt = 0; } else tapAt = now;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "two_taps_too_slow",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (now - tapAt < 400)",
+   "new": "if (now - tapAt < 40)",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "two_taps_any_time",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (now - tapAt < 400)",
+   "new": "if (now - tapAt < 400000)",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "a_drag_counts_as_a_tap",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (moved) { store(); tapAt = 0; }",
+   "new": "if (moved) { store(); }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "arrow_step_wrong",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "STEP = 16,",
+   "new": "STEP = 10,",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "arrow_right_goes_left",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "ArrowRight: [1, 0]",
+   "new": "ArrowRight: [-1, 0]",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "arrow_down_goes_up",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "ArrowDown: [0, 1]",
+   "new": "ArrowDown: [0, -1]",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "home_does_nothing",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (e.key === 'Home') { e.preventDefault(); reset(); }",
+   "new": "if (e.key === 'Home') { e.preventDefault(); }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "home_page_scrolls",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (e.key === 'Home') { e.preventDefault(); reset(); }",
+   "new": "if (e.key === 'Home') { reset(); }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "arrow_page_scrolls",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "else if (d) { e.preventDefault(); if (!st.lock",
+   "new": "else if (d) { if (!st.lock",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "pointer_not_captured",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "try { env.grip.setPointerCapture(e.pointerId); } catch (x) { /* gone */ }",
+   "new": "void 0;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "grip_press_reaches_page",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "e.preventDefault();\n            });\n            env.grip.addEventListener('pointermove'",
+   "new": "});\n            env.grip.addEventListener('pointermove'",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "show_button_not_at_the_box",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "n.style.left = st.pos ? st.pos.x + 'px' : ''; n.style.top = st.pos ? st.pos.y + 'px' : ''; n.style.right = st.pos ? 'auto' : '';",
+   "new": "if (n === box) { n.style.left = st.pos ? st.pos.x + 'px' : ''; n.style.top = st.pos ? st.pos.y + 'px' : ''; n.style.right = st.pos ? 'auto' : ''; }",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "corner_keeps_right_auto",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "n.style.right = st.pos ? 'auto' : '';",
+   "new": "n.style.right = 'auto';",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "room_of_hidden_box_unknown",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "b = sizeOf(box.hidden && env.show ? env.show : box),",
+   "new": "b = sizeOf(box),",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hills_of_a_team_far_apart_merged",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "for (r = -1; r < 2; r++) for (q = -1; q < 2; q++) {",
+   "new": "for (r = -3; r < 4; r++) for (q = -3; q < 4; q++) {",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_corners_not_touching",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "c = i + r * w + q;",
+   "new": "c = r && q ? -1 : i + r * w + q;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "row_end_joins_next_row",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "if (i % w + q >= 0 && i % w + q < w && cells[c] === id)",
+   "new": "if (cells[c] === id)",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hills_of_two_teams_joined",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "cells[c] === id) { cells[c] = 0;",
+   "new": "cells[c]) { cells[c] = 0;",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_group_not_marked_used",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "id = cells[k]; s = { team: TEAMS[id - 245], x: 0, y: 0, n: 0 }; todo = [+k]; cells[k] = 0;",
+   "new": "id = cells[k]; s = { team: TEAMS[id - 245], x: 0, y: 0, n: 0 }; todo = [+k];",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "hill_group_averaged_by_one",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "out.push({ team: s.team, x: s.x / s.n, y: s.y / s.n });",
+   "new": "out.push({ team: s.team, x: s.x, y: s.y });",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  },
+  {
+   "id": "stored_boolean_place_taken",
+   "file": "web/front/mapmaker_minimap.js",
+   "old": "typeof v[0] === 'number' && typeof v[1] === 'number' && isFinite(v[0])",
+   "new": "isFinite(v[0])",
+   "test": "node tests/scripts/web_mapmaker_minimap_check.js"
+  }
+ ]
+}
