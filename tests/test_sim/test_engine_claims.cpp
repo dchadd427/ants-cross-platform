@@ -1,7 +1,7 @@
 // The claim lists (src/ants_sim/order_claims.cpp): the ants that claim a tile, by tile, answer "does a team-mate claim this tile?" (can_enter, rule R6) without a scan of every ant,
 // and must give the scan's answer in every state, so that no match changes by a single bit (docs/ARCHITECTURE.md, "Lookups in the tick loop").
 //
-// This program links ants_sim_shadow, like test_engine_lookups: every question in a tick is also run through the scan (every call up to 256 ants, every 64th above) and stops the program
+// This program links ants_sim_shadow, like test_engine_lookups: every question in a tick is also run through the scan (every call up to 2,048 ants, every 16th above) and stops the program
 // on a difference, and every list is checked against the ants' orders at the end of a tick and after a copy. The matches here are played by two engines at once, one on the scans alone
 // (LinearOnly) and one on the lists, with the state hash (all eight parts) compared at every tick; the worlds that call each writer of an order by hand are in this file, the crowds
 // with every kind of order are those of test_engine_lookups (it asserts that the lists answered there).
@@ -20,17 +20,6 @@
 
 using namespace ants::sim;
 using namespace ants::sim::twin_test;
-
-#if defined(__SANITIZE_ADDRESS__)
-#define ANTS_CLAIMS_TEST_SANITIZED 1
-#elif defined(__has_feature)
-#if __has_feature(address_sanitizer) || __has_feature(undefined_behavior_sanitizer)
-#define ANTS_CLAIMS_TEST_SANITIZED 1
-#endif
-#endif
-#ifndef ANTS_CLAIMS_TEST_SANITIZED
-#define ANTS_CLAIMS_TEST_SANITIZED 0
-#endif
 
 static int g_test_count = 0;
 static int g_test_failures = 0;
@@ -284,6 +273,7 @@ void run_claim_tests() {
             {"go_to a far tile", [](ClaimWorld& w, AntUnit& a) { w.impl.go_to(a, TileCoord{10, 10}, false, false); }},
             {"go_to the entrance of the own hill", [](ClaimWorld& w, AntUnit& a) { w.impl.go_to(a, TileCoord{1, 1}, false, false); }},
             {"go_to a tile of an enemy hill", [](ClaimWorld& w, AntUnit& a) { w.impl.go_to(a, TileCoord{9, 1}, true, false); }},
+            {"go_to the raid tile of an enemy hill (a thief)", [](ClaimWorld& w, AntUnit& a) { a.type = AntType::Thief; w.impl.go_to(a, TileCoord{9, 1}, true, false); }},
             {"go_to a tile with an ant of another team", [](ClaimWorld& w, AntUnit& a) { w.impl.go_to(a, TileCoord{3, 2}, true, false); }},
             {"go_to a tile with a team-mate (a special order)", [](ClaimWorld& w, AntUnit& a) { w.impl.go_to(a, TileCoord{3, 3}, true, true); }},
             {"go_to a bomb", [](ClaimWorld& w, AntUnit& a) { w.impl.grid_.place_bomb(6, 6, 1); w.impl.go_to(a, TileCoord{6, 6}, true, false); }},
@@ -422,7 +412,7 @@ void run_claim_tests() {
         for (const Layout layout : {Layout::Packed, Layout::Spread, Layout::Piled}) {
             const ClaimMarks marks;
             uint64_t checks = 0, pending = 0;
-            const std::string why = play_crowd(90, layout == Layout::Spread ? 100 : 60, layout, ANTS_CLAIMS_TEST_SANITIZED ? 150u : 300u, &checks, &pending);
+            const std::string why = play_crowd(90, layout == Layout::Spread ? 100 : 60, layout, 300u, &checks, &pending);
             std::cout << "\n        layout " << static_cast<int>(layout) << ": " << marks.calls_since() << " questions answered by the lists (" << marks.hits_since() << " yes), " << marks.checks_since() << " compared with the scan, "
                       << marks.verifies_since() << " list checks, " << marks.catch_ups_since() << " ants looked at by the start-of-tick pass   ... ";
             if (!why.empty()) std::cout << "\n        " << why << "\n";
@@ -436,7 +426,7 @@ void run_claim_tests() {
     TEST_CASE("C3.3 The six shipped maps, scripted players (orders of every kind, food carried home and the hill entered, fights, hatching), copies of the engine in the middle: the lists answer, both answers are met, the hashes of the engine on the scans and of the engine on the lists are equal at every tick and nothing is put right by the pass at the start of a tick") {
         uint32_t seed = 140;
         const std::string dir = std::string(ORIGINAL_ASSETS_DIR) + "/Maps";
-        const uint32_t ticks = ANTS_CLAIMS_TEST_SANITIZED ? 200u : 900u;
+        const uint32_t ticks = 900u;
         const ClaimMarks all_maps;
         for (const char* file : {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "ISLANDS.LVL", "GAUNTLET.LVL", "TREASURE.LVL"}) {
             const auto& level = library_map(dir, file);
