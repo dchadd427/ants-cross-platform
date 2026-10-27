@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none; the rules and network protocol 21 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea2c4cc5...0b2fe424)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea2c4cc5...034ecbf2)
 
 ## v0.12.141 - 2026-10-26 - Faster: orders after a fight no longer look at every ant
 
