@@ -152,8 +152,8 @@
   {
    "id": "copy_of_an_engine_is_not_checked",
    "file": "src/ants_sim/sim_engine.cpp",
-   "old": "    if (other.impl_) { impl_->tile_ants_verify(); impl_->event_heap_verify(); }   // the copy's lists and heap are right at once (shadow build)\n",
-   "new": "    if (other.impl_) { impl_->tile_ants_verify(); }\n"
+   "old": "    if (other.impl_) { impl_->tile_ants_verify(); impl_->event_heap_verify(); impl_->claims_verify(); }   // the copy's lists and heap are right at once (shadow build)\n",
+   "new": "    if (other.impl_) { impl_->tile_ants_verify(); impl_->claims_verify(); }\n"
   },
   {
    "id": "burn_of_a_removed_ant_pending",
