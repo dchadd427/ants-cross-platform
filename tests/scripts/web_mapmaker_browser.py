@@ -79,6 +79,7 @@ Parts:
              the grip that drags the box (mouse and finger; no stroke, no looking around), the arrow keys, Home, two taps, Lock, a smaller window, a stored place that does not fit, the phone's size
   * foot     desktop windows from 800 x 500 to 1920 x 1080 (at 1 and 1.25 pixels a pixel) and phones (390 x 844, 360 x 640, 320 x 568) (tests/scripts/web_mapmaker_browser_foot.py, which says what it covers): the footer line
              lies inside the screen's frame, as the page opens, after a stroke and with the Pick up bar open, and the page has no scrollbar that it did not need; a phone held sideways has no footer
+  * convertwait  1280 x 800, the scripts of Copy, convert and Crop on a slow network (every request takes 1.5 s longer): a second press of Copy... during the load asks for nothing more (one tag for each script) and opens ONE dialog; a map opened, or an Open a map dialog opened, while the crop scripts load keeps the crop screen shut (it would be cut for the wrong map and limits)
   * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -98,7 +99,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants", "pickup", "line", "foot", "minimap")
+PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants", "pickup", "line", "foot", "minimap", "convertwait")
 WITH_ATLAS = ("panel", "sprites", "layer", "edges", "play", "ants", "pickup")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 VIOLATIONS = []                   # what the browser refused for the page's content security policy (the console's "Refused to ..." lines and the audit issues), kept for the part that is running
@@ -1475,6 +1476,45 @@ def run_part(part, tab, args, check, tiny, junk):
         check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Cancel closes it")
         page.ev("document.getElementById('undo-btn').click()")
         check(wait_for(lambda: page.ev("document.getElementById('phone-sum').textContent") == "“Tiny map with no PowerUps” · 6 min"), "Undo gives it back on a phone too")
+    elif part == "convertwait":
+        print("[web map maker] the scripts of Copy, convert and Crop on a slow network, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        medium = os.path.join(REPO, "Original-Ants", "Maps", "MEDIUM.LVL")
+        slow = {"offline": False, "latency": 1500, "downloadThroughput": -1, "uploadThroughput": -1}
+
+        for what in ("a map is opened", "a dialog is opened", "Copy is pressed twice"):
+            page = Page(tab, args.web)
+            check(page.open() and page.ready(), "the page starts (%s)" % what)
+            page.choose_file(tiny)
+            check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open (%s)" % what)
+            tab.call("Network.enable")
+            tab.call("Network.setCacheDisabled", {"cacheDisabled": True})                          # (each round loads the scripts again)
+            tab.call("Network.emulateNetworkConditions", slow)
+            if what == "Copy is pressed twice":
+                page.press_act("copy")
+                page.press_act("copy")
+                check(wait_for(lambda: page.ev("!!document.querySelector('.dlg .srccard')"), 20), "the dialog opens when the scripts are there")
+                time.sleep(1)
+                check(page.ev("document.querySelectorAll('.dlg').length") == 1 and page.ev("document.querySelectorAll('script[src*=mapmaker_convert]').length") == 1 and page.ev("document.querySelectorAll('script[src*=mapmaker_crop]').length") == 1, "one dialog, and one tag for each script, for two presses")
+            else:
+                page.press_act("resize")
+                wait_for(lambda: page.ev("!!document.getElementById('resize-rows')"))
+                page.type_into("#resize-rows", "20")
+                page.ev("document.querySelector('.dlg-foot .btn:last-child').click()")
+                if what == "a map is opened":
+                    page.choose_file(medium)
+                    check(wait_for(lambda: page.state()["rows"] == "60"), "MEDIUM is opened while the scripts load")
+                else:
+                    page.press_act("open")
+                    check(wait_for(lambda: page.ev("!!document.querySelector('.dlg')")), "Open a map is opened while the scripts load")
+                wait_for(lambda: page.ev("typeof MapCrop !== 'undefined' && typeof MapConvert !== 'undefined'"), 20)
+                time.sleep(1)
+                check(page.ev("document.getElementById('crop').hidden") and not page.ev("document.getElementById('editor').hidden"), "the crop screen stays shut (%s)" % what)
+                if what == "a map is opened":
+                    check(page.state()["rows"] == "60" and page.state()["name"] == "MEDIUM", "the open map is untouched: %s" % page.state())
+                else:
+                    check(page.ev("!!document.querySelector('.dlg')") and page.state()["name"] == "TINY", "the Open a map dialog is still the only thing on the screen")
+            tab.call("Network.emulateNetworkConditions", dict(slow, latency=0))
     elif part == "convert":
         print("[web map maker] copy, convert and crop, 1280 x 800")
         tab.emulate(1280, 800, 1)
@@ -1483,6 +1523,33 @@ def run_part(part, tab, args, check, tiny, junk):
         page.choose_file(tiny)
         check(wait_for(lambda: page.state()["name"] == "TINY"), "TINY is open")
         check(page.ev("document.getElementById('convert-link').textContent") == "Start an Extended map from this one...", "the side panel offers an Extended map")
+        check(page.ev("typeof MapConvert === 'undefined' && typeof MapCrop === 'undefined' && !document.querySelector('script[src*=mapmaker_convert]') && !document.querySelector('script[src*=mapmaker_crop]')"), "the copy, convert and crop scripts are not loaded before one is used")
+        # the network is cut for one of the two scripts: the person is told in plain words, nothing opens, the page and the map are as before; the next press asks again
+        tab.call("Network.enable")
+        tab.call("Network.setBlockedURLs", {"urls": ["*mapmaker_crop.js*"]})
+        page.press_act("copy")
+        check(wait_for(lambda: page.ev("document.body.textContent.indexOf('This part did not load') >= 0")) and not page.ev("!!document.querySelector('.dlg .srccard')"), "a script that did not load: Copy... says so in plain words and opens nothing")
+        page.key("Escape")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")) and page.state()["name"] == "TINY", "Escape closes the words and the map is as it was")
+        # Resize to a smaller size asks for the crop screen: with its script cut off it says so and the map is as before; with the network back the crop screen opens
+        page.press_act("resize")
+        check(wait_for(lambda: page.ev("!!document.getElementById('resize-rows')")), "Resize... opens its dialog")
+        page.type_into("#resize-rows", "20")
+        page.ev("document.querySelector('.dlg-foot .btn:last-child').click()")
+        check(wait_for(lambda: page.ev("document.body.textContent.indexOf('This part did not load') >= 0")) and page.ev("document.getElementById('crop').hidden"), "a crop script that did not load: Choose part to keep says so in plain words and the crop screen stays shut")
+        page.key("Escape")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")) and page.state()["name"] == "TINY", "Escape closes the words and the map is as it was")
+        tab.call("Network.setBlockedURLs", {"urls": []})
+        page.press_act("resize")
+        check(wait_for(lambda: page.ev("!!document.getElementById('resize-rows')")), "Resize... opens its dialog again")
+        page.type_into("#resize-rows", "20")
+        page.ev("document.querySelector('.dlg-foot .btn:last-child').click()")
+        check(wait_for(lambda: page.ev("!document.getElementById('crop').hidden")), "with the network back, Choose part to keep loads the crop script and opens the crop screen")
+        page.key("Escape")
+        check(wait_for(lambda: page.ev("!!document.getElementById('resize-rows')")) and page.ev("document.getElementById('crop').hidden"), "Escape on the crop screen comes back to the Resize dialog")
+        page.key("Escape")
+        check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Escape closes the Resize dialog")
+        tab.call("Network.setBlockedURLs", {"urls": []})
         page.press_act("copy")
         check(wait_for(lambda: page.ev("!!document.querySelector('.dlg .srccard')")), "Copy... opens the dialog with the map that is copied")
         page.shot(args.shots, "mapmaker-convert-copy")
