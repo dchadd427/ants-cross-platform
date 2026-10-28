@@ -385,11 +385,10 @@ LobbyServices RoomManager::lobby_services() {
     LobbyServices s;
     s.choose_map = [this](const std::string& name) {
         if (name.empty()) return std::string();
-        if (!store_.online_refusal(name).empty()) return std::string();          // (a map that a room does not play is not chosen, though the operator offers it: the leader is told by map_refusal)
         for (const std::string& file : limits_.demo_maps) {
-            if (iequals(name, file)) return file;
+            if (iequals(name, file)) return store_.online_refusal(file).empty() ? file : std::string();       // (a map that a room does not play is not chosen though the operator offers it: map_refusal tells the leader)
         }
-        if (!limits_.demo_map.empty() && iequals(name, limits_.demo_map)) return limits_.demo_map;       // (the server's one map when it offers no list)
+        if (!limits_.demo_map.empty() && iequals(name, limits_.demo_map)) return store_.online_refusal(limits_.demo_map).empty() ? limits_.demo_map : std::string();       // (the server's one map when it offers no list)
         // Any other map of the scanned list (the maps folder and the community folder: GET /maps lists them): the lobby offers every map of the list, not only the --demo-maps. Answered from the list in memory:
         // a Plan message costs no disk read and no hashing; a name that is not in the list is refused. The file is read when the room loads its map (load_map).
         return store_.listed_name(name);

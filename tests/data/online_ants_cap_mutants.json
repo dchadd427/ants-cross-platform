@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the cap of starting ants of an online room (OnlineLimits::kMaxStartAnts = 8,000, all four colors together) and of the weight of a match (the most of the places of its cells and of its ants, one for every started 400 ants), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_ants_cap_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'Starting ants') or docs/MAP_SUBMISSIONS.md ('The online size limit'). The web side (the Play this map dialog's refusal and the picker's chip) is in tests/data/mapmaker_play_mutants.json (play_cap_*) and tests/scripts/test_web_map_picker.py. Not listed on purpose: three second locks behind a first one that a test does reach: the check in Room::start_lobby and in the lobby's START (Room::update) behind choose_map, load_map and build_room (no door of the manager makes a Room on a map over the cap, so no test can start one), and the ants check in the history's approved-map callback behind the feeder's own load_level.",
+ "note": "Mutants of the cap of starting ants of an online room (OnlineLimits::kMaxStartAnts = 8,000, all four colors together) and of the weight of a match (the most of the places of its cells and of its ants, one for every started 400 ants), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_ants_cap_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'Starting ants') or docs/MAP_SUBMISSIONS.md ('The online size limit'). The web side (the Play this map dialog's refusal and the picker's chip) is in tests/data/mapmaker_play_mutants.json (play_cap_*) and tests/scripts/test_web_map_picker.py. Not listed on purpose: three second locks behind a first one that a test does reach: the check in Room::start_lobby and in the lobby's START (Room::update) behind choose_map, load_map and build_room (no door of the manager makes a Room on a map over the cap, so no test can start one), the ants check in the history's approved-map callback behind the feeder's own load_level, and the ants of a restart record whose room is not made yet (RoomManager::public_places looks at the head's map then; the first slice of the restore makes the room before any Hello is looked at, so no test can ask in between).",
  "mutants": [
   {
    "id": "cap_one_more",
@@ -47,7 +47,7 @@
    "id": "cap_never_refuses",
    "file": "include/ants_server/online_limits.hpp",
    "old": "{ return start_ants <= kMaxStartAnts; }",
-   "new": "{ return true; }",
+   "new": "{ return start_ants <= kMaxStartAnts || true; }",
    "build": [
     "test_server",
     "test_map_list",
@@ -61,7 +61,7 @@
    "id": "cap_forgets_the_cells",
    "file": "include/ants_server/online_limits.hpp",
    "old": "{ return allows(cells) && allows_ants(start_ants); }",
-   "new": "{ return allows_ants(start_ants); }",
+   "new": "{ return allows_ants(start_ants + cells * 0); }",
    "build": [
     "test_server",
     "test_map_list",
@@ -75,7 +75,7 @@
    "id": "cap_forgets_the_ants_in_the_pair",
    "file": "include/ants_server/online_limits.hpp",
    "old": "{ return allows(cells) && allows_ants(start_ants); }",
-   "new": "{ return allows(cells); }",
+   "new": "{ return allows(cells + start_ants * 0); }",
    "build": [
     "test_server",
     "test_map_list",
@@ -89,7 +89,7 @@
    "id": "weight_without_ants",
    "file": "include/ants_server/online_limits.hpp",
    "old": "return static_cast<uint32_t>(by_cells > by_ants ? by_cells : by_ants);",
-   "new": "return static_cast<uint32_t>(by_cells);",
+   "new": "return static_cast<uint32_t>(by_cells + by_ants * 0);",
    "build": [
     "test_server",
     "test_map_list",
@@ -103,7 +103,7 @@
    "id": "weight_of_ants_only",
    "file": "include/ants_server/online_limits.hpp",
    "old": "return static_cast<uint32_t>(by_cells > by_ants ? by_cells : by_ants);",
-   "new": "return static_cast<uint32_t>(by_ants);",
+   "new": "return static_cast<uint32_t>(by_ants + by_cells * 0);",
    "build": [
     "test_server",
     "test_map_list",
@@ -314,8 +314,8 @@
   {
    "id": "start_plan_takes_an_offered_map_over_the_cap",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "        if (!store_.online_refusal(name).empty()) return std::string();          // (a map that a room does not play is not chosen, though the operator offers it: the leader is told by map_refusal)\n",
-   "new": "",
+   "old": "return store_.online_refusal(file).empty() ? file : std::string();",
+   "new": "return file;",
    "build": [
     "test_server"
    ],
@@ -445,8 +445,8 @@
   {
    "id": "start_place_asked_without_ants",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "OnlineLimits::weight(cells, start_ants), std::max<size_t>(limits_.demo_rooms, 1)",
-   "new": "OnlineLimits::weight(cells), std::max<size_t>(limits_.demo_rooms, 1)",
+   "old": "    const size_t want = std::min<size_t>(OnlineLimits::weight(cells, start_ants), std::max<size_t>(limits_.demo_rooms, 1));",
+   "new": "    const size_t want = OnlineLimits::weight(cells + start_ants * 0);",
    "build": [
     "test_server"
    ],
@@ -480,13 +480,13 @@
    "build": [
     "test_server"
    ],
-   "test": "ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
+   "test": "ANTS_TEST_FILTER=S3.230 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "start_record_that_waits_weighs_no_ants",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "weigh(store_.cells_of(r.head.map), store_.start_ants_of(r.head.map))",
-   "new": "weigh(store_.cells_of(r.head.map), 0)",
+   "old": "weigh(r.room->map_cells(), r.room->map_start_ants())",
+   "new": "weigh(r.room->map_cells(), 0)",
    "build": [
     "test_server"
    ],

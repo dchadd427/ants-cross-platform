@@ -799,6 +799,8 @@ void run_online_limit_tests() {
             draft_fits.start_ants = 8000;
             w.mgr.mutable_store().set_test_maps({draft_over, draft_fits});
             ASSERT_EQ(w.mgr.store().online_refusal("over draft ~TEST-0badf00d.lvl"), std::string(net::kNoticeMapTooManyAnts));
+            ASSERT_TRUE(services.choose_map("Over Draft ~test-0badf00d.lvl").empty() && services.choose_map("OVER DRAFT ~TEST-0BADF00D.LVL").empty());        // (the lobby's plan: a test map over the cap is not chosen, in any letter case)
+            ASSERT_TRUE(services.choose_map("Fits Draft ~test-0badf00e.lvl") == "Fits Draft ~test-0badf00e.lvl" && services.choose_map("fits draft ~TEST-0badf00e.lvl") == "Fits Draft ~test-0badf00e.lvl");
             w.connect_page("Ann", "cap00002", lobby_block_of("Over Draft ~test-0badf00d.lvl"));
             w.connect_page("Cat", "cap00003", lobby_block_of("Fits Draft ~test-0badf00e.lvl"));
             w.run(300);
@@ -943,7 +945,7 @@ void run_online_limit_tests() {
             rewrite_head(w, "AC-1", [&](RestartHead& h) { h.map = file; h.map_hash = hash; h.start.map_name = file; h.start.map_hash = hash; });
             w.start_server(500);
             ASSERT_MSG(w.report.items.size() == 1 && w.report.items[0].outcome == RestoreItem::Outcome::Ended, std::to_string(w.report.items.size()) + (w.report.items.empty() ? std::string() : ": " + w.report.items[0].note));
-            ASSERT_MSG(w.report.items[0].note.find("too many ants to play online") != std::string::npos && w.report.items[0].note.find(file) != std::string::npos, w.report.items[0].note);
+            ASSERT_MSG(w.report.items[0].note.find("starts too many ants to play online now") != std::string::npos && w.report.items[0].note.find(file) != std::string::npos, w.report.items[0].note);
             const RoomStatus s = w.status("AC-1");
             ASSERT_TRUE(s.state == RoomState::Failed && s.reason == w.report.items[0].note && !s.restored);
             ASSERT_TRUE(w.record_files().empty());
