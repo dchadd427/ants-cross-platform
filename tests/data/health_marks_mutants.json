@@ -435,7 +435,7 @@
     {
       "id": "application_hands_no_marks_to_the_renderer",
       "file": "src/ants_app/application.cpp",
-      "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css);",
+      "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);",
       "new": "renderer_->set_health_marks(health::Setting{health::When::Off, health::Style::Bar}, 1.0);",
       "build": [
         "test_replay_app"
@@ -445,7 +445,7 @@
     {
       "id": "application_hands_the_default_marks",
       "file": "src/ants_app/application.cpp",
-      "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css);",
+      "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);",
       "new": "renderer_->set_health_marks(health::Setting{}, 1.0);",
       "build": [
         "test_replay_app"
@@ -656,8 +656,8 @@
     {
       "id": "digit_scale_floor_not_ceil",
       "file": "include/ants_app/health_marks.hpp",
-      "old": "std::ceil(kDigitCssFactor * picture_px_per_css - 1e-9)",
-      "new": "std::floor(kDigitCssFactor * picture_px_per_css - 1e-9)",
+      "old": "std::ceil(kDigitCssFactor * picture_px_per_css)",
+      "new": "std::floor(kDigitCssFactor * picture_px_per_css)",
       "build": [
         "test_health_marks"
       ],
@@ -696,8 +696,8 @@
     {
       "id": "digit_scale_always_one",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "    digit_scale_ = health::digit_scale(picture_px_per_css);",
-      "new": "    digit_scale_ = 1;",
+      "old": "digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) : 1;",
+      "new": "digit_scale_ = 1;",
       "build": [
         "test_health_marks"
       ],
@@ -706,8 +706,8 @@
     {
       "id": "digit_scale_from_zoom_not_density",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "    digit_scale_ = health::digit_scale(picture_px_per_css);",
-      "new": "    digit_scale_ = health::digit_scale(picture_px_per_css) + (picture_px_per_css >= 1.25 ? 1 : 0);",
+      "old": "digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) : 1;",
+      "new": "digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) + (picture_px_per_css >= 1.25 ? 1 : 0) : 1;",
       "build": [
         "test_health_marks"
       ],
@@ -716,8 +716,8 @@
     {
       "id": "outline_on_desktop",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "    digit_outline_ = health::digit_outlined(picture_px_per_css);",
-      "new": "    digit_outline_ = true;",
+      "old": "digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);",
+      "new": "digit_outline_ = true;",
       "build": [
         "test_health_marks"
       ],
@@ -726,8 +726,8 @@
     {
       "id": "outline_missing_on_phone",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "    digit_outline_ = health::digit_outlined(picture_px_per_css);",
-      "new": "    digit_outline_ = false;",
+      "old": "digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);",
+      "new": "digit_outline_ = false;",
       "build": [
         "test_health_marks"
       ],
