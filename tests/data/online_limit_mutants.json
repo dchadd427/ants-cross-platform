@@ -245,7 +245,7 @@
    "id": "big_map_refusal_is_silent",
    "file": "src/ants_server/room_manager.cpp",
    "old": "return store_.online_refusal(name); };",
-   "new": "return std::string(); };",
+   "new": "return store_.online_refusal(name).substr(0, 0); };",
    "build": [
     "test_map_list",
     "test_server",
