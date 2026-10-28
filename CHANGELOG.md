@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2e45f112...dc3f7259)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2e45f112...67c5b473)
 
 ## v0.12.147 - 2026-10-27 - Map Maker: each start ant faces its own way
 
