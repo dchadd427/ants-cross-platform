@@ -23,10 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.148 - 2026-10-28 - On a phone the health numbers are bigger and outlined
 
 **For players:**
 - **On a phone the health numbers are bigger and outlined.** In "Show health as: Number" the digits were 2 to 3 CSS pixels tall on a phone, too small to read. They now grow with the screen (about 8 CSS pixels tall or more: three times as big on a phone held upright, twice on its side) and get a thin black outline. Desktop is unchanged: the original's white digits, pixel for pixel.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2e45f112...76466d3f)
 
 ## v0.12.147 - 2026-10-27 - Map Maker: each start ant faces its own way
 
