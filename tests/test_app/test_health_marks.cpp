@@ -339,15 +339,15 @@ void test_phone_numbers(const assets::AssetArchive& arc) {
             for (int y = cy0 - pad; y < cy0 + ch * c.scale + pad; ++y) {
                 for (int x = cx0 - pad; x < cx0 + cw * c.scale + pad; ++x) {
                     const int fx = (x - cx0 >= 0) ? (x - cx0) / c.scale : -1, fy = (y - cy0 >= 0) ? (y - cy0) / c.scale : -1;
-                    bool is_white = white1(fx, fy), near = false;
-                    for (int oy = -c.scale; oy <= c.scale && !near; ++oy)
-                        for (int ox = -c.scale; ox <= c.scale && !near; ++ox) {
+                    bool is_white = white1(fx, fy), in_ring = false;
+                    for (int oy = -c.scale; oy <= c.scale && !in_ring; ++oy)
+                        for (int ox = -c.scale; ox <= c.scale && !in_ring; ++ox) {
                             const int nx = x + ox - cx0, ny = y + oy - cy0;
-                            if (nx >= 0 && ny >= 0 && white1(nx / c.scale, ny / c.scale)) near = true;
+                            if (nx >= 0 && ny >= 0 && white1(nx / c.scale, ny / c.scale)) in_ring = true;
                         }
-                    // (for x < 0 or y < 0 the division above is not the floor: a pixel left of or over the cell is looked at through `near` only)
+                    // (for x < 0 or y < 0 the division above is not the floor: a pixel left of or over the cell is looked at through `in_ring` only)
                     if (is_white) { ++white_n; if (!is(got, x, y, 255, 255, 255)) ++missing; }
-                    else if (c.outline && near) { ++ring_n; if (!is(got, x, y, 0, 0, 0)) ++wrong; }
+                    else if (c.outline && in_ring) { ++ring_n; if (!is(got, x, y, 0, 0, 0)) ++wrong; }
                     else if (std::memcmp(got.at(x, y), none.at(x, y), 3) != 0) ++stray;
                 }
             }
