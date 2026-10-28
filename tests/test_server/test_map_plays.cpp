@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "../common/test_assert.hpp"
+#include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -329,6 +330,34 @@ int main() {
             ASSERT_TRUE(!rig.keep(renamed).empty());
             rig.drain(8);
             ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.left_out() == 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("MP2.3 A recording on a map that starts more ants than a room plays (8,000, the four colors added up) is not played by the feeder (one piece on the one thread, seconds for 40,000 ants): it is left out; one at the cap is counted as ever") {
+        TempDir maps;
+        const auto keep_map = [&](const char* name, uint32_t per_color) {
+            const std::string bytes = tiny_with_ants({per_color, per_color, per_color, per_color});
+            std::ofstream out(maps.path / name, std::ios::binary);
+            out << bytes;
+            return !bytes.empty() && static_cast<bool>(out);
+        };
+        ASSERT_TRUE(keep_map("AT CAP.LVL", 2000) && keep_map("OVER CAP.LVL", 2001));                // (8,000 and 8,004)
+        for (const bool over : {false, true}) {
+            MatchSpec spec;
+            spec.dir = maps.path.string();
+            spec.file = over ? "OVER CAP.LVL" : "AT CAP.LVL";
+            spec.seed = 41;
+            spec.turns = 700;
+            spec.roster = 0x03;
+            spec.names = {"Ann", "Bob", "", ""};
+            const std::vector<uint8_t> played = record_match(spec);
+            ASSERT_TRUE(!played.empty());
+            Rig rig(maps.path.string());
+            ASSERT_TRUE(rig.open());
+            ASSERT_TRUE(!rig.keep(played).empty());
+            rig.drain(8);
+            if (rig.history.count() != (over ? 0u : 1u) || rig.feeder.left_out() != (over ? 1u : 0u)) std::cout << "[" << (over ? "over the cap" : "at the cap") << ": " << rig.history.count() << " counted, " << rig.feeder.left_out() << " left out] " << std::flush;
+            ASSERT_TRUE(rig.history.count() == (over ? 0u : 1u) && rig.feeder.left_out() == (over ? 1u : 0u));
         }
     } TEST_END();
 

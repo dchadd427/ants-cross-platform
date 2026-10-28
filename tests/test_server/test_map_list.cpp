@@ -580,6 +580,10 @@ int main() {
                 ASSERT_TRUE(m.start_ants >= 12 && m.start_ants <= 32);                         // (TINY starts 12, ISLANDS 32)
             }
             ASSERT_TRUE(m.start_ants > 0);                                            // (every map of the library has start markers, so a count of 0 would mean a file that did not load)
+            ASSERT_TRUE(OnlineLimits::allows(static_cast<uint64_t>(m.width) * m.height, m.start_ants) && store.online_refusal(m.file).empty());          // (none of the 540 is refused online for its ants or its size)
+            ASSERT_EQ(OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height, m.start_ants), OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height));        // (and none weighs more than before: at most 248 ants is one place, the cells decide)
+            ASSERT_EQ(OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height, m.start_ants), store.start_ants_of(m.file) > 0 ? OnlineLimits::weight(store.cells_of(m.file), store.start_ants_of(m.file)) : 0u);
+            if (m.file == "TREASURE.LVL") ASSERT_EQ(OnlineLimits::weight(store.cells_of(m.file), store.start_ants_of(m.file)), 1u);
         }
         ASSERT_EQ(store.listing().size(), size_t{540});
         ASSERT_EQ(originals, size_t{6});

@@ -240,6 +240,7 @@ private:
     void build_backfill();
     bool backfill(const std::string& file);
     void skip(const std::string& id, const std::string& why);
+    bool load_map_of(const replay::Header& head, assets::LevelData& level, std::string& why) const;          // (the map of a recording: an approved map or the folders)
     bool load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const;
 
     ApprovedMapPath approved_path_;

@@ -16,6 +16,7 @@
 #include "ants_server/map_names.hpp"
 #include "ants_server/map_preview.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/online_limits.hpp"
 #include "ants_server/secret.hpp"
 
 namespace fs = std::filesystem;
@@ -277,6 +278,11 @@ SubmitOutcome SubmissionStore::submit(const SubmitInput& in, int64_t now) {
     const core::Result info = core::read_report(reinterpret_cast<const uint8_t*>(canonical.data()), canonical.size(), profile);
     JsonValue meta;
     if (info.status != 0 || !parse_big_json(info.payload, meta) || !meta.get("loaded").as_bool_or(false)) return refuse(400, "not_a_map", "This map could not be read.");
+    uint64_t start_ants = 0;                                       // (the start markers of the four colors added up, as OnlineLimits::start_ants counts them: from the canonical file, never a number that the sender gave)
+    for (size_t s = 0; s < 4 && s < meta.get("teams").size(); ++s) start_ants += static_cast<uint64_t>(std::max<int64_t>(0, meta.get("teams").at(s).get("start_markers").as_int_or(0)));
+    if (!OnlineLimits::allows_ants(start_ants)) {          // (a map that no room plays is not sent for approval: it would be on the list with nothing to play online)
+        return refuse(422, "map_too_many_ants_online", "This map starts too many ants to play online (8,000 at most, all colors together). You can still play it against bots on this computer.");
+    }
     int64_t players = 0;
     for (size_t i = 0; i < meta.get("teams").size(); ++i) players += meta.get("teams").at(i).get("start_markers").as_int_or(0) > 0 ? 1 : 0;
     if (players == 0) players = 4;

@@ -146,6 +146,11 @@ class ThePickersOwnCode(unittest.TestCase):
             "the flag is not read from the list": ("heavy: m.heavy === true", "heavy: false"),
             "a map with no flag is heavy": ("heavy: m.heavy === true", "heavy: m.heavy !== false"),
             "the warning says the map is refused": ("var HEAVY_TEXT = 'Many ants: may run slowly';", "var HEAVY_TEXT = 'Too many ants for an online game';"),
+            "a map over the cap of ants is not marked": ("if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            else if (m.heavy)", "if (m.heavy)"),
+            "a map over the cap of ants has both chips": ("if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            else if (m.heavy)", "if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            if (m.heavy)"),
+            "the reason is read without the refusal": ("m.online === false && m.online_why === 'ants'", "m.online_why === 'ants'"),
+            "any refused map is marked as too many ants": ("m.online === false && m.online_why === 'ants'", "m.online === false"),
+            "the chip says the game is slow": ("var TOO_MANY_TEXT = 'Too many ants to play online';", "var TOO_MANY_TEXT = 'Many ants: may run slowly';"),
         }
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():

@@ -311,7 +311,7 @@ private:
     /// The places of the public rooms that are taken: public rooms that are not a lobby that waits, and the records that wait for their replay; a match on a big map takes several (OnlineLimits::weight)
     size_t public_places() const;
     /// A place for one more public match on a map of `cells` cells, for the START of a lobby room: free, or made free by ending the public matches that have been abandoned the longest (evict_abandoned_public)
-    bool take_match_place(uint32_t now_ms, uint64_t cells);
+    bool take_match_place(uint32_t now_ms, uint64_t cells, uint64_t start_ants);
     /// Ends the public room that has been abandoned the longest (at least kDemoAbandonedMs: every seat of a person held absent, nobody back): its clients are dropped, its record is deleted, its log is
     /// freed, its end is reported, and it is forgotten at once so that its place can be taken. False when no public room qualifies (a room with a person present never does).
     bool evict_abandoned_public(uint32_t now_ms);

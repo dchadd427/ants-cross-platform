@@ -486,7 +486,7 @@
   {
    "id": "REV_public_places_ignore_retired",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "    for (const auto& r : retired_) places += r->public_room() ? weigh(r->map_cells()) : 0u;",
+   "old": "    for (const auto& r : retired_) places += r->public_room() ? weigh(r->map_cells(), r->map_start_ants()) : 0u;",
    "new": "",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.201 ./build/tests/test_server/test_server"

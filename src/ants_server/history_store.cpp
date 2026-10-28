@@ -15,6 +15,7 @@
 #include "ants_replay/player.hpp"
 #include "ants_server/history_deaths.hpp"
 #include "ants_server/history_details.hpp"
+#include "ants_server/online_limits.hpp"
 #include "ants_sim/start_teams.hpp"
 
 namespace ants::server {
@@ -815,12 +816,23 @@ HistoryFeeder::HistoryFeeder(HistoryStore& history, const ReplayStore& replays, 
 }
 
 // The map of a recording: an approved map of the players (a file of the submissions folder under a name of its own), else the maps folder and the community folder
-bool HistoryFeeder::load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const {
+bool HistoryFeeder::load_map_of(const replay::Header& head, assets::LevelData& level, std::string& why) const {
     if (approved_path_) {
         const std::string path = approved_path_(head.map_name);
         if (!path.empty()) return replay::load_map_file(head, path, level, why);
     }
     return replay::load_map(head, map_dirs_, level, why);
+}
+
+// ... and a map that starts more ants than a room plays online is not played here either: a recording is played in one piece on the one thread, and setting up the ants of such a map would hold it for seconds
+// (no room makes such a recording; one from elsewhere may be one)
+bool HistoryFeeder::load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const {
+    if (!load_map_of(head, level, why)) return false;
+    if (!OnlineLimits::allows_ants(OnlineLimits::start_ants(level))) {
+        why = "the map starts more ants than a room plays online";
+        return false;
+    }
+    return true;
 }
 
 void HistoryFeeder::skip(const std::string& id, const std::string& why) {

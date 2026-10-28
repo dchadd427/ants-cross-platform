@@ -219,6 +219,16 @@ function rig(options) {
             same('the parts: the flag is read as it is, and a missing or odd flag means a map that is not heavy', P.parseList({ format: 2, maps: [M('a.lvl', { heavy: true, ants: 2401 }), M('b.lvl', {}), M('c.lvl', { heavy: 'yes' }), M('d.lvl', { heavy: false })] }).map((m) => m.heavy), [true, false, false, false]);
             same('the words', P.HEAVY_TEXT, 'Many ants: may run slowly');
         }
+        {   // a map that starts more ants than a room plays (the server's "online": false with "online_why": "ants") says so on its row instead of the slow-game warning; a map that is only too big has no such chip; the row can still be picked
+            const rover = rig({ answer: () => Promise.resolve(response({ format: 2, maps: [M('Over.lvl', { heavy: true, ants: 9000, online: false, online_why: 'ants' }), M('Edge.lvl', { heavy: true, ants: 8000 }), M('Wide.lvl', { online: false, kind: 'extended', width: 400, height: 400 }), M('Odd.lvl', { online_why: 'ants' })] })) });
+            rover.picker.open(''); await settle();
+            const chips = {};
+            rover.rows().forEach((n) => { const b = n.querySelectorAll('.pk-badge.pk-heavy'); chips[n.querySelector('.pk-nm').textContent.replace(/(Many ants: may run slowly|Too many ants to play online|Original|Extended)/g, '').trim().toLowerCase()] = b.map((x) => x.textContent).join(' + '); });
+            same('only the map over the cap of ants has the refusal chip (one chip, not two); a map at the cap has the slow-game warning; a map that is only too big has none; a reason without "online": false is not read', Object.keys(chips).sort().map((k) => [k, chips[k]]), [['edge', 'Many ants: may run slowly'], ['odd', ''], ['over', 'Too many ants to play online'], ['wide', '']]);
+            same('the row can still be picked', rover.rows().length, 4);
+            same('the parts: the flag needs both keys', P.parseList({ format: 2, maps: [M('a.lvl', { online: false, online_why: 'ants' }), M('b.lvl', { online: false }), M('c.lvl', { online_why: 'ants' }), M('d.lvl', { online: true, online_why: 'ants' })] }).map((m) => m.tooManyAnts), [true, false, false, false]);
+            same('the words', P.TOO_MANY_TEXT, 'Too many ants to play online');
+        }
     }
     // 2. the switch: Detail by default, remembered per browser, unaffected by a storage that throws
     {

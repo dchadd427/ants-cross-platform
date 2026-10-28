@@ -1173,7 +1173,7 @@
     {
       "id": "play_heavy_room_button_off",
       "file": "web/front/mapmaker_play.js",
-      "old": "startButton.disabled = false; startButton.textContent = '\\u25b6 Open a room with this map';",
+      "old": "startButton.disabled = !v.online; startButton.textContent = '\\u25b6 Open a room with this map';",
       "new": "startButton.disabled = v.heavy; startButton.textContent = '\\u25b6 Open a room with this map';",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
@@ -1182,6 +1182,90 @@
       "file": "web/front/mapmaker_play.js",
       "old": "if (startButton) startButton.disabled = !go.ok;",
       "new": "if (startButton) startButton.disabled = !go.ok || v.heavy;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_8001",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_ONLINE_ANTS = 8000;",
+      "new": "var MAX_ONLINE_ANTS = 8001;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_7999",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_ONLINE_ANTS = 8000;",
+      "new": "var MAX_ONLINE_ANTS = 7999;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_off_by_one",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS;",
+      "new": "out.online = out.ants < MAX_ONLINE_ANTS;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_never_refuses",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS;",
+      "new": "out.online = true;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_counts_one_color_only",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS;",
+      "new": "out.online = (teams[0] ? teams[0].start_markers : 0) <= MAX_ONLINE_ANTS;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_refusal_button_stays_on",
+      "file": "web/front/mapmaker_play.js",
+      "old": "startButton.disabled = !v.online; startButton.textContent",
+      "new": "startButton.disabled = false; startButton.textContent",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_refuses_the_bots_tab",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var go = mode === 'friends' ? { ok: v.online } : startable(choice, v.seats);",
+      "new": "var go = mode === 'friends' ? { ok: v.online } : { ok: v.online && startable(choice, v.seats).ok, text: startable(choice, v.seats).text };",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_refusal_missing",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (!v.online) {                                             // (a refusal, in the place of the slow-game warning: the same words as the server's answer)",
+      "new": "if (false) {                                             // (a refusal, in the place of the slow-game warning: the same words as the server's answer)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_refusal_words",
+      "file": "web/front/mapmaker_play.js",
+      "old": "so it cannot host this map. You can still play it against bots on this device.",
+      "new": "so it is refused.",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_refusal_without_the_way_out",
+      "file": "web/front/mapmaker_play.js",
+      "old": "You can still play it against bots on this device.'; }",
+      "new": "'; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_refusal_numbers_without_commas",
+      "file": "web/front/mapmaker_play.js",
+      "old": "'This map starts ' + commas(ants) + ' ants. An online room plays at most ' + commas(MAX_ONLINE_ANTS)",
+      "new": "'This map starts ' + ants + ' ants. An online room plays at most ' + MAX_ONLINE_ANTS",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_cap_refusal_not_a_status",
+      "file": "web/front/mapmaker_play.js",
+      "old": "no.setAttribute('role', 'status');\n                    friendsPanel.appendChild(no);",
+      "new": "friendsPanel.appendChild(no);",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     }
   ]

@@ -238,6 +238,43 @@ int main() {
         ASSERT_EQ(rig.files().size(), size_t{1});
     } TEST_END();
 
+    TEST_CASE("SUB1.2c A map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts = 8,000, the four colors added up) is refused with one plain sentence (422 map_too_many_ants_online) and nothing is kept or counted against the day's three; 8,000 passes; the count is the file's own") {
+        Sub rig;
+        const auto with_ants = [](const std::array<uint32_t, 4>& per_color) {
+            assets::LevelData t;
+            if (!assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(tiny().data()), tiny().size(), t, nullptr, assets::LevelLimits::for_extended_maps())) return std::string();
+            std::array<std::vector<assets::AnthillSpawn>, 4> markers;
+            std::vector<assets::AnthillSpawn> kept;
+            for (const assets::AnthillSpawn& s : t.anthill_spawns) {
+                if (s.team_id < 4) markers[s.team_id].push_back(s);
+                else kept.push_back(s);
+            }
+            for (size_t c = 0; c < 4; ++c) {
+                if (markers[c].empty()) return std::string();
+                for (uint32_t i = 0; i < per_color[c]; ++i) kept.push_back(markers[c][i % markers[c].size()]);
+            }
+            t.anthill_spawns.assign(kept.begin(), kept.end());
+            const assets::LevelWriteResult w = assets::write_level(t, assets::LevelLimits::for_extended_maps());
+            return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+        };
+        const std::string at_cap = with_ants({2000, 2000, 2000, 2000});
+        ASSERT_FALSE(at_cap.empty());
+        for (const std::array<uint32_t, 4>& per_color : {std::array<uint32_t, 4>{2000, 2000, 2000, 2001}, std::array<uint32_t, 4>{1, 1, 7999, 1}, std::array<uint32_t, 4>{5000, 5000, 5000, 5000}}) {
+            const std::string over = with_ants(per_color);
+            ASSERT_FALSE(over.empty());
+            const SubmitOutcome o = rig.store->submit(rig.input(over, "Too Many Ants"), rig.now);
+            ASSERT_EQ(o.fail.code, std::string("map_too_many_ants_online"));
+            ASSERT_TRUE(!o.ok && o.fail.status == 422);
+            ASSERT_TRUE(o.fail.message.find("8,000") != std::string::npos && o.fail.message.find("against bots") != std::string::npos);
+        }
+        ASSERT_TRUE(rig.files().empty());
+        ASSERT_EQ(rig.text("SELECT COUNT(*) FROM map_submissions"), std::string("0"));
+        ASSERT_EQ(rig.text("SELECT COUNT(*) FROM submission_limits"), std::string("0"));          // (the refusals cost the sender nothing of the three a day)
+        const SubmitOutcome o = rig.store->submit(rig.input(at_cap, "Many Ants"), rig.now);
+        ASSERT_TRUE(o.ok && o.submission.state == "waiting");
+        ASSERT_EQ(rig.files().size(), size_t{1});
+    } TEST_END();
+
     TEST_CASE("SUB1.3 A map that does not pass the server's check is refused with the findings, and nothing is kept: no file, no row, and no use of the day's three") {
         Sub rig;
         const SubmitOutcome o = rig.store->submit(rig.input(blank_map()), rig.now);

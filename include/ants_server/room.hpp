@@ -74,6 +74,7 @@
 #include "ants_net/turnlog.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/online_limits.hpp"
 #include "ants_server/live_board.hpp"
 #include "ants_server/replay_store.hpp"
 #include "ants_server/restart_record.hpp"
@@ -289,7 +290,7 @@ struct LobbyServices {
     /// Loads that file for a match (false: it is gone or cannot be played by this engine)
     std::function<bool(const std::string& file, MapEntry& entry, assets::LevelData& level)> load_map;
     /// Whether the server has a place for a match on a map of `cells` cells now (and makes one when an abandoned match can give its place up): a big map takes several places (OnlineLimits::weight)
-    std::function<bool(uint32_t now_ms, uint64_t cells)> match_place;
+    std::function<bool(uint32_t now_ms, uint64_t cells, uint64_t start_ants)> match_place;
     /// The sentence for the leader who chose a map that the server has but does not play online (too big: OnlineLimits), else "" (the name is unknown: the room's map just stays)
     std::function<std::string(const std::string& name)> map_refusal;
 };
@@ -362,6 +363,10 @@ public:
     bool public_room() const noexcept { return spec_.public_room; }
     /// The cells (rows times columns) of the map that the room has loaded: what a match on it takes of the server's places (OnlineLimits::weight)
     uint64_t map_cells() const noexcept { return static_cast<uint64_t>(level_.width()) * level_.height(); }
+    /// The starting ants of the map that the room has loaded (the start markers of the four colors, counted from the loaded map: OnlineLimits::start_ants)
+    uint64_t map_start_ants() const { return OnlineLimits::start_ants(level_); }
+    /// The places that a match on the room's map takes (OnlineLimits::weight of its cells and its ants)
+    uint32_t map_places() const { return OnlineLimits::weight(map_cells(), map_start_ants()); }
     /// Whether the room has this map (file name) as its map or as its plan's map: a test map that a room has is not dropped to make room for another
     bool uses_map(const std::string& file_name) const { return map_.name == file_name || lobby_.map_name() == file_name; }
     /// The server's own match of computer players alone (RoomSpec::bots_only)

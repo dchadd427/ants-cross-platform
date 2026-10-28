@@ -457,10 +457,10 @@ function dialogChecks() {
     const warnings = (p, panel) => all(p, panel + ' .play-status').filter((n) => n.textContent.indexOf('may run slowly') >= 0);
     equal([warnings(p, '.play-panel-bots').length, warnings(p, '.play-panel-friends').length], [0, 0], 'a map of 12 ants has no word about ants in either panel');
     // a map of more than 2,400 start ants (all colors together): a warning in both tabs, under the intro, nothing refused and nothing turned off; 2,400 is not heavy
-    for (const [ants, heavy] of [[2400, false], [2401, true], [6000, true]]) {
+    for (const [ants, heavy] of [[2400, false], [2401, true], [6000, true], [8000, true]]) {
         const per = [Math.floor(ants / 4), Math.floor(ants / 4), Math.floor(ants / 4), ants - 3 * Math.floor(ants / 4)];
         const big = answers({ teams: per.map((n) => [n, 16]) });
-        const count = ants === 6000 ? '6,000' : ants === 2400 ? '2,400' : '2,401';
+        const count = ants === 8000 ? '8,000' : ants === 6000 ? '6,000' : ants === 2400 ? '2,400' : '2,401';
         const word = 'This map starts with ' + count + ' ants, so a game may run slowly, especially on phones and older computers.';
         p = pageOf();
         Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } }));
@@ -486,6 +486,29 @@ function dialogChecks() {
         startButton(p).click();
         check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: the game against bots opens the game page');
     }
+    // a map that starts more ants than an online room plays (8,000, all colors together): the game against bots is as any other (the slow-game warning only); With other players says so in words in the place of
+    // the warning and its button is off, and nothing is opened or handed over; 8,000 itself (above) opens the room
+    for (const ants of [8001, 9500, 40000]) {
+        const per = [Math.floor(ants / 4), Math.floor(ants / 4), Math.floor(ants / 4), ants - 3 * Math.floor(ants / 4)];
+        const over = answers({ teams: per.map((n) => [n, 16]) });
+        const commas = String(ants).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        const refusal = 'This map starts ' + commas + ' ants. An online room plays at most 8,000, so it cannot host this map. You can still play it against bots on this device.';
+        p = pageOf();
+        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: over.check }), readReport: () => ({ status: 0, json: over.read }) } }));
+        check(warnings(p, '.play-panel-bots').length === 1 && !startButton(p).disabled && /Start the game/.test(startButton(p).textContent), ants + ' ants: against bots the slow-game warning and a button that works, as for any heavy map');
+        all(p, '.play-tab')[1].click();
+        const no = all(p, '.play-panel-friends .play-status');
+        equal(no.map((n) => n.textContent), [refusal], ants + ' ants: with other players the refusal is the only word under the map card (not the slow-game warning)');
+        check(no[0].className === 'play-status no' && no[0].getAttribute('role') === 'status', ants + ' ants: with the warning classes of the dialog');
+        check(startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), ants + ' ants: the room button is off');
+        startButton(p).click();
+        check(p.opened.length === 0, ants + ' ants: and pressing it opens nothing');
+        all(p, '.play-tab')[0].click();
+        check(!startButton(p).disabled, ants + ' ants: back on the bots tab the game can be started');
+        startButton(p).click();
+        check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: and it is started (the game against bots is never refused for its ants)');
+    }
+    check(Play.MAX_ONLINE_ANTS === 8000 && Play.onlineText(8001).indexOf('8,001 ants') > 0, 'the cap is 8,000 and the words write the number with thousands separators');
     check(Play.HEAVY_START_ANTS === 2400 && Play.heavyText(1234567) === 'This map starts with 1,234,567 ants, so a game may run slowly, especially on phones and older computers.', 'the threshold is 2,400 and the words write the number with thousands separators');
     equal(digest(bytes), before, 'at the end the open file is still as it was');
 }

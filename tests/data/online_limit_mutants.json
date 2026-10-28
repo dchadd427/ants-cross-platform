@@ -112,8 +112,8 @@
   {
    "id": "lobby_choice_takes_a_big_approved_map",
    "file": "src/ants_server/map_store.cpp",
-   "old": "        if (m.file == name && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;\n",
-   "new": "        if (m.file == name) return m.file;\n",
+   "old": "if (m.file == name && OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) return m.file;",
+   "new": "if (m.file == name) return m.file;",
    "build": [
     "test_map_list",
     "test_server",
@@ -124,8 +124,8 @@
   {
    "id": "lobby_choice_takes_a_big_test_map",
    "file": "src/ants_server/map_store.cpp",
-   "old": "        if (t.name == name && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;\n",
-   "new": "        if (t.name == name) return t.name;\n",
+   "old": "if (t.name == name && OnlineLimits::allows(cells_in(t.width, t.height), t.start_ants)) return t.name;",
+   "new": "if (t.name == name) return t.name;",
    "build": [
     "test_map_list",
     "test_server",
@@ -136,8 +136,8 @@
   {
    "id": "lobby_choice_takes_a_big_approved_map_in_other_case",
    "file": "src/ants_server/map_store.cpp",
-   "old": "        if (lower(m.file) == folded && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;\n",
-   "new": "        if (lower(m.file) == folded) return m.file;\n",
+   "old": "if (lower(m.file) == folded && OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) return m.file;",
+   "new": "if (lower(m.file) == folded) return m.file;",
    "build": [
     "test_map_list",
     "test_server",
@@ -148,8 +148,8 @@
   {
    "id": "lobby_choice_takes_a_big_test_map_in_other_case",
    "file": "src/ants_server/map_store.cpp",
-   "old": "        if (lower(t.name) == folded && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;\n",
-   "new": "        if (lower(t.name) == folded) return t.name;\n",
+   "old": "if (lower(t.name) == folded && OnlineLimits::allows(cells_in(t.width, t.height), t.start_ants)) return t.name;",
+   "new": "if (lower(t.name) == folded) return t.name;",
    "build": [
     "test_map_list",
     "test_server",
@@ -184,8 +184,8 @@
   {
    "id": "list_does_not_say_online_false",
    "file": "src/ants_server/map_store.cpp",
-   "old": "if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height))) o.set(\"online\"",
-   "new": "if (false && !OnlineLimits::allows(cells_in(m.width, m.height))) o.set(\"online\"",
+   "old": "if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) {",
+   "new": "if (false && !OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) {",
    "build": [
     "test_map_list",
     "test_server",
@@ -220,7 +220,7 @@
   {
    "id": "lobby_loads_a_big_map",
    "file": "src/ants_server/room_manager.cpp",
-   "old": " && OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height());\n    };",
+   "old": " && OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height(), OnlineLimits::start_ants(level));\n    };",
    "new": ";\n    };",
    "build": [
     "test_map_list",
@@ -232,7 +232,7 @@
   {
    "id": "lobby_page_block_takes_a_big_test_map",
    "file": "src/ants_server/room_manager.cpp",
-   "old": " && OnlineLimits::allows(store_.cells_of(block.map_name))) map =",
+   "old": " && OnlineLimits::allows(store_.cells_of(block.map_name), store_.start_ants_of(block.map_name))) map =",
    "new": ") map =",
    "build": [
     "test_map_list",
@@ -244,8 +244,8 @@
   {
    "id": "big_map_refusal_is_silent",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "return store_.too_big_online(name) ? std::string(net::kNoticeMapTooBig) : std::string(); };",
-   "new": "return store_.too_big_online(name) && false ? std::string(net::kNoticeMapTooBig) : std::string(); };",
+   "old": "return store_.online_refusal(name); };",
+   "new": "return std::string(); };",
    "build": [
     "test_map_list",
     "test_server",
@@ -256,8 +256,8 @@
   {
    "id": "big_map_takes_one_place_at_start",
    "file": "src/ants_server/room.cpp",
-   "old": "services_.match_place(now_ms, map_cells())",
-   "new": "services_.match_place(now_ms, 0)",
+   "old": "services_.match_place(now_ms, map_cells(), start_ants)",
+   "new": "services_.match_place(now_ms, 0, 0)",
    "build": [
     "test_server"
    ],
@@ -266,7 +266,7 @@
   {
    "id": "running_big_match_counts_one_place",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "? static_cast<size_t>(OnlineLimits::weight(room.map_cells())) : 0u;",
+   "old": "? static_cast<size_t>(room.map_places()) : 0u;",
    "new": "? 1u : 0u;",
    "build": [
     "test_server"
@@ -276,8 +276,8 @@
   {
    "id": "weight_may_exceed_all_places_on_start",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "    const size_t want = std::min<size_t>(OnlineLimits::weight(cells), std::max<size_t>(limits_.demo_rooms, 1));",
-   "new": "    const size_t want = OnlineLimits::weight(cells);",
+   "old": "    const size_t want = std::min<size_t>(OnlineLimits::weight(cells, start_ants), std::max<size_t>(limits_.demo_rooms, 1));",
+   "new": "    const size_t want = OnlineLimits::weight(cells, start_ants);",
    "build": [
     "test_server"
    ],
@@ -296,8 +296,8 @@
   {
    "id": "public_room_choice_weighs_nothing",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "take_match_place(now_ms, store_.cells_of(choice.map))",
-   "new": "take_match_place(now_ms, 0)",
+   "old": "take_match_place(now_ms, store_.cells_of(choice.map), store_.start_ants_of(choice.map))",
+   "new": "take_match_place(now_ms, 0, 0)",
    "build": [
     "test_server"
    ],
@@ -472,7 +472,7 @@
   {
    "id": "history_plays_big_approved_maps",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "return map != nullptr && OnlineLimits::allows(static_cast<uint64_t>(map->width) * map->height) ? map->path : std::string();",
+   "old": "return map != nullptr && OnlineLimits::allows(static_cast<uint64_t>(map->width) * map->height, map->start_ants) ? map->path : std::string();",
    "new": "return map != nullptr ? map->path : std::string();",
    "build": [
     "test_map_plays"
@@ -580,7 +580,7 @@
   {
    "id": "record_that_waits_weighs_one_place",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "weigh(r.room != nullptr ? r.room->map_cells() : store_.cells_of(r.head.map)) : 0u;",
+   "old": "(r.room != nullptr ? weigh(r.room->map_cells(), r.room->map_start_ants()) : weigh(store_.cells_of(r.head.map), store_.start_ants_of(r.head.map))) : 0u;",
    "new": "1u : 0u;",
    "build": [
     "test_server"
