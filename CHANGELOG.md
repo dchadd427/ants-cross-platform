@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none for the simulation and the network: network protocol 21, the simulation rules, the recordings and the map files are unchanged. One rule of online play is new, and a map that was accepted before can now be refused online: a room no longer plays a map that starts more than 8,000 ants.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2e45f112...LASTCODE)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ec8fa2fa...77259890)
 ## v0.12.148 - 2026-10-28 - Map Maker: the editor starts with less code
 
 **For players:**

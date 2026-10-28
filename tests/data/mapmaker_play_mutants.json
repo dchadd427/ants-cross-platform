@@ -1236,8 +1236,8 @@
     {
       "id": "play_cap_refusal_missing",
       "file": "web/front/mapmaker_play.js",
-      "old": "if (!v.online) {                                             // (a refusal, in the place of the slow-game warning: the same words as the server's answer)",
-      "new": "if (false) {                                             // (a refusal, in the place of the slow-game warning: the same words as the server's answer)",
+      "old": "if (!v.online) {                                             // (the refusal takes the place of the slow-game warning)",
+      "new": "if (false) {                                             // (the refusal takes the place of the slow-game warning)",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
