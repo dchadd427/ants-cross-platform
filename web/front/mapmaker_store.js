@@ -13,6 +13,14 @@
     // (a no-break space counts as a blank, zero-width characters count for nothing, and a letter written in two ways is one: NFC)
     function clean(name) { return String(name).normalize('NFC').replace(/[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]|\uDB40[\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
     function key(name) { return clean(name).toLowerCase(); }
+    var MAX_NAME = 40;
+    function room(name, tail) { return Array.from(name).slice(0, MAX_NAME - tail).join('').replace(/ +$/, ''); }
+    // "Treasure" -> "Treasure 2" -> "Treasure 3" ("Heaven 0105" -> "Heaven 0106"), never over 40 characters, never a taken name
+    function numbered(name, taken) {
+        var m = /^(.*\S) (\d{1,9})$/.exec(clean(name)), base = m ? m[1] : clean(name), n = m ? parseInt(m[2], 10) + 1 : 2, width = m ? m[2].length : 0, tried, digits;
+        do { digits = ('000000000' + n).slice(-Math.max(width, String(n).length)); tried = room(base, digits.length + 1) + ' ' + digits; n++; } while (taken(tried));
+        return tried;
+    }
 
     // The names in the list that GET /maps sends ({"format":1,"maps":[{file}]}): the file names without .lvl, or null when it is no list
     function libraryNames(data) {
@@ -197,5 +205,5 @@
         };
     }
 
-    return { create: create, createSent: createSent, clean: clean, key: key, libraryNames: libraryNames, libraryEntries: libraryEntries, fileUrl: fileUrl, ORIGINALS: ORIGINALS };
+    return { create: create, createSent: createSent, clean: clean, key: key, MAX_NAME: MAX_NAME, room: room, numbered: numbered, libraryNames: libraryNames, libraryEntries: libraryEntries, fileUrl: fileUrl, ORIGINALS: ORIGINALS };
 });
