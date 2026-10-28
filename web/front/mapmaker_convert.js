@@ -6,18 +6,11 @@
 })(this, function (Sizes, Checks, Props, Store) {
     'use strict';
 
-    var MAX_NAME = 40;
+    var MAX_NAME = Store.MAX_NAME, room = Store.room, numbered = Store.numbered;       // (made in the store: Open a map needs numbered before this script is loaded)
     var capital = Checks.capital;
     function sentence(t) { var c = capital(String(t)); return /[.!?]$/.test(c) ? c : c + '.'; }
     var clean = Store.clean;
     function same(a, b) { return Store.key(a) === Store.key(b); }
-    function room(name, tail) { return Array.from(name).slice(0, MAX_NAME - tail).join('').replace(/ +$/, ''); }
-    // "Treasure" -> "Treasure 2" -> "Treasure 3" ("Heaven 0105" -> "Heaven 0106"), never over 40 characters, never a taken name
-    function numbered(name, taken) {
-        var m = /^(.*\S) (\d{1,9})$/.exec(clean(name)), base = m ? m[1] : clean(name), n = m ? parseInt(m[2], 10) + 1 : 2, width = m ? m[2].length : 0, tried, digits;
-        do { digits = ('000000000' + n).slice(-Math.max(width, String(n).length)); tried = room(base, digits.length + 1) + ' ' + digits; n++; } while (taken(tried));
-        return tried;
-    }
     function suffixed(name, word) { return room(name, word.length + 1) + ' ' + word; }
     // "this map has 120 rows; a Classic map made now has at most 90 (ants ...): crop it ..." -> "this map has 120 rows and a Classic map made now has at most 90"
     function shortReason(message) { return String(message).replace(/( \(|:).*$/, '').replace('; ', ' and '); }

@@ -52,8 +52,8 @@ ANTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ants_check.js"
 PICKUP_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_pickup_check.js")
 LINE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_line_check.js")
 MINIMAP_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_minimap_check.js")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_crop.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_convert.js", "mapmaker_minimap.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
-LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js", "mapmaker_ants.js", "mapmaker_pickup.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts): not tags of the page, but the checks and the broken copies need them
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_minimap.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+LAZY_SCRIPTS = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js", "mapmaker_ants.js", "mapmaker_pickup.js", "mapmaker_convert.js", "mapmaker_crop.js")                      # loaded by the app after the page is up (mapmaker_app.js, loadParts; the last two on first use: convertOr): not tags of the page, but the checks and the broken copies need them
 ALL_SCRIPTS = SCRIPTS + LAZY_SCRIPTS
 
 
@@ -344,9 +344,9 @@ class TheCodeRuns(unittest.TestCase):
             "a note that stays after the frame is moved": (crop, "note('warn', '!', why ? noteText(frame, L) : ''); show(); }", "if (why) note('warn', '!', noteText(frame, L)); show(); }"),
             "a picture with the wrong proportions": (crop, "stage.style.setProperty('--ar', C + '/' + R);", "stage.style.setProperty('--ar', R + '/' + C);"),
             "a limit that is a number of the page": (crop, "It never has more than ' + L.rows + ' rows, '", "It never has more than 90 rows, '"),
-            "a copy that does not count on from the number": (convert, "n = m ? parseInt(m[2], 10) + 1 : 2", "n = m ? parseInt(m[2], 10) : 2"),
-            "a name that is taken and used again": (convert, "while (taken(tried));", "while (false);"),
-            "a name that goes over 40 characters": (convert, "Array.from(name).slice(0, MAX_NAME - tail)", "Array.from(name).slice(0, MAX_NAME)"),
+            "a copy that does not count on from the number": ("mapmaker_store.js", "n = m ? parseInt(m[2], 10) + 1 : 2", "n = m ? parseInt(m[2], 10) : 2"),
+            "a name that is taken and used again": ("mapmaker_store.js", "while (taken(tried));", "while (false);"),
+            "a name that goes over 40 characters": ("mapmaker_store.js", "Array.from(name).slice(0, MAX_NAME - tail)", "Array.from(name).slice(0, MAX_NAME)"),
             "names that differ in capitals": ("mapmaker_store.js", "function key(name) { return clean(name).toLowerCase(); }", "function key(name) { return clean(name); }"),
             "a name with blanks round it": ("mapmaker_store.js", ".replace(/^ | $/g, '')", ""),
             "reasons in the order of the core": (convert, "return rank(a) - rank(b); });", "return 0; });"),
@@ -815,13 +815,19 @@ class ThePage(unittest.TestCase):
 
     def test_the_crop_screen_is_in_the_page_with_every_id_its_code_asks_for_and_the_app_hands_it_what_it_needs(self):
         ids = re.findall(r'\bid="([^"]+)"', self.page)
-        asked = set(re.findall(r"\$\('([^']+)'\)", self.code["mapmaker_crop.js"]))
+        asked = set(re.findall(r"\$\('([^']+)'\)", read("web", "front", "mapmaker_crop.js")))
         self.assertTrue({"crop-stage", "crop-frame", "crop-fill", "crop-note", "crop-use", "crop-cancel", "crop-name", "crop-tags", "crop-whole", "crop-shapes", "crop-nothing", "crop-chips", "crop-big", "crop-cells", "crop-range"} <= asked, sorted(asked))
         self.assertEqual(sorted(asked - set(ids)), [], "the crop screen asks for ids that the page does not have")
         self.assertRegex(self.page, r'<div class="screen crop" id="crop" hidden>')
         self.assertEqual(re.findall(r'<i class="h ([a-z]+)" data-h="([a-z]+)"></i>', self.page), [(h, h) for h in ("nw", "n", "ne", "w", "e", "sw", "s", "se")], "the eight handles of the frame")
         self.assertIn("busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }", self.app, "the tools' keys do nothing while the crop screen or My maps is open")
         self.assertIn("MapCrop.open({ doc: doc, $: $, host: $('crop'), editor: $('editor'), limits: limits.classic,", self.app, "the limits of the frame are the core's")
+        needed = self.app.split("var NEEDED = ")[1].split("];")[0]
+        self.assertNotIn("MapCrop", needed, "the page does not need the crop screen to start: it is loaded the first time it is used")
+        self.assertNotIn("MapConvert", needed, "nor the copy and convert dialogs")
+        self.assertEqual(self.app.count("convertOr(function () {"), 3, "Copy, Save as new and Convert (one function), the Copy of My maps and the crop of Resize each ask for the two scripts first")
+        self.assertIn("else dialogs.message('This part did not load', 'The part of the page that copies, converts and crops maps did not load.", self.app, "a script that did not load is told in plain words")
+        self.assertIn("MapStore.numbered(name,", self.app, "the Open a map dialog names its copy with the store, which is there at the start")
         self.assertIn("{ text: 'Copy...', onClick: ACTIONS.copy }", self.app, "the phone's Menu has Copy...")
         self.assertIn("copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert')", self.app)
         self.assertIn("onMade: function (bytes, name) { leave(function () {", self.app, "the new map takes the place of the open one only after the question about unsaved drawing")

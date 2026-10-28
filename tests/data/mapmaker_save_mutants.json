@@ -423,14 +423,14 @@
   },
   {
    "id": "name_number_loses_its_zeros",
-   "file": "web/front/mapmaker_convert.js",
+   "file": "web/front/mapmaker_store.js",
    "old": "Math.max(width, String(n).length)",
    "new": "String(n).length",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },
   {
    "id": "name_number_too_long_is_counted",
-   "file": "web/front/mapmaker_convert.js",
+   "file": "web/front/mapmaker_store.js",
    "old": "(\\d{1,9})",
    "new": "(\\d+)",
    "test": "node tests/scripts/web_mapmaker_save_check.js"

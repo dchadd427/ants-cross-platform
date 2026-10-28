@@ -1,0 +1,54 @@
+{
+  "note": "Mutants of how the map maker loads its Copy, convert and Crop scripts on first use (web/front/mapmaker_app.js, convertOr) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): each must fail the page's text checks; the browser part 'convert' of tests/scripts/web_mapmaker_browser.py (opt-in) judges the loading itself, with the network cut for one script.",
+  "mutants": [
+    {
+      "id": "lazy_crop_needed_at_start",
+      "file": "web/front/mapmaker_app.js",
+      "old": "'MapProps', 'MapStore'",
+      "new": "'MapProps', 'MapCrop', 'MapStore'",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_open_map_waits_for_convert",
+      "file": "web/front/mapmaker_app.js",
+      "old": "MapStore.numbered(name,",
+      "new": "MapConvert.numbered(name,",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_my_maps_copy_not_asked_for",
+      "file": "web/front/mapmaker_app.js",
+      "old": "if (!dialogs.isOpen()) convertOr(function () { if (!dialogs.isOpen()) converterOf().copy(read(rec)); });",
+      "new": "if (!dialogs.isOpen()) converterOf().copy(read(rec));",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_resize_crop_not_asked_for",
+      "file": "web/front/mapmaker_app.js",
+      "old": "convertOr(function () { MapCrop.open({",
+      "new": "(function () { MapCrop.open({",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_copy_convert_not_asked_for",
+      "file": "web/front/mapmaker_app.js",
+      "old": "convertOr(function () { if (!dialogs.isOpen() && !canvas.isStroking()) converterOf()[name](); });",
+      "new": "converterOf()[name]();",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_failed_load_says_nothing",
+      "file": "web/front/mapmaker_app.js",
+      "old": "else dialogs.message('This part did not load', 'The part of the page that copies",
+      "new": "else void ('This part did not load', 'The part of the page that copies",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_crop_script_tag_back_in_the_page",
+      "file": "web/mapmaker.html",
+      "old": "<script src=\"front/mapmaker_store.js\"></script>",
+      "new": "<script src=\"front/mapmaker_store.js\"></script>\n<script src=\"front/mapmaker_crop.js\"></script>",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    }
+  ]
+}

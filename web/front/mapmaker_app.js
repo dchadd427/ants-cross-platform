@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var doc = document, win = window;
-    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapCrop', 'MapConvert', 'MapStore', 'MapMine', 'MapMini', 'MapCanvas', 'MapTools'];
+    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapProps', 'MapStore', 'MapMine', 'MapMini', 'MapCanvas', 'MapTools'];
     var GROUND = 485, EGGS = 6, MINUTES = 10;          // a new map: plain grass (docs/MAP_FORMAT.md, "The blank map"), 6 eggs a team, 10 minutes
     var NEW_NAME = 'My map';
 
@@ -99,7 +99,7 @@
             onResize: function (newRows, newCols) {
                 if (newRows < map.file.rows || newCols < map.file.columns) {
                     var keepRows = Math.min(map.file.rows, newRows), keepCols = Math.min(map.file.columns, newCols);
-                    MapCrop.open({
+                    convertOr(function () { MapCrop.open({
                         doc: doc, $: $, host: $('crop'), editor: $('editor'),
                         limits: { rows: keepRows, columns: keepCols, cells: keepRows * keepCols },
                         rows: map.file.rows, columns: map.file.columns, name: map.name,
@@ -107,7 +107,7 @@
                         picture: function () { return MapView.miniBase(map.file, 640, 640, canvasOf); },
                         onUse: function (frame) { applyResize(newRows < map.file.rows ? frame.rows : newRows, newCols < map.file.columns ? frame.columns : newCols, frame.row, frame.column); },
                         onCancel: function () { openResize(); }
-                    });
+                    }); });
                 } else applyResize(newRows, newCols, 0, 0);
             }
         });
@@ -282,7 +282,7 @@
     function openMap() {
         win.MapDialog.openMap({
             doc: doc, dialogs: dialogs, store: store,
-            numbered: function (name) { return MapConvert.numbered(name, function (n) { return MapStore.key(n) === MapStore.key(map.name) || store.has(n); }); },
+            numbered: function (name) { return MapStore.numbered(name, function (n) { return MapStore.key(n) === MapStore.key(map.name) || store.has(n); }); },
             onDisk: function () { $('file-in').click(); },
             onChoose: function (bytes, name) { openBytes(bytes, name); }
         });
@@ -317,7 +317,14 @@
     }
     var converter;
     function converterOf() { return converter || (converter = MapConvert.create(convertEnv())); }
-    function convertWith(name) { return function () { if (!dialogs.isOpen() && !canvas.isStroking()) converterOf()[name](); }; }
+    // Copy, convert and crop (mapmaker_convert.js, mapmaker_crop.js) load the first time one is needed; a script that failed is asked for again next time
+    function convertOr(then) {
+        var need = [['MapConvert', 'convert'], ['MapCrop', 'crop']].filter(function (p) { return !win[p[0]]; }), left = need.length;
+        function end() { if (--left > 0) return; if (win.MapConvert && win.MapCrop) then(); else dialogs.message('This part did not load', 'The part of the page that copies, converts and crops maps did not load. Check your connection and try again.'); }
+        if (!left) return then();
+        need.forEach(function (p) { var s = el('script'); s.src = 'front/mapmaker_' + p[1] + '.js'; s.onload = s.onerror = end; doc.head.appendChild(s); });
+    }
+    function convertWith(name) { return function () { if (!dialogs.isOpen() && !canvas.isStroking()) convertOr(function () { if (!dialogs.isOpen() && !canvas.isStroking()) converterOf()[name](); }); }; }
 
     // My maps (mapmaker_mine.js): a saved map opens as the working map (after the question about unsaved drawing; its history starts again), or is copied; nothing here writes over a saved map
     function mineEnv() {
@@ -328,7 +335,7 @@
             check: function (bytes) { var r = core.checkMap(bytes, 'extended'); return r.status === 0 ? MapChecks.summary(r.json) : null; },
             thumb: function (file) { return MapView.miniBase(file, 84, 84, canvasOf); },
             onOpen: function (rec) { if (!dialogs.isOpen()) leave(function () { var error = setMap(new win.Uint8Array(rec.bytes), rec.name); if (error) dialogs.message('This saved map cannot be opened', error); }); },
-            onCopy: function (rec) { if (!dialogs.isOpen()) converterOf().copy(read(rec)); },
+            onCopy: function (rec) { if (!dialogs.isOpen()) convertOr(function () { if (!dialogs.isOpen()) converterOf().copy(read(rec)); }); },
             onNew: function () { if (!dialogs.isOpen()) ACTIONS['new'](); },
             onBack: function () { if (dialogs.isOpen()) return; mine.hide(); var b = doc.querySelector('[data-act="mine"]'); (b && b.offsetParent ? b : doc.querySelector('[data-act="menu"]')).focus(); },
             onShow: function () { $('top').hidden = $('body').hidden = true; doc.title = 'My maps - Map maker - Ants (1998)'; },
