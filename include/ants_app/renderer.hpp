@@ -474,7 +474,8 @@ public:
     void clear_clip_rect() override;
     /// The ant health marks (health_marks.hpp; renderer_health.cpp): which ants wear a bar or a number, and how many picture pixels stand for one CSS pixel of the page (a canvas that is shown
     /// small gets thicker bars). A renderer draws none until it is asked (the application asks every frame). Style Number is the original's own Ctrl+L number: white digits at the ant's lower right.
-    void set_health_marks(health::Setting setting, double picture_px_per_css = 1.0);
+    /// `scale_digits` false (the native build) keeps the number the original's whatever the density: only the bars follow it
+    void set_health_marks(health::Setting setting, double picture_px_per_css = 1.0, bool scale_digits = true);
     health::Setting health_marks() const noexcept { return health_; }
     /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
     /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y)); `outline` first draws the glyph in black one scaled pixel round (the phone look, health_marks.hpp: digit_scale)

@@ -11,6 +11,7 @@
 #include <SDL.h>
 
 #include <cmath>
+#include <limits>
 #include <cstring>
 #include <cstdio>
 #include <string>
@@ -80,6 +81,13 @@ void test_rule() {
                        D{2.77, 3, true}, D{3.0, 3, true}, D{3.1, 3, true}, D{3.75, 3, true}, D{3.76, 4, true}, D{9.0, 4, true}, D{0.5, 1, false}, D{0.0, 1, false}}) {
         check(hm::digit_scale(d.per_css) == d.scale && hm::digit_outlined(d.per_css) == d.outline, "the number at " + std::to_string(d.per_css) + " picture pixels per CSS pixel: x" + num(d.scale) + (d.outline ? ", outlined" : ", plain"));
     }
+    // the edges of the arithmetic: no value makes an overflow or a scale outside 1..4
+    const double inf = std::numeric_limits<double>::infinity(), nan = std::numeric_limits<double>::quiet_NaN();
+    for (const double v : {inf, 1e300, std::numeric_limits<double>::max()}) check(hm::digit_scale(v) == 4 && hm::digit_outlined(v), "an absurd density (" + std::to_string(v) + ") is the largest scale, not an overflow");
+    for (const double v : {-inf, -1e300, -1.0, -0.0, 0.0, nan}) check(hm::digit_scale(v) == 1 && !hm::digit_outlined(v), "a density that is none, negative or NaN is the original's number");
+    // (an exact edge is on the lower scale; one step above it is on the next: 0.8 x 2.5 = 2, 0.8 x 3.75 = 3)
+    check(hm::digit_scale(2.5) == 2 && hm::digit_scale(std::nextafter(2.5, 3.0)) == 3 && hm::digit_scale(3.75) == 3 && hm::digit_scale(std::nextafter(3.75, 4.0)) == 4, "the edges 2.5 and 3.75 belong to the lower scale, the next double above to the higher");
+    check(hm::digit_scale(std::nextafter(1.25, 0.0)) == 1 && !hm::digit_outlined(std::nextafter(1.25, 0.0)) && hm::digit_outlined(1.25), "1.25 is where the phone rule starts, to the last bit");
     check(!hm::thick_for(1.0) && !hm::thick_for(2.0) && hm::thick_for(2.01) && hm::thick_for(3.0), "a canvas shown at less than half its size (more than 2 picture pixels for a CSS pixel) gets thick bars");
 }
 
@@ -356,6 +364,13 @@ void test_phone_numbers(const assets::AssetArchive& arc) {
             check(stray == 0, tag + "nothing else of the picture is touched (" + num(stray) + " stray)");
             const Delta d = delta(none, got, sx - c.scale - 2, sy - c.scale - 2, sx + 40 * c.scale, sy + 20 * c.scale);
             check(d.x0 == sx - c.scale && d.y0 == sy + c.scale, tag + "the cell is still anchored at the ant's position (the 7's first row is the font's third, the ring starts one scaled pixel before the glyph): " + num(d.x0 - sx) + ", " + num(d.y0 - sy));
+        }
+        // the native build asks for the original's digits whatever the density: a small window is the original's picture, pixel for pixel
+        for (const double c : {1.25, 2.0, 3.0, 9.0}) {
+            rig.renderer.set_health_marks(kHurtNumber, c, false);
+            rig.renderer.begin_frame();
+            rig.renderer.render_world(rig.world, rig.engine.grid(), -1, {}, false, false, -1, -1, -1, 0.0f);
+            check(delta(plain, rig.read()).n == 0, "zoom " + std::to_string(z) + ": a native window at " + std::to_string(c) + " picture pixels per point keeps the original's number");
         }
         // two digits: the second cell follows at 8 x scale
         const Picture ten = rig.shoot_with(hm::Setting{hm::When::All, hm::Style::Number}, 2.77);

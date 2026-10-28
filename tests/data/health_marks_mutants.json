@@ -822,6 +822,56 @@
         "test_health_marks"
       ],
       "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_no_epsilon_guard_removed_ceil_of_exact_edge",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "std::ceil(kDigitCssFactor * picture_px_per_css)",
+      "new": "std::ceil(kDigitCssFactor * picture_px_per_css - 1e-9)",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_unclamped_cast",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "return static_cast<int>(std::clamp(std::ceil(kDigitCssFactor * picture_px_per_css), 1.0, static_cast<double>(kDigitScaleMax)));",
+      "new": "return std::clamp(static_cast<int>(std::ceil(kDigitCssFactor * picture_px_per_css)), 1, kDigitScaleMax);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_nan_is_scaled",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "if (!digit_outlined(picture_px_per_css)) return 1; ",
+      "new": "if (picture_px_per_css < kPhoneFrom) return 1; ",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "native_scales_digits",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) : 1;",
+      "new": "digit_scale_ = health::digit_scale(picture_px_per_css);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "native_outlines_digits",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);",
+      "new": "digit_outline_ = health::digit_outlined(picture_px_per_css);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
     }
   ]
 }

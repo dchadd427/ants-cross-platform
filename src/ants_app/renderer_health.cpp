@@ -17,11 +17,11 @@
 
 namespace ants::app {
 
-void Renderer::set_health_marks(health::Setting setting, double picture_px_per_css) {
+void Renderer::set_health_marks(health::Setting setting, double picture_px_per_css, bool scale_digits) {
     health_ = setting;
     health_thick_ = health::thick_for(picture_px_per_css);
-    digit_scale_ = health::digit_scale(picture_px_per_css);
-    digit_outline_ = health::digit_outlined(picture_px_per_css);
+    digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) : 1;
+    digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);
 }
 
 // (the sprite's own, predicted position: the bar follows the ant the way its ears do)

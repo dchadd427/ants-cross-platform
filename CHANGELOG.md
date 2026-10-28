@@ -23,14 +23,24 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.148 - 2026-10-28 - On a phone the health numbers are bigger and outlined
+## Next
 
 **For players:**
-- **On a phone the health numbers are bigger and outlined.** In "Show health as: Number" the digits were 2 to 3 CSS pixels tall on a phone, too small to read. They now grow with the screen (about 8 CSS pixels tall or more: three times as big on a phone held upright, twice on its side) and get a thin black outline. Desktop is unchanged: the original's white digits, pixel for pixel.
+- **On a phone the health numbers are bigger and outlined.** In the browser, "Show health as: Number" had digits 2 to 3 CSS pixels tall on a phone, too small to read. On a small screen they now grow (about 8 CSS pixels tall or more: three times as big on a phone held upright, twice on its side) and get a thin black outline about 1 CSS pixel wide. The desktop game, and the browser in a normal desktop window, are unchanged: the original's white digits, pixel for pixel.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2e45f112...8b3c0d91)
+
+## v0.12.148 - 2026-10-28 - Map Maker: the editor starts with less code
+
+**For players:**
+- **No change for players.** The Map Maker looks and works as before, and a map you save or download is byte for byte what it was.
+- **The editor starts with less code.** Copy, Save as a new map, Start an Extended map / Make a Classic map and Crop to fit now load the first time you use one of them (two small scripts fetched at once, about 29 KB, 9 KB gzipped), so the Map Maker opens with about 7% less script. On a slow network that first dialog may take a moment (an estimate, not measured). If the scripts cannot load (no network), the page says so in plain words and asks again the next time.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2e45f112...67c5b473)
 
 ## v0.12.147 - 2026-10-27 - Map Maker: each start ant faces its own way
 
