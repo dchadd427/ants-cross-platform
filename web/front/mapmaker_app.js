@@ -262,7 +262,7 @@
         dialogs.open({
             title: 'Leave this map?', cls: 'narrow',
             build: function (body) { body.appendChild(el('p', 'fatalmsg', 'You have drawn on this map and it is not saved. ' + (can ? 'Save it as a new map or download it first, or leave without it.' : 'Download it first, or leave without it.'))); },
-            buttons: (can ? [{ id: 'save', text: 'Save as a new map first', onClick: function () { converterOf().save(then); } }] : []).concat([
+            buttons: (can ? [{ id: 'save', text: 'Save as a new map first', onClick: function () { convertOr(function () { converterOf().save(then); }); } }] : []).concat([
                 { id: 'download', text: 'Download it first', onClick: function () { download(); then(); } }, { id: 'leave', text: 'Leave without saving', onClick: then }, { id: 'stay', text: 'Stay here', ghost: true }])
         });
     }

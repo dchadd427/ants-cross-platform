@@ -825,7 +825,7 @@ class ThePage(unittest.TestCase):
         needed = self.app.split("var NEEDED = ")[1].split("];")[0]
         self.assertNotIn("MapCrop", needed, "the page does not need the crop screen to start: it is loaded the first time it is used")
         self.assertNotIn("MapConvert", needed, "nor the copy and convert dialogs")
-        self.assertEqual(self.app.count("convertOr(function () {"), 3, "Copy, Save as new and Convert (one function), the Copy of My maps and the crop of Resize each ask for the two scripts first")
+        self.assertEqual(self.app.count("convertOr(function () {"), 4, "Copy, Save as new and Convert (one function), the Save of the question before a map is left, the Copy of My maps and the crop of Resize each ask for the two scripts first")
         self.assertIn("else dialogs.message('This part did not load', 'The part of the page that copies, converts and crops maps did not load.", self.app, "a script that did not load is told in plain words")
         self.assertIn("MapStore.numbered(name,", self.app, "the Open a map dialog names its copy with the store, which is there at the start")
         self.assertIn("{ text: 'Copy...', onClick: ACTIONS.copy }", self.app, "the phone's Menu has Copy...")

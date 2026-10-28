@@ -49,6 +49,13 @@
       "old": "<script src=\"front/mapmaker_store.js\"></script>",
       "new": "<script src=\"front/mapmaker_store.js\"></script>\n<script src=\"front/mapmaker_crop.js\"></script>",
       "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_leave_question_save_not_asked_for",
+      "file": "web/front/mapmaker_app.js",
+      "old": "convertOr(function () { converterOf().save(then); });",
+      "new": "converterOf().save(then);",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
     }
   ]
 }
