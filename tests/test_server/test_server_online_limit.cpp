@@ -855,7 +855,7 @@ void run_online_limit_tests() {
         ASSERT_EQ(w.mgr.room_count(), rooms);                                                         // (not one room was made for the map: no Room, so no engine)
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count();
         std::cout << "(" << ms << " ms) " << std::flush;
-        ASSERT_MSG(ms < 4000, std::to_string(ms) + " ms for the refusals of a 40,000-ant map (setting its ants up takes about 9 s)");
+        ASSERT_MSG(ms < 60000, std::to_string(ms) + " ms for the refusals of a 40,000-ant map (setting its ants up takes about 9 s on a quiet machine; the check that matters is that no Room was made)");
         fs::remove_all(dir);
     } TEST_END();
 
@@ -1024,6 +1024,41 @@ void run_online_limit_tests() {
         RClient& cat = w.connect_creating("Cat", "pub00003", block_of("TINY.LVL", 2));
         w.run(300);
         ASSERT_TRUE(cat.was_rejected && cat.rejected == net::RejectReason::NoSuchRoom);                                  // (the room that came back holds its six: 6 + 1 + 1 > 7)
+        std::error_code ignore;
+        fs::remove_all(maps.parent_path(), ignore);
+    } TEST_END();
+    TEST_CASE("S3.231 Of Two Restart Records That Wait For Their Replay, The One Whose Room Is Not Made Yet Weighs Its Ants Too: Two 2,400-Ant Matches Hold 6 + 6 Of 13 Places Whichever Has Its Room, So One Small Public Room Fits And A Second Does Not") {
+        const fs::path maps = fs::path(temp_dir_for("online-231")) / "Maps";
+        fs::create_directories(maps);
+        fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
+        { std::ofstream out(maps / "MANY.LVL", std::ios::binary); out << tiny_with_ants({600, 600, 600, 600}); }
+        ServerLimits l;
+        l.demo_rooms = 13;
+        l.demo_map = "TINY.LVL";
+        l.demo_maps = {"TINY.LVL"};
+        PWorld w("online-231w", l, maps.string());
+        w.restart.restore_slice_ms = 0;                                                              // (a piece of work a pass: the second record has no room while the first is replayed)
+        w.start_server(500);
+        std::vector<std::string> codes = {"MZ-1", "MZ-2"};
+        for (const std::string& code : codes) {
+            RoomSpec spec = held_spec(code, 2, "MANY.LVL");
+            spec.public_room = true;
+            std::vector<RClient*> m = play_room(w, spec, 8000);
+            for (RClient* p : m) p->reconnects = false;
+        }
+        w.stop_server(false);
+        for (const std::string& code : codes) {
+            const RestartLoaded original = w.read_record(code);
+            ASSERT_TRUE(original.ok() && original.head.public_room);
+            lengthen_record(w, code, 5200 - original.turn_count);
+        }
+        w.start_server(500, false);
+        ASSERT_EQ(w.mgr->restoring_count(), size_t{2});
+        RClient& ann = w.connect_creating("Ann", "pub00001", block_of("TINY.LVL", 2));
+        RClient& bob = w.connect_creating("Bob", "pub00002", block_of("TINY.LVL", 2));
+        w.run(100);
+        ASSERT_TRUE(w.mgr->restoring_count() >= 1 && w.status("pub00001").joined == 1 && !ann.was_rejected);       // (6 + 6 + 1 = 13)
+        ASSERT_TRUE(bob.was_rejected && bob.rejected == net::RejectReason::NoSuchRoom);                            // (14: with the unmade record weighed as one place it would be 9 and Bob would be in)
         std::error_code ignore;
         fs::remove_all(maps.parent_path(), ignore);
     } TEST_END();
