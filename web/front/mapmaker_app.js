@@ -98,8 +98,8 @@
             doc: doc, dialogs: dialogs, limits: limits, kind: map.file.kind, rows: map.file.rows, columns: map.file.columns,
             onResize: function (newRows, newCols) {
                 if (newRows < map.file.rows || newCols < map.file.columns) {
-                    var keepRows = Math.min(map.file.rows, newRows), keepCols = Math.min(map.file.columns, newCols);
-                    convertOr(function () { MapCrop.open({
+                    var keepRows = Math.min(map.file.rows, newRows), keepCols = Math.min(map.file.columns, newCols), was = map;
+                    convertOr(function () { if (map !== was || dialogs.isOpen() || canvas.isStroking()) return; MapCrop.open({
                         doc: doc, $: $, host: $('crop'), editor: $('editor'),
                         limits: { rows: keepRows, columns: keepCols, cells: keepRows * keepCols },
                         rows: map.file.rows, columns: map.file.columns, name: map.name,
@@ -317,11 +317,18 @@
     }
     var converter;
     function converterOf() { return converter || (converter = MapConvert.create(convertEnv())); }
-    // Copy, convert and crop (mapmaker_convert.js, mapmaker_crop.js) load the first time one is needed; a script that failed is asked for again next time
+    // Copy, convert and crop (mapmaker_convert.js, mapmaker_crop.js) load on first use; a press during the load waits for it (one pair of tags, a callback for each press)
+    var convertWaiting = null;
     function convertOr(then) {
         var need = [['MapConvert', 'convert'], ['MapCrop', 'crop']].filter(function (p) { return !win[p[0]]; }), left = need.length;
-        function end() { if (--left > 0) return; if (win.MapConvert && win.MapCrop) then(); else dialogs.message('This part did not load', 'The part of the page that copies, converts and crops maps did not load. Check your connection and try again.'); }
         if (!left) return then();
+        if (convertWaiting) return convertWaiting.push(then);
+        convertWaiting = [then];
+        function end() {
+            if (--left > 0) return;
+            var waiting = convertWaiting; convertWaiting = null;
+            if (win.MapConvert && win.MapCrop) waiting.forEach(function (f) { f(); }); else dialogs.message('This part did not load', 'The part of the page that copies, converts and crops maps did not load. Check your connection and try again.');
+        }
         need.forEach(function (p) { var s = el('script'); s.src = 'front/mapmaker_' + p[1] + '.js'; s.onload = s.onerror = end; doc.head.appendChild(s); });
     }
     function convertWith(name) { return function () { if (!dialogs.isOpen() && !canvas.isStroking()) convertOr(function () { if (!dialogs.isOpen() && !canvas.isStroking()) converterOf()[name](); }); }; }

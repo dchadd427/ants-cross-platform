@@ -27,7 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **No change for players.** The Map Maker looks and works as before, and a map you save or download is byte for byte what it was.
-- **The editor starts with less code.** Copy, Save as a new map, Start an Extended map / Make a Classic map and Crop to fit now load the first time you use one of them (about 29 KB, 9 KB gzipped), so the Map Maker opens with about 7% less script. If that part cannot load (no network), the page says so in plain words and asks again the next time.
+- **The editor starts with less code.** Copy, Save as a new map, Start an Extended map / Make a Classic map and Crop to fit now load the first time you use one of them (two small scripts fetched at once, about 29 KB, 9 KB gzipped), so the Map Maker opens with about 7% less script. On a slow network that first dialog may take a moment (an estimate, not measured). If the scripts cannot load (no network), the page says so in plain words and asks again the next time.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
 

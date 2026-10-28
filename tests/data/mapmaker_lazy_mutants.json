@@ -25,8 +25,8 @@
     {
       "id": "lazy_resize_crop_not_asked_for",
       "file": "web/front/mapmaker_app.js",
-      "old": "convertOr(function () { MapCrop.open({",
-      "new": "(function () { MapCrop.open({",
+      "old": "convertOr(function () { if (map !== was || dialogs.isOpen() || canvas.isStroking()) return; MapCrop.open({",
+      "new": "(function () { if (map !== was || dialogs.isOpen() || canvas.isStroking()) return; MapCrop.open({",
       "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
     },
     {
@@ -55,6 +55,48 @@
       "file": "web/front/mapmaker_app.js",
       "old": "convertOr(function () { converterOf().save(then); });",
       "new": "converterOf().save(then);",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_crop_opens_although_map_changed",
+      "file": "web/front/mapmaker_app.js",
+      "old": "if (map !== was || dialogs.isOpen() || canvas.isStroking()) return;",
+      "new": "if (dialogs.isOpen() || canvas.isStroking()) return;",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_crop_opens_over_a_dialog",
+      "file": "web/front/mapmaker_app.js",
+      "old": "if (map !== was || dialogs.isOpen() || canvas.isStroking()) return;",
+      "new": "if (map !== was || canvas.isStroking()) return;",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_crop_opens_during_a_stroke",
+      "file": "web/front/mapmaker_app.js",
+      "old": "if (map !== was || dialogs.isOpen() || canvas.isStroking()) return;",
+      "new": "if (map !== was || dialogs.isOpen()) return;",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_second_press_loads_again",
+      "file": "web/front/mapmaker_app.js",
+      "old": "if (convertWaiting) return convertWaiting.push(then);",
+      "new": "if (false) return convertWaiting.push(then);",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_failed_script_never_asked_again",
+      "file": "web/front/mapmaker_app.js",
+      "old": "function (p) { return !win[p[0]]; }",
+      "new": "function (p) { return !win['tried' + p[0]]; }",
+      "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
+    },
+    {
+      "id": "lazy_next_press_after_failure_stuck",
+      "file": "web/front/mapmaker_app.js",
+      "old": "var waiting = convertWaiting; convertWaiting = null;",
+      "new": "var waiting = convertWaiting;",
       "test": "python3 tests/scripts/test_web_mapmaker.py ThePage"
     }
   ]
