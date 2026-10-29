@@ -33,6 +33,7 @@ sys.path.insert(0, HERE)
 from web_hidden_check import find_browser, free_port                          # noqa: E402
 from web_rejoin_check import Player, Server, wait_for, REPO                    # noqa: E402
 from web_map_fetch_check import Front                                           # noqa: E402
+from web_front_room import press_my_room                                     # noqa: E402
 
 PARTS = ("desktop", "phone")
 # A stalled uplink, as the page sees it: the socket takes the bytes (send() does not throw) and a Chat message never arrives. The patched send also remembers its socket, so that the check can cut the link.
@@ -54,12 +55,13 @@ class Visitor(Player):
         self.resize(width, height)
 
     def open_front(self, web, name="Ann"):
-        """Opens the front page as a person who has given this name before (the page makes its room under the name that the browser remembers)."""
+        """Opens the front page as a person who has given this name before and presses My room (the page makes its room under the name that the browser remembers)."""
         self.call("Page.addScriptToEvaluateOnNewDocument", {"source": "try { window.localStorage.setItem('ants.name', %r); } catch (e) { }" % name})
         self.call("Page.navigate", {"url": web})
         deadline = time.time() + 60
         while time.time() < deadline:
             time.sleep(0.4)
+            press_my_room(self.ev)                                                  # (a plain visit is Home and makes no room: My room does, once; docs/HOME_SCREEN.md)
             if wait_for(lambda: self.ev("!!document.getElementById('code') && document.getElementById('code').textContent.length > 0 && !document.getElementById('start').disabled"), 1.0):
                 return True
         return False

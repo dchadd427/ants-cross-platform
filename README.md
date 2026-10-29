@@ -29,6 +29,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 **Playing**
 
 - [Play in the browser](docs/PLAY_IN_BROWSER.md): the front page, rooms and rejoining, the 16:9 picture and mouse lock in the browser, hidden tabs, sound, the asset catalog (a page of every sprite, sound and animation of `ants.chd`)
+- [Home and the Room](docs/HOME_SCREEN.md): the front page's two screens, the top bar, My room, the Menu, the addresses and the START hand-off
 - [How the game plays](docs/GAMEPLAY.md): the data files, the 20 Hz simulation, the six kinds of ant and their abilities, movement, food, power-ups, combat, the anthill, the start and end of a match, fog of war
 - [View and HUD](docs/VIEW_AND_HUD.md): the 16:9 view, mouse-wheel zoom, edge scrolling and the minimap, the HUD, messages and the chat log, the results screen, sound and music
 - [Controls](docs/CONTROLS.md): the start menu, the setup screen, options and settings, the mouse controls, the keyboard
