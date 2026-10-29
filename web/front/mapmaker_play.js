@@ -21,9 +21,13 @@
     var TOAST_MS = 7000;
     var HEAVY_START_ANTS = 2400;                                                        // above this many start ants (all colors together) a map is heavy: the server's OnlineLimits::kHeavyStartAnts (include/ants_server/online_limits.hpp), which a test keeps equal to this
 
+    var MAX_ONLINE_ANTS = 8000;                                                         // a room plays no map above this many start ants: the server's OnlineLimits::kMaxStartAnts (a test keeps them equal)
+
     function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
     // The one warning for a heavy map, in both tabs: a warning only, nothing is refused and no button is turned off
     function heavyText(ants) { return 'This map starts with ' + commas(ants) + ' ants, so a game may run slowly, especially on phones and older computers.'; }
+    // The refusal of a map that no online room plays, in the With other players tab (shown first, so that nothing is sent)
+    function onlineText(ants) { return 'This map starts ' + commas(ants) + ' ants. An online room plays at most ' + commas(MAX_ONLINE_ANTS) + ', so it cannot host this map. You can still play it against bots on this device.'; }
     function capital(text) { text = String(text); return text.charAt(0).toUpperCase() + text.slice(1); }
 
     // What the check and the first reading say of the open map, as the dialog needs it: { ok, title, text, note, list, convert, seats, ants, heavy }
@@ -82,6 +86,7 @@
         out.ants = 0;
         for (var c = 0; c < 4; c++) out.ants += (teams[c] && teams[c].start_markers > 0) ? teams[c].start_markers : 0;
         out.heavy = out.ants > HEAVY_START_ANTS;
+        out.online = out.ants <= MAX_ONLINE_ANTS;                                      // (false: only a room is refused)
         out.ok = true;
         return out;
     }
@@ -209,7 +214,7 @@
                 friendsPanel.hidden = mode !== 'friends';
             }
             if (startButton) startButton.disabled = !go.ok;
-            if (startButton && mode === 'friends') { startButton.disabled = false; startButton.textContent = '\u25b6 Open a room with this map'; }
+            if (startButton && mode === 'friends') { startButton.disabled = !v.online; startButton.textContent = '\u25b6 Open a room with this map'; }
             else if (startButton) startButton.textContent = '\u25b6 Start the game';
         }
         function set(seat, value) {
@@ -224,7 +229,7 @@
 
         var started = false;
         function start(ctl) {
-            var go = mode === 'friends' ? { ok: true } : startable(choice, v.seats);
+            var go = mode === 'friends' ? { ok: v.online } : startable(choice, v.seats);
             if (!go.ok || started) return;
             started = true;                                                          // (a second call opens no second tab)
             var rec = { id: randomId(win), name: m.name, bytes: m.bytes.slice() };
@@ -311,7 +316,11 @@
                 fcard.appendChild(el('p', 'play-ftext', 'Opens a room in a new tab with the map as it is right now (' + kbText(m.bytes.length) + '). Anyone with your room link or 6-character room code receives the map automatically when they join.'));
                 fcard.appendChild(el('p', 'play-fnote', 'Not added to the public map list and not submitted for approval. Your editor tab stays open as you left it.'));
                 friendsPanel.appendChild(fcard);
-                if (v.heavy) friendsPanel.appendChild(warning());
+                if (!v.online) {                                             // (the refusal takes the place of the slow-game warning)
+                    var no = el('p', 'play-status no', onlineText(v.ants));
+                    no.setAttribute('role', 'status');
+                    friendsPanel.appendChild(no);
+                } else if (v.heavy) friendsPanel.appendChild(warning());
                 var usableCount = v.seats.filter(function (x) { return x.usable; }).length;
                 friendsPanel.appendChild(el('p', 'play-fhead', 'Colors available on this map (' + usableCount + ' of 4):'));
                 var flist = el('div', 'play-fseats');
@@ -336,5 +345,5 @@
         return ctl;
     }
 
-    return { verdict: verdict, startable: startable, quick: quick, firstChoice: firstChoice, code: code, open: open, heavyText: heavyText, HEAVY_START_ANTS: HEAVY_START_ANTS, MAX_ROWS: MAX_ROWS, MAX_EXTENDED_SIDE: MAX_EXTENDED_SIDE, KEPT: KEPT, kept: function () { return kept; } };
+    return { verdict: verdict, startable: startable, quick: quick, firstChoice: firstChoice, code: code, open: open, heavyText: heavyText, HEAVY_START_ANTS: HEAVY_START_ANTS, MAX_ONLINE_ANTS: MAX_ONLINE_ANTS, onlineText: onlineText, MAX_ROWS: MAX_ROWS, MAX_EXTENDED_SIDE: MAX_EXTENDED_SIDE, KEPT: KEPT, kept: function () { return kept; } };
 });

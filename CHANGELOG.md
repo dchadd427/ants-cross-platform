@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.150 - 2026-10-28 - Online rooms: at most 8,000 starting ants
+
+**For players:**
+- **Online rooms play at most 8,000 starting ants (all four colors added up).** Before, nothing limited the ants: a map with 40,000 ants passed the checker, and starting its match froze the whole server for about 11 seconds, with every room, the lobby and the health check, because setting the ants up takes time that grows with the square of their number. Now a map over 8,000 is refused before any ant is set up. A map that starts 8,000 ants or fewer, including the largest ones of the players (6,000 and 2,772 ants), plays online as before; none of the library's 540 maps starts more than 248.
+- **How you see the refusal.** The lobby tells the leader "This map starts too many ants to play online (8,000 at most): choose another map." and the room keeps its map. The map list marks the map "Too many ants to play online". In the Map Maker, **Play this map > With other players** says so and its button is off, and **Submit for approval** and test rooms get a sentence from the server. The map can still be opened, edited and saved, and played on your own computer or against bots.
+- **A match with many ants takes more of the server's places.** A match takes one place for every 10,000 cells of its map or every 400 starting ants, whichever is more: 2,400 ants take 6 places, 6,000 take 15 and 8,000 take 20 of the server's 48. A shipped map still takes one. So a 6,000-ant map now takes 15 of the 48 places (only 3 such matches at once; it took 3 before). Matches on a map above the cap are left out of the match history counts (only a recording made before the cap can be one). When a map needs more places than are free, the START waits as it does on any full server ("The server has no place for another match right now: try again in a minute.").
+
+**Rules / network:** none for the simulation and the network: network protocol 21, the simulation rules, the recordings and the map files are unchanged. One rule of online play is new, and a map that was accepted before can now be refused online: a room no longer plays a map that starts more than 8,000 ants.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dd307dfd...bb58eaa2)
 ## v0.12.149 - 2026-10-28 - On a phone the health numbers are bigger and outlined
 
 **For players:**
@@ -511,33 +521,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4f281d02...52079baf)
 
-## v0.12.105 - 2026-10-22 - Map tools never touch the library, fixes after the review of 0.12.103
+## Older versions (v0.12.105 and before)
 
-**For players:**
-- **A START that cannot get a place no longer ends other people's matches.** When a big map needs several of the server's places and the server cannot give them, matches that nobody has come back to are left alone; they are ended only when that really makes room.
-- **A saved match on a map over 65,536 cells is not brought back after a server restart.** It ends with the reason "too big to play online" instead of coming back into an online room.
-- **Big maps are sent faster.** The server reads a map file in one piece (about 0.5 ms instead of 11 ms for a 3 MB map).
-- **The owner's page asks before it resets a password**, the way it asks before it removes a user, and the red note about the last Admin goes away once a user has been added.
-- **The Tab key stays inside the boxes of the owner's page** (it had been leaving them in real browsers).
-- **The map tools never touch the map library.** `lvl_tool`, the map sweep, the bot arena and the scripts that build, draw or test maps refuse, with a plain message, to write into `Original-Ants/` or `Community-Maps/` or over the file they read. `lvl_tool rewrite` no longer takes the same file as input and output.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4bf5f60a...dbd35b23)
-
-## v0.12.104 - 2026-10-22 - Big maps keep their fingerprints; the limits of big maps are written down
-
-**For players:**
-- **Games on big maps in the original rules keep their old fingerprints.** Since v0.12.97, a map of the original rules with more than 90 rows and more than 120 columns gave a different game fingerprint for as long as an ant held the order tile column 120, row 90, so an older and a newer game (or a recording from before) could disagree about that map. It checks out as before again. Library maps, Classic maps and every other play were never affected.
-- **What a big map can do is written down.** Maps up to 512 x 512 load and play, but on an open 512 x 512 map a diagonal order of 286 tiles or more, or a straight one of 400 tiles or more, is refused ("Can't go there"), and a group of 30 ants sent 200 tiles on a 512 x 512 map can take two and a half minutes before the last ant starts walking. Nothing about this changed; the map-format document now says it.
-
-**Rules / network:** none: network protocol 21 and the simulation rules number are unchanged. For the record, since v0.12.97 an order to exactly column 120, row 90 on a map of the extended rules (rules 1) is a real target where it used to read as "no order"; the number was not raised for it.
-
-**Fixes:**
-- Two wrong comments in the code about the order tile were corrected.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1aad1500...2132ed99)
-
-## Older versions (v0.12.103 and before)
-
-Every release before v0.12.104, and the long notes of v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.106, and the long notes of v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

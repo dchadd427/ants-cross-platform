@@ -51,7 +51,7 @@ struct ApprovedMap {
     uint64_t hash{0};          // FNV-1a 64 of the file (net::hash_file)
     uint64_t size{0};
     uint32_t width{0}, height{0}, minutes{0}, players{0};
-    uint64_t start_ants{0};    // filled in by MapStore::set_approved from the file (never from the caller's number); a test map's is not counted: it is on no list
+    uint64_t start_ants{0};    // filled in by MapStore::set_approved from the file (never from the caller's number); a test map's is counted by TestMapStore from the canonical file it keeps (the room needs it: OnlineLimits)
     std::string description, maker, kind;
 };
 
@@ -80,6 +80,12 @@ public:
     std::string listed_name(const std::string& name) const;
     /// Whether `name` (exactly, or in another letter case) is an approved or test map that is too big to be played online (online_limits.hpp): the leader who chose it is told so
     bool too_big_online(const std::string& name) const;
+    /// Whether `name` (exactly, or in another letter case) is a listed, approved or test map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts)
+    bool too_many_ants_online(const std::string& name) const;
+    /// The sentence for the leader who chose a map that a room does not play (net::kNoticeMapTooBig, net::kNoticeMapTooManyAnts), "" when the map is not refused or not known
+    std::string online_refusal(const std::string& name) const;
+    /// The starting ants (the four colors added up) of the list's or the approved or test map `name` (exact name), 0 when it is not known: what a match on it costs with its cells (OnlineLimits::weight)
+    uint64_t start_ants_of(const std::string& name) const;
     /// The cells (rows times columns) of the list's or the approved or test map `name` (exact name), 0 when it is not known: what a match on it costs (OnlineLimits::weight)
     uint64_t cells_of(const std::string& name) const;
     /// The body of GET /maps: {"format":1,"maps":[{file,width,height,minutes,players,description,plays,thumb[,original][,maker]}]}. `plays` is how many times each map was played (map_plays of the database, keyed

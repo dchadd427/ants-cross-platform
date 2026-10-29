@@ -142,6 +142,11 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
         r.error = std::string("the map '") + spec.map + "' is too big for a room: " + net::kNoticeMapTooBig;
         return nullptr;
     }
+    if (!OnlineLimits::allows_ants(OnlineLimits::start_ants(level))) {                      // (checked before the room, and so before its engine, is made: the ants of such a map would hold the one thread for seconds)
+        r.http_status = 422;
+        r.error = std::string("the map '") + spec.map + "' starts too many ants for a room: " + net::kNoticeMapTooManyAnts;
+        return nullptr;
+    }
     uint32_t seed = spec.seed;
     if (!spec.has_seed) {
         std::random_device rd;
@@ -199,7 +204,7 @@ bool RoomManager::make_public_room(const std::string& code, const net::CreateBlo
     // POST /rooms, and the players who come for that room with no block would be seated in the visitor's (v0.10.0 kept the two apart with its lower-case "demo-" prefix).
     if (limits_.demo_rooms == 0 || limits_.demo_map.empty() || !net::public_room_code(code) || !net::valid_create_block(block)) return false;
     const PublicChoice choice = public_choice_of(block, limits_);
-    if (!take_match_place(now_ms, store_.cells_of(choice.map))) return false;       // (no place is free: a match that nobody has come back to for a while gives its place up, never a room with a person at it)
+    if (!take_match_place(now_ms, store_.cells_of(choice.map), store_.start_ants_of(choice.map))) return false;       // (no place is free: a match that nobody has come back to for a while gives its place up, never a room with a person at it)
     RoomSpec spec = default_spec();                                 // (public rooms follow the server's reconnect setting and its limits)
     spec.code = code;
     spec.max_pause_ms = std::min(spec.max_pause_ms, kDemoMaxPauseMs);      // (the cap of a match that is abandoned: a public place is not held for half an hour)
@@ -251,22 +256,22 @@ bool RoomManager::map_in_use(const std::string& file_name) const {
 
 // What a room in rooms_ holds of the public places (a lobby that waits holds none: its START asks for one)
 static size_t held_places(const Room& room) {
-    return room.public_room() && !room.lobby_waiting() ? static_cast<size_t>(OnlineLimits::weight(room.map_cells())) : 0u;
+    return room.public_room() && !room.lobby_waiting() ? static_cast<size_t>(room.map_places()) : 0u;
 }
 
 size_t RoomManager::public_places() const {
-    const auto weigh = [](uint64_t cells) { return static_cast<size_t>(OnlineLimits::weight(cells)); };       // (a match heavier than all the places only makes the server full: no cap is needed to count it)
+    const auto weigh = [](uint64_t cells, uint64_t ants) { return static_cast<size_t>(OnlineLimits::weight(cells, ants)); };       // (a match heavier than all the places only makes the server full: no cap is needed to count it)
     size_t places = 0;
     for (const auto& kv : rooms_) places += held_places(*kv.second);
-    for (const auto& r : retired_) places += r->public_room() ? weigh(r->map_cells()) : 0u;                                                      // (a match that gave its code to its rematch keeps its place until it is forgotten, as before)
-    for (const Restoring& r : restoring_) places += r.head.public_room ? weigh(r.room != nullptr ? r.room->map_cells() : store_.cells_of(r.head.map)) : 0u;
+    for (const auto& r : retired_) places += r->public_room() ? weigh(r->map_cells(), r->map_start_ants()) : 0u;                                                      // (a match that gave its code to its rematch keeps its place until it is forgotten, as before)
+    for (const Restoring& r : restoring_) places += r.head.public_room ? (r.room != nullptr ? weigh(r.room->map_cells(), r.room->map_start_ants()) : weigh(store_.cells_of(r.head.map), store_.start_ants_of(r.head.map))) : 0u;
     return places;
 }
 
 // All or nothing: the abandoned matches are ended only when ending all of them would make the room that the START needs (a weight of seven can need three), so that a START that cannot be seated
 // costs nobody their match (their players may be holding seats for a reconnect), however often it is pressed
-bool RoomManager::take_match_place(uint32_t now_ms, uint64_t cells) {
-    const size_t want = std::min<size_t>(OnlineLimits::weight(cells), std::max<size_t>(limits_.demo_rooms, 1));
+bool RoomManager::take_match_place(uint32_t now_ms, uint64_t cells, uint64_t start_ants) {
+    const size_t want = std::min<size_t>(OnlineLimits::weight(cells, start_ants), std::max<size_t>(limits_.demo_rooms, 1));
     size_t evictable = 0;
     for (const auto& kv : rooms_) evictable += kv.second->public_room() && kv.second->abandoned_ms(now_ms) >= kDemoAbandonedMs ? held_places(*kv.second) : 0u;
     if (public_places() + want > limits_.demo_rooms + evictable) return false;
@@ -282,7 +287,7 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     if (!net::public_room_code(code) || !net::valid_create_block(block) || !block.lobby()) return false;
     if (!lobby_place(now_ms)) return false;
     std::string map = public_choice_of(block, limits_).map;
-    if (!block.map_name.empty() && store_.test_map(block.map_name) != nullptr && OnlineLimits::allows(store_.cells_of(block.map_name))) map = store_.test_map(block.map_name)->name;
+    if (!block.map_name.empty() && store_.test_map(block.map_name) != nullptr && OnlineLimits::allows(store_.cells_of(block.map_name), store_.start_ants_of(block.map_name))) map = store_.test_map(block.map_name)->name;
     return create_room(lobby_spec(code, map), now_ms).ok;      // (the map of the block when the server offers it; the plan changes it)
 }
 
@@ -381,18 +386,18 @@ LobbyServices RoomManager::lobby_services() {
     s.choose_map = [this](const std::string& name) {
         if (name.empty()) return std::string();
         for (const std::string& file : limits_.demo_maps) {
-            if (iequals(name, file)) return file;
+            if (iequals(name, file)) return store_.online_refusal(file).empty() ? file : std::string();       // (a map that a room does not play is not chosen though the operator offers it: map_refusal tells the leader)
         }
-        if (!limits_.demo_map.empty() && iequals(name, limits_.demo_map)) return limits_.demo_map;       // (the server's one map when it offers no list)
+        if (!limits_.demo_map.empty() && iequals(name, limits_.demo_map)) return store_.online_refusal(limits_.demo_map).empty() ? limits_.demo_map : std::string();       // (the server's one map when it offers no list)
         // Any other map of the scanned list (the maps folder and the community folder: GET /maps lists them): the lobby offers every map of the list, not only the --demo-maps. Answered from the list in memory:
         // a Plan message costs no disk read and no hashing; a name that is not in the list is refused. The file is read when the room loads its map (load_map).
         return store_.listed_name(name);
     };
     s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) {
-        return store_.find(file, entry) && level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()) && OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height());
+        return store_.find(file, entry) && level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()) && OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height(), OnlineLimits::start_ants(level));
     };
-    s.match_place = [this](uint32_t now_ms, uint64_t cells) { return take_match_place(now_ms, cells); };
-    s.map_refusal = [this](const std::string& name) { return store_.too_big_online(name) ? std::string(net::kNoticeMapTooBig) : std::string(); };
+    s.match_place = [this](uint32_t now_ms, uint64_t cells, uint64_t start_ants) { return take_match_place(now_ms, cells, start_ants); };
+    s.map_refusal = [this](const std::string& name) { return store_.online_refusal(name); };
     return s;
 }
 
@@ -710,7 +715,7 @@ bool RoomManager::enable_history(db::Database& database, std::string& why, Histo
         history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory(), std::function<uint64_t()>(), store_.community_directory());
         history_feeder_->set_approved_map_path([this](const std::string& name) {          // (the matches on an approved map of the players are counted too; one that a room could not play online is not: its recording would hold the one thread for seconds)
             const ApprovedMap* map = store_.approved(name);
-            return map != nullptr && OnlineLimits::allows(static_cast<uint64_t>(map->width) * map->height) ? map->path : std::string();
+            return map != nullptr && OnlineLimits::allows(static_cast<uint64_t>(map->width) * map->height, map->start_ants) ? map->path : std::string();
         });
     }
     return true;
@@ -847,6 +852,7 @@ std::string RoomManager::map_refusal(const RestartHead& head, MapEntry& entry, a
     if (entry.hash != head.map_hash) return "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
     if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
     if (!OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height())) return "ended by a restart of the server: the map " + head.map + " is too big to play online now (" + net::kNoticeMapTooBig + ")";      // (a record of a match from before the limit: a room is online, whatever its record says; judge_record and the replay both come here)
+    if (!OnlineLimits::allows_ants(OnlineLimits::start_ants(level))) return "ended by a restart of the server: the map " + head.map + " starts too many ants to play online now (" + net::kNoticeMapTooManyAnts + ")";      // (the same for a record of a match from before the limit; checked before the engine is made)
     if (!level.validate(head.start.roster, assets::LevelLimits::for_play_extended()).playable) return "ended by a restart of the server: the map cannot be played by the seats of the match";
     return std::string();
 }

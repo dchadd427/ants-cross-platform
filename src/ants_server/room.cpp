@@ -425,6 +425,7 @@ uint8_t Room::roster_with(const std::vector<std::pair<uint8_t, net::FillLevel>>&
 // The match is started from the waiting room: the bots of the fill sit down, the teams that were asked for count when the seats that play can make them (else the match starts without them and everybody in
 // the room is told why, once it has started), and the lobby sends the Start. False, and the room is as it was (the bots go again), when the lobby refuses.
 bool Room::start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::pair<uint8_t, net::FillLevel>>& fill_seats, const sim::StartTeams& wanted) {
+    if (!OnlineLimits::allows_ants(map_start_ants())) return false;          // (every start of a room comes through here: no match is made on a map that starts more ants than a room plays, whatever door the map came by)
     sim::StartTeams teams;
     std::string no_teams;
     if (wanted.set) {
@@ -517,7 +518,9 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     const std::vector<std::pair<uint8_t, net::FillLevel>> fill_seats = net::plan_fill_seats(net::FillPlan(asked_fill), lobby_.room(), spec_.players);
     const uint8_t roster = roster_with(fill_seats);
     if (!level_.validate(roster, assets::LevelLimits::for_play_extended()).playable) return lobby_.end_start(net::kNoticeMapColors);
-    if (!services_.match_place || !services_.match_place(now_ms, map_cells())) return lobby_.end_start(net::kNoticeNoPlace);
+    const uint64_t start_ants = map_start_ants();
+    if (!OnlineLimits::allows_ants(start_ants)) return lobby_.end_start(net::kNoticeMapTooManyAnts);          // (the last door before the engine is made: setting up the ants of such a map would hold the one thread for seconds; the plan's own door is choose_map)
+    if (!services_.match_place || !services_.match_place(now_ms, map_cells(), start_ants)) return lobby_.end_start(net::kNoticeNoPlace);
     if (!start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, true, asked_teams))) lobby_.end_start(std::string());
 }
 
@@ -908,6 +911,10 @@ std::unique_ptr<Room> Room::refused(const RestartHead& head, const std::string& 
 Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_vote_after_ms, std::string& why) {
     why.clear();
     const RestartHead& h = rec.head;
+    if (!OnlineLimits::allows_ants(map_start_ants())) {          // (RoomManager::map_refusal says so first; this is the last door before the engine is made)
+        why = "the map starts more ants than a room plays";
+        return ReplayBegin::Refused;
+    }
     if (state_ != RoomState::Waiting || session_ != nullptr || !spec_.reconnect || restart_store_ == nullptr || h.code != spec_.code || !rec.ok()) {
         why = "the room is not one that a record can be restored into";
         return ReplayBegin::Refused;

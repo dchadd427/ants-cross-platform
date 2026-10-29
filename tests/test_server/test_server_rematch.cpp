@@ -1,5 +1,6 @@
 // Tests of the dedicated game server: the rematch of a lobby room (docs/SERVER.md "Lobby rooms"). When the rules end the match that a lobby room began, the server opens a lobby room with the same code at once,
 // with the match's plan and a seat reserved for the key of each of its people; the room of the match is retired (it answers its last connections and keeps its status for its keep time).
+#include "big_map_fixtures.hpp"
 #include "server_fixtures.hpp"
 
 #include <regex>
@@ -57,7 +58,7 @@ struct Played {
     Client* pia_game{nullptr};
     Client* bob_game{nullptr};
 };
-void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, Played& out, bool quit = true, uint8_t bob_platform = 0) {
+void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, Played& out, bool quit = true, uint8_t bob_platform = 0, const std::string& map_folder = std::string()) {
     Client& pia = w.connect_page("Pia", code, lobby_block_of());
     Client& bob = w.connect_page("Bob", code, lobby_block_of());
     w.run(300);
@@ -71,9 +72,9 @@ void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, 
     out.bob = bob.lobby->key();
     pia.end->close();                                                                // (the pages go to the game page)
     bob.end->close();
-    out.pia_game = &w.connect_game("Pia", code, out.pia);
+    out.pia_game = &w.connect_game("Pia", code, out.pia, false, map_folder);
     w.next_platform = bob_platform;
-    out.bob_game = &w.connect_game("Bob", code, out.bob);
+    out.bob_game = &w.connect_game("Bob", code, out.bob, false, map_folder);
     w.next_platform = 0;
     ASSERT_TRUE(until_running(w, code, 8000));
     w.run(kPre + 3000);
@@ -85,6 +86,12 @@ void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, 
     ASSERT_TRUE(out.bob_game->session->submit(q));
     for (int i = 0; i < 400 && w.status(code).state == RoomState::Running; ++i) w.run(10);
     ASSERT_TRUE(w.ended(code).state == RoomState::Finished && w.ended(code).reason == "the match ended");
+}
+
+// The answer a Hello got at the door after 300 ms: the reason of its Reject, 0 when it was seated
+net::RejectReason door_answer_of(World& w, Client& c) {
+    w.run(300);
+    return c.lobby->phase() == net::ClientLobby::Phase::Rejected ? c.lobby->reject_reason() : static_cast<net::RejectReason>(0);
 }
 
 }  // namespace
@@ -681,5 +688,29 @@ void run_rematch_tests() {
         ASSERT_EQ(store.retry_stale(), size_t{0});
         ASSERT_FALSE(fs::exists(held));
 #endif
+    } TEST_END();
+    TEST_CASE("S3.230 The Match That Gave Its Code To Its Rematch (Retired) Keeps The Places Of Its Ants As Well As Of Its Cells Until It Is Forgotten: A 2,400-Ant Match Holds Six Of Seven Places, So One Small Public Room Fits Beside It And A Second Does Not; When It Is Forgotten They Are Free") {
+        const fs::path dir = fs::temp_directory_path() / (std::string("ants_rematch_ants_") + std::to_string(static_cast<long long>(std::hash<std::string>()(maps_dir()) % 100000)));
+        fs::remove_all(dir);
+        fs::create_directories(dir);
+        fs::copy_file(maps_dir() + "/TINY.LVL", dir / "TINY.LVL", fs::copy_options::overwrite_existing);
+        { std::ofstream out(dir / "MANY.LVL", std::ios::binary); out << tiny_with_ants({600, 600, 600, 600}); }       // (2,400 ants on TINY's 31 x 31 cells: one place by its cells, six by its ants)
+        ServerLimits l = rematch_limits();
+        l.demo_rooms = 7;
+        l.demo_maps = {"TINY.LVL", "MANY.LVL"};
+        World w(l, dir.string());
+        Played p;
+        play_and_quit(w, "rmt00030", plan_of({K::Open, K::Open, K::Nobody, K::Nobody}, net::kNoTeam, net::kNoTeam, "MANY.LVL"), p, true, 0, dir.string());
+        ASSERT_EQ(w.mgr.retired_count(), 1u);
+        Client& ann = w.connect_creating("Ann", "pub00031", block_of("TINY.LVL", 2));
+        ASSERT_EQ(door_answer_of(w, ann), static_cast<net::RejectReason>(0));                          // (6 + 1 = 7)
+        Client& bob = w.connect_creating("Bob", "pub00032", block_of("TINY.LVL", 2));
+        ASSERT_EQ(door_answer_of(w, bob), net::RejectReason::NoSuchRoom);                              // (6 + 1 + 1 = 8; weighed by its cells alone the match would hold one and Bob would be in)
+        w.run(31000);                                                                                  // the match's keep time is over: it is forgotten
+        ASSERT_EQ(w.mgr.retired_count(), 0u);
+        Client& cat = w.connect_creating("Cat", "pub00033", block_of("TINY.LVL", 2));
+        ASSERT_EQ(door_answer_of(w, cat), static_cast<net::RejectReason>(0));                          // (1 + 1: the six are free again)
+        std::error_code ignore;
+        fs::remove_all(dir, ignore);
     } TEST_END();
 }

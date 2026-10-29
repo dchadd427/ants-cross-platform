@@ -330,23 +330,23 @@ uint64_t cells_in(uint32_t width, uint32_t height) { return static_cast<uint64_t
 
 std::string MapStore::listed_name(const std::string& name) const {
     for (const MapListing& m : listing_) {
-        if (m.file == name) return m.file;
+        if (m.file == name && OnlineLimits::allows_ants(m.start_ants)) return m.file;
     }
     const std::string folded = lower(name);
     for (const MapListing& m : extended_listing_) {
-        if (m.file == name && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;
+        if (m.file == name && OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) return m.file;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (t.name == name && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;
+        if (t.name == name && OnlineLimits::allows(cells_in(t.width, t.height), t.start_ants)) return t.name;
     }
     for (const MapListing& m : listing_) {
-        if (lower(m.file) == folded) return m.file;
+        if (lower(m.file) == folded && OnlineLimits::allows_ants(m.start_ants)) return m.file;
     }
     for (const MapListing& m : extended_listing_) {
-        if (lower(m.file) == folded && OnlineLimits::allows(cells_in(m.width, m.height))) return m.file;
+        if (lower(m.file) == folded && OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) return m.file;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (lower(t.name) == folded && OnlineLimits::allows(cells_in(t.width, t.height))) return t.name;
+        if (lower(t.name) == folded && OnlineLimits::allows(cells_in(t.width, t.height), t.start_ants)) return t.name;
     }
     return std::string();
 }
@@ -360,6 +360,39 @@ bool MapStore::too_big_online(const std::string& name) const {
         if (lower(t.name) == folded && !OnlineLimits::allows(cells_in(t.width, t.height))) return true;
     }
     return false;
+}
+
+bool MapStore::too_many_ants_online(const std::string& name) const {
+    const std::string folded = lower(name);
+    for (const MapListing& m : listing_) {
+        if (lower(m.file) == folded && !OnlineLimits::allows_ants(m.start_ants)) return true;
+    }
+    for (const MapListing& m : extended_listing_) {
+        if (lower(m.file) == folded && !OnlineLimits::allows_ants(m.start_ants)) return true;
+    }
+    for (const ApprovedMap& t : test_maps_) {
+        if (lower(t.name) == folded && !OnlineLimits::allows_ants(t.start_ants)) return true;
+    }
+    return false;
+}
+
+std::string MapStore::online_refusal(const std::string& name) const {
+    if (too_big_online(name)) return net::kNoticeMapTooBig;
+    if (too_many_ants_online(name)) return net::kNoticeMapTooManyAnts;
+    return std::string();
+}
+
+uint64_t MapStore::start_ants_of(const std::string& name) const {
+    for (const MapListing& m : listing_) {
+        if (m.file == name) return m.start_ants;
+    }
+    for (const MapListing& m : extended_listing_) {
+        if (m.file == name) return m.start_ants;
+    }
+    for (const ApprovedMap& t : test_maps_) {
+        if (t.name == name) return t.start_ants;
+    }
+    return 0;
 }
 
 uint64_t MapStore::cells_of(const std::string& name) const {
@@ -401,7 +434,10 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_ex
         if (m.original) o.set("original", ctl::JsonValue::make_bool(true));
         if (m.approved) o.set("maker", ctl::JsonValue::make_string(m.maker));
         if (with_extended) o.set("kind", ctl::JsonValue::make_string(m.kind));
-        if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height))) o.set("online", ctl::JsonValue::make_bool(false));       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)
+        if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) {       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)
+            o.set("online", ctl::JsonValue::make_bool(false));
+            if (!OnlineLimits::allows_ants(m.start_ants)) o.set("online_why", ctl::JsonValue::make_string("ants"));       // (the picker says which limit: only the ants one is named, the size one is as it was)
+        }
         if (with_extended && OnlineLimits::heavy(m.start_ants)) {          // (a game on it may run slowly: the pages warn; no map is refused for its ants)
             o.set("ants", ctl::JsonValue::make_int(static_cast<int64_t>(m.start_ants)));
             o.set("heavy", ctl::JsonValue::make_bool(true));
