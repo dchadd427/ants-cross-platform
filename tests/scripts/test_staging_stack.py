@@ -96,7 +96,7 @@ class ComposeFilesAsText(unittest.TestCase):
             self.assertRegex(text, r"(?m)^  ants-server:\s*$")
             self.assertRegex(text, r"(?m)^  ants-hub:\s*$")
             self.assertNotIn("Dockerfile.login", text)
-            self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-hub"])      # (these three and no other: the server plays its own matches of computer players, there is no bot arena container, the owner signs in at the game server itself, docs/MAP_SUBMISSIONS.md, and the chat is the hub, docs/HUB.md)
+            self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-hub"])      # (these three and no other: the server plays its own matches of computer players, there is no bot arena container, the administrators sign in at the game server itself, docs/MAP_SUBMISSIONS.md, and the chat is the hub, docs/HUB.md)
             self.assertNotIn("profiles:", "\n".join(code_lines(text)))                            # (and none that waits behind a profile for somebody to ask for it)
         command = lambda text: [l.strip() for l in code_lines(text) if l.strip().startswith("command:")]
         self.assertEqual(len(command(self.staging)), 1)
