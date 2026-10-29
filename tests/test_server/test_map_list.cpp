@@ -347,7 +347,7 @@ int main() {
             rq.method = method;
             rq.path = path;
             rq.query = query;
-            return handle_public_replays(mgr, rq);
+            return handle_public_replays(mgr, rq, 0);
         };
         ctl::HttpResponse r = get("GET", "/maps");
         ASSERT_EQ(r.status, 200);
@@ -524,16 +524,16 @@ int main() {
             ctl::HttpRequest request;
             request.method = "GET";
             request.path = "/maps/files/Wide%20410.lvl";
-            ctl::HttpResponse r = handle_public_replays(mgr, request);
+            ctl::HttpResponse r = handle_public_replays(mgr, request, 0);
             ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == approved[1].size && r.content_type == "application/octet-stream");
             request.path = "/maps/previews/Wide%20410.png";
-            r = handle_public_replays(mgr, request);
+            r = handle_public_replays(mgr, request, 0);
             ASSERT_TRUE(r.status == 200 && !r.file && r.body.compare(0, 4, "\x89PNG") == 0);
             request.path = "/maps/files/Draft%20Big%20~test-0badf00d.lvl";                          // (a test map's file too: unlisted, not unreachable)
-            r = handle_public_replays(mgr, request);
+            r = handle_public_replays(mgr, request, 0);
             ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == tests[0].size);
             request.path = "/maps/files/Nobody.lvl";
-            r = handle_public_replays(mgr, request);
+            r = handle_public_replays(mgr, request, 0);
             ASSERT_TRUE(r.status == 404 && !r.file);
             {   // a file that grew after the store looked at it (the list says 100 bytes, the disk has one byte over what the store keeps) is not read whole on the game thread: a 404
                 const fs::path grown = dir.path / "grown.bin";
@@ -548,7 +548,7 @@ int main() {
                 request.path = "/maps/files/Grew%20256.lvl";
                 std::error_code size_error;
                 const unsigned long long on_disk = static_cast<unsigned long long>(fs::file_size(grown, size_error));
-                r = handle_public_replays(mgr, request);
+                r = handle_public_replays(mgr, request, 0);
                 if (on_disk != MapStore::kMaxMapBytes + 1u || r.status != 404 || r.file) std::cout << "\n      [grew] on the disk " << on_disk << " bytes, status " << r.status << ", file " << r.file << ", body " << r.body.size() << " bytes: " << r.body.substr(0, 80) << "\n";
                 ASSERT_TRUE(on_disk == MapStore::kMaxMapBytes + 1u);
                 ASSERT_TRUE(r.status == 404 && !r.file);
@@ -558,7 +558,7 @@ int main() {
                 more.back() = g;
                 mgr.mutable_store().set_approved(more);
                 request.path = "/maps/files/Grew%20256.lvl";
-                r = handle_public_replays(mgr, request);
+                r = handle_public_replays(mgr, request, 0);
                 ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == MapStore::kMaxMapBytes);
                 mgr.mutable_store().set_approved(approved);
             }

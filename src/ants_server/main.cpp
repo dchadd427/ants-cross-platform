@@ -917,7 +917,7 @@ int main(int argc, char** argv) {
             test_map_http->update(now, [&](const ants::ctl::HttpRequest& request) { return test_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });
             ants::server::upkeep_test_maps(rooms, *test_store, static_cast<int64_t>(std::time(nullptr)), now);          // (once a minute: the maps that are six hours old)
         }
-        if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request); });
+        if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request, now); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
             stats.count_ended(s);                                  // (a match that ran 600 ticks counts, public rooms too; a shorter one, or a room that never began, counts nothing)
             const bool demo = s.public_room;

@@ -623,7 +623,7 @@ void run_rematch_tests() {
         ctl::HttpRequest rq;
         rq.method = "GET";
         rq.path = "/replays";
-        const ctl::HttpResponse r = handle_public_replays(w.mgr, rq);
+        const ctl::HttpResponse r = handle_public_replays(w.mgr, rq, w.now);
         ctl::JsonValue j;
         ASSERT_TRUE(r.status == 200 && ctl::parse_json(r.body, j, &why));
         ASSERT_EQ(j.get("replays").size(), size_t{1});

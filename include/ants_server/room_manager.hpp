@@ -113,6 +113,9 @@ struct BusyCounts {
     uint32_t players{0};
 };
 
+/// The public list of games shows this many lobbies at the most (RoomManager::lobbies), the best first
+inline constexpr size_t kMaxListedLobbies = 50;
+
 struct CreateResult {
     bool ok{false};
     int http_status{201};                   // what the control interface answers: 201, 400, 404, 409, 503
@@ -236,6 +239,10 @@ public:
 
     /// How busy the server is (see BusyCounts); cheap: a pass over the rooms
     BusyCounts busy(uint32_t now_ms) const;
+
+    /// The public list of games (protocol 22; GET /lobbies): the lobby rooms that Room::listing lists, at most kMaxListedLobbies, the best first: more people, then the longer listed, then the smaller code. Cheap: a pass over
+    /// the rooms with a predicate, no status. A room that is private, full, starting, empty or kept for a rematch is not in it.
+    std::vector<LobbyListing> lobbies(uint32_t now_ms) const;
 
     size_t room_count() const noexcept { return rooms_.size(); }
     /// The rooms of matches that gave their code to the lobby of their rematch and answer their last connections (see the paragraph at the top), and the lobbies that were opened again so

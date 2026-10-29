@@ -1125,6 +1125,28 @@ uint32_t Room::abandoned_ms(uint32_t now_ms) const {
     return now_ms - last_person_ms_;
 }
 
+// A public lobby room that a newcomer can join now (room.hpp). Each condition is one thing a visitor would be sent to a dead end by: a room that has begun or loads, one that is private, one whose START waits (it takes nobody
+// new), one nobody is at, one with no free color, one that keeps seats for the people of its last match.
+bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
+    if (!lobby_waiting() || !lobby_.is_public() || lobby_.phase() != net::HostLobby::Phase::Room) return false;
+    if (lobby_.starting() || lobby_.any_reserved()) return false;
+    const uint8_t leader = lobby_.leader();
+    if (leader >= sim::MAX_PLAYERS || lobby_.connected() == 0) return false;
+    const size_t open = lobby_.open_colors();
+    if (open == 0) return false;
+    out = LobbyListing{};
+    out.code = spec_.code;
+    out.host = lobby_.room().slots[leader].name;
+    out.map = lobby_.map_name();
+    out.mode = lobby_.mode();
+    out.people = static_cast<uint8_t>(lobby_.people_colors());
+    out.bots = static_cast<uint8_t>(lobby_.bot_colors());
+    out.free_colors = static_cast<uint8_t>(open);
+    out.size = static_cast<uint8_t>(lobby_.match_colors());
+    out.age_ms = lobby_.listed_age_ms(now_ms);
+    return true;
+}
+
 RoomStatus Room::status(uint32_t now_ms) const {
     RoomStatus s;
     s.code = spec_.code;
@@ -1139,6 +1161,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     if (spec_.lobby) {
         const net::RoomMsg& shown = lobby_.room();
         s.starting = lobby_.starting();
+        s.lobby_public = lobby_.is_public();
         s.reopened = reopened_;
         for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
             if (lobby_.in_game(seat)) s.games = static_cast<uint8_t>(s.games | (1u << seat));

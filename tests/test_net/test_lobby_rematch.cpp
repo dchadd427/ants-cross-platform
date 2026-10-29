@@ -74,18 +74,6 @@ std::array<SeatKey, 3> play_three_to_begun(Room& room, const PlanMsg& plan, cons
     return keys;
 }
 
-// The room's clock in steps of `step` ms, for the hours of a reservation (every link speaks within a step: the silence limit is far above it)
-void run_coarse(Room& room, uint64_t ms, uint32_t step) {
-    for (uint64_t elapsed = 0; elapsed < ms; elapsed += step) {
-        room.now += static_cast<uint32_t>(std::min<uint64_t>(step, ms - elapsed));
-        room.net.set_time(room.now);
-        room.host.update(room.now);
-        for (auto& g : room.guests) {
-            if (!g.frozen) g.lobby->update(room.now);
-        }
-    }
-}
-
 // A lobby room that is opened again from `r` (what the server does when the match is over), at the time `now`
 bool reopened(Room& room, const Rematch& r) { return room.host.reopen(r, room.now); }
 
