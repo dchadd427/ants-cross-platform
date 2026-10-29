@@ -95,15 +95,15 @@
   {
    "id": "home_says_opening_on_the_room_only",
    "file": "web/home/home.js",
-   "old": "if (screen === 'home') opening.hidden = false; }",
-   "new": "if (screen === 'room') opening.hidden = false; }",
+   "old": "if (screen === 'home') opening.hidden = false;",
+   "new": "if (screen === 'room') opening.hidden = false;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "home_says_opening_always",
    "file": "web/home/home.js",
-   "old": "if (screen === 'home') opening.hidden = false; }",
-   "new": "opening.hidden = false; }",
+   "old": "if (screen === 'home') opening.hidden = false;",
+   "new": "opening.hidden = false;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -466,8 +466,8 @@
   {
    "id": "inert_does_nothing",
    "file": "web/home/home.js",
-   "old": "[bar, rbar].forEach(function (n) { if (on || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });",
-   "new": "[bar].forEach(function (n) { if (on || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });",
+   "old": "[bar, rbar].forEach(function (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });",
+   "new": "[bar].forEach(function (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -697,22 +697,22 @@
   {
    "id": "opening_does_not_make_the_bars_inert",
    "file": "web/home/home.js",
-   "old": "function say() { going = true; closeMenu(); inert(true);",
-   "new": "function say() { going = true; closeMenu();",
+   "old": "going = true; closeMenu(); inert(held);",
+   "new": "going = true; closeMenu();",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "opening_keeps_the_menu_open",
    "file": "web/home/home.js",
-   "old": "function say() { going = true; closeMenu(); inert(true);",
-   "new": "function say() { going = true; inert(true);",
+   "old": "going = true; closeMenu(); inert(held);",
+   "new": "going = true; inert(held);",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "a_dialog_frees_the_bars_after_the_hand_off",
    "file": "web/home/home.js",
-   "old": "if (on || going) n.setAttribute('inert', '');",
-   "new": "if (on) n.setAttribute('inert', '');",
+   "old": "if (held || going) n.setAttribute('inert', '');",
+   "new": "if (held) n.setAttribute('inert', '');",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -851,7 +851,7 @@
   {
    "id": "stale_how_it_works",
    "file": "web/lobby.html",
-   "old": "<h3>The room</h3><p>Press My room and your room is ready",
+   "old": "<h3>The room</h3><p>From Home, press My room and your room is ready",
    "new": "<h3>The room</h3><p>Open the page and your room is ready",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -867,6 +867,90 @@
    "file": "web/home/home.css",
    "old": "    .rbar .hbrand { flex: 1 1 0; min-width: 40px; max-width: 76px; } .rbar .hlogo { width: 100%; }\n",
    "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "how_it_works_press_my_room_from_the_room",
+   "file": "web/lobby.html",
+   "old": "<h3>The room</h3><p>From Home, press My room and your room is ready",
+   "new": "<h3>The room</h3><p>Press My room and your room is ready",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "browser_check_says_a_room_is_made_again_by_the_front_page",
+   "file": "tests/scripts/web_home_check.py",
+   "old": "\"menu: the front page (Home), after My room, makes a room again, a new code",
+   "new": "\"menu: the front page makes a room again, a new code",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "hand_off_timer_missing",
+   "file": "web/home/home.js",
+   "old": "            goingTimer = setTimeout(function () { goingTimer = null; going = false; opening.hidden = true; inert(held); }, OPENING_MS);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "hand_off_timer_ten_times_too_long",
+   "file": "web/home/home.js",
+   "old": "var OPENING_MS = 15000;",
+   "new": "var OPENING_MS = 150000;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "hand_off_timer_leaves_the_card",
+   "file": "web/home/home.js",
+   "old": "going = false; opening.hidden = true; inert(held); }, OPENING_MS);",
+   "new": "going = false; inert(held); }, OPENING_MS);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "hand_off_timer_leaves_the_bars_inert",
+   "file": "web/home/home.js",
+   "old": "going = false; opening.hidden = true; inert(held); }, OPENING_MS);",
+   "new": "going = false; opening.hidden = true; }, OPENING_MS);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "hand_off_timer_frees_what_a_dialog_holds",
+   "file": "web/home/home.js",
+   "old": "going = false; opening.hidden = true; inert(held); }, OPENING_MS);",
+   "new": "going = false; opening.hidden = true; inert(false); }, OPENING_MS);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "hand_off_timer_never_goes_again",
+   "file": "web/home/home.js",
+   "old": "            if (goingTimer !== null) clearTimeout(goingTimer);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "hand_off_timer_keeps_going_forever",
+   "file": "web/home/home.js",
+   "old": "goingTimer = setTimeout(function () { goingTimer = null; going = false;",
+   "new": "goingTimer = setTimeout(function () { goingTimer = null; going = going;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "narrow_logo_rule_missing",
+   "file": "web/home/home.css",
+   "old": "@media (max-width: 339px) { .rbar .hbrand { position: absolute; min-width: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "narrow_logo_loses_its_heading",
+   "file": "web/home/home.css",
+   "old": "@media (max-width: 339px) { .rbar .hbrand { position: absolute; min-width: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }",
+   "new": "@media (max-width: 339px) { .rbar .hbrand { display: none; } }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "narrow_logo_rule_too_wide",
+   "file": "web/home/home.css",
+   "old": "@media (max-width: 339px) { .rbar .hbrand {",
+   "new": "@media (max-width: 389px) { .rbar .hbrand {",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]

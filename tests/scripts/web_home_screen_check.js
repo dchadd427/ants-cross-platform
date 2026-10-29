@@ -411,9 +411,43 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('the page opens the list and makes Home\'s bars inert with the rest of the page behind it (and the footer, the logo row and the strips)', env.$('picker-panel').children.length > 0 && rbar.hasAttribute('inert') && env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert'));
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 7. A hand-off that fails or is stopped: after 15 s Home takes presses again (the page is still here)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{   // the hand-off that fails or is stopped: after 15 s Home is Home again
+    const env = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
+    env.home('mine').click();
+    const s = env.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
+    env.roomBar('rhome').click();
+    s.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+    const rbar = env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1)[0], hbar = env.home('hbar'), card = env.$('home').children[2];
+    check('START: Home says "Opening the game…" and both bars are inert', card.hidden === false && rbar.hasAttribute('inert') && hbar.hasAttribute('inert'));
+    env.advance(14999);
+    check('14.999 s later it still does', card.hidden === false && hbar.hasAttribute('inert') && rbar.hasAttribute('inert'));
+    env.advance(1);
+    check('after 15 s (the page is still here: the hand-off failed or was stopped) the card goes and both bars take presses again', card.hidden === true && !hbar.hasAttribute('inert') && !rbar.hasAttribute('inert'));
+    env.home('mine').click();
+    check('... and My room works', env.screen() === 'room');
+}
+{   // the timer does not free what a dialog holds
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const host = new H.El(env, 'div', 'home2'), lobby = new H.El(env, 'div', 'lobby2');
+    lobby.parent = env.root;
+    const second = env.win.AntsHome.mount({ doc: env.doc, win: env.win, host, lobby, page: { info: () => ({ client: false, model: null, offline: 'none' }), make() {}, leave() {}, how() {} } });
+    const bars = host.findAll((e) => e.tagName === 'header').concat(env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1).slice(-1));
+    second.inert(true); second.opening();
+    env.advance(15000);
+    check('a dialog that is still open when the 15 s are up keeps the bars inert (the timer gives back only what START took)', bars.every((b) => b.hasAttribute('inert')) && (second.inert(false), bars.every((b) => !b.hasAttribute('inert'))));
+    second.opening(); second.opening();
+    env.advance(14000);
+    second.opening();
+    env.advance(14000);
+    check('a second hand-off starts the 15 s again (and one timer only is running for each Home)', bars.every((b) => b.hasAttribute('inert')) && (env.advance(1000), bars.every((b) => !b.hasAttribute('inert'))));
+}
+
 {   // what Home never does: no network of its own, no storage, no markup, nothing that is the page's room (the client, the model, the session)
     const code = fs.readFileSync(path.join(lobbyDir, 'home', 'home.js'), 'utf8');
-    check('home.js makes no request and keeps nothing (no fetch, XMLHttpRequest, WebSocket, localStorage, sessionStorage) and writes no markup', !/\bfetch\b|XMLHttpRequest|WebSocket|localStorage|sessionStorage|innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(code.replace(/\/\/.*$/gm, '')));
+    check('home.js makes no request of its own and keeps nothing (no fetch, XMLHttpRequest, WebSocket, localStorage, sessionStorage; the chat dock\'s two files are asked for by a link and a script element) and writes no markup', !/\bfetch\b|XMLHttpRequest|WebSocket|localStorage|sessionStorage|innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(code.replace(/\/\/.*$/gm, '')));
     check('... its only calls into the page are info, make, leave and how', [...code.matchAll(/\bpage\.(\w+)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i).sort().join() === 'how,info,leave,make');
 }
 

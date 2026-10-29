@@ -15,6 +15,8 @@
     var HASH = '#room';                                  // the address of the Room screen
     var STATE_KEY = 'ants';                              // history.state.ants: 'home' or 'room' (the entries that this script made or marked)
     var LOGO = { src: 'front/logo.png', width: 581, height: 218 };      // (the page's own picture: front/logo.png, the size of its file)
+    var CHAT = { script: 'home/chat.js', style: 'home/chat.css' };       // the chat dock: loaded once, after the first paint, when Home is first shown
+    var OPENING_MS = 15000;                              // a hand-off that is still here after this long has failed or was stopped: Home takes presses again
     var TEXT = {
         quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', opening: 'Opening the game…',
         yardTitle: 'The Yard will live here', yardLine: 'Stand-in picture. The real Yard is a big shared map: your 3 ants appear in it as soon as the page opens. It fills everything under the top bar.',
@@ -48,10 +50,10 @@
 
     // ---- the screens -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make() (a room of the page's own), leave(), how() } })
-    // returns { start, sync, opening, show, screen, inert, menu }
+    // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false;
+        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, goingTimer = null, dock = null, asked = false;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -201,6 +203,8 @@
             doc.body.setAttribute('data-screen', name);
             if (how === 'push') push(from, name);
             sync();
+            if (name === 'home') wantDock();
+            dockShown();
             if (how !== 'first') {
                 try { win.scrollTo(0, 0); } catch (e) { /* no scrolling here */ }
                 var next = name === 'room' ? homeBtn : mine;
@@ -225,10 +229,31 @@
             win.addEventListener('resize', function () { fit(); if (menuOpen) placeMenu(); });
         }
         // START reached this page: it is on its way to the game page, so both bars take no press (My room, Home, Leave room, Menu), and Home says so
-        function say() { going = true; closeMenu(); inert(true); if (screen === 'home') opening.hidden = false; }
-        function inert(on) { [bar, rbar].forEach(function (n) { if (on || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
+        function say() {
+            going = true; closeMenu(); inert(held); if (screen === 'home') opening.hidden = false;
+            if (goingTimer !== null) clearTimeout(goingTimer);
+            goingTimer = setTimeout(function () { goingTimer = null; going = false; opening.hidden = true; inert(held); }, OPENING_MS);
+        }
+        function inert(on) { held = !!on; [bar, rbar].forEach(function (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
+        // The chat dock (chat.js, chat.css) mounts into Home's div and is told which screen shows; what goes wrong with it stays with it
+        function dockShown() { try { if (dock) dock.shown(screen === 'home'); } catch (e) { /* the dock is its own */ } }
+        function wantDock() {
+            if (asked) return;
+            asked = true;
+            var parts = 2;
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); dockShown(); } } catch (e) { dock = null; } }
+            function load() {
+                try {
+                    var tail = doc.head || doc.body, css = el('link'), js = el('script');
+                    css.rel = 'stylesheet'; css.href = CHAT.style; css.onload = mountDock;
+                    js.src = CHAT.script; js.async = true; js.onload = mountDock;
+                    tail.appendChild(css); tail.appendChild(js);
+                } catch (e) { /* no chat */ }
+            }
+            if (typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(function () { setTimeout(load, 0); }); else setTimeout(load, 0);
+        }
 
-        return { start: start, sync: sync, opening: say, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; } };
+        return { start: start, sync: sync, opening: say, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };
     }
 
     return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, screenOf: screenOf, firstScreen: firstScreen, reservedText: reservedText, mount: mount };
