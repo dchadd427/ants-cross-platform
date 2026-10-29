@@ -16,7 +16,7 @@
 
     var PATH = '/hub/ws', VERSION = 1;
     var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
-    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000 };
+    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
     var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
     var STRIP = 62, BELOW = 12;                                        // px: the strip's height, and the room under the dock (chat.css)
     var PACE = { burst: 2, every: 2500, same: 31000 };                  // this page's own limit, below the hub's (3 at once, one every 2 s, the same text twice within 30 s)
@@ -48,6 +48,8 @@
         s = pairs(String(s).replace(/[\t-\r\u0085\u2028\u2029]/g, ' ')).replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/g, '').replace(HIDDEN, '');
         return (strict ? s.replace(SELECTORS, '') : s).replace(/\s+/g, ' ').replace(/^ | $/g, '');
     }
+    function nfc(s) { try { return s.normalize ? s.normalize('NFC') : s; } catch (e) { return s; } }
+    function within(a, b) { for (var i = 0, j = 0; i < a.length; i++, j++) { j = b.indexOf(a.charAt(i), j); if (j < 0) return false; } return true; }       // (a is b with characters taken out)
     function shows(s) { return /[^\s\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe00-\ufe0f\ufe20-\ufe2f]/.test(s); }       // (marks alone show nothing)
     function points(s) { var n = 0; for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); if (!(c >= 0xdc00 && c <= 0xdfff)) n++; } return n; }
     function clip(s, max) {                                              // at most `max` code points, then "…" (a pair of surrogates is never cut)
@@ -88,7 +90,7 @@
         var doc = env.doc, win = env.win, host = env.host;
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', out = [], crowded = false, stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, crowd: 0 };       // (out: the lines that were sent and have no answer yet, oldest first)
+        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], crowded = false, stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, crowd: 0 };       // (unanswered: lines sent and not answered yet, oldest first)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;       // a desktop opens with the panel out, a phone or a short window with the strip (home.css has the same breakpoints)
         var tight = 0;                                                           // what Home leaves under its bar: 0 the room for the panel, 1 too little for the open panel (the strip shows), 2 too little for the strip (nothing shows)
@@ -131,7 +133,7 @@
 
         // ---- what is seen -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function visible() { return !doc.hidden; }
-        function fit() {                                                         // the panel stays under Home's bar: notices above Home (or a small phone) take the room, and then the strip shows instead of the panel, or nothing when not even the strip fits
+        function fit() {                                                         // the panel stays under Home's bar: with too little room the strip shows instead, or nothing when not even the strip fits
             var bar = host.querySelector ? host.querySelector('.hbar') : null, least = 0, room, was = tight;
             try { least = parseFloat(win.getComputedStyle(box).getPropertyValue('--gc-min')) || 0; } catch (e) { least = 0; }       // (the least height of the open panel is the style's: chat.css)
             if (least && typeof host.clientHeight === 'number' && bar && typeof bar.offsetHeight === 'number') {
@@ -206,7 +208,7 @@
         function lost() {                                                        // the socket is gone (closed, failed, silent, or it sent what no hub sends): say so, and try again later
             var s = sock;
             sock = null;
-            ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = ''; out = [];
+            ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = ''; unanswered = [];
             if (s) { try { s.onopen = s.onmessage = s.onerror = s.onclose = null; s.close(); } catch (e) { /* it is gone */ } }
             if (liveSince !== null && now() - liveSince >= MS.stable) attempt = 0;       // (a link that held for a while starts over at 1 s; one that is closed at once keeps growing)
             liveSince = null; welcomed = false; state = 'offline';
@@ -270,7 +272,7 @@
             var e = lineOf(m);
             if (!e || known(e.id)) return;
             e.own = !!you && e.who === you.name; e.fresh = !e.own && !seen();
-            if (e.own) { var at = out.indexOf(e.text); if (at !== -1) out.splice(at, 1); }       // (a line that came back is answered)
+            if (e.own) { var key = nfc(e.text), at = -1; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; if (at < 0 && unanswered.length && within(key, unanswered[0].key)) at = 0; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
             render();
@@ -293,10 +295,11 @@
             else if (m.t === 'line') onLine(m);
             else if (m.t === 'del') onDel(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
-            else if (m.t === 'err') { var refused = out.shift(); tell(m.code); if (refused !== undefined) { if (!field.value) field.value = refused; delete said[refused]; } }       // (the hub answers in order: the refused line is the oldest that has no answer; it is not one that the hub remembers, so it may be sent again)
+            else if (m.t === 'err') { waiting(); var refused = unanswered.shift(); tell(m.code); if (refused !== undefined) { if (!field.value) field.value = refused.text; delete said[refused.text]; } }       // (the hub answers in order: the refused line is the oldest without an answer; the hub forgets it)
         }                                                                        // (any other kind is ignored)
 
         // ---- what the visitor does ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        function waiting() { var t = now(); unanswered = unanswered.filter(function (o) { return t - o.at < MS.pending; }); }       // (a line with no answer after 8 s is not waited for)
         function allowed(text) {                                                // this page's own pace, below the hub's; a text that was sent in the last 31 s is not sent again (the hub remembers every one of them, not only the last)
             var t = now(), old;
             tokens = Math.min(PACE.burst, tokens + Math.max(0, t - tokensAt) / PACE.every); tokensAt = t;
@@ -310,11 +313,11 @@
             var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
-            out.push(text); if (out.length > 8) out.shift();
+            if (!(you.mod && text.charAt(0) === '/')) { waiting(); unanswered.push({ text: text, key: nfc(text), at: now() }); }       // (a moderator's command has no answer)
             return '';
         }
         function setOpen(on) { open = !!on; if (seen()) stale = true; render(); }
-        function crowd() {                                                       // a press that wants the panel where there is no room for it: the strip says so for a few seconds
+        function crowd() {                                                       // a press that wants the panel with no room for it: the strip says so for a few seconds
             if (!tight) return;
             crowded = true; stop('crowd');
             timers.crowd = setTimeout(guard(function () { timers.crowd = 0; crowded = false; render(); }), MS.notice);
@@ -324,7 +327,7 @@
             if (e && e.preventDefault) e.preventDefault();
             if (sendLine(field.value) === '') field.value = '';
         }));
-        fold.addEventListener('click', guard(function () { setOpen(tight ? true : !open); crowd(); if (fold.focus) fold.focus(); }));       // (a window with no room for the panel keeps the wish to open it, and shows the strip)
+        fold.addEventListener('click', guard(function () { setOpen(tight ? true : !open); crowd(); if (fold.focus) fold.focus(); }));
         head.addEventListener('click', guard(function (e) { if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) { setOpen(true); crowd(); } else if (tight && !(e && e.target && fold.contains && fold.contains(e.target))) crowd(); }));       // (a folded strip opens wherever it is pressed)
         box.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && open) { setOpen(false); if (fold.focus) fold.focus(); } }));
         doc.addEventListener('visibilitychange', guard(function () { if (visible()) { stale = true; render(); nudge(); } }));

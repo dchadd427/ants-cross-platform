@@ -157,7 +157,7 @@ class TheFolderAndTheScript(unittest.TestCase):
 
     def test_the_limits_are_the_hubs_and_the_pace_is_below_it(self):
         self.assertIn("var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };", self.js)
-        self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000 };", self.js)
+        self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000, pending: 8000 };", self.js)
         self.assertIn("var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };", self.js, "the wait is spread from half a step to one and a half, within 1 to 60 s")
         self.assertIn("var PACE = { burst: 2, every: 2500, same: 31000 };", self.js, "below the hub's: 3 at once, one every 2 s, the same text twice within 30 s")
 
