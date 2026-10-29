@@ -494,8 +494,10 @@ class TheLockedDatabaseOnTheWire(RigTest):
         started = time.monotonic()
         alice.say("hello")
         self.assertEqual(next(m for m in iter(alice.recv_json, None) if m["t"] == "err"), {"t": "err", "code": "rate"})
-        self.assertGreater(time.monotonic() - started, 0.25)                           # (it waited its 0.3 seconds, and no longer)
-        self.assertLess(time.monotonic() - started, 2.5)
+        self.assertGreater(time.monotonic() - started, 0.25)                           # (it waited its 0.3 seconds ...)
+        self.assertLess(time.monotonic() - started, 4.5)                               # (... and not the five seconds that a connection waits by default. SQLite counts the naps of its busy handler, not the clock:
+                                                                                       # on a machine whose naps overshoot (the CI's macOS: a second and a half) the wait is longer than 0.3 seconds; the settings
+                                                                                       # themselves are held by TheProgramUses... below)
         self.assert_the_write_lock_is_held()
         mod.say("/mute alice 5")
         seen = self.wait_for(mod, lambda m: m == {"t": "err", "code": "bad"})
