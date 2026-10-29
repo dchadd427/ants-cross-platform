@@ -23,7 +23,7 @@
     var TEXT = {
         title: 'Global chat', short: 'Chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
-        fold: 'Fold chat', open: 'Open chat', mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+'
+        fold: 'Fold chat', open: 'Open chat', crowded: 'No room to open it: close a notice',  mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+'
     };
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
         rate: 'Slow down a little', login: 'Log in with Discord to chat', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first',
@@ -88,7 +88,7 @@
         var doc = env.doc, win = env.win, host = env.host;
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', draft = '', stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0 };
+        var sock = null, stopped = false, isHome = false, stale = true, notice = '', out = [], crowded = false, stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, crowd: 0 };       // (out: the lines that were sent and have no answer yet, oldest first)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;       // a desktop opens with the panel out, a phone or a short window with the strip (home.css has the same breakpoints)
         var tight = 0;                                                           // what Home leaves under its bar: 0 the room for the panel, 1 too little for the open panel (the strip shows), 2 too little for the strip (nothing shows)
@@ -183,10 +183,10 @@
             box.setAttribute('data-state', state); box.setAttribute('data-open', out ? 'true' : 'false'); box.setAttribute('data-you', you ? 'yes' : 'no'); box.hidden = tight === 2;
             body.hidden = !out;
             fold.setAttribute('aria-expanded', out ? 'true' : 'false');
-            fold.setAttribute('aria-label', out ? TEXT.fold : TEXT.open + (n ? ', ' + n + TEXT.unread : ''));
+            fold.setAttribute('aria-label', out ? TEXT.fold : TEXT.open + (open && tight ? ', ' + TEXT.crowded : '') + (n ? ', ' + n + TEXT.unread : ''));
             pill.textContent = n > 99 ? '99+' : String(n); pill.hidden = !n;
-            peekWho.textContent = state !== 'offline' && last ? last.who + ': ' : '';
-            peekText.textContent = state === 'offline' ? TEXT.offline : last ? last.text : state === 'connecting' ? TEXT.connecting : you ? '' : ERR.readonly;
+            peekWho.textContent = !crowded && state !== 'offline' && last ? last.who + ': ' : '';
+            peekText.textContent = crowded ? TEXT.crowded : state === 'offline' ? TEXT.offline : last ? last.text : state === 'connecting' ? TEXT.connecting : you ? '' : ERR.readonly;
             hereText.textContent = state === 'live' ? (people !== null ? (people > LIMIT.here ? TEXT.many : people) + TEXT.online : '') : state === 'connecting' ? TEXT.connecting : TEXT.reconnecting;
             here.hidden = dead || !hereText.textContent;
             form.hidden = !(state === 'live' && you);
@@ -206,7 +206,7 @@
         function lost() {                                                        // the socket is gone (closed, failed, silent, or it sent what no hub sends): say so, and try again later
             var s = sock;
             sock = null;
-            ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = '';
+            ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = ''; out = [];
             if (s) { try { s.onopen = s.onmessage = s.onerror = s.onclose = null; s.close(); } catch (e) { /* it is gone */ } }
             if (liveSince !== null && now() - liveSince >= MS.stable) attempt = 0;       // (a link that held for a while starts over at 1 s; one that is closed at once keeps growing)
             liveSince = null; welcomed = false; state = 'offline';
@@ -270,7 +270,7 @@
             var e = lineOf(m);
             if (!e || known(e.id)) return;
             e.own = !!you && e.who === you.name; e.fresh = !e.own && !seen();
-            if (e.own && e.text === draft) draft = '';
+            if (e.own) { var at = out.indexOf(e.text); if (at !== -1) out.splice(at, 1); }       // (a line that came back is answered)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
             render();
@@ -293,7 +293,7 @@
             else if (m.t === 'line') onLine(m);
             else if (m.t === 'del') onDel(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
-            else if (m.t === 'err') { tell(m.code); if (draft && !field.value) field.value = draft; delete said[draft]; draft = ''; }       // (a refused line is not one that the hub remembers: it may be sent again)
+            else if (m.t === 'err') { var refused = out.shift(); tell(m.code); if (refused !== undefined) { if (!field.value) field.value = refused; delete said[refused]; } }       // (the hub answers in order: the refused line is the oldest that has no answer; it is not one that the hub remembers, so it may be sent again)
         }                                                                        // (any other kind is ignored)
 
         // ---- what the visitor does ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -310,16 +310,22 @@
             var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
-            draft = text;
+            out.push(text); if (out.length > 8) out.shift();
             return '';
         }
         function setOpen(on) { open = !!on; if (seen()) stale = true; render(); }
+        function crowd() {                                                       // a press that wants the panel where there is no room for it: the strip says so for a few seconds
+            if (!tight) return;
+            crowded = true; stop('crowd');
+            timers.crowd = setTimeout(guard(function () { timers.crowd = 0; crowded = false; render(); }), MS.notice);
+            render();
+        }
         form.addEventListener('submit', guard(function (e) {
             if (e && e.preventDefault) e.preventDefault();
             if (sendLine(field.value) === '') field.value = '';
         }));
-        fold.addEventListener('click', guard(function () { setOpen(tight ? true : !open); if (fold.focus) fold.focus(); }));       // (a window with no room for the panel keeps the wish to open it, and shows the strip)
-        head.addEventListener('click', guard(function (e) { if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) setOpen(true); }));       // (a folded strip opens wherever it is pressed)
+        fold.addEventListener('click', guard(function () { setOpen(tight ? true : !open); crowd(); if (fold.focus) fold.focus(); }));       // (a window with no room for the panel keeps the wish to open it, and shows the strip)
+        head.addEventListener('click', guard(function (e) { if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) { setOpen(true); crowd(); } else if (tight && !(e && e.target && fold.contains && fold.contains(e.target))) crowd(); }));       // (a folded strip opens wherever it is pressed)
         box.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && open) { setOpen(false); if (fold.focus) fold.focus(); } }));
         doc.addEventListener('visibilitychange', guard(function () { if (visible()) { stale = true; render(); nudge(); } }));
         win.addEventListener('online', guard(nudge));

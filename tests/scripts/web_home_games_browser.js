@@ -189,6 +189,24 @@ async function flows() {
             await a.context().close(); await b.context().close();
         }
 
+        // ---- 1c. a double click on Join is one Join: the line of a Join that waits is put above the rows, and its Cancel stands where the Join button stood, so that the second click of the double click lands on it (a real double click) ----
+        for (const size of [SIZES[2], SIZES[0]]) {
+            const host = await newPage(browser, live, 'Maple', size); await lit(host);
+            await host.click('.quick.host');
+            await until('the room is public', async () => (await host.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
+            const code = await host.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
+            const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
+            await until('the real list holds the room', async () => (await (await guest.request.get(live.url + '/lobbies')).json()).lobbies.some((x) => x.code === code), 10000);
+            await guest.click('.hchip.games');
+            await guest.waitForSelector('.gjoin[data-code="' + code + '"]', { timeout: 15000 });
+            await guest.dblclick('.gjoin[data-code="' + code + '"]');
+            await until('the guest is in the Room of the host', async () => (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room', 12000).catch(() => null);
+            check(size[0] + ' ' + size[1] + 'x' + size[2] + ': a double click on Join is one Join: the second click does not land on the Cancel of the line that appears (a real double click): the guest is in the host\'s Room', (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room');
+            check('... and the host sees the guest, once', (await host.evaluate(() => document.getElementById('slots').textContent.split('Sage').length - 1)) === 1);
+            check('(no script error in these pages)', host.errors.length === 0 && guest.errors.length === 0, host.errors.concat(guest.errors).join(' | '));
+            await host.context().close(); await guest.context().close();
+        }
+
         // ---- 2. the pictures: the scenes of the approved pictures, at their three sizes ----------------------------------------------------------------------------------------------------
         if (shotsDir) {
             fs.mkdirSync(shotsDir, { recursive: true });

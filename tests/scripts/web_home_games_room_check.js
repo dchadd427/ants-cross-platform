@@ -688,15 +688,28 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     tap(joinOf(rowsOf(env)[0]));
     const probe = env.last().open();
     check('a Join says what it waits for ("Joining Pebble’s room…", as a status) with a Cancel button, and the buttons wait', bar.hidden === false && bar.getAttribute('role') === 'status' && textOf(bar.children[0]) === 'Joining Pebble’s room…' && textOf(bar.children[1]) === 'Cancel' && joinOf(rowsOf(env)[0]).disabled === true);
+    check('(the Cancel stands where the Join button stood: it takes no press for a moment, so that the second press of a double press is not a Cancel)', bar.children[1].disabled === true);
+    tap(bar.children[1]);
+    check('a press on it in that moment does nothing: the Join goes on (the second client is there, nothing was left, the line is shown)', bar.hidden === false && !probe.closed && leaves(probe) === 0 && joinOf(rowsOf(env)[0]).disabled === true);
+    await wait(env, 699);
+    check('... not before 700 ms', bar.children[1].disabled === true);
+    await wait(env, 1);
+    check('... then Cancel can be pressed', bar.children[1].disabled === false);
     await wait(env, 5000);
-    check('... for as long as the look takes (a second client waits up to 15 s)', bar.hidden === false);
+    check('... for as long as the look takes (a second client waits up to 15 s)', bar.hidden === false && bar.children[1].disabled === false);
     tap(bar.children[1]);
     check('Cancel: the line goes, the buttons are back, the second client is let go of (a Leave, closed), the own room is as it was, and the focus is in the field', bar.hidden === true && joinOf(rowsOf(env)[0]).disabled === false && leaves(probe) === 1 && probe.closed && leaves(own) === 0 && !own.closed && env.focused === first(popOf(env), 'joinbox').children[0]);
     probe.receive(welcome(1, KEY2, 0));
     await wait(env, 20000);
     check('a Welcome (or the 15 s of silence) that comes after Cancel changes nothing: no notice, no Room, no words, the own room stays', env.screen() === 'home' && own.closed === false && leaves(own) === 0 && stripOf(env).hidden === true && textOf(first(popOf(env), 'gpnote')) === '' && bar.hidden === true);
     tap(joinOf(rowsOf(env)[0]));
-    check('(and a new Join can be made)', env.sockets.length === 3 && bar.hidden === false);
+    check('(and a new Join can be made)', env.sockets.length === 3 && bar.hidden === false && bar.children[1].disabled === true);
+    await wait(env, 800);
+    env.site.body = listOf([row('k7m2xq', 'Pebble', { map: 'ISLANDS.LVL', people: 3, free: 1 }), row('abc234', 'Clover', { people: 1, bots: 1, free: 2 })]);
+    await wait(env, 5500);
+    check('a look that finds the rooms changed while a Join waits draws the rows again, and does not take the Cancel away again for 700 ms (it is not a new Join)', textOf(first(rowsOf(env)[0], 'gcount')) === '3/4' && bar.hidden === false && bar.children[1].disabled === false && joinOf(rowsOf(env)[0]).disabled === true);
+    tap(bar.children[1]);
+    check('(Cancel again)', bar.hidden === true);
     const typed = await withList();
     myRoom(typed, ['Maya']);
     typed.roomBar('rhome').click();
@@ -706,10 +719,29 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     const tp = typed.last().open();
     const tbar = first(popOf(typed), 'gjoining');
     check('Join by code says "Joining the room…" too, with its Cancel', tbar.hidden === false && textOf(tbar.children[0]) === 'Joining the room…');
+    await wait(typed, 800);
     tap(tbar.children[1]);
     check('... and Cancel lets the second client go (the name card was answered already)', tbar.hidden === true && leaves(tp) === 1 && tp.closed && first(popOf(typed), 'gcgo').disabled === false);
     await wait(typed, 20000);
     check('(the 15 s of silence of a look that was given up say nothing under the field)', textOf(first(popOf(typed), 'hint')) === '' && tbar.hidden === true);
+}
+{   // the moment of a Join that waits belongs to that Join: a Join that was refused at once leaves no timer behind that frees the Cancel of the next one early
+    const env = await withList();
+    myRoom(env, ['Maya']);
+    env.roomBar('rhome').click();
+    await wait(env, 2500);
+    await openGames(env);
+    const bar = first(popOf(env), 'gjoining');
+    tap(joinOf(rowsOf(env)[0]));
+    env.last().open().receive(reject(1));
+    await flush();
+    await wait(env, 100);
+    tap(joinOf(rowsOf(env)[0]));
+    check('(a second Join, a moment after the first was refused: its Cancel waits)', bar.hidden === false && bar.children[1].disabled === true);
+    await wait(env, 650);
+    check('the Cancel of the second Join is still off 650 ms after it began (the first Join\'s 700 ms ran out 550 ms after the second began, and are nobody\'s)', bar.children[1].disabled === true);
+    await wait(env, 100);
+    check('... and it is on 700 ms after the second began', bar.children[1].disabled === false);
 }
 {   // MUST: a press inside the page's cards is not a press elsewhere, and the list stays open for the words that tell why a Join did not go
     const env = await withList(null, { search: '?room=zzz999', options: { stayHome: false } });
@@ -719,19 +751,30 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     pressElsewhere(env, env.$('start'));
     check('(a press that really is elsewhere closes the list)', popOf(env).hidden === true);
 }
-{   // a match for one: the page is on its way to the game page, and Home makes no room and joins none
+{   // a match for one: the page is on its way to the game page, and Home makes no room and joins none, and says why (a navigation that is stopped leaves the page here)
     const env = await withList();
     const own = myRoom(env, ['Maya']);
     env.$('start').click();
     check('(START with nobody else goes to the game page on its own, and lets the room go)', env.assigned.length === 1 && own.closed === true);
     env.roomBar('rhome').click();
+    check('(Home shows)', env.screen() === 'home');
     const before = env.sockets.length;
     tap(env.home('host'));
+    check('Quick host does nothing while the page is on its way to a game: no socket, no Room, no room made; the strip says that the game is opening, with a Reload button', env.sockets.length === before && env.screen() === 'home' && dialogOf(env) === null
+          && stripText(env) === 'The game is opening. If it does not, reload this page.' && stripOf(env).className.indexOf('warn') !== -1 && textOf(stripButtons(env)[0]) === 'Reload' && stripButtons(env).length === 2);
+    tap(stripButtons(env)[0]);
+    check('Reload reloads the page (a navigation that did not come leaves the page here: that is the way back)', env.reloads === 1);
+    tap(stripButtons(env)[1]);
+    check('(OK takes the strip away)', stripOf(env).hidden === true);
     await openGames(env);
+    check('(the list opens)', popOf(env) !== null && popOf(env).hidden === false && rowsOf(env).length === 2);
     tap(joinOf(rowsOf(env)[0]));
+    check('Join does nothing either (no second client) and says so; the list is put away', env.sockets.length === before && stripText(env) === 'The game is opening. If it does not, reload this page.' && popOf(env).hidden === true);
+    tap(stripButtons(env)[1]);
+    await openGames(env);
     const input = first(popOf(env), 'joinbox').children[0];
     input.value = 'k7m2xq'; tap(first(popOf(env), 'gcgo'));
-    check('Quick host, Join and Join by code do nothing while the page is on its way to a game (no socket, no notice, no card)', env.sockets.length === before && stripOf(env).hidden === true && dialogOf(env) === null && env.$('name-step').hidden === true);
+    check('Join by code does nothing either (no name card, no second client) and says so', env.sockets.length === before && env.$('name-step').hidden === true && stripText(env) === 'The game is opening. If it does not, reload this page.');
 }
 {   // the page's bridge as the list sees it: a "handing" that throws is a page that is not on its way; a Cancel that comes when the second client is the page's own client lets nothing go
     let bridge = null;

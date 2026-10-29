@@ -36,7 +36,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_check.js")
 HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 37500, 12000           # bytes, raw and gzipped, both files together (about 36,700 and 11,700, with the dock's fit to the room under Home's bar): they load after the first paint, so they cost the first look nothing
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 39000, 12400           # bytes, raw and gzipped, both files together (about 37,700 and 11,900, with the dock's fit to the room under Home's bar and its queue of lines that wait for an answer): they load after the first paint, so they cost the first look nothing
 
 
 def read(*parts):

@@ -25,6 +25,7 @@
     var REFRESH_MS = 600000;                             // a public room that the leader looks at says "public" again every 10 minutes (the server's idle rule is 30)
     var ACTIVE_MS = 1200000;                             // a leader who has touched nothing for this long (no pointer, key or touch) is not at the Room: the repeat stops, and the server's idle rule goes on
     var ASK_MS = 10000;                                  // a Private that was asked for is told from a room that went private by itself for this long
+    var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long: it stands where the Join button stood, and the second press of a double press is not a Cancel
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
@@ -35,7 +36,7 @@
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
         private: 'Private', privateSub: 'link only', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Private room', visLabel: 'Who can find this room',
         noteHow: 'Public rooms show your name and map in the Games list.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
-        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', joiningCode: 'Joining the room…',
+        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', joiningCode: 'Joining the room…', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
@@ -95,7 +96,7 @@
         var random = env.random || Math.random, now = env.now || function () { return Date.now(); };
 
         var rows = [], loaded = false, off = false, failures = 0, isOpen = false, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
-        var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, paintedSig = null;
+        var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [];
 
         function el(tag, cls, text) {
@@ -114,6 +115,10 @@
         function client() { try { var c = page.client(); return c && !c.final() ? c : null; } catch (e) { return null; } }
         function ownCode() { var c = client(); return c ? c.code : ''; }
         function visible() { return !doc.hidden; }
+        function itsWay() {                                // a press while the page is on its way to a game: the page does not do it, and says why (a navigation that was stopped leaves the page here: a reload gets it back)
+            closeAll();
+            notice('opening', TEXT.opening, 'warn', [{ text: TEXT.reload, run: function () { try { win.location.reload(); } catch (e) { /* none */ } return false; } }]);
+        }
         function over() { try { return !!page.handing && !!page.handing(); } catch (e) { return false; } }         // the page is on its way to a game (a match for one too): it makes no room and joins none
         function onHome() { return ctl.screen() === 'home'; }
         function others(c) {                               // the names of the other people of the room that the page is in
@@ -281,7 +286,8 @@
             ctl.show('room', 'push');
         }
         function quickHost() {
-            if (joining || over()) return;
+            if (joining) return;
+            if (over()) { itsWay(); return; }
             closeAll();
             if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)
             var c = client();
@@ -425,8 +431,13 @@
             }, go);
         }
         function busy(on, what) {                          // a Join is on its way (up to 15 s): the buttons wait, and the list says what it waits for, with a way out
+            var was = joining;
             joining = on; joinButtons.forEach(function (b) { b.disabled = on; }); codeGo.disabled = on;
             popJoin.hidden = !on; popJoinText.textContent = on ? what || TEXT.joiningCode : '';
+            if (on === was) return;
+            if (cancelTimer !== null) { cancel(cancelTimer); cancelTimer = null; }
+            popJoinStop.disabled = !!on;
+            if (on) cancelTimer = later(guard(function () { cancelTimer = null; if (joining) popJoinStop.disabled = false; }), CANCEL_AFTER_MS);
         }
         function cancelJoin() {                            // the look at the room is given up: its answer, when it comes, is nobody's, and the second client is let go of
             joinSeq++;
@@ -445,7 +456,8 @@
             ctl.show('room', 'push');
         }
         function joinRow(row) {
-            if (joining || over()) return;
+            if (joining) return;
+            if (over()) { itsWay(); return; }
             var c = client();
             if (matchRunning(c)) { closeAll(); runningNotice(); return; }
             function go() {
@@ -456,7 +468,8 @@
             if (needsAsk(c)) askLeave(c, row, go); else go();
         }
         function joinTyped() {                             // the page checks the code first (a line for one that leads nowhere), then the question, then the name card, then the look at the room
-            if (joining || over()) return;
+            if (joining) return;
+            if (over()) { itsWay(); return; }
             var c = client();
             if (matchRunning(c)) { closeAll(); runningNotice(); return; }
             var mine = ++joinSeq;
@@ -549,8 +562,8 @@
         }
         function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more (the page is frozen: it is on its way to the game, or it is stuck and says so)
             closeAll(); clearNotice(); gone = true;
-            [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer].forEach(function (t) { if (t !== null) cancel(t); });
-            pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = null;
+            [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer].forEach(function (t) { if (t !== null) cancel(t); });
+            pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = null;
         }
         function stalled(words) {                          // the hand-off did not come in 15 s (Home takes presses again, the page's room is still frozen): the buttons that need the page's room say why they do not work
             [parts.quickHost, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });

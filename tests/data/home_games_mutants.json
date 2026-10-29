@@ -571,8 +571,8 @@
   {
    "id": "double_join_press",
    "file": "web/home/games.js",
-   "old": "        function joinRow(row) {\n            if (joining || over()) return;",
-   "new": "        function joinRow(row) {\n            if (over()) return;",
+   "old": "        function joinRow(row) {\n            if (joining) return;\n            if (over())",
+   "new": "        function joinRow(row) {\n            if (over())",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1264,21 +1264,21 @@
   {
    "id": "quick_host_on_its_way_to_a_game",
    "file": "web/home/games.js",
-   "old": "        function quickHost() {\n            if (joining || over()) return;",
+   "old": "        function quickHost() {\n            if (joining) return;\n            if (over()) { itsWay(); return; }",
    "new": "        function quickHost() {\n            if (joining) return;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "join_row_on_its_way_to_a_game",
    "file": "web/home/games.js",
-   "old": "        function joinRow(row) {\n            if (joining || over()) return;",
+   "old": "        function joinRow(row) {\n            if (joining) return;\n            if (over()) { itsWay(); return; }",
    "new": "        function joinRow(row) {\n            if (joining) return;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "join_by_code_on_its_way_to_a_game",
    "file": "web/home/games.js",
-   "old": "then the look at the room\n            if (joining || over()) return;",
+   "old": "then the look at the room\n            if (joining) return;\n            if (over()) { itsWay(); return; }",
    "new": "then the look at the room\n            if (joining) return;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -1511,6 +1511,83 @@
    "file": "web/home/games.js",
    "old": "var asked = askedAt && now() - askedAt < ASK_MS;",
    "new": "var asked = false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_second_press_of_a_double_press_is_a_cancel",
+   "file": "web/home/games.js",
+   "old": "            popJoinStop.disabled = !!on;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_never_comes_back",
+   "file": "web/home/games.js",
+   "old": "if (joining) popJoinStop.disabled = false; }), CANCEL_AFTER_MS);",
+   "new": "}), CANCEL_AFTER_MS);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_waits_for_a_minute",
+   "file": "web/home/games.js",
+   "old": "var CANCEL_AFTER_MS = 700;",
+   "new": "var CANCEL_AFTER_MS = 60000;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_waits_for_no_time",
+   "file": "web/home/games.js",
+   "old": "var CANCEL_AFTER_MS = 700;",
+   "new": "var CANCEL_AFTER_MS = 0;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_is_taken_away_at_every_look",
+   "file": "web/home/games.js",
+   "old": "            if (on === was) return;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_timer_outlives_the_join",
+   "file": "web/home/games.js",
+   "old": "            if (cancelTimer !== null) { cancel(cancelTimer); cancelTimer = null; }\n            popJoinStop.disabled = !!on;",
+   "new": "            popJoinStop.disabled = !!on;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_says_nothing",
+   "file": "web/home/games.js",
+   "old": "            notice('opening', TEXT.opening, 'warn', [{ text: TEXT.reload, run:",
+   "new": "            if (false) notice('opening', TEXT.opening, 'warn', [{ text: TEXT.reload, run:",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_has_no_reload",
+   "file": "web/home/games.js",
+   "old": "'warn', [{ text: TEXT.reload, run: function () { try { win.location.reload(); } catch (e) { /* none */ } return false; } }]);",
+   "new": "'warn', []);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_reload_does_not_reload",
+   "file": "web/home/games.js",
+   "old": "try { win.location.reload(); } catch (e) { /* none */ } return false;",
+   "new": "return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_leaves_the_list_open",
+   "file": "web/home/games.js",
+   "old": "        function itsWay() {                                // a press while the page is on its way to a game: the page does not do it, and says why (a navigation that was stopped leaves the page here: a reload gets it back)\n            closeAll();\n",
+   "new": "        function itsWay() {                                // a press while the page is on its way to a game: the page does not do it, and says why (a navigation that was stopped leaves the page here: a reload gets it back)\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_is_no_warning",
+   "file": "web/home/games.js",
+   "old": "notice('opening', TEXT.opening, 'warn',",
+   "new": "notice('opening', TEXT.opening, '',",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]

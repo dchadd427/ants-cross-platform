@@ -33,7 +33,7 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 58 * 1000, 16500      # bytes, raw and gzipped, both files together (about 56,000 and 16,000): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 60 * 1000, 17000      # bytes, raw and gzipped, both files together (about 57,300 and 16,300): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
