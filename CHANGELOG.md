@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.13.0 - 2026-10-28 - Public rooms and the open games list
+
+**For players:**
+- **Nothing changes on screen yet; the game server learns public rooms.** The leader of a room can now make it public (every new room is private), and the server then lists it, with its code, the leader's name, the map, the game type and how many people and free colors it has, in a public list of open games that the site will show in a later release. A room is on the list only while a newcomer could join it: it waits, its START is not waiting, someone is connected and a color is free.
+- **A public room that nobody has used for 30 minutes becomes private by itself**, so the list never shows an abandoned room. The leader's page keeps it public by saying so again.
+- **Everybody needs the new version.** A game or a page of v0.12 cannot join a v0.13 server until it is updated (reload the page).
+
+**Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the leader makes a lobby room public or private), and one new Room flag, public (only in a lobby room). A v0.12 game cannot play with a v0.13 one. The simulation rules, the recordings and the map files are unchanged. **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies`, and the status of a lobby room has `"public"`; the site's web server must pass `/lobbies` to the door before the list can be read from the site.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...HEAD)
+
 ## v0.12.151 - 2026-10-28 - Tests: the map submission checks no longer fail on a slow machine
 
 **For players:**
@@ -504,20 +515,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...be7df044)
 
-## v0.12.107 - 2026-10-22 - Map Maker: the Pick up tool moves, copies and deletes what is on a map
+## Older versions (v0.12.107 and before)
 
-**For players:**
-- **The Map Maker has a new tool, Pick up (key P).** Tap a hill, object, food pile, plant or starting ant and a gold ring shows everything it covers (a hill's 4 x 4 square and its door, a pile's footprint). A bar then offers **Move**, **Copy here**, **Delete**, **Select an area...** and **Cancel**.
-- **Move shows a see-through copy of the thing where it would land.** It is green when it fits and red when it does not, with the reason in plain words ("The red hill cannot go here. It needs a free 4 x 4 square, and the mushroom is in the way."). On a desktop it follows the mouse. Use the arrow buttons (or the arrow keys, Shift for 8 cells) to nudge it, or drag it, then press **Done**. Enter does the same, Escape cancels, Delete deletes.
-- **Ants: "this ant or its group".** One tap picks one ant; Move, Copy here and Delete each ask whether to take only that ant or the whole group of that team's ants that stand together.
-- **Select an area** picks every object that lies whole inside a box you draw, so a whole stretch of the map can be moved or copied at once.
-- **One Undo undoes a whole move, copy or delete**, including an area. A short help sheet, "What can be picked up?", is opened from the tool's note, and on a short screen (a phone held sideways) the bar is smaller and can be folded away.
-- **The old Move tool is now called Pan** (the M key still chooses it). It only looks around and never changes the map. Maps in the library are never changed by any tool.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.0.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/146ef42b...dc352756)
-
-## Older versions (v0.12.106 and before)
-
-Every release before v0.12.107, and the long notes of v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.108, and the long notes of v0.12.107, v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

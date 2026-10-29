@@ -11,6 +11,7 @@ int main() {
     run_demo_tests();
     run_lobby_room_tests();
     run_rematch_tests();
+    run_public_room_tests();
     run_hardening_tests();
     run_map_tests();
     run_match_tests();

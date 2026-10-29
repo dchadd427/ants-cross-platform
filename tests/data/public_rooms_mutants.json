@@ -1,0 +1,1052 @@
+{
+ "note": "Mutants of the public rooms of network protocol 22 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): what the list of games shows and leaves out (Room::listing: private, a match, a START that waits, only held seats, no free color, kept rematch seats), its order and cap (RoomManager::lobbies), its door and answer (control.cpp), the leader's Visibility in the lobby (who is heard, the budget, what is counted, what is forgiven), the idle rule that makes an unused public room private, the colors a listing is made of, the codec of the message and of the Room flag in C++ and in the page's lobby_net.js. Every mutant must be caught. Run from the checkout: python3 tools/mutate.py tests/data/public_rooms_mutants.json --keep-going --jobs 4 --timeout 1800. Not mutated: an address in the output, because nothing of the lobby gives a listing an address (HostLobby keeps it for the match and has no reader of it); tests/test_server/test_server_public.cpp S3.236 searches the whole answer for the addresses of the pages' links all the same.",
+ "mutants": [
+  {
+   "id": "listing_private_room_listed",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (!lobby_waiting() || !lobby_.is_public()) return false;",
+   "new": "if (!lobby_waiting()) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_match_state_listed",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (!lobby_waiting() || !lobby_.is_public()) return false;",
+   "new": "if (!spec_.lobby || !lobby_.is_public()) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_starting_room_listed",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (lobby_.starting() || lobby_.any_reserved()) return false;",
+   "new": "if (lobby_.any_reserved()) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_kept_seats_listed",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (lobby_.starting() || lobby_.any_reserved()) return false;",
+   "new": "if (lobby_.starting()) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_held_only_listed",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (leader >= sim::MAX_PLAYERS || lobby_.connected() == 0) return false;",
+   "new": "if (leader >= sim::MAX_PLAYERS) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_full_room_listed",
+   "file": "src/ants_server/room.cpp",
+   "old": "    if (free_now == 0) return false;\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_host_is_first_seat",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.host = lobby_.room().slots[leader].name;",
+   "new": "out.host = lobby_.room().slots[0].name;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_map_is_the_default",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.map = lobby_.map_name();",
+   "new": "out.map = map_.name;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_mode_always_zero",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.mode = lobby_.mode();",
+   "new": "out.mode = 0;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_people_are_connected_only",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.people = static_cast<uint8_t>(lobby_.people_colors());",
+   "new": "out.people = static_cast<uint8_t>(lobby_.connected());",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_age_is_zero",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.age_ms = lobby_.listed_age_ms(now_ms);",
+   "new": "out.age_ms = 0;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_size_is_four",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.size = static_cast<uint8_t>(lobby_.match_colors());",
+   "new": "out.size = sim::MAX_PLAYERS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_free_is_size_less_people",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.free_colors = static_cast<uint8_t>(free_now);",
+   "new": "out.free_colors = static_cast<uint8_t>(lobby_.match_colors() - lobby_.people_colors());",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_key_in_the_output",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.map = lobby_.map_name();",
+   "new": "out.map = lobby_.map_name();\n    for (const uint8_t byte : lobby_.key_of(leader)) { static const char kHex[] = \"0123456789abcdef\"; out.map.push_back(kHex[byte >> 4]); out.map.push_back(kHex[byte & 15]); }",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_other_name_in_the_output",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.host = lobby_.room().slots[leader].name;",
+   "new": "out.host = lobby_.room().slots[leader].name + \" \" + lobby_.room().slots[(leader + 1) % sim::MAX_PLAYERS].name;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobbies_people_ascending",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (a.people != b.people) return a.people > b.people;",
+   "new": "if (a.people != b.people) return a.people < b.people;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobbies_newest_listing_first",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (a.age_ms != b.age_ms) return a.age_ms > b.age_ms;",
+   "new": "if (a.age_ms != b.age_ms) return a.age_ms < b.age_ms;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobbies_larger_code_first",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "return a.code < b.code;",
+   "new": "return a.code > b.code;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobbies_not_ordered",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        if (a.people != b.people) return a.people > b.people;\n        if (a.age_ms != b.age_ms) return a.age_ms > b.age_ms;\n        return a.code < b.code;",
+   "new": "        return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobbies_no_cap",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (list.size() > kMaxListedLobbies) list.resize(kMaxListedLobbies);",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobbies_cap_before_order",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    std::vector<LobbyListing> list;\n    for (const auto& entry : rooms_) {\n        LobbyListing row;\n        if (entry.second->listing(now_ms, row)) list.push_back(std::move(row));\n    }",
+   "new": "    std::vector<LobbyListing> list;\n    for (const auto& entry : rooms_) {\n        LobbyListing row;\n        if (list.size() < kMaxListedLobbies && entry.second->listing(now_ms, row)) list.push_back(std::move(row));\n    }",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobbies_cap_of_51",
+   "file": "include/ants_server/room_manager.hpp",
+   "old": "kMaxListedLobbies = 50;",
+   "new": "kMaxListedLobbies = 51;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobbies_cap_of_49",
+   "file": "include/ants_server/room_manager.hpp",
+   "old": "kMaxListedLobbies = 50;",
+   "new": "kMaxListedLobbies = 49;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "door_answers_a_query",
+   "file": "src/ants_server/control.cpp",
+   "old": "    if (request.method != \"GET\" || !request.query.empty()) return error_response(404, \"not found\");\n    JsonValue list = JsonValue::make_array();\n    for (const LobbyListing& l : rooms.lobbies(now_ms)) {",
+   "new": "    if (request.method != \"GET\") return error_response(404, \"not found\");\n    JsonValue list = JsonValue::make_array();\n    for (const LobbyListing& l : rooms.lobbies(now_ms)) {",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "door_answers_a_post",
+   "file": "src/ants_server/control.cpp",
+   "old": "    if (request.method != \"GET\" || !request.query.empty()) return error_response(404, \"not found\");\n    JsonValue list = JsonValue::make_array();\n    for (const LobbyListing& l : rooms.lobbies(now_ms)) {",
+   "new": "    if (!request.query.empty()) return error_response(404, \"not found\");\n    JsonValue list = JsonValue::make_array();\n    for (const LobbyListing& l : rooms.lobbies(now_ms)) {",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "door_routes_a_longer_path",
+   "file": "src/ants_server/control.cpp",
+   "old": "if (request.path == \"/lobbies\") return handle_public_lobbies(rooms, request, now_ms);",
+   "new": "if (request.path.compare(0, 8, \"/lobbies\") == 0) return handle_public_lobbies(rooms, request, now_ms);",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "door_age_in_milliseconds",
+   "file": "src/ants_server/control.cpp",
+   "old": "e.set(\"age\", JsonValue::make_int(l.age_ms / 1000));",
+   "new": "e.set(\"age\", JsonValue::make_int(l.age_ms));",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "door_count_is_total",
+   "file": "src/ants_server/control.cpp",
+   "old": "o.set(\"count\", JsonValue::make_int(count));",
+   "new": "o.set(\"count\", JsonValue::make_int(count + 1));",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "door_answer_with_the_plan",
+   "file": "src/ants_server/control.cpp",
+   "old": "        e.set(\"age\", JsonValue::make_int(l.age_ms / 1000));",
+   "new": "        e.set(\"age\", JsonValue::make_int(l.age_ms / 1000));\n        e.set(\"plan\", JsonValue::make_string(\"oooo\"));",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "status_public_missing",
+   "file": "src/ants_server/control.cpp",
+   "old": "o.set(\"public\", JsonValue::make_bool(s.lobby_public));",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "status_public_for_every_room",
+   "file": "src/ants_server/control.cpp",
+   "old": "    if (s.lobby) {                                                  // a lobby room (protocol 16): the keys exist for lobby rooms only",
+   "new": "    o.set(\"public\", JsonValue::make_bool(s.lobby_public));\n    if (s.lobby) {                                                  // a lobby room (protocol 16): the keys exist for lobby rooms only",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "status_public_never_set",
+   "file": "src/ants_server/room.cpp",
+   "old": "        s.lobby_public = lobby_.is_public();",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "visibility_anybody_is_heard",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (phase_ == Phase::Room && !starting_.active && seat == room_.leader) {\n                switch (guests_[seat].visibility.take(",
+   "new": "if (phase_ == Phase::Room && !starting_.active) {\n                switch (guests_[seat].visibility.take(",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_heard_while_starting",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (phase_ == Phase::Room && !starting_.active && seat == room_.leader) {\n                switch (guests_[seat].visibility.take(",
+   "new": "if (phase_ == Phase::Room && seat == room_.leader) {\n                switch (guests_[seat].visibility.take(",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_heard_while_loading",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (phase_ == Phase::Room && !starting_.active && seat == room_.leader) {\n                switch (guests_[seat].visibility.take(",
+   "new": "if (!starting_.active && seat == room_.leader) {\n                switch (guests_[seat].visibility.take(",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_in_a_room_that_is_no_lobby",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room is never public",
+   "new": "if (!decode(msg, m)) return violation(seat);       // (a room that is no lobby room is never public",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_malformed_is_no_offence",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room is never public",
+   "new": "if (!cfg_.lobby_room || !decode(msg, m)) return;       // (a room that is no lobby room is never public",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_burst_one_more",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "visibility.take(now_ms, kVisibilityBurst, kVisibilityPerSecond, kVisibilityExcessBurst)",
+   "new": "visibility.take(now_ms, kVisibilityBurst + 1, kVisibilityPerSecond, kVisibilityExcessBurst)",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_two_a_second",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "visibility.take(now_ms, kVisibilityBurst, kVisibilityPerSecond, kVisibilityExcessBurst)",
+   "new": "visibility.take(now_ms, kVisibilityBurst, kVisibilityPerSecond + 1, kVisibilityExcessBurst)",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_excess_one_more",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "visibility.take(now_ms, kVisibilityBurst, kVisibilityPerSecond, kVisibilityExcessBurst)",
+   "new": "visibility.take(now_ms, kVisibilityBurst, kVisibilityPerSecond, kVisibilityExcessBurst + 1)",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_drop_is_an_offence",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "                    case ChatBudget::Verdict::Relay: apply_visibility(m.is_public, now_ms); return;\n                    case ChatBudget::Verdict::Drop: return;",
+   "new": "                    case ChatBudget::Verdict::Relay: apply_visibility(m.is_public, now_ms); return;\n                    case ChatBudget::Verdict::Drop: return violation(seat);",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_offence_is_free",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "                    case ChatBudget::Verdict::Offence: return violation(seat);\n                }\n            }\n            ++ignored_visibility_;",
+   "new": "                    case ChatBudget::Verdict::Offence: return;\n                }\n            }\n            ++ignored_visibility_;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_ignored_not_counted",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "            ++ignored_visibility_;\n",
+   "new": "",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_ignored_never_an_offence",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (++guests_[seat].ignored_visibility > kIgnoredVisibilityAllowed) violation(seat);",
+   "new": "++guests_[seat].ignored_visibility;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_one_more_free",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (++guests_[seat].ignored_visibility > kIgnoredVisibilityAllowed) violation(seat);",
+   "new": "if (++guests_[seat].ignored_visibility > kIgnoredVisibilityAllowed + 1) violation(seat);",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_not_forgiven",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "&g.ignored_removes, &g.ignored_visibility}",
+   "new": "&g.ignored_removes}",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_refresh_is_no_activity",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (want_public == public_ && !want_public) return;\n    ++visibility_acts_;",
+   "new": "    if (want_public == public_) return;\n    ++visibility_acts_;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_no_activity",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (want_public == public_ && !want_public) return;\n    ++visibility_acts_;\n",
+   "new": "    if (want_public == public_ && !want_public) return;\n",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_private_to_private_counts",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (want_public == public_ && !want_public) return;\n    ++visibility_acts_;",
+   "new": "    ++visibility_acts_;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_refresh_lists_again",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (want_public == public_) return;                          // (the refresh: nothing to show)\n    public_ = want_public;",
+   "new": "    public_ = want_public;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_listing_time_never_set",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (public_) listed_ms_ = now_ms;\n",
+   "new": "",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_change_not_shown",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (public_) listed_ms_ = now_ms;\n    broadcast_room();",
+   "new": "    if (public_) listed_ms_ = now_ms;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "flag_never_shown",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    room_.flags = public_ ? static_cast<uint8_t>(room_.flags | kRoomPublic) : static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomPublic));",
+   "new": "    room_.flags = static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomPublic));",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "flag_never_cleared",
+   "file": "src/ants_net/lobby.cpp",
+   "old": ": static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomPublic));",
+   "new": ": room_.flags;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_rule_removed",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (cfg_.public_idle_ms != 0 && now_ms - active_ms_ >= cfg_.public_idle_ms) {",
+   "new": "if (false) {",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_rule_one_step_late",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "now_ms - active_ms_ >= cfg_.public_idle_ms",
+   "new": "now_ms - active_ms_ > cfg_.public_idle_ms",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_rule_not_told",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        public_ = false;\n        ++unlists_;\n        broadcast_room();",
+   "new": "        public_ = false;\n        ++unlists_;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_rule_not_counted",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        ++unlists_;\n",
+   "new": "",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_time_never_restarts",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        seen_activity_ = act;\n        active_ms_ = now_ms;",
+   "new": "        seen_activity_ = act;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_time_runs_from_the_listing",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        seen_activity_ = act;\n        active_ms_ = now_ms;",
+   "new": "        seen_activity_ = act;\n        if (!public_) active_ms_ = now_ms;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_zero_is_no_limit_lost",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "cfg_.public_idle_ms != 0 && ",
+   "new": "",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_30_minutes_to_31",
+   "file": "include/ants_net/lobby.hpp",
+   "old": "kLobbyPublicIdleMs = 30u * 60u * 1000u;",
+   "new": "kLobbyPublicIdleMs = 31u * 60u * 1000u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_30_minutes_to_29",
+   "file": "include/ants_net/lobby.hpp",
+   "old": "kLobbyPublicIdleMs = 30u * 60u * 1000u;",
+   "new": "kLobbyPublicIdleMs = 29u * 60u * 1000u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "idle_visibility_not_activity",
+   "file": "include/ants_net/lobby.hpp",
+   "old": "+ start_arms_ + visibility_acts_ + chat_.total())",
+   "new": "+ start_arms_ + chat_.total())",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "listing_age_never_capped",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (now_ms - listed_ms_ > kLobbyListedAgeCapMs) listed_ms_ = now_ms - kLobbyListedAgeCapMs;\n",
+   "new": "",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "listing_age_cap_of_a_day",
+   "file": "include/ants_net/lobby.hpp",
+   "old": "kLobbyListedAgeCapMs = 30u * 24u * 3600u * 1000u;",
+   "new": "kLobbyListedAgeCapMs = 24u * 3600u * 1000u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "open_color_ignores_the_plan",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "return room_.slots[seat].state == SlotState::Empty && room_.plan[seat] == PlanKind::Open;",
+   "new": "return room_.slots[seat].state == SlotState::Empty;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "open_color_ignores_the_person",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "return room_.slots[seat].state == SlotState::Empty && room_.plan[seat] == PlanKind::Open;",
+   "new": "return room_.plan[seat] == PlanKind::Open;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "bot_colors_count_nobody",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "n += room_.slots[s].state == SlotState::Empty && plan_fill_level(room_.plan[s]) != FillLevel::None ? 1u : 0u;",
+   "new": "n += room_.slots[s].state == SlotState::Empty && room_.plan[s] != PlanKind::Open ? 1u : 0u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "bot_colors_count_held_colors",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "n += room_.slots[s].state == SlotState::Empty && plan_fill_level(room_.plan[s]) != FillLevel::None ? 1u : 0u;",
+   "new": "n += plan_fill_level(room_.plan[s]) != FillLevel::None ? 1u : 0u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "match_colors_leave_out_a_person_on_nobody",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "n += room_.slots[s].state != SlotState::Empty || room_.plan[s] != PlanKind::Nobody ? 1u : 0u;",
+   "new": "n += room_.plan[s] != PlanKind::Nobody ? 1u : 0u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "match_colors_always_four",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "n += room_.slots[s].state != SlotState::Empty || room_.plan[s] != PlanKind::Nobody ? 1u : 0u;",
+   "new": "n += 1u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "connected_counts_held_seats",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "n += g.conn != nullptr && g.conn->is_open() ? 1u : 0u;",
+   "new": "n += (g.conn != nullptr && g.conn->is_open()) || g.held ? 1u : 0u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "connected_counts_a_closed_link",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "n += g.conn != nullptr && g.conn->is_open() ? 1u : 0u;",
+   "new": "n += g.conn != nullptr ? 1u : 0u;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "client_sends_to_a_started_room",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "|| !room_.lobby() || room_.starting() || !conn_->is_open()) return false;        // (a START that waits hears nobody",
+   "new": "|| !room_.lobby() || !conn_->is_open()) return false;        // (a START that waits hears nobody",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "client_sends_without_leading",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "bool ClientLobby::request_visibility(bool make_public) {\n    if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() ||",
+   "new": "bool ClientLobby::request_visibility(bool make_public) {\n    if (conn_ == nullptr || phase_ != Phase::InRoom ||",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_public_flag_without_lobby",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "    if (m.is_public() && !m.lobby()) return false;                        // (protocol 22: only a lobby room is public)\n",
+   "new": "",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_public_flag_not_known",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "if ((m.flags & ~(kRoomLeaderStarts | kRoomLobby | kRoomStarting | kRoomPublic)) != 0) return false;",
+   "new": "if ((m.flags & ~(kRoomLeaderStarts | kRoomLobby | kRoomStarting)) != 0) return false;",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_every_flag_known",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "if ((m.flags & ~(kRoomLeaderStarts | kRoomLobby | kRoomStarting | kRoomPublic)) != 0) return false;",
+   "new": "if ((m.flags & ~(kRoomLeaderStarts | kRoomLobby | kRoomStarting | kRoomPublic | 16u)) != 0) return false;",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_visibility_value_two",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "if (!r->done() || value > 1) return false;",
+   "new": "if (!r->done() || value > 2) return false;",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_visibility_trailing_byte",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "if (!r->done() || value > 1) return false;",
+   "new": "if (value > 1) return false;",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_visibility_inverted",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "static_cast<uint8_t>(m.is_public ? 1 : 0)};",
+   "new": "static_cast<uint8_t>(m.is_public ? 0 : 1)};",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_visibility_wrong_type",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "return {static_cast<uint8_t>(MsgType::Visibility), static_cast<uint8_t>(m.is_public ? 1 : 0)};",
+   "new": "return {static_cast<uint8_t>(MsgType::Remove), static_cast<uint8_t>(m.is_public ? 1 : 0)};",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_last_type_is_remove",
+   "file": "include/ants_net/protocol.hpp",
+   "old": "    Last = Visibility\n",
+   "new": "    Last = Remove\n",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_visibility_is_type_36",
+   "file": "include/ants_net/protocol.hpp",
+   "old": "Visibility = 35,",
+   "new": "Visibility = 36,",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_room_public_is_bit_four",
+   "file": "include/ants_net/protocol.hpp",
+   "old": "inline constexpr uint8_t kRoomPublic = 8;",
+   "new": "inline constexpr uint8_t kRoomPublic = 16;",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_protocol_still_21",
+   "file": "include/ants_net/protocol.hpp",
+   "old": "inline constexpr uint16_t kProtocolVersion = 22;",
+   "new": "inline constexpr uint16_t kProtocolVersion = 21;",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_budget_burst_four",
+   "file": "include/ants_net/flood.hpp",
+   "old": "kVisibilityBurst = 3;",
+   "new": "kVisibilityBurst = 4;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_budget_two_a_second",
+   "file": "include/ants_net/flood.hpp",
+   "old": "kVisibilityPerSecond = 1;",
+   "new": "kVisibilityPerSecond = 2;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_budget_excess_seven",
+   "file": "include/ants_net/flood.hpp",
+   "old": "kVisibilityExcessBurst = 6;",
+   "new": "kVisibilityExcessBurst = 7;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_ignored_allowance_seventeen",
+   "file": "include/ants_net/flood.hpp",
+   "old": "kIgnoredVisibilityAllowed = 16;",
+   "new": "kIgnoredVisibilityAllowed = 17;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "page_protocol_still_21",
+   "file": "web/front/lobby_net.js",
+   "old": "var PROTOCOL = 22;",
+   "new": "var PROTOCOL = 21;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_visibility_is_type_34",
+   "file": "web/front/lobby_net.js",
+   "old": "Visibility: 35, Last: 35 };",
+   "new": "Visibility: 34, Last: 35 };",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_last_type_is_34",
+   "file": "web/front/lobby_net.js",
+   "old": "Visibility: 35, Last: 35 };",
+   "new": "Visibility: 35, Last: 34 };",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_public_flag_is_16",
+   "file": "web/front/lobby_net.js",
+   "old": "ROOM_STARTING = 4, ROOM_PUBLIC = 8;",
+   "new": "ROOM_STARTING = 4, ROOM_PUBLIC = 16;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_public_flag_unknown",
+   "file": "web/front/lobby_net.js",
+   "old": "(ROOM_LEADER_STARTS | ROOM_LOBBY | ROOM_STARTING | ROOM_PUBLIC)) !== 0) return null;",
+   "new": "(ROOM_LEADER_STARTS | ROOM_LOBBY | ROOM_STARTING)) !== 0) return null;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_public_without_lobby",
+   "file": "web/front/lobby_net.js",
+   "old": "        if (m.isPublic && !m.lobby) return null;\n",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_room_never_public",
+   "file": "web/front/lobby_net.js",
+   "old": "m.isPublic = (m.flags & ROOM_PUBLIC) !== 0;",
+   "new": "m.isPublic = false;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_visibility_inverted",
+   "file": "web/front/lobby_net.js",
+   "old": "u8(MSG.Visibility).u8(isPublic ? 1 : 0)",
+   "new": "u8(MSG.Visibility).u8(isPublic ? 0 : 1)",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_anybody",
+   "file": "web/front/lobby_net.js",
+   "old": "if (!this.canAct() || !this.isLeader() || this.room.starting || typeof isPublic !== 'boolean') return false;",
+   "new": "if (!this.canAct() || this.room.starting || typeof isPublic !== 'boolean') return false;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_while_starting",
+   "file": "web/front/lobby_net.js",
+   "old": "if (!this.canAct() || !this.isLeader() || this.room.starting || typeof isPublic !== 'boolean') return false;",
+   "new": "if (!this.canAct() || !this.isLeader() || typeof isPublic !== 'boolean') return false;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_any_value",
+   "file": "web/front/lobby_net.js",
+   "old": "if (!this.canAct() || !this.isLeader() || this.room.starting || typeof isPublic !== 'boolean') return false;",
+   "new": "if (!this.canAct() || !this.isLeader() || this.room.starting) return false;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_offline",
+   "file": "web/front/lobby_net.js",
+   "old": "if (!this.canAct() || !this.isLeader() || this.room.starting || typeof isPublic !== 'boolean') return false;",
+   "new": "if (!this.isLeader() || this.room.starting || typeof isPublic !== 'boolean') return false;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_shares_the_name_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "return this.send('visibility', encodeVisibility(isPublic));",
+   "new": "return this.send('rename', encodeVisibility(isPublic));",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_at_the_servers_bucket",
+   "file": "web/front/lobby_net.js",
+   "old": "visibility: [2, 0.8]",
+   "new": "visibility: [3, 1]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_burst_without_reserve",
+   "file": "web/front/lobby_net.js",
+   "old": "visibility: [2, 0.8]",
+   "new": "visibility: [3, 0.8]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_rate_without_margin",
+   "file": "web/front/lobby_net.js",
+   "old": "visibility: [2, 0.8]",
+   "new": "visibility: [2, 1]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_too_slow",
+   "file": "web/front/lobby_net.js",
+   "old": "visibility: [2, 0.8]",
+   "new": "visibility: [2, 0.4]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_setpublic_burst_of_one",
+   "file": "web/front/lobby_net.js",
+   "old": "visibility: [2, 0.8]",
+   "new": "visibility: [1, 0.8]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  }
+ ]
+}

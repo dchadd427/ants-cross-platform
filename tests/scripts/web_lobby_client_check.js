@@ -1,4 +1,4 @@
-// Runs the lobby page's client of network protocol 21 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
+// Runs the lobby page's client of network protocol 22 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
 // takes in, the answers to the server's pings, what changed between two Room messages (joined, left, renamed, moved, swapped, a new host), the requests that only the leader may make and the
 // bytes they put on the wire (the guard of a color move is the room's seating hash), the way back with the key after a lost link (the waits grow, the link that says nothing is given up, a page
 // that comes back to the front tries at once), what each refusal means (the room is gone: made again without the key; removed; another window; full), and the entry that the game page reads.

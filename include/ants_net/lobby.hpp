@@ -57,7 +57,7 @@
 // for a person whom the match dropped: Room::take_rematch).
 //
 // (8) Public rooms (protocol 22, docs/NETWORK_PORT.md "Protocol 22"). A new lobby room is private. The leader of an open lobby room, while its START does not wait, makes it public or private with VisibilityMsg (within a budget of its
-// own: flood.hpp); the Room message shows it (kRoomPublic) and the owner lists the room (is_public(), listed_ms()). A room whose people have done nothing with it for Config::public_idle_ms (activity() has not moved: answered pings are no
+// own: flood.hpp); the Room message shows it (kRoomPublic) and the server lists the room (is_public(), listed_age_ms()). A room whose people have done nothing with it for Config::public_idle_ms (activity() has not moved: answered pings are no
 // use) becomes private by itself, unlist_count() counts those; a Visibility that says public to a public room is the leader's page looking at it still, and counts as use, so it keeps the room public.
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
@@ -339,8 +339,8 @@ public:
     size_t connected() const noexcept;
     /// Colors that nobody holds and the plan calls Open: the ones a newcomer can take (joiner_seat takes the lowest)
     size_t open_colors() const noexcept;
-    /// The leader's page and the plan, for a listing: colors that a person holds (the host, a guest, held), colors that no person holds and the plan gives to a bot, and the colors in the match at all (a color that nobody holds
-    /// and the plan calls Nobody is not): people + bots + open_colors() == match_colors()
+    /// The colors of a listing: those that a person holds (a guest, also one whose seat is held), those that nobody holds and the plan gives to a bot, and those in the match at all (a color that nobody holds and the plan
+    /// calls Nobody is not; a person on such a color plays): people_colors() + bot_colors() + open_colors() == match_colors()
     size_t people_colors() const noexcept { return humans(); }
     size_t bot_colors() const noexcept;
     size_t match_colors() const noexcept;
@@ -351,7 +351,7 @@ public:
     /// Connections that were closed for their silence (silence_ms)
     uint32_t silences() const noexcept { return silences_; }
     /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a color moves, the plan or a name changes, a person is removed, a line of chat is said, a START is asked for
-    /// (a ping, a link that comes back, a seat that is held or gives up are not; a Visibility that was done is, protocol 22). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the owner may give
+    /// (a ping, a link that comes back, a seat that is held or gives up are not; a Visibility that was done is, protocol 22). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the server may give
     /// the place of such a room up when it needs it.
     uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + visibility_acts_ + chat_.total()); }
 

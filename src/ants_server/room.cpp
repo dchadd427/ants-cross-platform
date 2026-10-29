@@ -1128,12 +1128,12 @@ uint32_t Room::abandoned_ms(uint32_t now_ms) const {
 // A public lobby room that a newcomer can join now (room.hpp). Each condition is one thing a visitor would be sent to a dead end by: a room that has begun or loads, one that is private, one whose START waits (it takes nobody
 // new), one nobody is at, one with no free color, one that keeps seats for the people of its last match.
 bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
-    if (!lobby_waiting() || !lobby_.is_public() || lobby_.phase() != net::HostLobby::Phase::Room) return false;
+    if (!lobby_waiting() || !lobby_.is_public()) return false;                 // (a room that waits is a lobby in its open phase: Loading and Running are other states of the room)
     if (lobby_.starting() || lobby_.any_reserved()) return false;
     const uint8_t leader = lobby_.leader();
     if (leader >= sim::MAX_PLAYERS || lobby_.connected() == 0) return false;
-    const size_t open = lobby_.open_colors();
-    if (open == 0) return false;
+    const size_t free_now = lobby_.open_colors();
+    if (free_now == 0) return false;
     out = LobbyListing{};
     out.code = spec_.code;
     out.host = lobby_.room().slots[leader].name;
@@ -1141,7 +1141,7 @@ bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
     out.mode = lobby_.mode();
     out.people = static_cast<uint8_t>(lobby_.people_colors());
     out.bots = static_cast<uint8_t>(lobby_.bot_colors());
-    out.free_colors = static_cast<uint8_t>(open);
+    out.free_colors = static_cast<uint8_t>(free_now);
     out.size = static_cast<uint8_t>(lobby_.match_colors());
     out.age_ms = lobby_.listed_age_ms(now_ms);
     return true;
