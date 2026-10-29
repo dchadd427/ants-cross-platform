@@ -252,6 +252,7 @@ void run_lobby_public_tests() {
             room.run(300);
             ASSERT_FALSE(room.host.occupied(ann_seat));                                            // the eighth
             ASSERT_EQ(room.host.visibility_acts(), 1u);
+            ASSERT_EQ(room.host.ignored_visibility(), kIgnoredVisibilityAllowed + 8u);               // (every one that was ignored is counted once, a violation or not)
             ASSERT_TRUE(!room.host.is_public() && !room.guests[pia].lobby->room_is_public());      // (Pia leads now and chose nothing: the room is private)
         }
         {   // a match that loads hears no Visibility either: a stray one is counted without offence

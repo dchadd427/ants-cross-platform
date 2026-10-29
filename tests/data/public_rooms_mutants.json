@@ -1127,6 +1127,16 @@
     "test_server"
    ],
    "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "visibility_violations_counted_twice",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (++guests_[seat].ignored_visibility > kIgnoredVisibilityAllowed) violation(seat);",
+   "new": "if (++guests_[seat].ignored_visibility > kIgnoredVisibilityAllowed) { ++ignored_visibility_; violation(seat); }",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
   }
  ]
 }
