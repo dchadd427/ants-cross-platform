@@ -515,7 +515,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const sockets = [];
         class ToTheServer extends WS { constructor() { super(wsUrl); sockets.push(this); } }
         const realList = (url) => (url === '/lobbies' ? fetch(listBase + '/lobbies', { cache: 'no-store' }) : Promise.reject(new Error('no ' + url + ' here')));
-        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, fetch: realList });
+        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: realList });
         const listed = async () => (await (await fetch(listBase + '/lobbies')).json());
         const text = (env, cls) => { const e = env.$('home').findAll((n) => String(n.className).split(/\s+/).indexOf(cls) !== -1)[0]; return e ? e.textContent : null; };
         const A = onPage('Quinn');
