@@ -152,6 +152,16 @@ class TheText(unittest.TestCase):
         self.assertIn("proxy_hide_header X-Content-Type-Options;", BLOCK)                  # (the server-level nosniff line applies once)
 
 
+class TheSkipsAreThere(unittest.TestCase):
+    def test_every_class_that_runs_nginx_skips_with_a_message_where_it_is_not_installed(self):
+        lines = read("tests", "scripts", "test_nginx_lobbies.py").splitlines()
+        runs = [i for i, l in enumerate(lines) if re.match(r"class \w+\(.*unittest\.TestCase\)", l) and not re.match(r"class (TheText|TheDocumentsSayWhatIsBuilt|TheSkipsAreThere)\(", l)]
+        self.assertGreaterEqual(len(runs), 6)
+        for i in runs:
+            self.assertEqual(lines[i - 1], '@unittest.skipUnless(shutil.which("nginx"), NO_NGINX)', lines[i])     # (a machine without nginx skips; it does not fail)
+        self.assertIn("were NOT run", NO_NGINX)
+
+
 class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
     def test_the_documents_name_the_route_the_zone_and_the_tests(self):
         server = read("docs", "SERVER.md")
@@ -516,6 +526,7 @@ class TheCacheRuns(Running, unittest.TestCase):
         self.assertEqual(len(self.upstream.lists()), 2)
 
 
+@unittest.skipUnless(shutil.which("nginx"), NO_NGINX)
 class TheServerFailsRuns(Running, unittest.TestCase):
     """A list that is old is never served because the server fails or hangs up: the entry is there, and the answer is the truth."""
     def assert_off(self, answer):
