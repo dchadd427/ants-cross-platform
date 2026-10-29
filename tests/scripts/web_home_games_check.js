@@ -77,16 +77,16 @@ const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, fi
 {
     const site = fakeSite();
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch });
-    check('before the page has painted, nothing of the list is asked for: no script, no style, no look at /lobbies', env.lazyLoads.length === 0 && site.calls.length === 0);
+    check('before the page has painted, nothing of the list is asked for: no script, no style, no look at /lobbies', env.lazyLoads.filter((f) => /games/.test(f)).length === 0 && site.calls.length === 0);
     check('... Quick host, Quick join and Games are drawn and disabled (nothing on the bar is a button that does nothing)', ['host', 'join', 'games'].every((c) => env.home(c).disabled === true && env.home(c).getAttribute('aria-disabled') === 'true'));
     env.advance(0);
     await flush();
-    same('after the first paint the page loads the style and the script, once (from its own folder)', env.lazyLoads, ['home/games.css', 'home/games.js']);
+    same('after the first paint the page loads the style and the script, once (from its own folder)', env.lazyLoads.filter((f) => /games/.test(f)), ['home/games.css', 'home/games.js']);
     check('... then Quick host and Games are lit (a plain button that takes a press, with no mark of being disabled) and Quick join is not (it comes with a later piece)', [env.home('host'), env.home('games')].every((b) => b.disabled === false && b.getAttribute('aria-disabled') === null) && env.home('join').disabled === true && env.home('join').getAttribute('aria-disabled') === 'true');
     check('... Games names its popup, says that it is closed and has its count (none yet: the first look has not answered) beside its name', env.home('games').getAttribute('aria-haspopup') === 'dialog' && env.home('games').getAttribute('aria-expanded') === 'false' && env.home('games').children[0].textContent === 'Games');
     check('... and the page looked at the list once, at its own address, with no query and no cookies', site.calls.length === 1 && site.calls[0].url === '/lobbies' && site.calls[0].init.credentials === 'omit' && site.calls[0].init.cache === 'no-store');
     env.advance(0);
-    check('(the page loads the script once, however often it is shown)', env.lazyLoads.length === 2);
+    check('(the page loads the script once, however often it is shown)', env.lazyLoads.filter((f) => /games/.test(f)).length === 2);
 }
 for (const [what, lazy] of [['never comes', false], ['fails to load', 'script']]) {
     const env = await page({ options: { lazy } });

@@ -276,7 +276,7 @@ function runLobby(search, stored, options) {
         if (options.lazy === false) return c;
         if (c.tagName === 'script') {
             const file = String(c.src);
-            if (options.lazy === 'script' || !/^home\/\w+\.js$/.test(file)) { if (c.onerror) c.onerror({}); return c; }
+            if (options.lazy === 'script' || file !== 'home/games.js') { if (c.onerror) c.onerror({}); return c; }       // (the other parts that the page loads later, the chat dock, have checks of their own that run them)
             Object.assign(win, options.lazy && typeof options.lazy === 'object' ? options.lazy : loadFile(file, scope));
         }
         if (c.onload) { try { c.onload({}); } catch (e) { env.lazyErrors.push(String(e && e.message || e)); } }       // (a handler that throws is an error of the page, which does not reach the one that appended the file)
