@@ -43,6 +43,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 
 - [Build and run](docs/BUILD_AND_RUN.md): prerequisites, building, the launch scripts, sanitizers, Docker
 - [The dedicated server](docs/SERVER.md): `ants_server`, its options, the control interface, reconnecting, the Docker stack
+- [The chat hub](docs/HUB.md): `ants-hub`, the global chat service next to the game server: its protocol and limits, the text rules, moderation from a terminal, the stack and nginx wiring
 - [Testing and CI](docs/TESTING.md): the test suites and tiers, the browser checks, continuous integration
 - [Workflow](docs/WORKFLOW.md): branches, pull requests, releases and the deploy; the rules for contributors are in [`AGENTS.md`](AGENTS.md)
 
