@@ -27,7 +27,7 @@ DEPLOYS = [
     "VERSION", "CMakeLists.txt", "cmake/ants_stamp_build_id.cmake", "cmake/ants_test_paths.cpp.in", "include/ants_sim/sim_engine.hpp", "src/ants_sim/sim_engine.cpp", "include/ants_db/database.hpp", "src/ants_db/database.cpp",
     "third_party/sqlite/sqlite3.c", "third_party/sqlite/sqlite3.h", "third_party/sqlite/CMakeLists.txt",
     "src/ants_app/application.cpp", "web/shell.html", "web/lobby.html", "web/favicon.png", "docker/nginx.conf", "docker/resolve_build_id.sh",
-    "Dockerfile", "Dockerfile.server", ".dockerignore", "docker-compose.stack.yml",
+    "Dockerfile", "Dockerfile.server", "Dockerfile.hub", ".dockerignore", "docker-compose.stack.yml", "hub/server.py", "hub/__main__.py", "hub/ws.py",
     "CHANGELOG.md", "tools/changelog_to_html.py",
     "Original-Ants/ants.chd", "Original-Ants/Maps/TINY.LVL", "Original-Ants/INTRO.mp3", "asset_catalog/index.html", "asset_catalog/sprites/s1.png",
 ]
@@ -37,6 +37,7 @@ SKIPS = [
     "tests/test_sim/test_sim_rules.cpp", "tests/scripts/test_run_tests.py", "tests/data/edge_scroll_samples.csv", "tests/common/ants_test_paths.hpp", "tests/e2e/e2e_model.hpp",
     "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py", "tools/deploy_wait.py", "tools/deploy_webhook.sh",
     "run_tests.sh", "run_tests.bat", "start_game.sh", "start_game.bat", "build_web.sh", ".editorconfig", ".gitignore", ".gitattributes",
+    "docs/HUB.md", "tests/scripts/test_hub_ws.py", "tests/scripts/hub_client.py", "tests/data/hub_mutants.json", "hub/__pycache__/ws.cpython-312.pyc",
     "docker-compose.yml", "docker-compose.server.yml", "docker-compose.staging.yml",
     "Original-Ants/ddraw.ini", "Original-Ants/Ants.exe", "Original-Ants/chat.txt", "Original-Ants/Shaders/x.glsl",
 ]
@@ -78,7 +79,7 @@ class TheList(unittest.TestCase):
         for path in tracked.stdout.splitlines():
             counts, why = self.classifier.verdict(path)
             top = path.split("/")[0]
-            if top in ("src", "include", "cmake", "web", "asset_catalog") or (top == "third_party" and not path.endswith(".md")):
+            if top in ("src", "include", "cmake", "web", "asset_catalog", "hub") or (top == "third_party" and not path.endswith(".md")):
                 self.assertTrue(counts, "%s is under %s/, which the images copy (%s)" % (path, top, why))
             elif top in ("tests", ".github"):
                 self.assertFalse(counts, "%s: tests and CI files are in no image (%s)" % (path, why))
@@ -92,14 +93,14 @@ class TheList(unittest.TestCase):
     def test_the_sources_of_the_dockerfiles_are_derived_from_the_real_files(self):
         sources = [s for s, _ in self.classifier.sources]
         for expected in ("src/", "include/", "cmake/", "web/", "Original-Ants/", "Original-Ants/Maps/", "tools/", "asset_catalog/", "CHANGELOG.md",
-                         "docker/nginx.conf", "docker/resolve_build_id.sh", "web/favicon.*", "CMakeLists.txt", "VERSION", "third_party/"):
+                         "docker/nginx.conf", "docker/resolve_build_id.sh", "web/favicon.*", "CMakeLists.txt", "VERSION", "third_party/", "hub/"):
             self.assertIn(expected, sources)
         self.assertEqual([s for s in sources if s.startswith("docs")], [])                  # no image copies a document of docs/
         self.assertNotIn("/src/build_web/src/ants_app/index.*", sources)                  # COPY --from=builder reads another stage, not the context
 
     def test_a_new_copy_line_is_noticed(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("Dockerfile", "Dockerfile.server", ".dockerignore"):
+            for name in ("Dockerfile", "Dockerfile.server", "Dockerfile.hub", ".dockerignore"):
                 text = read(os.path.join(REPO, name))
                 if name == "Dockerfile":
                     text += "\nCOPY brand-new-folder/ /usr/share/nginx/html/new/\n"
@@ -174,7 +175,7 @@ class FromGit(unittest.TestCase):
 
     def test_the_files_between_two_revisions(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("Dockerfile", "Dockerfile.server", ".dockerignore"):
+            for name in ("Dockerfile", "Dockerfile.server", "Dockerfile.hub", ".dockerignore"):
                 write(os.path.join(root, name), read(os.path.join(REPO, name)))
             self.git(root, "init", "-q")
             os.makedirs(os.path.join(root, "src"))
@@ -258,6 +259,7 @@ class CopyLines(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             write(os.path.join(root, "Dockerfile"), "COPY . /src/\n")
             write(os.path.join(root, "Dockerfile.server"), "FROM x\n")
+            write(os.path.join(root, "Dockerfile.hub"), "FROM x\n")
             write(os.path.join(root, ".dockerignore"), "tests\n")
             classifier = df.Classifier(root, "docker-compose.stack.yml")
             self.assertTrue(classifier.verdict("anything/at/all.txt")[0])

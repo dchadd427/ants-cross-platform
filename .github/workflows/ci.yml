@@ -390,6 +390,26 @@ jobs:
           docker build -f Dockerfile.server -t ants-server .
           docker run --rm --entrypoint /usr/local/bin/ants_server ants-server --version
 
+      # The chat hub's image (Dockerfile.hub, docs/HUB.md): built the way the stacks build it, and started the way they start it (read only, no capabilities, no new privileges, 32 processes, 192 MB, a
+      # tmpfs for /tmp, a volume for the database): its health check must say healthy, its command line tool must open the database, and a socket from the wrong site must be refused. (No sixth
+      # required check: this is a step of the Web job.)
+      - name: Build the chat hub image and start it with the stack's hardening
+        run: |
+          docker build -f Dockerfile.hub -t ants-hub .
+          docker run -d --name ants-hub-check --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 32 --memory 192m --tmpfs /tmp --health-interval 2s --health-start-period 2s -v ants-hub-check-data:/data \
+            -e ANTS_HUB_PUBLIC_URL=https://chat.example.org ants-hub
+          ok=
+          for i in $(seq 1 40); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' ants-hub-check)" = healthy ] && ok=1 && break
+            sleep 2
+          done
+          docker logs ants-hub-check
+          [ -n "$ok" ] || { docker rm -f ants-hub-check; exit 1; }
+          docker exec ants-hub-check python -m hub.admin list
+          docker exec ants-hub-check python -c "import http.client as h; c = h.HTTPConnection('127.0.0.1', 4040); c.request('GET', '/hub/ws', headers={'Origin': 'https://evil.example', 'Upgrade': 'websocket', 'Connection': 'Upgrade', 'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==', 'Sec-WebSocket-Version': '13'}); r = c.getresponse(); print(r.status, r.read()); raise SystemExit(0 if r.status == 403 else 1)" || { docker rm -f ants-hub-check; exit 1; }
+          docker rm -f ants-hub-check
+          docker volume rm ants-hub-check-data
+
       # The two stacks (docker-compose.stack.yml and docker-compose.staging.yml) must render, and the build argument ANTS_SITE_LABEL of the staging stack must put "staging" in the
       # title and the footer of the pages, while the production pages do not have the word. (The second image reuses the layers of the first: only its last layers are built.)
       - name: Check the stack files and the staging label of the pages
