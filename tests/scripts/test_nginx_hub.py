@@ -49,7 +49,7 @@ class TheText(unittest.TestCase):
     def test_only_a_get_without_a_query_goes_through_and_the_checks_come_first(self):
         self.assertIn("if ($request_method != GET) { return 405; }", HUB)
         self.assertIn("if ($is_args) { return 404; }", HUB)
-        for check in ("$request_method", "$is_args", "limit_conn "):
+        for check in ("$request_method", "$is_args", "limit_conn ", "limit_req "):
             self.assertLess(HUB.index(check), HUB.index("proxy_pass "), check)
 
     def test_the_name_is_resolved_per_request_so_the_site_starts_without_the_hub(self):
@@ -85,6 +85,21 @@ class TheText(unittest.TestCase):
         self.assertLessEqual(int(limit.group(1)), 32)
         self.assertIn("limit_conn_status 429;", HUB)
 
+    def test_new_sockets_are_limited_in_rate_for_each_address(self):
+        zone = re.search(r"limit_req_zone \$binary_remote_addr zone=ants_hub_req:(\d+)m rate=(\d+)r/s;", CONF)
+        self.assertIsNotNone(zone)
+        self.assertLess(CONF.index(zone.group(0)), CONF.index("server {"))        # http context
+        self.assertLessEqual(int(zone.group(2)), 10)                              # (each handshake costs the hub a welcome of up to 50 KB)
+        self.assertIn("limit_req zone=ants_hub_req burst=10 nodelay;", HUB)
+        self.assertIn("limit_req_status 503;", HUB)
+
+    def test_nothing_about_the_visitor_is_written_to_the_access_log(self):
+        self.assertIn("access_log off;", HUB)                                     # (the server's default format writes the address, the referrer and the user agent)
+        text = read("docker", "nginx.conf")
+        comment = text[text.index("# The chat hub's door"):text.index("location = /hub/ws")]
+        self.assertIn("access log is off", comment)
+        self.assertNotIn("which holds the request line only", comment)
+
     def test_only_these_headers_go_on(self):
         self.assertIn("proxy_pass_request_headers off;", HUB)
         sent = re.findall(r"proxy_set_header ([A-Za-z-]+) ", HUB)
@@ -119,7 +134,7 @@ class Recorder:
     def __init__(self):
         self.seen = []
 
-    def identify(self, headers):
+    async def identify(self, headers):
         from hub import session
         self.seen.append(dict(headers))
         return session.Identity("1001", "alice", False) if headers.get("cookie") == "ants_hub=ok" else None
@@ -138,23 +153,29 @@ class TheBlockRuns(unittest.TestCase):
             cls.recorder = Recorder()
             cls.rig.hub.sessions = cls.recorder
             cls.rig.hub.chat.login = True
-            cls.front, cls.proc = cls.start_nginx(cls.rig.port)
-            cls.dead, cls.dead_proc = cls.start_nginx(free_port())
+            cls.front, cls.proc = cls.start_nginx(cls.rig.port, drop=("limit_req zone=ants_hub_req burst=10 nodelay;",))        # (the rate limit is tested apart: these tests open many sockets quickly)
+            cls.fast, cls.fast_proc = cls.start_nginx(cls.rig.port, drop=("limit_conn ants_hub_conn 16;",))
+            cls.dead, cls.dead_proc = cls.start_nginx(free_port(), drop=("limit_req zone=ants_hub_req burst=10 nodelay;",))
         except BaseException:
             cls.rig.__exit__(None, None, None)
             shutil.rmtree(cls.tmp, ignore_errors=True)
             raise
 
     @classmethod
-    def start_nginx(cls, hub_port):
+    def start_nginx(cls, hub_port, drop=()):
+        """nginx with the real text of the zones and the block; `drop` names directives to cut out (the tests of one limit do not want the other in the way)."""
         port = free_port()
-        zone = re.search(r"limit_conn_zone [^;]+;", HEAD).group(0)
+        zones = "\n  ".join(re.findall(r"limit_(?:conn|req)_zone \$binary_remote_addr zone=ants_hub_\w+:[^;]+;", HEAD))
+        assert zones.count("limit_") == 2, zones
         block = HUB.replace("resolver 127.0.0.11 valid=10s ipv6=off;", "").replace("set $ants_hub ants-hub:4040;", "set $ants_hub 127.0.0.1:%d;" % hub_port)
+        for directive in drop:
+            assert directive in block, directive
+            block = block.replace(directive, "")
         conf = os.path.join(cls.tmp, "nginx-%d.conf" % port)
         with open(conf, "w", encoding="utf-8") as f:
             f.write("daemon off;\nmaster_process off;\npid %s/n%d.pid;\nerror_log %s/e%d.log;\nevents { worker_connections 256; }\nhttp {\n  access_log off;\n  client_body_temp_path %s/b%d;\n"
                     "  proxy_temp_path %s/p%d;\n  %s\n  server {\n    listen 127.0.0.1:%d;\n    location = /hub/ws {%s}\n    location @hub_off {%s}\n    location / { return 200 'the page'; }\n  }\n}\n"
-                    % (cls.tmp, port, cls.tmp, port, cls.tmp, port, cls.tmp, port, zone, port, block, OFF))
+                    % (cls.tmp, port, cls.tmp, port, cls.tmp, port, cls.tmp, port, zones, port, block, OFF))
         proc = subprocess.Popen([nginx_binary(), "-c", conf, "-p", cls.tmp], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         for _ in range(100):
             try:
@@ -168,7 +189,7 @@ class TheBlockRuns(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        for proc in (cls.proc, cls.dead_proc):
+        for proc in (cls.proc, cls.fast_proc, cls.dead_proc):
             proc.send_signal(signal.SIGTERM)
             try:
                 proc.wait(5)
@@ -251,6 +272,21 @@ class TheBlockRuns(unittest.TestCase):
         open_ones[0].close()
         time.sleep(0.3)
         self.assertTrue(self.connect().ok)
+
+    def test_more_than_five_new_sockets_a_second_get_503_and_the_hub_is_not_asked(self):
+        before = len(self.rig.hub.chat.peers)
+        answers = []
+        for _ in range(40):
+            c = self.connect(port=self.fast)
+            answers.append(c.status.split()[1])
+        self.assertEqual(answers[:10], ["101"] * 10)                            # the burst
+        self.assertGreaterEqual(answers.count("503"), 20)                      # the rest, in well under a second
+        self.assertEqual(set(answers), {"101", "503"})
+        self.assertLessEqual(len(self.rig.hub.chat.peers) - before, answers.count("101"))
+        for c in self.clients:
+            c.close()
+        time.sleep(1.2)                                                         # the allowance comes back at five a second
+        self.assertEqual(self.connect(port=self.fast).status.split()[1], "101")
 
     def test_a_quiet_socket_stays_open_through_nginx(self):
         c = self.connect()

@@ -169,6 +169,38 @@ class Pushes(unittest.TestCase):
         self.assertEqual(run_tool("--base", "abc").returncode, 2)
 
 
+class TheChatHub(unittest.TestCase):
+    """What a push of the chat hub does (docs/HUB.md "Deploys"): it counts, so the job waits for an idle game server and calls the webhook; and the stack that the webhook rebuilds gives the
+    page's and the game server's images the build id of the commit, so they are recreated too, while the hub's image does not depend on the commit."""
+
+    def test_a_push_of_the_hub_alone_deploys(self):
+        for files in (["hub/chat.py"], ["hub/ws.py", "hub/http.py"], ["Dockerfile.hub"], ["docker/nginx.conf"]):
+            out = run_tool("--files", stdin="\n".join(files) + "\n").stdout.strip()
+            self.assertTrue(out.startswith("deploy:"), "%s: %s" % (files, out))
+
+    def test_what_surrounds_the_hub_does_not(self):
+        out = run_tool("--files", stdin="docs/HUB.md\ntests/scripts/test_hub_core.py\ntests/scripts/hub_client.py\ntests/data/hub_mutants.json\nREADME.md\n").stdout.strip()
+        self.assertTrue(out.startswith("skip:"), out)
+
+    def test_the_stacks_give_the_build_id_to_the_page_and_the_game_server_and_not_to_the_hub(self):
+        for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+            text = read(os.path.join(REPO, name))
+            code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+            self.assertEqual(code.count("ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}"), 2, name)         # ants-beta and ants-server
+            self.assertNotIn("ANTS_BUILD_ID", code[code.index("  ants-hub:"):code.index("\nvolumes:")], name)
+        for dockerfile, has in (("Dockerfile", True), ("Dockerfile.server", True), ("Dockerfile.hub", False)):
+            code = "\n".join(l for l in read(os.path.join(REPO, dockerfile)).splitlines() if not l.lstrip().startswith("#"))
+            self.assertEqual("ANTS_BUILD_ID" in code, has, dockerfile)
+
+    def test_the_documents_say_so(self):
+        hub = read(os.path.join(REPO, "docs", "HUB.md"))
+        self.assertIn("a hub-only change also rebuilds and recreates the page and the game server", hub)
+        self.assertIn("recreated only when `hub/` or `Dockerfile.hub` changed", hub)
+        workflow = read(os.path.join(REPO, "docs", "WORKFLOW.md"))
+        self.assertIn("it recreates them too", workflow)
+        self.assertIn("the hub itself is recreated only when its own files changed", workflow)
+
+
 class FromGit(unittest.TestCase):
     def git(self, root, *args):
         return subprocess.run(["git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.org", *args], capture_output=True, text=True, check=True).stdout.strip()

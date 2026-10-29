@@ -4,14 +4,15 @@
 Messages (JSON, "v":1; docs/HUB.md has the table):
   up    {"t":"say","text":"..."}   {"t":"ping"}
   down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"err","code":"login|rate|muted|banned|long|empty|young|bad"}
-An `err` and every message that cannot be read count as a mistake of the socket (peer.strike()): twenty in a minute close it.
+An `err` and every message that cannot be read count as a mistake of the socket (peer.strike()): twenty in a minute close it. A line is kept only if the account's own limit, the limit of
+all accounts together and the size of the database allow it (`rate` otherwise); a moderator's command is never refused for those.
 """
 import collections
 import json
 import re
 
 from . import PROTOCOL, text as textrules
-from .limits import AccountLimits
+from .limits import AccountLimits, TokenBucket
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
@@ -29,6 +30,7 @@ class Chat:
         self.clock = clock
         self.login = login
         self.account_limits = AccountLimits(limits)
+        self.global_limit = TokenBucket(limits.global_burst, limits.global_refill_seconds, clock())      # all accounts together: what the database is asked to keep
         self.peers = set()
         self.ring = collections.deque(maxlen=limits.history_lines)
         for line in store.recent_lines(limits.history_lines):
@@ -97,9 +99,10 @@ class Chat:
         mod = who.account_id in self.mods
         if mod and line.startswith("/"):
             return self.command(peer, line)
-        refused = self.account_limits.check(who.account_id, line, self.clock())
-        if refused:
-            return self.mistake(peer, "rate")
+        now = self.clock()
+        if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes or self.account_limits.check(who.account_id, line, now):
+            return self.mistake(peer, "rate")                      # (the account's own check is the last: it is the one that counts the line as said)
+        self.global_limit.take(now)
         entry = self.store.add_line(who.account_id, who.name, line, mod)
         self.ring.append(entry)
         self.broadcast(dict({"t": "line"}, **self.line_of(entry)))
@@ -121,10 +124,12 @@ class Chat:
             self.mistake(peer, "bad")
 
     def account_named(self, name):
-        for peer in self.peers:
-            if peer.identity is not None and peer.identity.name == name:
-                return peer.identity.account_id
-        return self.store.account_of_name(name)
+        """The account that a moderator means by a name: the one that is here with it; of two that are here with it (a name is unique among Discord's accounts, but a test login or a rename can
+        make two) none, because it is not known which; when nobody is here with it, the account that last spoke under it."""
+        here = {p.identity.account_id for p in self.peers if p.identity is not None and p.identity.name == name}
+        if len(here) > 1:
+            return None
+        return next(iter(here)) if here else self.store.account_of_name(name)
 
     # ---- the clock's work -----------------------------------------------------------------------------------------------------------------
 

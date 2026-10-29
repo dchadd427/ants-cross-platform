@@ -101,6 +101,19 @@ class TheTricks(unittest.TestCase):
         self.assertEqual(clean("กิ้")[0], "กิ้")
         self.assertEqual(clean("كَتَبَ")[0], "كَتَبَ")
 
+    def test_a_line_of_marks_alone_shows_nothing_and_is_empty(self):
+        for text_ in ("\ufe0f", "\ufe00\ufe01\ufe0e", "\u180b", "\u180c\u180d", "\u180f", "\U000e0100", "\U000e01ef", "\U00016fe4", "\u0301", "\u0301\u0300\u0302", " \ufe0f ", "\ufe0f \u180b \U000e0100",
+                      "\u0e34\u0e49", "\u200d\ufe0f"):
+            self.assertEqual(clean(text_), (None, "empty"), repr(text_))
+        for ch in ("\ufe0f", "\u180b", "\U000e0100", "\U00016fe4", "\u0301"):
+            self.assertEqual(unicodedata.category(ch)[0], "M", hex(ord(ch)))      # (they are what the table says they are)
+        # with a letter anywhere, they are a line: the marks belong to something
+        self.assertEqual(clean("a\ufe0f"), ("a\ufe0f", None))
+        self.assertEqual(clean("\ufe0f a"), ("\ufe0f a", None))
+        self.assertEqual(clean("\u2764\ufe0f"), ("\u2764\ufe0f", None))
+        self.assertEqual(clean("1"), ("1", None))
+        self.assertEqual(clean("."), (".", None))
+
     def test_markup_is_refused_after_the_hiding_places_are_gone(self):
         for line in ("<b>hi</b>", "a < b", "a > b", "<script>alert(1)</script>", "x<", ">x", "<​script>", "<‮>", "<ㅤ>"):
             self.assertEqual(clean(line), (None, "bad"), repr(line))
@@ -226,7 +239,9 @@ class TheLawsHold(unittest.TestCase):
             words = ["".join(rnd.choice(plain) for _ in range(rnd.randint(1, 8))) for _ in range(rnd.randint(1, 12))]
             raw = " ".join(words)
             expected = unicodedata.normalize("NFC", raw)
-            if len(expected) <= 200:
+            if not any(c != " " and not unicodedata.category(c).startswith("M") for c in expected):
+                self.assertEqual(clean(raw), (None, "empty"))              # (a word of marks alone shows nothing)
+            elif len(expected) <= 200:
                 self.assertEqual(clean(raw), (expected, None))
 
 

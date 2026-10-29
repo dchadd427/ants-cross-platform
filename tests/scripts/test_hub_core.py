@@ -4,13 +4,17 @@ history that is kept 7 days and then deleted for good, the moderators' commands 
 
 The chat is driven with plain fake peers and a fake clock, so every limit is tested at its edge in no time. The sockets, the timers and the real process are tests/scripts/test_hub_server.py.
 """
+import asyncio
 import collections
+import dataclasses
 import io
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -272,6 +276,84 @@ class TheRules(WorldTest):
         self.assertEqual(self.alice.codes(), ["rate"] * 5)           # (the 5 duplicates, and y and z came through on the 2 tokens left)
         self.assertEqual(len(self.reader.kinds("line")), 3)
 
+    def test_a_refused_line_is_not_kept(self):
+        for n in range(3):
+            self.w.say(self.alice, "line %d" % n)
+        self.w.say(self.alice, "too fast")                            # rate
+        self.w.say(self.alice, "line 0")                              # a duplicate
+        self.assertEqual(self.alice.codes(), ["rate", "rate"])
+        self.assertEqual([l.text for l in self.w.store.recent_lines(50)], ["line 0", "line 1", "line 2"])
+        self.assertEqual([l.text for l in self.w.chat.ring], ["line 0", "line 1", "line 2"])
+        self.assertEqual(self.w.store.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0], 3)
+
+    def test_two_accounts_of_one_name_have_a_limit_each(self):
+        first, second = self.w.join(session.Identity("1010", "sam", False)), self.w.join(session.Identity("1011", "sam", False))
+        for n in range(3):
+            self.w.say(first, "a%d" % n)
+            self.w.say(second, "b%d" % n)
+        self.assertEqual((first.codes(), second.codes()), ([], []))
+        self.w.say(first, "a3")
+        self.w.say(second, "b3")
+        self.assertEqual((first.codes(), second.codes()), (["rate"], ["rate"]))
+
+    def test_the_same_text_is_free_again_at_exactly_30_seconds(self):
+        self.w.say(self.alice, "same")
+        self.w.clock.now += 30.0
+        self.w.say(self.alice, "same")
+        self.assertEqual(self.alice.codes(), [])
+        self.assertEqual(len(self.reader.kinds("line")), 2)
+
+    def test_lines_that_show_nothing_are_empty(self):
+        for text in ("\ufe0f", " \u180b ", "\U000e0100", "\U00016fe4", "\u0301\u0301", "\u180d\u180f \ufe0f"):
+            self.w.say(self.alice, text)
+            self.assertEqual(self.alice.codes()[-1], "empty", repr(text))
+        self.w.say(self.alice, "a\ufe0f")
+        self.assertEqual(self.alice.codes()[-1], "empty")              # (the code before is still the last error: this line went out)
+        self.assertEqual(self.reader.kinds("line")[-1]["text"], "a\ufe0f")
+
+    def test_all_accounts_together_have_a_limit_too(self):
+        w = World(limits=dataclasses.replace(LIMITS, global_burst=3, global_refill_seconds=1.0))
+        self.addCleanup(w.close)
+        people = [w.join(session.Identity(str(2000 + n), "user%02d" % n, False)) for n in range(5)]
+        for person in people:
+            w.say(person, "hello")
+        self.assertEqual([p.codes() for p in people], [[], [], [], ["rate"], ["rate"]])
+        self.assertEqual(len(w.store.recent_lines(50)), 3)
+        w.clock.now += 1.0
+        w.say(people[3], "hello")
+        w.say(people[4], "hello")
+        self.assertEqual([p.codes() for p in people[3:]], [["rate"], ["rate", "rate"]])      # one more line, for one account
+        self.assertEqual(len(w.store.recent_lines(50)), 4)
+
+    def test_a_moderator_s_command_is_not_held_back_by_the_limits_of_lines(self):
+        w = World(limits=dataclasses.replace(LIMITS, global_burst=1, global_refill_seconds=1000.0, db_max_bytes=1))
+        self.addCleanup(w.close)
+        mod, alice = w.join(MOD), w.join(ALICE)
+        w.say(alice, "hello")
+        self.assertEqual(alice.codes(), ["rate"])
+        w.say(mod, "/mute alice 5")
+        self.assertEqual(mod.codes(), [])
+        self.assertEqual(len(w.store.mutes()), 1)
+
+    def test_no_line_is_kept_once_the_database_is_full_and_moderation_goes_on(self):
+        w = World(limits=dataclasses.replace(LIMITS, db_max_bytes=1))
+        self.addCleanup(w.close)
+        alice, mod = w.join(ALICE), w.join(MOD)
+        w.say(alice, "hello")
+        self.assertEqual(alice.codes(), ["rate"])
+        self.assertEqual(w.store.recent_lines(10), [])
+        self.assertTrue(w.store.mute("1001", 5, "cli") > 0)              # a mute, a ban and a deletion are small writes that the guard does not refuse
+        w.store.ban("1002", "cli")
+        self.assertTrue(w.store.is_banned("1002"))
+        size = w.store.size()
+        self.assertGreater(size, 1)
+        again = World(limits=dataclasses.replace(LIMITS, db_max_bytes=size + 10 ** 6))
+        self.addCleanup(again.close)
+        again_alice = again.join(ALICE)
+        again.say(again_alice, "hello")
+        self.assertEqual(again_alice.codes(), [])
+        self.assertEqual(len(again.store.recent_lines(10)), 1)
+
     def test_idle_accounts_are_forgotten(self):
         self.w.say(self.alice, "x")
         self.w.chat.account_limits.forget_idle(self.w.clock.now + 10)
@@ -324,6 +406,60 @@ class TheModerators(WorldTest):
     def setUp(self):
         super().setUp()
         self.mod = self.w.join(MOD)
+
+    def test_a_name_that_two_accounts_here_have_is_not_a_target(self):
+        first, second = self.w.join(session.Identity("1010", "sam", False)), self.w.join(session.Identity("1011", "sam", False))
+        self.w.say(first, "hi")
+        self.w.say(self.mod, "/mute sam 5")
+        self.assertEqual(self.mod.codes(), ["bad"])
+        self.assertEqual(self.w.store.mutes(), [])
+        self.w.chat.peers.discard(second)                               # with one of them gone it is clear who is meant
+        self.w.say(self.mod, "/mute sam 5")
+        self.assertEqual([m[0] for m in self.w.store.mutes()], ["1010"])
+
+    def test_the_account_that_is_here_wins_over_one_that_spoke_under_the_name_before(self):
+        self.w.store.add_line("1020", "sam", "years ago", False)
+        here = self.w.join(session.Identity("1021", "sam", False))
+        self.w.say(self.mod, "/mute sam 5")
+        self.assertEqual([m[0] for m in self.w.store.mutes()], ["1021"])
+        self.assertIn(here, self.w.chat.peers)
+
+    def test_a_user_whose_name_is_a_moderators_id_is_not_a_moderator(self):
+        impostor = self.w.join(session.Identity("1050", "9001", False))
+        self.assertIs(self.w.chat.welcome(impostor)["you"]["mod"], False)
+        self.w.say(self.alice, "hi")
+        self.w.say(impostor, "/mute alice 5")
+        line = self.reader.kinds("line")[-1]
+        self.assertEqual((line["text"], line["mod"]), ("/mute alice 5", False))        # text, from someone who is not one
+        self.assertEqual(self.w.store.mutes(), [])
+
+    def test_deleting_goes_on_working_after_old_lines_were_purged(self):
+        self.w.say(self.alice, "the first line")
+        self.w.say(self.mod, "/del 1")
+        self.assertEqual(self.reader.kinds("del"), [{"t": "del", "id": 1}])
+        self.w.wall.now += 8 * 86400
+        self.w.clock.now += 8 * 86400
+        self.assertEqual(self.w.store.purge(), 1)                       # the line is gone, and with it the row that held the number of its deletion
+        self.w.say(self.alice, "a later line")
+        self.w.say(self.mod, "/del 2")
+        self.assertEqual(self.mod.codes(), [])
+        self.assertEqual(self.reader.kinds("del"), [{"t": "del", "id": 1}, {"t": "del", "id": 2}])
+        self.assertEqual(self.w.chat.welcome(self.reader)["history"], [])
+        self.assertEqual(self.w.store.last_deletion(), 2)
+
+    def test_a_deletion_by_the_command_line_after_a_purge_is_found_too(self):
+        self.w.say(self.alice, "one")
+        other = storemod.Store(self.w.db, clock=self.w.wall)
+        self.addCleanup(other.close)
+        other.delete_line(1, "command line")
+        self.w.chat.sync_deletions()
+        self.w.wall.now += 8 * 86400
+        self.w.clock.now += 8 * 86400
+        other.purge()
+        self.w.say(self.alice, "two")
+        other.delete_line(2, "command line")
+        self.w.chat.sync_deletions()
+        self.assertEqual(self.reader.kinds("del"), [{"t": "del", "id": 1}, {"t": "del", "id": 2}])
 
     def test_a_blank_run_in_a_command_is_one_blank(self):
         self.w.say(self.alice, "hi")
@@ -513,6 +649,17 @@ class TheCounters(unittest.TestCase):
         counter.remove("a")                                          # (more removes than adds change nothing)
         self.assertNotIn("a", counter.counts)
 
+    def test_a_place_is_given_back_one_at_a_time(self):
+        counter = limitmod.PerAddress(8)
+        for _ in range(3):
+            self.assertTrue(counter.try_add("a"))
+        counter.remove("a")
+        self.assertEqual(counter.counts, {"a": 2})
+        counter.remove("a")
+        self.assertEqual(counter.counts, {"a": 1})                       # the last live socket is still counted
+        self.assertTrue(all(counter.try_add("a") for _ in range(7)))
+        self.assertFalse(counter.try_add("a"))
+
     def test_address_keys(self):
         key = limitmod.address_key
         self.assertEqual(key("203.0.113.9", "10.0.0.2"), "203.0.113.9")
@@ -645,6 +792,77 @@ class TheStore(unittest.TestCase):
         self.assertEqual(self.store.deletions_since(0), [(1, ids[0]), (2, ids[2])])
         self.assertEqual(self.store.deletions_since(1), [(2, ids[2])])           # what the hub has not heard of yet, and nothing it has
 
+    def test_a_deletion_number_is_never_used_twice_even_after_a_purge(self):
+        first = self.store.add_line("1", "ann", "x", False)
+        self.assertTrue(self.store.delete_line(first.id, "cli"))
+        self.wall.now += 8 * 86400
+        self.assertEqual(self.store.purge(), 1)
+        self.assertEqual(self.store.last_deletion(), 1)                  # the number stays when the line that had it is gone
+        second = self.store.add_line("1", "ann", "y", False)
+        self.assertTrue(self.store.delete_line(second.id, "cli"))
+        self.assertEqual(self.store.last_deletion(), 2)
+        self.assertEqual(self.store.deletions_since(1), [(2, second.id)])
+        self.assertFalse(self.store.delete_line(second.id, "cli"))
+        self.assertFalse(self.store.delete_line(999, "cli"))
+        self.assertEqual(self.store.last_deletion(), 2)                  # a deletion that did nothing took no number
+
+    def test_a_database_of_the_first_schema_gets_the_counter(self):
+        path = os.path.join(self.folder.name, "old.db")
+        old = sqlite3.connect(path, isolation_level=None)
+        old.executescript("""CREATE TABLE lines (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, account TEXT NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL,
+                             mod INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, del_seq INTEGER NOT NULL DEFAULT 0, del_by TEXT);
+                             CREATE TABLE mutes (account TEXT PRIMARY KEY, until INTEGER NOT NULL, at INTEGER NOT NULL, by TEXT NOT NULL, name TEXT NOT NULL);
+                             CREATE TABLE bans (account TEXT PRIMARY KEY, at INTEGER NOT NULL, by TEXT NOT NULL, name TEXT NOT NULL);
+                             INSERT INTO lines (at, account, name, text, deleted, del_seq) VALUES (1, '1', 'ann', 'x', 1, 7);
+                             PRAGMA user_version = 1;""")
+        old.close()
+        migrated = storemod.Store(path, clock=self.wall)
+        self.addCleanup(migrated.close)
+        self.assertEqual(migrated.last_deletion(), 7)
+        line = migrated.add_line("1", "ann", "y", False)
+        migrated.delete_line(line.id, "cli")
+        self.assertEqual(migrated.last_deletion(), 8)
+
+    def test_a_backlog_is_deleted_a_chunk_at_a_time(self):
+        for n in range(5):
+            self.store.add_line("1", "ann", "line %d" % n, False)
+        self.wall.now += 8 * 86400
+        self.store.add_line("1", "ann", "fresh", False)
+        self.assertEqual([self.store.purge(2) for _ in range(4)], [2, 2, 1, 0])
+        self.assertEqual([r[4] for r in self.store.lines(10)], ["fresh"])
+
+    def test_the_log_file_is_cut_when_a_reader_lets_go_and_not_before(self):
+        canary = "canary-text-held-by-a-reader-5d7e"
+        self.store.add_line("1", "ann", canary, False)
+        self.wall.now += 8 * 86400
+        reader = sqlite3.connect(self.db, isolation_level=None)               # `hub.admin list` or a backup: a read that is open
+        reader.execute("BEGIN")
+        self.assertEqual(reader.execute("SELECT COUNT(*) FROM lines").fetchone()[0], 1)
+        started = time.monotonic()
+        self.assertEqual(self.store.purge(), 1)
+        self.assertLess(time.monotonic() - started, 1.0)                     # (the hub's one thread does not wait for a reader)
+        self.assertTrue(self.store.unsettled)
+        reader.execute("COMMIT")
+        reader.close()
+        self.assertTrue(self.store.checkpoint())
+        self.assertFalse(self.store.unsettled)
+        for name in os.listdir(self.folder.name):
+            with open(os.path.join(self.folder.name, name), "rb") as f:
+                self.assertNotIn(canary.encode(), f.read(), "the text is still in " + name)
+
+    def test_a_purge_with_nothing_to_delete_still_cuts_the_log_file(self):
+        self.store.add_line("1", "ann", "fresh", False)
+        self.assertGreater(os.path.getsize(self.db + "-wal"), 0)
+        self.assertEqual(self.store.purge(), 0)
+        self.assertEqual(os.path.getsize(self.db + "-wal"), 0)
+
+    def test_the_size_counts_the_database_and_its_log_file(self):
+        before = self.store.size()
+        for n in range(200):
+            self.store.add_line("1", "ann", "line %d " % n + "x" * 150, False)
+        self.assertGreater(self.store.size(), before)
+        self.assertGreaterEqual(self.store.size(), os.path.getsize(self.db) + os.path.getsize(self.db + "-wal"))
+
     def test_a_newer_database_is_refused(self):
         self.store.db.execute("PRAGMA user_version = 99")
         with self.assertRaises(RuntimeError):
@@ -686,6 +904,21 @@ class TheSettings(unittest.TestCase):
                 config.parse_mods(bad)
             self.assertNotIn(bad.replace(" ", ""), str(caught.exception) if len(bad) > 3 else "never")      # (the message names the place, not the value)
 
+    def test_a_wrong_address_of_the_site_is_a_message_and_not_a_traceback(self):
+        for bad in ("https://host:abc", "http://[::1", "https://host:99999", "https://host:-1", "https://[::1]:x"):
+            with self.assertRaises(config.ConfigError, msg=bad) as caught:
+                config.load({"ANTS_HUB_PUBLIC_URL": bad})
+            self.assertIn("ANTS_HUB_PUBLIC_URL", str(caught.exception))
+            self.assertNotIn(bad, str(caught.exception))
+
+    def test_an_account_id_is_digits_without_a_leading_zero(self):
+        for good in ("1", "9", "10", "1001", "123456789012345678", "1" * 20):
+            self.assertTrue(config.ACCOUNT_ID.match(good), good)
+        for bad in ("", "0", "00012", "01", "1" * 21, "12a", " 12", "12\n"):
+            self.assertFalse(config.ACCOUNT_ID.match(bad), repr(bad))
+        with self.assertRaises(config.ConfigError):
+            config.parse_mods("1001,0123")
+
     def test_the_port(self):
         self.assertEqual(config.load({"ANTS_HUB_PORT": "0"}).port, 0)
         for bad in ("x", "-1", "65536", ""):
@@ -712,18 +945,27 @@ class TheSettings(unittest.TestCase):
         self.assertEqual(cfg.login_client_secret, secret)             # (it is read: the login layer that comes later needs it)
 
 
+def identify(sessions, headers):
+    return asyncio.run(sessions.identify(headers))
+
+
 class TheSessions(unittest.TestCase):
     def test_no_login_knows_nobody(self):
-        self.assertIsNone(session.NoLogin().identify({"x-hub-test-login": "1001:alice", "cookie": "a=b"}))
+        self.assertIsNone(identify(session.NoLogin(), {"x-hub-test-login": "1001:alice", "cookie": "a=b"}))
 
     def test_the_test_login_reads_one_header(self):
         login = session.TestLogin()
         self.assertTrue(login.login)
-        self.assertEqual(login.identify({"x-hub-test-login": "1001:alice"}), ALICE)
-        self.assertEqual(login.identify({"x-hub-test-login": "1003:newbie:young"}), YOUNG)
-        for bad in ("", "1001", "1001:", ":alice", "x:alice", "1001:Alice", "1001:a", "1001:alice:old", "1001:alice:young:x", "1001:ali ce", "1" * 21 + ":alice", "1001:alice\n"):
-            self.assertIsNone(login.identify({"x-hub-test-login": bad}), bad)
-        self.assertIsNone(login.identify({}))
+        self.assertEqual(identify(login, {"x-hub-test-login": "1001:alice"}), ALICE)
+        self.assertEqual(identify(login, {"x-hub-test-login": "1003:newbie:young"}), YOUNG)
+        for bad in ("", "1001", "1001:", ":alice", "x:alice", "1001:Alice", "1001:a", "1001:alice:old", "1001:alice:young:x", "1001:ali ce", "1" * 21 + ":alice", "1001:alice\n", "0:alice", "01001:alice"):
+            self.assertIsNone(identify(login, {"x-hub-test-login": bad}), bad)
+        self.assertIsNone(identify(login, {}))
+
+    def test_identify_is_a_coroutine_so_that_a_real_login_can_look_something_up(self):
+        import inspect
+        for sessions in (session.Sessions(), session.NoLogin(), session.TestLogin()):
+            self.assertTrue(inspect.iscoroutinefunction(sessions.identify), type(sessions).__name__)
 
 
 class TheCommandLine(unittest.TestCase):
@@ -778,6 +1020,34 @@ class TheCommandLine(unittest.TestCase):
         self.assertEqual(self.run_admin("frobnicate")[0], 2)
         self.assertEqual(self.run_admin()[0], 2)
         self.assertEqual(self.run_admin("del", "x")[0], 2)
+
+    def test_a_number_that_cannot_be_a_line_is_a_wrong_use_and_not_a_traceback(self):
+        for number in ("99999999999999999999", "0", "-3", str(2 ** 62), str(2 ** 63)):
+            status, _, err = self.run_admin("del", number)
+            self.assertEqual(status, 2, number)
+            self.assertIn("LINE_ID", err)
+
+    def test_an_account_id_with_a_leading_zero_makes_no_phantom_ban(self):
+        for command in (("ban", "00012"), ("mute", "007", "5"), ("unban", "0123")):
+            self.assertEqual(self.run_admin(*command)[0], 1, command)
+        store = storemod.Store(self.db)
+        self.addCleanup(store.close)
+        self.assertEqual((store.bans(), store.mutes()), ([], []))
+
+    def test_a_database_that_refuses_the_write_is_a_message_and_not_a_traceback(self):
+        for command in (("ban", "alice"), ("mute", "alice", "5"), ("del", "1"), ("unban", "1001")):
+            with mock.patch.object(storemod.Store, "transaction", side_effect=sqlite3.OperationalError("database or disk is full")):
+                status, out, err = self.run_admin(*command)
+            self.assertEqual((status, out), (1, ""), command)
+            self.assertEqual(err, "hub.admin: the database refused it (OperationalError)\n", command)
+
+    def test_a_file_that_is_not_a_database_is_a_message_too(self):
+        path = os.path.join(self.folder.name, "garbage.db")
+        with open(path, "wb") as f:
+            f.write(b"this is not a database at all" * 10)
+        out, err = io.StringIO(), io.StringIO()
+        self.assertEqual(admin.run(["--db", path, "list"], out, err), 1)
+        self.assertIn("the database cannot be opened", err.getvalue())
 
     def test_del(self):
         status, out, _ = self.run_admin("del", "1")

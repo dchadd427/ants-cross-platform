@@ -11,6 +11,7 @@ import os
 import random
 import struct
 import sys
+import time
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -335,6 +336,39 @@ class TheRequestReader(unittest.TestCase):
         self.refused(b"\r\n\r\n")
         self.refused(b"GET /hub/ws HTTP/1.1\r\nnocolon\r\n\r\n")
         self.refused(b"GET /hub/ws HTTP/1.1\r\n\r\n"[:-2])
+
+    def test_a_bare_line_feed_after_a_line_is_refused(self):
+        self.refused(b"GET /hub/ws HTTP/1.1\n\r\nHost: x\r\n\r\n")                           # (the end of a text, which `$` would accept before a last line feed, is not a line end)
+        self.refused(b"GET /hub/ws HTTP/1.1\r\nHost: x\n\r\n\r\n")
+        self.refused(b"GET /hub/ws HTTP/1.1\r\nHost: x\r\nX-A: b\n\r\n\r\n")
+
+    def test_the_blanks_around_a_value_are_not_part_of_it(self):
+        head = http.parse_head(b"GET /hub/ws HTTP/1.1\r\nX-A:   v  w \t \r\nX-B:\r\nX-C:\t\tz\r\n\r\n")
+        self.assertEqual((head.headers["x-a"], head.headers["x-b"], head.headers["x-c"]), ("v  w", "", "z"))
+
+    def test_a_long_run_of_blanks_costs_nothing(self):
+        # a header line is read in one pass: a pattern that cut the blanks around the value itself took a quarter of a second on one like this, on the one thread that serves every socket
+        for tail in ("b", "\x01", "b\x01", "\t", " "):
+            head = b"GET /hub/ws HTTP/1.1\r\nCookie: a" + b" " * 7600 + tail.encode() + b"\r\nHost: x\r\n\r\n"
+            best = 1.0
+            for _ in range(3):
+                started = time.perf_counter()
+                try:
+                    http.parse_head(head)
+                except http.HttpError:
+                    pass
+                best = min(best, time.perf_counter() - started)
+            self.assertLess(best, 0.05, "a head with %r after 7600 blanks took %.3f s" % (tail, best))
+        # the same for every header name that is believed, and for a request line with a long path
+        for name in ("Origin", "Sec-Fetch-Site", "Cookie", "X-Client-Address"):
+            head = ("GET /hub/ws HTTP/1.1\r\n%s: a%s\x01\r\n\r\n" % (name, " " * 7500)).encode("latin-1")
+            started = time.perf_counter()
+            with self.assertRaises(http.HttpError):
+                http.parse_head(head)
+            self.assertLess(time.perf_counter() - started, 0.05, name)
+        started = time.perf_counter()
+        http.parse_head(b"GET /" + b"a" * 1990 + b" HTTP/1.1\r\n\r\n")
+        self.assertLess(time.perf_counter() - started, 0.05)
 
     def test_a_header_that_is_believed_may_not_be_repeated(self):
         for name in ("Origin: https://chat.example.org", "Upgrade: websocket", "Connection: Upgrade", "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==", "Sec-WebSocket-Version: 13",

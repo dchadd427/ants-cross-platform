@@ -9,7 +9,7 @@ import re
 
 MAX_HEADERS = 60
 REQUEST_LINE = re.compile(r"([A-Z]{1,10}) (/[!-~]{0,1999}) HTTP/1\.[01]\Z")
-HEADER_LINE = re.compile(r"([!#$%&'*+.^_`|~0-9A-Za-z-]+):[ \t]*([\t\x20-\x7e\x80-\xff]*?)[ \t]*\Z")
+HEADER_LINE = re.compile(r"([!#$%&'*+.^_`|~0-9A-Za-z-]+):([\t\x20-\x7e\x80-\xff]*)\Z")        # (the blanks around the value are cut after the match: a pattern that did it itself backtracked, quadratically, on a long run of blanks)
 ONCE = frozenset(("origin", "upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "x-client-address", "content-length", "transfer-encoding", "host",
                   "cookie", "x-hub-test-login"))
 REASONS = {101: "Switching Protocols", 200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 408: "Request Timeout",
@@ -55,7 +55,7 @@ def parse_head(head):
         h = HEADER_LINE.match(line)
         if not h:
             raise HttpError(400, "header")
-        name, value = h.group(1).lower(), h.group(2)
+        name, value = h.group(1).lower(), h.group(2).strip(" \t")
         if name in headers:
             if name in ONCE:
                 raise HttpError(400, "repeated_" + name.replace("-", "_"))

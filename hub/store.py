@@ -11,13 +11,15 @@ import sqlite3
 import time
 
 Line = collections.namedtuple("Line", "id at account name text mod")
-SCHEMA = 1
+SCHEMA = 2
 
 
 class Store:
     def __init__(self, path, clock=time.time, retention_days=7):
+        self.path = path
         self.clock = clock
         self.retention = retention_days * 86400
+        self.unsettled = False                      # True while the log file could not be cut because a reader held it
         new = not os.path.exists(path)
         self.db = sqlite3.connect(path, timeout=5.0, isolation_level=None)
         self.db.execute("PRAGMA journal_mode=WAL")
@@ -51,6 +53,13 @@ class Store:
                 CREATE TABLE IF NOT EXISTS bans (account TEXT PRIMARY KEY, at INTEGER NOT NULL, by TEXT NOT NULL, name TEXT NOT NULL);
                 PRAGMA user_version = 1;
                 COMMIT;""")
+        if version < 2:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL);
+                INSERT OR IGNORE INTO meta (k, v) SELECT 'del_seq', COALESCE(MAX(del_seq), 0) FROM lines;
+                PRAGMA user_version = 2;
+                COMMIT;""")
 
     def close(self):
         self.db.close()
@@ -80,18 +89,22 @@ class Store:
         return [Line(*r) for r in reversed(rows)]
 
     def delete_line(self, line_id, by):
-        """Mark a line deleted; False when there is no such line or it was deleted already."""
+        """Mark a line deleted; False when there is no such line or it was deleted already. Every deletion gets the next number of a counter that nothing lowers (a purge of old
+        lines does not), so the hub, which asks for the deletions after the last number it knows, never misses one."""
         with self.transaction():
-            seq = self.db.execute("SELECT COALESCE(MAX(del_seq), 0) + 1 FROM lines").fetchone()[0]
-            cur = self.db.execute("UPDATE lines SET deleted = 1, del_seq = ?, del_by = ? WHERE id = ? AND deleted = 0", (seq, by, line_id))
-        return cur.rowcount == 1
+            if self.db.execute("SELECT 1 FROM lines WHERE id = ? AND deleted = 0", (line_id,)).fetchone() is None:
+                return False
+            self.db.execute("UPDATE meta SET v = v + 1 WHERE k = 'del_seq'")
+            seq = self.last_deletion()
+            self.db.execute("UPDATE lines SET deleted = 1, del_seq = ?, del_by = ? WHERE id = ?", (seq, by, line_id))
+            return True
 
     def deletions_since(self, seq):
         """[(del_seq, id)] of the lines deleted after `seq`, in order."""
         return self.db.execute("SELECT del_seq, id FROM lines WHERE del_seq > ? ORDER BY del_seq", (seq,)).fetchall()
 
     def last_deletion(self):
-        return self.db.execute("SELECT COALESCE(MAX(del_seq), 0) FROM lines").fetchone()[0]
+        return self.db.execute("SELECT v FROM meta WHERE k = 'del_seq'").fetchone()[0]
 
     def account_of_name(self, name):
         """The account that last spoke under this name (names are unique among live accounts, but a rename frees one), or None."""
@@ -106,15 +119,35 @@ class Store:
         """The newest `count` lines with their state, newest first (for the command line)."""
         return self.db.execute("SELECT id, at, account, name, text, deleted FROM lines ORDER BY id DESC LIMIT ?", (count,)).fetchall()
 
-    def purge(self):
-        """Delete the lines that are past their time and the mutes that are over; returns how many lines went."""
+    def purge(self, chunk=2000):
+        """Delete up to `chunk` lines that are past their time (call again while it returns `chunk`: a long backlog is not one long wait) and the mutes that are over, then cut the log
+        file. Returns how many lines went."""
         now = int(self.clock())
         with self.transaction():
-            gone = self.db.execute("DELETE FROM lines WHERE at < ?", (now - self.retention,)).rowcount
+            gone = self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE at < ? LIMIT ?)", (now - self.retention, chunk)).rowcount
             self.db.execute("DELETE FROM mutes WHERE until <= ?", (now,))
-        if gone:
-            self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        self.checkpoint()
         return gone
+
+    def checkpoint(self):
+        """Cut the log file, so that what was deleted is in neither file. False when a reader holds it (`unsettled` says so until a later call succeeds)."""
+        self.db.execute("PRAGMA busy_timeout=0")                # (the hub's one thread must not wait for a reader here: a later call tries again)
+        try:
+            busy = self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+        finally:
+            self.db.execute("PRAGMA busy_timeout=5000")
+        self.unsettled = bool(busy)
+        return not busy
+
+    def size(self):
+        """Bytes of hub.db and its log file."""
+        total = 0
+        for path in (self.path, self.path + "-wal"):
+            try:
+                total += os.path.getsize(path)
+            except OSError:
+                pass
+        return total
 
     # ---- mutes and bans -------------------------------------------------------------------------------------------------------------------
 

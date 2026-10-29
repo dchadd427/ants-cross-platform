@@ -31,6 +31,7 @@ class Peer:
         self.last_rx = now
         self.last_ping = now
         self.closed = False
+        self.closed_at = None                       # when it was closed (the hub cuts a closed socket whose output is still unsent after a while)
 
     def send_text(self, data):
         self.write(ws.encode_frame(ws.TEXT, data))
@@ -45,6 +46,7 @@ class Peer:
         if self.writer.transport.get_write_buffer_size() > self.hub.limits.write_buffer_max:
             self.hub.log.event("drop", why="slow", tag=self.tag)
             self.closed = True
+            self.closed_at = self.hub.clock()
             self.writer.transport.abort()
             return
         self.writer.write(frame)
@@ -54,6 +56,7 @@ class Peer:
         if self.closed:
             return
         self.closed = True
+        self.closed_at = self.hub.clock()
         self.hub.log.event("close", code=code, tag=self.tag)
         self.writer.write(ws.encode_close(code, reason))
         self.writer.close()
@@ -97,7 +100,7 @@ class Hub:
         self.port = None
         self.online_shown = 0
         self.online_at = float("-inf")
-        self.next_deletions = self.next_forget = self.next_purge = float("-inf")
+        self.next_deletions = self.next_forget = self.next_purge = self.next_checkpoint = self.next_crowded = float("-inf")
 
     async def start(self, host, port):
         self.server = await asyncio.start_server(self.handle, host, port, limit=8192, backlog=128)
@@ -134,7 +137,7 @@ class Hub:
                 return writer.write(http.response(200, {"ok": True}))
             if request.path != WS_PATH:
                 raise http.HttpError(404, "not_found")
-            peer = self.upgrade(request, reader, writer)
+            peer = await self.upgrade(request, reader, writer)
             self.pending -= 1
             pending = False
             await peer.run(reader)
@@ -157,7 +160,7 @@ class Hub:
                 self.log.event("gone", tag=peer.tag, online=len(self.chat.peers))
             writer.close()
 
-    def upgrade(self, request, reader, writer):
+    async def upgrade(self, request, reader, writer):
         """Check the handshake and take the socket in: an HttpError says no; otherwise the 101 and the welcome are written and the Peer is returned."""
         h = request.headers
         if request.method != "GET":
@@ -179,17 +182,28 @@ class Hub:
         address = limitmod.address_key(h.get("x-client-address"), peername[0] if peername else "")
         if not self.per_address.try_add(address):
             raise http.HttpError(429, "address", {"Retry-After": "10"})
-        peer = Peer(self, writer, address, self.log.tag(address), self.identify(h), self.clock())
-        self.chat.peers.add(peer)
-        writer.write(http.response(101, headers={"Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Accept": ws.accept_key(key)}))
-        peer.send_text(chatmod.dumps(self.chat.welcome(peer)))
+        peer = None
+        try:                                                         # (the place of the address is given back whatever goes wrong from here)
+            identity = await self.identify(h)
+            if len(self.chat.peers) >= self.limits.sockets_total:      # (others were let in while the login layer was asked)
+                raise http.HttpError(503, "full", {"Retry-After": "30"})
+            peer = Peer(self, writer, address, self.log.tag(address), identity, self.clock())
+            self.chat.peers.add(peer)
+            writer.write(http.response(101, headers={"Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Accept": ws.accept_key(key)}))
+            peer.send_text(chatmod.dumps(self.chat.welcome(peer)))
+        except BaseException:
+            self.per_address.remove(address)
+            if peer is not None:
+                peer.closed = True
+                self.chat.peers.discard(peer)
+            raise
         self.log.event("open", tag=peer.tag, online=len(self.chat.peers), account="yes" if peer.identity else "no")
         return peer
 
-    def identify(self, headers):
+    async def identify(self, headers):
         try:
-            who = self.sessions.identify(headers)
-        except Exception as e:
+            who = await asyncio.wait_for(self.sessions.identify(headers), self.limits.identify_seconds)
+        except Exception as e:                                       # (a login that fails or is late: the visitor reads, and cannot write)
             self.log.event("error", kind=type(e).__name__, where="session")
             return None
         if who is not None and configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.name):
@@ -208,7 +222,10 @@ class Hub:
 
     def on_tick(self, now):
         for peer in list(self.chat.peers):
-            if now - peer.last_rx >= self.limits.silence_seconds:
+            if peer.closed:
+                if peer.closed_at is not None and now - peer.closed_at >= self.limits.close_grace_seconds:
+                    peer.writer.transport.abort()                     # (a closed socket whose reader never takes the rest of the output would stay for ever)
+            elif now - peer.last_rx >= self.limits.silence_seconds:
                 peer.close(1001, "silent")
             elif now - peer.last_ping >= self.limits.ping_seconds:
                 peer.last_ping = now
@@ -224,10 +241,19 @@ class Hub:
             self.next_forget = now + 60.0
             self.chat.account_limits.forget_idle(now)
         if now >= self.next_purge:
-            self.next_purge = now + self.limits.purge_seconds
-            gone = self.store.purge()
+            gone = self.store.purge(self.limits.purge_chunk)
+            self.next_purge = now + (self.limits.tick_seconds if gone >= self.limits.purge_chunk else self.limits.purge_seconds)      # (a long backlog goes a chunk at a time)
+            self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
             if gone:
                 self.log.event("purge", lines=gone)
+        elif self.store.unsettled and now >= self.next_checkpoint:
+            self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
+            self.store.checkpoint()
+        if now >= self.next_crowded:
+            self.next_crowded = now + self.limits.crowded_log_seconds
+            biggest = max(self.per_address.counts.values(), default=0)
+            if biggest > self.limits.crowded_sockets:
+                self.log.event("crowded", sockets=biggest, groups=len(self.per_address.counts))      # (no address: see docs/HUB.md, "Behind a reverse proxy")
 
 
 async def serve(cfg, store, sessions, log):
@@ -251,10 +277,12 @@ def main(env=None):
         return 2
     log = Log()
     log.event("start", **cfg.summary())
+    log.event("note", what="sockets_are_counted_for_each_X-Client-Address_that_nginx_sets_see_docs/HUB.md")
     if cfg.test_login:
         log.event("warning", what="test_login_is_on")
     store = storemod.Store(cfg.db)
     try:
+        store.checkpoint()                  # (what a crash left in the log file)
         asyncio.run(serve(cfg, store, sessionmod.make(cfg), log))
     finally:
         store.close()

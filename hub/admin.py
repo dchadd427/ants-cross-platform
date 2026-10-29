@@ -6,12 +6,13 @@
     docker exec ants-hub python -m hub.admin unban ACCOUNT
     docker exec ants-hub python -m hub.admin del LINE_ID
 
-ACCOUNT is an account id (digits), or a name that has said something in the last 7 days (written @name when the name is all digits). It works on hub.db directly (ANTS_HUB_DB or
+ACCOUNT is an account id (digits, no leading zero), or a name that has said something in the last 7 days (written @name when the name is all digits). It works on hub.db directly (ANTS_HUB_DB or
 --db), so the running hub needs no network door for it: a mute or a ban counts from the next line the account says, and a deleted line is taken off every screen within two seconds.
 Exit status: 0 done, 1 nothing to do (no such account, line or ban), 2 wrong use.
 """
 import argparse
 import os
+import sqlite3
 import sys
 import time
 
@@ -69,10 +70,17 @@ def run(argv, out=None, err=None, env=None):
     if args.command == "mute" and not 0 <= args.minutes <= MAX_MINUTES:
         err.write("hub.admin: MINUTES is 0 to %d\n" % MAX_MINUTES)
         return 2
+    if args.command == "del" and not 0 < args.line_id < 2 ** 62:
+        err.write("hub.admin: LINE_ID is a number from 1\n")
+        return 2
     if not os.path.exists(args.db):
         err.write("hub.admin: no database at that path (is the hub's volume mounted?)\n")
         return 1
-    store = storemod.Store(args.db)
+    try:
+        store = storemod.Store(args.db)
+    except (sqlite3.Error, RuntimeError) as e:
+        err.write("hub.admin: the database cannot be opened (%s)\n" % type(e).__name__)
+        return 1
     try:
         if args.command == "list":
             show(store, max(0, min(args.lines, 500)), out)
@@ -99,6 +107,9 @@ def run(argv, out=None, err=None, env=None):
                 return 1
             out.write("%s unbanned\n" % account)
         return 0
+    except sqlite3.Error as e:                                  # (a full disk, a locked file: a message and not a traceback)
+        err.write("hub.admin: the database refused it (%s)\n" % type(e).__name__)
+        return 1
     finally:
         store.close()
 

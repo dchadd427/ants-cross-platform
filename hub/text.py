@@ -7,7 +7,7 @@ The rules, in order:
      (Co), characters no Unicode version of this Python has assigned (Cn), and the letters that draw as blanks (the Hangul fillers, the braille blank, the combining grapheme joiner, the
      Khmer inherent vowels). So nothing is left that reorders the text or hides in it.
   4. More than MAX_MARKS combining marks in a row are cut (a column of them would overlap the lines above and below).
-  5. Nothing left: 'empty'. More than 200 code points or 800 bytes: 'long'. A '<' or '>': 'bad' (no markup; the page uses textContent only, shows no link and makes no mention).
+  5. Nothing left, or nothing but combining marks (a variation selector shows nothing by itself): 'empty'. More than 200 code points or 800 bytes: 'long'. A '<' or '>': 'bad' (no markup; the page uses textContent only, shows no link and makes no mention).
 The check for '<' and '>' is made on the result, after the hiding places are gone.
 """
 import re
@@ -48,7 +48,7 @@ def clean_line(raw):
             marks = 0
             out.append(ch)
     text = unicodedata.normalize("NFC", "".join(out)).strip(" ")        # (again: a mark that the removed characters kept from its letter composes with it now)
-    if not text:
+    if not any(c != " " and not unicodedata.category(c).startswith("M") for c in text):       # (marks alone, as the variation selectors are, show nothing)
         return None, "empty"
     if len(text) > MAX_CODE_POINTS or len(text.encode("utf-8")) > MAX_BYTES:
         return None, "long"

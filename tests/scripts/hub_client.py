@@ -101,6 +101,7 @@ class Client:
             assert self.reply_headers.get("sec-websocket-accept") == expect, "wrong Sec-WebSocket-Accept"
 
     def send(self, data):
+        self.sock.settimeout(self.timeout)                  # (a read with no wait leaves the socket not blocking, and a write on it could fail for a full buffer)
         self.sock.sendall(data)
 
     def say(self, text):

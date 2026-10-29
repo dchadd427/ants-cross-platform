@@ -5,7 +5,7 @@ import ipaddress
 import re
 from urllib.parse import urlsplit
 
-ACCOUNT_ID = re.compile(r"[0-9]{1,20}\Z")
+ACCOUNT_ID = re.compile(r"[1-9][0-9]{0,19}\Z")           # a Discord id: digits, no leading zero
 
 
 class ConfigError(Exception):
@@ -32,13 +32,18 @@ def parse_origin(url):
     """'https://beta.example.org/' -> 'https://beta.example.org' (the form a browser sends in Origin)."""
     if not url:
         return ""
-    parts = urlsplit(url.strip())
-    if parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.password or parts.path not in ("", "/") or parts.query or parts.fragment:
-        raise ConfigError("ANTS_HUB_PUBLIC_URL must be like https://example.org (a scheme and a host, nothing else)")
-    host = parts.hostname.lower()
+    problem = ConfigError("ANTS_HUB_PUBLIC_URL must be like https://example.org (a scheme and a host, nothing else)")
+    try:
+        parts = urlsplit(url.strip())
+        port = parts.port
+        host = parts.hostname
+    except ValueError:                                              # (a port that is not a number, an unclosed bracket)
+        raise problem
+    if parts.scheme not in ("http", "https") or not host or parts.username or parts.password or parts.path not in ("", "/") or parts.query or parts.fragment:
+        raise problem
+    host = host.lower()
     if ":" in host:
         host = "[%s]" % host
-    port = parts.port
     default = {"http": 80, "https": 443}[parts.scheme]
     return "%s://%s%s" % (parts.scheme, host, "" if port in (None, default) else ":%d" % port)
 

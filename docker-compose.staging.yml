@@ -90,6 +90,12 @@ services:
     mem_limit: 192m
     tmpfs:
       - /tmp
+    # the hub writes a few lines for each connection: the log is kept small (docker's own default keeps all of it)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   ants-staging-results:

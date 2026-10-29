@@ -109,6 +109,12 @@ class TheServices(unittest.TestCase):
             self.assertNotIn("ANTS_BUILD_ID", hub, name)
             self.assertNotIn("expose:", hub, name)
 
+    def test_its_log_is_kept_small_in_both_stacks(self):
+        for name, text in self.files.items():
+            hub = service(text, "ants-hub")
+            self.assertRegex(hub, r"logging:\s*\n\s+driver: json-file\s*\n\s+options:\s*\n\s+max-size: \"\d+m\"\s*\n\s+max-file: \"\d+\"", name)
+            self.assertNotIn("logging:", service(text, "ants-server"), name)          # (the other services are as they were)
+
     def test_its_volume_and_network_are_its_own(self):
         stack_hub, staging_hub = service(self.files["stack"], "ants-hub"), service(self.files["staging"], "ants-hub")
         self.assertIn("- ants-hub-data:/data", stack_hub)
@@ -140,6 +146,16 @@ class TheServices(unittest.TestCase):
             server = service(text, "ants-server")
             self.assertNotIn("HUB", server, name)
             self.assertIn("pids_limit: 64", server, name)
+
+    @unittest.skipUnless(shutil.which("docker"), "docker is needed")
+    def test_compose_renders_the_hub_with_a_log_that_rotates(self):
+        for path in (STACK, STAGING):
+            done = subprocess.run(["docker", "compose", "-f", path, "config", "--format", "json"], capture_output=True, text=True)
+            if done.returncode != 0:
+                self.skipTest("docker compose is not available: " + done.stderr[:200])
+            logging = json.loads(done.stdout)["services"]["ants-hub"]["logging"]
+            self.assertEqual(logging["driver"], "json-file")
+            self.assertEqual(logging["options"], {"max-size": "10m", "max-file": "3"})
 
     @unittest.skipUnless(shutil.which("docker"), "docker is needed")
     def test_compose_renders_the_hub_with_no_published_port(self):
@@ -194,13 +210,17 @@ class TheCode(unittest.TestCase):
     def test_the_documented_limits_are_the_ones_in_the_code(self):
         doc = read(os.path.join(REPO, "docs", "HUB.md"))
         defaults = limitmod.Limits()
+        for needle in ("5 lines a second (a burst of 50)", "64 MB", "2,000 lines", "closed with output still unsent is cut after 5 seconds", "5 seconds to answer", "5 new sockets a second"):
+            self.assertIn(needle, doc, needle)
+        self.assertEqual((defaults.global_burst, defaults.global_refill_seconds, defaults.db_max_bytes, defaults.purge_chunk, defaults.close_grace_seconds, defaults.identify_seconds,
+                          defaults.checkpoint_retry_seconds, defaults.crowded_sockets), (50, 0.2, 64 * 1024 * 1024, 2000, 5.0, 5.0, 10.0, 6))
         for needle in ("2 KB", "200 code points", "800 bytes", "burst of 3", "every 2 seconds", "30 seconds", "20 within a minute", "8 for each client address", "500 in all", "every 25 seconds",
-                       "60 seconds", "last 50 lines", "7 days", "256 KB"):
+                       "60 seconds", "last 50 lines", "7 days", "128 KB"):
             self.assertIn(needle, doc, needle)
         self.assertEqual((defaults.frame_max, defaults.line_code_points, defaults.line_bytes, defaults.history_lines, defaults.retention_days, defaults.burst, defaults.refill_seconds,
                           defaults.duplicate_seconds, defaults.violations, defaults.violation_window, defaults.sockets_per_address, defaults.sockets_total, defaults.ping_seconds,
                           defaults.silence_seconds, defaults.write_buffer_max),
-                         (2048, 200, 800, 50, 7, 3, 2.0, 30.0, 20, 60.0, 8, 500, 25.0, 60.0, 262144))
+                         (2048, 200, 800, 50, 7, 3, 2.0, 30.0, 20, 60.0, 8, 500, 25.0, 60.0, 131072))
 
 
 class TheWiring(unittest.TestCase):

@@ -28,7 +28,16 @@ class Limits:
     tick_seconds: float = 1.0
     deletions_seconds: float = 2.0      # how often the lines that the command line deleted are looked for
     purge_seconds: float = 3600.0       # how often the lines past their 7 days are deleted
-    write_buffer_max: int = 262144      # a socket that has this much unsent is dropped (it cannot keep up)
+    write_buffer_max: int = 131072      # a socket that has this much unsent is dropped (it cannot keep up); 500 of them stay well inside the container's memory
+    close_grace_seconds: float = 5.0    # a socket that was closed with output unsent is cut after this long
+    identify_seconds: float = 5.0       # the login layer has this long to say who is at the other end of a handshake
+    global_burst: int = 50              # lines that all accounts together may say at once ...
+    global_refill_seconds: float = 0.2  # ... then five a second (what the database is asked to keep)
+    db_max_bytes: int = 67108864        # no new chat line is kept once hub.db and its log file hold this much (mutes, bans and deletions are never refused for it)
+    purge_chunk: int = 2000             # lines deleted at a time when they are past their 7 days
+    checkpoint_retry_seconds: float = 10.0      # how soon the database's log file is cut again when a reader held it
+    crowded_sockets: int = 6            # more sockets than this from one address group is logged (all visitors may share one address, docs/HUB.md)
+    crowded_log_seconds: float = 60.0
 
 
 class TokenBucket:
@@ -42,10 +51,14 @@ class TokenBucket:
         self.tokens = float(burst)
         self.at = now
 
-    def take(self, now):
+    def ready(self, now):
+        """Whether take() would succeed now (nothing is spent)."""
         self.tokens = min(self.burst, self.tokens + max(0.0, now - self.at) / self.refill)
         self.at = now
-        if self.tokens >= 1.0:
+        return self.tokens >= 1.0
+
+    def take(self, now):
+        if self.ready(now):
             self.tokens -= 1.0
             return True
         return False

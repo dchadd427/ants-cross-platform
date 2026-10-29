@@ -5,6 +5,7 @@ the wire), and the real process (`python -m hub`) with its log read for secrets.
 Most classes run the hub in a thread of this process (tests/scripts/hub_rig.py) with the timers shortened; the last one starts it as the image does and talks to it with the command line.
 The client is tests/scripts/hub_client.py, which shares no code with the hub. Reproducible (fixed seeds); ANTS_HUB_FUZZ_SCALE=10 runs ten times more.
 """
+import asyncio
 import io
 import json
 import os
@@ -27,11 +28,11 @@ sys.path.insert(0, HERE)
 import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
 import test_hub_ws  # noqa: E402  (its random streams are the fuzz here too)
-from hub import limits as limitmod, server, ws  # noqa: E402
+from hub import config as configmod, limits as limitmod, log as logmod, server, session as sessionmod, store as storemod, ws  # noqa: E402
 
 SCALE = int(os.environ.get("ANTS_HUB_FUZZ_SCALE", "1"))
 FAST = dict(tick_seconds=0.05, deletions_seconds=0.2, online_seconds=0.2)
-LOOSE = dict(burst=1000, refill_seconds=0.001, frame_burst=1000, frame_refill_seconds=0.001)       # (limits out of the way, for tests of something else)
+LOOSE = dict(burst=1000, refill_seconds=0.001, frame_burst=1000, frame_refill_seconds=0.001, global_burst=1000, global_refill_seconds=0.001)       # (limits out of the way, for tests of something else)
 
 
 def status_of(port, **kw):
@@ -522,7 +523,7 @@ class TheBadIdentity(RigTest):
             def __init__(self, who):
                 self.who = who
 
-            def identify(self, headers):
+            async def identify(self, headers):
                 if self.who == "raise":
                     raise RuntimeError("boom with a secret")
                 return self.who
@@ -538,6 +539,124 @@ class TheBadIdentity(RigTest):
         c = hc.Client(self.rig.port)
         self.clients.append(c)
         self.assertEqual(c.recv_json()["you"], {"name": "alice", "mod": False})
+
+
+class TheLoginLayerIsAskedAndMayBeSlow(RigTest):
+    rig_args = dict(identify_seconds=0.3)
+
+    def test_a_login_that_is_late_is_a_reader_and_the_hub_goes_on(self):
+        class Slow:
+            login = True
+
+            async def identify(self, headers):
+                await asyncio.sleep(2.0)
+                return sessionmod.Identity("1001", "alice", False)
+
+        self.rig.hub.sessions = Slow()
+        started = time.monotonic()
+        c = hc.Client(self.rig.port)
+        self.clients.append(c)
+        self.assertLess(time.monotonic() - started, 1.5)
+        self.assertIsNone(c.recv_json()["you"])
+        self.assertIn(" error kind=TimeoutError where=session", self.rig.log_text.getvalue())
+        self.rig.hub.sessions = sessionmod.TestLogin()
+        self.assertEqual(self.connect("1002:bob").status, "HTTP/1.1 101 Switching Protocols")
+
+    def test_the_hub_serves_others_while_one_login_is_being_asked(self):
+        gate = []
+
+        class Waiting:
+            login = True
+
+            async def identify(self, headers):
+                if headers.get("x-hub-test-login") == "1001:slow":
+                    await asyncio.sleep(0.25)
+                return None
+
+        self.rig.hub.sessions = Waiting()
+        slow = threading.Thread(target=lambda: gate.append(hc.Client(self.rig.port, login="1001:slow")))
+        slow.start()
+        time.sleep(0.05)
+        started = time.monotonic()
+        quick = hc.Client(self.rig.port)                               # a handshake that arrives meanwhile is not held up behind it
+        self.clients.append(quick)
+        self.assertLess(time.monotonic() - started, 0.2)
+        slow.join()
+        self.clients.extend(gate)
+
+    def test_a_place_is_given_back_when_the_handshake_fails_after_the_address_was_counted(self):
+        def broken_welcome(peer):
+            raise RuntimeError("the welcome could not be made")
+
+        self.rig.hub.chat.welcome = broken_welcome
+        for _ in range(3):
+            c = hc.Client(self.rig.port)
+            self.clients.append(c)
+        self.assertTrue(self.settle(lambda: self.rig.hub.per_address.counts == {} and len(self.rig.hub.chat.peers) == 0, 3), (self.rig.hub.per_address.counts, len(self.rig.hub.chat.peers)))
+        self.assertTrue(self.settle(lambda: self.rig.hub.pending == 0))
+        self.assertIn(" error kind=RuntimeError", self.rig.log_text.getvalue())
+
+
+class TheLoginRace(RigTest):
+    rig_args = dict(sockets_total=1, identify_seconds=2.0)
+
+    def test_the_last_place_is_given_once_when_two_handshakes_wait_for_the_login_layer(self):
+        class Waiting:
+            login = True
+
+            async def identify(self, headers):
+                await asyncio.sleep(0.3)
+                return None
+
+        self.rig.hub.sessions = Waiting()
+        results = []
+        threads = [threading.Thread(target=lambda: results.append(hc.Client(self.rig.port, headers={"X-Client-Address": "203.0.113.%d" % (n + 1)}))) for n in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.clients.extend(results)
+        self.assertEqual(sorted(c.status.split()[1] for c in results), ["101", "503"])
+        self.assertEqual(len(self.rig.hub.chat.peers), 1)
+
+
+class TheHubTidiesTheDatabase(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.store = storemod.Store(os.path.join(self.folder.name, "hub.db"))
+        self.addCleanup(self.store.close)
+        self.hub = server.Hub(configmod.load({"ANTS_HUB_PUBLIC_URL": hc.SITE}), self.store, sessionmod.NoLogin(), logmod.Log(io.StringIO()),
+                              limitmod.Limits(purge_chunk=10, purge_seconds=3600.0, tick_seconds=1.0, checkpoint_retry_seconds=10.0), clock=lambda: 0.0)
+        self.purges, self.checkpoints = [], []
+        self.hub.store.purge = lambda chunk: self.purges.append(chunk) or self.purged
+        self.hub.store.checkpoint = lambda: self.checkpoints.append(1) or True
+        self.purged = 0
+        self.hub.next_purge = 0.0                                     # the first purge has been done
+
+    def test_a_full_chunk_is_followed_by_another_at_the_next_tick(self):
+        self.hub.next_purge = float("-inf")
+        self.purged = 10
+        self.hub.on_tick(100.0)
+        self.assertEqual(self.purges, [10])
+        self.assertEqual(self.hub.next_purge, 101.0)
+        self.purged = 3
+        self.hub.on_tick(101.0)
+        self.assertEqual(self.hub.next_purge, 101.0 + 3600.0)
+
+    def test_a_log_file_that_a_reader_held_is_cut_again_every_ten_seconds(self):
+        self.hub.next_purge = 10 ** 9
+        self.hub.next_checkpoint = float("-inf")
+        self.store.unsettled = False
+        self.hub.on_tick(100.0)
+        self.assertEqual(self.checkpoints, [])                          # nothing to cut again
+        self.store.unsettled = True
+        self.hub.on_tick(101.0)
+        self.assertEqual(self.checkpoints, [1])
+        self.hub.on_tick(105.0)
+        self.assertEqual(self.checkpoints, [1])                         # not before ten seconds have passed
+        self.hub.on_tick(111.0)
+        self.assertEqual(self.checkpoints, [1, 1])
 
 
 class FakeTransport:
@@ -599,6 +718,108 @@ class TheSlowReader(unittest.TestCase):
         peer.send_text(b"{}")
         self.assertFalse(writer.transport.aborted)
         self.assertEqual(writer.written, [b"\x81\x02{}"])
+
+
+class TheClosedSocketsAreCut(unittest.TestCase):
+    """A socket that was closed with output the other side never takes would stay for ever: the hub cuts it after a while."""
+
+    def hub(self, clock):
+        cfg = configmod.load({"ANTS_HUB_PUBLIC_URL": hc.SITE})
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        store = storemod.Store(os.path.join(self.folder.name, "hub.db"))
+        self.addCleanup(store.close)
+        return server.Hub(cfg, store, sessionmod.NoLogin(), logmod.Log(io.StringIO()), limitmod.Limits(close_grace_seconds=5.0), clock=clock)
+
+    def test_the_socket_is_aborted_five_seconds_after_the_close(self):
+        now = [100.0]
+        hub = self.hub(lambda: now[0])
+        writer = FakeWriter(50000)
+        peer = server.Peer(hub, writer, "k", "tag", None, now[0])
+        hub.chat.peers.add(peer)
+        peer.close(1001, "going")
+        self.assertTrue(peer.closed)
+        hub.on_tick(now[0] + 4.9)
+        self.assertFalse(writer.transport.aborted)
+        hub.on_tick(now[0] + 5.0)
+        self.assertTrue(writer.transport.aborted)
+
+    def test_an_open_socket_is_not_cut(self):
+        now = [100.0]
+        hub = self.hub(lambda: now[0])
+        writer = FakeWriter(0)
+        peer = server.Peer(hub, writer, "k", "tag", None, now[0])
+        hub.chat.peers.add(peer)
+        hub.on_tick(now[0] + 30.0)
+        self.assertFalse(writer.transport.aborted)
+        self.assertFalse(peer.closed)
+
+
+class TheStuckReader(RigTest):
+    rig_args = dict(LOOSE, burst=10 ** 6, global_burst=10 ** 6, frame_burst=10 ** 6, write_buffer_max=10 ** 9, close_grace_seconds=0.5, tick_seconds=0.05, online_seconds=1000.0)
+
+    def test_a_reader_that_never_reads_does_not_keep_its_place_after_it_was_closed(self):
+        stuck = socket.socket()
+        stuck.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024)
+        stuck.connect(("127.0.0.1", self.rig.port))
+        self.addCleanup(stuck.close)
+        request, _ = hc.handshake_request(headers={"X-Client-Address": "198.51.100.77"})
+        stuck.sendall(request)                                         # and never another call to recv
+        speaker = self.connect("1001:alice")
+        self.assertTrue(self.settle(lambda: len(self.rig.hub.chat.peers) == 2))
+        text = "x" * 190
+        sent = 0
+        while sent < 60000:                                            # the lines pile up in front of the stuck socket until the kernel's buffers are full and the hub's own begins to fill
+            for _ in range(100):
+                speaker.say("%d %s" % (sent, text))
+                sent += 1
+            speaker.drain(0.0)
+            peers = self.rig.call(lambda: [p for p in self.rig.hub.chat.peers if p.identity is None])
+            if peers and self.rig.call(lambda: peers[0].writer.transport.get_write_buffer_size()) > 0:
+                break
+        else:
+            self.skipTest("this machine's sockets took 60,000 lines without filling")
+        victim = peers[0]
+        self.rig.call(victim.close, 1001, "test")
+        self.assertTrue(self.settle(lambda: victim not in self.rig.hub.chat.peers, 5), "the closed socket is still among the peers")
+        self.assertTrue(self.settle(lambda: "198.51.100.77" not in self.rig.hub.per_address.counts, 5))
+
+
+class TheCrowdIsLogged(RigTest):
+    rig_args = dict(crowded_sockets=2, crowded_log_seconds=0.2, tick_seconds=0.05)
+
+    def test_many_sockets_of_one_address_group_make_a_line_without_the_address(self):
+        for n in range(4):
+            self.connect(headers={"X-Client-Address": "203.0.113.9"})
+        self.connect(headers={"X-Client-Address": "203.0.113.50"})
+        self.assertTrue(self.settle(lambda: " crowded sockets=4 groups=2" in self.rig.log_text.getvalue()), self.rig.log_text.getvalue())
+        self.assertNotIn("203.0.113", self.rig.log_text.getvalue())
+
+    def test_a_few_sockets_make_no_line(self):
+        self.connect(headers={"X-Client-Address": "203.0.113.9"})
+        self.connect(headers={"X-Client-Address": "203.0.113.9"})
+        time.sleep(0.6)
+        self.assertNotIn(" crowded ", self.rig.log_text.getvalue())
+
+
+class TheBacklogIsPurgedInChunks(RigTest):
+    rig_args = dict(purge_chunk=100, purge_seconds=3600.0, tick_seconds=0.05, deletions_seconds=100.0)
+
+    def test_old_lines_go_a_chunk_at_a_time_while_the_hub_serves(self):
+        old = storemod.Store(self.rig.db, clock=lambda: time.time() - 8 * 86400)
+        for n in range(350):
+            old.add_line("1", "ann", "old line %d" % n, False)
+        old.close()
+        fresh = storemod.Store(self.rig.db)
+        fresh.add_line("1", "ann", "fresh line", False)
+        fresh.close()
+        c = self.connect()
+        self.assertTrue(self.settle(lambda: self.log_events().count("purge") >= 4, 10), self.rig.log_text.getvalue())
+        self.assertEqual(sorted(set(re.findall(r" purge lines=(\d+)", self.rig.log_text.getvalue()))), ["100", "50"])
+        left = self.rig.call(lambda: self.rig.store.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0])
+        self.assertEqual(left, 1)
+        c.say("hello")                                                 # (and the hub answers meanwhile)
+        self.assertIn({"t": "err", "code": "login"}, c.drain(0.5))
 
 
 class TheFuzzOnTheWire(RigTest):
@@ -786,6 +1007,7 @@ class TheProcess(unittest.TestCase):
         proc2.wait(10)
         for path in (log_path, log2):
             text = read_text(path)
+            self.assertIn(" note what=sockets_are_counted_for_each_X-Client-Address", text)          # (the dependence on the proxy setting is said at every start)
             self.assertIn(" listening port=", text)
             self.assertIn(" open ", text)
             for canary in (self.SECRET, self.CLIENT_ID, "5551234567", "5559876543", self.COOKIE, "canary-cookie", chat_text, "hello again", "203.0.113.77", "127.0.0.1", "6101", "alice", "moddy",
