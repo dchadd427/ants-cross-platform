@@ -463,34 +463,66 @@ class TheLockedDatabaseOnTheWire(RigTest):
     """The review's finding: a write lock that another process holds for longer than the hub waits (0.3 seconds) made the line or the moderator's command raise, and the sender was cut off with 1011."""
     rig_args = dict(LOOSE, mods="9001", **FAST)
 
+    @staticmethod
+    def wait_for(client, wanted, seconds=8.0):
+        """The messages that come until one of them is `wanted` (a function), or the time is out: a slow machine delays an answer, and a silence of a second is not yet no answer."""
+        seen, end = [], time.monotonic() + seconds
+        while not any(wanted(m) for m in seen) and time.monotonic() < end:
+            try:
+                seen.append(client.recv_json(min(1.0, max(0.05, end - time.monotonic()))))
+            except (socket.timeout, BlockingIOError):
+                pass
+            except EOFError:
+                break
+        return seen
+
+    def assert_the_write_lock_is_held(self):
+        """The test's own premise: another connection of this machine cannot start a write now (the hub's connection is no different from it)."""
+        probe = sqlite3.connect(self.rig.db, timeout=0.05, isolation_level=None)
+        try:
+            with self.assertRaises(sqlite3.OperationalError):
+                probe.execute("BEGIN IMMEDIATE")
+        finally:
+            probe.close()
+
     def test_a_line_and_a_command_that_could_not_be_written_are_answered_and_the_socket_stays(self):
         alice, mod, reader = self.connect("1001:alice"), self.connect("9001:moddy"), self.connect()
         blocker = sqlite3.connect(self.rig.db, isolation_level=None)                  # (an administrator's tool that hangs while it holds the write lock)
         self.addCleanup(blocker.close)
         blocker.execute("BEGIN IMMEDIATE")
+        self.assert_the_write_lock_is_held()
         started = time.monotonic()
         alice.say("hello")
         self.assertEqual(next(m for m in iter(alice.recv_json, None) if m["t"] == "err"), {"t": "err", "code": "rate"})
         self.assertGreater(time.monotonic() - started, 0.25)                           # (it waited its 0.3 seconds, and no longer)
         self.assertLess(time.monotonic() - started, 2.5)
+        self.assert_the_write_lock_is_held()
         mod.say("/mute alice 5")
-        self.assertIn({"t": "err", "code": "bad"}, mod.drain(1.2))
+        seen = self.wait_for(mod, lambda m: m == {"t": "err", "code": "bad"})
+        self.assertIn({"t": "err", "code": "bad"}, seen, "the moderator was not answered: it heard %r, the mutes of the database are %r (the command went through if there is one), the log:\n%s"
+                      % (seen, blocker.execute("SELECT account FROM mutes").fetchall(), self.rig.log_text.getvalue()))
         alice.send(hc.frame(1, b'{"t":"ping"}'))
-        self.assertIn("online", [m["t"] for m in alice.drain(0.4)])                    # (the socket is open and answers)
+        self.assertIn("online", [m["t"] for m in self.wait_for(alice, lambda m: m["t"] == "online")])      # (the socket is open and answers)
         self.assertEqual([m for m in reader.drain(0.3) if m["t"] == "line"], [])
+        self.assert_the_write_lock_is_held()
         blocker.execute("ROLLBACK")
         alice.say("hello")
-        self.assertEqual(next(m for m in reader.drain(0.5) if m["t"] == "line")["text"], "hello")      # (the same text, at once: its token and its place in the 30 seconds were not used up)
+        self.assertEqual(next(m for m in self.wait_for(reader, lambda m: m["t"] == "line") if m["t"] == "line")["text"], "hello")      # (the same text, at once: its token and its place in the 30 seconds were not used up)
         mod.say("/mute alice 5")
-        time.sleep(0.2)
-        alice.drain(0.2)
-        alice.say("after the mute")
-        self.assertIn({"t": "err", "code": "muted"}, alice.drain(0.5))
+        self.assertIn({"t": "err", "code": "muted"}, self.say_until_muted(alice))
         log = self.rig.log_text.getvalue()
         self.assertEqual(log.count(" error kind=OperationalError where=store"), 1)       # (one line for the two failures that came within ten seconds, the class of the error and nothing of the text)
         self.assertNotIn("hello", log)
         self.assertNotIn("alice", log)
         self.assertNotIn("1011", log)
+
+    def say_until_muted(self, client):
+        """What a client hears while it says a line every half second until it is told that it is muted (the moderator's command is a moment away on a slow machine)."""
+        heard, end = [], time.monotonic() + 8.0
+        while {"t": "err", "code": "muted"} not in heard and time.monotonic() < end:
+            client.say("after the mute %d" % len(heard))
+            heard += client.drain(0.5)
+        return heard
 
     def test_the_reads_of_a_busy_database_do_not_cut_the_socket_either(self):
         alice = self.connect("1001:alice")
