@@ -1083,6 +1083,23 @@ class TheProcess(unittest.TestCase):
             for line in text.splitlines():
                 self.assertRegex(line, r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ [a-z_]+( [a-z_]+=[A-Za-z0-9_.:/-]*)*$", line)
 
+    def test_the_log_file_that_a_crash_left_is_cut_before_the_first_connection(self):
+        import shutil
+        before = tempfile.mkdtemp(prefix="hub-crash-")
+        self.addCleanup(shutil.rmtree, before, ignore_errors=True)
+        source = os.path.join(before, "source.db")
+        store = storemod.Store(source)
+        store.add_line("1001", "ann", "left in the log file", False)
+        crashed = os.path.join(before, "hub.db")
+        shutil.copy(source, crashed)
+        shutil.copy(source + "-wal", crashed + "-wal")                    # the two files as a crash would leave them: the line only in the log file
+        store.close()
+        self.assertGreater(os.path.getsize(crashed + "-wal"), 0)
+        proc, port, folder, log_path, env = self.run_hub(db=crashed)
+        self.assertEqual(os.path.getsize(crashed + "-wal"), 0)             # (before the clock of the hub has ticked once: that is a second away)
+        c = self.client(port)
+        self.assertEqual([h["text"] for h in c.recv_json()["history"]], ["left in the log file"])
+
     def test_a_deployment_that_enables_the_test_login_for_the_network_does_not_start(self):
         proc, folder, log_path, env = start_process({"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_HOST": "0.0.0.0"})
         self.procs.append(proc)

@@ -1776,13 +1776,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   },
   {
-   "id": "review2_n07_closed_at_not_set_by_slow_drop",
-   "file": "hub/server.py",
-   "old": "            self.closed = True\n            self.closed_at = self.hub.clock()\n            self.writer.transport.abort()",
-   "new": "            self.closed = True\n            self.writer.transport.abort()",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
-  },
-  {
    "id": "review2_n08_bucket_ready_spends",
    "file": "hub/limits.py",
    "old": "        self.at = now\n        return self.tokens >= 1.0",

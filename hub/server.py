@@ -46,8 +46,7 @@ class Peer:
         if self.writer.transport.get_write_buffer_size() > self.hub.limits.write_buffer_max:
             self.hub.log.event("drop", why="slow", tag=self.tag)
             self.closed = True
-            self.closed_at = self.hub.clock()
-            self.writer.transport.abort()
+            self.writer.transport.abort()                # (cut at once: there is no grace to wait for)
             return
         self.writer.write(frame)
 
