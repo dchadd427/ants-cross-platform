@@ -2,7 +2,8 @@
 // clock and a scripted game server (FakeSocket: env.arrive() opens the newest socket and plays a Welcome and a Room), or any WebSocket that is handed in (options.WebSocket, with options.realTime: the
 // real clock; tests/scripts/web_lobby_server_check.js runs the page against a real ants_server this way). One page per runLobby(search, stored, options):
 //   search: the address's query; stored: what local storage holds (THROWS: a browser that refuses its storage); options: session (what this tab's session storage holds), noSession, clipboard (false:
-//   none), copyResult, share, fetch, noFetch, ua, random (what Math.random() says: 0.5), hash (the address's #...), noWebSocket, WebSocket, realTime, noHome (without web/home/home.js: the page says that it could not load all of
+//   none), copyResult, share, fetch, noFetch, ua, random (what Math.random() says: 0.5), hash (the address's #...), innerHeight and innerWidth, historyThrows (a sandboxed frame: the history takes no
+//   entry), picker (the map list's script is loaded too), noWebSocket, WebSocket, realTime, noHome (without web/home/home.js: the page says that it could not load all of
 //   its parts), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room).
 // Used by tests/scripts/web_name_check.js (the page's rules, its name card, its room), tests/scripts/web_home_screen_check.js (Home and the Room) and tests/scripts/web_lobby_server_check.js.
 'use strict';
@@ -166,6 +167,7 @@ function runLobby(search, stored, options) {
         body: new El(env, 'body', ''),
         getElementById(id) { if (!env.elements[id]) throw new Error('the page asked for #' + id + ', which its markup does not have'); return env.elements[id]; },
         createElement(tag) { return new El(env, tag, ''); },
+        querySelector(selector) { return selector === 'header.mast' ? env.mast : null; },       // (the old logo row has no id in the markup: a stand-in that the page can set an attribute on)
         createTextNode(text) { return { isText: true, textContent: String(text), parent: null }; },
         activeElement: null,
         elementFromPoint() { return null; },
@@ -180,6 +182,8 @@ function runLobby(search, stored, options) {
         removeEventListener() {},
     };
     env.doc = doc;
+    env.mast = new El(env, 'header', '');
+    env.mast.className = 'mast';
     const data = stored === THROWS ? {} : Object.assign({}, stored);
     const storage = {
         data,
@@ -206,8 +210,8 @@ function runLobby(search, stored, options) {
     const history = {
         get state() { return entries[at].state; },
         get length() { return entries.length; },
-        replaceState(...a) { if (a[2] !== undefined && a[2] !== entries[at].url) env.replaced.push(a); else env.marked.push(a); entries[at] = { state: a[0], url: a[2] === undefined ? entries[at].url : a[2] }; if (a[2] !== undefined) goTo(a[2]); },
-        pushState(...a) { env.pushed.push(a); entries.splice(at + 1); entries.push({ state: a[0], url: a[2] === undefined ? entries[at].url : a[2] }); at++; if (a[2] !== undefined) goTo(a[2]); },
+        replaceState(...a) { if (options.historyThrows) throw new Error('a sandboxed frame'); if (a[2] !== undefined && a[2] !== entries[at].url) env.replaced.push(a); else env.marked.push(a); entries[at] = { state: a[0], url: a[2] === undefined ? entries[at].url : a[2] }; if (a[2] !== undefined) goTo(a[2]); },
+        pushState(...a) { if (options.historyThrows) throw new Error('a sandboxed frame'); env.pushed.push(a); entries.splice(at + 1); entries.push({ state: a[0], url: a[2] === undefined ? entries[at].url : a[2] }); at++; if (a[2] !== undefined) goTo(a[2]); },
     };
     env.entries = entries;
     env.move = (step) => { const to = at + step; if (to < 0 || to >= entries.length) return false; at = to; goTo(entries[at].url); (win.listeners.popstate || []).forEach((fn) => fn({ state: entries[at].state })); return true; };
@@ -220,6 +224,7 @@ function runLobby(search, stored, options) {
         listeners: {},
         addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); },
         removeEventListener() {},
+        innerHeight: options.innerHeight || 800, innerWidth: options.innerWidth || 1280,
         scrollTo(x, y) { env.scrolled.push([x, y]); },
         open(url, name, features) { env.opened.push({ url, name, features }); return { closed: false, focus() {} }; },
         confirm(q) { env.confirms.push(q); return true; },
@@ -255,6 +260,7 @@ function runLobby(search, stored, options) {
     win.AntsRematch = loadFront('rematch.js', scope).AntsRematch;
     win.AntsGameModes = loadFront('game_modes.js', scope).AntsGameModes;
     win.AntsGameType = loadFront('game_type.js', scope).AntsGameType;
+    if (options.picker) { win.AntsMapPicker = loadFront('map_picker.js', scope).AntsMapPicker; win.AbortController = AbortController; win.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} }); }
     if (!options.noHome) win.AntsHome = loadFile('home/home.js', scope).AntsHome;
     const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };
     if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then() {} }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
@@ -267,6 +273,7 @@ function runLobby(search, stored, options) {
     const network = options.fetch || (() => Promise.reject(new Error('the test has no network')));
     const fetchSpy = options.noFetch ? undefined : (url, init) => { env.fetches.push({ url, init }); return network(url, init); };
     const fakeMath = Object.assign(Object.create(Math), { random: () => (options.random === undefined ? 0.5 : options.random) });     // (the page's picked name, and the order of its random names, are the same on every run)
+    if (options.picker) { win.fetch = fetchSpy; globalThis.AntsMapPicker = win.AntsMapPicker; }       // (the page asks for the list's script and for fetch on window, and names the list's script as a global)
     new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', 'clearTimeout', 'fetch', 'BroadcastChannel', 'Math', lobbyScript)(win, doc, history, nav, () => 0, scope.setTimeout, scope.clearTimeout, fetchSpy, undefined, fakeMath);
     env.storage = storage;
     env.session = session;

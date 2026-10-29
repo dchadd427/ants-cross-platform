@@ -1,6 +1,5 @@
-/* The two screens of the front page (web/home/home.js, docs/HOME_SCREEN.md): Home (the top bar over a stand-in picture of the Yard) and the Room (today's room card under a slim bar). The page is one document:
-   <body data-screen="home|room"> says which one shows. The colors, the .btn bevel and the ants' sheet are the page's own (web/lobby.html: the tokens on :root, .btn, .ant); the picture is CSS and two small
-   pictures drawn as data (no file). The stand-in is replaced by the Yard, which mounts into #yard. Every target is at least 44 px high and wide. */
+/* The front page's two screens (web/home/home.js, docs/HOME_SCREEN.md): <body data-screen="home|room"> says which shows. The colors, .btn and .ant are the page's own (web/lobby.html). The Yard
+   stand-in is CSS and two small pictures drawn as data; the Yard mounts into #yard. Every target is at least 44 px high and wide. */
 
 /* ---- which screen shows ---- */
 body[data-screen="home"] main.wrap, body[data-screen="home"] .bar { display: none; }
@@ -8,11 +7,13 @@ body[data-screen="room"] #home { display: none; }
 .mast { display: none; }                                    /* the old logo row: its buttons are in the Menu now, and the slim bar below has the logo */
 .strips { flex: none; padding-top: 0; padding-bottom: 0; }
 .strips > :not([hidden]) { margin-top: 16px; margin-bottom: 0; }
-body[data-screen="home"] .screen { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
+body[data-screen="home"] { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }       /* (a strip above the page, "Back from the match", takes its height out of the screen's) */
+body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 
 /* ---- Home: the top bar ---- */
 .hbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 30px 12px; }
+.hbrand { margin: 0; font: inherit; line-height: 0; flex: none; }
 .hlogo, .rbar .hlogo { display: block; width: 116px; height: auto; flex: none; }
 .hbar .btn { min-height: 46px; padding: 6px 16px; font-size: 16px; }
 .hbar .quick { min-height: 52px; padding: 6px 22px 6px 18px; font-size: 20px; letter-spacing: .1em; text-transform: uppercase; gap: 10px; }
@@ -60,7 +61,7 @@ body[data-screen="home"] .screen { height: 100vh; height: 100dvh; min-height: 0;
 .leave:hover { background-color: #2a1713; }
 
 /* ---- the Menu ---- */
-.hmenubox { position: fixed; right: 10px; z-index: 60; width: min(316px, calc(100vw - 20px)); padding: 6px 16px 12px; color: var(--cream); background: #050b0e; border: 3px solid var(--frame);
+.hmenubox { position: fixed; right: 10px; z-index: 60; width: min(316px, calc(100vw - 20px)); max-height: calc(100vh - 90px); max-height: calc(100dvh - 90px); overflow-y: auto; overscroll-behavior: contain; padding: 6px 16px 12px; color: var(--cream); background: #050b0e; border: 3px solid var(--frame);
     border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
 .hmenubox a, .hmenubox button.mitem { display: flex; align-items: center; min-height: 48px; padding: 0 4px; font-size: 18px; text-decoration: none; text-align: left; color: var(--cream); background: none; border: 0; border-bottom: 1px solid #1d3a31; cursor: pointer; width: 100%; }
 .hmenubox a:hover, .hmenubox button.mitem:hover { background: #0e1f1b; }
@@ -72,7 +73,7 @@ body[data-screen="home"] .screen { height: 100vh; height: 100dvh; min-height: 0;
 /* ---- a phone upright: three rows ---- */
 @media (max-width: 720px) and (orientation: portrait) {
     .hbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; padding: 12px 16px 10px; }
-    .hbar .hlogo { width: 92px; align-self: center; }
+    .hbar .hbrand { align-self: center; } .hbar .hlogo { width: 92px; }
     .hbar .hright { grid-column: 2; grid-row: 1; margin-left: 0; justify-self: end; }
     .hbar .quick { grid-row: 2; min-height: 50px; padding: 6px 8px; font-size: 17px; letter-spacing: .06em; }
     .hbar .quick.host { grid-column: 1; } .hbar .quick.join { grid-column: 2; }
@@ -97,6 +98,11 @@ body[data-screen="home"] .screen { height: 100vh; height: 100dvh; min-height: 0;
     .ytitle { font-size: 16px; } .yline { display: none; } .yres { margin-top: 2px; }
     .ytag { top: 41%; } .y1 { top: 60%; } .y2 { top: 76%; } .y3 { top: 70%; } .y4 { top: 60%; } .y5 { top: 76%; }
     .rbar { min-height: 52px; margin-bottom: 6px; }
+}
+/* ---- a narrow phone (360 and 320 px): the Room's bar gives the logo what is left */
+@media (max-width: 389px) {
+    .rbar { gap: 6px; } .rbar .btn { padding: 6px 8px; font-size: 15px; }
+    .rbar .hbrand { flex: 1 1 0; min-width: 40px; max-width: 76px; } .rbar .hlogo { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .yant .ant { animation: none; } }
 @media (min-width: 721px) and (min-height: 501px) { .yant { --k: 2; } }

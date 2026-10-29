@@ -59,6 +59,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
 import web_rejoin_check as rejoin                                            # noqa: E402  (its Server: the site's game server of this tree; its Player: a person's own browser)
 from web_aspect_check import Browser, NotReachable, Tab                    # noqa: E402
+from web_front_room import press_my_room                                     # noqa: E402
 
 # The browsers of this check are a 1440 x 900 screen unless a part says otherwise: a first visit starts in the shape nearest to it (web/shapes.js, firstVisit; web_aspect_check.py's oracle),
 # and the front page hands a shape on to the game only when the player picked one.
@@ -242,8 +243,8 @@ def lobby_of(t):
 
 def seated(t):
     """The page is in its room: the room has welcomed it (the colors are not greyed out) and a person sits in a color. A plain visit opens on Home and makes no room (docs/HOME_SCREEN.md): the first
-    time that this asks about a page that holds no room, it presses My room, as a person does."""
-    t.ev("(function () { var b = document.querySelector('.hbar .mine'); if (b && document.body.getAttribute('data-screen') === 'home' && !b.getAttribute('data-pressed') && !sessionStorage.getItem('ants.lobby')) { b.setAttribute('data-pressed', '1'); b.click(); } return 1; })()")
+    time that this asks about a page that holds no room, it presses My room, as a person does (web_front_room.py)."""
+    press_my_room(t.ev)
     return bool(t.ev("!document.body.classList.contains('offline') && !!document.querySelector('#slots li.k-person')"))
 
 

@@ -86,7 +86,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("            Home.sync();\n        }\n        function paintCard", page, "render() ends with Home's look at the room (the count of My room)")
         self.assertIn("handing = true; Home.opening();", page, "the hand-off to the game says it on Home, in the same breath as it starts")
         self.assertIn("Home.inert(on); }", page, "the dialog of the map list makes Home's bars inert too")
-        self.assertIn("window.history.replaceState(window.history.state, '', window.location.pathname.replace(/^\\/+/, '/') + window.location.hash)", page, "stripping the room's code from the address keeps the screen's entry and hash")
+        self.assertIn("window.history.replaceState(window.history.state, '', window.location.pathname.replace(/^\\/+/, '/') + (Home.screen() === 'room' ? '#room' : ''))", page, "stripping the room's code from the address keeps the screen's entry and names the screen that is up")
         self.assertEqual(page.count("AntsHome.mount("), 1)
 
     def test_the_hand_off_does_not_look_at_the_screen(self):
@@ -98,8 +98,21 @@ class ThePage(unittest.TestCase):
     def test_leaving_the_room_forgets_it_and_the_page_asks_for_nothing_else_of_home(self):
         mount = self.page[self.page.index("AntsHome.mount("):]
         mount = mount[:mount.index("// ---- go ----")]
+        self.assertIn("leave: function () { if (handing) return; var old = client;", mount, "a page that is on its way to the game gives its seat up to nobody")
         self.assertIn("if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render();", mount)
         self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how):", mount))), ["how", "info", "leave", "make"])
+
+    def test_the_words_that_said_that_a_page_makes_a_room_when_it_opens_are_corrected(self):
+        page = self.page
+        self.assertNotIn("Open the page and your room is ready", page)
+        self.assertNotIn("where a new room is ready", page)
+        self.assertNotIn("Back finds a room again", page)
+        self.assertNotIn("A plain visit makes a room", page)
+        self.assertNotIn("ready when the page opens", read("docker", "nginx.conf"))
+        self.assertNotIn("ready when the page opens", read("docs", "PLAY_IN_BROWSER.md"))
+
+    def test_the_coffee_picture_of_the_footer_that_is_not_shown_on_home_is_lazy(self):
+        self.assertRegex(self.page, r'<img src="https://cdn\.buymeacoffee\.com/[^"]*" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous" loading="lazy">')
 
     def test_the_page_is_under_its_line_limit(self):
         self.assertLessEqual(len(self.page.split("\n")) - 1, LINES, "tools/check_hygiene.py: the page's line limit")
@@ -143,7 +156,20 @@ class TheStyle(unittest.TestCase):
         self.assertIn('body[data-screen="home"] main.wrap, body[data-screen="home"] .bar { display: none; }', css)
         self.assertIn('body[data-screen="room"] #home { display: none; }', css)
         self.assertRegex(css, r"\.mast \{ display: none; \}")
-        self.assertRegex(css, r'body\[data-screen="home"\] \.screen \{ height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; \}')
+        self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; \}')
+        self.assertRegex(css, r'body\[data-screen="home"\] \.screen \{ flex: 1 1 auto; min-height: 0; overflow: hidden; \}')
+
+    def test_the_rooms_bar_gives_the_logo_what_is_left_on_a_narrow_phone(self):
+        match = re.search(r"@media \(max-width: 389px\) \{(.*?)\n\}", self.css, re.S)
+        self.assertIsNotNone(match, "a rule for 360 and 320 px (the bar does not fit at its size for a wider phone)")
+        self.assertIn(".rbar .hbrand { flex: 1 1 0; min-width: 40px; max-width: 76px; } .rbar .hlogo { width: 100%; }", match.group(1))
+
+    def test_the_menu_scrolls_inside_itself_when_the_window_is_short(self):
+        box = next(body for selector, body in self.rules if selector.strip() == ".hmenubox")
+        self.assertIn("overflow-y: auto;", box)
+        self.assertIn("overscroll-behavior: contain;", box)
+        self.assertRegex(box, r"max-height: calc\(100vh - \d+px\); max-height: calc\(100dvh - \d+px\);")
+        self.assertIn("position: fixed;", box)
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         heights = {}
@@ -200,7 +226,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
     FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
-             "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_maker_link.js")]
+             "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 
     @classmethod
     def setUpClass(cls):

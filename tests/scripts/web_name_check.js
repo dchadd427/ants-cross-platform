@@ -653,7 +653,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     check('... the address stays the link (nothing replaced) and no strip is shown', none.replaced.length === 0 && none.$('banner').hidden);
     none.$('name-step-own').click();
     const mine = none.last().open().sent[0];
-    check('... "Start a room of my own instead" then makes a room of its own under the same name (a new code, no key, the lobby block) and puts the plain address in the bar', none.sockets.length === 2 && none.$('name-step').hidden && CODE.test(helloRoom(mine)) && helloRoom(mine) !== 'k7m2xq' && hex(mine) === hex(helloBytes('Zed', helloRoom(mine))) && none.replaced.length === 1 && none.replaced[0][2] === '/');
+    check('... "Start a room of my own instead" then makes a room of its own under the same name (a new code, no key, the lobby block) and puts the address of the Room ("/#room": no link in it) in the bar', none.sockets.length === 2 && none.$('name-step').hidden && CODE.test(helloRoom(mine)) && helloRoom(mine) !== 'k7m2xq' && hex(mine) === hex(helloBytes('Zed', helloRoom(mine))) && none.replaced.length === 1 && none.replaced[0][2] === '/#room');
     const retry = link('Zed');
     retry.last().receive(reject(6));
     retry.$('name-step-go').click();
@@ -691,7 +691,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
         e.last().open().receive(reject(reason));
         const next = e.last().open().sent[0];
         check('a link to a room that is ' + what + ': the page makes a room of its own under the same name (a new code, no key), and the strip says why', e.sockets.length === 2 && CODE.test(helloRoom(next)) && helloRoom(next) !== 'k7m2xq' && hex(next) === hex(helloBytes('Zed', helloRoom(next))) && e.$('banner-text').textContent === sentence, e.$('banner-text').textContent);
-        check('... and its address is the plain page again (the link is no longer in the bar)', e.replaced.length === 1 && e.replaced[0][2] === '/');
+        check('... and its address is the Room\'s, "/#room" (the link is no longer in the bar)', e.replaced.length === 1 && e.replaced[0][2] === '/#room');
     }
     const kicked = runLobby('', { 'ants.name': 'Sam' });
     kicked.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } }).receive(reject(4));
@@ -703,7 +703,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' });
     env.$('name-step-own').click();
     const hello = env.last().open().sent[0];
-    check('"Start a room of my own instead" closes the card, makes a room of the visitor\'s own (a new code, the remembered name) and puts the plain address in the bar', env.$('name-step').hidden && env.sockets.length === 1 && CODE.test(helloRoom(hello)) && helloRoom(hello) !== 'k7m2xq' && hex(hello) === hex(helloBytes('Maya', helloRoom(hello))) && env.replaced.length === 1 && env.replaced[0][2] === '/');
+    check('"Start a room of my own instead" closes the card, makes a room of the visitor\'s own (a new code, the remembered name) and puts the address of the Room ("/#room": no link in it) in the bar', env.$('name-step').hidden && env.sockets.length === 1 && CODE.test(helloRoom(hello)) && helloRoom(hello) !== 'k7m2xq' && hex(hello) === hex(helloBytes('Maya', helloRoom(hello))) && env.replaced.length === 1 && env.replaced[0][2] === '/#room');
     const kept = { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Maya', o: 1 }) };
     const env2 = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: kept });
     check('a tab that has a room of its own is asked first too, and nothing connects before the card is done (the own room waits)', !env2.$('name-step').hidden && env2.sockets.length === 0);
