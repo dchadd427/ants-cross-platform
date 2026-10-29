@@ -474,10 +474,12 @@ public:
     void clear_clip_rect() override;
     /// The ant health marks (health_marks.hpp; renderer_health.cpp): which ants wear a bar or a number, and how many picture pixels stand for one CSS pixel of the page (a canvas that is shown
     /// small gets thicker bars). A renderer draws none until it is asked (the application asks every frame). Style Number is the original's own Ctrl+L number: white digits at the ant's lower right.
-    void set_health_marks(health::Setting setting, double picture_px_per_css = 1.0);
+    /// `scale_digits` false (the native build) keeps the number the original's whatever the density: only the bars follow it
+    void set_health_marks(health::Setting setting, double picture_px_per_css = 1.0, bool scale_digits = true);
     health::Setting health_marks() const noexcept { return health_; }
     /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
-    void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color);
+    /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y)); `outline` first draws the glyph in black one scaled pixel round (the phone look, health_marks.hpp: digit_scale)
+    void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale = 1, bool outline = false);
     static constexpr int32_t kFixedCellW = 8;
     static constexpr int32_t kFixedCellH = 15;
     void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override;
@@ -658,6 +660,8 @@ private:
     uint8_t hud_team_id_{0};
     health::Setting health_{health::When::Off, health::Style::Bar};
     bool health_thick_{false};
+    int32_t digit_scale_{1};          // the number's size and look on a canvas shown small (health::digit_scale / digit_outlined)
+    bool digit_outline_{false};
     ScreenLayout layout_{ScreenLayout::classic()};
     int32_t canvas_w_{CANVAS_WIDTH};
     int32_t canvas_h_{CANVAS_HEIGHT};

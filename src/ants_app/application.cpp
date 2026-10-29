@@ -949,6 +949,13 @@ bool Application::init(const ApplicationConfig& config) {
     return true;
 }
 
+// The numbers grow on a small canvas in the browser only (a phone: the CSS-pixel density); a native window of any size keeps the original's digits
+#if defined(__EMSCRIPTEN__)
+static constexpr bool kPhoneDigits = true;
+#else
+static constexpr bool kPhoneDigits = false;
+#endif
+
 void Application::set_layout(const ScreenLayout& layout) {
     layout_ = layout;
     update_picture();
@@ -3122,7 +3129,7 @@ void Application::render_frame() {
         sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
         const auto& world = view.get_world_state();
         sync_game_menu_settings();                           // (Ctrl+L flipped the health marks: remembered)
-        renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css);
+        renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);
         renderer_->render_world(world, view.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,

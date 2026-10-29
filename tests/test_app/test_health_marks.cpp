@@ -11,6 +11,8 @@
 #include <SDL.h>
 
 #include <cmath>
+#include <limits>
+#include <cstring>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -73,6 +75,19 @@ void test_rule() {
             check(!hm::shown_number(hm::When::Off, hp, max_hp, false) && !hm::shown_number(hm::When::Hurt, hp, max_hp, true) && !hm::shown_number(hm::When::All, hp, max_hp, true), "Off and a frozen ant: no number, hp " + num(hp));
         }
     }
+    // the number on a small canvas: scale = ceil(0.8 x picture pixels per CSS pixel) from 1.25, and the outline with it
+    struct D { double per_css; int scale; bool outline; };
+    for (const D& d : {D{1.0, 1, false}, D{1.24, 1, false}, D{1.249, 1, false}, D{1.25, 1, true}, D{1.26, 2, true}, D{1.5, 2, true}, D{2.0, 2, true}, D{2.14, 2, true}, D{2.5, 2, true}, D{2.51, 3, true},
+                       D{2.77, 3, true}, D{3.0, 3, true}, D{3.1, 3, true}, D{3.75, 3, true}, D{3.76, 4, true}, D{9.0, 4, true}, D{0.5, 1, false}, D{0.0, 1, false}}) {
+        check(hm::digit_scale(d.per_css) == d.scale && hm::digit_outlined(d.per_css) == d.outline, "the number at " + std::to_string(d.per_css) + " picture pixels per CSS pixel: x" + num(d.scale) + (d.outline ? ", outlined" : ", plain"));
+    }
+    // the edges of the arithmetic: no value makes an overflow or a scale outside 1..4
+    const double inf = std::numeric_limits<double>::infinity(), nan = std::numeric_limits<double>::quiet_NaN();
+    for (const double v : {inf, 1e300, std::numeric_limits<double>::max()}) check(hm::digit_scale(v) == 4 && hm::digit_outlined(v), "an absurd density (" + std::to_string(v) + ") is the largest scale, not an overflow");
+    for (const double v : {-inf, -1e300, -1.0, -0.0, 0.0, nan}) check(hm::digit_scale(v) == 1 && !hm::digit_outlined(v), "a density that is none, negative or NaN is the original's number");
+    // (an exact edge is on the lower scale; one step above it is on the next: 0.8 x 2.5 = 2, 0.8 x 3.75 = 3)
+    check(hm::digit_scale(2.5) == 2 && hm::digit_scale(std::nextafter(2.5, 3.0)) == 3 && hm::digit_scale(3.75) == 3 && hm::digit_scale(std::nextafter(3.75, 4.0)) == 4, "the edges 2.5 and 3.75 belong to the lower scale, the next double above to the higher");
+    check(hm::digit_scale(std::nextafter(1.25, 0.0)) == 1 && !hm::digit_outlined(std::nextafter(1.25, 0.0)) && hm::digit_outlined(1.25), "1.25 is where the phone rule starts, to the last bit");
     check(!hm::thick_for(1.0) && !hm::thick_for(2.0) && hm::thick_for(2.01) && hm::thick_for(3.0), "a canvas shown at less than half its size (more than 2 picture pixels for a CSS pixel) gets thick bars");
 }
 
@@ -305,6 +320,72 @@ void test_numbers(const assets::AssetArchive& arc) {
     check(ten.n > 20 && ten.x0 >= sx && ten.x1 < sx + 16 && ten.y0 >= sy && ten.y1 < sy + 15, "All ants, Number: a 10 is two digits at the lower right of the ant's position, inside its 16 x 15 cells: " + num(ten.x0 - sx) + ".." + num(ten.x1 - sx) + " x " + num(ten.y0 - sy) + ".." + num(ten.y1 - sy));
 }
 
+// The number on a canvas that is shown small (a phone): every font pixel is scale x scale, the glyph's top left stays at the ant's position, white, with a black outline of one scaled pixel round it.
+// The reference is the plain (x1) glyph of the same picture, enlarged here by hand.
+void test_phone_numbers(const assets::AssetArchive& arc) {
+    std::printf("[phone numbers] the number scaled by the canvas's density, outlined, anchored where the original's is\n");
+    PixelRig rig(arc, "MEDIUM", kWideW, kWideH);
+    check(rig.ok, "the rig is up");
+    if (!rig.ok) return;
+    rig.world.ants = {ant(1, 0, 600, 500, 7), ant(2, 1, 800, 500, 10)};
+    struct Case { double per_css; int scale; bool outline; };
+    for (const float z : {1.0f, 0.5f}) {
+        rig.look(500.0, 400.0, z);
+        const Picture none = rig.shoot_with(kOff);
+        const Picture plain = rig.shoot_with(kHurtNumber, 1.0);
+        check(delta(plain, rig.shoot_with(kHurtNumber, 1.24)).n == 0, "zoom " + std::to_string(z) + ": 1.24 picture pixels per CSS pixel is the original's picture, pixel for pixel");
+        for (const Case& c : {Case{1.25, 1, true}, Case{2.0, 2, true}, Case{2.14, 2, true}, Case{2.77, 3, true}, Case{3.0, 3, true}}) {
+            const Picture got = rig.shoot_with(kHurtNumber, c.per_css);
+            const std::string tag = "zoom " + std::to_string(z) + ", " + std::to_string(c.per_css) + " per CSS pixel (x" + num(c.scale) + "): ";
+            int sx = 0, sy = 0;
+            screen_of(rig, 600, 500, z, sx, sy);
+            // the glyph's white pixels at x1 (the original's, found against the map without marks), enlarged: white; one scaled pixel round them: black; everything else: the map
+            const int cx0 = sx, cy0 = sy, cw = 8, ch = 15;
+            auto white1 = [&](int fx, int fy) { return fx >= 0 && fy >= 0 && fx < cw && fy < ch && std::memcmp(plain.at(cx0 + fx, cy0 + fy), none.at(cx0 + fx, cy0 + fy), 3) != 0 && is(plain, cx0 + fx, cy0 + fy, 255, 255, 255); };
+            int white_n = 0, ring_n = 0, wrong = 0, missing = 0, stray = 0;
+            const int pad = c.scale + 1;
+            for (int y = cy0 - pad; y < cy0 + ch * c.scale + pad; ++y) {
+                for (int x = cx0 - pad; x < cx0 + cw * c.scale + pad; ++x) {
+                    const int fx = (x - cx0 >= 0) ? (x - cx0) / c.scale : -1, fy = (y - cy0 >= 0) ? (y - cy0) / c.scale : -1;
+                    bool is_white = white1(fx, fy), in_ring = false;
+                    for (int oy = -c.scale; oy <= c.scale && !in_ring; ++oy)
+                        for (int ox = -c.scale; ox <= c.scale && !in_ring; ++ox) {
+                            const int nx = x + ox - cx0, ny = y + oy - cy0;
+                            if (nx >= 0 && ny >= 0 && white1(nx / c.scale, ny / c.scale)) in_ring = true;
+                        }
+                    // (for x < 0 or y < 0 the division above is not the floor: a pixel left of or over the cell is looked at through `in_ring` only)
+                    if (is_white) { ++white_n; if (!is(got, x, y, 255, 255, 255)) ++missing; }
+                    else if (c.outline && in_ring) { ++ring_n; if (!is(got, x, y, 0, 0, 0)) ++wrong; }
+                    else if (std::memcmp(got.at(x, y), none.at(x, y), 3) != 0) ++stray;
+                }
+            }
+            check(white_n == 0 ? false : (white_n > 10 && missing == 0), tag + "the font's white pixels, each enlarged to " + num(c.scale) + " x " + num(c.scale) + ", all white (" + num(white_n) + ", missing " + num(missing) + ")");
+            check(ring_n > 10 && wrong == 0, tag + "a black ring of one scaled pixel round the digits (" + num(ring_n) + " pixels, " + num(wrong) + " not black)");
+            check(stray == 0, tag + "nothing else of the picture is touched (" + num(stray) + " stray)");
+            const Delta d = delta(none, got, sx - c.scale - 2, sy - c.scale - 2, sx + 40 * c.scale, sy + 20 * c.scale);
+            check(d.x0 == sx - c.scale && d.y0 == sy + c.scale, tag + "the cell is still anchored at the ant's position (the 7's first row is the font's third, the ring starts one scaled pixel before the glyph): " + num(d.x0 - sx) + ", " + num(d.y0 - sy));
+        }
+        // the native build asks for the original's digits whatever the density: a small window is the original's picture, pixel for pixel
+        for (const double c : {1.25, 2.0, 3.0, 9.0}) {
+            rig.renderer.set_health_marks(kHurtNumber, c, false);
+            rig.renderer.begin_frame();
+            rig.renderer.render_world(rig.world, rig.engine.grid(), -1, {}, false, false, -1, -1, -1, 0.0f);
+            check(delta(plain, rig.read()).n == 0, "zoom " + std::to_string(z) + ": a native window at " + std::to_string(c) + " picture pixels per point keeps the original's number");
+        }
+        // two digits: the second cell follows at 8 x scale
+        const Picture ten = rig.shoot_with(hm::Setting{hm::When::All, hm::Style::Number}, 2.77);
+        int sx2 = 0, sy2 = 0;
+        screen_of(rig, 800, 500, z, sx2, sy2);
+        const Picture none2 = rig.shoot_with(kOff);
+        const Delta dd = delta(none2, ten, sx2 - 6, sy2 - 6, sx2 + 60, sy2 + 60);
+        check(dd.x1 >= sx2 + 24 + 18 && dd.x1 < sx2 + 48 + 3 && dd.y1 < sy2 + 45 + 3, "zoom " + std::to_string(z) + ": a 10 at x3 spans two cells of 24 pixels, from the ant's position down to 45 pixels");
+        // no mark when the mode says none
+        check(delta(none, rig.shoot_with(kOff, 2.77)).n == 0, "Off: nothing, whatever the density");
+        const Picture bars = rig.shoot_with(kHurtBar, 2.77);
+        check(delta(rig.shoot_with(kHurtBar, 2.77), bars).n == 0 && delta(rig.shoot_with(kHurtBar, 1.0), bars).n > 0, "a bar is drawn as before (thick on a phone), no digits");
+    }
+}
+
 void test_which_ants(const assets::AssetArchive& arc) {
     std::printf("[ants] which ants wear a mark: hurt and all, own and enemy, dead and frozen, and the fog\n");
     PixelRig rig(arc, "MEDIUM", kWideW, kWideH);
@@ -382,7 +463,8 @@ void test_thick_and_target(const assets::AssetArchive& arc) {
     }
     const Delta shown_small = delta(none, rig.shoot_with(kHurtNumber, 4.0));
     const Delta shown_big = delta(none, rig.shoot_with(kHurtNumber, 1.0));
-    check(shown_small.n == shown_big.n && shown_small.n > 10, "a number is the same size whatever the page shows");
+    check(shown_big.n > 10 && delta(none, rig.shoot_with(kHurtNumber, 1.2)).n == shown_big.n, "a number is the original's at 1.0 and at 1.2 picture pixels for a CSS pixel");
+    check(shown_small.n > shown_big.n * 8 && shown_small.x1 - shown_small.x0 + 1 >= 4 * 7, "...and four times as big, outlined, on a picture shown at a quarter of its size (a very small phone)");
 
     // the zoom 1 pass drawn straight into the view and through the offscreen target
     sim::WorldState& world = rig.world;
@@ -453,6 +535,7 @@ int main(int argc, char* argv[]) {
     }
     test_bars(arc);
     test_numbers(arc);
+    test_phone_numbers(arc);
     test_which_ants(arc);
     test_thick_and_target(arc);
     test_play_zooms(arc);
