@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the leader makes a lobby room public or private), and one new Room flag, public (only in a lobby room). A v0.12 game cannot play with a v0.13 one. The simulation rules, the recordings and the map files are unchanged. **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies`, and the status of a lobby room has `"public"`; the site's web server must pass `/lobbies` to the door before the list can be read from the site.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...5bbeeb13)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...888abd12)
 
 ## v0.12.151 - 2026-10-28 - Tests: the map submission checks no longer fail on a slow machine
 
