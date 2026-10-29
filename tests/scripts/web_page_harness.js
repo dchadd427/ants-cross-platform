@@ -4,7 +4,10 @@
 //   search: the address's query; stored: what local storage holds (THROWS: a browser that refuses its storage); options: session (what this tab's session storage holds), noSession, clipboard (false:
 //   none), copyResult, share, fetch, noFetch, ua, random (what Math.random() says: 0.5), hash (the address's #...), innerHeight and innerWidth, historyThrows (a sandboxed frame: the history takes no
 //   entry), picker (the map list's script is loaded too), noWebSocket, WebSocket, realTime, noHome (without web/home/home.js: the page says that it could not load all of
-//   its parts), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room).
+//   its parts), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room),
+//   fakeClock (Date.now() of the scripts that the page loads is the fake clock's: env.advance(ms) moves it, so the pace of the client's requests and the waits of web/home/games.js follow the clock that the
+//   timers follow), lazy (what the page loads after its first paint, web/home/games.js and games.css: true, the default, loads them when the page asks, which is when env.advance(0) runs the page's own
+//   timer; false: nothing comes; 'script': the script fails to load; an object: what the script puts on the window, for a script that is broken). env.hide(true | false) hides the tab or shows it (visibilitychange).
 // Used by tests/scripts/web_name_check.js (the page's rules, its name card, its room), tests/scripts/web_home_screen_check.js (Home and the Room) and tests/scripts/web_lobby_server_check.js.
 'use strict';
 const fs = require('fs');
@@ -21,11 +24,12 @@ const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 // The scripts of front/ are run as they are, in a sandbox that has the fake WebSocket and the fake clock of one page (they are ES5 with no module system: a page gets a global, node gets module.exports)
 function loadFile(rel, scope) {
     const root = {};
-    new Function('self', 'WebSocket', 'setTimeout', 'clearTimeout', fs.readFileSync(path.join(lobbyDir, rel), 'utf8'))(root, scope.WebSocket, scope.setTimeout, scope.clearTimeout);
+    new Function('self', 'WebSocket', 'setTimeout', 'clearTimeout', 'Date', 'Math', fs.readFileSync(path.join(lobbyDir, rel), 'utf8'))(root, scope.WebSocket, scope.setTimeout, scope.clearTimeout, scope.Date || Date, scope.Math || Math);
     return root;
 }
 const loadFront = (file, scope) => loadFile('front/' + file, scope);
 const NOSCOPE = { WebSocket: function () { throw new Error('no socket here'); }, setTimeout() { return 0; }, clearTimeout() {} };
+const CLOCK_START = 1700000000000;                      // (what the fake clock says at env.clock = 0, in ms since 1970)
 const RULES0 = loadFront('lobby_rules.js', NOSCOPE).AntsLobbyRules;
 const NET0 = loadFront('lobby_net.js', NOSCOPE).AntsLobbyNet;
 const CHAT0 = loadFront('lobby_chat.js', NOSCOPE).AntsLobbyChat;
@@ -65,6 +69,7 @@ class El {
         this._text = ''; this.style = {}; this.hidden = false; this.value = ''; this.className = ''; this.src = ''; this.alt = ''; this.readOnly = false; this._checked = false; this.disabled = false; this.selected = false;
     }
     get parentNode() { return this.parent; }
+    get nextSibling() { const p = this.parent; if (!p || !p.children) return null; return p.children[p.children.indexOf(this) + 1] || null; }
     get checked() { return this._checked; }
     set checked(on) {                                    // a radio button: checking it unchecks the others of its group (the same name), as a browser does
         const radio = (e) => e.tagName === 'input' && e.attributes.type === 'radio' && e.attributes.name;
@@ -81,8 +86,14 @@ class El {
     get innerHTML() { return this._text; }
     get firstChild() { return this.children[0] || null; }
     getBoundingClientRect() { return { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 }; }
-    appendChild(c) { c.parent = this; this.children.push(c); return c; }
-    insertBefore(c, ref) { const at = this.children.indexOf(ref); c.parent = this; if (at === -1) this.children.push(c); else this.children.splice(at, 0, c); return c; }
+    appendChild(c) { if (c.parent && c.parent.children) c.parent.children = c.parent.children.filter((x) => x !== c); c.parent = this; this.children.push(c); return c; }       // (a node that is somewhere moves, as in a browser)
+    insertBefore(c, ref) {
+        if (c.parent && c.parent.children) c.parent.children = c.parent.children.filter((x) => x !== c);
+        const at = this.children.indexOf(ref);
+        c.parent = this;
+        if (at === -1) this.children.push(c); else this.children.splice(at, 0, c);
+        return c;
+    }
     removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parent = null; return c; }
     replaceChild(fresh, old) {
         const at = this.children.indexOf(old);
@@ -159,6 +170,7 @@ function runLobby(search, stored, options) {
         for (const a of m[2].matchAll(/([\w-]+)="([^"]*)"/g)) { el.attributes[a[1]] = a[2]; if (a[1] === 'class') el.className = a[2]; }
         if (m[1] === 'input' && el.attributes.value !== undefined) el.value = el.attributes.value;
         el.parent = env.root;
+        env.root.children.push(el);                      // (the markup's elements with an id are the page's, in the order of the markup, all of them under one root: the tree is flat)
         env.elements[idm[1]] = el;
     }
     // the markup's own text (the buttons say Join, Rejoin it, START!): what stands between a tag with an id and the next tag
@@ -177,7 +189,7 @@ function runLobby(search, stored, options) {
             if (options.copyResult === 'throws') throw new Error('not allowed');
             return options.copyResult !== false;
         },
-        hidden: false, listeners: {},
+        hidden: false, listeners: {}, head: new El(env, 'head', ''),
         addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); },
         removeEventListener() {},
     };
@@ -252,8 +264,24 @@ function runLobby(search, stored, options) {
         receive(bytes) { if (this.onmessage) this.onmessage({ data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) }); return this; }
         drop() { this.closed = true; if (this.onclose) this.onclose({ code: 1006 }); }
     }
+    const fakeMath = Object.assign(Object.create(Math), { random: () => (options.random === undefined ? 0.5 : options.random) });     // (the page's picked name, the order of its random names and the waits of the scripts it loads are the same on every run)
     const scope = options.realTime ? { WebSocket: options.WebSocket, setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (id) => clearTimeout(id) }
-        : { WebSocket: options.noWebSocket ? undefined : options.WebSocket || FakeSocket, setTimeout: setTimer, clearTimeout: clearTimer };
+        : { WebSocket: options.noWebSocket ? undefined : options.WebSocket || FakeSocket, setTimeout: setTimer, clearTimeout: clearTimer, Date: options.fakeClock ? { now: () => CLOCK_START + env.clock } : undefined, Math: options.fakeClock ? fakeMath : undefined };
+    env.scope = scope;                                   // (what a script of the page is run with)
+    // what the page loads after its first paint (a script and a style appended to the head): the file is run when it is appended, and its onload is called, as a browser does a moment later
+    env.lazyLoads = [];
+    env.lazyErrors = [];
+    doc.head.appendChild = function (c) {
+        c.parent = doc.head; doc.head.children.push(c); env.lazyLoads.push(c.src || c.href);
+        if (options.lazy === false) return c;
+        if (c.tagName === 'script') {
+            const file = String(c.src);
+            if (options.lazy === 'script' || !/^home\/\w+\.js$/.test(file)) { if (c.onerror) c.onerror({}); return c; }
+            Object.assign(win, options.lazy && typeof options.lazy === 'object' ? options.lazy : loadFile(file, scope));
+        }
+        if (c.onload) { try { c.onload({}); } catch (e) { env.lazyErrors.push(String(e && e.message || e)); } }       // (a handler that throws is an error of the page, which does not reach the one that appended the file)
+        return c;
+    };
     win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;
     win.AntsLobbyChat = loadFront('lobby_chat.js', scope).AntsLobbyChat;
@@ -272,8 +300,8 @@ function runLobby(search, stored, options) {
     env.fetches = [];
     const network = options.fetch || (() => Promise.reject(new Error('the test has no network')));
     const fetchSpy = options.noFetch ? undefined : (url, init) => { env.fetches.push({ url, init }); return network(url, init); };
-    const fakeMath = Object.assign(Object.create(Math), { random: () => (options.random === undefined ? 0.5 : options.random) });     // (the page's picked name, and the order of its random names, are the same on every run)
-    if (options.picker) { win.fetch = fetchSpy; globalThis.AntsMapPicker = win.AntsMapPicker; }       // (the page asks for the list's script and for fetch on window, and names the list's script as a global)
+    if (options.picker) globalThis.AntsMapPicker = win.AntsMapPicker;       // (the page names the list's script as a global)
+    if (!options.noFetch) win.fetch = fetchSpy;                             // (the map list, and the Games list of web/home/games.js, ask for fetch on window)
     new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', 'clearTimeout', 'fetch', 'BroadcastChannel', 'Math', lobbyScript)(win, doc, history, nav, () => 0, scope.setTimeout, scope.clearTimeout, fetchSpy, undefined, fakeMath);
     env.storage = storage;
     env.session = session;
@@ -283,6 +311,7 @@ function runLobby(search, stored, options) {
     env.type = (id, text) => { const el = env.elements[id]; el.value = text; el.fire('input', {}); };
     env.param = (url, key) => new URL(url).searchParams.get(key);
     env.last = () => env.sockets[env.sockets.length - 1];
+    env.hide = (on) => { doc.hidden = !!on; (doc.listeners.visibilitychange || []).forEach((fn) => fn({})); };       // the tab goes out of sight, or comes back
     // The newest socket opens and the server welcomes it as seat `seat` and tells it the room: seats [[state, name] x 4], o as roomMessage takes it (you: the seat, leader: the first)
     env.arrive = (o) => {
         o = o || {};

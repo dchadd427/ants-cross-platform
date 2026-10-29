@@ -2,13 +2,14 @@
 // pages that make a lobby room and join it by one code, the leader's color moves (a move to an empty color, a change of places), the plan and the teams, a new name (and a name that looks like a
 // bot's), the leader taking a person out, the leader going (the player who has been there the longest leads), a link that drops (the seat is held and taken back with the key), a key for a room that is
 // gone (the page makes the room again), a second window with the same key, START that waits for the games, the people of the lobbies in GET /busy, and the front page itself (web/lobby.html with web/home/home.js in the
-// fake browser of web_page_harness.js, on a real socket): a guest on Home takes START.
-// usage: node web_lobby_server_check.js web/front/lobby_net.js ws://127.0.0.1:PORT/ws http://127.0.0.1:WSPORT     (the server: --demo-rooms N --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies M)
+// fake browser of web_page_harness.js, on a real socket): a guest on Home takes START; and, with the public door, a host that makes its room public with Quick host, a second page that sees it in the real list and joins it from there.
+// usage: node web_lobby_server_check.js web/front/lobby_net.js ws://127.0.0.1:PORT/ws http://127.0.0.1:WSPORT [http://127.0.0.1:REPLAYPORT]     (the server: --demo-rooms N --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL
+//        --demo-lobbies M [--replay-port REPLAYPORT: the public door that lists the games; the front page's Quick host and Games list are run against it when it is given])
 //        exit 0: every check holds; the failures are printed
 'use strict';
 const path = require('path');
 
-const [modulePath, wsUrl, httpBase] = process.argv.slice(2);
+const [modulePath, wsUrl, httpBase, listBase] = process.argv.slice(2);
 if (!modulePath || !wsUrl) { console.log('usage: web_lobby_server_check.js lobby_net.js ws://host:port/ws [http://host:port]'); process.exit(2); }
 const N = require(path.resolve(modulePath));
 
@@ -503,6 +504,44 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         check('(the room waits for the games: START is on for both)', A.room.starting === true && A.room.slots[2].state === N.SLOT.Client);
         A.leave();
         for (const ws of pageSockets) { try { ws.close(); } catch (e) { /* closed already */ } }
+    });
+
+    // ---- the front page's public room and Games list against the real server and its real public door (docs/HOME_SCREEN.md): Quick host makes the room public, a second page lists it and joins it from the list ------------------
+    await scenario('the front page: Quick host makes a real room public, a second page sees it in the real list and joins it from there', async () => {
+        if (!listBase) { console.log('SKIP: no public door was given: the front page\'s Games list was NOT run against the real list'); return; }
+        const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
+        const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
+        const sockets = [];
+        class ToTheServer extends WS { constructor() { super(wsUrl); sockets.push(this); } }
+        const realList = (url) => (url === '/lobbies' ? fetch(listBase + '/lobbies', { cache: 'no-store' }) : Promise.reject(new Error('no ' + url + ' here')));
+        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, fetch: realList });
+        const listed = async () => (await (await fetch(listBase + '/lobbies')).json());
+        const text = (env, cls) => { const e = env.$('home').findAll((n) => String(n.className).split(/\s+/).indexOf(cls) !== -1)[0]; return e ? e.textContent : null; };
+        const A = onPage('Quinn');
+        await step('the script of the list comes after the first paint and lights Quick host and Games', () => () => !A.home('host').disabled && !A.home('games').disabled, 5000);
+        A.home('host').click();
+        await step('Quick host makes a real room and the real server says that it is public (the switch follows the Room message)', () => () => A.screen() === 'room' && A.root.findAll((n) => n.getAttribute && n.getAttribute('aria-pressed') === 'true' && /Public/.test(n.textContent) && String(n.className).indexOf('vbtn') !== -1).length === 1, 8000);
+        const room = A.$('code').textContent.replace(' ', '');
+        const list = await listed();
+        const mine = list.lobbies.find((x) => x.code === room);
+        check('the real /lobbies door lists it: the code, the leader\'s name, the people and the free colors (no key, no address)', !!mine && mine.host === 'Quinn' && mine.people === 1 && mine.free === 3 && mine.size === 4 && !/[0-9a-f]{32}/.test(JSON.stringify(list)), JSON.stringify(list));
+        const B = onPage('Reed');
+        await step('a second page lights its list', () => () => !B.home('games').disabled, 5000);
+        await step('... and its count is the real list\'s (the room of the first page)', () => () => B.home('games').children[1].textContent === String(list.count) && !B.home('games').children[1].hidden, 8000);
+        B.home('games').click();
+        await step('... the popover shows the room: its host, its seats', () => () => text(B, 'gname') === 'Quinn' && text(B, 'gcount') === '1/4', 8000);
+        const join = B.$('home').findAll((n) => String(n.className).split(/\s+/).indexOf('gjoin') !== -1 && n.getAttribute('data-code') === room)[0];
+        check('(the Join button is the one of that room)', !!join);
+        join.click();
+        await step('Join from the list: the second page is in that room, as a guest (the Room shows, the host\'s name is the heading, the chip says public)', () => () => B.screen() === 'room' && B.$('room-h').textContent === 'Quinn’s room' && B.$('code').textContent.replace(' ', '') === room, 8000);
+        await step('... and the first page sees Reed in its room', () => () => A.$('slots').textContent.indexOf('Reed') !== -1, 8000);
+        check('... and the real list says two people', (await listed()).lobbies.find((x) => x.code === room).people === 2);
+        const priv = A.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vbtn') !== -1 && n.getAttribute('aria-pressed') === 'false')[0];
+        priv.click();
+        await step('the host presses Private: the guest\'s chip says so', () => () => B.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vistag') !== -1)[0].textContent === 'Private room', 8000);
+        check('... and the real list has lost the room', (await listed()).lobbies.every((x) => x.code !== room));
+        for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
 
     for (const c of ALL) { try { c.leave(); } catch (e) { /* closed already */ } }

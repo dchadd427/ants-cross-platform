@@ -69,11 +69,9 @@
     .invite input { appearance: none; width: 100%; min-height: 48px; padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); text-overflow: ellipsis; }
     .invite .btn { min-height: 52px; }
     .invite-note { margin-top: 10px; font-size: 15px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; }
-    .invite-note button { background: none; border: 0; color: var(--cream); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 0; }
     .joinbox { display: flex; gap: 10px; margin-top: 10px; }
     .hint { margin-top: 6px; font-size: 14px; color: #f2c48c; }
     .hint:empty { display: none; }
-    .invite-note .rt { display: inline-flex; flex-wrap: wrap; gap: 4px 16px; }
     .banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 14px; padding: 10px 14px; background: var(--inset); border: 3px solid var(--frame-hi); border-radius: 4px; color: var(--cream); box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
     .banner span { flex: 1 1 220px; }
     .banner.warn { border-color: var(--gold); }
@@ -304,9 +302,7 @@
                 <button class="btn" type="button" id="copy">Copy link</button>
                 <button class="btn share" type="button" id="share" hidden>Share</button>
             </div>
-            <div class="invite-note"><span id="invite-line">Players who open this link take the next free color.</span><span class="rt"><button type="button" id="havecode">Have a code?</button></span></div>
-            <div class="joinbox" id="joinbox" hidden><input type="text" id="joincode" placeholder="6 letters and numbers, like k7m 2xq" aria-label="Room code" aria-describedby="joinhint" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">Join</button></div>
-            <p class="hint" id="joinhint" role="status"></p>
+            <div class="invite-note"><span id="invite-line">Players who open this link take the next free color.</span></div>
 
             <ul class="slots" id="slots" aria-label="The four colors"></ul>
             <p class="slots-note" id="slots-note" role="status"></p>
@@ -1272,28 +1268,27 @@
             $('share').hidden = false;
             $('share').addEventListener('click', function () { try { navigator.share({ url: roomLink() }).catch(function () { /* the sheet was closed */ }); } catch (e) { /* no share sheet */ } });
         }
-        $('havecode').addEventListener('click', function () {
-            $('joinbox').hidden = !$('joinbox').hidden;
-            $('joinhint').textContent = '';
-            if (!$('joinbox').hidden) $('joincode').focus();
-        });
-        $('joincode').addEventListener('input', function () { $('joinhint').textContent = ''; });
-        $('joincode').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });
-        $('joingo').addEventListener('click', joinTyped);
-        // A code that was typed: the name card first, then a look at the room while this page's own stays (a code with no room is answered, and nothing is lost)
-        function joinTyped() {
-            var typed = Rules.typedCode($('joincode').value), hint = $('joinhint');
-            if (!typed.ok) { hint.textContent = typed.why; return; }
-            if (client && typed.code === client.code) { hint.textContent = ownRoom ? Rules.HINT.own : Rules.HINT.same; return; }
-            askName({
-                title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',
-                done: function (name) { probe(typed.code, name); },
-                back: function () { /* the page's own room stays */ }
+        // A code that was typed (Join by code, in the Games list: web/home/games.js): the line for a code that leads nowhere, or '' when the join is on its way: before(go) may ask a question first, go() opens the name card, and
+        // the look at the room follows when the name is done (done gets what probe says, or null when the visitor keeps the room that is theirs)
+        function joinTyped(text, done, before) {
+            var typed = Rules.typedCode(text);
+            if (!typed.ok) return typed.why;
+            if (client && typed.code === client.code) return ownRoom ? Rules.HINT.own : Rules.HINT.same;
+            (before || function (go) { go(); })(function () {
+                askName({
+                    title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',
+                    done: function (name) { probe(typed.code, name, done); },
+                    back: function () { done(null); }                 // (the page's own room stays)
+                });
             });
+            return '';
         }
-        function probe(code, name) {
-            var hint = $('joinhint'), p = makeClient({ code: code, name: name, join: true }), adopted = false;
-            function failed(text) { hint.textContent = text; }
+        // A look at the room of a code while this page's own room stays (a code with no room is answered, and nothing is lost): a second client that only joins and never makes a room, which is the page's client, and the old one
+        // is let go of, only when the room WELCOMES it. done({ ok: true }) or done({ ok: false, kind: 'full' | 'running' | 'version' | 'noroom' | 'silent', text }), once. Returns the second client.
+        function probe(code, name, done) {
+            var p = makeClient({ code: code, name: name, join: true }), adopted = false, told = false, timer = setTimeout(function () { if (!adopted) { p.leave(); failed('silent', 'The server did not answer. Try again in a moment.'); } }, 15000);
+            function tell(result) { clearTimeout(timer); if (!told && done) { told = true; done(result); } }
+            function failed(kind, text) { tell({ ok: false, kind: kind, text: text }); }
             p.on('welcome', function (e) {
                 if (adopted || handing) return;
                 adopted = true;
@@ -1305,19 +1300,20 @@
                 model = null; lastStarting = false; localSides = [0, 0, 0, 0]; picked = -1; removing = -1; painted = {};
                 if (old) old.leave();
                 hook(p);
-                $('joinbox').hidden = true; $('joincode').value = ''; hint.textContent = '';
                 hideBanner();
                 onWelcome(e);
+                tell({ ok: true, code: code });
             });
             p.on('refused', function (e) {
                 var R = Net.REJECT;
                 if (adopted) return;
-                if (e.reason === R.Full) failed(Rules.HINT.full);
-                else if (e.reason === R.MatchRunning) failed(Rules.HINT.running);
-                else if (e.reason === R.VersionMismatch) showBanner('version');
-                else failed(Rules.TEXT.noroom());
+                if (e.reason === R.Full) failed('full', Rules.HINT.full);
+                else if (e.reason === R.MatchRunning) failed('running', Rules.HINT.running);
+                else if (e.reason === R.VersionMismatch) { showBanner('version'); failed('version', Rules.TEXT.version()); }
+                else failed('noroom', Rules.TEXT.noroom());
             });
             p.connect();
+            return p;
         }
         // ---- how it works ----
         var howOpener = null;
@@ -1476,6 +1472,7 @@
         // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
         var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
             info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow,
+            client: function () { return client; }, join: probe, typed: joinTyped, name: myName,
             leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
         // ---- go ----

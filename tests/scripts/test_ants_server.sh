@@ -1186,10 +1186,10 @@ stop_server
 # site's proxy reaches it: the lobby made by one code and joined by the same link, a color move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a
 # key for a room that is gone, a second window, START that waits, the chat at the server's pace, and the pages in GET /busy (tests/scripts/web_lobby_server_check.js)
 if command -v node > /dev/null 2>&1; then
-    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --replay-port "$LOBBY_REPLAY" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
     SERVER_PID=$!
     for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
-    run_limited $((120 * TIME_SCALE)) "node web_lobby_server_check.js (the lobby page's client against the server)" "$WORK/page_check.out" node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS"
+    run_limited $((120 * TIME_SCALE)) "node web_lobby_server_check.js (the lobby page's client against the server)" "$WORK/page_check.out" node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS" "http://127.0.0.1:$LOBBY_REPLAY"
     PAGE_RC=$?
     PAGE_OUT="$(cat "$WORK/page_check.out")"
     [ "$PAGE_RC" -ne 0 ] && echo "$PAGE_OUT" | sed 's/^/    /'

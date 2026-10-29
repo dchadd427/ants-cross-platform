@@ -319,8 +319,8 @@
   {
    "id": "games_is_on",
    "file": "web/home/home.js",
-   "old": "var games = stub('hchip games', TEXT.games);",
-   "new": "var games = button('hchip games', TEXT.games);",
+   "old": "var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');",
+   "new": "var gamesBtn = button('hchip games', ''), gamesPill = el('span', 'pill');",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

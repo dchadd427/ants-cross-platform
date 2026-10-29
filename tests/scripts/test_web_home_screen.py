@@ -32,7 +32,8 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_home_screen_check.js")
 NODE = shutil.which("node")
 FILES = ("home.js", "home.css")
-HOME_BUDGET, HOME_GZIP_BUDGET = 31 * 1000, 9400      # bytes, raw and gzipped, both files together (about 29,600 and 9,100): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+LATER = ("games.js", "games.css")                    # the files that load after the first paint (tests/scripts/test_web_home_games.py has their budgets)
+HOME_BUDGET, HOME_GZIP_BUDGET = 33 * 1000, 10000     # bytes, raw and gzipped, both files together (about 32,200 and 9,700): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
 LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
@@ -101,6 +102,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("leave: function () { if (handing) return; var old = client;", mount, "a page that is on its way to the game gives its seat up to nobody")
         self.assertIn("if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render();", mount)
         self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how):", mount))), ["how", "info", "leave", "make"])
+        self.assertIn("client: function () { return client; }, join: probe, typed: joinTyped, name: myName,", mount, "what the Games list reads of the page (docs/HOME_SCREEN.md): its client, the look at a room, a typed code and the name")
 
     def test_the_words_that_said_that_a_page_makes_a_room_when_it_opens_are_corrected(self):
         page = self.page
@@ -120,7 +122,7 @@ class ThePage(unittest.TestCase):
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_the_script_and_the_style_and_nothing_else(self):
-        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
+        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
 
     def test_it_is_under_its_budgets(self):
         raw = zipped = 0
@@ -225,7 +227,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
+    FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
              "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 
     @classmethod
