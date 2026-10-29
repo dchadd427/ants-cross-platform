@@ -74,18 +74,6 @@ std::array<SeatKey, 3> play_three_to_begun(Room& room, const PlanMsg& plan, cons
     return keys;
 }
 
-// The room's clock in steps of `step` ms, for the hours of a reservation (every link speaks within a step: the silence limit is far above it)
-void run_coarse(Room& room, uint64_t ms, uint32_t step) {
-    for (uint64_t elapsed = 0; elapsed < ms; elapsed += step) {
-        room.now += static_cast<uint32_t>(std::min<uint64_t>(step, ms - elapsed));
-        room.net.set_time(room.now);
-        room.host.update(room.now);
-        for (auto& g : room.guests) {
-            if (!g.frozen) g.lobby->update(room.now);
-        }
-    }
-}
-
 // A lobby room that is opened again from `r` (what the server does when the match is over), at the time `now`
 bool reopened(Room& room, const Rematch& r) { return room.host.reopen(r, room.now); }
 
@@ -566,6 +554,35 @@ void run_lobby_rematch_tests() {
         ASSERT_TRUE(reopened(alone, rematch_of({K::Open, K::Open, K::Open, K::Open})));
         alone.run(10 * hc.hold_ms);
         ASSERT_TRUE(alone.host.reserved(0) && alone.host.reserved(1) && alone.host.orphan_expiries() == 0u && alone.host.present() == 0u);
+    } TEST_END();
+
+    TEST_CASE("N4.49c The Choice Of A Public Rematch Lobby Is The Leader's (Protocol 22): The Person Of The Match Who Is Back First Leads And Makes The Room Public, A Newcomer Does Not Lead And Changes Nothing, And When The Person Who Was Earlier In The Match Is Back And Leads Again The Room Is Private And Everybody Is Shown So (She Chose Nothing)") {
+        Room room(lobby_room_config(169), false);
+        ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Open, K::Open})));
+        const size_t bob = join_with(room, page_with_key("Bob", key_with(2)));                          // Bob is the second of the match, back first: he leads
+        room.run(300);
+        ASSERT_TRUE(room.guests[bob].lobby->is_leader());
+        ASSERT_TRUE(room.guests[bob].lobby->request_visibility(true));
+        room.run(300);
+        ASSERT_TRUE(room.host.is_public() && room.guests[bob].lobby->room_is_public());
+        const size_t cat = join_with(room, page_config("Cat"));                                         // a newcomer (Ann's seat is kept): she does not lead, the choice stays Bob's
+        room.run(300);
+        ASSERT_TRUE(!room.guests[cat].lobby->is_leader() && room.host.is_public() && room.guests[cat].lobby->room_is_public());
+        const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));                          // Ann, the first of the match, is back: the match's order makes her lead again
+        room.run(300);
+        ASSERT_TRUE(room.guests[ann].lobby->is_leader() && !room.guests[bob].lobby->is_leader());
+        ASSERT_TRUE(!room.host.is_public() && !room.host.room().is_public());
+        for (const size_t who : {bob, ann, cat}) ASSERT_TRUE(room.guests[who].lobby->phase() == ClientLobby::Phase::InRoom && !room.guests[who].lobby->room_is_public());
+        ASSERT_TRUE(room.host.listed_age_ms(room.now) == 0 && room.host.unlist_count() == 0);          // (not an idle unlisting: the lead changed hands)
+        ASSERT_TRUE(room.guests[ann].lobby->request_visibility(true));                                  // she chooses for herself
+        room.run(300);
+        ASSERT_TRUE(room.host.is_public() && room.guests[cat].lobby->room_is_public() && room.guests[bob].lobby->room_is_public());
+        // the person who leads, back by the key after the link ended, is the same person: the room stays public
+        room.guests[ann].client_end->close();
+        room.run(300);
+        const size_t ann_again = join_with(room, page_with_key("Ann", key_with(1)));
+        room.run(300);
+        ASSERT_TRUE(room.guests[ann_again].lobby->is_leader() && room.host.is_public() && room.guests[ann_again].lobby->room_is_public());
     } TEST_END();
 
     TEST_CASE("N4.48 The Notice Of Who Is Not Back Fits A Line Of Chat (100 Characters) With Whole Names: When The Names Do Not Fit, As Many As Fit And \"And N More\"") {

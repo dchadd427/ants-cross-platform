@@ -181,6 +181,20 @@ struct RoomRow {
     bool winner{false};
 };
 
+/// One row of the public list of games (GET /lobbies, docs/SERVER.md "Lobby rooms"; Room::listing): a public lobby room that a newcomer can join now. Only what the list shows: the room's code (the link, public on purpose), the
+/// leader's name, the map's file name, the game mode and numbers; never an address, a key, a platform, another person's name or the plan's letters.
+struct LobbyListing {
+    std::string code;
+    std::string host;                       // the leader's name, as the room shows it
+    std::string map;                        // the plan's map (a file name)
+    uint8_t mode{0};                        // sim::GameMode as a byte
+    uint8_t people{0};                      // the colors that a person holds (a seat that is held counts)
+    uint8_t bots{0};                        // the colors that nobody holds and the plan gives to a bot
+    uint8_t free_colors{0};                 // the colors that a newcomer can take (nobody holds them and the plan calls them Open)
+    uint8_t size{0};                        // the colors in the match: people + bots + free_colors (a color that nobody holds and the plan calls Nobody is not)
+    uint32_t age_ms{0};                     // how long the room has been public, in ms
+};
+
 struct RoomStatus {
     std::string code;
     std::string map;
@@ -192,6 +206,7 @@ struct RoomStatus {
     bool leader_starts{false};              // the full room waits for its leader's START (protocol 15): for the tests, not shown by the control interface
     bool lobby{false};                      // a lobby room (protocol 16): the control interface shows lobby rooms as such
     bool starting{false};                   // ... whose leader's START waits for the games
+    bool lobby_public{false};               // ... that the leader made public (protocol 22): the control interface shows it as "public"
     uint8_t games{0};                       // ... the seats (bit s) that hold a game: a page, a seat that is held and an empty seat do not
     bool reopened{false};                   // ... the rematch: the server opened this lobby again with its code when its match was over (for the tests, not shown by the control interface)
     uint8_t reserved{0};                    // ... and the seats (bit s) that still wait for a person of the match who is not back
@@ -375,6 +390,9 @@ public:
     bool lobby() const noexcept { return spec_.lobby; }
     /// ... that waits (no match has been started): it is in the server's pool of lobbies, and holds no place of the public rooms
     bool lobby_waiting() const noexcept { return spec_.lobby && state_ == RoomState::Waiting; }
+    /// Protocol 22: a public lobby room that a newcomer can join now fills `out` and is true. Listed = a lobby room that waits (no match has begun or loads), that its leader made public, whose START does not wait, that has a
+    /// person whose connection is open (a room that only holds seats is nobody's: it goes within a minute), at least one color that a newcomer can take, and no seat kept for a person of the match who is not back. Cheap: no status is built.
+    bool listing(uint32_t now_ms, LobbyListing& out) const;
     /// A waiting lobby room that has had nobody in it since the last pass (a held seat is somebody) and that no Hello has reached since (the room reads it in its next pass: a lobby that a visitor was just
     /// sent to is not empty, whatever the room's last pass saw), and for how long (0 for every other room)
     bool empty_lobby() const noexcept { return lobby_waiting() && empty_ && !arrived_; }

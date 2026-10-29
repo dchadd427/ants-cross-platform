@@ -317,10 +317,11 @@ struct World {
     net::SeatKey next_key{};
     bool next_fail_load{false};                                             // the next connect()'s machine cannot load the map (connect_game sets it for one call)
     std::string next_map_folder;                                            // the next connect()'s machine is one of the newest version with this folder of maps (see Client::map_folder)
+    std::string next_address{"127.0.0.1"};                                  // where the next connect()'s link comes from (the address that the door is given with it); it stays until it is set again
 
     Client& connect(const std::string& name, const std::string& room, uint8_t seat = 255, net::LoopbackNetwork::Link link = {20, 10}, Throttled** throttle = nullptr) {
         auto ends = net.connect(link);
-        mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", now);
+        mgr.add_connection(std::make_unique<Borrowed>(ends.first), next_address, now);
         clients.push_back(std::make_unique<Client>());
         Client& c = *clients.back();
         c.name = name;
@@ -1447,3 +1448,4 @@ void run_persist_review_process_tests_2();
 void run_restore_tests();
 void run_lobby_room_tests();
 void run_rematch_tests();
+void run_public_room_tests();

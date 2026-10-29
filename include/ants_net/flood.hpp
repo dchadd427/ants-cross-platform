@@ -59,6 +59,15 @@ inline constexpr uint32_t kRemoveBurst = 3;
 inline constexpr uint32_t kRemovesPerSecond = 1;
 inline constexpr uint32_t kRemoveExcessBurst = 6;
 
+/// The Visibility messages of a lobby room's leader (protocol 22), with the same two rules: one that cannot be heard (the sender does not lead, the room is no open lobby room, its START waits) is no offence at first, up to
+/// kIgnoredVisibilityAllowed per connection, each one after those is a violation; one that can be heard changes what everybody is shown (or is a page's refresh), so it has a budget of its own (a burst of kVisibilityBurst,
+/// then kVisibilityPerSecond a second: a leader switches it once in a long while, and the page repeats it every ten minutes), and one beyond it is dropped, kVisibilityExcessBurst more are tolerated and every one after
+/// that is a violation.
+inline constexpr uint32_t kIgnoredVisibilityAllowed = 16;
+inline constexpr uint32_t kVisibilityBurst = 3;
+inline constexpr uint32_t kVisibilityPerSecond = 1;
+inline constexpr uint32_t kVisibilityExcessBurst = 6;
+
 /// The lines of chat that one connection may say (a remake protection: the original has no limit, but nobody types more than a line a second for long). A line is relayed to everybody, so
 /// a flood of them is a flood for the whole room: a burst of kChatBurst lines, then kChatPerSecond a second. A line beyond that is DROPPED (not relayed, not logged, no answer): a person
 /// who pastes six lines loses the sixth. It costs nothing at first, but a connection that goes on saying more than the budget allows is flooding: kChatExcessBurst lines beyond it are tolerated and that allowance
