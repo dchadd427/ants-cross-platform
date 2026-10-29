@@ -47,6 +47,8 @@ const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, fi
     same('a list: its rows in the order given, an own row of the shape and a bad one dropped, the same code once', Games.parseList(listOf([row('aaaaaa', 'A'), 'x', row('bbbbbb', 'B'), row('aaaaaa', 'Again'), { code: 'cccccc' }, row('dddddd', 'D')]), RULES0).map((r) => r.code + ':' + r.host), ['aaaaaa:A', 'bbbbbb:B', 'dddddd:D']);
     const many = Games.parseList(listOf(Array.from({ length: 10000 }, (_, i) => row('r' + String(i).padStart(5, '0'), 'H' + i))), RULES0);
     check('10,000 rows are 50 rows (the first 50, in order)', many.length === 50 && many[0].code === 'r00000' && many[49].code === 'r00049');
+    const proto = Games.parseList(listOf([row('__proto__', 'A'), row('__proto__', 'B'), row('constructor', 'C'), row('constructor', 'D'), row('toString', 'E')]), RULES0);
+    same('a code that is a name of Object ("__proto__", "constructor", "toString" are good codes) is a code once, as any other', proto.map((r) => r.code + ':' + r.host), ['__proto__:A', 'constructor:C']);
     const junk = Games.parseList(listOf(Array.from({ length: 10000 }, () => 'x')), RULES0);
     check('10,000 rows that are no rows are no rows, and are not all looked at (the look is bounded)', junk.length === 0);
     {   // a list of 10,000 entries is not read to its end: the rows that are looked at are bounded (the answer is a proxy that counts the entries that are asked for)
@@ -109,18 +111,20 @@ for (const [what, lazy] of [['never comes', false], ['fails to load', 'script']]
     same('(the moments of the looks)', env.site.times, [0, 30000, 60000, 90000]);
     tap(env.home('games'));
     await flush();
-    same('the popover opening looks at once (the list is there when it shows)', [env.looks(), env.site.times[4]], [5, 90000]);
+    same('the popover that opens in the same second as a look waits for the second to be over (two looks are a second apart at least): no look yet', env.looks(), 4);
+    await wait(env, 1000);
+    same('... and looks at once when the second is over (the list is there when it shows)', [env.looks(), env.site.times[4]], [5, 91000]);
     await wait(env, 4500);
     check('... and again 5 s later, not before', env.looks() === 5);
     await wait(env, 500);
     await wait(env, 5000); await wait(env, 5000);
-    same('... every 5 s while it is open', env.site.times.slice(4), [90000, 95000, 100000, 105000]);
+    same('... every 5 s while it is open', env.site.times.slice(4), [91000, 96000, 101000, 106000]);
     tap(env.home('games'));
     await flush();
     await wait(env, 29500);
     check('the popover closed goes back to every 30 s', env.looks() === 8);
     await wait(env, 500);
-    check('... (the next look comes 30 s after the last one that was made while it was open)', env.looks() === 9 && env.site.times[8] === 135000, JSON.stringify(env.site.times));
+    check('... (the next look comes 30 s after the last one that was made while it was open)', env.looks() === 9 && env.site.times[8] === 136000, JSON.stringify(env.site.times));
     env.hide(true);
     const before = env.looks();
     await wait(env, 120000);
@@ -185,6 +189,7 @@ for (const [what, random, closed, open] of [['the lowest', 0, 24000, 4000], ['th
     await wait(env, 500);
     check('... (a good answer forgets the failures)', env.looks() === good + 1);
     site.reject = true;
+    await wait(env, 1000);
     tap(env.home('games'));
     await flush();
     const open = env.looks();
@@ -342,6 +347,57 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     site.body = listOf([row('zzzzzz', 'New'), row('aaaaaa', 'Ann'), row('bbbbbb', 'Bea')]);
     await wait(env, 5000);
     check('a list that changes while it is open keeps the focus on the button of the same room (and shows the new row)', env.focused && env.focused.getAttribute('data-code') === 'bbbbbb' && rowsOf(env).length === 3 && textOf(first(rowsOf(env)[0], 'gname')) === 'New');
+}
+{   // an answer that says that it is huge is not read; one that is the same list again does not make the rows again
+    const site = fakeSite();
+    site.body = listOf([row('aaaaaa', 'Ann')]);
+    site.length = 3000000;
+    const env = await page({ site });
+    check('an answer whose length is over 2 MB (it says so) is not read at all, and the list is off', site.calls.length === 1 && site.reads === 0 && pillOf(env).hidden === true);
+    site.length = 1999999;
+    await wait(env, 90000);
+    check('(one that says 1,999,999 is read: the limit is 2,000,000)', site.reads >= 1 && pillOf(env).hidden === false && pillOf(env).textContent === '1');
+    site.length = 2000000;
+    const before = site.reads;
+    await wait(env, 90000);
+    check('(one that says 2,000,000 is read too: only more than that is not)', site.reads > before);
+    site.length = undefined;
+}
+{   // the rows are made again only when what they show has changed: the age of a row is not shown, and a press that straddles a look is not lost
+    const site = fakeSite();
+    site.body = listOf([row('aaaaaa', 'Ann', { age: 10 }), row('bbbbbb', 'Bea')]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    const before = rowsOf(env), button = joinOf(before[0]);
+    button.focus();
+    site.body = listOf([row('aaaaaa', 'Ann', { age: 40 }), row('bbbbbb', 'Bea', { age: 99 })]);
+    await wait(env, 6000);
+    check('a look that finds the same rooms (only older) leaves the rows and their buttons as they were: the same nodes, the focus where it was', site.calls.length >= 3 && rowsOf(env).length === 2 && rowsOf(env)[0] === before[0] && joinOf(rowsOf(env)[0]) === button && env.focused === button);
+    site.body = listOf([row('aaaaaa', 'Ann', { people: 3, free: 1 }), row('bbbbbb', 'Bea')]);
+    await wait(env, 6000);
+    check('... a room that fills up is drawn again (the count shows it: 3/4)', textOf(first(rowsOf(env)[0], 'gcount')) === '3/4' && rowsOf(env)[0] !== before[0]);
+}
+{   // two looks are a second apart at least: a tab that comes and goes, and Home and the Room, do not make a look each
+    const env = await page();
+    await wait(env, 5000);
+    const base = env.looks();
+    for (let i = 0; i < 6; i++) { env.hide(true); env.hide(false); }
+    await flush();
+    check('six comings and goings of the tab in one moment make one look at most', env.looks() <= base + 1, env.looks() + ' looks, ' + base + ' before');
+    await wait(env, 1000);
+    const again = env.looks();
+    env.home('mine').click();
+    env.roomBar('rhome').click();
+    env.home('mine').click();
+    env.roomBar('rhome').click();
+    await flush();
+    check('... and so do the toggles between Home and the Room', env.looks() <= again + 1, env.looks() + ' looks, ' + again + ' before');
+    check('... and the look comes when its second is over (nothing is lost)', (await wait(env, 1000), env.looks() >= again + 1 || env.looks() === again));
+    const times = env.site.times;
+    let tightest = Infinity;
+    for (let i = 1; i < times.length; i++) tightest = Math.min(tightest, times[i] - times[i - 1]);
+    check('no two looks of the whole run are less than a second apart (the smallest gap is ' + tightest + ' ms)', tightest >= 1000);
 }
 
 done('the games list');

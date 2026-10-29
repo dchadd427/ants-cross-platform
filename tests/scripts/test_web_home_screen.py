@@ -103,7 +103,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("leave: function () { if (handing) return; var old = client;", mount, "a page that is on its way to the game gives its seat up to nobody")
         self.assertIn("if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render();", mount)
         self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how|stalled):", mount))), ["how", "info", "leave", "make", "stalled"])
-        self.assertIn("client: function () { return client; }, join: probe, typed: joinTyped, name: myName,", mount, "what the Games list reads of the page (docs/HOME_SCREEN.md): its client, the look at a room, a typed code and the name")
+        self.assertIn("client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },", mount, "what the Games list reads of the page (docs/HOME_SCREEN.md): its client, the look at a room, a typed code, the name, whether the page is on its way to a game, and the way to give a look up")
 
     def test_the_words_that_said_that_a_page_makes_a_room_when_it_opens_are_corrected(self):
         page = self.page
@@ -116,6 +116,7 @@ class ThePage(unittest.TestCase):
 
     def test_how_it_works_says_where_my_room_is_because_the_room_shows_it_too(self):
         self.assertIn("<h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours.", self.page)
+        self.assertIn("To let anybody in, press Quick host on Home or switch the room to Public: it is then listed under Games, where players join it from the list or by its code.</p>", self.page, "How it works says where the public rooms are and how to be in one")
         self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no My room to press")
         check = read("tests", "scripts", "web_home_check.py")
         self.assertNotIn("the front page makes a room again", check, "a plain visit of the front page makes no room: My room does")

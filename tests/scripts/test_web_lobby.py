@@ -255,7 +255,7 @@ class TheFrontPageMarkup(PageCase):
         # the look at the room: a client of its own that must find the room (join: true makes none), and this page's room is let go of only when that room has welcomed it
         probe = script[script.index("function probe(code, name, done) {"):]
         probe = probe[:probe.index("p.connect();")]
-        self.assertIn("p = makeClient({ code: code, name: name, join: true })", probe)
+        self.assertIn("p = lastProbe = makeClient({ code: code, name: name, join: true })", probe)
         self.assertIn("join: !!p.join", script)
         self.assertLess(probe.index("p.on('welcome'"), probe.index("if (old) old.leave();"))
         self.assertLess(probe.index("client = p;"), probe.index("if (old) old.leave();"))

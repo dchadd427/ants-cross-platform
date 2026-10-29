@@ -18,10 +18,13 @@
     var CAP_CLOSED = 300000, CAP_OPEN = 60000;           // the longest wait after failures
     var JITTER = 0.2;                                    // every wait is its base +-20 %
     var FETCH_MS = 8000;                                 // a look that takes longer is a failed look
-    var BODY_MAX = 2000000;                              // characters of an answer that are read at all
+    var BODY_MAX = 2000000;                              // characters of an answer that are read at all (and the length that an answer may say that it has)
+    var FLOOR_MS = 1000;                                 // two looks are at least this far apart, whatever the tab and the screens do
     var SCAN_MAX = 500;                                  // rows that are looked at before the cap, whatever the answer holds
     var ROWS_MAX = 50;                                   // rows that are shown (the server lists 50 at most: the count says "50+")
     var REFRESH_MS = 600000;                             // a public room that the leader looks at says "public" again every 10 minutes (the server's idle rule is 30)
+    var ACTIVE_MS = 1200000;                             // a leader who has touched nothing for this long (no pointer, key or touch) is not at the Room: the repeat stops, and the server's idle rule goes on
+    var ASK_MS = 10000;                                  // a Private that was asked for is told from a room that went private by itself for this long
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
@@ -32,7 +35,7 @@
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
         private: 'Private', privateSub: 'link only', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Private room', visLabel: 'Who can find this room',
         noteHow: 'Public rooms show your name and map in the Games list.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
-        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', leaveJoin: 'Leave and join', leaveHost: 'Leave and host',
+        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', joiningCode: 'Joining the room…',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
@@ -56,10 +59,10 @@
     // The rows of an answer ({ format: 1, lobbies: [...] }), at most 50, a code once; null when the answer is not that shape (the list is "off"). A row that is not of the shape is dropped, the others stay.
     function parseList(data, rules) {
         if (!data || typeof data !== 'object' || Array.isArray(data) || data.format !== 1 || !Array.isArray(data.lobbies)) return null;
-        var rows = [], seen = {};
+        var rows = [], seen = Object.create(null);
         for (var i = 0; i < data.lobbies.length && i < SCAN_MAX && rows.length < ROWS_MAX; i++) {
             var row = rowOf(data.lobbies[i], rules);
-            if (!row || Object.prototype.hasOwnProperty.call(seen, row.code)) continue;
+            if (!row || seen[row.code] === true) continue;
             seen[row.code] = true;
             rows.push(row);
         }
@@ -92,7 +95,7 @@
         var random = env.random || Math.random, now = env.now || function () { return Date.now(); };
 
         var rows = [], loaded = false, off = false, failures = 0, isOpen = false, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
-        var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedPrivate = false, locked = false, lockTimer = null, hint = '';
+        var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [];
 
         function el(tag, cls, text) {
@@ -111,6 +114,7 @@
         function client() { try { var c = page.client(); return c && !c.final() ? c : null; } catch (e) { return null; } }
         function ownCode() { var c = client(); return c ? c.code : ''; }
         function visible() { return !doc.hidden; }
+        function over() { try { return !!page.handing && !!page.handing(); } catch (e) { return false; } }         // the page is on its way to a game (a match for one too): it makes no room and joins none
         function onHome() { return ctl.screen() === 'home'; }
         function others(c) {                               // the names of the other people of the room that the page is in
             var out = [], room = c && c.room;
@@ -178,13 +182,13 @@
             visNote.textContent = hint || (room.isPublic ? TEXT.noteListed : TEXT.noteHow);
             visNote.hidden = false;
         }
-        function lock() { locked = true; if (lockTimer !== null) cancel(lockTimer); lockTimer = later(guard(function () { lockTimer = null; locked = false; paintVis(); }), RETRY_MS); }
+        function lock() { locked = true; if (lockTimer !== null) cancel(lockTimer); lockTimer = later(guard(function () { lockTimer = null; locked = false; hint = ''; paintVis(); }), RETRY_MS); }
         function unlock() { locked = false; if (lockTimer !== null) { cancel(lockTimer); lockTimer = null; } }
         function choose(want) {                            // a press: the request goes to the room; what the switch shows stays what the room said until its next Room message
             var c = client();
             if (!c || !c.room || c.room.isPublic === want || locked) return;
-            if (c.setPublic(want)) { hint = ''; if (!want) askedPrivate = true; else lastSent = now(); lock(); }
-            else hint = TEXT.noteWait;
+            if (c.setPublic(want)) { hint = ''; if (!want) askedAt = now(); else lastSent = now(); lock(); }
+            else { hint = TEXT.noteWait; lock(); }
             paintVis();
         }
 
@@ -192,7 +196,7 @@
         function track(c) {
             if (!c) { tracked = null; lastRoom = null; return; }
             if (c === tracked) return;
-            tracked = c; lastRoom = c.room || null; lastSent = 0; askedPrivate = false; unlock(); hint = '';
+            tracked = c; lastRoom = c.room || null; lastSent = 0; askedAt = 0; unlock(); hint = '';
             c.on('room', guard(function (room) { if (c === tracked) heard(c, room); }));
             c.on('welcome', guard(function () { if (c === tracked) lastRoom = null; }));            // (a room that was made again is a new room)
             c.on('refused', guard(function () { if (c === tracked) endPending(); }));
@@ -214,7 +218,9 @@
             notice('public', 'Your room is public now. It shows in ' + TEXT.title + (names.length ? '; ' + rules.listOf(names) + (names.length > 1 ? ' stay' : ' stays') + ' in it.' : '.'), '', []);
         }
         function wentPrivate(c, prev, room) {              // the room was public a Room message ago: the leader asked, another person leads now, or nobody did anything for 30 minutes
-            if (askedPrivate) { askedPrivate = false; return; }
+            var asked = askedAt && now() - askedAt < ASK_MS;                   // (a Private that the server dropped is not the reason of a room that goes private half an hour later)
+            askedAt = 0;
+            if (asked) return;
             var changed = Net.diffRooms(prev, room).some(function (e) { return e.type === 'host'; });
             if (changed) notice('private', TEXT.hostChanged, '', []);
             else if (c.isLeader() && !room.starting) notice('idle', TEXT.idle, 'warn', [{ text: TEXT.makePublic, run: function () { var k = client(); return !!k && k.setPublic(true); } }]);
@@ -223,8 +229,9 @@
         // ---- the repeat that keeps a public room public: every 10 minutes, while the leader looks at the Room and the tab is visible ------------------------------------------------------------------------------
         function wantRefresh() {
             var c = client(), room = c && c.room;
-            return !!(!gone && room && room.lobby && room.isPublic && !room.starting && c.isLeader() && c.canAct() && visible() && !onHome());
+            return !!(!gone && room && room.lobby && room.isPublic && !room.starting && c.isLeader() && c.canAct() && visible() && !onHome() && now() - lastInput < ACTIVE_MS);
         }
+        function touched() { var was = now() - lastInput >= ACTIVE_MS; lastInput = now(); if (was) armRefresh(); }          // (a leader who comes back to a tab that he left alone starts the repeat again)
         function armRefresh() {
             var c = client();
             if (!wantRefresh()) { if (refreshTimer !== null) { cancel(refreshTimer); refreshTimer = null; } refreshFor = null; return; }
@@ -274,7 +281,7 @@
             ctl.show('room', 'push');
         }
         function quickHost() {
-            if (joining) return;
+            if (joining || over()) return;
             closeAll();
             if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)
             var c = client();
@@ -286,21 +293,23 @@
                 return;
             }
             if (c.room.isPublic) { notice('already', TEXT.already, '', []); ctl.show('room', 'push'); return; }
-            startPending(c);
-            ctl.show('room', 'push');
-            doPending(c);
+            var names = others(c);
+            function flip() { startPending(c); ctl.show('room', 'push'); doPending(c); }
+            if (names.length) ask({ title: 'Make your room public?', line: rules.listOf(names) + (names.length > 1 ? ' are' : ' is') + ' in it. Anybody on the front page will be able to join it.', yes: TEXT.makePublic, stay: TEXT.keepPrivate }, flip);
+            else flip();
         }
 
         // ---- the confirm card (the approved picture): the question, what it is about, and the answer that changes nothing has the focus ----------------------------------------------------------------------------
         function inertOthers(on, except) {
             var kids = host.children || [], i;
             if (on) for (i = 0; i < kids.length; i++) if (except.indexOf(kids[i]) === -1) { kids[i].setAttribute('inert', ''); quiet.push(kids[i]); }
+            if (on) { strip.setAttribute('inert', ''); quiet.push(strip); }               // (the notice is outside Home's div, and just as much behind the question)
             if (!on) { quiet.forEach(function (k) { k.removeAttribute('inert'); }); quiet = []; }
         }
-        function ask(o, yes) {                             // o: { title, line, row (a row of the list to show), yes (the words of the button) }
+        function ask(o, yes) {                             // o: { title, line, row (a row of the list to show), yes (the words of the button), stay (the words of the other) }
             if (dialog) return;
             var shade = el('div', 'gshade'), box = el('div', 'gconfirm'), title = el('h2', 'gctitle', o.title), line = el('p', 'gcline', o.line), actions = el('div', 'gcbtns');
-            var go = button('gyes', o.yes, guard(function () { closeAsk(false); yes(); })), stay = button('gstay', TEXT.stay, guard(function () { closeAsk(true); }));
+            var go = button('gyes', o.yes, guard(function () { closeAsk(false); yes(); })), stay = button('gstay', o.stay || TEXT.stay, guard(function () { closeAsk(true); }));
             box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); title.id = 'gc-title'; box.setAttribute('aria-labelledby', 'gc-title');
             box.appendChild(title); box.appendChild(line);
             if (o.row) box.appendChild(rowNode(o.row, null));
@@ -322,9 +331,11 @@
         // ---- the list's popover -------------------------------------------------------------------------------------------------------------------------------------------------------------------
         var pop = el('section', 'gpop'), popHead = el('div', 'gphead'), popTitle = el('h2', 'gptitle', TEXT.title), popCount = el('span', 'gpcount'), popNote = el('p', 'gpnote');
         var popBody = el('div', 'gpbody'), popList = el('ul', 'glist'), popLoad = el('p', 'gemline', TEXT.loading), popEmpty = el('div', 'gempty'), popOff = el('div', 'goff'), popLegend = el('p', 'glegend');
+        var popJoin = el('div', 'gjoining'), popJoinText = el('span'), popJoinStop = button('sm', TEXT.cancel, guard(function () { cancelJoin(); }));
         var codeBox = el('div', 'gcode'), codeLabel = el('label', 'gclabel', TEXT.code), codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
         pop.hidden = true; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
         popHead.appendChild(popTitle); popHead.appendChild(popCount);
+        popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
         popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
         popEmpty.appendChild(el('p', 'gemtitle', TEXT.emptyTitle)); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine)); popEmpty.appendChild(button('ghostbtn', TEXT.hostOne, guard(function () { quickHost(); })));
         popOff.appendChild(el('p', 'gemtitle', TEXT.off)); popOff.appendChild(el('p', 'gemline', TEXT.offHint));
@@ -333,7 +344,7 @@
         codeInput.setAttribute('spellcheck', 'false'); codeInput.setAttribute('aria-describedby', 'gc-hint'); codeHint.id = 'gc-hint';
         codeRow.appendChild(codeInput); codeRow.appendChild(codeGo); codeBox.appendChild(codeLabel); codeBox.appendChild(codeRow); codeBox.appendChild(codeHint);
         [popList, popLoad, popEmpty, popOff].forEach(function (n) { popBody.appendChild(n); });
-        [popHead, popNote, popBody, popLegend, codeBox].forEach(function (n) { pop.appendChild(n); });
+        [popHead, popJoin, popNote, popBody, popLegend, codeBox].forEach(function (n) { pop.appendChild(n); });
         host.appendChild(pop);
         codeInput.addEventListener('input', guard(function () { codeHint.textContent = ''; }));
         codeInput.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter') joinTyped(); }));
@@ -367,10 +378,13 @@
             popCount.textContent = !loaded || off ? '' : shown.length === 0 ? TEXT.none : countText(shown.length) + ' waiting';
             popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length); popList.hidden = !(loaded && !off && shown.length); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
+            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
+            if (sig === paintedSig) return;
+            paintedSig = sig;
             while (popList.firstChild) popList.removeChild(popList.firstChild);
             joinButtons = [];
             shown.forEach(function (r) { popList.appendChild(rowNode(r, true)); });
-            busy(joining);
+            busy(joining, popJoinText.textContent);
             if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
         }
         function place() {                                 // under the bar, at the Games button (a phone: the whole width); no taller than what is left of the window
@@ -410,7 +424,16 @@
                 row: row, yes: TEXT.leaveJoin
             }, go);
         }
-        function busy(on) { joining = on; joinButtons.forEach(function (b) { b.disabled = on; }); codeGo.disabled = on; }
+        function busy(on, what) {                          // a Join is on its way (up to 15 s): the buttons wait, and the list says what it waits for, with a way out
+            joining = on; joinButtons.forEach(function (b) { b.disabled = on; }); codeGo.disabled = on;
+            popJoin.hidden = !on; popJoinText.textContent = on ? what || TEXT.joiningCode : '';
+        }
+        function cancelJoin() {                            // the look at the room is given up: its answer, when it comes, is nobody's, and the second client is let go of
+            joinSeq++;
+            try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ }
+            busy(false);
+            if (isOpen && codeInput.focus) codeInput.focus();
+        }
         function refused(res, fromList) {
             var words = res.kind === 'full' ? TEXT.full : res.kind === 'running' ? TEXT.started : res.kind === 'silent' ? TEXT.silent : res.kind === 'version' ? res.text : fromList ? TEXT.gone : res.text;
             if (fromList) { popNote.textContent = words; popNote.hidden = false; } else codeHint.textContent = words;
@@ -422,20 +445,23 @@
             ctl.show('room', 'push');
         }
         function joinRow(row) {
-            if (joining) return;
+            if (joining || over()) return;
             var c = client();
             if (matchRunning(c)) { closeAll(); runningNotice(); return; }
             function go() {
-                busy(true); popNote.textContent = ''; popNote.hidden = true;
-                page.join(row.code, page.name(), guard(function (res) { busy(false); if (res && res.ok) joined(possessive(row.host) + ' room'); else if (res) refused(res, true); }));
+                var mine = ++joinSeq;
+                busy(true, 'Joining ' + possessive(row.host) + ' room…'); popNote.textContent = ''; popNote.hidden = true;
+                page.join(row.code, page.name(), guard(function (res) { if (mine !== joinSeq) return; busy(false); if (res && res.ok) joined(possessive(row.host) + ' room'); else if (res) refused(res, true); }));
             }
             if (needsAsk(c)) askLeave(c, row, go); else go();
         }
         function joinTyped() {                             // the page checks the code first (a line for one that leads nowhere), then the question, then the name card, then the look at the room
-            if (joining) return;
+            if (joining || over()) return;
             var c = client();
             if (matchRunning(c)) { closeAll(); runningNotice(); return; }
+            var mine = ++joinSeq;
             codeHint.textContent = page.typed(codeInput.value, guard(function (res) {
+                if (mine !== joinSeq) return;
                 busy(false);
                 if (res && res.ok) joined('room ' + rules.codeText(res.code)); else if (res) refused(res, false);
             }), function (go) { function start() { busy(true); go(); } if (needsAsk(c)) askLeave(c, null, start); else start(); }) || '';
@@ -457,6 +483,8 @@
                 try {
                     win.fetch(LIST_URL, { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined }).then(function (res) {
                         if (!res || res.status !== 200) { finish(null); return null; }
+                        var length = res.headers && res.headers.get ? Number(res.headers.get('content-length')) : NaN;
+                        if (length > BODY_MAX) { finish(null); try { if (ctrl) ctrl.abort(); } catch (e) { /* it was over */ } return null; }          // (an answer that says that it is huge is not read)
                         return res.text().then(function (text) {
                             var data = null;
                             try { data = typeof text === 'string' && text.length <= BODY_MAX ? JSON.parse(text) : null; } catch (e) { data = null; }
@@ -466,9 +494,13 @@
                 } catch (e) { finish(null); }
             });
         }
-        function poll() {                                  // a look at once (the popover opened, Home came back, the tab came back, the page started): one at a time, never while the tab is hidden or the Room shows
+        function poll() {                                  // a look at once (the popover opened, Home came back, the tab came back, the page started): one at a time, a second apart at least, never while the tab is hidden or the Room shows
             if (!wanted() || polling) return;
+            var wait = lastLook ? FLOOR_MS - (now() - lastLook) : 0;
+            if (floorTimer !== null) { cancel(floorTimer); floorTimer = null; }
+            if (wait > 0) { floorTimer = later(guard(function () { floorTimer = null; poll(); }), wait); return; }
             if (pollTimer !== null) { cancel(pollTimer); pollTimer = null; }
+            lastLook = now();
             if (typeof win.fetch !== 'function') { settle(null); return; }
             polling = true;
             var mine = ++round;
@@ -491,12 +523,13 @@
         parts.games.addEventListener('click', guard(function () { if (isOpen) closeList(true); else openList(); }));
         parts.quickHost.addEventListener('click', guard(quickHost));
         enable(parts.games); enable(parts.quickHost);
-        doc.addEventListener('click', guard(function (e) {         // a press anywhere else puts the list away
+        doc.addEventListener('click', guard(function (e) {         // a press anywhere else puts the list away (seen in the capture phase: before the buttons of the question card and of a Join that is on its way change anything, and take themselves out of the page)
             var t = e && e.target;
-            if (!isOpen || dialog || !t) return;
+            if (!isOpen || dialog || joining || !t) return;
             if ((pop.contains && pop.contains(t)) || (parts.games.contains && parts.games.contains(t))) return;
             closeList(false);
-        }));
+        }), true);
+        ['pointerdown', 'keydown', 'touchstart'].forEach(function (t) { doc.addEventListener(t, guard(touched), true); });
         doc.addEventListener('keydown', guard(function (e) {
             if (!e || e.key !== 'Escape') return;
             if (dialog) closeAsk(true); else if (isOpen) closeList(true);
@@ -516,8 +549,8 @@
         }
         function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more (the page is frozen: it is on its way to the game, or it is stuck and says so)
             closeAll(); clearNotice(); gone = true;
-            [pollTimer, refreshTimer, pendingTimer, lockTimer].forEach(function (t) { if (t !== null) cancel(t); });
-            pollTimer = refreshTimer = pendingTimer = lockTimer = null;
+            [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer].forEach(function (t) { if (t !== null) cancel(t); });
+            pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = null;
         }
         function stalled(words) {                          // the hand-off did not come in 15 s (Home takes presses again, the page's room is still frozen): the buttons that need the page's room say why they do not work
             [parts.quickHost, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });

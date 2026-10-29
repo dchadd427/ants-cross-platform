@@ -115,7 +115,18 @@ class El {
     hasAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attributes, k); }
     addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
     fire(t, ev) { (this.listeners[t] || []).forEach((fn) => fn(ev || {})); }
-    click() { this.fire('click', { target: this, detail: 1 }); }
+    // A press, as a browser makes it: the document's capture listeners first, then the target's, then the listeners of every parent, then the document's (the path is that of the moment of the press:
+    // a handler that takes the target out of the page does not stop the document from hearing the press, with the target in its hand)
+    click() {
+        const ev = { target: this, detail: 1 }, path = [];
+        for (let n = this.parent; n; n = n.parent) path.push(n);
+        const top = path.length ? path[path.length - 1] : this, doc = this.env.doc;
+        const attached = !!doc && (top === this.env.root || top === doc.body);
+        if (attached) (doc.capturing.click || []).slice().forEach((fn) => fn(ev));
+        this.fire('click', ev);
+        path.forEach((n) => { if (n.fire) n.fire('click', ev); });
+        if (attached) (doc.listeners.click || []).slice().forEach((fn) => fn(ev));
+    }
     key(k) { this.fire('keydown', { key: k, preventDefault() {} }); }
     focus() { this.env.focused = this; this.env.doc.activeElement = this; }
     blur() { if (this.env.doc.activeElement === this) this.env.doc.activeElement = null; this.fire('blur', {}); }
@@ -189,8 +200,8 @@ function runLobby(search, stored, options) {
             if (options.copyResult === 'throws') throw new Error('not allowed');
             return options.copyResult !== false;
         },
-        hidden: false, listeners: {},
-        addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); },
+        hidden: false, listeners: {}, capturing: {},
+        addEventListener(t, fn, capture) { const book = capture ? doc.capturing : doc.listeners; (book[t] = book[t] || []).push(fn); },
         removeEventListener() {},
     };
     env.doc = doc;

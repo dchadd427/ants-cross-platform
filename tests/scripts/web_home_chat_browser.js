@@ -67,6 +67,8 @@ async function main() {
     }
     const dockText = (page, selector) => page.evaluate((s) => { const e = document.querySelector('#gchat ' + s); return e ? e.innerText : null; }, selector);
     const state = (page) => page.evaluate(() => { const d = document.getElementById('gchat'); return d ? d.getAttribute('data-state') + '/' + d.getAttribute('data-open') : null; });
+    const writer = (page, ms) => page.waitForFunction(() => { const f = document.querySelector('#gchat .gc-form'); return !!f && !f.hidden; }, null, { timeout: ms || 8000 }).then(() => true, () => false);       // (the dock has a welcome that names the visitor: not the old one, which a hub that was dropped a moment ago has not been told is gone)
+    const settled = (page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))));       // (the page has had a frame, so that its styles, its measures and its observers are done)
     const waitState = async (page, want, ms) => { const end = Date.now() + (ms || 6000); while (Date.now() < end) { if ((await state(page)) === want) return true; await sleep(50); } return (await state(page)) === want; };
     const noSideways = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth);
     const targets = (page) => page.evaluate(() => [...document.querySelectorAll('#gchat button, #gchat input, #gchat a, #gchat [tabindex]')].filter((e) => e.offsetParent !== null || e.getClientRects().length).map((e) => { const r = e.getBoundingClientRect(); return { tag: e.tagName.toLowerCase() + '.' + e.className, w: Math.round(r.width), h: Math.round(r.height) }; }));
@@ -86,7 +88,7 @@ async function main() {
             await shot(page, 'x_home', size);
             hub.set({ you: { name: 'maple.leaf', mod: false }, login: true });
             hub.drop();
-            check('desktop: a hub that now names the visitor: after the retry the field and Send are there', await waitState(page, 'live/true', 8000) && (await page.evaluate(() => !document.querySelector('#gchat .gc-form').hidden)));
+            check('desktop: a hub that now names the visitor: after the retry the field and Send are there', await writer(page) && await waitState(page, 'live/true', 8000));
             hub.say('maple.leaf', 'quick join works nice');
             await sleep(150);
             await shot(page, 'x_chat_in', size);
@@ -107,7 +109,7 @@ async function main() {
             await shot(page, 'x_chat_out', size);
             hub.set({ you: { name: 'maple.leaf', mod: false }, login: true });
             hub.drop();
-            check(size + ': a hub that names the visitor after a retry: the field and Send are in the open panel', await waitState(page, 'live/true', 8000));
+            check(size + ': a hub that names the visitor after a retry: the field and Send are in the open panel', await writer(page) && await waitState(page, 'live/true', 8000));
             hub.say('maple.leaf', 'quick join works nice');
             await sleep(150);
             await shot(page, 'x_chat_in', size);
@@ -161,11 +163,11 @@ async function main() {
         await page.goto(site.url + '/', { waitUntil: 'load' });
         await page.waitForSelector('#gchat', { timeout: 5000 });
         await page.evaluate(() => document.querySelector('.hbar .mine').click());       // (My room: the game server is not there: the notice strip)
-        await sleep(900);
+        await page.waitForFunction(() => !document.getElementById('banner').hidden, null, { timeout: 15000 });
         await page.evaluate(() => document.querySelector('.rbar .rhome').click());
-        await sleep(200);
+        await page.waitForFunction(() => document.body.getAttribute('data-screen') === 'home', null, { timeout: 5000 });
         if ((await state(page)) === 'live/false' || (await state(page)) === 'offline/false' || (await state(page)) === 'connecting/false') await page.evaluate(() => document.querySelector('#gchat .gc-head').click());
-        await sleep(300);
+        await settled(page);
         const m = await page.evaluate(() => {
             const r = (sel) => { const e = document.querySelector(sel); if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { left: Math.round(q.left), right: Math.round(q.right), top: Math.round(q.top), bottom: Math.round(q.bottom), height: Math.round(q.height) }; };
             const dock = r('#gchat'), buttons = [...document.querySelectorAll('.hbar button')].map((b) => b.getBoundingClientRect()).filter((q) => q.width > 0 && q.height > 0);
@@ -182,7 +184,8 @@ async function main() {
         check(name + ': nothing scrolls sideways, and the dock is inside the window', (await noSideways(page)) && (m.dock === null || m.dock.bottom <= Hh));
         if (name === 'phone_small') {                                  // the notices go (the page's own OK and the strip's): the panel that was wished for is back
             await page.evaluate(() => { document.getElementById('rejoin').hidden = true; document.getElementById('banner').hidden = true; });
-            await sleep(300);
+            await page.waitForFunction(() => { const d = document.getElementById('gchat'); return !!d && d.getAttribute('data-open') === 'true'; }, null, { timeout: 5000 }).catch(() => {});
+            await settled(page);
             const back = await page.evaluate(() => { const d = document.getElementById('gchat'), q = d.getBoundingClientRect(); return { open: d.getAttribute('data-open'), height: Math.round(q.height) }; });
             check(name + ': when the notices are gone the panel is back as the visitor left it, without a press (Home\'s height changed, not the window\'s)', back.open === 'true' && back.height >= 200, JSON.stringify(back));
         }

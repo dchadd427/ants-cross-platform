@@ -153,6 +153,42 @@ async function flows() {
         for (const p of [maple, sage]) check('no script error in the page', p.errors.length === 0, p.errors.join(' | '));
         for (const p of [maple, sage]) await p.context().close();
 
+        // ---- 1b. a press on the page's own cards (the question, the name) is not a press elsewhere: the list stays open, with the focus where it was, and shows why a Join did not go (real mouse clicks) ----------------------
+        {
+            const a = await newPage(browser, fake, 'Maple', SIZES[2]); await lit(a);
+            await a.click('.hchip.mine');
+            await a.waitForSelector('#slots li');
+            const room = await a.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
+            const b = await newPage(browser, fake, 'Sage', SIZES[2], '/?room=' + room);
+            await b.click('#name-step-go');
+            await until('Sage is in the room of Maple', async () => (await a.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
+            await a.click('.rhome');
+            await a.click('.hchip.games'); await a.waitForSelector('.glist .gitem');
+            await a.click('.gjoin');
+            await a.waitForSelector('.gconfirm');
+            await a.click('.gstay');
+            check('"Stay here" with the mouse keeps the list open, and the focus is on the Join button that asked', await a.evaluate(() => !document.querySelector('.gpop').hidden && !document.querySelector('.gconfirm') && !!document.activeElement && document.activeElement.classList.contains('gjoin')));
+            await a.click('.gjoin');
+            await a.waitForSelector('.gconfirm');
+            await a.click('.gyes');
+            await a.waitForSelector('.gpnote:not([hidden])');
+            check('"Leave and join" into a game that is gone: the list is open and says "That game is not open any more." (and the room that the page is in is kept)', !(await a.evaluate(() => document.querySelector('.gpop').hidden)) && (await textOf(a, '.gpnote')) === 'That game is not open any more.' && await screenOf(a) === 'home' && (await a.evaluate(() => !!document.getElementById('code').textContent)));
+            await a.fill('.gcode input', 'zzzzzz');
+            await a.click('.gcgo');
+            await a.waitForSelector('.gconfirm');
+            await a.click('.gyes');
+            await a.waitForSelector('#name-step:not([hidden])');
+            await a.click('#name-step-go');
+            await a.waitForFunction(() => { const h = document.querySelector('.gcode .hint'); return !!h && h.textContent.length > 0; }, null, { timeout: 12000 });
+            check('Join by code with a code that leads nowhere: the name card is answered, the list is still open and the words are under the field (not in a list that went away)', await a.evaluate(() => !document.querySelector('.gpop').hidden && /no room/i.test(document.querySelector('.gcode .hint').textContent)), await textOf(a, '.gcode .hint'));
+            await a.click('.gjoin');
+            await a.waitForSelector('.gconfirm');
+            await a.click('.gyes');
+            await a.waitForSelector('.gjoining:not([hidden]), .gpnote:not([hidden])');
+            check('(no script error in these pages)', a.errors.length === 0 && b.errors.length === 0, a.errors.concat(b.errors).join(' | '));
+            await a.context().close(); await b.context().close();
+        }
+
         // ---- 2. the pictures: the scenes of the approved pictures, at their three sizes ----------------------------------------------------------------------------------------------------
         if (shotsDir) {
             fs.mkdirSync(shotsDir, { recursive: true });
@@ -170,6 +206,10 @@ async function flows() {
                 await shot(p, 'games', size);
                 check(label + ': the Games list shows five rows, and every target in it is at least 44 px high and wide', (await p.evaluate(() => document.querySelectorAll('.glist .gitem').length)) === 5 && (await small(p, '.gpop')).length === 0, JSON.stringify(await small(p, '.gpop')));
                 check(label + ': the list is inside the window and scrolls inside itself (it is no taller than what is left under the bar)', await p.evaluate(() => { const r = document.querySelector('.gpop').getBoundingClientRect(); return r.bottom <= window.innerHeight + 1 && r.right <= window.innerWidth + 1 && r.left >= 0 && r.top > 0; }));
+                await p.evaluate(() => { const j = document.querySelector('.gjoining'); j.hidden = false; j.firstChild.textContent = 'Joining Pebble’s room…'; });       // (the line of a Join that waits: shown by hand, the real one lasts a moment)
+                await shot(p, 'games_joining', size);
+                check(label + ': the line that says that a Join is on its way is inside the list, and its Cancel is at least 44 px high and wide', await p.evaluate(() => { const j = document.querySelector('.gjoining'), b = j.querySelector('.btn'), r = j.getBoundingClientRect(), q = document.querySelector('.gpop').getBoundingClientRect(), br = b.getBoundingClientRect(); return br.height >= 44 && br.width >= 44 && r.left >= q.left && r.right <= q.right + 1 && r.height > 0; }));
+                await p.evaluate(() => { document.querySelector('.gjoining').hidden = true; });
                 await p.keyboard.press('Escape');
                 await p.context().close();
                 p = await newPage(browser, emptySite, 'Maple', size); await lit(p);
@@ -195,6 +235,10 @@ async function flows() {
                 await shot(a, 'room_private', size);
                 check(label + ': the Room card has the switch (private), 44 px high, inside the window, and the page does not scroll sideways', (await small(a, '.vis')).length === 0 && (await a.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)), JSON.stringify(await small(a, '.vis')));
                 await a.click('.rhome'); await a.click('.quick.host');
+                await a.waitForSelector('.gconfirm');
+                await shot(a, 'confirm_public', size);
+                check(label + ': Quick host with people in the room asks first ("Make your room public?"), with its two answers at least 44 px high', (await textOf(a, '.gctitle')) === 'Make your room public?' && await a.evaluate(() => Array.from(document.querySelectorAll('.gconfirm .btn')).every((b) => b.getBoundingClientRect().height >= 44)));
+                await a.click('.gyes');
                 await a.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public');
                 await shot(a, 'room_public', size);
                 await shot(b, 'room_guest', size);

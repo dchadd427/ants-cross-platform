@@ -12,7 +12,7 @@
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
 const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, popOf, rowsOf, joinOf, textOf, stripOf, stripText, stripButtons, pillOf, dialogOf, visibilities, leaves, seatsOf, myRoom, guestRoom, roomAs,
-        PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, RULES0, done, broke, pressEscape } = R;
+        PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, RULES0, done, broke, pressEscape, pressElsewhere } = R;
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
 const visOf = (env) => first(env.root, 'vis');
@@ -21,6 +21,7 @@ const state = (env) => pressed(env).join();
 const noteOf = (env) => first(env.root, 'visnote');
 const tagOf = (env) => first(env.root, 'vistag');
 const gone = (sock) => sock.closed === true;
+const touch = (env, kind) => (env.doc.capturing[kind || 'pointerdown'] || []).forEach((fn) => fn({}));       // (a press, a key or a touch of the person: what the repeat of a public room asks for)
 const openGames = async (env) => { tap(env.home('games')); await flush(); };
 const OTHERS = ['Maya', 'Sage'];
 
@@ -154,33 +155,65 @@ const OTHERS = ['Maya', 'Sage'];
     sock.receive(roomAs(['Pebble', 'Maya'], 1, PRIVATE));
     check('a guest sees the idle room go private as the chip and nothing else (the one tap is the leader\'s)', stripOf(env).hidden === true && tagOf(env).textContent === 'Private room');
 }
-{   // the repeat: every 10 minutes, only while the Room shows, the tab is visible and the leader looks at a public room
+{   // the repeat: every 10 minutes, only while the Room shows, the tab is visible and the leader looks at a public room (and is there: touches something now and then)
     const env = await page({ options: { fakeClock: true } });
     const sock = myRoom(env, OTHERS, PUBLIC);
     await wait(env, 599500);
     same('a public room that its leader looks at is told "public" again after 10 minutes, not before', visibilities(sock), []);
     await wait(env, 500);
     same('... after 10 minutes, once (the byte 1)', visibilities(sock), [1]);
+    touch(env);
     await wait(env, 599500);
     same('... and not again until 10 more', visibilities(sock), [1]);
     await wait(env, 500);
     same('... every 10 minutes', visibilities(sock), [1, 1]);
     check('(the repeat is no change that anybody sees: the room is as it was and no strip, no hint)', stripOf(env).hidden === true && state(env) === 'false,true');
+    touch(env);
     env.hide(true);
     await wait(env, 1500000);
     same('a tab that is out of sight says nothing, however long it stays so (25 minutes: nothing)', visibilities(sock), [1, 1]);
     env.hide(false);
+    touch(env, 'keydown');
     await wait(env, 500);
     same('... and the tab that is back repeats it at once (more than 10 minutes have gone by)', visibilities(sock), [1, 1, 1]);
     env.roomBar('rhome').click();
     await wait(env, 1800000);
     same('Home shows (the Room does not): nothing is said in half an hour', visibilities(sock), [1, 1, 1]);
     env.home('mine').click();
+    touch(env);
     await wait(env, 500);
     same('... and the Room back repeats it at once', visibilities(sock), [1, 1, 1, 1]);
     sock.receive(roomAs(OTHERS, 0, PRIVATE));
     await wait(env, 1300000);
     same('a room that is private is not told anything', visibilities(sock), [1, 1, 1, 1]);
+}
+{   // a leader who has gone away from a visible tab: the repeat does not keep the room public for ever
+    const env = await page({ options: { fakeClock: true } });
+    const sock = myRoom(env, OTHERS, PUBLIC);
+    await wait(env, 1199500);
+    same('nothing touched for 20 minutes less half a second: the repeat of the 10th minute went, and no other', visibilities(sock), [1]);
+    await wait(env, 500);
+    same('... and at 20 minutes the repeat that would have kept the room public a third 10 minutes is not made (the server\'s 30-minute idle rule goes on)', visibilities(sock), [1]);
+    await wait(env, 3600000);
+    same('... an hour more, a tab in sight all the time: nothing', visibilities(sock), [1]);
+    check('(no timer waits for the next repeat: nothing is asked of the clock for an abandoned room)', env.timers.every((t) => t.at - env.clock < 500000));
+    touch(env);
+    await wait(env, 500);
+    same('a touch of the person starts it again at once (it is long overdue)', visibilities(sock), [1, 1]);
+    for (const kind of ['pointerdown', 'keydown', 'touchstart']) {
+        const e2 = await page({ options: { fakeClock: true } });
+        const s2 = myRoom(e2, OTHERS, PUBLIC);
+        await wait(e2, 1300000);
+        touch(e2, kind);
+        await wait(e2, 500);
+        same('(a ' + kind + ' is a touch of the person)', visibilities(s2), [1, 1]);
+    }
+    const e3 = await page({ options: { fakeClock: true } });
+    const s3 = myRoom(e3, OTHERS, PUBLIC);
+    await wait(e3, 900000);
+    touch(e3);
+    await wait(e3, 300000);
+    same('a leader who touched something at the 15th minute is there at the 20th: the repeat goes (10 minutes, and 20)', visibilities(s3), [1, 1]);
 }
 {
     const waiting = await page({ options: { fakeClock: true } });
@@ -238,19 +271,50 @@ const OTHERS = ['Maya', 'Sage'];
     sock.receive(roomAs(['Maya', 'Sage'], 0, PUBLIC));
     same('(nothing more is sent)', visibilities(sock), [1]);
 }
-{   // a leader of a private room, with others: it flips the room, the others stay
+{   // a leader of a private room, with others: it asks first, and then flips the room, the others stay
     const env = await page();
     const sock = myRoom(env, ['Maya', 'Sage', 'Pip']);
     env.roomBar('rhome').click();
     tap(env.home('host'));
-    check('Quick host with a private room of yours flips it: Visibility(public) at once, the Room shows, no second room, nobody leaves', visibilities(sock).length === 1 && visibilities(sock)[0] === 1 && env.screen() === 'room' && env.sockets.length === 1 && leaves(sock) === 0);
+    const box = dialogOf(env);
+    check('Quick host with a private room of yours that has others in it asks first: "Make your room public?", who is in it, and the answer that changes nothing has the focus; nothing was sent', !!box && textOf(first(box, 'gctitle')) === 'Make your room public?'
+          && textOf(first(box, 'gcline')) === 'Sage and Pip are in it. Anybody on the front page will be able to join it.' && textOf(first(box, 'gyes')) === 'Make it public' && textOf(first(box, 'gstay')) === 'Keep it private' && env.focused === first(box, 'gstay')
+          && visibilities(sock).length === 0 && env.screen() === 'home');
+    tap(first(box, 'gstay'));
+    check('"Keep it private" changes nothing: the card is gone, nothing was sent, Home stays, no timer waits for the room to turn public', dialogOf(env) === null && visibilities(sock).length === 0 && env.screen() === 'home' && env.sockets.length === 1);
+    tap(env.home('host'));
+    pressEscape(env);
+    check('Escape is "Keep it private"', dialogOf(env) === null && visibilities(sock).length === 0);
+    tap(env.home('host'));
+    tap(first(dialogOf(env), 'gyes'));
+    check('"Make it public" flips it: Visibility(public) at once, the Room shows, no second room, nobody leaves', visibilities(sock).length === 1 && visibilities(sock)[0] === 1 && env.screen() === 'room' && env.sockets.length === 1 && leaves(sock) === 0);
     sock.receive(roomAs(['Maya', 'Sage', 'Pip'], 0, PUBLIC));
     same('... and says who stays in it, as the picture does', stripText(env), 'Your room is public now. It shows in Open games; Sage and Pip stay in it.');
     const one = await page();
     const s1 = myRoom(one, ['Maya', 'Sage']);
+    one.roomBar('rhome').click();
     tap(one.home('host'));
+    check('(one other: the card names him alone, "Sage is in it.")', textOf(first(dialogOf(one), 'gcline')) === 'Sage is in it. Anybody on the front page will be able to join it.');
+    tap(first(dialogOf(one), 'gyes'));
     s1.receive(roomAs(['Maya', 'Sage'], 0, PUBLIC));
-    same('(one other: "Sage stays in it")', stripText(one), 'Your room is public now. It shows in Open games; Sage stays in it.');
+    same('(and "Sage stays in it")', stripText(one), 'Your room is public now. It shows in Open games; Sage stays in it.');
+    const alone = await page();
+    const sa = myRoom(alone, ['Maya']);
+    alone.roomBar('rhome').click();
+    tap(alone.home('host'));
+    check('a leader who is alone in the room is not asked: it flips at once', dialogOf(alone) === null && visibilities(sa).length === 1 && alone.screen() === 'room');
+    const bots = await page();
+    bots.home('mine').click();
+    const sb = bots.arrive({ key: KEY, seats: [[C, 'Maya'], [NET0.SLOT.Bot, 'Easy'], [E, ''], [E, '']], room: { flags: PRIVATE } });
+    bots.roomBar('rhome').click();
+    tap(bots.home('host'));
+    check('(a computer player is not a person who is asked about: only people are in the question)', dialogOf(bots) === null && visibilities(sb).length === 1);
+    const press = await page();
+    const sp = myRoom(press, ['Maya', 'Sage']);
+    press.roomBar('rhome').click();
+    tap(press.home('host'));
+    sp.receive(roomMessage(seatsOf(['Maya', 'Sage']), { you: 0, leader: 0, flags: STARTING }));
+    check('START that reaches the page while the question is up takes the question away and nothing is sent', dialogOf(press) === null && visibilities(sp).length === 0);
 }
 {   // already public
     const env = await page();
@@ -415,13 +479,15 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     const env = await withList();
     const own = myRoom(env, ['Maya']);
     env.roomBar('rhome').click();
+    await wait(env, 2500);
     await openGames(env);
     const looks = env.looks();
     tap(joinOf(rowsOf(env)[0]));
     env.last().open().receive(reject(reason));
     await flush();
+    await wait(env, 1000);
     check('a room that is ' + what + ': "' + words + '" in the list, the own room is as it was (no Leave, open), the page is where it was', textOf(first(popOf(env), 'gpnote')) === words && first(popOf(env), 'gpnote').hidden === false && leaves(own) === 0 && !own.closed && env.screen() === 'home' && popOf(env).hidden === false);
-    check('... the list is looked at again at once, and its buttons take presses again', env.looks() === looks + 1 && joinOf(rowsOf(env)[0]).disabled === false);
+    check('... the list is looked at again (a second apart at most from the look at its opening), and its buttons take presses again', env.looks() === looks + 1 && joinOf(rowsOf(env)[0]).disabled === false);
     check('... and the page costs nothing: no banner, the same session', env.$('banner').hidden === true && JSON.parse(env.session.data['ants.lobby']).c === helloRoom(own.sent[0]));
 }
 {
@@ -460,7 +526,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
           && textOf(first(box, 'gyes')) === 'Leave and join' && env.focused === first(box, 'gstay') && env.sockets.length === 1 && leaves(own) === 0);
     check('... the buttons of the row inside the card are not there (the card has the answers)', first(box, 'gjoin') === null);
     tap(first(box, 'gstay'));
-    check('"Stay here": no second client, nothing left', dialogOf(env) === null && env.sockets.length === 1 && leaves(own) === 0 && popOf(env).hidden === false);
+    check('"Stay here": no second client, nothing left, the list stays open (a press on the card is not a press elsewhere) and the focus is back on the Join that asked', dialogOf(env) === null && env.sockets.length === 1 && leaves(own) === 0 && popOf(env).hidden === false && env.focused === joinOf(rowsOf(env)[0]));
     tap(joinOf(rowsOf(env)[0]));
     pressEscape(env);
     check('Escape is "Stay here" and gives the focus back to the button that asked', dialogOf(env) === null && env.sockets.length === 1 && env.focused === joinOf(rowsOf(env)[0]));
@@ -548,6 +614,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
         e.$('name-step-go').click();
         e.last().open().receive(reject(reason));
         check('a room that is ' + what + ': "' + words + '" under the field', textOf(first(popOf(e), 'hint')) === words);
+        check('... and the list stays open to show it (the press on the name card is not a press elsewhere)', popOf(e).hidden === false);
     }
     const old = await withList();
     myRoom(old, ['Maya']);
@@ -557,6 +624,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     old.$('name-step-go').click();
     old.last().open().receive(reject(2));
     check('a server of another version: the strip asks for a reload', !old.$('banner').hidden && /A newer version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
+    check('... and the list is still open, with the words under the field', popOf(old).hidden === false && /newer version of Ants/.test(textOf(first(popOf(old), 'hint'))));
     const ok = await withList();
     const okOwn = myRoom(ok, ['Maya']);
     ok.roomBar('rhome').click();
@@ -594,6 +662,142 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     tap(first(popOf(env), 'gcgo'));
     tap(first(dialogOf(env), 'gyes'));
     check('"Leave and join": the name card comes, and the own room is still there', env.$('name-step').hidden === false && leaves(own) === 0 && !own.closed);
+}
+
+{   // "Leave and join" into a room that cannot be joined: the refusal is shown in the list that stays open
+    for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a match that has started', 3, 'The match in that room has already started.']]) {
+        const env = await withList();
+        const own = myRoom(env, OTHERS);
+        env.roomBar('rhome').click();
+        await openGames(env);
+        tap(joinOf(rowsOf(env)[0]));
+        tap(first(dialogOf(env), 'gyes'));
+        check('after "Leave and join" the list stays open (the press on the card is not a press elsewhere)', popOf(env).hidden === false && first(popOf(env), 'gjoining').hidden === false);
+        env.last().open().receive(reject(reason));
+        await flush();
+        check('a room that is ' + what + ' (Leave and join): "' + words + '" is in the list that is open, the own room is kept', textOf(first(popOf(env), 'gpnote')) === words && popOf(env).hidden === false && leaves(own) === 0 && !own.closed && first(popOf(env), 'gjoining').hidden === true);
+    }
+}
+{   // a Join that is on its way says so, with a way out
+    const env = await withList();
+    const own = myRoom(env, ['Maya']);
+    env.roomBar('rhome').click();
+    await openGames(env);
+    const bar = first(popOf(env), 'gjoining');
+    check('(no Join is on its way: the line is not there)', bar.hidden === true);
+    tap(joinOf(rowsOf(env)[0]));
+    const probe = env.last().open();
+    check('a Join says what it waits for ("Joining Pebble’s room…", as a status) with a Cancel button, and the buttons wait', bar.hidden === false && bar.getAttribute('role') === 'status' && textOf(bar.children[0]) === 'Joining Pebble’s room…' && textOf(bar.children[1]) === 'Cancel' && joinOf(rowsOf(env)[0]).disabled === true);
+    await wait(env, 5000);
+    check('... for as long as the look takes (a second client waits up to 15 s)', bar.hidden === false);
+    tap(bar.children[1]);
+    check('Cancel: the line goes, the buttons are back, the second client is let go of (a Leave, closed), the own room is as it was, and the focus is in the field', bar.hidden === true && joinOf(rowsOf(env)[0]).disabled === false && leaves(probe) === 1 && probe.closed && leaves(own) === 0 && !own.closed && env.focused === first(popOf(env), 'joinbox').children[0]);
+    probe.receive(welcome(1, KEY2, 0));
+    await wait(env, 20000);
+    check('a Welcome (or the 15 s of silence) that comes after Cancel changes nothing: no notice, no Room, no words, the own room stays', env.screen() === 'home' && own.closed === false && leaves(own) === 0 && stripOf(env).hidden === true && textOf(first(popOf(env), 'gpnote')) === '' && bar.hidden === true);
+    tap(joinOf(rowsOf(env)[0]));
+    check('(and a new Join can be made)', env.sockets.length === 3 && bar.hidden === false);
+    const typed = await withList();
+    myRoom(typed, ['Maya']);
+    typed.roomBar('rhome').click();
+    await openGames(typed);
+    first(popOf(typed), 'joinbox').children[0].value = 'k7m2xq'; tap(first(popOf(typed), 'gcgo'));
+    typed.$('name-step-go').click();
+    const tp = typed.last().open();
+    const tbar = first(popOf(typed), 'gjoining');
+    check('Join by code says "Joining the room…" too, with its Cancel', tbar.hidden === false && textOf(tbar.children[0]) === 'Joining the room…');
+    tap(tbar.children[1]);
+    check('... and Cancel lets the second client go (the name card was answered already)', tbar.hidden === true && leaves(tp) === 1 && tp.closed && first(popOf(typed), 'gcgo').disabled === false);
+    await wait(typed, 20000);
+    check('(the 15 s of silence of a look that was given up say nothing under the field)', textOf(first(popOf(typed), 'hint')) === '' && tbar.hidden === true);
+}
+{   // MUST: a press inside the page's cards is not a press elsewhere, and the list stays open for the words that tell why a Join did not go
+    const env = await withList(null, { search: '?room=zzz999', options: { stayHome: false } });
+    const sock = guestRoom(env, 'Zed', PRIVATE);
+    env.roomBar('rhome').click();
+    await openGames(env);
+    pressElsewhere(env, env.$('start'));
+    check('(a press that really is elsewhere closes the list)', popOf(env).hidden === true);
+}
+{   // a match for one: the page is on its way to the game page, and Home makes no room and joins none
+    const env = await withList();
+    const own = myRoom(env, ['Maya']);
+    env.$('start').click();
+    check('(START with nobody else goes to the game page on its own, and lets the room go)', env.assigned.length === 1 && own.closed === true);
+    env.roomBar('rhome').click();
+    const before = env.sockets.length;
+    tap(env.home('host'));
+    await openGames(env);
+    tap(joinOf(rowsOf(env)[0]));
+    const input = first(popOf(env), 'joinbox').children[0];
+    input.value = 'k7m2xq'; tap(first(popOf(env), 'gcgo'));
+    check('Quick host, Join and Join by code do nothing while the page is on its way to a game (no socket, no notice, no card)', env.sockets.length === before && stripOf(env).hidden === true && dialogOf(env) === null && env.$('name-step').hidden === true);
+}
+{   // the page's bridge as the list sees it: a "handing" that throws is a page that is not on its way; a Cancel that comes when the second client is the page's own client lets nothing go
+    let bridge = null;
+    const site = fakeSite();
+    site.body = listOf([row('k7m2xq', 'Pebble', { map: 'ISLANDS.LVL', people: 2, free: 2 })]);
+    const wrapper = { mount: (e) => R.Games.mount(Object.assign({}, e, { page: (bridge = Object.assign(Object.create(e.page), { handing() { throw new Error('the page cannot say'); } })) })) };
+    const env = await page({ site, options: { lazy: { AntsHomeGames: wrapper } } });
+    tap(env.home('host'));
+    check('a page whose handing() throws is a page that is not on its way: Quick host makes the room (and the error is not the user\'s)', env.sockets.length === 1 && env.screen() === 'room');
+    env.roomBar('rhome').click();
+    await openGames(env);
+    tap(joinOf(rowsOf(env)[0]));
+    const probe = env.last().open();
+    probe.receive(welcome(1, KEY2, 0));
+    probe.receive(roomAs(['Pebble', 'Maya'], 1, PRIVATE));
+    check('(the Join went: the page is in the other room, and that second client is the page\'s own client now)', env.screen() === 'room' && env.$('room-h').textContent === 'Pebble’s room');
+    bridge.cancel();
+    check('a Cancel that reaches the page when the second client has become its own client lets nothing go (no Leave, the socket open)', leaves(probe) === 0 && !probe.closed);
+}
+{   // a second client that is welcomed by a page that is on its way to a game is let go of at once, and says nothing
+    const env = await withList();
+    const own = myRoom(env, ['Maya']);
+    env.roomBar('rhome').click();
+    await openGames(env);
+    tap(joinOf(rowsOf(env)[0]));
+    const probe = env.last().open();
+    env.home('mine').click();
+    env.$('start').click();
+    check('(START with nobody else goes to the game page while the second client waits)', env.assigned.length === 1);
+    probe.receive(welcome(1, KEY2, 0));
+    check('the Welcome of a room that the page cannot take any more: the second client leaves at once (a Leave, closed), and nothing changes in the page', leaves(probe) === 1 && probe.closed && env.assigned.length === 1);
+}
+{   // a Private that the server did not take is not the cause of a room that goes private half an hour later; the hint of a held back press goes by itself
+    const env = await page({ options: { fakeClock: true } });
+    const sock = myRoom(env, ['Maya', 'Sage'], PUBLIC);
+    sock.receive(roomAs(['Maya', 'Sage'], 0, PUBLIC));
+    tap(visOf(env).children[0]);
+    await wait(env, 11000);
+    sock.receive(roomAs(['Maya', 'Sage'], 0, PRIVATE));
+    check('a Private press that nobody answered for 10 s is forgotten: the room that goes private then says so ("went private after 30 minutes") with its Make it public button', stripText(env) === 'Your room went private after 30 minutes. Make it public again?' && stripButtons(env).length === 2);
+    const quick = await page({ options: { fakeClock: true } });
+    const qs = myRoom(quick, ['Maya', 'Sage'], PUBLIC);
+    qs.receive(roomAs(['Maya', 'Sage'], 0, PUBLIC));
+    tap(visOf(quick).children[0]);
+    qs.receive(roomAs(['Maya', 'Sage'], 0, PRIVATE));
+    check('(a Private that was answered is the leader\'s own: nothing is said)', stripOf(quick).hidden === true);
+    const hold = await page({ options: { fakeClock: true } });
+    const hs = myRoom(hold, ['Maya']);
+    tap(visOf(hold).children[1]); hs.receive(roomAs(['Maya'], 0, PUBLIC)); tap(visOf(hold).children[0]); hs.receive(roomAs(['Maya'], 0, PRIVATE));
+    tap(visOf(hold).children[1]);
+    check('(a press that the page\'s pace holds back says "One moment, then press again.")', noteOf(hold).textContent === 'One moment, then press again.');
+    await wait(hold, 1500);
+    check('... and the words go by themselves when the moment is over (nobody has to wait for a message of the room), and the switch can be pressed again', noteOf(hold).textContent === 'Public rooms show your name and map in the Games list.' && visOf(hold).children.every((b) => b.disabled === false));
+}
+{   // the notice of the list is behind the question card too
+    const env = await withList();
+    myRoom(env, ['Maya', 'Sage'], PUBLIC);
+    env.roomBar('rhome').click();
+    tap(env.home('host'));
+    env.roomBar('rhome').click();
+    check('(a notice of the list stands, and takes presses)', stripOf(env).hidden === false && !stripOf(env).hasAttribute('inert'));
+    await openGames(env);
+    tap(joinOf(rowsOf(env)[0]));
+    check('the question is up ("Leave your room?"): the notice, which is outside Home, is behind it and takes no key or tap', dialogOf(env) !== null && stripOf(env).hasAttribute('inert'));
+    tap(first(dialogOf(env), 'gstay'));
+    check('... and takes presses again when the question is answered', !stripOf(env).hasAttribute('inert') && stripOf(env).hidden === false);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

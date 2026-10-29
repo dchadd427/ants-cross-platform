@@ -339,7 +339,7 @@
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
-    <h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color.</p>
+    <h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color. To let anybody in, press Quick host on Home or switch the room to Public: it is then listed under Games, where players join it from the list or by its code.</p>
     <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
     <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their color. It asks first, and the color opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
     <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another color, their team goes along.</p>
@@ -608,7 +608,7 @@
         var dirty = false;                            // something changed while the cards could not be drawn
         var skipClick = false;
         var bannerKind = '';
-        var handing = false;                          // the page is on its way to the game page (or to a game for one): no more messages
+        var handing = false, lastProbe = null;                          // the page is on its way to the game page (or to a game for one): no more messages; lastProbe: the second client of the last Join (the Games list's Cancel lets it go)
         var lastStarting = false;
         var lastParams = null;                        // what the client was made from, to make it again (Try again, Use this window)
         var fixSent = '';                             // the correction of the room's teams that was sent for this plan
@@ -1291,11 +1291,12 @@
         // A look at the room of a code while this page's own room stays (a code with no room is answered, and nothing is lost): a second client that only joins and never makes a room, which is the page's client, and the old one
         // is let go of, only when the room WELCOMES it. done({ ok: true }) or done({ ok: false, kind: 'full' | 'running' | 'version' | 'noroom' | 'silent', text }), once. Returns the second client.
         function probe(code, name, done) {
-            var p = makeClient({ code: code, name: name, join: true }), adopted = false, told = false, timer = setTimeout(function () { if (!adopted) { p.leave(); failed('silent', 'The server did not answer. Try again in a moment.'); } }, 15000);
+            var p = lastProbe = makeClient({ code: code, name: name, join: true }), adopted = false, told = false, timer = setTimeout(function () { if (!adopted) { p.leave(); failed('silent', 'The server did not answer. Try again in a moment.'); } }, 15000);
             function tell(result) { clearTimeout(timer); if (!told && done) { told = true; done(result); } }
             function failed(kind, text) { tell({ ok: false, kind: kind, text: text }); }
             p.on('welcome', function (e) {
-                if (adopted || handing) return;
+                if (adopted) return;
+                if (handing) { adopted = true; clearTimeout(timer); p.leave(); return; }       // (the page is on its way to a game: this one is let go of at once, and says nothing)
                 adopted = true;
                 var old = client;
                 client = p;
@@ -1477,7 +1478,7 @@
         // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
         var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
             info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow, stalled: stalled,
-            client: function () { return client; }, join: probe, typed: joinTyped, name: myName,
+            client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },
             leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
         // ---- go ----

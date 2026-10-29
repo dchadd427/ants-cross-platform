@@ -10,6 +10,9 @@
 .gphead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .gptitle { margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
 .gpcount { font-size: 15px; color: #a8cfc0; text-align: right; }
+.gjoining { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 8px; padding: 4px 4px 4px 10px; font-size: 16px; color: var(--cream); border-left: 6px solid var(--gold); background: rgba(255, 255, 255, .05); }
+.gjoining span { min-width: 0; overflow-wrap: anywhere; }
+.gjoining .btn { flex: none; min-height: 44px; min-width: 88px; }
 .gpnote { margin: 0 0 8px; padding: 6px 10px; font-size: 15px; line-height: 1.3; color: #ffe4de; background: var(--bad-bg); border-left: 6px solid var(--bad-edge); border-radius: 3px; overflow-wrap: anywhere; }
 .gpbody { min-width: 0; }
 .glist { list-style: none; margin: 0; padding: 0; background: #080d12; border: 1px solid #17382f; border-radius: 4px; }
@@ -36,7 +39,7 @@
 .glegend .gdot.player { --c: #79bf93; } .glegend .gdot.bot { --c: #d4707f; }
 .gjoin { min-width: 72px; min-height: 44px; }
 .gempty, .goff { display: grid; justify-items: center; gap: 6px; padding: 22px 16px 18px; text-align: center; background: #080d12; border: 1px solid #17382f; border-radius: 4px; }
-.gempty[hidden], .goff[hidden], .glist[hidden], .glegend[hidden], .gpnote[hidden] { display: none; }
+.gempty[hidden], .goff[hidden], .glist[hidden], .glegend[hidden], .gpnote[hidden], .gjoining[hidden] { display: none; }
 .gempty .ant { --k: 2; margin: 0 auto 4px; filter: brightness(0) invert(1); opacity: .13; animation: none; }       /* (the ant of an open color: a shadow of one) */
 .gemtitle { margin: 0; font-size: 22px; line-height: 1.2; }
 .gemline { margin: 0 0 4px; font-size: 15px; line-height: 1.35; color: #a8cfc0; }

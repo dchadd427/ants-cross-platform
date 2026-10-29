@@ -30,14 +30,14 @@ function same(label, got, want) {
 const flush = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };      // (the promises of one look settle)
 // A fake GET /lobbies: `body` is the answer (an object, or `text` as it is), `status`; reject / throws / hang make it fail; times says at which moments of the clock it was asked
 function fakeSite() {
-    const n = { calls: [], times: [], status: 200, body: { format: 1, lobbies: [], count: 0 }, text: null, reject: false, throws: false, hang: false, clock: () => 0 };
+    const n = { calls: [], times: [], reads: 0, length: undefined, status: 200, body: { format: 1, lobbies: [], count: 0 }, text: null, reject: false, throws: false, hang: false, clock: () => 0 };
     n.fetch = (url, init) => {
         if (url !== '/lobbies') return Promise.reject(new Error('this site has no ' + url + ' here'));
         n.calls.push({ url, init }); n.times.push(n.clock());
         if (n.throws) throw new Error('fetch throws');
         if (n.hang) return new Promise(() => {});
         if (n.reject) return Promise.reject(new Error('the network is down'));
-        return Promise.resolve({ status: n.status, text: () => Promise.resolve(n.text !== null ? n.text : JSON.stringify(n.body)) });
+        return Promise.resolve({ status: n.status, headers: { get: (k) => (n.length !== undefined && String(k).toLowerCase() === 'content-length' ? String(n.length) : null) }, text: () => { n.reads++; return Promise.resolve(n.text !== null ? n.text : JSON.stringify(n.body)); } });
     };
     return n;
 }
@@ -71,7 +71,7 @@ const first = (root, cls) => find(root, cls)[0] || null;
 const home = (env, cls) => first(env.$('home'), cls);
 const tap = (b) => { if (b && !b.disabled) b.click(); };                              // (a disabled button takes no press, as in a browser)
 const pressEscape = (env) => (env.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
-const pressElsewhere = (env, target) => (env.doc.listeners.click || []).forEach((fn) => fn({ target }));
+const pressElsewhere = (env, target) => (env.doc.capturing.click || []).concat(env.doc.listeners.click || []).forEach((fn) => fn({ target }));
 const popOf = (env) => home(env, 'gpop');
 const rowsOf = (env) => find(popOf(env), 'gitem').filter((e) => e.tagName === 'li');
 const joinOf = (li) => li.findAll((e) => e.tagName === 'button')[0];

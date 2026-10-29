@@ -33,7 +33,7 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 53 * 1000, 15200      # bytes, raw and gzipped, both files together: they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 58 * 1000, 16500      # bytes, raw and gzipped, both files together (about 56,000 and 16,000): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
@@ -74,7 +74,8 @@ class ThePage(unittest.TestCase):
         self.assertLess(probe.index("client = p;"), probe.index("if (old) old.leave();"))
         self.assertEqual(probe.count("old.leave()"), 1, "the one place where the old room is let go of")
         self.assertEqual(probe.count("client.leave()"), 0)
-        self.assertIn("if (adopted || handing) return;", probe, "a Welcome that comes after the page gave the look up (or is on its way to the game) takes nothing")
+        self.assertIn("if (adopted) return;", probe, "a Welcome that comes after the page gave the look up takes nothing")
+        self.assertIn("if (handing) { adopted = true; clearTimeout(timer); p.leave(); return; }", probe, "a Welcome that comes when the page is on its way to a game is let go of at once, and says nothing")
         join = read("web", "home", "games.js")
         join = join[join.index("function joinRow(row) {"):join.index("function joinTyped() {")]
         self.assertNotIn("page.leave()", join, "a Join from the list never leaves a room itself")
@@ -167,12 +168,13 @@ class TheStyle(unittest.TestCase):
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".gjoin", ".gcode .gcgo", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gstrip .btn"):
+        for selector in (".gjoin", ".gcode .gcgo", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gstrip .btn", ".gjoining .btn"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
             for value in values:
                 self.assertGreaterEqual(value, 44, "%s has a min-height of %d" % (selector, value))
-        for selector in (r"\.gjoin", r"\.gcode \.gcgo"):
+        self.assertIn(".gjoining[hidden] { display: none; }", self.css, "a Join that is not on its way shows no line (and no Cancel)")
+        for selector in (r"\.gjoin", r"\.gcode \.gcgo", r"\.gjoining \.btn"):
             self.assertGreaterEqual(int(re.search(selector + r" \{[^}]*min-width: (\d+)px", self.css).group(1)), 44, selector)
         self.assertNotRegex(self.css, r"(?<!min-)height: [1-3]\d px; *}", "no fixed height under 40 px on a control")
 
