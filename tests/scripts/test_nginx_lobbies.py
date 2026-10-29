@@ -7,9 +7,11 @@ address, key or chat); the page's nginx forwards it like /live (tests/scripts/te
   - /lobbies is an exact location, the only one of its name: only a GET without a query goes through (405 and 404 otherwise), the checks come before the allowance, and the server is always asked
     for /lobbies, however the visitor spelled the address;
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
-  - one allowance for the whole site (behind a reverse proxy every visitor has the proxy's address), thirty a second with a burst of a hundred, 503 beyond, and a zone of its own;
+  - an allowance of its own, a hundred a second with a burst of two hundred, 503 beyond (the key is the address nginx sees: the whole site's while the reverse proxy is not named in
+    docker/trusted-proxies.conf);
   - one cache entry for everybody, TWO seconds long, in the cache of /stats: the server is asked about once in two seconds however many look; only a 200 is kept; an answer is served old only while
-    a new one is being fetched, never because the server fails or does not answer (a game that is listed after it has begun or was closed is a card that fails when it is pressed);
+    a new one is being fetched, never because the server fails, hangs up or refuses (a game that is listed after it has begun or was closed is a card that fails when it is pressed); a server that
+    HANGS holds one request for the read timeout (3 seconds) and the others get the old list meanwhile;
   - a server that has no such door (it is not there, or it was started without the replay port) is answered 404 with {"error":"lobbies_off"}, a JSON type and Cache-Control: no-store.
 
 The text of the file is checked everywhere. Where the program nginx is installed the real file is RUN: a copy with the folders and the address of the stand-in server put in, in a temporary folder,
@@ -43,6 +45,8 @@ BLOCK = block_of(CONF, "location = /lobbies ")
 OFF = block_of(CONF, "location @lobbies_off ")
 LIVE = block_of(CONF, "location = /live ")
 REPLAYS_OFF = block_of(CONF, "location @replays_off ")
+# What the stand-in answers on the other doors that share the cache of /stats (the page of the front, the recorded matches, the maps): each has an entry of its own there
+OTHER_DOORS = {"/stats": b'{"games":7}', "/replays": b'{"replays":[],"count":0}', "/maps": b'{"format":1,"maps":[]}'}
 ROW = ("code", "host", "map", "mode", "people", "bots", "free", "size", "age")             # the nine fields of a row (docs/SERVER.md "Lobby rooms")
 NO_NGINX = "nginx is not installed: the blocks of docker/nginx.conf for /lobbies were NOT run (tests/scripts/test_nginx_lobbies.py)"
 OFF_BODY = b'{"error":"lobbies_off"}'
@@ -92,8 +96,8 @@ class TheText(unittest.TestCase):
         zone = re.search(r"limit_req_zone \$binary_remote_addr zone=ants_lobbies:(\d+)m rate=(\d+)r/([sm]);", CONF)
         self.assertIsNotNone(zone)
         self.assertLess(CONF.index(zone.group(0)), CONF.index("server {"))                # http context: before the server block
-        self.assertEqual((int(zone.group(1)), int(zone.group(2)), zone.group(3)), (1, 30, "s"))
-        self.assertIn("limit_req zone=ants_lobbies burst=100 nodelay;", BLOCK)
+        self.assertEqual((int(zone.group(1)), int(zone.group(2)), zone.group(3)), (1, 100, "s"))
+        self.assertIn("limit_req zone=ants_lobbies burst=200 nodelay;", BLOCK)
         self.assertIn("limit_req_status 503;", BLOCK)                                     # (like the other zones: a flood is 503)
         self.assertEqual(len(re.findall(r"\bants_lobbies\b", CONF)), 2)                    # the zone and its one use: no other block counts against it
         self.assertEqual(re.findall(r"limit_req zone=(\w+)", BLOCK), ["ants_lobbies"])     # (and this block counts against no other zone)
@@ -135,14 +139,14 @@ class TheText(unittest.TestCase):
     def test_the_block_is_the_live_block_but_for_the_zone_the_key_the_path_and_the_fallback(self):
         def lines(block, *own):
             return [l.strip() for l in block.splitlines() if l.strip() and not l.strip().startswith(own)]
-        own = ("limit_req zone=", "proxy_cache_key", "proxy_pass ", "error_page")
-        self.assertEqual(lines(BLOCK, *own), lines(LIVE, *own))                           # (one door, one set of timeouts, headers, checks and cache rules: they cannot drift apart)
+        own = ("limit_req zone=", "proxy_cache_key", "proxy_pass ", "error_page", "proxy_read_timeout")
+        self.assertEqual(lines(BLOCK, *own), lines(LIVE, *own))                           # (one door, one set of headers, checks, cache rules and the other timeouts: they cannot drift apart)
 
     def test_it_has_short_timeouts_and_adds_nothing_of_its_own(self):
-        for directive, limit in (("proxy_connect_timeout", 5), ("proxy_read_timeout", 15), ("proxy_send_timeout", 15)):
+        for directive, limit in (("proxy_connect_timeout", 5), ("proxy_read_timeout", 3), ("proxy_send_timeout", 15)):
             value = re.search(r"%s (\d+)s;" % directive, BLOCK)
             self.assertIsNotNone(value, directive)
-            self.assertLessEqual(int(value.group(1)), limit, directive)
+            self.assertLessEqual(int(value.group(1)), limit, directive)               # (the read timeout is how long one request waits for a server that hangs, and how long the others see the old list)
         for forbidden in ("add_header", "expires", "alias", "root", "try_files", "rewrite", "sub_filter", "proxy_intercept_errors", "proxy_next_upstream"):
             self.assertNotRegex(BLOCK, r"\b%s\b" % forbidden, forbidden)                   # (the server's own Cache-Control: no-store is the answer's header)
         self.assertIn("proxy_hide_header X-Content-Type-Options;", BLOCK)                  # (the server-level nosniff line applies once)
@@ -183,6 +187,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.command != "GET":
                 self.answer(405, b'{"error":"method not allowed"}', {"Allow": "GET"})
+            elif self.path in OTHER_DOORS:
+                self.answer(200, OTHER_DOORS[self.path])
             elif self.path != "/lobbies":
                 self.answer(404, b'{"error":"not found"}')
             elif mode == "reset":
@@ -249,12 +255,10 @@ class Upstream:
 
 
 class Rig:
-    """The real file in front of the stand-in server, in a temporary folder. restart() starts nginx again with an empty cache and the whole allowance, so that no test depends on another.
-    `read_timeout` shortens the read timeout of THIS block only (the file's own, 10 seconds, is checked as text), so that a server that says nothing is not waited for that long."""
-    def __init__(self, stub_port, read_timeout=None):
+    """The real file in front of the stand-in server, in a temporary folder. restart() starts nginx again with an empty cache and the whole allowance, so that no test depends on another."""
+    def __init__(self, stub_port):
         self.work = tempfile.mkdtemp(prefix="ants_nginx_lobbies_")
         self.stub_port = stub_port
-        self.read_timeout = read_timeout
         self.proc = None
         self.port = 0
         try:
@@ -272,14 +276,7 @@ class Rig:
 
     def config(self, port):
         text = maps.make_config(self.work, port, self.stub_port).replace("/usr/share/nginx/html", self.work + "/html")
-        if self.read_timeout:
-            at = text.index("location = /lobbies {")
-            end = text.index("location @lobbies_off", at)
-            old = "proxy_read_timeout 10s;"
-            found = text.index(old, at)
-            assert found < end, "the block of /lobbies has no read timeout of 10 s to shorten"
-            text = text[:found] + "proxy_read_timeout %ds;" % self.read_timeout + text[found + len(old):]
-        return text
+        return text.replace("set $ants_server ants-server:4002;", "set $ants_server 127.0.0.1:%d;" % self.stub_port)        # (/stats is the WebSocket port's: the stand-in answers it too)
 
     def start(self):
         self.folders()
@@ -323,13 +320,11 @@ def ask(port, method, target, headers=None, body=None, timeout=20):
 
 class Running:
     """What the classes below share: a stand-in server and the real file in front of it, started again (empty cache, whole allowance) for every test."""
-    READ_TIMEOUT = None
-
     @classmethod
     def setUpClass(cls):
         cls.upstream = Upstream()
         try:
-            cls.rig = Rig(cls.upstream.port, cls.READ_TIMEOUT)
+            cls.rig = Rig(cls.upstream.port)
         except BaseException:
             cls.upstream.close()
             raise
@@ -439,13 +434,24 @@ class TheBlockRuns(Running, unittest.TestCase):
             self.assertEqual((status, body), (200, list_body(1)), spelling)
             self.assertEqual([(s["method"], s["path"]) for s in self.upstream.seen], [("GET", "/lobbies")], spelling)
 
-    def test_the_lists_entry_is_the_lists_and_not_the_live_matches(self):
-        self.assertEqual(self.get()[0], 200)
-        status, _, body = self.get("/live")                                                 # (the stand-in has no live board: its 404, not the list from the entry of /lobbies)
-        self.assertEqual((status, body), (404, b'{"error":"not found"}'))
-        self.assertEqual([s["path"] for s in self.upstream.seen], ["/lobbies", "/live"])
-        status, _, body = self.get()
-        self.assertEqual((status, body), (200, list_body(1)))                               # (and the 404 of /live is no entry of /lobbies)
+    def test_the_lists_entry_is_the_lists_and_not_the_numbers_the_recorded_matches_the_maps_or_the_live_matches(self):
+        # (they share one cache: each has a key of its own, and none may be answered with another's entry, whichever was asked first)
+        for first in ("the list", "the others"):
+            self.rig.restart()
+            self.upstream.reset()
+            if first == "the list":
+                self.assertEqual(self.get()[2], list_body(1))
+            for path, data in OTHER_DOORS.items():
+                self.assertEqual(self.get(path)[2], data, path)
+            self.assertEqual(self.get()[2], list_body(1))                                    # the list, and not the entry of /stats, /replays or /maps
+            for path, data in OTHER_DOORS.items():
+                self.assertEqual(self.get(path)[2], data, path)                             # (and each of those is still its own)
+            status, _, body = self.get("/live")                                             # (the stand-in has no live board: its 404, not the list from the entry of /lobbies)
+            self.assertEqual((status, body), (404, b'{"error":"not found"}'))
+            self.assertEqual(self.get()[2], list_body(1))                                    # (and the 404 of /live is no entry of /lobbies)
+            paths = [s["path"] for s in self.upstream.seen]
+            for path in ["/lobbies", "/live"] + list(OTHER_DOORS):
+                self.assertEqual(paths.count(path), 1, (path, paths))                       # each was asked of the server once: the rest came from the entry of its own
 
     def test_a_404_of_a_server_that_has_no_such_list_passes_as_it_is_and_is_asked_again(self):
         self.upstream.mode, self.upstream.status = "status", 404                            # (an older build of the game server: the door answers 404 for the path)
@@ -510,11 +516,8 @@ class TheCacheRuns(Running, unittest.TestCase):
         self.assertEqual(len(self.upstream.lists()), 2)
 
 
-@unittest.skipUnless(shutil.which("nginx"), NO_NGINX)
 class TheServerFailsRuns(Running, unittest.TestCase):
-    """A list that is old is never served because the server fails or says nothing: the entry is there, and the answer is the truth."""
-    READ_TIMEOUT = 1
-
+    """A list that is old is never served because the server fails or hangs up: the entry is there, and the answer is the truth."""
     def assert_off(self, answer):
         status, headers, body = answer
         self.assertEqual((status, body), (404, OFF_BODY))
@@ -538,30 +541,52 @@ class TheServerFailsRuns(Running, unittest.TestCase):
         self.assertNotEqual(body, old)                                                      # the server is back: the next answer is its own
         self.assertEqual(self.get()[2], body)
 
-    def test_a_server_that_hangs_up_is_answered_404_lobbies_off_and_not_the_old_list(self):
+    def test_a_server_that_hangs_up_is_answered_404_lobbies_off_at_once_to_everybody_and_not_the_old_list(self):
         old = self.expired()
         self.upstream.mode = "reset"
-        started = time.monotonic()
-        answer = self.get()
-        self.assert_off(answer)
-        self.assertNotEqual(answer[2], old)
-        self.assertLess(time.monotonic() - started, 3.0)                                    # (at once)
+        for _ in range(3):
+            started = time.monotonic()
+            answer = self.get()
+            self.assert_off(answer)
+            self.assertNotEqual(answer[2], old)
+            self.assertLess(time.monotonic() - started, 2.0)                                # (at once, each time: nobody waits for a server that has hung up)
         self.upstream.mode = "ok"
         status, _, body = self.get()
         self.assertEqual(status, 200)                                                       # the server is back, and the 404 was not kept
         self.assertEqual(json.loads(body)["count"], 1)
 
-    def test_a_server_that_says_nothing_is_answered_404_lobbies_off_when_the_read_timeout_is_over_and_not_the_old_list(self):
+
+@unittest.skipUnless(shutil.which("nginx"), NO_NGINX)
+class TheServerHangsRuns(Running, unittest.TestCase):
+    """A server that takes the connection and says nothing: the request that renews waits for the read timeout (3 seconds in the file) and is answered 404 lobbies_off, never the old list; the others
+    are served the old list meanwhile (the cost of "an old answer while a new one is fetched"), and the next one to find the entry old waits in its turn."""
+    def test_the_request_that_waits_gets_lobbies_off_after_the_read_timeout_and_the_others_get_the_old_list_meanwhile(self):
         old = self.expired()
-        self.upstream.mode, self.upstream.delay = "slow", 4.0                               # (this rig reads for 1 second, the file for 10)
-        started = time.monotonic()
-        answer = self.get()
-        took = time.monotonic() - started
-        self.assert_off(answer)
-        self.assertNotEqual(answer[2], old)
-        self.assertGreater(took, 0.5)                                                       # (it waited for the server)
-        self.assertLess(took, 3.5)                                                          # (and no longer than the timeout)
-        self.upstream.mode, self.upstream.delay = "ok", 0.0
+        self.upstream.mode, self.upstream.delay = "slow", 8.0                               # (the stand-in answers after eight seconds: the file gives up after three)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            started = time.monotonic()
+            renewing = pool.submit(self.get)
+            self.upstream.wait_for(2)                                                       # the renewal is on its way, and hangs
+            began = time.monotonic()
+            status, _, body = self.get()
+            self.assertEqual((status, body), (200, old))                                    # the old list for the second request,
+            self.assertLess(time.monotonic() - began, 1.0)                                  # at once
+            answer = renewing.result(timeout=15)
+            took = time.monotonic() - started
+            self.assertEqual((answer[0], answer[2]), (404, OFF_BODY))                       # and the one that waited gets the truth, not the old list
+            self.assertTrue(self.names(answer[1], "content-type")[0].startswith("application/json"))
+            self.assertEqual(self.names(answer[1], "cache-control"), ["no-store"])
+            self.assertGreater(took, 2.5)                                                   # after the read timeout of the file (3 seconds)
+            self.assertLess(took, 5.0)                                                      # and not after ten
+            # the next request finds the entry old and no renewal going: it waits in its turn, and is not given the old list either
+            started = time.monotonic()
+            waiting = pool.submit(self.get)
+            self.upstream.wait_for(3)
+            self.assertEqual(self.get()[2], old)                                            # (the one beside it is, meanwhile)
+            answer = waiting.result(timeout=15)
+            self.assertEqual((answer[0], answer[2]), (404, OFF_BODY))
+            self.assertGreater(time.monotonic() - started, 2.5)
+        self.upstream.mode, self.upstream.delay = "ok", 0.0                                 # the server is back: the next answer is its own, and the 404 was not kept
         status, _, body = self.get()
         self.assertEqual(status, 200)
         self.assertNotEqual(body, old)
@@ -580,29 +605,29 @@ class TheAllowanceRuns(Running, unittest.TestCase):
                 self.assertNotIn(b"Ada", body)                                              # (a refusal is not the list)
         return codes
 
-    def test_thirty_a_second_for_the_whole_site_with_a_burst_of_a_hundred_and_the_rest_is_503(self):
+    def test_a_hundred_a_second_with_a_burst_of_two_hundred_and_the_rest_is_503(self):
         # (every request has an address, a cookie and an agent of its own: the key of the allowance is the address of the connection, which a visitor cannot choose)
         connection = http.client.HTTPConnection("127.0.0.1", self.rig.port, timeout=30)    # (one connection: the flood is as fast as it can be)
         try:
             started = time.monotonic()
-            codes = self.flood(101, connection)
+            codes = self.flood(201, connection)
             burst_took = time.monotonic() - started
-            codes += self.flood(149, connection)
+            codes += self.flood(449, connection)
             took = time.monotonic() - started
             allowed = codes.count(200)
             self.assertTrue(set(codes) <= {200, 503}, set(codes))
-            self.assertEqual(codes[:101], [200] * 101)                                      # the first request and the burst of 100 (none refused, none between)
-            self.assertLess(burst_took, 2.5)                                                # ("nodelay": the burst is not spread over three seconds)
-            self.assertTrue(101 <= allowed <= 101 + int(30 * took) + 1, (allowed, took))     # and thirty a second while this goes on
-            self.assertIn(503, codes)                                                       # 250 at once are more than the allowance (503: the file's own limit_req_status)
+            self.assertEqual(codes[:201], [200] * 201)                                      # the first request and the burst of 200 (none refused, none between)
+            self.assertLess(burst_took, 1.5)                                                # ("nodelay": a burst that is spread over the rate would take two seconds)
+            self.assertTrue(201 <= allowed <= 201 + int(100 * took) + 1, (allowed, took))    # and a hundred a second while this goes on
+            self.assertIn(503, codes)                                                       # 650 at once are more than the allowance (503: the file's own limit_req_status)
             self.assertLessEqual(len(self.upstream.lists()), 2)                              # (a flood is the cache's: the server is asked once, or twice when the entry ran out)
-            # the allowance is refilled at thirty a second: after a second of quiet about thirty more go through
+            # the allowance is refilled at a hundred a second: after a second of quiet about a hundred more go through
             quiet = time.monotonic()
             time.sleep(1.0)
-            second = self.flood(60, connection)
+            second = self.flood(150, connection)
             over = time.monotonic() - quiet
-            self.assertGreaterEqual(second.count(200), 27, second.count(200))
-            self.assertLessEqual(second.count(200), int(30 * over) + 4, (second.count(200), over))
+            self.assertGreaterEqual(second.count(200), 93, second.count(200))
+            self.assertLessEqual(second.count(200), int(100 * over) + 4, (second.count(200), over))
         finally:
             connection.close()
         for path in ("/live", "/replays", "/maps"):                                         # a zone of its own: the other doors of the same address are not out of allowance
