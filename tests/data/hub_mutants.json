@@ -660,7 +660,21 @@
    "file": "hub/log.py",
    "old": "SAFE.sub(\"_\", str(v))[:60]",
    "new": "str(v)",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "log_values_not_cut",
+   "file": "hub/log.py",
+   "old": "SAFE.sub(\"_\", str(v))[:60]",
+   "new": "SAFE.sub(\"_\", str(v))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "log_tag_is_the_address",
+   "file": "hub/log.py",
+   "old": "return hmac.new(self.salt, address_key.encode(\"utf-8\"), hashlib.sha256).hexdigest()[:8]",
+   "new": "return address_key",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "frame_cap_off",
