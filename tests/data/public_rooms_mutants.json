@@ -105,7 +105,7 @@
    "id": "listing_age_is_zero",
    "file": "src/ants_server/room.cpp",
    "old": "out.age_ms = lobby_.listed_age_ms(now_ms);",
-   "new": "out.age_ms = 0;",
+   "new": "out.age_ms = now_ms - now_ms;",
    "build": [
     "test_server"
    ],
@@ -145,7 +145,7 @@
    "id": "listing_other_name_in_the_output",
    "file": "src/ants_server/room.cpp",
    "old": "out.host = lobby_.room().slots[leader].name;",
-   "new": "out.host = lobby_.room().slots[leader].name + \" \" + lobby_.room().slots[(leader + 1) % sim::MAX_PLAYERS].name;",
+   "new": "out.host = lobby_.room().slots[leader].name + \" \" + lobby_.room().slots[(leader + 1u) % 4u].name;",
    "build": [
     "test_server"
    ],
@@ -185,7 +185,7 @@
    "id": "lobbies_not_ordered",
    "file": "src/ants_server/room_manager.cpp",
    "old": "        if (a.people != b.people) return a.people > b.people;\n        if (a.age_ms != b.age_ms) return a.age_ms > b.age_ms;\n        return a.code < b.code;",
-   "new": "        return false;",
+   "new": "        return a.code.empty() && b.code.empty();",
    "build": [
     "test_server"
    ],
@@ -505,7 +505,7 @@
    "id": "visibility_listing_time_never_set",
    "file": "src/ants_net/lobby.cpp",
    "old": "    if (public_) listed_ms_ = now_ms;\n",
-   "new": "",
+   "new": "    if (public_) listed_ms_ = now_ms - now_ms;\n",
    "build": [
     "test_lobby"
    ],

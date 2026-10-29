@@ -235,7 +235,11 @@ void run_lobby_public_tests() {
             room.run(10);
             ASSERT_EQ(room.host.visibility_acts(), kVisibilityBurst);                              // (the fourth was dropped: the room is as the third left it, public)
             ASSERT_TRUE(room.host.is_public());
-            room.run(1010);                                                                         // one second: a message is back
+            room.run(500);                                                                          // half a second: only half a message is back, so a fifth is dropped too (the rate is one a second)
+            room.guests[ann].client_end->send(encode(VisibilityMsg{false}));
+            room.run(10);
+            ASSERT_TRUE(room.host.visibility_acts() == kVisibilityBurst && room.host.is_public());
+            room.run(500);                                                                          // a second since the burst: a message is back
             room.guests[ann].client_end->send(encode(VisibilityMsg{false}));
             room.run(10);
             ASSERT_EQ(room.host.visibility_acts(), kVisibilityBurst + 1);
@@ -433,8 +437,11 @@ void run_lobby_public_tests() {
             ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({PlanKind::Nobody, PlanKind::Open, PlanKind::Open, PlanKind::Open})));
             room.run(300);
             ASSERT_TRUE(room.host.people_colors() == 2 && room.host.open_colors() == 2 && room.host.bot_colors() == 0 && room.host.match_colors() == 4);
-            // Bob's link ends: the seat is held, the person counts, the connection does not
+            // Bob's link ends: the seat is held, the person counts, the connection does not (not even in the moment before the room has looked: a link that is closed is nobody to write to)
+            room.guests[bob].frozen = true;
+            room.run(100);
             room.guests[bob].client_end->close();
+            ASSERT_TRUE(room.host.connected() == 1 && !room.host.held(3));
             room.run(300);
             ASSERT_TRUE(room.host.held(3));
             ASSERT_TRUE(room.host.connected() == 1 && room.host.people_colors() == 2 && room.host.open_colors() == 2 && room.host.match_colors() == 4);

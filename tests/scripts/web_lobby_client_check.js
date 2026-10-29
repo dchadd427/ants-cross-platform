@@ -1099,9 +1099,12 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
         const c = client(w, { silenceMs: 0 });
         online(w, c, seats, {});
         const base = w.last().sent.length;
+        let renamed = 0;
+        for (let i = 0; i < 6; i++) { if (c.rename('N' + i)) renamed++; }
+        check('(the names have a budget of their own: two went, and the room\'s public choice is not touched by it)', renamed === 2 && w.last().sent.length === base + 2);
         let ok = 0;
         for (let i = 0; i < 6; i++) { if (c.setPublic(i % 2 === 0)) ok++; }
-        check('visibility: a burst of 2 (the server\'s is 3), then no more', ok === 2 && w.last().sent.length === base + 2);
+        check('visibility: a burst of 2 (the server\'s is 3), then no more, whatever the names used up', ok === 2 && w.last().sent.length === base + 4);
         w.advance(1249);
         check('... not before 1.25 s are over', c.setPublic(true) === false);
         w.advance(1);
