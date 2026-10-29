@@ -39,10 +39,17 @@ class Chat:
 
     # ---- peers ----------------------------------------------------------------------------------------------------------------------------
 
+    def recent(self):
+        """The last lines, oldest first, without those that are past their time (they are deleted from the database; the screens of newcomers must not show them either)."""
+        cutoff = int(self.store.clock()) - self.store.retention
+        for line in [l for l in self.ring if l.at < cutoff]:
+            self.ring.remove(line)
+        return list(self.ring)
+
     def welcome(self, peer):
         you = peer.identity
         return {"t": "welcome", "v": PROTOCOL, "you": {"name": you.name, "mod": you.account_id in self.mods} if you else None, "login": bool(self.login), "online": len(self.peers),
-                "history": [self.line_of(l) for l in self.ring]}
+                "history": [self.line_of(l) for l in self.recent()]}
 
     @staticmethod
     def line_of(line):
@@ -78,10 +85,11 @@ class Chat:
     def refuse_constant(name):
         raise ValueError(name)
 
-    def mistake(self, peer, code):
-        """Tell the peer what was wrong and count it; the twentieth within a minute closes the socket."""
+    def mistake(self, peer, code, count=True):
+        """Tell the peer what was wrong and count it; the twentieth within a minute closes the socket. (`count=False` is for a refusal that is not the client's doing.)"""
         peer.send_text(dumps({"t": "err", "code": code}))
-        peer.strike()
+        if count:
+            peer.strike()
 
     def on_say(self, peer, raw):
         who = peer.identity
@@ -100,8 +108,10 @@ class Chat:
         if mod and line.startswith("/"):
             return self.command(peer, line)
         now = self.clock()
-        if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes or self.account_limits.check(who.account_id, line, now):
-            return self.mistake(peer, "rate")                      # (the account's own check is the last: it is the one that counts the line as said)
+        if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:
+            return self.mistake(peer, "rate", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)
+        if self.account_limits.check(who.account_id, line, now):
+            return self.mistake(peer, "rate")                      # (this check is the last: it is the one that counts the line as said)
         self.global_limit.take(now)
         entry = self.store.add_line(who.account_id, who.name, line, mod)
         self.ring.append(entry)

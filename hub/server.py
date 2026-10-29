@@ -203,11 +203,10 @@ class Hub:
     async def identify(self, headers):
         try:
             who = await asyncio.wait_for(self.sessions.identify(headers), self.limits.identify_seconds)
-        except Exception as e:                                       # (a login that fails or is late: the visitor reads, and cannot write)
+            if who is not None and configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.name):
+                return who
+        except Exception as e:                                       # (a login that fails or is late, or hands out what is not an identity: the visitor reads, and cannot write)
             self.log.event("error", kind=type(e).__name__, where="session")
-            return None
-        if who is not None and configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.name):
-            return who
         return None
 
     # ---- the clock ------------------------------------------------------------------------------------------------------------------------
@@ -241,6 +240,7 @@ class Hub:
             self.next_forget = now + 60.0
             self.chat.account_limits.forget_idle(now)
         if now >= self.next_purge:
+            self.next_purge = now + self.limits.purge_failure_seconds         # (set first: a purge that fails is tried again in a minute, not at every tick)
             gone = self.store.purge(self.limits.purge_chunk)
             self.next_purge = now + (self.limits.tick_seconds if gone >= self.limits.purge_chunk else self.limits.purge_seconds)      # (a long backlog goes a chunk at a time)
             self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
@@ -280,7 +280,7 @@ def main(env=None):
     log.event("note", what="sockets_are_counted_for_each_X-Client-Address_that_nginx_sets_see_docs/HUB.md")
     if cfg.test_login:
         log.event("warning", what="test_login_is_on")
-    store = storemod.Store(cfg.db)
+    store = storemod.Store(cfg.db, busy_ms=300)                      # (the one thread of the hub waits at most this long for another process's write)
     try:
         store.checkpoint()                  # (what a crash left in the log file)
         asyncio.run(serve(cfg, store, sessionmod.make(cfg), log))

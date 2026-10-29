@@ -195,6 +195,16 @@ class TheCode(unittest.TestCase):
                 for module in modules:
                     self.assertIn(module.split(".")[0], sys.stdlib_module_names, "%s imports %s, which is not the standard library" % (name, module))
 
+    def test_the_sources_hold_no_invisible_or_look_alike_character(self):
+        # a bidirectional control or a zero-width character in a source file could make the code read differently from what it does; the tricks are written as escapes (\\u202e) and the files are ASCII
+        names = ["Dockerfile.hub", os.path.join("docs", "HUB.md")] + [os.path.join("hub", n) for n in os.listdir(os.path.join(REPO, "hub")) if n.endswith(".py")]
+        names += [os.path.join("tests", "scripts", n) for n in os.listdir(os.path.join(REPO, "tests", "scripts")) if n.startswith(("test_hub_", "hub_")) or n == "test_nginx_hub.py"]
+        for name in names:
+            with open(os.path.join(REPO, name), "rb") as f:
+                data = f.read()
+            bad = [i for i, b in enumerate(data) if b > 127]
+            self.assertEqual(bad, [], "%s holds a byte above 127 at %s" % (name, bad[:3]))
+
     def test_no_dangerous_call_and_the_environment_is_read_in_few_places(self):
         for name in sorted(os.listdir(os.path.join(REPO, "hub"))):
             if not name.endswith(".py"):

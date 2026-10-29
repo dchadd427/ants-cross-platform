@@ -95,6 +95,7 @@ class TheText(unittest.TestCase):
 
     def test_nothing_about_the_visitor_is_written_to_the_access_log(self):
         self.assertIn("access_log off;", HUB)                                     # (the server's default format writes the address, the referrer and the user agent)
+        self.assertIn("access_log off;", OFF)                                     # (nginx logs a request with the settings of the place where it ends: after the redirect of error_page that is this one)
         text = read("docker", "nginx.conf")
         comment = text[text.index("# The chat hub's door"):text.index("location = /hub/ws")]
         self.assertIn("access log is off", comment)
@@ -144,6 +145,8 @@ class Recorder:
 class TheBlockRuns(unittest.TestCase):
     """The real text of the two blocks and the zone, in a small server of their own, in front of a real hub (the name of the hub replaced by this machine's address and the port)."""
 
+    access_logs = {}
+
     @classmethod
     def setUpClass(cls):
         cls.rig = hub_rig.Rig(sockets_per_address=100)
@@ -173,9 +176,10 @@ class TheBlockRuns(unittest.TestCase):
             block = block.replace(directive, "")
         conf = os.path.join(cls.tmp, "nginx-%d.conf" % port)
         with open(conf, "w", encoding="utf-8") as f:
-            f.write("daemon off;\nmaster_process off;\npid %s/n%d.pid;\nerror_log %s/e%d.log;\nevents { worker_connections 256; }\nhttp {\n  access_log off;\n  client_body_temp_path %s/b%d;\n"
+            f.write("daemon off;\nmaster_process off;\npid %s/n%d.pid;\nerror_log %s/e%d.log;\nevents { worker_connections 256; }\nhttp {\n  access_log %s/a%d.log;\n  client_body_temp_path %s/b%d;\n"
                     "  proxy_temp_path %s/p%d;\n  %s\n  server {\n    listen 127.0.0.1:%d;\n    location = /hub/ws {%s}\n    location @hub_off {%s}\n    location / { return 200 'the page'; }\n  }\n}\n"
-                    % (cls.tmp, port, cls.tmp, port, cls.tmp, port, cls.tmp, port, zones, port, block, OFF))
+                    % (cls.tmp, port, cls.tmp, port, cls.tmp, port, cls.tmp, port, cls.tmp, port, zones, port, block, OFF))
+        cls.access_logs[port] = os.path.join(cls.tmp, "a%d.log" % port)
         proc = subprocess.Popen([nginx_binary(), "-c", conf, "-p", cls.tmp], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         for _ in range(100):
             try:
@@ -287,6 +291,28 @@ class TheBlockRuns(unittest.TestCase):
             c.close()
         time.sleep(1.2)                                                         # the allowance comes back at five a second
         self.assertEqual(self.connect(port=self.fast).status.split()[1], "101")
+
+    def access_log(self, port):
+        try:
+            with open(self.access_logs[port], encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
+
+    def test_nothing_is_written_to_the_access_log_for_the_door_whether_the_hub_is_there_or_not(self):
+        # the stand-in server has a real access log (the default format, which writes the address, the referrer and the browser), so that "off" in the block is what is tested
+        for port in (self.front, self.dead):
+            with socket.create_connection(("127.0.0.1", port), timeout=3) as s:
+                s.sendall(b"GET /ordinary-page HTTP/1.1\r\nHost: x\r\nUser-Agent: canary-agent-77\r\nConnection: close\r\n\r\n")     # a page of the site is logged, which shows that the log works
+                hc.read_head(s)
+            for _ in range(5):
+                c = self.connect(port=port, headers={"User-Agent": "canary-agent-77", "Referer": "https://canary-referrer.example/"})
+                self.assertEqual(c.status.split()[1], "101" if port == self.front else "503")
+            time.sleep(0.3)
+            log = self.access_log(port)
+            self.assertIn("/ordinary-page", log, "the stand-in's access log does not work")
+            self.assertNotIn("/hub/ws", log, "the door is in the access log (port %s)" % ("front" if port == self.front else "hub down"))
+            self.assertNotIn("canary-referrer", log)
 
     def test_a_quiet_socket_stays_open_through_nginx(self):
         c = self.connect()

@@ -15,25 +15,26 @@ SCHEMA = 2
 
 
 class Store:
-    def __init__(self, path, clock=time.time, retention_days=7):
+    def __init__(self, path, clock=time.time, retention_days=7, busy_ms=5000):
         self.path = path
+        self.busy_ms = busy_ms                      # how long a write waits for another process's write (the hub uses a short time: its one thread must not wait for seconds)
         self.clock = clock
         self.retention = retention_days * 86400
         self.unsettled = False                      # True while the log file could not be cut because a reader held it
         new = not os.path.exists(path)
         self.db = sqlite3.connect(path, timeout=5.0, isolation_level=None)
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("PRAGMA synchronous=NORMAL")
-        self.db.execute("PRAGMA secure_delete=ON")
-        self.db.execute("PRAGMA busy_timeout=5000")
-        if new:
-            try:
-                os.chmod(path, 0o600)
-            except OSError:
-                pass
         try:
+            self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.execute("PRAGMA synchronous=NORMAL")
+            self.db.execute("PRAGMA secure_delete=ON")
+            self.db.execute("PRAGMA busy_timeout=%d" % self.busy_ms)
+            if new:
+                try:
+                    os.chmod(path, 0o600)
+                except OSError:
+                    pass
             self.migrate()
-        except BaseException:
+        except BaseException:                       # (a file that is not a database, a newer schema: no connection is left open)
             self.db.close()
             raise
 
@@ -135,19 +136,21 @@ class Store:
         try:
             busy = self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
         finally:
-            self.db.execute("PRAGMA busy_timeout=5000")
+            self.db.execute("PRAGMA busy_timeout=%d" % self.busy_ms)
         self.unsettled = bool(busy)
         return not busy
 
     def size(self):
-        """Bytes of hub.db and its log file."""
-        total = 0
-        for path in (self.path, self.path + "-wal"):
-            try:
-                total += os.path.getsize(path)
-            except OSError:
-                pass
-        return total
+        """Bytes in use: the pages of hub.db that hold something, and the log file. A page that deleted lines freed is room for new ones, though the file never shrinks, so the file's
+        own size is not what is counted (a database that was once full would stay full for ever)."""
+        pages = self.db.execute("PRAGMA page_count").fetchone()[0]
+        free = self.db.execute("PRAGMA freelist_count").fetchone()[0]
+        page_size = self.db.execute("PRAGMA page_size").fetchone()[0]
+        try:
+            log_file = os.path.getsize(self.path + "-wal")
+        except OSError:
+            log_file = 0
+        return (pages - free) * page_size + log_file
 
     # ---- mutes and bans -------------------------------------------------------------------------------------------------------------------
 

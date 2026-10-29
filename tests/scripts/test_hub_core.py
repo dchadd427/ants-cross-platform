@@ -119,6 +119,19 @@ class TheWelcome(WorldTest):
         self.assertEqual(history[0]["who"], "alice")
         self.assertIs(history[0]["mod"], False)
 
+    def test_lines_past_their_7_days_are_not_in_the_history_of_a_newcomer(self):
+        self.w.say(self.alice, "an old line")
+        self.w.clock.now += 3
+        self.w.say(self.alice, "a newer line")
+        self.w.wall.now += 6 * 86400                                       # 6 days: both are shown
+        self.assertEqual([h["text"] for h in self.w.chat.welcome(self.reader)["history"]], ["an old line", "a newer line"])
+        self.w.say(self.bob, "a fresh line")
+        self.w.wall.now += 86400 + 1                                       # past 7 days for the first two, whatever happened to the database
+        self.assertEqual([h["text"] for h in self.w.chat.welcome(self.reader)["history"]], ["a fresh line"])
+        self.assertEqual([l.text for l in self.w.chat.ring], ["a fresh line"])      # and they are out of the memory too
+        self.w.wall.now += 8 * 86400
+        self.assertEqual(self.w.chat.welcome(self.reader)["history"], [])
+
     def test_exactly_50_and_exactly_49(self):
         for n in range(49):
             self.w.clock.now += 3
@@ -194,13 +207,13 @@ class TheRules(WorldTest):
         self.assertEqual(self.bob.codes(), [])
 
     def test_empty_long_and_markup(self):
-        for text, code in (("", "empty"), ("   ", "empty"), ("‮​", "empty"), ("a" * 201, "long"), ("<b>", "bad"), ("a>b", "bad")):
+        for text, code in (("", "empty"), ("   ", "empty"), ("\u202e\u200b", "empty"), ("a" * 201, "long"), ("<b>", "bad"), ("a>b", "bad")):
             self.w.say(self.alice, text)
             self.assertEqual(self.alice.codes()[-1], code, repr(text))
         self.assertEqual(self.reader.kinds("line"), [])
 
     def test_the_text_is_cleaned_before_it_is_stored_and_sent(self):
-        self.w.say(self.alice, "  hi‮   there​  ")
+        self.w.say(self.alice, "  hi\u202e   there\u200b  ")
         self.assertEqual(self.reader.kinds("line")[0]["text"], "hi there")
         self.assertEqual(self.w.store.recent_lines(50)[0].text, "hi there")
 
@@ -258,7 +271,7 @@ class TheRules(WorldTest):
     def test_the_duplicate_is_of_the_cleaned_text_and_of_the_account(self):
         self.w.say(self.alice, "same text")
         self.w.clock.now += 3
-        self.w.say(self.alice, "same​   text")
+        self.w.say(self.alice, "same\u200b   text")
         self.assertEqual(self.alice.codes(), ["rate"])
         self.w.say(self.bob, "same text")                            # another account may say it
         self.assertEqual(self.bob.codes(), [])
@@ -353,6 +366,45 @@ class TheRules(WorldTest):
         again.say(again_alice, "hello")
         self.assertEqual(again_alice.codes(), [])
         self.assertEqual(len(again.store.recent_lines(10)), 1)
+
+    def test_a_full_database_takes_lines_again_when_the_old_ones_are_purged(self):
+        w = World(limits=dataclasses.replace(LIMITS, db_max_bytes=300000))
+        self.addCleanup(w.close)
+        for n in range(2500):
+            w.store.add_line("9", "old.timer", "an old line %d " % n + "y" * 150, False)
+        w.store.checkpoint()
+        self.assertGreater(w.store.size(), 300000)
+        alice = w.join(ALICE)
+        w.say(alice, "hello")
+        self.assertEqual(alice.codes(), ["rate"])                          # full
+        w.wall.now += 8 * 86400
+        w.clock.now += 8 * 86400
+        self.assertEqual(w.store.purge(10 ** 6), 2500)
+        self.assertGreater(os.path.getsize(w.db), 300000)                  # the file is as big as it was
+        w.say(alice, "hello again")
+        self.assertEqual(alice.codes(), ["rate"])                          # the line went through: no second refusal
+        self.assertEqual([l.text for l in w.store.recent_lines(10)], ["hello again"])
+
+    def test_a_refusal_that_is_not_the_clients_doing_is_not_a_mistake_of_its_socket(self):
+        w = World(limits=dataclasses.replace(LIMITS, global_burst=1, global_refill_seconds=1000.0))
+        self.addCleanup(w.close)
+        alice, bob = w.join(ALICE), w.join(BOB)
+        w.say(alice, "first")
+        for n in range(30):
+            w.say(bob, "line %d" % n)                                       # the shared limit is spent: all of these are refused
+        self.assertEqual(bob.codes(), ["rate"] * 30)
+        self.assertEqual(bob.strikes, 0)                                    # and none of them counts against the socket (twenty would close it)
+        full = World(limits=dataclasses.replace(LIMITS, db_max_bytes=1))
+        self.addCleanup(full.close)
+        carol = full.join(ALICE)
+        for n in range(30):
+            full.say(carol, "line %d" % n)
+        self.assertEqual((carol.codes().count("rate"), carol.strikes), (30, 0))
+        # a client's own limit still counts
+        dave = self.w.join(session.Identity("1030", "dave", False))
+        for n in range(8):
+            self.w.say(dave, "line %d" % n)
+        self.assertEqual((dave.codes(), dave.strikes), (["rate"] * 5, 5))
 
     def test_idle_accounts_are_forgotten(self):
         self.w.say(self.alice, "x")
@@ -856,12 +908,30 @@ class TheStore(unittest.TestCase):
         self.assertEqual(self.store.purge(), 0)
         self.assertEqual(os.path.getsize(self.db + "-wal"), 0)
 
-    def test_the_size_counts_the_database_and_its_log_file(self):
-        before = self.store.size()
+    def test_the_size_counts_what_is_in_use_and_the_log_file(self):
+        self.store.checkpoint()
+        empty = self.store.size()
         for n in range(200):
             self.store.add_line("1", "ann", "line %d " % n + "x" * 150, False)
-        self.assertGreater(self.store.size(), before)
-        self.assertGreaterEqual(self.store.size(), os.path.getsize(self.db) + os.path.getsize(self.db + "-wal"))
+        grown = self.store.size()
+        self.assertGreater(grown, empty)
+        self.assertGreaterEqual(grown, os.path.getsize(self.db + "-wal"))                 # (the log file is in it)
+        self.store.checkpoint()
+        self.assertEqual(os.path.getsize(self.db + "-wal"), 0)
+        self.assertGreater(self.store.size(), empty)                                    # (and the pages that hold the lines, once the log file is cut)
+
+    def test_the_size_goes_down_when_lines_are_deleted_though_the_file_does_not(self):
+        for n in range(3000):
+            self.store.add_line("1", "ann", "line %d " % n + "x" * 150, False)
+        self.store.checkpoint()
+        full = self.store.size()
+        file_size = os.path.getsize(self.db)
+        self.assertGreater(full, 400000)
+        self.wall.now += 8 * 86400
+        self.assertEqual(self.store.purge(10 ** 6), 3000)
+        self.assertGreaterEqual(os.path.getsize(self.db), file_size * 0.9)              # sqlite keeps the file as big as it was ...
+        self.assertLess(self.store.size(), full / 10)                                   # ... but the freed pages are room again, and room is what the guard counts
+
 
     def test_a_newer_database_is_refused(self):
         self.store.db.execute("PRAGMA user_version = 99")

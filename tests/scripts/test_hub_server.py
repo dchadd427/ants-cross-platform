@@ -13,6 +13,7 @@ import random
 import re
 import signal
 import socket
+import sqlite3
 import struct
 import subprocess
 import sys
@@ -514,6 +515,8 @@ class TheDefaultHasNoLogin(RigTest):
 
 
 class TheBadIdentity(RigTest):
+    rig_args = dict(sockets_per_address=50)
+
     def test_a_login_layer_that_hands_out_rubbish_is_not_believed(self):
         from hub import session
 
@@ -528,7 +531,7 @@ class TheBadIdentity(RigTest):
                     raise RuntimeError("boom with a secret")
                 return self.who
 
-        for who in (session.Identity("12ab", "alice", False), session.Identity("1001", "Alice Smith", False), session.Identity("1001", "<b>", False), "raise", session.Identity("", "alice", False)):
+        for who in (session.Identity("12ab", "alice", False), session.Identity("1001", "Alice Smith", False), session.Identity("1001", "<b>", False), "raise", session.Identity("", "alice", False), 5, None, object(), sessionmod.Identity(5, "alice", False), sessionmod.Identity("1001", 5, False), sessionmod.Identity(None, "alice", False), sessionmod.Identity("1001", None, False)):
             self.rig.hub.sessions = Rubbish(who)
             c = hc.Client(self.rig.port)
             self.clients.append(c)
@@ -679,6 +682,48 @@ class TheHubTidiesTheDatabase(unittest.TestCase):
         self.assertEqual(self.checkpoints, [1])                         # not before ten seconds have passed
         self.hub.on_tick(111.0)
         self.assertEqual(self.checkpoints, [1, 1])
+
+
+class TheFailingPurge(unittest.TestCase):
+    """A purge that cannot run (another process holds the write lock, the disk is full) is tried again after a minute, and does not hold up the one thread meanwhile."""
+
+    def test_pacing_and_the_time_the_loop_is_held(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = os.path.join(folder.name, "hub.db")
+        store = storemod.Store(path, busy_ms=100)
+        self.addCleanup(store.close)
+        hub = server.Hub(configmod.load({"ANTS_HUB_PUBLIC_URL": hc.SITE}), store, sessionmod.NoLogin(), logmod.Log(io.StringIO()),
+                         limitmod.Limits(purge_failure_seconds=60.0, purge_seconds=3600.0), clock=lambda: 0.0)
+        calls = []
+        real_purge = store.purge
+        store.purge = lambda chunk: calls.append(chunk) or real_purge(chunk)
+        blocker = sqlite3.connect(path, isolation_level=None)                 # another process that holds the write lock (an administrator's tool that hangs)
+        self.addCleanup(blocker.close)
+        blocker.execute("BEGIN IMMEDIATE")
+        started = time.monotonic()
+        with self.assertRaises(sqlite3.OperationalError):
+            hub.on_tick(1000.0)
+        self.assertLess(time.monotonic() - started, 2.0)                     # (the write waited its 100 ms and not the 5 seconds of the command line)
+        self.assertEqual(calls, [2000])
+        self.assertEqual(hub.next_purge, 1060.0)                              # a minute from now, though the call raised
+        for second in range(1, 30):
+            hub.on_tick(1000.0 + second)                                      # no more tries, no more waiting
+        self.assertEqual(calls, [2000])
+        blocker.execute("ROLLBACK")
+        hub.on_tick(1060.0)
+        self.assertEqual(calls, [2000, 2000])
+        self.assertEqual(hub.next_purge, 1060.0 + 3600.0)
+
+    def test_the_wait_for_another_writer_is_a_setting_of_the_store(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        for busy_ms, expected in ((None, 5000), (300, 300)):
+            store = storemod.Store(os.path.join(folder.name, "%s.db" % busy_ms), **({} if busy_ms is None else {"busy_ms": busy_ms}))
+            self.addCleanup(store.close)
+            self.assertEqual(store.db.execute("PRAGMA busy_timeout").fetchone()[0], expected)
+            store.checkpoint()
+            self.assertEqual(store.db.execute("PRAGMA busy_timeout").fetchone()[0], expected)      # (the short wait of the checkpoint does not stay)
 
 
 class FakeTransport:

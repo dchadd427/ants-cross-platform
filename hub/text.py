@@ -5,7 +5,7 @@ The rules, in order:
   2. A blank (a space, a tab or line end, the other spaces of category Zs, the line and paragraph separators Zl and Zp) becomes one plain space; runs of blanks become one; the ends are trimmed.
   3. These are removed: the other control characters (Cc), format characters (Cf: the bidirectional controls, zero-width space, joiners, the byte order mark, ...), surrogates (Cs), private use
      (Co), characters no Unicode version of this Python has assigned (Cn), and the letters that draw as blanks (the Hangul fillers, the braille blank, the combining grapheme joiner, the
-     Khmer inherent vowels). So nothing is left that reorders the text or hides in it.
+     Khmer inherent vowels, the musical null notehead). So nothing is left that reorders the text or hides in it.
   4. More than MAX_MARKS combining marks in a row are cut (a column of them would overlap the lines above and below).
   5. Nothing left, or nothing but combining marks (a variation selector shows nothing by itself): 'empty'. More than 200 code points or 800 bytes: 'long'. A '<' or '>': 'bad' (no markup; the page uses textContent only, shows no link and makes no mention).
 The check for '<' and '>' is made on the result, after the hiding places are gone.
@@ -20,7 +20,7 @@ MAX_RAW = 4096                      # a client frame is 2 KB: anything longer is
 BLANK_CATEGORIES = frozenset(("Zs", "Zl", "Zp"))
 BLANK_CONTROLS = frozenset("\t\n\r\x0b\x0c\x85")
 REMOVED_CATEGORIES = frozenset(("Cc", "Cf", "Cs", "Co", "Cn"))
-FILLERS = frozenset("͏ᅟᅠ឴឵⠀ㅤﾠ")
+FILLERS = frozenset("\u034f\u115f\u1160\u17b4\u17b5\u2800\u3164\uffa0\U0001d159")        # (written as escapes: they draw as nothing)
 NAME = re.compile(r"[a-z0-9_.]{2,32}\Z")
 
 

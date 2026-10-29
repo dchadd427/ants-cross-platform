@@ -35,6 +35,7 @@ class Limits:
     global_refill_seconds: float = 0.2  # ... then five a second (what the database is asked to keep)
     db_max_bytes: int = 67108864        # no new chat line is kept once hub.db and its log file hold this much (mutes, bans and deletions are never refused for it)
     purge_chunk: int = 2000             # lines deleted at a time when they are past their 7 days
+    purge_failure_seconds: float = 60.0         # how soon a purge that failed (a locked or full database) is tried again
     checkpoint_retry_seconds: float = 10.0      # how soon the database's log file is cut again when a reader held it
     crowded_sockets: int = 6            # more sockets than this from one address group is logged (all visitors may share one address, docs/HUB.md)
     crowded_log_seconds: float = 60.0

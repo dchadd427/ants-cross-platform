@@ -36,7 +36,7 @@ class Rig:
         return self
 
     async def start(self):
-        self.store = store.Store(self.cfg.db)
+        self.store = store.Store(self.cfg.db, busy_ms=300)
         self.hub = server.Hub(self.cfg, self.store, session.make(self.cfg), Log(self.log_text), self.limits)
         return await self.hub.start("127.0.0.1", 0)
 

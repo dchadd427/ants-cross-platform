@@ -131,7 +131,7 @@ class TheRefusals(unittest.TestCase):
     def test_text_that_is_not_utf8_is_1007(self):
         for bad in (b"\xff", b"\xc0\xaf", b"\xed\xa0\x80", b"\xe2\x82", b"\xf4\x90\x80\x80", b"ok\x80", b"\xc3"):
             self.assertEqual(self.code(hc.frame(1, bad)), 1007, bad)
-        self.assertEqual(self.code(hc.frame(1, "€\U0001f600".encode())), None)
+        self.assertEqual(self.code(hc.frame(1, "\u20ac\U0001f600".encode())), None)
 
     def test_close_frames(self):
         for payload, expected in ((b"", (1000, "")), (b"\x03\xe8", (1000, "")), (b"\x03\xe9bye", (1001, "bye")), (b"\x03\xef", (1007, "")), (b"\x03\xf6", (1014, "")),
@@ -345,6 +345,11 @@ class TheRequestReader(unittest.TestCase):
     def test_the_blanks_around_a_value_are_not_part_of_it(self):
         head = http.parse_head(b"GET /hub/ws HTTP/1.1\r\nX-A:   v  w \t \r\nX-B:\r\nX-C:\t\tz\r\n\r\n")
         self.assertEqual((head.headers["x-a"], head.headers["x-b"], head.headers["x-c"]), ("v  w", "", "z"))
+
+    def test_only_spaces_and_tabs_are_cut_from_the_ends_of_a_value(self):
+        # a no-break space and the next-line character are not blanks of HTTP: they stay where the client put them (the old pattern cut a space and a tab and nothing else)
+        head = http.parse_head("GET /hub/ws HTTP/1.1\r\nX-A: \xa0v\xa0\r\nX-B:\x85w\x85 \t\r\nX-C:  \xa0 \r\n\r\n".encode("latin-1"))
+        self.assertEqual((head.headers["x-a"], head.headers["x-b"], head.headers["x-c"]), ("\xa0v\xa0", "\x85w\x85", "\xa0"))
 
     def test_a_long_run_of_blanks_costs_nothing(self):
         # a header line is read in one pass: a pattern that cut the blanks around the value itself took a quarter of a second on one like this, on the one thread that serves every socket
