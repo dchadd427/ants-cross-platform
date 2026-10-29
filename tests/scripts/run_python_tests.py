@@ -27,7 +27,7 @@ import time
 COSTS = {
     "test_web_mapmaker.TheCodeRuns": 110, "test_web_mapmaker.TheGroundAndTheSprites": 100, "test_web_mapmaker.ThePage": 20, "test_nginx_history.TheBlocksRun": 58, "test_web_admin.ThePagesOwnCode": 33,
     "test_bot_names.TheMutants": 30, "test_web_death_map.TheCards": 30, "test_nginx_stats.TheCacheRuns": 28, "test_web_map_files.ThePagesOwnCode": 26, "test_web_lobby_chat.TheChecksAreNotVacuous": 24,
-    "test_web_mapmaker_play.ThePlayChecks": 20, "test_e2e_deadlines.Waits": 20, "test_web_home_games.TheChecksAreNotVacuous": 100,
+    "test_web_mapmaker_play.ThePlayChecks": 20, "test_e2e_deadlines.Waits": 20, "test_web_home_chat.TheChecksAreNotVacuous": 72, "test_web_home_screen.TheChecksAreNotVacuous": 39, "test_web_home_games.TheChecksAreNotVacuous": 100,
 }
 
 

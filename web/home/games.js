@@ -25,7 +25,6 @@
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
-    var HANDOFF_MS = 15000;                              // a START that has not taken the page to the game after this long has failed: the list is back (the same wait as the Home bars' own)
     var SEAT_PERSON = 1, SEAT_CLIENT = 2;                // the Room message's states of a color that a person holds (lobby_net.js SLOT)
     var TEXT = {
         title: 'Open games', loading: 'Looking for games…', off: 'Games list is off right now', offHint: 'Join by code still works.', none: 'none waiting',
@@ -85,16 +84,16 @@
 
     // ---- the screens ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // mount({ doc, win, host (Home's div), page (web/lobby.html's bridge: client(), make(), leave(), join(code, name, done), typed(text, done, before), name()), parts: { quickHost, games, pill } (Home's buttons),
-    //         ctl: { show(screen, how), screen() }, later, cancel, random, now (the clocks: tests give their own) }) returns { sync, shown, opening, poll, state }
+    //         ctl: { show(screen, how), screen() }, handoff (START is on its way already: the part mounts waiting), later, cancel, random, now (the clocks: tests give their own) }) returns { sync, shown, opening, stalled, inert, poll, state }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page, parts = env.parts, ctl = env.ctl;
         var rules = win.AntsLobbyRules, Net = win.AntsLobbyNet;
         var later = env.later || function (fn, ms) { return setTimeout(fn, ms); }, cancel = env.cancel || function (id) { clearTimeout(id); };
         var random = env.random || Math.random, now = env.now || function () { return Date.now(); };
 
-        var rows = [], loaded = false, off = false, failures = 0, isOpen = false, polling = false, round = 0, pollTimer = null, gone = false, joining = false, joinButtons = [];
+        var rows = [], loaded = false, off = false, failures = 0, isOpen = false, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedPrivate = false, locked = false, lockTimer = null, hint = '';
-        var dialog = null, noticeKind = '', quiet = [], resumeTimer = null;
+        var dialog = null, noticeKind = '', quiet = [];
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -515,16 +514,20 @@
             sync();
             schedule();
         }
-        function opening() {                               // START reached the page: nothing here takes a press or a timer, until the hand-off has failed
-            closeAll(); gone = true;
-            [pollTimer, refreshTimer, pendingTimer, lockTimer, resumeTimer].forEach(function (t) { if (t !== null) cancel(t); });
+        function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more (the page is frozen: it is on its way to the game, or it is stuck and says so)
+            closeAll(); clearNotice(); gone = true;
+            [pollTimer, refreshTimer, pendingTimer, lockTimer].forEach(function (t) { if (t !== null) cancel(t); });
             pollTimer = refreshTimer = pendingTimer = lockTimer = null;
-            resumeTimer = later(function () { resumeTimer = null; gone = false; pending = null; polling = false; sync(); poll(); }, HANDOFF_MS);
         }
+        function stalled(words) {                          // the hand-off did not come in 15 s (Home takes presses again, the page's room is still frozen): the buttons that need the page's room say why they do not work
+            [parts.quickHost, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });
+            hint = words; paintVis();
+        }
+        function inert(on) { [strip, pop].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a dialog of the page, or the hand-off, is over this part: it takes no key or tap)
         sync();
         poll();
         return {
-            sync: guard(sync), shown: guard(shown), opening: opening, poll: poll,
+            sync: guard(sync), shown: guard(shown), opening: opening, stalled: stalled, inert: inert, poll: poll,
             state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind }; }
         };
     }

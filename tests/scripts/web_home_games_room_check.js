@@ -259,6 +259,18 @@ const OTHERS = ['Maya', 'Sage'];
     tap(env.home('host'));
     check('Quick host with a room that is public already sends nothing, says so and shows the Room', visibilities(sock).length === 0 && stripText(env) === 'Your room is already public.' && env.screen() === 'room' && env.sockets.length === 1);
 }
+{   // START reaches a guest while the card "Leave ... and host your own?" is up
+    const env = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
+    const sock = guestRoom(env, 'Pebble', PUBLIC);
+    env.roomBar('rhome').click();
+    tap(env.home('host'));
+    const rbar = env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1)[0];
+    check('(the card is up, and the bar is inert behind it)', dialogOf(env) !== null && env.home('hbar').hasAttribute('inert'));
+    sock.receive(roomMessage(seatsOf(['Pebble', 'Maya']), { you: 1, leader: 0, flags: STARTING }));
+    check('START reaches the page: the card is gone, the hand-off goes, and both bars stay inert (the card gives back what it took before the hand-off holds them)', env.assigned.length === 1 && dialogOf(env) === null && env.home('hbar').hasAttribute('inert') && rbar.hasAttribute('inert'));
+    await wait(env, 16000);
+    check('... and 15 s later, when Home takes presses again, they are free', !env.home('hbar').hasAttribute('inert') && !rbar.hasAttribute('inert') && env.home('host').disabled === true && env.home('games').disabled === true);
+}
 {   // somebody else's room: ask first
     const env = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
     const guestSock = guestRoom(env, 'Pebble', PUBLIC);
@@ -588,6 +600,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 // 5. START reaches the page; a script that is broken
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
+    const SLOW = 'The game is slow to open. Reload this page to get your seat back.', FAILED = 'The game did not open. Reload this page to get your seat back.';
     const env = await withList();
     const sock = myRoom(env, OTHERS, PRIVATE, { you: 1, leader: 0 });
     env.roomBar('rhome').click();
@@ -601,7 +614,102 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     tap(env.home('games'));
     check('... and nothing is asked of /lobbies any more, whatever the tab does, and Games opens nothing', env.looks() === looks && popOf(env).hidden === true);
     await wait(env, 14000);
-    check('a START that has not taken the page away after 15 s has failed: the list is back (a look, and Games opens it again)', env.looks() === looks + 1 && (tap(env.home('games')), true) && popOf(env).hidden === false);
+    const banner = env.$('banner'), words = env.$('banner-text');
+    check('a START that has not taken the page away after 15 s is slow (the page\'s strip says "slow to open", Home takes presses again): the buttons that need the page\'s room are OFF, each with that reason as its title, and nothing is asked of /lobbies', banner.hidden === false && words.textContent === SLOW
+          && [env.home('host'), env.home('games')].every((b) => b.disabled === true && b.getAttribute('aria-disabled') === 'true' && b.getAttribute('title') === SLOW) && env.looks() === looks);
+    tap(env.home('games')); env.home('games').click(); env.home('host').click();
+    check('... a press that a browser did let through opens no list, asks no question, makes no room and no notice, and sends no Leave (not for a guest: Quick host would ask "Leave ... room and host your own?")', popOf(env).hidden === true && dialogOf(env) === null && stripOf(env).hidden === true && env.sockets.length === 1 && leaves(sock) === 0 && env.looks() === looks);
+    await wait(env, 32000);
+    check('a minute after START the strip says that the game did not open, and the buttons say the same; still no look at the list, and nothing was polled in the 30 s or the 5 s that the list used to wait', words.textContent === FAILED && [env.home('host'), env.home('games')].every((b) => b.disabled === true && b.getAttribute('title') === FAILED) && env.looks() === looks);
+    await wait(env, 330000);
+    env.hide(true); env.hide(false);
+    await wait(env, 1000);
+    check('... five more minutes, and a tab that goes out of sight and comes back: nothing is asked of /lobbies and nothing is sent (the page is frozen until it is reloaded)', env.looks() === looks && leaves(sock) === 0 && visibilities(sock).length === 0 && popOf(env).hidden === true && env.sockets.length === 1);
+}
+{   // the leader of a public room starts: the hand-off goes, the switch cannot be pressed, the repeat is over, and the page says why (as the guest's buttons do)
+    const SLOW = 'The game is slow to open. Reload this page to get your seat back.', FAILED = 'The game did not open. Reload this page to get your seat back.';
+    const env = await page();
+    const sock = myRoom(env, OTHERS, PUBLIC);
+    sock.receive(roomAs(OTHERS, 0, PUBLIC));
+    const vis = visOf(env);
+    check('(the leader of a public room: the switch can be pressed)', vis.hidden === false && vis.children.every((b) => b.disabled === false));
+    env.roomBar('rhome').click();
+    tap(env.home('host'));
+    check('(a notice of the list stands: Quick host on a public room says so)', stripText(env) === 'Your room is already public.' && stripButtons(env).length === 1);
+    sock.receive(roomMessage(seatsOf(OTHERS), { you: 0, leader: 0, flags: STARTING }));
+    check('START reaches the page: the hand-off goes, the notice is taken away (its OK would take no press), and the switch is off at once', env.assigned.length === 1 && stripOf(env).hidden === true && vis.children.every((b) => b.disabled === true));
+    vis.children[0].click(); vis.children[1].click();
+    same('(a press that got through sends nothing)', visibilities(sock), []);
+    await wait(env, 15000);
+    check('15 s later the page says that the game is slow to open, and the line under the switch says so too (the switch stays off)', env.$('banner-text').textContent === SLOW && noteOf(env).textContent === SLOW && noteOf(env).hidden === false && vis.children.every((b) => b.disabled === true));
+    await wait(env, 45000);
+    check('... and "did not open" a minute after START, on both', env.$('banner-text').textContent === FAILED && noteOf(env).textContent === FAILED && vis.children.every((b) => b.disabled === true));
+    await wait(env, 660000);
+    same('... and the repeat that keeps a room public does not run for a page that is frozen (not in 11 minutes, a tab in sight)', visibilities(sock), []);
+}
+{   // START comes before the script of the list does, and the 15 s are over before it comes: it mounts into a page that waits for the game, and says so at once
+    const SLOW = 'The game is slow to open. Reload this page to get your seat back.';
+    const site = fakeSite();
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch });
+    env.advance(0);
+    const parts = () => env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/games.js') || (c.tagName === 'link' && c.href === 'home/games.css'));
+    check('(the script and the style of the list were asked for, and have not come)', parts().length === 2 && env.home('host').disabled === true);
+    env.home('mine').click();
+    const sock = env.arrive({ key: KEY, seats: seatsOf(OTHERS), room: { flags: PRIVATE } });
+    env.roomBar('rhome').click();
+    sock.receive(roomMessage(seatsOf(OTHERS), { you: 0, leader: 0, flags: STARTING }));
+    await wait(env, 16000);
+    check('(START came while Home showed, and was not taken: the page says that the game is slow)', env.screen() === 'home' && env.assigned.length === 1 && env.$('banner-text').textContent === SLOW);
+    env.win.AntsHomeGames = R.Games;
+    parts().forEach((c) => c.onload && c.onload({}));
+    await flush();
+    check('the list comes now: its buttons are off with the same reason, and it asked for nothing (Home shows, and a list that is mounted on Home looks at once: this one does not)', [env.home('host'), env.home('games')].every((b) => b.disabled === true && b.getAttribute('title') === SLOW) && site.calls.length === 0);
+    env.home('games').click();
+    await wait(env, 60000);
+    check('... even a press that got through opens nothing, and a minute later still nothing was asked of the list', popOf(env).hidden === true && site.calls.length === 0 && env.lazyErrors.length === 0);
+}
+{   // a script that comes while START is on its way (not slow yet) waits as well
+    const site = fakeSite();
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch });
+    env.advance(0);
+    env.home('mine').click();
+    const sock = env.arrive({ key: KEY, seats: seatsOf(OTHERS), room: { flags: PRIVATE } });
+    env.roomBar('rhome').click();
+    sock.receive(roomMessage(seatsOf(OTHERS), { you: 0, leader: 0, flags: STARTING }));
+    env.win.AntsHomeGames = R.Games;
+    env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/games.js') || (c.tagName === 'link' && c.href === 'home/games.css')).forEach((c) => c.onload && c.onload({}));
+    await flush();
+    env.home('games').click(); env.home('host').click();
+    check('a list that comes after START (and before the 15 s), while Home shows, takes no press and asks for nothing: no look, no list, no notice', site.calls.length === 0 && popOf(env).hidden === true && stripOf(env).hidden === true && env.sockets.length === 1);
+    await wait(env, 30000);
+    check('... and nothing is asked in the 30 s that follow (the 15 s of the hand-off are over: the buttons are off)', site.calls.length === 0 && env.home('games').disabled === true && env.home('host').disabled === true);
+}
+{   // a script that comes while a dialog of the page is open is under it as well
+    const site = fakeSite();
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch });
+    env.advance(0);
+    env.home('mine').click();
+    env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PUBLIC } });
+    env.roomBar('rhome').click();
+    env.$('how-open').click();
+    env.win.AntsHomeGames = R.Games;
+    env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/games.js') || (c.tagName === 'link' && c.href === 'home/games.css')).forEach((c) => c.onload && c.onload({}));
+    await flush();
+    env.home('host').click();
+    check('How it works is open when the list arrives: a notice that it makes then is inert with the rest of the page', stripText(env) === 'Your room is already public.' && stripOf(env).hasAttribute('inert'));
+    env.$('how-close').click();
+    check('... and takes presses again when the dialog is closed', !stripOf(env).hasAttribute('inert'));
+}
+{   // a dialog of the page (How it works, the map list) and the notice of the list: the strip is behind it, so it takes no key or tap
+    const env = await page();
+    myRoom(env, ['Maya'], PUBLIC);
+    env.roomBar('rhome').click();
+    tap(env.home('host'));
+    check('(Quick host on a public room says so)', stripText(env) === 'Your room is already public.');
+    env.$('how-open').click();
+    check('How it works is open: the strip of the list is inert with the rest of the page (a Tab does not reach its OK)', stripOf(env).hasAttribute('inert') && env.$('how').hidden === false && !env.$('how').hasAttribute('inert'));
+    env.$('how-close').click();
+    check('... and it takes presses again when the dialog is closed', !stripOf(env).hasAttribute('inert') && stripText(env) === 'Your room is already public.');
 }
 {
     const env = await page({ options: { lazy: { AntsHomeGames: { mount() { throw new Error('boom'); } } } } });

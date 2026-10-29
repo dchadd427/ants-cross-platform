@@ -14,6 +14,7 @@ class MiniWebSocket {
         this.buffer = Buffer.alloc(0);
         this.head = null;                                              // the answer to the handshake until its blank line has come
         this.pieces = [];
+        this.kind = 2;                                                 // the kind of the message that is being read: 1 text, 2 binary
         const key = crypto.randomBytes(16).toString('base64');
         this.socket = net.connect(Number(m[2]), m[1]);
         this.socket.on('connect', () => this.socket.write('GET ' + (m[3] || '/') + ' HTTP/1.1\r\nHost: ' + m[1] + ':' + m[2] + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ' + key + '\r\nSec-WebSocket-Version: 13\r\n\r\n'));
@@ -53,11 +54,14 @@ class MiniWebSocket {
             if (opcode === 8) { this.sendFrame(8, payload.slice(0, 2)); this.readyState = 2; this.socket.end(); return; }
             if (opcode === 9) { this.sendFrame(10, payload); continue; }
             if (opcode === 10) continue;
+            if (opcode === 1 || opcode === 2) this.kind = opcode;           // (the first frame of a message says whether it is text or binary; the pieces after it are opcode 0)
             this.pieces.push(payload);
             if (!fin) continue;
             const whole = Buffer.concat(this.pieces);
             this.pieces = [];
-            if (opcode === 2 || opcode === 0) {
+            if (this.kind === 1) {                                         // a text message (the chat hub's) arrives as a string, as in a browser
+                if (this.onmessage) this.onmessage({ data: whole.toString('utf8') });
+            } else if (opcode === 2 || opcode === 0) {
                 if (this.onmessage) this.onmessage({ data: whole.buffer.slice(whole.byteOffset, whole.byteOffset + whole.length) });
             }
         }
@@ -74,7 +78,8 @@ class MiniWebSocket {
     }
     send(bytes) {
         if (this.readyState !== 1) throw new Error('send on a socket that is not open');
-        this.sendFrame(2, Buffer.from(bytes));
+        if (typeof bytes === 'string') this.sendFrame(1, Buffer.from(bytes, 'utf8'));          // (a string is a text message)
+        else this.sendFrame(2, Buffer.from(bytes));
     }
     close() {
         if (this.readyState >= 2) return;

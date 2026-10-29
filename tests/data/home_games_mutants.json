@@ -431,15 +431,15 @@
   {
    "id": "start_does_not_stop_it",
    "file": "web/home/games.js",
-   "old": "closeAll(); gone = true;",
-   "new": "closeAll();",
+   "old": "closeAll(); clearNotice(); gone = true;",
+   "new": "closeAll(); clearNotice();",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "start_leaves_the_list_up",
    "file": "web/home/games.js",
-   "old": "closeAll(); gone = true;",
-   "new": "gone = true;",
+   "old": "closeAll(); clearNotice(); gone = true;",
+   "new": "clearNotice(); gone = true;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -914,8 +914,8 @@
   {
    "id": "home_does_not_tell_start",
    "file": "web/home/home.js",
-   "old": "gamesCall('opening'); ",
-   "new": "",
+   "old": "gamesCall('opening'); inert(held);",
+   "new": "inert(held);",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1035,6 +1035,132 @@
    "file": "web/home/games.css",
    "old": ".gmap { display: block;",
    "new": ".gmap { background: url(\"https://example.test/p.png\"); display: block;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_games_not_told",
+   "file": "web/home/home.js",
+   "old": "            gamesCall('stalled', words);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "late_games_not_told_it_stalled",
+   "file": "web/home/home.js",
+   "old": "if (stalled) gamesCall('stalled', said);",
+   "new": "if (false) gamesCall('stalled', said);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "late_games_not_inert",
+   "file": "web/home/home.js",
+   "old": "                gamesCall('inert', held || going);\n            });",
+   "new": "            });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "games_not_inert_with_the_page",
+   "file": "web/home/home.js",
+   "old": "n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }",
+   "new": "n.removeAttribute('inert'); } }); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "bars_inert_before_the_card_goes",
+   "file": "web/home/home.js",
+   "old": "gamesCall('opening'); inert(held);",
+   "new": "inert(held); gamesCall('opening');",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_leaves_quick_host_on",
+   "file": "web/home/games.js",
+   "old": "[parts.quickHost, parts.games].forEach(function (b) { b.disabled = true;",
+   "new": "[parts.games].forEach(function (b) { b.disabled = true;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_leaves_games_on",
+   "file": "web/home/games.js",
+   "old": "[parts.quickHost, parts.games].forEach(function (b) { b.disabled = true;",
+   "new": "[parts.quickHost].forEach(function (b) { b.disabled = true;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_gives_no_reason",
+   "file": "web/home/games.js",
+   "old": "b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });",
+   "new": "b.setAttribute('aria-disabled', 'true'); });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_not_said_to_a_screen_reader",
+   "file": "web/home/games.js",
+   "old": "b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });",
+   "new": "b.disabled = true; b.setAttribute('title', words); });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_switch_says_nothing",
+   "file": "web/home/games.js",
+   "old": "            hint = words; paintVis();\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "start_leaves_its_notice",
+   "file": "web/home/games.js",
+   "old": "closeAll(); clearNotice(); gone = true;",
+   "new": "closeAll(); gone = true;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "part_not_inert_with_the_page_strip",
+   "file": "web/home/games.js",
+   "old": "[strip, pop].forEach(function (n) { if (on)",
+   "new": "[pop].forEach(function (n) { if (on)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "part_never_lifts_inert",
+   "file": "web/home/games.js",
+   "old": "if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }",
+   "new": "n.setAttribute('inert', ''); }); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_not_given_to_home",
+   "file": "web/home/games.js",
+   "old": "opening: opening, stalled: stalled, inert: inert,",
+   "new": "opening: opening, inert: inert,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "inert_not_given_to_home",
+   "file": "web/home/games.js",
+   "old": "opening: opening, stalled: stalled, inert: inert,",
+   "new": "opening: opening, stalled: stalled,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "late_games_looks_once_before_it_waits",
+   "file": "web/home/games.js",
+   "old": "gone = !!env.handoff,",
+   "new": "gone = false,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "home_does_not_tell_the_part_that_start_is_on_its_way",
+   "file": "web/home/home.js",
+   "old": "handoff: going || stalled });",
+   "new": "handoff: false });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "home_tells_the_part_that_start_is_always_on_its_way",
+   "file": "web/home/home.js",
+   "old": "handoff: going || stalled });",
+   "new": "handoff: true });",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]

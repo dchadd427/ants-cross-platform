@@ -1,0 +1,2007 @@
+{
+ "note": "Mutants of the chat dock of Home (web/home/chat.js and chat.css, docs/HOME_SCREEN.md 'The chat dock') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_chat_check.js (the dock against a fake hub and a fake clock), tests/scripts/web_home_chat_hub_check.js (the fake hub on a real socket) and the static checks of tests/scripts/test_web_home_chat.py: text that becomes markup, no cap on the lines, del ignored, a send while offline, no backoff, a reconnect storm, unread never reset, the words of the errors, garbage that throws, a socket on another page, no ping, a login button with login:false, the field without `you`, the loader in home.js, the style and the wiring; every one must be caught (tools/mutate.py tests/data/home_chat_mutants.json --keep-going --jobs 1).",
+ "mutants": [
+  {
+   "id": "text_made_with_innerhtml",
+   "file": "web/home/chat.js",
+   "old": "if (text !== undefined) e.textContent = text;",
+   "new": "if (text !== undefined) e.innerHTML = text;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "name_in_a_span_not_a_bdi",
+   "file": "web/home/chat.js",
+   "old": "el('bdi', 'gc-who', e.who)",
+   "new": "el('span', 'gc-who', e.who)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "line_in_a_span_not_a_bdi",
+   "file": "web/home/chat.js",
+   "old": "el('bdi', 'gc-text', e.text)",
+   "new": "el('span', 'gc-text', e.text)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "line_made_a_link",
+   "file": "web/home/chat.js",
+   "old": "el('bdi', 'gc-text', e.text)",
+   "new": "el('a', 'gc-text', e.text)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "text_stored_in_local_storage",
+   "file": "web/home/chat.js",
+   "old": "            draft = text;\n            return '';",
+   "new": "            draft = text; win.localStorage.setItem('gchat.draft', text);\n            return '';",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "controls_kept",
+   "file": "web/home/chat.js",
+   "old": ".replace(/[\\u0000-\\u0008\\u000e-\\u001f\\u007f-\\u009f]/g, '')",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "bidi_controls_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u206f",
+   "new": "\\u200b-\\u200f\\u2060-\\u206f",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "isolates_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u2060-\\u206f\\u2800",
+   "new": "\\u2060-\\u2065\\u2800",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "zero_width_space_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u180e\\u200b-\\u200f",
+   "new": "\\u180e\\u200c-\\u200f",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "byte_order_mark_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u3164\\ufeff\\uffa0",
+   "new": "\\u3164\\uffa0",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "blanks_not_collapsed",
+   "file": "web/home/chat.js",
+   "old": ".replace(/\\s+/g, ' ').replace(/^ | $/g, '')",
+   "new": ".replace(/^ | $/g, '')",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "line_ends_removed_not_blanks",
+   "file": "web/home/chat.js",
+   "old": ".replace(/[\\t-\\r\\u0085\\u2028\\u2029]/g, ' ')",
+   "new": ".replace(/[\\t-\\r\\u0085\\u2028\\u2029]/g, '')",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "lone_surrogates_kept",
+   "file": "web/home/chat.js",
+   "old": "s = pairs(String(s).replace(/[\\t-\\r\\u0085\\u2028\\u2029]/g, ' ')).replace(",
+   "new": "s = String(s).replace(/[\\t-\\r\\u0085\\u2028\\u2029]/g, ' ').replace(",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "names_not_cut",
+   "file": "web/home/chat.js",
+   "old": "var LIMIT = { name: 32,",
+   "new": "var LIMIT = { name: 3200,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "lines_not_cut",
+   "file": "web/home/chat.js",
+   "old": "line: 200, feed: 100,",
+   "new": "line: 200000, feed: 100,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_pair_of_surrogates_is_cut",
+   "file": "web/home/chat.js",
+   "old": "i += c >= 0xd800 && c <= 0xdbff ? 2 : 1;",
+   "new": "i += 1;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "points_count_units",
+   "file": "web/home/chat.js",
+   "old": "if (!(c >= 0xdc00 && c <= 0xdfff)) n++;",
+   "new": "n++;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "nameless_has_no_name",
+   "file": "web/home/chat.js",
+   "old": "LIMIT.name) || '?', text: text",
+   "new": "LIMIT.name), text: text",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "mod_flag_is_loose",
+   "file": "web/home/chat.js",
+   "old": "mod: m.mod === true }",
+   "new": "mod: !!m.mod }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "line_without_id_is_a_line",
+   "file": "web/home/chat.js",
+   "old": "typeof m.text !== 'string' || count(m.id) === null) return null;",
+   "new": "typeof m.text !== 'string') return null;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "line_without_name_is_a_line",
+   "file": "web/home/chat.js",
+   "old": "typeof m.who !== 'string' || typeof m.text",
+   "new": "typeof m.text",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "huge_frames_are_read",
+   "file": "web/home/chat.js",
+   "old": "if (typeof data !== 'string' || data.length > LIMIT.frame) return null;",
+   "new": "if (typeof data !== 'string') return null;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "frame_limit_is_ten_bytes",
+   "file": "web/home/chat.js",
+   "old": "frame: 120000,",
+   "new": "frame: 10,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "no_cap_on_the_lines",
+   "file": "web/home/chat.js",
+   "old": "feed: 100, history: 50",
+   "new": "feed: 100000, history: 50",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "old_rows_stay_on_the_screen",
+   "file": "web/home/chat.js",
+   "old": "var old = feed.shift(); if (seen() && !stale && old.el && old.el.parentNode) old.el.parentNode.removeChild(old.el); else stale = true; }",
+   "new": "var old = feed.shift(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "del_ignored",
+   "file": "web/home/chat.js",
+   "old": "else if (m.t === 'del') onDel(m);",
+   "new": "else if (m.t === 'del') { }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "del_leaves_the_row",
+   "file": "web/home/chat.js",
+   "old": "if (seen() && !stale && gone.el && gone.el.parentNode) gone.el.parentNode.removeChild(gone.el); else stale = true;",
+   "new": "gone.el = gone.el;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "del_takes_the_wrong_line",
+   "file": "web/home/chat.js",
+   "old": "if (feed[i].id !== m.id) continue;",
+   "new": "if (feed[i].id === m.id) continue;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "same_line_twice_is_drawn_twice",
+   "file": "web/home/chat.js",
+   "old": "var e = lineOf(m);\n            if (!e || known(e.id)) return;",
+   "new": "var e = lineOf(m);\n            if (!e) return;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "history_longer_than_50",
+   "file": "web/home/chat.js",
+   "old": ".slice(-LIMIT.history)",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "history_cut_at_the_wrong_end",
+   "file": "web/home/chat.js",
+   "old": ".slice(-LIMIT.history)",
+   "new": ".slice(0, LIMIT.history)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "history_not_a_list_is_fine",
+   "file": "web/home/chat.js",
+   "old": "if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }",
+   "new": "if (m.v !== VERSION) { lost(); return; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "version_not_checked",
+   "file": "web/home/chat.js",
+   "old": "if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }",
+   "new": "if (m.history !== undefined && !Array.isArray(m.history)) { lost(); return; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_second_welcome_is_taken",
+   "file": "web/home/chat.js",
+   "old": "if (welcomed) return;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_line_before_the_welcome_is_taken",
+   "file": "web/home/chat.js",
+   "old": "if (!welcomed && m.t !== 'welcome') return;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hub_of_unknown_kinds_is_dropped",
+   "file": "web/home/chat.js",
+   "old": "delete said[draft]; draft = ''; }",
+   "new": "delete said[draft]; draft = ''; } else lost();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "online_count_not_checked",
+   "file": "web/home/chat.js",
+   "old": "function count(n) { return typeof n === 'number' && n >= 0 && n <= LIMIT.count && n === Math.floor(n) ? n : null; }",
+   "new": "function count(n) { return n; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "garbage_throws",
+   "file": "web/home/chat.js",
+   "old": "try { m = JSON.parse(data); } catch (e) { return null; }",
+   "new": "m = JSON.parse(data);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "garbage_never_drops_the_hub",
+   "file": "web/home/chat.js",
+   "old": "if (!m) { if (++bad >= LIMIT.bad) lost(); return; }",
+   "new": "if (!m) return;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "one_bad_frame_drops_the_hub",
+   "file": "web/home/chat.js",
+   "old": "frame: 120000, bad: 30,",
+   "new": "frame: 120000, bad: 1,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "form_without_you",
+   "file": "web/home/chat.js",
+   "old": "form.hidden = !(state === 'live' && you);",
+   "new": "form.hidden = !(state === 'live');",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "form_while_offline",
+   "file": "web/home/chat.js",
+   "old": "form.hidden = !(state === 'live' && you);",
+   "new": "form.hidden = !you;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "guest_line_for_writers",
+   "file": "web/home/chat.js",
+   "old": "guest.hidden = !(state === 'live' && !you);",
+   "new": "guest.hidden = state !== 'live';",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "login_words_without_a_login",
+   "file": "web/home/chat.js",
+   "old": "(login ? ERR.login : ERR.readonly)",
+   "new": "ERR.login",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "read_only_words_where_a_login_exists",
+   "file": "web/home/chat.js",
+   "old": "(login ? ERR.login : ERR.readonly)",
+   "new": "ERR.readonly",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "login_button_with_login_false",
+   "file": "web/home/chat.js",
+   "old": "put(body, [log, note, news, form, guest, slot]);",
+   "new": "slot.appendChild(el('button', 'btn gc-login', 'Log in')); put(body, [log, note, news, form, guest, slot]);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "login_place_is_shown",
+   "file": "web/home/chat.js",
+   "old": "slot.setAttribute('data-slot', 'login'); slot.hidden = true;",
+   "new": "slot.setAttribute('data-slot', 'login'); slot.hidden = false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "login_place_follows_the_welcome",
+   "file": "web/home/chat.js",
+   "old": "form.hidden = !(state === 'live' && you);",
+   "new": "form.hidden = !(state === 'live' && you); slot.hidden = !login;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "read_only_words_changed",
+   "file": "web/home/chat.js",
+   "old": "readonly: 'Chat is read-only for now'",
+   "new": "readonly: 'Chat is closed'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html && node tests/scripts/web_home_chat_hub_check.js web/lobby.html"
+  },
+  {
+   "id": "offline_words_changed",
+   "file": "web/home/chat.js",
+   "old": "offline: 'Chat is offline'",
+   "new": "offline: 'Chat is down'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "offline_note_missing",
+   "file": "web/home/chat.js",
+   "old": "note.textContent = notice || (state === 'offline' ? TEXT.offline :",
+   "new": "note.textContent = notice || (state === 'offline' ? '' :",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "reconnecting_word_missing",
+   "file": "web/home/chat.js",
+   "old": "state === 'connecting' ? TEXT.connecting : TEXT.reconnecting;",
+   "new": "state === 'connecting' ? TEXT.connecting : '';",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "offline_dock_keeps_an_old_notice",
+   "file": "web/home/chat.js",
+   "old": "['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = '';",
+   "new": "['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html && node tests/scripts/web_home_chat_hub_check.js web/lobby.html"
+  },
+  {
+   "id": "send_while_offline",
+   "file": "web/home/chat.js",
+   "old": "var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline'",
+   "new": "var why = false ? 'offline'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "send_to_a_socket_that_is_closing",
+   "file": "web/home/chat.js",
+   "old": "var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline'",
+   "new": "var why = !sock || state !== 'live' ? 'offline'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "send_before_the_welcome",
+   "file": "web/home/chat.js",
+   "old": "var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline'",
+   "new": "var why = !sock || sock.readyState !== 1 ? 'offline'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "read_only_may_send",
+   "file": "web/home/chat.js",
+   "old": ": !you ? 'readonly'",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "empty_lines_are_sent",
+   "file": "web/home/chat.js",
+   "old": ": !text ? 'empty'",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "long_lines_are_sent",
+   "file": "web/home/chat.js",
+   "old": ": points(text) > LIMIT.line ? 'long'",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "no_pace",
+   "file": "web/home/chat.js",
+   "old": "if (tokens < 1 || said[text] !== undefined) return false;",
+   "new": "if (false) return false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pace_burst_of_ten",
+   "file": "web/home/chat.js",
+   "old": "var PACE = { burst: 2,",
+   "new": "var PACE = { burst: 10,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pace_every_tenth_of_a_second",
+   "file": "web/home/chat.js",
+   "old": "every: 2500,",
+   "new": "every: 100,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pace_never_refills",
+   "file": "web/home/chat.js",
+   "old": "tokens = Math.min(PACE.burst, tokens + Math.max(0, t - tokensAt) / PACE.every);",
+   "new": "tokens = Math.min(PACE.burst, tokens);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_same_text_goes_twice",
+   "file": "web/home/chat.js",
+   "old": "|| said[text] !== undefined",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_same_text_window_is_nothing",
+   "file": "web/home/chat.js",
+   "old": "same: 31000 }",
+   "new": "same: 0 }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "text_sent_as_typed",
+   "file": "web/home/chat.js",
+   "old": "var text = plain(String(raw));",
+   "new": "var text = String(raw);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "wrong_message_shape",
+   "file": "web/home/chat.js",
+   "old": "JSON.stringify({ t: 'say', text: text })",
+   "new": "JSON.stringify({ t: 'say', msg: text })",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "field_not_emptied",
+   "file": "web/home/chat.js",
+   "old": "if (sendLine(field.value) === '') field.value = '';",
+   "new": "sendLine(field.value);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "field_emptied_on_a_refusal",
+   "file": "web/home/chat.js",
+   "old": "if (sendLine(field.value) === '') field.value = '';",
+   "new": "sendLine(field.value); field.value = '';",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "submit_goes_to_the_page",
+   "file": "web/home/chat.js",
+   "old": "if (e && e.preventDefault) e.preventDefault();",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "field_without_a_limit",
+   "file": "web/home/chat.js",
+   "old": "field.setAttribute('maxlength', String(LIMIT.field));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "draft_not_given_back",
+   "file": "web/home/chat.js",
+   "old": "if (draft && !field.value) field.value = draft;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "draft_given_back_over_new_words",
+   "file": "web/home/chat.js",
+   "old": "if (draft && !field.value) field.value = draft;",
+   "new": "if (draft) field.value = draft;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "draft_given_back_after_it_came_as_a_line",
+   "file": "web/home/chat.js",
+   "old": "if (e.own && e.text === draft) draft = '';",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_ignored",
+   "file": "web/home/chat.js",
+   "old": "{ tell(m.code); if (draft && !field.value) field.value = draft; delete said[draft]; draft = ''; }",
+   "new": "{ }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_notice_never_goes",
+   "file": "web/home/chat.js",
+   "old": "timers.notice = setTimeout(guard(function () { timers.notice = 0; notice = ''; render(); }), MS.notice);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_rate_words",
+   "file": "web/home/chat.js",
+   "old": "rate: 'Slow down a little'",
+   "new": "rate: 'Error'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_login_asks_without_a_login",
+   "file": "web/home/chat.js",
+   "old": "if (code === 'login' && !login) return ERR.readonly;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_muted_words_empty",
+   "file": "web/home/chat.js",
+   "old": "muted: 'You cannot chat for a while'",
+   "new": "muted: ''",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_banned_words_changed",
+   "file": "web/home/chat.js",
+   "old": "banned: 'You cannot chat here'",
+   "new": "banned: 'Bye'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_long_words_changed",
+   "file": "web/home/chat.js",
+   "old": "long: 'That line is too long'",
+   "new": "long: 'No'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_empty_words_changed",
+   "file": "web/home/chat.js",
+   "old": "empty: 'Write something first'",
+   "new": "empty: 'No'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_young_words_changed",
+   "file": "web/home/chat.js",
+   "old": "young: 'Your account is too new to chat yet'",
+   "new": "young: 'No'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_bad_words_changed",
+   "file": "web/home/chat.js",
+   "old": "bad: 'That line could not be sent'",
+   "new": "bad: 'No'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_generic_words_changed",
+   "file": "web/home/chat.js",
+   "old": "generic: 'That did not go through'",
+   "new": "generic: ''",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_code_is_looked_up_in_object",
+   "file": "web/home/chat.js",
+   "old": "return typeof code === 'string' && Object.prototype.hasOwnProperty.call(ERR, code) ? ERR[code] : TEXT.generic;",
+   "new": "return ERR[code] || TEXT.generic;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "no_backoff",
+   "file": "web/home/chat.js",
+   "old": "var base = Math.min(BACKOFF.max, BACKOFF.min * Math.pow(2, Math.min(attempt, 12)));",
+   "new": "var base = BACKOFF.min;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_without_a_cap",
+   "file": "web/home/chat.js",
+   "old": "var base = Math.min(BACKOFF.max, BACKOFF.min * Math.pow(2, Math.min(attempt, 12)));",
+   "new": "var base = BACKOFF.min * Math.pow(2, Math.min(attempt, 12));",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_cap_of_five_minutes",
+   "file": "web/home/chat.js",
+   "old": "max: 60000, low",
+   "new": "max: 300000, low",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_without_jitter",
+   "file": "web/home/chat.js",
+   "old": "low: 0.5, high: 1.5 }",
+   "new": "low: 1, high: 1 }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_jitter_of_four",
+   "file": "web/home/chat.js",
+   "old": "low: 0.5, high: 1.5 }",
+   "new": "low: 0.5, high: 4 }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_starts_at_a_tenth_of_a_second",
+   "file": "web/home/chat.js",
+   "old": "var BACKOFF = { min: 1000,",
+   "new": "var BACKOFF = { min: 100,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "retry_at_once",
+   "file": "web/home/chat.js",
+   "old": "setTimeout(guard(go), delayOf(attempt, rnd()))",
+   "new": "setTimeout(guard(go), 0)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "no_retry",
+   "file": "web/home/chat.js",
+   "old": "if (!stopped) { timers.retry = setTimeout(guard(go), delayOf(attempt, rnd())); attempt++; }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "attempts_not_counted",
+   "file": "web/home/chat.js",
+   "old": "delayOf(attempt, rnd())); attempt++; }",
+   "new": "delayOf(attempt, rnd())); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "reconnect_storm_every_welcome_starts_over",
+   "file": "web/home/chat.js",
+   "old": "state = 'live'; liveSince = now();",
+   "new": "state = 'live'; liveSince = now(); attempt = 0;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_never_starts_over",
+   "file": "web/home/chat.js",
+   "old": "if (liveSince !== null && now() - liveSince >= MS.stable) attempt = 0;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_starts_over_after_a_second",
+   "file": "web/home/chat.js",
+   "old": "stable: 30000,",
+   "new": "stable: 1000,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "no_connect_timeout",
+   "file": "web/home/chat.js",
+   "old": "timers.connect = setTimeout(guard(function () { timers.connect = 0; if (s === sock && !welcomed) lost(); }), MS.connect);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "connect_timeout_of_an_hour",
+   "file": "web/home/chat.js",
+   "old": "connect: 15000,",
+   "new": "connect: 3600000,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "ping_missing",
+   "file": "web/home/chat.js",
+   "old": "liveSince = now();\n            ping();",
+   "new": "liveSince = now();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "ping_every_four_minutes",
+   "file": "web/home/chat.js",
+   "old": "ping: 25000,",
+   "new": "ping: 250000,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "ping_never_answered_is_fine",
+   "file": "web/home/chat.js",
+   "old": "timers.answer = setTimeout(guard(lost), MS.answer);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "every_ping_is_taken_for_unanswered",
+   "file": "web/home/chat.js",
+   "old": "            stop('answer');\n            if (m.t === 'welcome') onWelcome(m);",
+   "new": "            if (m.t === 'welcome') onWelcome(m);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "ping_answer_wait_of_an_hour",
+   "file": "web/home/chat.js",
+   "old": "answer: 30000,",
+   "new": "answer: 3600000,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "tab_back_does_not_try_again",
+   "file": "web/home/chat.js",
+   "old": "if (visible()) { stale = true; render(); nudge(); }",
+   "new": "if (visible()) { stale = true; render(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "tab_back_tries_every_time",
+   "file": "web/home/chat.js",
+   "old": "if (state === 'offline' && !sock && !stopped && now() - lastTry >= MS.regain) { stop('retry'); go(); }",
+   "new": "if (state === 'offline' && !sock && !stopped) { stop('retry'); go(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "network_back_is_ignored",
+   "file": "web/home/chat.js",
+   "old": "win.addEventListener('online', guard(nudge));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "page_hide_is_ignored",
+   "file": "web/home/chat.js",
+   "old": "win.addEventListener('pagehide', guard(function () { stopped = true; lost(); }));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "page_show_never_reconnects",
+   "file": "web/home/chat.js",
+   "old": "if (e && e.persisted && stopped) { stopped = false; attempt = 0; go(); }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "page_show_always_reconnects",
+   "file": "web/home/chat.js",
+   "old": "if (e && e.persisted && stopped) { stopped = false; attempt = 0; go(); }",
+   "new": "if (stopped) { stopped = false; attempt = 0; go(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "hidden_tab_is_painted",
+   "file": "web/home/chat.js",
+   "old": "function render() { if (visible()) paint(); else stale = true; }",
+   "new": "function render() { paint(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "line_painted_in_a_hidden_tab",
+   "file": "web/home/chat.js",
+   "old": "if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;",
+   "new": "if (isHome && open && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_not_made_again_for_a_tab_that_comes_back",
+   "file": "web/home/chat.js",
+   "old": "if (stale && seen()) repaint();",
+   "new": "if (stale && seen() && !feed.length) repaint();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "socket_url_never_secure",
+   "file": "web/home/chat.js",
+   "old": "(loc.protocol === 'https:' ? 'wss://' : 'ws://')",
+   "new": "'ws://'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "socket_url_is_another_host",
+   "file": "web/home/chat.js",
+   "old": "+ loc.host + PATH;",
+   "new": "+ 'example.invalid' + PATH;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "constructor_that_throws_is_not_caught",
+   "file": "web/home/chat.js",
+   "old": "try { s = new Socket(addressOf(win.location)); } catch (e) { lost(); return; }",
+   "new": "s = new Socket(addressOf(win.location));",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "no_websocket_is_not_handled",
+   "file": "web/home/chat.js",
+   "old": "if (typeof Socket !== 'function') { state = 'offline'; render(); return; }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "socket_opened_when_loaded",
+   "file": "web/home/chat.js",
+   "old": "else root.AntsHomeChat = api;",
+   "new": "else { root.AntsHomeChat = api; new root.WebSocket('wss://x.example/hub/ws'); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "callbacks_not_guarded",
+   "file": "web/home/chat.js",
+   "old": "function guard(fn) { return function () { try { return fn.apply(this, arguments); } catch (e) { if (env.error) env.error(e); return undefined; } }; }",
+   "new": "function guard(fn) { return fn; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "unread_never_reset",
+   "file": "web/home/chat.js",
+   "old": "if (seen()) feed.forEach(function (e) { e.fresh = false; });",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "own_lines_are_unread",
+   "file": "web/home/chat.js",
+   "old": "e.fresh = !e.own && !seen();",
+   "new": "e.fresh = !seen();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "history_is_unread",
+   "file": "web/home/chat.js",
+   "old": "e.fresh = ever && e.id > before && !e.own && !seen();",
+   "new": "e.fresh = !e.own && !seen();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "lines_after_a_lost_link_are_not_news",
+   "file": "web/home/chat.js",
+   "old": "e.fresh = ever && e.id > before && !e.own && !seen();",
+   "new": "e.fresh = false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "folded_dock_is_read",
+   "file": "web/home/chat.js",
+   "old": "function seen() { return isHome && open && !tight && visible(); }",
+   "new": "function seen() { return isHome && !tight && visible(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "room_is_read",
+   "file": "web/home/chat.js",
+   "old": "function seen() { return isHome && open && !tight && visible(); }",
+   "new": "function seen() { return open && !tight && visible(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "hidden_tab_is_read",
+   "file": "web/home/chat.js",
+   "old": "function seen() { return isHome && open && !tight && visible(); }",
+   "new": "function seen() { return isHome && open && !tight; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "unread_count_not_capped",
+   "file": "web/home/chat.js",
+   "old": "pill.textContent = n > 99 ? '99+' : String(n);",
+   "new": "pill.textContent = String(n);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "unread_pill_always_shown",
+   "file": "web/home/chat.js",
+   "old": "pill.hidden = !n;",
+   "new": "pill.hidden = false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "unread_not_in_the_buttons_name",
+   "file": "web/home/chat.js",
+   "old": "TEXT.open + (n ? ', ' + n + TEXT.unread : '')",
+   "new": "TEXT.open",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "shown_is_not_remembered",
+   "file": "web/home/chat.js",
+   "old": "shown: guard(function (on) { isHome = !!on;",
+   "new": "shown: guard(function (on) { isHome = true;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "fold_does_not_hide_the_body",
+   "file": "web/home/chat.js",
+   "old": "body.hidden = !out;",
+   "new": "body.hidden = false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "fold_button_says_the_same",
+   "file": "web/home/chat.js",
+   "old": "TEXT.fold : TEXT.open",
+   "new": "TEXT.fold : TEXT.fold",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "fold_state_not_said",
+   "file": "web/home/chat.js",
+   "old": "fold.setAttribute('aria-expanded', out ? 'true' : 'false');",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "fold_does_not_keep_the_focus",
+   "file": "web/home/chat.js",
+   "old": "fold.addEventListener('click', guard(function () { setOpen(tight ? true : !open); if (fold.focus) fold.focus(); }));",
+   "new": "fold.addEventListener('click', guard(function () { setOpen(tight ? true : !open); }));",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "fold_button_does_nothing",
+   "file": "web/home/chat.js",
+   "old": "fold.addEventListener('click', guard(function () { setOpen(tight ? true : !open); if (fold.focus) fold.focus(); }));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "strip_opens_only_from_its_button",
+   "file": "web/home/chat.js",
+   "old": "if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) setOpen(true);",
+   "new": "if (false) setOpen(true);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "header_press_folds_the_open_panel",
+   "file": "web/home/chat.js",
+   "old": "if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) setOpen(true);",
+   "new": "if (!(e && e.target && fold.contains && fold.contains(e.target))) setOpen(!open);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "strip_press_moves_the_focus",
+   "file": "web/home/chat.js",
+   "old": "fold.contains(e.target))) setOpen(true); }));",
+   "new": "fold.contains(e.target))) { setOpen(true); fold.focus(); } }));",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_does_not_fold",
+   "file": "web/home/chat.js",
+   "old": "if (e && e.key === 'Escape' && open) { setOpen(false); if (fold.focus) fold.focus(); }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_loses_the_focus",
+   "file": "web/home/chat.js",
+   "old": "{ setOpen(false); if (fold.focus) fold.focus(); } }));",
+   "new": "{ setOpen(false); } }));",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "any_key_folds",
+   "file": "web/home/chat.js",
+   "old": "e.key === 'Escape' && open",
+   "new": "open",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "desktop_starts_folded",
+   "file": "web/home/chat.js",
+   "old": "var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;",
+   "new": "var open = false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "phone_starts_open",
+   "file": "web/home/chat.js",
+   "old": "var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;",
+   "new": "var open = true;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "desktop_needs_a_wider_window",
+   "file": "web/home/chat.js",
+   "old": "(win.innerWidth || 0) >= 721 &&",
+   "new": "(win.innerWidth || 0) >= 1000 &&",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_short_window_is_a_desktop",
+   "file": "web/home/chat.js",
+   "old": "(win.innerHeight || 0) >= 501;",
+   "new": "(win.innerHeight || 0) >= 1;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_is_not_a_log",
+   "file": "web/home/chat.js",
+   "old": "log.setAttribute('role', 'log');",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_is_assertive",
+   "file": "web/home/chat.js",
+   "old": "log.setAttribute('aria-live', 'polite'); log.setAttribute('aria-label', TEXT.log);",
+   "new": "log.setAttribute('aria-live', 'assertive'); log.setAttribute('aria-label', TEXT.log);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_has_no_name",
+   "file": "web/home/chat.js",
+   "old": "log.setAttribute('aria-label', TEXT.log); ",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_cannot_be_focused",
+   "file": "web/home/chat.js",
+   "old": "log.setAttribute('tabindex', '0');",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "field_has_no_name",
+   "file": "web/home/chat.js",
+   "old": "field.setAttribute('aria-label', TEXT.field);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "note_is_not_a_status",
+   "file": "web/home/chat.js",
+   "old": "note.setAttribute('role', 'status'); note.setAttribute('aria-live', 'polite');",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_has_no_name",
+   "file": "web/home/chat.js",
+   "old": "box.setAttribute('aria-labelledby', 'gchat-title');",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "heading_is_an_h1",
+   "file": "web/home/chat.js",
+   "old": "el('h2', 'gc-title')",
+   "new": "el('h1', 'gc-title')",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "short_title_is_read_out",
+   "file": "web/home/chat.js",
+   "old": "shortTitle.setAttribute('aria-hidden', 'true');",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_is_read_out_again_whole",
+   "file": "web/home/chat.js",
+   "old": "muted.repaint = true; live(); stop('quiet');",
+   "new": "stop('quiet');",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "mod_lines_not_marked",
+   "file": "web/home/chat.js",
+   "old": "if (e.mod) r.appendChild(el('span', 'gc-badge', TEXT.mod + ' '));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "mod_class_missing",
+   "file": "web/home/chat.js",
+   "old": "(e.mod ? ' gc-mod' : '')",
+   "new": "''",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "own_lines_not_marked",
+   "file": "web/home/chat.js",
+   "old": "(e.own ? ' gc-me' : '')",
+   "new": "''",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "online_count_words",
+   "file": "web/home/chat.js",
+   "old": "online: ' here now'",
+   "new": "online: ''",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "strip_has_no_last_line",
+   "file": "web/home/chat.js",
+   "old": "peekText.textContent = state === 'offline' ? TEXT.offline : last ? last.text :",
+   "new": "peekText.textContent = state === 'offline' ? TEXT.offline : last ? '' :",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_made_again_is_not_scrolled_to_the_newest",
+   "file": "web/home/chat.js",
+   "old": "settle(true);",
+   "new": "settle();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "reader_who_scrolled_up_is_moved",
+   "file": "web/home/chat.js",
+   "old": "if (stuck) log.scrollTop = log.scrollHeight;",
+   "new": "log.scrollTop = log.scrollHeight;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "burst_scrolls_every_time",
+   "file": "web/home/chat.js",
+   "old": "if (!stickTimer) {\n                stuck = atBottom();",
+   "new": "if (true) {\n                stuck = atBottom();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "same_text_only_the_last_is_remembered",
+   "file": "web/home/chat.js",
+   "old": "tokens -= 1; said[text] = t;",
+   "new": "tokens -= 1; said = Object.create(null); said[text] = t;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "said_texts_never_forgotten",
+   "file": "web/home/chat.js",
+   "old": "for (old in said) if (t - said[old] >= PACE.same) delete said[old];",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "said_texts_forgotten_after_a_second",
+   "file": "web/home/chat.js",
+   "old": "same: 31000 }",
+   "new": "same: 1000 }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "soft_hyphen_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u00ad\\u034f",
+   "new": "\\u034f",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "hangul_fillers_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u115f\\u1160",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "braille_blank_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u2800\\u3164",
+   "new": "\\u3164",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "combining_grapheme_joiner_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u00ad\\u034f",
+   "new": "\\u00ad",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "khmer_fillers_kept",
+   "file": "web/home/chat.js",
+   "old": "\\u17b4\\u17b5",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "tag_characters_kept",
+   "file": "web/home/chat.js",
+   "old": "|\\udb40[\\udc00-\\udc7f]/g;",
+   "new": "/g;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "musical_null_notehead_kept",
+   "file": "web/home/chat.js",
+   "old": "\\ud834[\\udd59\\udd73-\\udd7a]",
+   "new": "\\ud834[\\udd73-\\udd7a]",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "variation_selectors_kept_in_names",
+   "file": "web/home/chat.js",
+   "old": "var SELECTORS = /[\\u180b-\\u180d\\u180f\\ufe00-\\ufe0f]|\\udb40[\\udd00-\\uddef]/g;",
+   "new": "var SELECTORS = /[\\u180b-\\u180d\\u180f]|\\udb40[\\udd00-\\uddef]/g;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "names_are_not_strict",
+   "file": "web/home/chat.js",
+   "old": "clip(plain(m.who.slice(0, LIMIT.name * 4), true), LIMIT.name)",
+   "new": "clip(plain(m.who.slice(0, LIMIT.name * 4)), LIMIT.name)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "your_name_is_not_strict",
+   "file": "web/home/chat.js",
+   "old": "clip(plain(m.you.name.slice(0, LIMIT.name * 4), true), LIMIT.name)",
+   "new": "clip(plain(m.you.name.slice(0, LIMIT.name * 4)), LIMIT.name)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "variation_selectors_removed_from_lines",
+   "file": "web/home/chat.js",
+   "old": "return (strict ? s.replace(SELECTORS, '') : s).replace(",
+   "new": "return s.replace(SELECTORS, '').replace(",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "marks_alone_are_a_line",
+   "file": "web/home/chat.js",
+   "old": "return shows(text) ? {",
+   "new": "return text ? {",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "lone_low_surrogates_kept",
+   "file": "web/home/chat.js",
+   "old": "else if (!(c >= 0xdc00 && c <= 0xdfff)) out += s.charAt(i);",
+   "new": "else out += s.charAt(i);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "lone_high_surrogates_kept",
+   "file": "web/home/chat.js",
+   "old": "{ out += s.charAt(i) + s.charAt(i + 1); i++; } }",
+   "new": "{ out += s.charAt(i) + s.charAt(i + 1); i++; } else out += s.charAt(i); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_only_adds",
+   "file": "web/home/chat.js",
+   "old": "low: 0.5, high: 1.5 }",
+   "new": "low: 1, high: 1.5 }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_floor_missing",
+   "file": "web/home/chat.js",
+   "old": "Math.max(BACKOFF.min, base * BACKOFF.low)",
+   "new": "base * BACKOFF.low",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "backoff_over_a_minute",
+   "file": "web/home/chat.js",
+   "old": "Math.min(BACKOFF.max, base * BACKOFF.high)",
+   "new": "base * BACKOFF.high",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "flood_is_read_out_line_by_line",
+   "file": "web/home/chat.js",
+   "old": "said: 2 };",
+   "new": "said: 2000 };",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "flood_has_no_summary",
+   "file": "web/home/chat.js",
+   "old": "if (skipped) news.textContent = skipped === 1 ? TEXT.one : skipped + TEXT.more;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "flood_never_over",
+   "file": "web/home/chat.js",
+   "old": "muted.flood = false; live();\n                }), MS.flood);",
+   "new": "live();\n                }), MS.flood);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "flood_window_ten_minutes",
+   "file": "web/home/chat.js",
+   "old": "flood: 3000 };",
+   "new": "flood: 600000 };",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "flood_summary_says_one_messages",
+   "file": "web/home/chat.js",
+   "old": "one: 'One more message'",
+   "new": "one: '1 more messages'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "flood_summary_wrong_count",
+   "file": "web/home/chat.js",
+   "old": "news.textContent = skipped === 1 ? TEXT.one : skipped + TEXT.more;",
+   "new": "news.textContent = skipped === 1 ? TEXT.one : heard + TEXT.more;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "mod_badge_touches_the_name",
+   "file": "web/home/chat.js",
+   "old": "el('span', 'gc-badge', TEXT.mod + ' ')",
+   "new": "el('span', 'gc-badge', TEXT.mod)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "markup_goes_to_the_hub",
+   "file": "web/home/chat.js",
+   "old": ": /[<>]/.test(text) ? 'markup'",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "markup_words_are_generic",
+   "file": "web/home/chat.js",
+   "old": "markup: 'Lines cannot hold < or >'",
+   "new": "markup: 'That line could not be sent'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "markup_check_misses_the_closing_one",
+   "file": "web/home/chat.js",
+   "old": ": /[<>]/.test(text) ? 'markup'",
+   "new": ": /[<]/.test(text) ? 'markup'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "online_count_not_capped",
+   "file": "web/home/chat.js",
+   "old": "(people > LIMIT.here ? TEXT.many : people)",
+   "new": "people",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "online_cap_off_by_one",
+   "file": "web/home/chat.js",
+   "old": "people > LIMIT.here ? TEXT.many",
+   "new": "people >= LIMIT.here ? TEXT.many",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_free_while_a_dialog_is_up",
+   "file": "web/home/home.js",
+   "old": "[bar, rbar, dock && dock.root].forEach(",
+   "new": "[bar, rbar].forEach(",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_mounted_free_while_going",
+   "file": "web/home/home.js",
+   "old": "inert(held); dockShown(); } } catch (e) { dock = null; }",
+   "new": "dockShown(); } } catch (e) { dock = null; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "opening_card_below_the_dock",
+   "file": "web/home/home.css",
+   "old": "translate(-50%, -50%); z-index: 8;",
+   "new": "translate(-50%, -50%); z-index: 5;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "open_panel_can_be_a_sliver",
+   "file": "web/home/chat.css",
+   "old": "with notices above it) */\n    .gc[data-open=\"true\"] { min-height: var(--gc-min); }\n",
+   "new": "with notices above it) */\n",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "sideways_panel_can_be_a_sliver",
+   "file": "web/home/chat.css",
+   "old": "height: min(286px, calc(100% - 76px)); }\n    .gc[data-open=\"true\"] { min-height: var(--gc-min); }\n",
+   "new": "height: min(286px, calc(100% - 76px)); }\n",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "folded_strip_has_a_minimum_height",
+   "file": "web/home/chat.css",
+   "old": "    .gc[data-open=\"true\"] { min-height: var(--gc-min); }\n    .gc[data-open=\"false\"] { left: 16px;",
+   "new": "    .gc { min-height: var(--gc-min); }\n    .gc[data-open=\"false\"] { left: 16px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "phone_panel_covers_the_bar",
+   "file": "web/home/chat.css",
+   "old": "calc(100% - 200px)",
+   "new": "calc(100% - 196px)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "sideways_panel_covers_the_bar",
+   "file": "web/home/chat.css",
+   "old": "calc(100% - 76px)",
+   "new": "calc(100% - 72px)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "guest_line_in_a_cramped_window",
+   "file": "web/home/chat.css",
+   "old": "@media (max-width: 720px) and (max-height: 640px), (max-height: 500px) { .gc-guest { display: none; } }\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "narrow_phone_heading_wraps",
+   "file": "web/home/chat.css",
+   "old": "@media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "summary_place_is_seen",
+   "file": "web/home/chat.css",
+   "old": ".gc-news { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }",
+   "new": ".gc-news { display: none; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "ping_chain_stays_after_a_lost_link",
+   "file": "web/home/chat.js",
+   "old": "['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop);",
+   "new": "['connect', 'answer', 'retry', 'notice'].forEach(stop);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "bad_frames_add_up_across_sockets",
+   "file": "web/home/chat.js",
+   "old": "lastTry = now(); bad = 0; welcomed = false;",
+   "new": "lastTry = now(); welcomed = false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "newest_id_goes_down",
+   "file": "web/home/chat.js",
+   "old": "if (e.id > lastId) lastId = e.id;",
+   "new": "lastId = e.id;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "welcome_count_taken_as_it_comes",
+   "file": "web/home/chat.js",
+   "old": "people = count(m.online);",
+   "new": "people = m.online;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "welcome_history_not_deduplicated",
+   "file": "web/home/chat.js",
+   "old": "if (!e || known(e.id)) return;\n                e.own",
+   "new": "if (!e) return;\n                e.own",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "del_compares_loosely",
+   "file": "web/home/chat.js",
+   "old": "if (feed[i].id !== m.id) continue;",
+   "new": "if (feed[i].id != m.id) continue;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_loaded_before_the_first_paint",
+   "file": "web/home/home.js",
+   "old": "if (typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(function () { setTimeout(load, 0); }); else setTimeout(load, 0);",
+   "new": "load();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_loaded_for_the_room_too",
+   "file": "web/home/home.js",
+   "old": "if (name === 'home') wantDock();",
+   "new": "wantDock();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_never_loaded",
+   "file": "web/home/home.js",
+   "old": "if (name === 'home') wantDock();",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_loaded_twice",
+   "file": "web/home/home.js",
+   "old": "if (asked) return;\n            asked = true;",
+   "new": "asked = true;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_mounted_after_one_file",
+   "file": "web/home/home.js",
+   "old": "var parts = 2;\n            function mountDock()",
+   "new": "var parts = 1;\n            function mountDock()",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_style_not_waited_for",
+   "file": "web/home/home.js",
+   "old": "css.onload = mountDock;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_script_not_async",
+   "file": "web/home/home.js",
+   "old": "js.src = CHAT.script; js.async = true;",
+   "new": "js.src = CHAT.script;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_mount_error_reaches_the_page",
+   "file": "web/home/home.js",
+   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); inert(held); dockShown(); } } catch (e) { dock = null; }",
+   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); inert(held); dockShown(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_load_error_reaches_the_page",
+   "file": "web/home/home.js",
+   "old": "} catch (e) { /* no chat */ }",
+   "new": "} catch (e) { throw e; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_told_it_is_always_home",
+   "file": "web/home/home.js",
+   "old": "dock.shown(screen === 'home')",
+   "new": "dock.shown(true)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_not_told_when_the_screen_changes",
+   "file": "web/home/home.js",
+   "old": "if (name === 'home') wantDock();\n            dockShown();",
+   "new": "if (name === 'home') wantDock();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_told_with_no_guard",
+   "file": "web/home/home.js",
+   "old": "try { if (dock) dock.shown(screen === 'home'); } catch (e) { /* the dock is its own */ }",
+   "new": "if (dock) dock.shown(screen === 'home');",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_mounted_on_the_body",
+   "file": "web/home/home.js",
+   "old": "mount({ doc: doc, win: win, host: host })",
+   "new": "mount({ doc: doc, win: win, host: doc.body })",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dock_script_has_another_name",
+   "file": "web/home/home.js",
+   "old": "script: 'home/chat.js'",
+   "new": "script: 'home/chat.min.js'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "panel_is_300_wide",
+   "file": "web/home/chat.css",
+   "old": "width: 380px; height: 380px;",
+   "new": "width: 300px; height: 380px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "panel_at_the_right",
+   "file": "web/home/chat.css",
+   "old": "left: 24px; bottom: 22px;",
+   "new": "right: 24px; bottom: 22px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "panel_above_the_menu",
+   "file": "web/home/chat.css",
+   "old": "z-index: 6;",
+   "new": "z-index: 90;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "strip_is_40_high",
+   "file": "web/home/chat.css",
+   "old": ".gc[data-open=\"false\"] { height: 62px; }",
+   "new": ".gc[data-open=\"false\"] { height: 40px; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "phone_panel_is_600_high",
+   "file": "web/home/chat.css",
+   "old": "height: min(490px, calc(100% - 200px));",
+   "new": "height: min(600px, calc(100% - 200px));",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "sideways_panel_is_500_wide",
+   "file": "web/home/chat.css",
+   "old": "width: 420px; height: min(286px,",
+   "new": "width: 500px; height: min(286px,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "fold_button_is_small",
+   "file": "web/home/chat.css",
+   "old": "min-width: 46px; min-height: 46px; padding: 0; }",
+   "new": "min-width: 30px; min-height: 30px; padding: 0; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "field_is_short",
+   "file": "web/home/chat.css",
+   "old": ".gc-input { min-width: 0; min-height: 48px;",
+   "new": ".gc-input { min-width: 0; min-height: 30px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "send_is_short",
+   "file": "web/home/chat.css",
+   "old": ".gc-send { min-height: 48px; }",
+   "new": ".gc-send { min-height: 30px; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "header_is_short",
+   "file": "web/home/chat.css",
+   "old": "gap: 10px; min-height: 58px;",
+   "new": "gap: 10px; min-height: 30px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "field_text_is_14_px",
+   "file": "web/home/chat.css",
+   "old": "padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117;",
+   "new": "padding: 8px 14px; font-size: 14px; color: var(--cream); background: #0b1117;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_scrolls_sideways",
+   "file": "web/home/chat.css",
+   "old": "overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px;",
+   "new": "overflow-x: auto; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "log_does_not_scroll",
+   "file": "web/home/chat.css",
+   "old": "overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px;",
+   "new": "overflow-y: hidden; overscroll-behavior: contain; padding: 8px 12px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "motion_not_stopped",
+   "file": "web/home/chat.css",
+   "old": "@media (prefers-reduced-motion: reduce) { .gc-dot { animation: none; } }\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "login_place_shows_through",
+   "file": "web/home/chat.css",
+   "old": ".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }",
+   "new": ".gc-form[hidden], .gc-guest[hidden] { display: none; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "form_shows_through",
+   "file": "web/home/chat.css",
+   "old": ".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }",
+   "new": ".gc-guest[hidden], .gc-slot[hidden] { display: none; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "empty_count_shows_through",
+   "file": "web/home/chat.css",
+   "old": ".gc-unread[hidden], .gc-online[hidden] { display: none; }",
+   "new": ".gc-online[hidden] { display: none; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "long_title_loses_its_name",
+   "file": "web/home/chat.css",
+   "old": ".gc[data-open=\"false\"] .gc-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }",
+   "new": ".gc[data-open=\"false\"] .gc-long { display: none; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "picture_from_another_site",
+   "file": "web/home/chat.css",
+   "old": ".gc-sys { font-size: 14px;",
+   "new": ".gc-sys { background: url(https://pictures.example/a.png); font-size: 14px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "offline_log_not_dimmed",
+   "file": "web/home/chat.css",
+   "old": ".gc[data-state=\"offline\"] .gc-log { filter: saturate(.5) brightness(.94); }\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "own_name_is_not_gold",
+   "file": "web/home/chat.css",
+   "old": ".gc-me .gc-who { color: var(--gold); }",
+   "new": ".gc-me .gc-who { color: #9fe0b8; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "compact_breakpoint_moved",
+   "file": "web/home/chat.css",
+   "old": "@media (max-width: 720px), (max-height: 500px) {",
+   "new": "@media (max-width: 600px), (max-height: 500px) {",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "ci_does_not_look_for_chat_js",
+   "file": ".github/workflows/ci.yml",
+   "old": " home/chat.js home/chat.css ",
+   "new": " home/chat.css ",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "ci_does_not_look_for_chat_css",
+   "file": ".github/workflows/ci.yml",
+   "old": " home/chat.js home/chat.css ",
+   "new": " home/chat.js ",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dockerfile_copies_two_files_only",
+   "file": "Dockerfile",
+   "old": "COPY web/home/ /usr/share/nginx/html/home/\n",
+   "new": "COPY web/home/home.js web/home/home.css /usr/share/nginx/html/home/\n",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "local_build_leaves_the_dock_out",
+   "file": "build_web.sh",
+   "old": "cp -f \"${SCRIPT_DIR}/web/home\"/* \"${DIST_DIR}/home/\"",
+   "new": "cp -f \"${SCRIPT_DIR}/web/home\"/home.* \"${DIST_DIR}/home/\"",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "front_page_links_the_script",
+   "file": "web/lobby.html",
+   "old": "<script src=\"home/home.js\"></script>",
+   "new": "<script src=\"home/home.js\"></script><script src=\"home/chat.js\"></script>",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "front_page_links_the_style",
+   "file": "web/lobby.html",
+   "old": "<link rel=\"stylesheet\" href=\"home/home.css\">",
+   "new": "<link rel=\"stylesheet\" href=\"home/home.css\"><link rel=\"stylesheet\" href=\"home/chat.css\">",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_page_loads_the_dock",
+   "file": "web/matches.html",
+   "old": "</body>",
+   "new": "<script src=\"home/chat.js\"></script></body>",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "live_page_opens_the_hub",
+   "file": "web/live.html",
+   "old": "</body>",
+   "new": "<script>new WebSocket(\"wss://\" + location.host + \"/hub/ws\");</script></body>",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "legal_page_loads_the_dock",
+   "file": "web/legal.html",
+   "old": "</body>",
+   "new": "<script src=\"home/chat.js\"></script></body>",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "map_maker_names_the_hub",
+   "file": "web/mapmaker.html",
+   "old": "</body>",
+   "new": "<!-- /hub/ws --></body>",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "room_chat_names_the_hub",
+   "file": "web/front/lobby_chat.js",
+   "old": "'use strict';",
+   "new": "'use strict'; var hub = '/hub/ws';",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "docs_forget_the_login_place",
+   "file": "docs/HOME_SCREEN.md",
+   "old": "`#gchat-login-slot` is the place of the login chip",
+   "new": "The login chip has a place",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "docs_say_another_backoff",
+   "file": "docs/HOME_SCREEN.md",
+   "old": "1 s, doubling to 60 s",
+   "new": "1 s, doubling to 600 s",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "docs_say_the_dock_loads_everywhere",
+   "file": "docs/HOME_SCREEN.md",
+   "old": "no other page loads them or opens a hub socket",
+   "new": "every page loads them",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "refused_line_stays_said",
+   "file": "web/home/chat.js",
+   "old": "delete said[draft]; ",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "refusal_forgets_every_text",
+   "file": "web/home/chat.js",
+   "old": "delete said[draft]; ",
+   "new": "said = Object.create(null); ",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "flood_summary_stays_into_the_next_window",
+   "file": "web/home/chat.js",
+   "old": "heard = 0; skipped = 0; news.textContent = '';",
+   "new": "heard = 0; skipped = 0;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "panel_needs_no_room_below_it",
+   "file": "web/home/chat.js",
+   "old": "tight = room >= least + BELOW ? 0",
+   "new": "tight = room >= least ? 0",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "strip_needs_no_room_below_it",
+   "file": "web/home/chat.js",
+   "old": "room >= STRIP + BELOW ? 1 : 2",
+   "new": "room >= STRIP ? 1 : 2",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "nothing_is_put_away_for_lack_of_room",
+   "file": "web/home/chat.js",
+   "old": "room >= STRIP + BELOW ? 1 : 2",
+   "new": "room >= STRIP + BELOW ? 1 : 1",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "every_window_that_is_short_hides_the_strip",
+   "file": "web/home/chat.js",
+   "old": "room >= STRIP + BELOW ? 1 : 2",
+   "new": "room >= STRIP + BELOW ? 2 : 2",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "room_is_measured_from_the_window_top",
+   "file": "web/home/chat.js",
+   "old": "room = host.clientHeight - bar.offsetHeight;",
+   "new": "room = host.clientHeight;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "least_height_is_not_the_styles",
+   "file": "web/home/chat.js",
+   "old": "getPropertyValue('--gc-min')",
+   "new": "getPropertyValue('--gc-least')",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "desktop_is_measured_too",
+   "file": "web/home/chat.js",
+   "old": "if (least && typeof host.clientHeight",
+   "new": "if (typeof host.clientHeight",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "no_room_does_not_hide_the_dock",
+   "file": "web/home/chat.js",
+   "old": "box.hidden = tight === 2;",
+   "new": "box.hidden = false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "strip_is_not_shown_for_lack_of_room",
+   "file": "web/home/chat.js",
+   "old": "box.setAttribute('data-open', out ? 'true' : 'false');",
+   "new": "box.setAttribute('data-open', open ? 'true' : 'false');",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "unread_counted_as_read_without_room",
+   "file": "web/home/chat.js",
+   "old": "function seen() { return isHome && open && !tight && visible(); }",
+   "new": "function seen() { return isHome && open && visible(); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "fold_closes_what_is_not_out",
+   "file": "web/home/chat.js",
+   "old": "setOpen(tight ? true : !open);",
+   "new": "setOpen(!open);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "resize_does_not_measure",
+   "file": "web/home/chat.js",
+   "old": "        win.addEventListener('resize', guard(function () { if (fit()) render(); }));\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "observer_does_not_measure",
+   "file": "web/home/chat.js",
+   "old": "new win.ResizeObserver(guard(function () { if (fit()) render(); })).observe(host);",
+   "new": "new win.ResizeObserver(guard(function () { })).observe(host);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "observer_watches_nothing",
+   "file": "web/home/chat.js",
+   "old": ".observe(host); } catch (e)",
+   "new": ".observe(box); } catch (e)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "home_shown_does_not_measure",
+   "file": "web/home/chat.js",
+   "old": "isHome = !!on; fit(); if (seen())",
+   "new": "isHome = !!on; if (seen())",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_change_of_room_is_not_painted",
+   "file": "web/home/chat.js",
+   "old": "return tight !== was;",
+   "new": "return false;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_style_that_throws_is_not_survived",
+   "file": "web/home/chat.js",
+   "old": "try { least = parseFloat(win.getComputedStyle(box).getPropertyValue('--gc-min')) || 0; } catch (e) { least = 0; }",
+   "new": "least = parseFloat(win.getComputedStyle(box).getPropertyValue('--gc-min')) || 0;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "hidden_dock_is_shown_by_the_style",
+   "file": "web/home/chat.css",
+   "old": ".gc[hidden] { display: none; }\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "narrow_least_height_is_150",
+   "file": "web/home/chat.css",
+   "old": ".gc { --gc-min: 200px; left: 16px;",
+   "new": ".gc { --gc-min: 150px; left: 16px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "sideways_least_height_is_200",
+   "file": "web/home/chat.css",
+   "old": "{ --gc-min: 150px; left: 14px;",
+   "new": "{ --gc-min: 200px; left: 14px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  }
+ ]
+}

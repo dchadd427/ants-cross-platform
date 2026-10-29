@@ -544,6 +544,51 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
 
+    // ---- the hand-off that does not come (docs/HOME_SCREEN.md, START while a guest sits on Home): the tab was told to go to the game page, and the page is still here 15 s later. It says so ("slow to open. Reload this page to get your seat back"),
+    // keeps the seat (a Leave room that sent a Leave would end the START for everybody and leave a game page that is only slow with no seat to take over), and a game page that is 20 s late takes the seat over with the key
+    // that the page wrote for it, as a game does (the page's own socket is superseded). This runs in real time: it takes about 21 s.
+    await scenario('the hand-off that does not come: after 15 s the page says so and keeps the seat; a game page that is 20 s late takes it over', async () => {
+        const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
+        const room = code('q');
+        const pageSockets = [];
+        class ToTheServer extends WS { constructor() { super(wsUrl); pageSockets.push(this); } }
+        const A = page('Ada', room);
+        A.connect();
+        await step('Ada makes the room', () => online(A));
+        const env = harness.runLobby('?room=' + room, { 'ants.name': 'Bea' }, { WebSocket: ToTheServer, realTime: true });
+        env.$('name-step-go').click();
+        await step('Bea joins by the link', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'Waiting for Ada', 5000);
+        env.roomBar('rhome').click();
+        check('(Bea goes Home, Ada plans for two)', env.screen() === 'home' && A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
+        await step('... the plan is in (My room says 2/2)', () => () => env.home('mine').children[1].textContent === '2/2');
+        check('Ada presses START', A.start() === true);
+        await step('START reaches the page: it goes to the game page (and does not get there)', () => () => env.assigned.length === 1, 5000);
+        const t0 = Date.now();
+        const STALLED = 'The game is slow to open. Reload this page to get your seat back.';       // (a game page that is 20 s late is slow, it did not fail: "did not open" comes a minute after START)
+        await sleep(5000);
+        check('5 s later Home still says "Opening the game…", the bars are inert, and no strip says that anything is wrong', env.$('home').children[2].hidden === false && env.home('hbar').hasAttribute('inert') && env.$('banner').hidden === true);
+        await step('at 15 s the strip says that the game is slow to open, with a Reload button', () => () => env.$('banner').hidden === false && env.$('banner-text').textContent === STALLED, 15000);
+        check('... not before 14.5 s, and Home takes presses again with Leave room off', Date.now() - t0 >= 14500 && env.$('home').children[2].hidden === true && !env.home('hbar').hasAttribute('inert') && env.roomBar('leave').disabled === true && env.$('banner-x').textContent === 'Reload');
+        env.home('mine').click();
+        env.roomBar('leave').click();
+        await sleep(800);
+        check('Leave room pressed on the stalled page sends no Leave: Ada has heard nobody leave, the page\'s socket is open, Bea has her color', A.count('left') === 0 && A.seatOf('Bea') === 1 && pageSockets.length === 1 && pageSockets[0].readyState === 1 && A.room.starting === true);
+        await sleep(Math.max(0, 20000 - (Date.now() - t0)));
+        const entry = JSON.parse(env.storage.data['ants.rejoin.' + room + '.1'] || 'null');
+        const G = page('Bea', room, { key: N.bytesOfHex(entry.k) });
+        G.connect();
+        await step('the game page that is 20 s late takes the seat over with the key of the page (its socket is told that it was superseded)', () => () => G.status === 'online' && G.seat === 1, 5000);
+        check('... Ada heard nobody leave, Bea is in the same color, the page\'s own socket was closed by the server', A.count('left') === 0 && A.seatOf('Bea') === 1 && A.room.slots[1].state === N.SLOT.Client);
+        await sleep(300);
+        check('(the page ignores what the server says to it: the strip still stands, and nothing is sent after the takeover)', env.$('banner-text').textContent === STALLED && pageSockets[0].readyState !== 1);
+        check('(the START was waiting for this seat: it is on while the game page holds it)', A.room.starting === true);
+        G.leave();
+        await step('a Leave from the seat that the START waits for ends the START for everybody: that is what a Leave room on the stalled page would have done to Ada, and to a game page that is only slow', () => () => A.seatOf('Bea') === -1 && A.room.starting === false, 5000);
+        A.leave();
+        for (const ws of pageSockets) { try { ws.close(); } catch (e) { /* closed already */ } }
+    });
+
     for (const c of ALL) { try { c.leave(); } catch (e) { /* closed already */ } }
     await sleep(100);
     console.log('lobby page client against a real server: ' + checks + ' checks, ' + failures + ' failed');
