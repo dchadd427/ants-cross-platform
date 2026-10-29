@@ -23,7 +23,9 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import unicodedata
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -34,7 +36,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_check.js")
 HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 31 * 1000, 9900        # bytes, raw and gzipped, both files together (about 30,300 and 9,550): they load after the first paint, so they cost the first look nothing
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 35500, 11300           # bytes, raw and gzipped, both files together (about 33,900 and 10,800): they load after the first paint, so they cost the first look nothing
 
 
 def read(*parts):
@@ -96,7 +98,8 @@ class TheLoaderInHome(unittest.TestCase):
 
     def test_the_dock_is_mounted_when_both_files_are_there_and_whatever_goes_wrong_stays_in_it(self):
         self.assertIn("var parts = 2;", self.js)
-        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); dockShown(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); inert(held); dockShown(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("[bar, rbar, dock && dock.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
         self.assertIn("} catch (e) { /* no chat */ }", self.js)
@@ -153,9 +156,9 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertIn("root.AntsHomeChat = api;", self.js)
 
     def test_the_limits_are_the_hubs_and_the_pace_is_below_it(self):
-        self.assertIn("var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9 };", self.js)
-        self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000 };", self.js)
-        self.assertIn("var BACKOFF = { min: 1000, max: 60000, jitter: 0.25 };", self.js)
+        self.assertIn("var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };", self.js)
+        self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000 };", self.js)
+        self.assertIn("var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };", self.js, "the wait is spread from half a step to one and a half, within 1 to 60 s")
         self.assertIn("var PACE = { burst: 2, every: 2500, same: 31000 };", self.js, "below the hub's: 3 at once, one every 2 s, the same text twice within 30 s")
 
     def test_the_words_are_the_agreed_ones(self):
@@ -200,10 +203,12 @@ class TheStyle(unittest.TestCase):
         compact = re.search(r"@media \(max-width: 720px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn('.gc[data-open="false"] { height: 62px; }', compact)
         self.assertIn("left: 16px; right: 16px; bottom: 12px;", compact)
-        self.assertIn("height: min(490px, calc(100% - 196px));", compact)
+        self.assertIn("height: min(490px, calc(100% - 200px));", compact, "under the bar of a phone (184 px)")
+        self.assertIn('.gc[data-open="true"] { min-height: 200px; }', compact, "with the strips above Home there is less room: the open panel is never a sliver")
         self.assertIn('.gc[data-open="true"] { left: 10px; right: 10px; }', compact)
         side = re.search(r"@media \(max-height: 500px\) and \(orientation: landscape\) \{(.*?)\n\}", self.css, re.S).group(1)
-        self.assertIn("width: 420px; height: min(286px, calc(100% - 72px));", side)
+        self.assertIn("width: 420px; height: min(286px, calc(100% - 76px)); }", side, "its top clears the bar of 62 px")
+        self.assertIn('.gc[data-open="true"] { min-height: 150px; }', side, "an open panel is never a sliver; a folded strip has no minimum")
         self.assertIn('left: 14px; right: auto;', side)
 
     def test_the_title_of_a_folded_strip_is_the_short_one_and_the_long_one_stays_for_a_screen_reader(self):
@@ -236,12 +241,23 @@ class TheStyle(unittest.TestCase):
         self.assertIn("overflow-wrap: anywhere;", self.rule(".gc-line"))
         self.assertIn("min-width: 0;", self.rule(".gc-input"))
 
+    def test_a_narrow_or_a_low_window_gives_the_log_its_room(self):
+        self.assertIn("@media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }", self.css, "the heading and the count on one line at 320 px")
+        self.assertIn("@media (max-width: 720px) and (max-height: 640px), (max-height: 500px) { .gc-guest { display: none; } }", self.css, "with notices above Home, or sideways, the guest line gives its place to the log")
+
     def test_the_input_is_16_px_so_that_a_phone_does_not_zoom_into_it(self):
         self.assertIn("font-size: 16px;", self.rule(".gc-input"))
 
     def test_motion_stops_for_a_person_who_asks(self):
         self.assertIn("@media (prefers-reduced-motion: reduce) { .gc-dot { animation: none; } }", self.css)
         self.assertIn("animation: gc-pulse", self.css)
+
+    def test_the_card_that_says_that_the_game_is_opening_is_above_the_dock_and_the_summary_place_is_not_seen(self):
+        card = re.search(r"\.hopen \{[^}]*z-index: (\d+);", self.home_css)
+        self.assertGreater(int(card.group(1)), int(re.search(r"z-index: (\d+);", self.rule(".gc")).group(1)), "an open panel does not hide it")
+        news = self.rule(".gc-news")
+        self.assertIn("clip: rect(0 0 0 0);", news)
+        self.assertNotRegex(news, r"display: *none|visibility: *hidden", "a screen reader reads it")
 
     def test_the_hidden_parts_are_hidden_even_where_the_style_gives_them_a_display(self):
         self.assertIn(".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }", self.css)
@@ -276,6 +292,40 @@ class TheWayIntoTheImage(unittest.TestCase):
             self.assertIn(needle, doc, needle)
 
 
+@unittest.skipUnless(NODE, "node is not installed: the invisible characters were NOT compared with the hub's (tests/scripts/test_web_home_chat.py)")
+class TheInvisibleCharactersAreTheHubs(unittest.TestCase):
+    """the page removes what the hub removes (hub/text.py: the control and format characters, the fillers), as a second wall: a name of nothing that shows is "?"; the two lists are kept in step here"""
+    SCRIPT = (
+        "const Chat = require(process.argv[1]); const list = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));"
+        "const out = list.filter((x) => { const c = String.fromCodePoint(x.cp); const t = Chat.plain('a' + c + 'b', x.strict); return !x.keep ? (t !== 'ab' && t !== 'a b') : t !== 'a' + c + 'b'; });"
+        "console.log(JSON.stringify(out.map((x) => x.cp.toString(16))));")
+
+    def run_list(self, items):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "list.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(items, f)
+            done = subprocess.run([NODE, "-e", self.SCRIPT, os.path.join(HOME, "chat.js"), path], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        return json.loads(done.stdout)
+
+    def test_every_control_format_and_filler_character_that_the_hub_removes_is_removed_by_the_page(self):
+        sys.path.insert(0, REPO)
+        try:
+            from hub import text as hub_text
+        finally:
+            sys.path.remove(REPO)
+        every = [cp for cp in range(0x110000) if not 0xd800 <= cp <= 0xdfff and (unicodedata.category(chr(cp)) in ("Cc", "Cf") or chr(cp) in hub_text.FILLERS)]
+        self.assertGreater(len(every), 200)
+        self.assertEqual(self.run_list([{"cp": cp} for cp in every]), [], "code points (hex) that hub/text.py removes and web/home/chat.js does not: add them to HIDDEN")
+
+    def test_the_variation_selectors_leave_a_name_and_stay_in_a_line(self):
+        selectors = [cp for cp in range(0x110000) if not 0xd800 <= cp <= 0xdfff and "VARIATION SELECTOR" in unicodedata.name(chr(cp), "")]
+        self.assertGreater(len(selectors), 250)
+        self.assertEqual(self.run_list([{"cp": cp, "strict": True} for cp in selectors]), [], "a name made of these shows nothing: SELECTORS")
+        self.assertEqual(self.run_list([{"cp": cp, "keep": True} for cp in selectors]), [], "a line keeps them: the heart that is a picture is a heart and a variation selector")
+
+
 @unittest.skipUnless(NODE, "node is not installed: the chat dock was NOT run (tests/scripts/web_home_chat_check.js)")
 class TheCodeRuns(unittest.TestCase):
     def test_the_dock_against_a_fake_hub_and_a_fake_clock(self):
@@ -294,7 +344,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["web/lobby.html", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
-              "docs/HOME_SCREEN.md", "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
+              "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
 
     @classmethod

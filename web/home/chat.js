@@ -15,26 +15,39 @@
     'use strict';
 
     var PATH = '/hub/ws', VERSION = 1;
-    var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
-    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000 };
-    var BACKOFF = { min: 1000, max: 60000, jitter: 0.25 };
+    var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
+    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000 };
+    var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
     var PACE = { burst: 2, every: 2500, same: 31000 };                  // this page's own limit, below the hub's (3 at once, one every 2 s, the same text twice within 30 s)
     var TEXT = {
         title: 'Global chat', short: 'Chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
-        fold: 'Fold chat', open: 'Open chat', mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through'
+        fold: 'Fold chat', open: 'Open chat', mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+'
     };
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
         rate: 'Slow down a little', login: 'Log in with Discord to chat', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first',
-        young: 'Your account is too new to chat yet', bad: 'That line could not be sent', offline: TEXT.offline, readonly: TEXT.readonly
+        young: 'Your account is too new to chat yet', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', offline: TEXT.offline, readonly: TEXT.readonly
     };
 
     // ---- the pure parts -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // text from the hub for display: line ends and tabs are blanks, the other controls and the bidirectional and zero-width characters go, blanks become one space, lone surrogates go
-    function plain(s) {
-        return String(s).replace(/[\t-\r\u0085\u2028\u2029]/g, ' ').replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffc]/g, '')
-            .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(^|[^\ud800-\udbff])[\udc00-\udfff]/g, '$1').replace(/\s+/g, ' ').replace(/^ | $/g, '');
+    // The invisible characters that the hub removes (docs/HUB.md "Text rules": the format characters Cf, the fillers that draw as blanks); tests/scripts/test_web_home_chat.py keeps this list in step with hub/text.py
+    var HIDDEN = /[\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u17b4\u17b5\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\ufeff\uffa0\ufff9-\ufffc]|\ud804[\udcbd\udccd]|\ud80d[\udc30-\udc3f]|\ud82f[\udca0-\udca3]|\ud834[\udd59\udd73-\udd7a]|\udb40[\udc00-\udc7f]/g;
+    var SELECTORS = /[\u180b-\u180d\u180f\ufe00-\ufe0f]|\udb40[\udd00-\uddef]/g;       // (variation selectors: a name is made of none, a line keeps them: they make an emoji of a heart)
+    function pairs(s) {                                                  // only the surrogates that make a pair stay (a run of lone ones leaves nothing behind)
+        var out = '';
+        for (var i = 0; i < s.length; i++) {
+            var c = s.charCodeAt(i), d = s.charCodeAt(i + 1);
+            if (c >= 0xd800 && c <= 0xdbff) { if (d >= 0xdc00 && d <= 0xdfff) { out += s.charAt(i) + s.charAt(i + 1); i++; } }
+            else if (!(c >= 0xdc00 && c <= 0xdfff)) out += s.charAt(i);
+        }
+        return out;
     }
+    // text from the hub for display: line ends and tabs are blanks, the other controls and the invisible characters go, blanks become one space, lone surrogates go; strict (a name) takes the variation selectors out too
+    function plain(s, strict) {
+        s = pairs(String(s).replace(/[\t-\r\u0085\u2028\u2029]/g, ' ')).replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/g, '').replace(HIDDEN, '');
+        return (strict ? s.replace(SELECTORS, '') : s).replace(/\s+/g, ' ').replace(/^ | $/g, '');
+    }
+    function shows(s) { return /[^\s\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe00-\ufe0f\ufe20-\ufe2f]/.test(s); }       // (marks alone show nothing)
     function points(s) { var n = 0; for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); if (!(c >= 0xdc00 && c <= 0xdfff)) n++; } return n; }
     function clip(s, max) {                                              // at most `max` code points, then "…" (a pair of surrogates is never cut)
         var n = 0, i = 0;
@@ -55,15 +68,16 @@
     function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod }, or null when it is not a line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line);
-        return text ? { id: m.id, who: clip(plain(m.who.slice(0, LIMIT.name * 4)), LIMIT.name) || '?', text: text, mod: m.mod === true } : null;
+        return shows(text) ? { id: m.id, who: clip(plain(m.who.slice(0, LIMIT.name * 4), true), LIMIT.name) || '?', text: text, mod: m.mod === true } : null;
     }
     function wordOf(code, login) {                                       // the words of an err code; "log in" is asked only where the hub has a login
         if (code === 'login' && !login) return ERR.readonly;
         return typeof code === 'string' && Object.prototype.hasOwnProperty.call(ERR, code) ? ERR[code] : TEXT.generic;
     }
-    function delayOf(attempt, random) {                                  // the wait before retry number `attempt` (0 is the first): 1 s, doubling to 60 s, and up to a quarter more
+    function delayOf(attempt, random) {                                  // the wait before retry number `attempt` (0 is the first): the step is 1 s, doubling to 60 s; the wait is anywhere from half to one and a half steps, within 1 to 60 s
         var base = Math.min(BACKOFF.max, BACKOFF.min * Math.pow(2, Math.min(attempt, 12)));
-        return Math.round(base + base * BACKOFF.jitter * (random >= 0 && random <= 1 ? random : 0.5));
+        var low = Math.max(BACKOFF.min, base * BACKOFF.low), high = Math.min(BACKOFF.max, base * BACKOFF.high);
+        return Math.round(low + (high - low) * (random >= 0 && random <= 1 ? random : 0.5));
     }
     function addressOf(loc) { return (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + PATH; }
 
@@ -73,8 +87,8 @@
         var doc = env.doc, win = env.win, host = env.host;
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', draft = '', stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0 };
-        var tokens = PACE.burst, tokensAt = now(), lastText = '', lastAt = 0;
+        var sock = null, stopped = false, isHome = false, stale = true, notice = '', draft = '', stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0 };
+        var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;       // a desktop opens with the panel out, a phone or a short window with the strip (home.css has the same breakpoints)
 
         function el(tag, cls, text) {
@@ -102,13 +116,14 @@
         var log = el('div', 'gc-log'); log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite'); log.setAttribute('aria-label', TEXT.log); log.setAttribute('tabindex', '0');
         log.appendChild(el('p', 'gc-sys', TEXT.welcome));
         var note = el('p', 'gc-note'); note.setAttribute('role', 'status'); note.setAttribute('aria-live', 'polite');
+        var news = el('p', 'gc-news'); news.setAttribute('role', 'status'); news.setAttribute('aria-live', 'polite');       // (what a screen reader is told when lines come faster than it can read them: one summary)
         var form = el('form', 'gc-form'), field = el('input', 'gc-input'), send = el('button', 'btn gc-send', TEXT.send);
         field.type = 'text'; field.setAttribute('aria-label', TEXT.field); field.setAttribute('placeholder', TEXT.field); field.setAttribute('autocomplete', 'off'); field.setAttribute('enterkeyhint', 'send');
         field.setAttribute('maxlength', String(LIMIT.field)); send.type = 'submit';
         put(form, [field, send]); form.hidden = true;
         var guest = el('p', 'gc-guest', TEXT.guest); guest.hidden = true;
         var slot = el('div', 'gc-slot'); slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;      // the login chip's place: the login (a later change) fills it and shows it
-        put(body, [log, note, form, guest, slot]);
+        put(body, [log, note, news, form, guest, slot]);
         put(box, [head, body]);
         host.appendChild(box);
 
@@ -118,7 +133,7 @@
         function unread() { var n = 0; for (var i = 0; i < feed.length; i++) if (feed[i].fresh) n++; return n; }
         function row(e) {
             var r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (e.own ? ' gc-me' : ''));
-            if (e.mod) r.appendChild(el('span', 'gc-badge', TEXT.mod));
+            if (e.mod) r.appendChild(el('span', 'gc-badge', TEXT.mod + ' '));
             put(r, [el('bdi', 'gc-who', e.who), el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
             return r;
         }
@@ -130,13 +145,25 @@
             }
             if (force) stuck = true;
         }
+        function live() { log.setAttribute('aria-live', muted.repaint || muted.flood ? 'off' : 'polite'); }
+        function flow() {                                                        // lines that are read out one by one, two in 3 s: the rest of a flood (the hub lets 5 a second through) is one line, "9 more messages"
+            if (!timers.flood) {
+                heard = 0; skipped = 0;
+                timers.flood = setTimeout(guard(function () {
+                    timers.flood = 0;
+                    if (skipped) news.textContent = skipped === 1 ? TEXT.one : skipped + TEXT.more;
+                    muted.flood = false; live();
+                }), MS.flood);
+            }
+            if (++heard > LIMIT.said) { skipped++; if (!muted.flood) { news.textContent = ''; muted.flood = true; live(); } }
+        }
         function repaint() {                                                     // the log is made again from the model (a welcome, the tab or the dock coming back); a screen reader is not told all of it again
-            log.setAttribute('aria-live', 'off'); stop('quiet');
+            muted.repaint = true; live(); stop('quiet');
             while (log.children.length > 1) log.removeChild(log.children[log.children.length - 1]);
             feed.forEach(function (e) { e.el = row(e); log.appendChild(e.el); });
             stale = false;
             settle(true);
-            timers.quiet = setTimeout(guard(function () { timers.quiet = 0; log.setAttribute('aria-live', 'polite'); }), 300);
+            timers.quiet = setTimeout(guard(function () { timers.quiet = 0; muted.repaint = false; live(); }), 300);
         }
         function paint() {                                                       // everything that is not a line, from the model
             if (seen()) feed.forEach(function (e) { e.fresh = false; });
@@ -148,7 +175,7 @@
             pill.textContent = n > 99 ? '99+' : String(n); pill.hidden = !n;
             peekWho.textContent = state !== 'offline' && last ? last.who + ': ' : '';
             peekText.textContent = state === 'offline' ? TEXT.offline : last ? last.text : state === 'connecting' ? TEXT.connecting : you ? '' : ERR.readonly;
-            hereText.textContent = state === 'live' ? (people !== null ? people + TEXT.online : '') : state === 'connecting' ? TEXT.connecting : TEXT.reconnecting;
+            hereText.textContent = state === 'live' ? (people !== null ? (people > LIMIT.here ? TEXT.many : people) + TEXT.online : '') : state === 'connecting' ? TEXT.connecting : TEXT.reconnecting;
             here.hidden = dead || !hereText.textContent;
             form.hidden = !(state === 'live' && you);
             guest.hidden = !(state === 'live' && !you);
@@ -211,7 +238,7 @@
         function onWelcome(m) {
             if (welcomed) return;                                                // (one welcome for each socket)
             if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }       // (a hub that speaks another version is no hub for this page)
-            var name = m.you && typeof m.you === 'object' && typeof m.you.name === 'string' ? clip(plain(m.you.name.slice(0, LIMIT.name * 4)), LIMIT.name) : '';
+            var name = m.you && typeof m.you === 'object' && typeof m.you.name === 'string' ? clip(plain(m.you.name.slice(0, LIMIT.name * 4), true), LIMIT.name) : '';
             you = name ? { name: name, mod: m.you.mod === true } : null;
             login = m.login === true; people = count(m.online);
             var before = lastId;
@@ -233,7 +260,7 @@
             e.own = !!you && e.who === you.name; e.fresh = !e.own && !seen();
             if (e.own && e.text === draft) draft = '';
             push(e);
-            if (seen() && !stale) { settle(); e.el = row(e); log.appendChild(e.el); } else stale = true;
+            if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
             render();
         }
         function onDel(m) {
@@ -258,16 +285,17 @@
         }                                                                        // (any other kind is ignored)
 
         // ---- what the visitor does ------------------------------------------------------------------------------------------------------------------------------------------------------------
-        function allowed(text) {                                                // this page's own pace, below the hub's
-            var t = now();
+        function allowed(text) {                                                // this page's own pace, below the hub's; a text that was sent in the last 31 s is not sent again (the hub remembers every one of them, not only the last)
+            var t = now(), old;
             tokens = Math.min(PACE.burst, tokens + Math.max(0, t - tokensAt) / PACE.every); tokensAt = t;
-            if (tokens < 1 || (text === lastText && t - lastAt < PACE.same)) return false;
-            tokens -= 1; lastText = text; lastAt = t;
+            for (old in said) if (t - said[old] >= PACE.same) delete said[old];
+            if (tokens < 1 || said[text] !== undefined) return false;
+            tokens -= 1; said[text] = t;
             return true;
         }
         function sendLine(raw) {                                                // '' when the line went out, else the code that says why not; never while the link is down
             var text = plain(String(raw));
-            var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : !allowed(text) ? 'rate' : '';
+            var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
             draft = text;

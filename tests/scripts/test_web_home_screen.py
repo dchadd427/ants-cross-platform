@@ -101,7 +101,7 @@ class ThePage(unittest.TestCase):
         mount = mount[:mount.index("// ---- go ----")]
         self.assertIn("leave: function () { if (handing) return; var old = client;", mount, "a page that is on its way to the game gives its seat up to nobody")
         self.assertIn("if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render();", mount)
-        self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how):", mount))), ["how", "info", "leave", "make"])
+        self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how|stalled):", mount))), ["how", "info", "leave", "make", "stalled"])
 
     def test_the_words_that_said_that_a_page_makes_a_room_when_it_opens_are_corrected(self):
         page = self.page
@@ -143,7 +143,9 @@ class TheFolder(unittest.TestCase):
     def test_a_hand_off_that_does_not_come_is_given_up_after_15_seconds(self):
         js = read("web", "home", "home.js")
         self.assertIn("var OPENING_MS = 15000;", js)
-        self.assertIn("goingTimer = setTimeout(function () { goingTimer = null; going = false; opening.hidden = true; inert(held); }, OPENING_MS);", js, "the card goes, the hand-off is over, and what a dialog holds stays held")
+        self.assertIn("goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);", js, "the card goes, Home is free, Leave room stays off (the seat may still be the game's), and what a dialog holds stays held")
+        self.assertIn("try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }", js, "the page says that the game did not open")
+        self.assertIn("function () { if (stalled) return; page.leave(); show('home', 'push'); }", js, "a Leave room that reaches the page all the same does nothing")
         self.assertIn("if (goingTimer !== null) clearTimeout(goingTimer);", js, "a second hand-off starts the time again")
 
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):

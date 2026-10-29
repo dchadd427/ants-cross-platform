@@ -49,11 +49,11 @@
     function reservedText(width, height) { return 'reserved: ' + Math.round(width) + ' x ' + Math.round(height) + ' px (everything under the top bar)'; }
 
     // ---- the screens -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make() (a room of the page's own), leave(), how() } })
+    // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make() (a room of the page's own), leave(), how(), stalled() (optional: the hand-off did not come in 15 s) } })
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, goingTimer = null, dock = null, asked = false;
+        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, dock = null, asked = false;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -110,7 +110,7 @@
         var homeBtn = button('rhome', '', function () { show('home', 'push'); });
         var chev = el('span', 'chev', '‹'); chev.setAttribute('aria-hidden', 'true');
         homeBtn.appendChild(chev); homeBtn.appendChild(el('span', '', TEXT.home));
-        var leave = button('leave', TEXT.leave, function () { page.leave(); show('home', 'push'); });
+        var leave = button('leave', TEXT.leave, function () { if (stalled) return; page.leave(); show('home', 'push'); });
         var menuRoom = menuButton();
         [homeBtn, logo(), el('span', 'grow'), leave, menuRoom].forEach(function (n) { rbar.appendChild(n); });
         env.lobby.parentNode.insertBefore(rbar, env.lobby);
@@ -232,16 +232,19 @@
         function say() {
             going = true; closeMenu(); inert(held); if (screen === 'home') opening.hidden = false;
             if (goingTimer !== null) clearTimeout(goingTimer);
-            goingTimer = setTimeout(function () { goingTimer = null; going = false; opening.hidden = true; inert(held); }, OPENING_MS);
+            goingTimer = setTimeout(function () {                // it did not come: Home takes presses again, but the seat may still be the game's (a slow page), so Leave room stays off, and the page says so
+                goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);
+                try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }
+            }, OPENING_MS);
         }
-        function inert(on) { held = !!on; [bar, rbar].forEach(function (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
+        function inert(on) { held = !!on; [bar, rbar, dock && dock.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
         // The chat dock (chat.js, chat.css) mounts into Home's div and is told which screen shows; what goes wrong with it stays with it
         function dockShown() { try { if (dock) dock.shown(screen === 'home'); } catch (e) { /* the dock is its own */ } }
         function wantDock() {
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); dockShown(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); inert(held); dockShown(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');

@@ -121,6 +121,9 @@ function rig(o) {
     const P = Pure;
     same('plain: controls, bidirectional and zero-width characters out, blanks into one space, the ends trimmed', P.plain('  a\tb\n\u202e c\u200b d\u2066e\u2069 \u0007f \ufeff '), 'a b c de f');
     same('plain: markup stays text (it is shown with textContent), a pair of surrogates stays, a lone one goes', [P.plain('<b>x</b> <img src=x onerror=alert(1)>'), P.plain('a\ud83d\ude00b'), P.plain('a\ud83db'), P.plain('a\ude00b')], ['<b>x</b> <img src=x onerror=alert(1)>', 'a\ud83d\ude00b', 'ab', 'ab']);
+    same('plain: the invisible characters of the hub\'s own list go from a line (soft hyphen, fillers, the braille blank, tag characters, the joiner of the grapheme, the Khmer vowels), and the variation selector of an emoji stays', [P.plain('a\u00adb\u3164c\u2800d\u115fe\u1160f\uffa0g\u034fh\u17b4i\u17b5j\ud834\udd59k\udb40\udc41l'), P.plain('\u2764\ufe0f x'), P.plain('\u180ea\u180bb')], ['abcdefghijkl', '\u2764\ufe0f x', 'a\u180bb']);
+    same('plain, for a name (strict): the variation selectors go too, the Mongolian ones and those of the supplement', [P.plain('a\ufe0fb\u180bc\u180dd\u180fe\udb40\udd00f\udb40\uddefg', true), P.plain('\ufe00\ufe0f\u180b', true)], ['abcdefg', '']);
+    same('plain: a run of lone surrogates leaves nothing behind (low ones, high ones, one after a pair)', [P.plain('x\udc00\udc00y'), P.plain('x\ud800\ud800z'), P.plain('\udc00\udc00\udc00'), P.plain('a\ud83d\ude00\udc00\udc00b'), P.plain('\ud83d\ud83d\ude00')], ['xy', 'xz', '', 'a\ud83d\ude00b', '\ud83d\ude00']);
     same('points and clip count code points, and never cut a pair', [P.points('a\ud83d\ude00b'), P.clip('abcdef', 3), P.clip('abc', 3), P.clip('\ud83d\ude00\ud83d\ude00\ud83d\ude00', 2), P.clip('', 5)], [3, 'abc…', 'abc', '\ud83d\ude00\ud83d\ude00…', '']);
     check('parse: an object with a string "t" only; not a string, too big, not JSON, an array, a number, null, no "t", a "t" that is not a string are all null',
         P.parse('{"t":"x"}') !== null && P.parse(5) === null && P.parse(new ArrayBuffer(4)) === null && P.parse('x'.repeat(P.LIMIT.frame + 1)) === null && P.parse('{') === null && P.parse('[1]') === null && P.parse('3') === null
@@ -130,14 +133,17 @@ function rig(o) {
     same('lineOf: not a line when the id is not a whole number, the name or text is not a string, or nothing is left of the text',
         [{ who: 'a', text: 'x' }, { id: '4', who: 'a', text: 'x' }, { id: -1, who: 'a', text: 'x' }, { id: 1.5, who: 'a', text: 'x' }, { id: 4, who: 5, text: 'x' }, { id: 4, who: 'a', text: 5 }, { id: 4, who: 'a', text: ' \u202e \u200b ' }, null, 'x', []].map((m) => P.lineOf(m)),
         [null, null, null, null, null, null, null, null, null, null]);
+    same('lineOf: a name of nothing that shows (fillers, variation selectors, tag characters) is "?", a line of marks only is no line, an emoji with its selector is one', [P.lineOf({ id: 1, who: '\u3164\u2800\ufe0f\u180b\udb40\udc41', text: 'x' }).who, P.lineOf({ id: 1, who: 'a', text: '\ufe0f\u0301 ' }), P.lineOf({ id: 1, who: 'a', text: '\u3164\u2800' }), P.lineOf({ id: 1, who: 'a', text: '\u2764\ufe0f' }).text, P.lineOf({ id: 1, who: 'a', text: 'e\u0301' }).text], ['?', null, null, '\u2764\ufe0f', 'e\u0301']);
     same('lineOf: a name over 32 and a line over 200 code points are cut with "…"; a name with nothing left is "?"', [P.lineOf({ id: 1, who: 'n'.repeat(60), text: 't'.repeat(5000) }).who, P.lineOf({ id: 1, who: 'n'.repeat(60), text: 't'.repeat(5000) }).text.length, P.lineOf({ id: 1, who: '\u202e', text: 'x' }).who],
         ['n'.repeat(32) + '…', 201, '?']);
     same('wordOf: the words of the codes; "log in" only where the hub has a login; an unknown code, or a name of Object, is the generic word', [P.wordOf('rate', true), P.wordOf('login', true), P.wordOf('login', false), P.wordOf('muted', false), P.wordOf('banned'), P.wordOf('long'), P.wordOf('empty'), P.wordOf('young'), P.wordOf('bad'),
         P.wordOf('what'), P.wordOf(undefined), P.wordOf(5), P.wordOf('constructor'), P.wordOf('__proto__'), P.wordOf('toString'), P.wordOf('hasOwnProperty')],
         ['Slow down a little', 'Log in with Discord to chat', 'Chat is read-only for now', 'You cannot chat for a while', 'You cannot chat here', 'That line is too long', 'Write something first', 'Your account is too new to chat yet', 'That line could not be sent',
          'That did not go through', 'That did not go through', 'That did not go through', 'That did not go through', 'That did not go through', 'That did not go through', 'That did not go through']);
-    same('delayOf: 1 s, doubling to 60 s (no jitter at 0); the most that jitter adds is a quarter', [0, 1, 2, 3, 4, 5, 6, 7, 20, 1000].map((n) => P.delayOf(n, 0)), [1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000, 60000]);
-    same('... with jitter the wait is 1 to 1.25 times, and a random that is no number in 0..1 is the middle', [P.delayOf(0, 1), P.delayOf(3, 0.5), P.delayOf(9, 1), P.delayOf(0, NaN), P.delayOf(0, 7), P.delayOf(0, undefined)], [1250, 9000, 75000, 1125, 1125, 1125]);
+    same('delayOf at the low end of the spread: half a step, never under 1 s (steps of 1 s doubling to 60 s)', [0, 1, 2, 3, 4, 5, 6, 7, 20, 1000].map((n) => P.delayOf(n, 0)), [1000, 1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000]);
+    same('... at the high end: one and a half steps, never over 60 s', [0, 1, 2, 3, 4, 5, 6, 7, 20, 1000].map((n) => P.delayOf(n, 1)), [1500, 3000, 6000, 12000, 24000, 48000, 60000, 60000, 60000, 60000]);
+    same('... in between it is in between, and a random that is no number in 0..1 is the middle of the spread', [P.delayOf(3, 0.5), P.delayOf(0, NaN), P.delayOf(3, 7), P.delayOf(3, undefined), P.delayOf(3, -1)], [8000, 1250, 8000, 8000, 8000]);
+    check('... for any step and any random the wait is from 1 s to 60 s, and a new random each time gives waits that differ (no wave)', (() => { const seen = new Set(); for (let n = 0; n < 16; n++) for (let i = 0; i <= 100; i++) { const d = P.delayOf(n, i / 100); if (d < 1000 || d > 60000) return false; if (n === 5) seen.add(d); } return seen.size > 50; })());
     same('addressOf: the page\'s own host, wss on https and ws on http, at /hub/ws', [P.addressOf({ protocol: 'https:', host: 'beta.example' }), P.addressOf({ protocol: 'http:', host: '127.0.0.1:8080' }), P.PATH], ['wss://beta.example/hub/ws', 'ws://127.0.0.1:8080/hub/ws', '/hub/ws']);
 }
 
@@ -156,7 +162,7 @@ function rig(o) {
         && r.fold().type === 'button' && r.fold().getAttribute('aria-controls') === 'gchat-body' && r.fold().getAttribute('aria-label') === 'Fold chat' && r.fold().getAttribute('aria-expanded') === 'true' && r.field().getAttribute('autocomplete') === 'off');
     check('before the welcome: "connecting…", no form, no online count, no note, the dock is open on a desktop', box.getAttribute('data-state') === 'connecting' && r.on() === 'connecting…' && r.form().hidden === true && r.note() === '' && box.getAttribute('data-open') === 'true' && r.rows().length === 0);
     r.live(W({ login: false, you: null, online: 7, history: HISTORY }));
-    check('the welcome shows the history oldest first as "name: text", the mod\'s line marked, and how many are here', eq(r.rowTexts(), ['pebble: anyone up for Islands?', 'modclover: I have a room open', 'juniper: joining!']) && one(r.rows()[1], 'gc-badge').textContent === 'mod'
+    check('the welcome shows the history oldest first as "name: text", the mod\'s line marked, and how many are here', eq(r.rowTexts(), ['pebble: anyone up for Islands?', 'mod clover: I have a room open', 'juniper: joining!']) && one(r.rows()[1], 'gc-badge').textContent === 'mod '
           && cls(r.rows()[1]).indexOf('gc-mod') !== -1 && cls(r.rows()[0]).indexOf('gc-mod') === -1 && r.on() === '7 here now' && box.getAttribute('data-state') === 'live');
     check('a name and a line each sit in a <bdi> (the right-to-left letters of one do not reorder the other)', eq(r.rows()[0].children.map((c) => c.tagName), ['bdi', 'span', 'bdi']));
     check('login:false and nobody named: "Chat is read-only for now" and the guest line; NO field, NO Send, NO login button (the login chip\'s place is empty and hidden)',
@@ -175,7 +181,7 @@ function rig(o) {
     const r = rig();
     r.live(W({ login: true, you: YOU, online: 1, history: HISTORY }));
     check('a named visitor gets the field and Send (and no read-only words); the count says "1 here now"', r.form().hidden === false && r.note() === '' && one(r.root, 'gc-guest').hidden === true && r.on() === '1 here now' && r.root.getAttribute('data-you') === 'yes');
-    check('a "you" that is not an object with a name is nobody: no field', [null, 5, 'x', {}, { name: 5 }, { name: '' }, { name: ' \u202e ' }, []].every((you) => { const q = rig(); q.live(W({ you })); return q.form().hidden === true && q.errors.length === 0; }));
+    check('a "you" that is not an object with a name is nobody: no field', [null, 5, 'x', {}, { name: 5 }, { name: '' }, { name: ' \u202e ' }, { name: '\ufe0f\u3164\u180b' }, { name: '\udb40\udc41\u2800' }, []].every((you) => { const q = rig(); q.live(W({ you })); return q.form().hidden === true && q.errors.length === 0; }));
     r.s().recv(L(9, 'maple.leaf', 'my own line'));
     check('the visitor\'s own line is marked (the page\'s gold), and the mod flag of "you" changes nothing else', cls(r.rows()[3]).indexOf('gc-me') !== -1 && r.rowTexts()[3] === 'maple.leaf: my own line');
     r.s().recv({ t: 'online', n: 12 });
@@ -268,6 +274,33 @@ function rig(o) {
     const f = rig(); f.live(W({ you: YOU })); f.dock.say('sent and shown'); f.s().recv(L(77, 'maple.leaf', 'sent and shown')); f.s().recv({ t: 'err', code: 'bad' });
     check('a line that came back as a line is not put back into the field by a later err', f.field().value === '');
 }
+{   // the counts of the welcome, the history's own ids, the noise of one socket, the order of the ids
+    const o = (online) => { const q = rig(); q.live(W({ online })); return [q.on(), one(q.root, 'gc-online').hidden]; };
+    same('the count of the welcome is a whole number or nothing (a hub that says "many", -3 or 1.5 gives no count); more than the hub\'s 500 is "500+"', [o(7), o('many'), o(-3), o(1.5), o(null), o(500), o(501), o(1e9)],
+        [['7 here now', false], ['', true], ['', true], ['', true], ['', true], ['500 here now', false], ['500+ here now', false], ['500+ here now', false]]);
+    const online = rig(); online.live(W({})); online.s().recv({ t: 'online', n: 900 });
+    check('... and the same for the count that follows', online.on() === '500+ here now');
+    const dup = rig(); dup.live(W({ history: [{ id: 1, at: 1, who: 'a', text: 'one', mod: false }, { id: 2, at: 1, who: 'a', text: 'two', mod: false }, { id: 2, at: 1, who: 'a', text: 'two again', mod: false }, { id: 3, at: 1, who: 'a', text: 'three', mod: false }] }));
+    check('a history that has the same id twice shows that line once (the first)', eq(dup.rowTexts(), ['a: one', 'a: two', 'a: three']));
+    const spread = rig();
+    spread.live(W({ you: YOU }));
+    for (let i = 0; i < 20; i++) spread.s().recv('noise ' + i);
+    const first = spread.s();
+    first.fail(); spread.clock.advance(1000);
+    spread.live(W({ you: YOU }));
+    for (let i = 0; i < 20; i++) spread.s().recv('noise ' + i);
+    check('the frames of noise are counted for each socket (20 and 20 are not 40): the second socket is still up', spread.sockets.length === 2 && spread.dock.state() === 'live' && spread.s() !== first);
+    const ids = rig({ width: 390, height: 844 });
+    ids.live(W({ you: YOU, history: HISTORY }));
+    ids.s().recv(L(10, 'a', 'ten')); ids.s().recv(L(5, 'a', 'five, late'));
+    ids.s().fail(); ids.clock.advance(2000);
+    ids.live(W({ you: YOU, history: HISTORY.concat([{ id: 6, at: 1, who: 'a', text: 'six', mod: false }, { id: 9, at: 1, who: 'a', text: 'nine', mod: false }, { id: 10, at: 1, who: 'a', text: 'ten', mod: false }, { id: 11, at: 1, who: 'a', text: 'eleven', mod: false }]) }));
+    check('the newest id that was seen never goes down: after a late line (5 after 10) only the line above 10 is news (1, not 4)', ids.pill() === '1', ids.pill());
+    const del = rig();
+    del.live(W({ history: HISTORY }));
+    del.s().recv({ t: 'del', id: '3' }); del.s().recv({ t: 'del', id: [3] }); del.s().recv({ t: 'del', id: true });
+    check('a del whose id is a string, a list or a boolean is not a del of line 3 (the ids are compared as numbers, strictly)', del.rows().length === 3);
+}
 {   // a second welcome, another version
     const r = rig();
     r.live(W({ you: YOU, history: HISTORY, online: 4 }));
@@ -288,10 +321,15 @@ function rig(o) {
     const r = rig();
     r.s().fail();
     check('a socket that fails: "Chat is offline" in the note, "reconnecting…" in the header, no field, no count; the first retry is in 1 s', r.dock.state() === 'offline' && r.note() === 'Chat is offline' && r.on() === 'reconnecting…' && r.form().hidden === true && r.sockets.length === 1);
-    const waits = [];
-    let t0 = r.clock.t;
-    for (let i = 0; i < 10; i++) { const n = r.sockets.length; for (let spent = 0; r.sockets.length === n && spent < 700; spent++) r.clock.advance(100); waits.push(Math.round((r.clock.t - t0) / 100) * 100); r.s().fail(); t0 = r.clock.t; }
-    same('the retries come after 1, 2, 4, 8, 16, 32 and then 60 s each (no jitter here), and never sooner', waits, [1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000, 60000]);
+    const waitsOf = (rand) => {
+        const q = rig({ random: () => rand }), waits = [];
+        q.s().fail();
+        let t0 = q.clock.t;
+        for (let i = 0; i < 10; i++) { const n = q.sockets.length; for (let spent = 0; q.sockets.length === n && spent < 1000; spent++) q.clock.advance(100); waits.push(Math.round((q.clock.t - t0) / 100) * 100); q.s().fail(); t0 = q.clock.t; }
+        return waits;
+    };
+    same('the retries come after 1, 1, 2, 4, 8, 16 and then 30 s at the low end of the spread, never sooner', waitsOf(0), [1000, 1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000]);
+    same('... and after 1.5, 3, 6, 12, 24, 48 and then 60 s at the high end, never later', waitsOf(1), [1500, 3000, 6000, 12000, 24000, 48000, 60000, 60000, 60000, 60000]);
     check('... and the note keeps saying it', r.note() === 'Chat is offline' && r.errors.length === 0);
 }
 {   // jitter, and a storm of clients
@@ -299,24 +337,24 @@ function rig(o) {
     [lo, hi].forEach((q) => q.s().fail());
     const first = (q) => { const n = q.sockets.length; let t = 0; while (q.sockets.length === n && t < 100000) { q.clock.advance(10); t += 10; } return t; };
     const a = first(lo), b = first(hi);
-    check('jitter: a retry is 1.00 to 1.25 times the wait (so that many pages that lost one hub do not come back on the same second)', a === 1000 && b >= 1240 && b <= 1260, a + ' ' + b);
-    const once = rig({ random: () => 0 }), times = [0];
-    for (let t = 0; t < 3600000; t += 100) { once.clock.advance(100); if (once.sockets.length > times.length) { times.push(once.clock.t); once.s().fail(); } }
-    const gaps = times.slice(1).map((x, i) => x - times[i]);
-    check('a hub that is down for an hour costs about one try a minute (62 sockets), never two within a second, and the last waits are 60 s', times.length >= 60 && times.length <= 70 && Math.min.apply(null, gaps.slice(1)) >= 1000 && gaps.slice(-10).every((g) => g === 60000), times.length + ' ' + gaps.slice(-3));
+    check('jitter: the first retry is 1 to 1.5 s, by chance (so that many pages that lost one hub do not come back on the same second)', a === 1000 && b >= 1490 && b <= 1500, a + ' ' + b);
+    const hour = (rand) => { const once = rig({ random: () => rand }), times = [0]; for (let t = 0; t < 3600000; t += 100) { once.clock.advance(100); if (once.sockets.length > times.length) { times.push(once.clock.t); once.s().fail(); } } return times; };
+    const slow = hour(1), quick = hour(0), gaps = slow.slice(1).map((x, i) => x - slow[i]);
+    check('a hub that is down for an hour costs about one try a minute at the slowest (65 sockets), never two within a second, and the last waits are 60 s', slow.length >= 60 && slow.length <= 70 && Math.min.apply(null, gaps) >= 1500 && gaps.slice(-10).every((g) => g === 60000), slow.length + ' ' + gaps.slice(-3));
+    check('... and one in half a minute at the quickest (125 sockets)', quick.length >= 110 && quick.length <= 130, quick.length);
     const q = rig({ random: () => 0 });
     q.clock.advance(1);
     let count = 0;
     for (let i = 0; i < 40; i++) { q.s().open().recv(W({})); q.s().fail(); q.clock.advance(1000); count = q.sockets.length; }
-    check('a hub that welcomes and then closes at once does not bring the wait back to 1 s (a link must hold for 30 s for that): 40 such tries in 40 s are 7 sockets at most', count <= 8, count);
-    const u = rig({ random: () => 0 });
-    u.s().fail(); u.clock.advance(1000); u.s().open().recv(W({})); u.clock.advance(29900); u.s().fail();
-    const held = u.sockets.length; u.clock.advance(1999);
-    check('a link that held for 29.9 s does not start the backoff again: the next retry is in 2 s, not in 1', u.sockets.length === held && (u.clock.advance(1), u.sockets.length === held + 1));
-    const s = rig({ random: () => 0 });
-    s.s().fail(); s.clock.advance(1000); s.s().fail(); s.clock.advance(2000); s.s().open().recv(W({})); s.clock.advance(31000); s.s().fail();
-    const n = s.sockets.length; s.clock.advance(999);
-    check('a link that held for 30 s starts the backoff again: the next retry is in 1 s', s.sockets.length === n && (s.clock.advance(1), s.sockets.length === n + 1));
+    check('a hub that welcomes and then closes at once does not bring the wait back to 1 s (a link must hold for 30 s for that): 40 such tries in 40 s are 8 sockets at most', count <= 8, count);
+    const u = rig({ random: () => 1 });
+    u.s().fail(); u.clock.advance(1500); u.s().open().recv(W({})); u.clock.advance(29900); u.s().fail();
+    const held = u.sockets.length; u.clock.advance(2999);
+    check('a link that held for 29.9 s does not start the backoff again: the next retry is in 3 s, not in 1.5', u.sockets.length === held && (u.clock.advance(1), u.sockets.length === held + 1));
+    const s = rig({ random: () => 1 });
+    s.s().fail(); s.clock.advance(1500); s.s().fail(); s.clock.advance(3000); s.s().open().recv(W({})); s.clock.advance(31000); s.s().fail();
+    const n = s.sockets.length; s.clock.advance(1499);
+    check('a link that held for 30 s starts the backoff again: the next retry is in 1.5 s, not in 6', s.sockets.length === n && (s.clock.advance(1), s.sockets.length === n + 1));
 }
 {   // nothing is sent while offline
     const r = rig();
@@ -367,6 +405,16 @@ function rig(o) {
     for (let i = 0; i < 20; i++) { q.clock.advance(25000); q.s().recv({ t: 'online', n: 2 }); }
     check('twenty pings in 500 s, each answered: one socket, still live', q.sockets.length === 1 && q.pings() === 20 && q.dock.state() === 'live');
 }
+{   // a lost link takes its ping with it: after three lost links there is still one ping chain
+    const r = rig({ random: () => 0 });
+    r.live(W({ you: YOU }));
+    for (let i = 0; i < 3; i++) { r.s().fail(); r.clock.advance(2500); r.live(W({ you: YOU })); }
+    const before = r.pings();
+    r.clock.advance(25000);
+    check('three lost links later the page still pings once every 25 s (one chain, not four)', r.dock.state() === 'live' && r.pings() - before === 1, r.pings() - before);
+    r.clock.advance(50000);
+    check('... and once more for each 25 s after that', r.pings() - before === 3);
+}
 {   // the tab: hidden is not painted, visible is made again
     const r = rig();
     r.live(W({ you: YOU, history: HISTORY }));
@@ -380,7 +428,7 @@ function rig(o) {
     check('... and what came while the tab was hidden is not unread when the log is open on Home (it is on the screen now), but is when the dock is folded', r.pill() === '' && (() => { const q = rig(); q.live(W({ you: YOU })); q.dock.open(false); q.hidden(true); q.s().recv(L(5, 'a', 'x')); q.hidden(false); return q.pill() === '1'; })());
 }
 {   // visible again after the link was lost: do not wait for the timer (but not twice in the same second)
-    const r = rig({ random: () => 0 });
+    const r = rig({ random: () => 1 });
     r.live(W({})); r.hidden(true); r.s().fail();
     const n = r.sockets.length;
     r.clock.advance(300);
@@ -389,16 +437,60 @@ function rig(o) {
     r.clock.advance(5000);
     const m = r.sockets.length;
     r.hidden(true); r.s().fail(); r.clock.advance(1100); r.hidden(false);
-    check('a tab that comes back while the link is down does not wait for the timer (the wait is 2 s, a second and a tenth have passed)', r.sockets.length === m + 1 && r.dock.state() !== 'live');
-    const q = rig({ random: () => 0 });
-    q.s().fail(); q.clock.advance(1000); q.s().fail(); q.clock.advance(2000); q.s().fail();
+    check('a tab that comes back while the link is down does not wait for the timer (the wait is 3 s, a second and a tenth have passed)', r.sockets.length === m + 1 && r.dock.state() !== 'live');
+    const q = rig({ random: () => 1 });
+    q.s().fail(); q.clock.advance(1500); q.s().fail(); q.clock.advance(3000); q.s().fail();
     const k = q.sockets.length;
     q.clock.advance(100);
     (q.win.listeners.online || []).forEach((fn) => fn({}));
     check('the network coming back (the page\'s online event) within a second of the last try waits for the timer', q.sockets.length === k);
     q.clock.advance(1000);
     (q.win.listeners.online || []).forEach((fn) => fn({}));
-    check('... later it is a reason to try now (the wait is 4 s, a second and a tenth have passed)', q.sockets.length === k + 1);
+    check('... later it is a reason to try now (the wait is 6 s, a second and a tenth have passed)', q.sockets.length === k + 1);
+}
+{   // a flood of lines is not read out line by line
+    const r = rig();
+    r.live(W({ you: YOU, history: HISTORY }));
+    r.clock.advance(400);
+    const news = () => one(r.root, 'gc-news');
+    check('(at rest the log is a polite live region, and the summary place is a polite status that says nothing)', r.log().getAttribute('aria-live') === 'polite' && news().getAttribute('role') === 'status' && news().getAttribute('aria-live') === 'polite' && news().textContent === '');
+    r.s().recv(L(50, 'a', '1')); r.s().recv(L(51, 'a', '2'));
+    check('the first two lines of a moment are read out as they come (the log stays live)', r.log().getAttribute('aria-live') === 'polite');
+    for (let i = 3; i <= 10; i++) r.s().recv(L(50 + i, 'a', String(i)));
+    check('the third line of the same 3 s turns the log quiet: the lines are in it, a screen reader is not told each one', r.log().getAttribute('aria-live') === 'off' && r.rows().length === 13 && news().textContent === '');
+    r.clock.advance(2999);
+    check('... for the 3 s of the window', r.log().getAttribute('aria-live') === 'off' && news().textContent === '');
+    r.clock.advance(1);
+    check('... then the log is live again and one line says how many were not read: "8 more messages"', r.log().getAttribute('aria-live') === 'polite' && news().textContent === '8 more messages');
+    r.s().recv(L(70, 'a', 'x')); r.s().recv(L(71, 'a', 'y')); r.s().recv(L(72, 'a', 'z'));
+    r.clock.advance(3000);
+    check('a window of three lines has one that is not read: "One more message"', news().textContent === 'One more message' && r.log().getAttribute('aria-live') === 'polite');
+    for (let i = 0; i < 8; i++) { r.s().recv(L(80 + i, 'a', 'slow ' + i)); r.clock.advance(2000); }
+    check('a line every 2 s for 16 s is never quiet and never summarized', r.log().getAttribute('aria-live') === 'polite' && news().textContent === 'One more message');
+    const q = rig();
+    q.live(W({ you: YOU }));
+    q.clock.advance(400);
+    q.dock.open(false);
+    for (let i = 0; i < 20; i++) q.s().recv(L(200 + i, 'a', 'folded ' + i));
+    q.clock.advance(3000);
+    check('a log that is folded gets no line painted, so nothing is read and nothing is summarized, however many come', q.log().getAttribute('aria-live') === 'polite' && one(q.root, 'gc-news').textContent === '' && q.pill() === '20');
+    const rep2 = rig();
+    rep2.live(W({ you: YOU, history: HISTORY }));
+    for (let i = 0; i < 6; i++) rep2.s().recv(L(90 + i, 'a', String(i)));
+    rep2.clock.advance(250);
+    check('the quiet of a log that is made again and the quiet of a flood do not cut each other short (the log stays quiet until both are over)', rep2.log().getAttribute('aria-live') === 'off');
+    rep2.clock.advance(3000);
+    check('... then it is live', rep2.log().getAttribute('aria-live') === 'polite');
+}
+{   // a notice does not outlive the link, and the log is polite from the first moment
+    const r = rig();
+    r.live(W({ you: YOU }));
+    r.dock.say('');
+    check('(a word is up: "Write something first")', r.note() === 'Write something first');
+    r.s().fail();
+    check('the link goes: the note says that the chat is offline, not the old word', r.note() === 'Chat is offline');
+    const early = rig({ home: false });
+    check('the log is a polite live region before anything has happened (and before Home has told the dock that it shows)', early.log().getAttribute('aria-live') === 'polite' && early.log().getAttribute('role') === 'log');
 }
 {   // an error inside the dock stays inside it
     const g = rig();
@@ -444,6 +536,18 @@ function rig(o) {
     check('a long rest gives back the burst of 2 and no more', r.dock.say('a1') === '' && r.dock.say('a2') === '' && r.dock.say('a3') === 'rate');
     same('an empty line, a line of blanks and controls only, and one of 201 code points are refused here, with their words', [r.dock.say(''), r.dock.say(' \t \u202e '), r.dock.say('x'.repeat(201)), r.note()], ['empty', 'empty', 'long', 'That line is too long']);
     check('200 code points go (so do 200 emoji: 400 UTF-16 units), 201 do not', (r.clock.advance(60000), r.dock.say('y'.repeat(200)) === '') && (r.clock.advance(60000), r.dock.say('\ud83d\ude00'.repeat(200)) === '') && (r.clock.advance(60000), r.dock.say('\ud83d\ude00'.repeat(201)) === 'long'));
+    const same3 = rig();
+    same3.live(W({ you: YOU }));
+    const sent3 = [same3.dock.say('A'), (same3.clock.advance(2500), same3.dock.say('B')), (same3.clock.advance(2500), same3.dock.say('A')), (same3.clock.advance(2500), same3.dock.say('B'))];
+    same('a text that was sent 5 s ago is not sent again, even when another was sent in between (A, B, A and B within 31 s: the hub remembers them all and answers "rate", which is a mistake against the 20 a minute)', [sent3, same3.said().map((m) => m.text)], [['', '', 'rate', 'rate'], ['A', 'B']]);
+    same3.clock.advance(24000);
+    check('... after 31 s from the first, the first may go again; the second still may not (it went at 2.5 s)', same3.dock.say('A') === '' && same3.dock.say('B') === 'rate' && (same3.clock.advance(2600), same3.dock.say('B') === ''), same3.said().map((m) => m.text).join());
+    const proto = rig();
+    proto.live(W({ you: YOU }));
+    check('texts that are names of Object (__proto__, constructor, toString) are only texts to the pace', proto.dock.say('__proto__') === '' && (proto.clock.advance(2500), proto.dock.say('constructor') === '') && (proto.clock.advance(2500), proto.dock.say('__proto__') === 'rate') && proto.errors.length === 0);
+    const lt = rig();
+    lt.live(W({ you: YOU }));
+    same('a line with < or > is not sent (the hub refuses it, and a refusal is a mistake against the 20 a minute): "Lines cannot hold < or >"', [lt.dock.say('a < b'), lt.note(), lt.dock.say('x > y'), lt.sockets[0].sent.length, lt.dock.say('fine') === ''], ['markup', 'Lines cannot hold < or >', 'markup', 0, true]);
     check('the field takes at most 400 characters (a paste cannot be a megabyte), and nothing threw', r.field().getAttribute('maxlength') === '400' && r.errors.length === 0);
 }
 {   // fold, strip, unread, the Room
@@ -565,6 +669,27 @@ function bring(env) {                                     // the two files arriv
     env.advance(10);
     check('show(home) again does not load the dock a second time', fresh(env).length === 2 && env.$('home').children.length === 4);
 }
+{   // a dialog over the page, and the hand-off to the game, take the dock's keys and presses too (the focus does not go behind a modal)
+    const env = runLobby('', { 'ants.name': 'Maya' }, { picker: true, stayHome: true });
+    hubFor(env); env.advance(0); bring(env);
+    const root = env.$('home').children[3];
+    check('(the dock is there and takes presses)', root.id === 'gchat' && !root.hasAttribute('inert'));
+    env.home('mine').click();
+    env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+    env.$('browse').click();
+    check('the map list is a dialog: the dock is inert with the bars, the Room and the strips behind it', root.hasAttribute('inert') && env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert'));
+    const late = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
+    hubFor(late); late.advance(0);
+    late.win.AntsHomeChat = H.loadFile('home/chat.js', late.scope).AntsHomeChat;
+    const hold = late.home('mine'); hold.click();
+    const sock = late.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
+    sock.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+    fresh(late).forEach((n) => n.onload());
+    const lateRoot = late.$('home').children[3];
+    check('a dock that is mounted while the page is on its way to the game is inert from the start', late.assigned.length === 1 && lateRoot.id === 'gchat' && lateRoot.hasAttribute('inert') && late.home('hbar').hasAttribute('inert'));
+    late.advance(15000);
+    check('... and 15 s later, when Home is free, so is the dock', !lateRoot.hasAttribute('inert') && !late.home('hbar').hasAttribute('inert'));
+}
 {   // a link to a room opens the Room: no Home, no dock until Home is shown
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Sam' });
     env.advance(10);
@@ -602,11 +727,12 @@ function bring(env) {                                     // the two files arriv
     check('a dock whose mount throws is nothing: no throw into the page, Home and the Room go on', !threw && broken.screen() === 'home' && broken.sockets.length === 1);
     const odd = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     odd.advance(0);
-    odd.win.AntsHomeChat = { mount() { return { shown() { throw new Error('a dock that breaks later'); } }; } };
+    let told = 0;
+    odd.win.AntsHomeChat = { mount() { return { shown() { if (++told > 1) throw new Error('a dock that breaks later'); } }; } };
     fresh(odd).forEach((n) => n.onload());
     let oddThrew = false;
     try { odd.home('mine').click(); odd.roomBar('rhome').click(); } catch (e) { oddThrew = true; }
-    check('a dock that breaks when it is told which screen shows is nothing: Home and the Room go on', !oddThrew && odd.screen() === 'home' && odd.sockets.length === 1);
+    check('a dock that breaks when it is told which screen shows (after it was mounted well) is nothing: Home and the Room go on, and each screen is told to it', !oddThrew && odd.screen() === 'home' && odd.sockets.length === 1 && told >= 3, told);
     const lone = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     lone.advance(0); fresh(lone).forEach((n) => n.onload());
     lone.home('mine').click();

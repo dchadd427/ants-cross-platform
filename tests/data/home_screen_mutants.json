@@ -60,8 +60,8 @@
   {
    "id": "leave_button_stays_on_the_room",
    "file": "web/home/home.js",
-   "old": "var leave = button('leave', TEXT.leave, function () { page.leave(); show('home', 'push'); });",
-   "new": "var leave = button('leave', TEXT.leave, function () { page.leave(); });",
+   "old": "function () { if (stalled) return; page.leave(); show('home', 'push'); }",
+   "new": "function () { if (stalled) return; page.leave(); }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -466,8 +466,8 @@
   {
    "id": "inert_does_nothing",
    "file": "web/home/home.js",
-   "old": "[bar, rbar].forEach(function (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });",
-   "new": "[bar].forEach(function (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });",
+   "old": "[bar, rbar, dock && dock.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
+   "new": "[bar].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -886,7 +886,7 @@
   {
    "id": "hand_off_timer_missing",
    "file": "web/home/home.js",
-   "old": "            goingTimer = setTimeout(function () { goingTimer = null; going = false; opening.hidden = true; inert(held); }, OPENING_MS);\n",
+   "old": "            goingTimer = setTimeout(function () {                // it did not come: Home takes presses again, but the seat may still be the game's (a slow page), so Leave room stays off, and the page says so\n                goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);\n                try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }\n            }, OPENING_MS);\n",
    "new": "",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -900,22 +900,22 @@
   {
    "id": "hand_off_timer_leaves_the_card",
    "file": "web/home/home.js",
-   "old": "going = false; opening.hidden = true; inert(held); }, OPENING_MS);",
-   "new": "going = false; inert(held); }, OPENING_MS);",
+   "old": "goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);",
+   "new": "goingTimer = null; going = false; stalled = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "hand_off_timer_leaves_the_bars_inert",
    "file": "web/home/home.js",
-   "old": "going = false; opening.hidden = true; inert(held); }, OPENING_MS);",
-   "new": "going = false; opening.hidden = true; }, OPENING_MS);",
+   "old": "goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);",
+   "new": "goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true');",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "hand_off_timer_frees_what_a_dialog_holds",
    "file": "web/home/home.js",
-   "old": "going = false; opening.hidden = true; inert(held); }, OPENING_MS);",
-   "new": "going = false; opening.hidden = true; inert(false); }, OPENING_MS);",
+   "old": "goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);",
+   "new": "goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(false);",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -928,8 +928,8 @@
   {
    "id": "hand_off_timer_keeps_going_forever",
    "file": "web/home/home.js",
-   "old": "goingTimer = setTimeout(function () { goingTimer = null; going = false;",
-   "new": "goingTimer = setTimeout(function () { goingTimer = null; going = going;",
+   "old": "goingTimer = null; going = false; stalled = true;",
+   "new": "goingTimer = null; going = going; stalled = true;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -951,6 +951,97 @@
    "file": "web/home/home.css",
    "old": "@media (max-width: 339px) { .rbar .hbrand {",
    "new": "@media (max-width: 389px) { .rbar .hbrand {",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_page_not_told",
+   "file": "web/home/home.js",
+   "old": "try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_page_that_throws_reaches_home",
+   "file": "web/home/home.js",
+   "old": "try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }",
+   "new": "if (page.stalled) page.stalled();",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_stays_on_when_stalled",
+   "file": "web/home/home.js",
+   "old": "leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);",
+   "new": "inert(held);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_not_said_to_a_screen_reader",
+   "file": "web/home/home.js",
+   "old": "leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);",
+   "new": "leave.disabled = true; inert(held);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_press_goes_through_when_stalled",
+   "file": "web/home/home.js",
+   "old": "function () { if (stalled) return; page.leave(); show('home', 'push'); }",
+   "new": "function () { page.leave(); show('home', 'push'); }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_is_never_remembered",
+   "file": "web/home/home.js",
+   "old": "goingTimer = null; going = false; stalled = true;",
+   "new": "goingTimer = null; going = false;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_words_changed",
+   "file": "web/lobby.html",
+   "old": "'The game did not open. Reload this page to get your seat back.'",
+   "new": "'Something went wrong.'",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_strip_without_its_button",
+   "file": "web/lobby.html",
+   "old": "$('banner-x').hidden = false; $('banner-x').textContent = 'Reload'; $('banner').hidden = false;",
+   "new": "$('banner-x').hidden = true; $('banner-x').textContent = 'Reload'; $('banner').hidden = false;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_button_has_other_words",
+   "file": "web/lobby.html",
+   "old": "$('banner-x').textContent = 'Reload'; $('banner').hidden = false;",
+   "new": "$('banner-x').textContent = 'OK'; $('banner').hidden = false;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_button_does_not_reload",
+   "file": "web/lobby.html",
+   "old": "else if (kind === 'version' || kind === 'stalled') window.location.reload();",
+   "new": "else if (kind === 'version') window.location.reload();",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_strip_is_not_a_warning",
+   "file": "web/lobby.html",
+   "old": "$('banner-text').textContent = 'The game did not open. Reload this page to get your seat back.'; $('banner').className = 'banner warn';",
+   "new": "$('banner-text').textContent = 'The game did not open. Reload this page to get your seat back.'; $('banner').className = 'banner';",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_strip_never_shown",
+   "file": "web/lobby.html",
+   "old": "$('banner-x').textContent = 'Reload'; $('banner').hidden = false;\n        }",
+   "new": "$('banner-x').textContent = 'Reload';\n        }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "page_gives_no_word_for_stalled",
+   "file": "web/lobby.html",
+   "old": "how: openHow, stalled: stalled,",
+   "new": "how: openHow,",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]

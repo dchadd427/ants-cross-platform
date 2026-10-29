@@ -150,6 +150,40 @@ async function main() {
         await context.close();
     }
 
+    // ---- both strips above Home (a notice and the Rejoin button): the open panel is never a sliver, clears the bar where there is room for that, and the "Opening the game" card is above it ----
+    for (const [W, Hh, name] of [[320, 568, 'phone_small'], [360, 640, 'phone_360'], [390, 844, 'phone'], [568, 320, 'side_small'], [844, 390, 'side'], [1280, 800, 'desktop']]) {
+        hub.set({ login: false, you: null, mode: 'normal', online: 7, history: HISTORY });
+        const context = await browser.newContext({ viewport: { width: W, height: Hh }, deviceScaleFactor: 1 });
+        await context.addInitScript((port) => { try { localStorage.setItem('ants.rejoin.abcdef.0', JSON.stringify({ k: '0f1e2d3c4b5a69788796a5b4c3d2e1f0', s: 'ws://127.0.0.1:' + port + '/ws', t: Date.now() })); } catch (e) { /* no storage */ } }, hub.port);
+        const page = await context.newPage();
+        page.on('pageerror', (e) => errors.push(String(e && e.message || e)));
+        await page.goto(site.url + '/', { waitUntil: 'load' });
+        await page.waitForSelector('#gchat', { timeout: 5000 });
+        await page.evaluate(() => document.querySelector('.hbar .mine').click());       // (My room: the game server is not there: the notice strip)
+        await sleep(900);
+        await page.evaluate(() => document.querySelector('.rbar .rhome').click());
+        await sleep(200);
+        if ((await state(page)) === 'live/false' || (await state(page)) === 'offline/false' || (await state(page)) === 'connecting/false') await page.evaluate(() => document.querySelector('#gchat .gc-head').click());
+        await sleep(300);
+        const m = await page.evaluate(() => { const r = (sel) => { const e = document.querySelector(sel); if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { top: Math.round(q.top), bottom: Math.round(q.bottom), height: Math.round(q.height) }; }; return { banner: r('#banner'), rejoin: r('#rejoin'), home: r('#home'), bar: r('.hbar'), dock: r('#gchat') }; });
+        check(name + ' (' + W + ' x ' + Hh + ') with both strips above Home: the open panel is not a sliver (' + m.dock.height + ' px high)', !!m.banner && !!m.rejoin && m.dock.height >= (W <= 720 && Hh > 500 ? 200 : W > 720 && Hh > 500 ? 380 : 150), JSON.stringify(m));
+        if (name !== 'phone_small' && name !== 'side_small') check(name + ': ... and it clears the bar (top ' + m.dock.top + ', the bar ends at ' + m.bar.bottom + ')', m.dock.top >= m.bar.bottom - 1 || name === 'desktop', JSON.stringify(m));
+        check(name + ': nothing scrolls sideways, and the dock is inside the window', (await noSideways(page)) && m.dock.bottom <= Hh);
+        await shot(page, 'strips', name);
+        await context.close();
+    }
+    {
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+        const page = await context.newPage();
+        await page.goto(site.url + '/', { waitUntil: 'load' });
+        await page.waitForSelector('#gchat');
+        await page.evaluate(() => { const c = document.querySelector('.hopen'); c.hidden = false; document.querySelector('#gchat .gc-head').click(); });
+        await sleep(200);
+        const top = await page.evaluate(() => { const c = document.querySelector('.hopen').getBoundingClientRect(), d = document.querySelector('#gchat').getBoundingClientRect(); const x = Math.round(Math.max(c.left, d.left) + 20), y = Math.round(Math.max(c.top, d.top) + 10); const e = document.elementFromPoint(x, y); return { overlap: c.bottom > d.top && c.top < d.bottom, onTop: !!e && (e.closest('.hopen') !== null) }; });
+        check('the card "Opening the game…" is above an open dock where they meet', !top.overlap || top.onTop, JSON.stringify(top));
+        await context.close();
+    }
+
     // ---- the page's first paint comes before the chat's files; the page asks for nothing else; nothing is kept in the browser ----
     {
         site.requests.length = 0;

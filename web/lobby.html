@@ -680,7 +680,7 @@
             hideBanner();
             if (kind === 'busy') tryAgain();
             else if (kind === 'away') takeBack();
-            else if (kind === 'version') window.location.reload();
+            else if (kind === 'version' || kind === 'stalled') window.location.reload();
         });
 
         // ---- the cards ----
@@ -890,6 +890,11 @@
             var seat = client.seat, code = client.code, name = client.name;
             forgetSession(); leaveBack();              // (Back from the match makes a room again: this one is the match's now)
             window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);
+        }
+        function stalled() {                          // Home's 15 s are up and the hand-off is still here: this page's room is frozen (a page on its way takes no message) and its seat may still be the game's, so say it, with the Reload that gets the seat back ("Rejoin it")
+            if (!handing) return;
+            bannerKind = 'stalled'; $('banner-text').textContent = 'The game did not open. Reload this page to get your seat back.'; $('banner').className = 'banner warn';
+            $('banner-x').hidden = false; $('banner-x').textContent = 'Reload'; $('banner').hidden = false;
         }
         function shownTeam(seat) {
             if (!model) return 0;
@@ -1475,7 +1480,7 @@
 
         // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
         var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
-            info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow,
+            info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow, stalled: stalled,
             leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
         // ---- go ----

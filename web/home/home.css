@@ -46,7 +46,7 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
 .yant { --k: 2; position: absolute; width: calc(24px * var(--k)); height: calc(41px * var(--k)); transform: translate(-50%, -50%); filter: drop-shadow(3px 4px 0 rgba(60, 40, 10, .3)); }
 .yant .ant { margin: 0; }
 .y1 { left: 46%; top: 53%; } .y2 { left: 41%; top: 66%; } .y3 { left: 53%; top: 62%; } .y4 { left: 71.5%; top: 53%; } .y5 { left: 78%; top: 66%; }
-.hopen { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; width: max-content; max-width: calc(100% - 24px); padding: 18px 34px; font-size: 24px; text-align: center; color: var(--cream); background: var(--inset);
+.hopen { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; width: max-content; max-width: calc(100% - 24px); padding: 18px 34px; font-size: 24px; text-align: center; color: var(--cream); background: var(--inset);
     border: 3px solid var(--gold); border-radius: 6px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
 
 /* ---- the Room: the slim bar ---- */

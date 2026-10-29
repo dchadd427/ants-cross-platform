@@ -52,7 +52,7 @@ async function main() {
         const hub = await startHub({ login: false, you: null, history: HISTORY, online: 7 });
         const v = dockFor(hub);
         check('the dock opens one socket to /hub/ws of the page\'s own host', await until(() => hub.upgrades === 1 && v.dock.state() === 'live'));
-        check('the welcome is shown: the history as "name: text", the mod marked, the count, the read-only words, and no field', JSON.stringify(v.rows()) === JSON.stringify(['pebble: anyone up for Islands?', 'modclover: I have a room open', 'juniper: joining!']) && v.on() === '7 here now'
+        check('the welcome is shown: the history as "name: text", the mod marked, the count, the read-only words, and no field', JSON.stringify(v.rows()) === JSON.stringify(['pebble: anyone up for Islands?', 'mod clover: I have a room open', 'juniper: joining!']) && v.on() === '7 here now'
               && v.note() === 'Chat is read-only for now' && v.form().hidden === true && hub.received.length === 0);
         hub.say('pebble', 'a new line'); hub.say('x'.repeat(40), 'long name');
         check('a line that the hub sends is a line, a long name is cut', await until(() => v.rows().length === 5) && v.rows()[3] === 'pebble: a new line' && v.rows()[4] === 'x'.repeat(32) + '…: long name');
@@ -102,7 +102,7 @@ async function main() {
         const cut = Date.now();
         check('a cut socket is "Chat is offline" and "reconnecting…" at once', await until(() => v.dock.state() === 'offline') && v.note() === 'Chat is offline' && v.on() === 'reconnecting…' && v.dock.say('hi') === 'offline');
         hub.set({ history: HISTORY.concat([line(4, 'pebble', 'while you were away')]) });
-        check('the first retry is 1 to 1.25 s after the cut (the backoff starts at one second, with jitter), and the welcome after it replaces the log', await until(() => v.dock.state() === 'live', 3000) && Date.now() - cut >= 900 && Date.now() - cut < 2200 && hub.upgrades === 2);
+        check('the first retry is 1 to 1.5 s after the cut (the backoff starts at one second, with jitter), and the welcome after it replaces the log', await until(() => v.dock.state() === 'live', 3000) && Date.now() - cut >= 900 && Date.now() - cut < 2500 && hub.upgrades === 2);
         check('the line that came while the link was down is unread (the dock is folded), the history is not doubled', v.pill() === '1' && v.errors.length === 0);
         v.dock.open(true);
         check('... and opening the dock shows it once', v.rows().length === 4 && v.pill() === '');
