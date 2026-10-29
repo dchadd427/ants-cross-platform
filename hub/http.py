@@ -1,7 +1,8 @@
 """The little HTTP the hub speaks: read one request head, answer with one JSON body, close. The one request that does not end there is the WebSocket upgrade (hub/server.py).
 
-A request head is parsed strictly (docs/HUB.md, "The handshake"): CRLF line ends only, no folded lines, no control characters, at most 60 headers, and the headers that the hub
-believes (Origin, Upgrade, Connection, the Sec-WebSocket pair, X-Client-Address, Content-Length, Transfer-Encoding, Host) at most once. No request body is ever read.
+A request head is parsed strictly (docs/HUB.md, "The handshake"): CRLF line ends only (a stray CR or LF fails the patterns of the request line and of the header lines), no folded
+lines, no control characters, at most 60 headers, and the headers that the hub believes (Origin, Upgrade, Connection, the Sec-WebSocket pair, X-Client-Address, Content-Length,
+Transfer-Encoding, Host) at most once. No request body is ever read.
 """
 import json
 import re
@@ -44,8 +45,6 @@ def parse_head(head):
     if not text.endswith("\r\n\r\n"):
         raise HttpError(400, "head")
     lines = text[:-4].split("\r\n")
-    if any("\r" in l or "\n" in l for l in lines):
-        raise HttpError(400, "line_end")
     m = REQUEST_LINE.match(lines[0])
     if not m:
         raise HttpError(400, "request_line")

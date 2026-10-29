@@ -12,10 +12,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
-from hub import admin, chat as chatmod, config, limits as limitmod, session, store as storemod  # noqa: E402
+from hub import admin, chat as chatmod, config, limits as limitmod, log as logmod, session, store as storemod  # noqa: E402
 
 LIMITS = limitmod.Limits()
 ALICE = session.Identity("1001", "alice", False)
@@ -294,6 +295,20 @@ class TheRules(WorldTest):
             self.assertEqual(peer.strikes, 1, repr(raw[:40]))
         self.assertEqual(self.w.store.recent_lines(50), [])
 
+    def test_a_message_too_deep_for_the_decoder_is_a_mistake_not_a_crash(self):
+        # a frame of 2 KB holds up to 2,000 brackets: Pythons before 3.12 give up (RecursionError) well below that, newer ones read them; the handler must live through either
+        real_loads, deep = json.loads, "[" * 2000
+        for decoder_error in (RecursionError("maximum recursion depth exceeded"), ValueError("too deep")):
+            def decoder(raw, **kw):
+                if raw == deep:
+                    raise decoder_error
+                return real_loads(raw, **kw)
+            peer = self.w.join(ALICE)
+            with mock.patch.object(json, "loads", side_effect=decoder):
+                self.w.chat.on_text(peer, deep)
+            self.assertEqual(peer.sent, [{"t": "err", "code": "bad"}])
+            self.assertEqual(peer.strikes, 1)
+
     def test_extra_fields_are_ignored(self):
         self.w.chat.on_text(self.alice, '{"t":"say","text":"hi","id":99,"who":"bob","mod":true,"x":[1,2]}')
         line = self.reader.kinds("line")[0]
@@ -386,6 +401,19 @@ class TheModerators(WorldTest):
         self.assertEqual(len(self.reader.kinds("del")), 1)           # told once
         self.assertEqual(self.w.chat.welcome(self.reader)["history"], [])
 
+    def test_two_deletions_by_the_command_line_are_both_announced(self):
+        for n in range(3):
+            self.w.clock.now += 3
+            self.w.say(self.alice, "line %d" % n)
+        other = storemod.Store(self.w.db, clock=self.w.wall)
+        self.addCleanup(other.close)
+        other.delete_line(1, "command line")
+        self.w.chat.sync_deletions()
+        other.delete_line(3, "command line")
+        self.w.chat.sync_deletions()
+        self.assertEqual(self.reader.kinds("del"), [{"t": "del", "id": 1}, {"t": "del", "id": 3}])
+        self.assertEqual([h["text"] for h in self.w.chat.welcome(self.reader)["history"]], ["line 1"])
+
     def test_the_commands_are_for_moderators_only(self):
         self.w.say(self.alice, "hi")
         self.w.clock.now += 3
@@ -429,6 +457,37 @@ class TheStrikes(unittest.TestCase):
         strikes = limitmod.Strikes(2, 60.0)
         strikes.add(0.0)
         self.assertTrue(strikes.add(59.9))
+
+
+class TheLog(unittest.TestCase):
+    def lines(self, **fields):
+        out = io.StringIO()
+        logmod.Log(out, clock=lambda: 1_800_000_000.0).event("something", **fields)
+        return out.getvalue()
+
+    def test_one_line_for_each_event_with_the_time_in_utc(self):
+        self.assertEqual(self.lines(port=4040, why="origin"), "2027-01-15T08:00:00Z something port=4040 why=origin\n")
+
+    def test_a_value_from_a_client_cannot_forge_a_line_or_run_long(self):
+        out = self.lines(why="x\n2027-01-15T08:00:00Z open tag=forged", other="a b\tc\x00d\u202ee<b>", long="a" * 500)
+        self.assertEqual(out.count("\n"), 1)
+        self.assertEqual(out, "2027-01-15T08:00:00Z something why=x_2027-01-15T08:00:00Z_open_tag_forged other=a_b_c_d_e_b_ long=" + "a" * 60 + "\n")
+
+    def test_an_address_is_a_tag_that_changes_with_every_start(self):
+        a, b = logmod.Log(io.StringIO()), logmod.Log(io.StringIO())
+        self.assertEqual(a.tag("203.0.113.9"), a.tag("203.0.113.9"))
+        self.assertNotEqual(a.tag("203.0.113.9"), a.tag("203.0.113.10"))
+        self.assertNotEqual(a.tag("203.0.113.9"), b.tag("203.0.113.9"))
+        self.assertRegex(a.tag("203.0.113.9"), r"^[0-9a-f]{8}$")
+
+    def test_a_stream_that_fails_does_not_stop_the_hub(self):
+        class Broken:
+            def write(self, text):
+                raise OSError("closed")
+
+            def flush(self):
+                raise OSError("closed")
+        logmod.Log(Broken()).event("something")
 
 
 class TheCounters(unittest.TestCase):
@@ -576,6 +635,15 @@ class TheStore(unittest.TestCase):
         self.assertEqual(self.store.deletions_since(1), [])
         self.assertEqual(self.store.recent_lines(10), [])
         self.assertEqual(self.store.lines(10)[0][5], 1)              # (kept, marked, for the moderators until its 7 days are up)
+
+    def test_every_deletion_has_a_number_of_its_own_so_that_none_is_missed(self):
+        ids = [self.store.add_line("1", "ann", "line %d" % n, False).id for n in range(3)]
+        self.assertTrue(self.store.delete_line(ids[0], "cli"))
+        self.assertEqual(self.store.last_deletion(), 1)
+        self.assertTrue(self.store.delete_line(ids[2], "cli"))
+        self.assertEqual(self.store.last_deletion(), 2)
+        self.assertEqual(self.store.deletions_since(0), [(1, ids[0]), (2, ids[2])])
+        self.assertEqual(self.store.deletions_since(1), [(2, ids[2])])           # what the hub has not heard of yet, and nothing it has
 
     def test_a_newer_database_is_refused(self):
         self.store.db.execute("PRAGMA user_version = 99")

@@ -782,10 +782,10 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
   },
   {
-   "id": "key_check_loose",
+   "id": "key_of_any_length_accepted",
    "file": "hub/ws.py",
-   "old": "    if len(key) != 24:\n        return False\n",
-   "new": "",
+   "old": "return len(base64.b64decode(key, validate=True)) == 16",
+   "new": "return True",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
   },
   {
@@ -813,13 +813,6 @@
    "id": "headers_unlimited",
    "file": "hub/http.py",
    "old": "    if len(lines) - 1 > MAX_HEADERS:",
-   "new": "    if False:",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
-  },
-  {
-   "id": "bare_line_feeds_accepted",
-   "file": "hub/http.py",
-   "old": "    if any(\"\\r\" in l or \"\\n\" in l for l in lines):",
    "new": "    if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
   },

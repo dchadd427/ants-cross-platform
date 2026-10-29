@@ -31,9 +31,7 @@ def accept_key(key):
 
 
 def valid_key(key):
-    """A Sec-WebSocket-Key: 16 random bytes in base64, 24 characters."""
-    if len(key) != 24:
-        return False
+    """A Sec-WebSocket-Key: 16 random bytes in base64 (24 characters with the padding; the decoder is strict)."""
     try:
         return len(base64.b64decode(key, validate=True)) == 16
     except (binascii.Error, ValueError):
