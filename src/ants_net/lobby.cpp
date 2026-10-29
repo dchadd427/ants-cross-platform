@@ -280,6 +280,9 @@ void HostLobby::elect_leader() {
         }
     }
     room_.leader = best;
+    // Protocol 22: a room is public because its leader said so. Whoever leads next, because that leader left, was thrown out or came back in another color (the lead goes with the person, so the seat does not
+    // tell), chose nothing and inherits nothing: the room is private again, and every caller shows the Room message.
+    if (public_ && (best == kNoLeader || guests_[best].join_order != public_by_)) public_ = false;
 }
 
 void HostLobby::remove_guest(uint8_t seat, bool notify_reject, RejectReason reason) {
@@ -1082,7 +1085,10 @@ void HostLobby::apply_visibility(bool want_public, uint32_t now_ms) {
     ++visibility_acts_;
     if (want_public == public_) return;                          // (the refresh: nothing to show)
     public_ = want_public;
-    if (public_) listed_ms_ = now_ms;
+    if (public_) {
+        listed_ms_ = now_ms;
+        public_by_ = guests_[room_.leader].join_order;                // (the leader is a guest: the room is public for as long as this person leads, see elect_leader)
+    }
     broadcast_room();
 }
 

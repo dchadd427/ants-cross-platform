@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the public rooms of network protocol 22 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): what the list of games shows and leaves out (Room::listing: private, a match, a START that waits, only held seats, no free color, kept rematch seats), its order and cap (RoomManager::lobbies), its door and answer (control.cpp), the leader's Visibility in the lobby (who is heard, the budget, what is counted, what is forgiven), the idle rule that makes an unused public room private, the colors a listing is made of, the codec of the message and of the Room flag in C++ and in the page's lobby_net.js. Every mutant must be caught. Run from the checkout: python3 tools/mutate.py tests/data/public_rooms_mutants.json --keep-going --jobs 4 --timeout 1800. Not mutated: an address in the output, because nothing of the lobby gives a listing an address (HostLobby keeps it for the match and has no reader of it); tests/test_server/test_server_public.cpp S3.236 searches the whole answer for the addresses of the pages' links all the same.",
+ "note": "Mutants of the public rooms of network protocol 22 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): what the list of games shows and leaves out (Room::listing: private, a match, a START that waits, only held seats, no free color, kept rematch seats), its order and cap (RoomManager::lobbies), its door and answer (control.cpp), the leader's Visibility in the lobby (who is heard, the budget, what is counted, what is forgiven), the idle rule that makes an unused public room private, the colors a listing is made of, the lead (a room is public for the leader who said so only), the budget that is the Visibility's own, the host's name, the codec of the message and of the Room flag in C++ and in the page's lobby_net.js. Every mutant must be caught. Run from the checkout: python3 tools/mutate.py tests/data/public_rooms_mutants.json --keep-going --jobs 4 --timeout 1800. Not mutated: an address in the output, because nothing of the lobby gives a listing an address (HostLobby keeps it for the match and has no reader of it); tests/test_server/test_server_public.cpp S3.236 searches the whole answer for the addresses of the pages' links all the same.",
  "mutants": [
   {
    "id": "listing_private_room_listed",
@@ -64,8 +64,8 @@
   {
    "id": "listing_host_is_first_seat",
    "file": "src/ants_server/room.cpp",
-   "old": "out.host = lobby_.room().slots[leader].name;",
-   "new": "out.host = lobby_.room().slots[0].name;",
+   "old": "const std::string& leader_name = lobby_.room().slots[leader].name;",
+   "new": "const std::string& leader_name = lobby_.room().slots[0].name;",
    "build": [
     "test_server"
    ],
@@ -144,8 +144,8 @@
   {
    "id": "listing_other_name_in_the_output",
    "file": "src/ants_server/room.cpp",
-   "old": "out.host = lobby_.room().slots[leader].name;",
-   "new": "out.host = lobby_.room().slots[leader].name + \" \" + lobby_.room().slots[(leader + 1u) % 4u].name;",
+   "old": "const std::string& leader_name = lobby_.room().slots[leader].name;",
+   "new": "const std::string leader_name = lobby_.room().slots[leader].name + \" \" + lobby_.room().slots[(leader + 1u) % 4u].name;",
    "build": [
     "test_server"
    ],
@@ -504,8 +504,8 @@
   {
    "id": "visibility_listing_time_never_set",
    "file": "src/ants_net/lobby.cpp",
-   "old": "    if (public_) listed_ms_ = now_ms;\n",
-   "new": "    if (public_) listed_ms_ = now_ms - now_ms;\n",
+   "old": "        listed_ms_ = now_ms;\n        public_by_",
+   "new": "        listed_ms_ = now_ms - now_ms;\n        public_by_",
    "build": [
     "test_lobby"
    ],
@@ -514,8 +514,8 @@
   {
    "id": "visibility_change_not_shown",
    "file": "src/ants_net/lobby.cpp",
-   "old": "    if (public_) listed_ms_ = now_ms;\n    broadcast_room();",
-   "new": "    if (public_) listed_ms_ = now_ms;",
+   "old": "    }\n    broadcast_room();\n}\n\n// A public room in which nothing",
+   "new": "    }\n}\n\n// A public room in which nothing",
    "build": [
     "test_lobby"
    ],
@@ -1047,6 +1047,86 @@
    "old": "visibility: [2, 0.8]",
    "new": "visibility: [1, 0.8]",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "leader_change_keeps_public",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "guests_[best].join_order != public_by_)) public_ = false;",
+   "new": "guests_[best].join_order != public_by_)) {}",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "leader_change_unlists_always",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "(best == kNoLeader || guests_[best].join_order != public_by_)",
+   "new": "(best == kNoLeader || true)",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "no_leader_keeps_public",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "(best == kNoLeader || guests_[best].join_order != public_by_)",
+   "new": "(best != kNoLeader && guests_[best].join_order != public_by_)",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "public_by_never_set",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "public_by_ = guests_[room_.leader].join_order;",
+   "new": "public_by_ = 0;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "visibility_shares_the_plans_budget",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "guests_[seat].visibility.take(",
+   "new": "guests_[seat].plans.take(",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "plans_share_the_visibility_budget",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "guests_[seat].plans.take(now_ms, kPlanBurst, kPlansPerSecond, kPlanExcessBurst)",
+   "new": "guests_[seat].visibility.take(now_ms, kPlanBurst, kPlansPerSecond, kPlanExcessBurst)",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "listing_nameless_host_empty",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.host = leader_name.empty() ? \"Player \" + std::to_string(static_cast<unsigned>(leader) + 1u) : leader_name;",
+   "new": "out.host = leader_name;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_nameless_host_off_by_one",
+   "file": "src/ants_server/room.cpp",
+   "old": "static_cast<unsigned>(leader) + 1u) : leader_name",
+   "new": "static_cast<unsigned>(leader)) : leader_name",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
   }
  ]
 }

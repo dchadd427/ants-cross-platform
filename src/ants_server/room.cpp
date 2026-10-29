@@ -1136,7 +1136,8 @@ bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
     if (free_now == 0) return false;
     out = LobbyListing{};
     out.code = spec_.code;
-    out.host = lobby_.room().slots[leader].name;
+    const std::string& leader_name = lobby_.room().slots[leader].name;
+    out.host = leader_name.empty() ? "Player " + std::to_string(static_cast<unsigned>(leader) + 1u) : leader_name;      // (a Hello with no name: the list names the person as the lobby names a player who gave none)
     out.map = lobby_.map_name();
     out.mode = lobby_.mode();
     out.people = static_cast<uint8_t>(lobby_.people_colors());

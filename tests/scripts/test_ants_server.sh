@@ -1130,6 +1130,13 @@ try:
     out['busy'] = '%d/%d' % (busy['matches'], busy['players'])
 except Exception as error:
     out['busy'] = 'error:%s' % error
+if 'list_made_private' in out:                                                      # (after the status above, which counts the two pages) the leader makes the room public and goes: Bea leads a room she never made public
+    a.sock.sendall(frame(bytes([35, 1])))
+    out['list_public_again'] = wait_listed('lob00001', 3.0)
+    a.sock.sendall(frame(bytes([17])))                                              # Leave
+    time.sleep(0.6)
+    out['list_leader_left'] = list_text()
+    out['new_leader_sees_public'] = 'yes' if sees_public(b) else 'no'
 for key in sorted(out):
     print('%s=%s' % (key, out[key]))
 PY
@@ -1160,6 +1167,7 @@ check "... the leader's Visibility makes the room public: the list holds its cod
 check "... the answer holds no key, no address, no other person's name, no platform and no private room's code" "$([ "$(lobby_value list_leaks)" = "none" ]; echo $?)"
 check "... the door answers GET only and no query (a POST is 405 and a query 404)" "$([ "$(lobby_value list_post)" = "405" ] && [ "$(lobby_value list_query)" = "404" ]; echo $?)"
 check "... and the leader's Visibility of private takes the room out of the list again" "$([ "$(lobby_value list_made_private)" = '{"format":1,"lobbies":[],"count":0}' ]; echo $?)"
+check "... a public room whose leader goes is private and off the list, and the person who leads next is told it is private (the choice was the leader's)" "$([ "$(lobby_value list_public_again)" != '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value list_leader_left)" = '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value new_leader_sees_public)" = "no" ]; echo $?)"
 stop_server
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 0 > "$WORK/lobby0.log" 2>&1 &
 SERVER_PID=$!

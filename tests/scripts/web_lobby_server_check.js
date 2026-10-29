@@ -460,7 +460,11 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         check('A makes the room private', A.setPublic(false) === true);
         await step('both pages see it private', () => () => A.room.isPublic === false && B.room.isPublic === false && B.room.flags === 3);
         check('(nobody was thrown out and the links stay up)', A.status === 'online' && B.status === 'online' && A.count('refused') === 0 && B.count('refused') === 0);
+        await sleep(1400);                                                                          // (the page keeps a little under the server's pace: a request is back)
+        check('A makes the room public again', A.setPublic(true) === true);
+        await step('both pages see it public', () => () => A.room.isPublic === true && B.room.isPublic === true);
         A.leave();
+        await step('A goes: B leads, and the room is private (B never chose it)', () => () => B.isLeader() === true && B.room.isPublic === false && B.room.flags === 3, 5000);
         B.leave();
     });
 

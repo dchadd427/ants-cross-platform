@@ -59,6 +59,7 @@
 // (8) Public rooms (protocol 22, docs/NETWORK_PORT.md "Protocol 22"). A new lobby room is private. The leader of an open lobby room, while its START does not wait, makes it public or private with VisibilityMsg (within a budget of its
 // own: flood.hpp); the Room message shows it (kRoomPublic) and the server lists the room (is_public(), listed_age_ms()). A room whose people have done nothing with it for Config::public_idle_ms (activity() has not moved: answered pings are no
 // use) becomes private by itself, unlist_count() counts those; a Visibility that says public to a public room is the leader's page looking at it still, and counts as use, so it keeps the room public.
+// A room is public because its leader said so: when another person leads (the leader left or was thrown out), it is private again and the new leader chooses for itself.
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
@@ -325,7 +326,7 @@ public:
     uint32_t ignored_removes() const noexcept { return ignored_removes_; }
     /// People that the leader removed (a RemoveMsg that was done)
     uint32_t removals() const noexcept { return removals_; }
-    /// Protocol 22: the room is public (the leader said so, and no idle time has made it private since). Always false for a room that is no lobby room.
+    /// Protocol 22: the room is public (its leader said so, and neither the idle time nor another person's lead has made it private since). Always false for a room that is no lobby room.
     bool is_public() const noexcept { return public_; }
     /// ... since when, by the clock of update() (the Visibility that made it public), as an age at `now_ms`: how long it has been listed, in ms (0 for a private room); it stops growing at kLobbyListedAgeCapMs
     uint32_t listed_age_ms(uint32_t now_ms) const noexcept { return public_ ? std::min<uint32_t>(now_ms - listed_ms_, kLobbyListedAgeCapMs) : 0u; }
@@ -333,7 +334,7 @@ public:
     uint32_t ignored_visibility() const noexcept { return ignored_visibility_; }
     /// Visibility messages that were done: a room made public or private, and the repeat of "public" to a public room (the leader's page looking at its room still: use of the room, activity())
     uint32_t visibility_acts() const noexcept { return visibility_acts_; }
-    /// Rooms that became private by themselves (public_idle_ms)
+    /// Rooms that became private by themselves for their idle time (public_idle_ms; a change of leader is not counted)
     uint32_t unlist_count() const noexcept { return unlists_; }
     /// The people of the room whose connection is open now (a held seat, a reserved seat and a bot are not): what a listing of the room needs besides its colors
     size_t connected() const noexcept;
@@ -488,6 +489,7 @@ private:
     uint32_t removals_{0};
     bool public_{false};                     // protocol 22: the room is public (a lobby room only) ...
     uint32_t listed_ms_{0};                  // ... since this time of the clock of the pass that heard the leader
+    uint32_t public_by_{0};                  // ... by the guest with this join_order, the leader who said so: when somebody else leads, the room is private again (elect_leader)
     uint32_t ignored_visibility_{0};
     uint32_t visibility_acts_{0};
     uint32_t unlists_{0};

@@ -107,7 +107,7 @@ void run_lobby_public_tests() {
             ASSERT_TRUE(room.host.is_public() && everyone_sees(room, true));
             ASSERT_EQ(room.host.listed_age_ms(room.now), listed + 1400);                           // (and the room was not listed again: it has been public since the first message)
         }
-        {   // the leader who goes: the next one is heard, the one who went is not (it is not here), and the flag stays with the room
+        {   // the leader who goes takes the choice with it: the next one leads a private room, is heard, and chooses for itself
             Room room(lobby_room_config(204));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
@@ -115,12 +115,18 @@ void run_lobby_public_tests() {
             settle(room);
             ASSERT_TRUE(room.guests[ann].lobby->request_visibility(true));
             room.run(200);
+            ASSERT_TRUE(room.host.is_public() && everyone_sees(room, true));
             room.guests[ann].lobby->leave();
             room.run(300);
-            ASSERT_TRUE(room.guests[bob].lobby->is_leader() && room.host.is_public() && everyone_sees(room, true));
-            room.guests[cat].client_end->send(encode(VisibilityMsg{false}));                       // (Cat does not lead)
+            ASSERT_TRUE(room.guests[bob].lobby->is_leader());
+            ASSERT_TRUE(!room.host.is_public() && !room.host.room().is_public() && everyone_sees(room, false));      // (Bob never chose it)
+            ASSERT_TRUE(room.host.listed_age_ms(room.now) == 0 && room.host.unlist_count() == 0);
+            room.guests[cat].client_end->send(encode(VisibilityMsg{true}));                        // (Cat does not lead)
             room.run(100);
-            ASSERT_TRUE(room.host.is_public() && room.host.ignored_visibility() == 1);
+            ASSERT_TRUE(!room.host.is_public() && room.host.ignored_visibility() == 1);
+            ASSERT_TRUE(room.guests[bob].lobby->request_visibility(true));
+            room.run(100);
+            ASSERT_TRUE(room.host.is_public() && everyone_sees(room, true));
             ASSERT_TRUE(room.guests[bob].lobby->request_visibility(false));
             room.run(100);
             ASSERT_TRUE(!room.host.is_public() && everyone_sees(room, false));
@@ -144,6 +150,62 @@ void run_lobby_public_tests() {
             room.run(300);
             ASSERT_TRUE(room.guests[bob2].lobby->phase() == ClientLobby::Phase::InRoom && room.guests[bob2].lobby->room_is_public());
             ASSERT_TRUE(room.host.is_public() && room.host.unlist_count() == 0);
+        }
+        {   // the leader's connection ends and the seat is held: the person still leads and the room is still public (for as long as the seat is held); a newcomer does not change it; the key brings the person back to it
+            Room room(lobby_room_config(209));
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            settle(room);
+            ASSERT_TRUE(room.guests[ann].lobby->request_visibility(true));
+            room.run(200);
+            const SeatKey ann_key = room.guests[ann].lobby->key();
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            room.guests[ann].client_end->close();
+            room.run(200);
+            ASSERT_TRUE(room.host.held(ann_seat) && room.host.leader() == ann_seat && room.host.is_public());
+            const size_t cat = room.join_seat("Cat");                                                // (a newcomer is welcomed: the earliest person still leads)
+            room.run(300);
+            ASSERT_TRUE(room.host.leader() == ann_seat && room.host.is_public() && room.guests[cat].lobby->room_is_public());
+            const size_t ann2 = join_keyed(room, "Ann", ann_key);
+            room.run(300);
+            ASSERT_TRUE(room.guests[ann2].lobby->is_leader() && room.guests[ann2].lobby->room_is_public() && room.host.is_public());
+            ASSERT_TRUE(room.host.visibility_acts() == 1 && room.host.unlist_count() == 0);
+        }
+        {   // the leader is thrown out (eight messages that are no Visibility at all): the next person leads a room that it never made public, and nobody is told that it is public
+            Room room(lobby_room_config(210));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bea = room.join_seat("Bea");
+            settle(room);
+            ASSERT_TRUE(room.guests[ann].lobby->request_visibility(true));
+            room.run(200);
+            ASSERT_TRUE(room.host.is_public() && everyone_sees(room, true));
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            const std::vector<uint8_t> garbage = {static_cast<uint8_t>(MsgType::Visibility), 7};      // (the value is 0 or 1)
+            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send(garbage);
+            room.run(100);
+            ASSERT_TRUE(room.host.occupied(ann_seat) && room.host.is_public());
+            room.guests[ann].client_end->send(garbage);
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(ann_seat));
+            ASSERT_TRUE(room.guests[bea].lobby->is_leader());
+            ASSERT_TRUE(!room.host.is_public() && !room.host.room().is_public() && room.host.listed_age_ms(room.now) == 0);
+            ASSERT_TRUE(!room.guests[bea].lobby->room_is_public() && room.guests[bea].lobby->room().flags == (kRoomLeaderStarts | kRoomLobby));
+        }
+        {   // the only person leaves a public room: it is private, and the stranger who is welcomed next (the seat is free, the room lives on) leads a private room and sees it so
+            Room room(lobby_room_config(214));
+            const size_t ann = room.join_seat("Ann");
+            settle(room);
+            ASSERT_TRUE(room.guests[ann].lobby->request_visibility(true));
+            room.run(200);
+            ASSERT_TRUE(room.host.is_public());
+            room.guests[ann].lobby->leave();
+            room.run(300);
+            ASSERT_TRUE(room.host.leader() == kNoLeader && !room.host.is_public() && room.host.listed_age_ms(room.now) == 0);
+            const size_t eve = room.join_seat("Eve");
+            room.run(300);
+            ASSERT_TRUE(room.guests[eve].lobby->is_leader());
+            ASSERT_TRUE(!room.host.is_public() && !room.guests[eve].lobby->room_is_public() && room.guests[eve].lobby->room().flags == (kRoomLeaderStarts | kRoomLobby));
+            ASSERT_TRUE(room.host.visibility_acts() == 1 && room.host.activity() >= 1u);
         }
         {   // a room that is no lobby room is never public: a client does not send the message, the room takes it for garbage (eight throw the sender out) and counts nothing
             HostLobby::Config hc = lobby_room_config(206);
@@ -190,6 +252,7 @@ void run_lobby_public_tests() {
             room.run(300);
             ASSERT_FALSE(room.host.occupied(ann_seat));                                            // the eighth
             ASSERT_EQ(room.host.visibility_acts(), 1u);
+            ASSERT_TRUE(!room.host.is_public() && !room.guests[pia].lobby->room_is_public());      // (Pia leads now and chose nothing: the room is private)
         }
         {   // a match that loads hears no Visibility either: a stray one is counted without offence
             Room room(lobby_room_config(208));
@@ -270,6 +333,44 @@ void run_lobby_public_tests() {
             room.run(300);
             ASSERT_FALSE(room.host.occupied(bob_seat));
             ASSERT_TRUE(!room.host.is_public() && room.host.visibility_acts() == 0);
+        }
+        {   // the budget is the Visibility's own: the Plans that the leader has made use up the Plans' and none of it (six Plans, then a Visibility is still heard), and three Visibility messages use up theirs and none of the Plans'
+            using K = PlanKind;
+            Room room(lobby_room_config(215));
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            room.run(100);
+            ASSERT_TRUE(kPlanBurst == 6);
+            for (unsigned i = 0; i < kPlanBurst; ++i) {                                              // (Easy, Open, Easy, ...: each one changes the room)
+                ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, i % 2 == 0 ? K::Easy : K::Open})));
+            }
+            room.run(10);
+            ASSERT_EQ(room.host.plan_changes(), kPlanBurst);                                         // (all six were heard: the Plans' burst)
+            ASSERT_TRUE(room.guests[ann].lobby->request_visibility(true));
+            room.run(10);
+            ASSERT_TRUE(room.host.visibility_acts() == 1 && room.host.is_public());                  // (and the Visibility has a burst of its own, though the Plans have none left)
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Hard})));
+            room.run(10);
+            ASSERT_EQ(room.host.plan_changes(), kPlanBurst);                                         // (the seventh Plan has no budget left: dropped)
+        }
+        {
+            using K = PlanKind;
+            Room room(lobby_room_config(216));
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            room.run(100);
+            for (unsigned i = 0; i < kVisibilityBurst; ++i) room.guests[ann].client_end->send(encode(VisibilityMsg{i % 2 == 0}));
+            room.run(10);
+            ASSERT_EQ(room.host.visibility_acts(), kVisibilityBurst);                                // (public, private, public: the whole burst)
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));
+            room.run(10);
+            ASSERT_EQ(room.host.plan_changes(), 1u);                                                 // (the Plans' budget is whole)
+            for (unsigned i = 1; i < kPlanBurst; ++i) ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, i % 2 == 0 ? K::Easy : K::Hard})));
+            room.run(10);
+            ASSERT_EQ(room.host.plan_changes(), kPlanBurst);                                         // (... for all of its six)
+            room.guests[ann].client_end->send(encode(VisibilityMsg{false}));
+            room.run(10);
+            ASSERT_TRUE(room.host.visibility_acts() == kVisibilityBurst && room.host.is_public());   // (a fourth Visibility is beyond the Visibility's burst: dropped)
         }
     } TEST_END();
 

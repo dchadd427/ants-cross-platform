@@ -136,10 +136,12 @@ void run_public_room_tests() {
         const std::vector<std::string> want = {"code", "host", "map", "mode", "people", "bots", "free", "size", "age"};
         ASSERT_TRUE(first.keys() == want);
         ASSERT_TRUE(list.get("format").as_int_or(0) == 1 && list.get("count").as_int_or(-1) == 1);
-        // the leader goes: the next person leads, the list says that person's name, and the room stays public
+        // the leader goes: the next person leads, and the room is private (Bob never made it public): the list is empty. Bob chooses for himself, and the list says his name
         pia.lobby->leave();
         w.run(300);
-        ASSERT_TRUE(bob.lobby->is_leader() && bob.lobby->room_is_public());
+        ASSERT_TRUE(bob.lobby->is_leader() && !bob.lobby->room_is_public() && !w.status("gam00001").lobby_public);
+        ASSERT_EQ(door(w, "GET").body, empty);
+        say_visibility(w, bob, true);
         ASSERT_EQ(row_of(w, "gam00001").get("host").str(), "Bob");
         ASSERT_TRUE(row_of(w, "gam00001").get("people").as_int_or(-1) == 1 && row_of(w, "gam00001").get("free").as_int_or(-1) == 2);
         // the leader says private: the list is empty again, and the room goes on
@@ -499,5 +501,57 @@ void run_public_room_tests() {
         ASSERT_TRUE(with == 1 && true_ones == 1);
         say_visibility(w, pia, false);
         ASSERT_FALSE(status_json("sta00001").get("public").as_bool_or(true));
+    } TEST_END();
+
+    TEST_CASE("S3.242 A Public Room Is The Leader's Choice (Protocol 22): When Another Person Leads (The Leader Left, Or Was Thrown Out For Garbage) The Room Is Private And Off The List And The One Who Leads Next Chooses For Itself; The Lead Going With A Person To Another Color Changes Nothing; A Leader With No Name Is Listed As Player N") {
+        World w(public_limits());
+        // (a) the only person leaves a public room; the room lives on for a while, and a stranger who is welcomed in it leads a room that is private, and that nobody listed
+        Client& ada = w.connect_page("Ada", "old00001", lobby_block_of());
+        w.run(300);
+        say_visibility(w, ada, true);
+        ASSERT_EQ(codes_of(w), "old00001");
+        ada.lobby->leave();
+        w.run(300);
+        ASSERT_EQ(codes_of(w), "");
+        Client& eve = w.connect_page("Eve", "old00001", lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(eve.lobby->phase() == net::ClientLobby::Phase::InRoom && eve.lobby->is_leader());
+        ASSERT_TRUE(!eve.lobby->room_is_public() && eve.lobby->room().flags == (net::kRoomLeaderStarts | net::kRoomLobby));
+        ASSERT_TRUE(!w.status("old00001").lobby_public && codes_of(w).empty());
+        say_visibility(w, eve, true);
+        ASSERT_TRUE(codes_of(w) == "old00001" && row_of(w, "old00001").get("host").str() == "Eve");
+        // (b) the leader is thrown out for eight messages that are no Visibility: the person who leads next never chose it
+        Client& abe = w.connect_page("Abe", "bea00001", lobby_block_of());
+        Client& bea = w.connect_page("Bea", "bea00001", lobby_block_of());
+        w.run(300);
+        say_visibility(w, abe, true);
+        ASSERT_EQ(codes_of(w), "bea00001,old00001");                                                  // (two people against one)
+        const std::vector<uint8_t> garbage = {static_cast<uint8_t>(net::MsgType::Visibility), 7};
+        for (int i = 0; i < 8; ++i) abe.end->send(garbage);
+        w.run(300);
+        ASSERT_TRUE(bea.lobby->is_leader() && !bea.lobby->room_is_public() && bea.lobby->room().flags == (net::kRoomLeaderStarts | net::kRoomLobby));
+        ASSERT_TRUE(!w.status("bea00001").lobby_public && w.status("bea00001").state == RoomState::Waiting);
+        ASSERT_EQ(codes_of(w), "old00001");
+        // (c) the lead goes with the person: the leader takes another color and the room is still public, still the leader's
+        Client& cy = w.connect_page("Cy", "mov00001", lobby_block_of());
+        Client& dee = w.connect_page("Dee", "mov00001", lobby_block_of());
+        w.run(300);
+        say_visibility(w, cy, true);
+        ASSERT_TRUE(cy.lobby->request_seat_move(0, 2));
+        w.run(300);
+        ASSERT_TRUE(cy.lobby->is_leader() && cy.lobby->room_is_public() && dee.lobby->room_is_public() && w.status("mov00001").lobby_public);
+        ASSERT_TRUE(row_of(w, "mov00001").get("host").str() == "Cy" && row_of(w, "mov00001").get("people").as_int_or(-1) == 2);
+        // (d) a leader who gave no name: the list says "Player" and the number of the color, as the lobby does for a player who gave none
+        Client& nobody = w.connect_page("", "nam00001", lobby_block_of());
+        w.run(300);
+        say_visibility(w, nobody, true);
+        ASSERT_EQ(row_of(w, "nam00001").get("host").str(), "Player 1");
+        ASSERT_TRUE(nobody.lobby->request_seat_move(0, 2));
+        w.run(300);
+        ASSERT_EQ(row_of(w, "nam00001").get("host").str(), "Player 3");
+        Client& blank = w.connect_page("   ", "nam00002", lobby_block_of());
+        w.run(300);
+        say_visibility(w, blank, true);
+        ASSERT_EQ(row_of(w, "nam00002").get("host").str(), "Player 1");
     } TEST_END();
 }

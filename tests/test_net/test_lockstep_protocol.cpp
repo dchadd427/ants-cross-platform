@@ -318,6 +318,8 @@ void run_protocol_tests() {
         lobby_room.plan = {PlanKind::Open, PlanKind::Open, PlanKind::Hard, PlanKind::Nobody};
         lobby_room.in_game = 0x01;
         const std::vector<uint8_t> seed_lobby_room = encode(lobby_room);
+        lobby_room.flags = static_cast<uint8_t>(kRoomLeaderStarts | kRoomLobby | kRoomPublic);        // (protocol 22) the same room, public
+        const std::vector<uint8_t> seed_public_room = encode(lobby_room);
         PlanMsg plan_msg;
         plan_msg.map_name = "TREASURE.LVL";
         plan_msg.plan = {PlanKind::Open, PlanKind::Easy, PlanKind::Medium, PlanKind::Nobody};
@@ -336,14 +338,14 @@ void run_protocol_tests() {
                                                          encode(ResumeMsg{1, 2, 500}), encode(RequestMsg{40}), encode(PeerHelloMsg{3}),
                                                          encode(server_room_of(0)), encode(server_room_of(255)), encode(StartRequestMsg{}), encode(LagMsg{2, 7000}), seed_hello,
                                                          seed_welcome, encode(RejectMsg{RejectReason::Superseded}), seed_presence, encode(VoteMsg{2, true}), encode(CatchUpMsg{100, 4000}),
-                                                         seed_batch, encode(CaughtUpMsg{4000, {1, 2, 3, 4, 5, 6, 7, 8}}), seed_request13, seed_start13, encode(SeatMoveMsg{1, 3, 5}), seed_page_hello, seed_created, seed_lobby_room, seed_plan, encode(NameMsg{"Ann"}), encode(RemoveMsg{2, 9})};
+                                                         seed_batch, encode(CaughtUpMsg{4000, {1, 2, 3, 4, 5, 6, 7, 8}}), seed_request13, seed_start13, encode(SeatMoveMsg{1, 3, 5}), seed_page_hello, seed_created, seed_lobby_room, seed_public_room, seed_plan, encode(NameMsg{"Ann"}), encode(RemoveMsg{2, 9}), encode(VisibilityMsg{true}), encode(VisibilityMsg{false})};
         size_t accepted = 0;
         for (int i = 0; i < 400000; ++i) {
             std::vector<uint8_t> buf;
             if (i % 3 == 0) {
                 buf.resize(rng.below(80));
                 for (auto& x : buf) x = static_cast<uint8_t>(rng.below(256));
-                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(34));    // a plausible type byte
+                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(35));    // a plausible type byte (1 .. MsgType::Last)
             } else {
                 buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
                 for (uint32_t m = 1 + rng.below(3); m > 0; --m) buf[rng.below(static_cast<uint32_t>(buf.size()))] = static_cast<uint8_t>(rng.below(256));
@@ -368,6 +370,7 @@ void run_protocol_tests() {
             PlanMsg plan;
             NameMsg nm;
             RemoveMsg rem;
+            VisibilityMsg vis;
             LagMsg lg;
             RejectMsg rj;
             PresenceMsg pres;
@@ -414,6 +417,7 @@ void run_protocol_tests() {
                 ASSERT_TRUE(room.leader == kNoLeader || (room.leader < sim::MAX_PLAYERS && room.slots[room.leader].state == SlotState::Client));
                 ASSERT_TRUE(room.lobby() || (!room.starting() && room.in_game == 0 && room.plan == std::array<PlanKind, 4>{}));        // (protocol 16: a plan, a game and "starting" are a lobby room's)
                 ASSERT_TRUE(!room.lobby() || room.leader_starts());
+                ASSERT_TRUE(!room.is_public() || room.lobby());                  // (protocol 22: only a lobby room is public)
                 for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) ASSERT_TRUE(!room.seat_in_game(seat) || room.slots[seat].state == SlotState::Client);
             }
             if (decode(buf, sreq)) {                   // (protocol 13: the type, a level for each seat, two team bytes: none, or two different seats)
@@ -439,6 +443,10 @@ void run_protocol_tests() {
             if (decode(buf, rem)) {                    // (protocol 16: the type, a seat of the room and the guard that is not 0)
                 ++accepted;
                 ASSERT_TRUE(encode(rem) == buf && buf.size() == 6 && rem.seat < sim::MAX_PLAYERS && rem.guard != 0);
+            }
+            if (decode(buf, vis)) {                    // (protocol 22: the type and 0 or 1)
+                ++accepted;
+                ASSERT_TRUE(encode(vis) == buf && buf.size() == 2 && buf[1] <= 1);
             }
             if (decode(buf, smsg)) {                   // a Start that gets through has teams that its own roster can make, and encodes back to the same bytes
                 ++accepted;
