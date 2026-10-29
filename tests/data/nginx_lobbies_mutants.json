@@ -1,0 +1,380 @@
+{
+ "note": "Mutants of the block of docker/nginx.conf that passes GET /lobbies (the public list of games, docs/SERVER.md 'Lobby rooms') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_lobbies_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_lobbies.py: each breaks one rule of the block - the method and the query, the exact location, the one path that goes on, what is passed on, the cache (two seconds, one entry for everybody, only a 200), the old answer (only while a new one is fetched, never for an error or a silent server), the allowance (thirty a second, a burst of a hundred, its own zone, the address of the connection as its key) and the fallback (404, the JSON word, its type and no-store). The mutants change docker/nginx.conf only, and put it back.",
+ "defaults": {
+  "test": "python3 tests/scripts/test_nginx_lobbies.py -f"
+ },
+ "mutants": [
+  {
+   "id": "method_check_removed",
+   "file": "docker/nginx.conf",
+   "old": "    location = /lobbies {\n        if ($request_method != GET) { return 405; }\n",
+   "new": "    location = /lobbies {\n"
+  },
+  {
+   "id": "method_head_allowed",
+   "file": "docker/nginx.conf",
+   "old": "    location = /lobbies {\n        if ($request_method != GET) { return 405; }\n",
+   "new": "    location = /lobbies {\n        if ($request_method !~ \"^(GET|HEAD)$\") { return 405; }\n"
+  },
+  {
+   "id": "method_only_delete_refused",
+   "file": "docker/nginx.conf",
+   "old": "    location = /lobbies {\n        if ($request_method != GET) { return 405; }\n",
+   "new": "    location = /lobbies {\n        if ($request_method = DELETE) { return 405; }\n"
+  },
+  {
+   "id": "query_check_removed",
+   "file": "docker/nginx.conf",
+   "old": "        if ($is_args) { return 404; }\n        limit_req zone=ants_lobbies burst=100 nodelay;\n",
+   "new": "        limit_req zone=ants_lobbies burst=100 nodelay;\n"
+  },
+  {
+   "id": "query_refused_with_400",
+   "file": "docker/nginx.conf",
+   "old": "        if ($is_args) { return 404; }\n        limit_req zone=ants_lobbies burst=100 nodelay;\n",
+   "new": "        if ($is_args) { return 400; }\n        limit_req zone=ants_lobbies burst=100 nodelay;\n"
+  },
+  {
+   "id": "query_passed_on_in_the_path",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n",
+   "new": "        proxy_pass http://$ants_replays/lobbies$is_args$args;\n"
+  },
+  {
+   "id": "location_prefix",
+   "file": "docker/nginx.conf",
+   "old": "    location = /lobbies {\n",
+   "new": "    location /lobbies {\n"
+  },
+  {
+   "id": "location_prefix_caret",
+   "file": "docker/nginx.conf",
+   "old": "    location = /lobbies {\n",
+   "new": "    location ^~ /lobbies {\n"
+  },
+  {
+   "id": "location_regular_expression",
+   "file": "docker/nginx.conf",
+   "old": "    location = /lobbies {\n",
+   "new": "    location ~ ^/lobbies {\n"
+  },
+  {
+   "id": "path_is_the_visitors",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n",
+   "new": "        proxy_pass http://$ants_replays;\n"
+  },
+  {
+   "id": "upstream_literal_name",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n",
+   "new": "        proxy_pass http://ants-server:4020/lobbies;\n"
+  },
+  {
+   "id": "upstream_other_port",
+   "file": "docker/nginx.conf",
+   "old": "        set $ants_replays ants-server:4020;\n        proxy_pass http://$ants_replays/lobbies;\n",
+   "new": "        set $ants_replays ants-server:4002;\n        proxy_pass http://$ants_replays/lobbies;\n"
+  },
+  {
+   "id": "resolver_removed",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 502 504 = @lobbies_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n",
+   "new": "        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "cookie_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n",
+   "new": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n        proxy_set_header Cookie $http_cookie;\n"
+  },
+  {
+   "id": "address_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n",
+   "new": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n        proxy_set_header X-Forwarded-For $remote_addr;\n"
+  },
+  {
+   "id": "upgrade_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n",
+   "new": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n"
+  },
+  {
+   "id": "all_request_headers_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n",
+   "new": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers on;\n"
+  },
+  {
+   "id": "connection_kept_alive",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n",
+   "new": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"\";\n"
+  },
+  {
+   "id": "host_with_its_port",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers",
+   "new": "        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $http_host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers"
+  },
+  {
+   "id": "body_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers",
+   "new": "        proxy_pass_request_body on;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers"
+  },
+  {
+   "id": "nosniff_not_hidden",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers",
+   "new": "        proxy_send_timeout 10s;\n    }\n\n    # What /lobbies answers"
+  },
+  {
+   "id": "errors_intercepted",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n",
+   "new": "        proxy_pass http://$ants_replays/lobbies;\n        proxy_http_version 1.1;\n        proxy_intercept_errors on;\n"
+  },
+  {
+   "id": "connect_timeout_sixty_seconds",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers",
+   "new": "        proxy_connect_timeout 60s;\n        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers"
+  },
+  {
+   "id": "read_timeout_sixty_seconds",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers",
+   "new": "        proxy_read_timeout 60s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # What /lobbies answers"
+  },
+  {
+   "id": "cache_sixty_seconds",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_key \"ants-lobbies\";\n        proxy_cache_valid 200 2s;\n",
+   "new": "        proxy_cache_key \"ants-lobbies\";\n        proxy_cache_valid 200 60s;\n"
+  },
+  {
+   "id": "cache_one_second",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_key \"ants-lobbies\";\n        proxy_cache_valid 200 2s;\n",
+   "new": "        proxy_cache_key \"ants-lobbies\";\n        proxy_cache_valid 200 1s;\n"
+  },
+  {
+   "id": "cache_every_status",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_key \"ants-lobbies\";\n        proxy_cache_valid 200 2s;\n",
+   "new": "        proxy_cache_key \"ants-lobbies\";\n        proxy_cache_valid any 2s;\n"
+  },
+  {
+   "id": "cache_off",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache ants_stats_cache;\n        proxy_cache_key \"ants-lobbies\";\n",
+   "new": "        proxy_cache off;\n        proxy_cache_key \"ants-lobbies\";\n"
+  },
+  {
+   "id": "cache_in_the_history_zone",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache ants_stats_cache;\n        proxy_cache_key \"ants-lobbies\";\n",
+   "new": "        proxy_cache ants_history_cache;\n        proxy_cache_key \"ants-lobbies\";\n"
+  },
+  {
+   "id": "cache_key_holds_the_cookie",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_key \"ants-lobbies\";\n",
+   "new": "        proxy_cache_key \"ants-lobbies$http_cookie\";\n"
+  },
+  {
+   "id": "cache_key_holds_the_request_uri",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_key \"ants-lobbies\";\n",
+   "new": "        proxy_cache_key \"ants-lobbies$request_uri\";\n"
+  },
+  {
+   "id": "cache_key_is_the_live_lists",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_key \"ants-lobbies\";\n",
+   "new": "        proxy_cache_key \"ants-live\";\n"
+  },
+  {
+   "id": "cache_lock_off",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_lock on;\n        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_lock off;\n        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "cache_keeps_to_the_servers_no_store",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_ignore_headers Cache-Control;\n        proxy_cache_lock on;\n        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_lock on;\n        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "old_answer_never",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_use_stale off;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "old_answer_on_error",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_use_stale updating error;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "old_answer_on_timeout",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_use_stale updating timeout;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "old_answer_on_error_and_timeout",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_use_stale updating error timeout;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "old_answer_on_http_500",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_use_stale updating http_500;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "old_answer_on_http_503",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_use_stale updating http_503;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "old_answer_like_the_recorded_matches",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_use_stale updating;\n        error_page 502 504 = @lobbies_off;\n",
+   "new": "        proxy_cache_use_stale updating error timeout http_503;\n        error_page 502 504 = @lobbies_off;\n"
+  },
+  {
+   "id": "allowance_removed",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_lobbies burst=100 nodelay;\n",
+   "new": ""
+  },
+  {
+   "id": "allowance_zone_removed",
+   "file": "docker/nginx.conf",
+   "old": "limit_req_zone $binary_remote_addr zone=ants_lobbies:1m rate=30r/s;\n",
+   "new": ""
+  },
+  {
+   "id": "allowance_rate_ten_times",
+   "file": "docker/nginx.conf",
+   "old": "limit_req_zone $binary_remote_addr zone=ants_lobbies:1m rate=30r/s;",
+   "new": "limit_req_zone $binary_remote_addr zone=ants_lobbies:1m rate=300r/s;"
+  },
+  {
+   "id": "allowance_rate_a_tenth",
+   "file": "docker/nginx.conf",
+   "old": "limit_req_zone $binary_remote_addr zone=ants_lobbies:1m rate=30r/s;",
+   "new": "limit_req_zone $binary_remote_addr zone=ants_lobbies:1m rate=3r/s;"
+  },
+  {
+   "id": "allowance_rate_per_minute",
+   "file": "docker/nginx.conf",
+   "old": "limit_req_zone $binary_remote_addr zone=ants_lobbies:1m rate=30r/s;",
+   "new": "limit_req_zone $binary_remote_addr zone=ants_lobbies:1m rate=30r/m;"
+  },
+  {
+   "id": "allowance_burst_ten",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_lobbies burst=100 nodelay;\n",
+   "new": "        limit_req zone=ants_lobbies burst=10 nodelay;\n"
+  },
+  {
+   "id": "allowance_burst_a_thousand",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_lobbies burst=100 nodelay;\n",
+   "new": "        limit_req zone=ants_lobbies burst=1000 nodelay;\n"
+  },
+  {
+   "id": "allowance_burst_delayed",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_lobbies burst=100 nodelay;\n",
+   "new": "        limit_req zone=ants_lobbies burst=100;\n"
+  },
+  {
+   "id": "allowance_shared_with_live",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_lobbies burst=100 nodelay;\n",
+   "new": "        limit_req zone=ants_live burst=100 nodelay;\n"
+  },
+  {
+   "id": "allowance_per_forwarded_for",
+   "file": "docker/nginx.conf",
+   "old": "limit_req_zone $binary_remote_addr zone=ants_lobbies:1m rate=30r/s;",
+   "new": "limit_req_zone $http_x_forwarded_for zone=ants_lobbies:1m rate=30r/s;"
+  },
+  {
+   "id": "allowance_refusal_is_429",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_lobbies burst=100 nodelay;\n        limit_req_status 503;\n",
+   "new": "        limit_req zone=ants_lobbies burst=100 nodelay;\n        limit_req_status 429;\n"
+  },
+  {
+   "id": "fallback_removed",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 502 504 = @lobbies_off;\n",
+   "new": ""
+  },
+  {
+   "id": "fallback_only_for_502",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 502 504 = @lobbies_off;\n",
+   "new": "        error_page 502 = @lobbies_off;\n"
+  },
+  {
+   "id": "fallback_is_the_recorded_matches",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 502 504 = @lobbies_off;\n",
+   "new": "        error_page 502 504 = @replays_off;\n"
+  },
+  {
+   "id": "fallback_body_changed",
+   "file": "docker/nginx.conf",
+   "old": "return 404 '{\"error\":\"lobbies_off\"}';",
+   "new": "return 404 '{\"error\":\"off\"}';"
+  },
+  {
+   "id": "fallback_status_200",
+   "file": "docker/nginx.conf",
+   "old": "return 404 '{\"error\":\"lobbies_off\"}';",
+   "new": "return 200 '{\"error\":\"lobbies_off\"}';"
+  },
+  {
+   "id": "fallback_status_503",
+   "file": "docker/nginx.conf",
+   "old": "return 404 '{\"error\":\"lobbies_off\"}';",
+   "new": "return 503 '{\"error\":\"lobbies_off\"}';"
+  },
+  {
+   "id": "fallback_without_the_json_type",
+   "file": "docker/nginx.conf",
+   "old": "    location @lobbies_off {\n        default_type application/json;\n",
+   "new": "    location @lobbies_off {\n"
+  },
+  {
+   "id": "fallback_without_no_store",
+   "file": "docker/nginx.conf",
+   "old": "    location @lobbies_off {\n        default_type application/json;\n        add_header Cache-Control \"no-store\" always;\n",
+   "new": "    location @lobbies_off {\n        default_type application/json;\n"
+  },
+  {
+   "id": "fallback_cacheable",
+   "file": "docker/nginx.conf",
+   "old": "    location @lobbies_off {\n        default_type application/json;\n        add_header Cache-Control \"no-store\" always;\n",
+   "new": "    location @lobbies_off {\n        default_type application/json;\n        add_header Cache-Control \"public, max-age=60\" always;\n"
+  },
+  {
+   "id": "fallback_without_nosniff",
+   "file": "docker/nginx.conf",
+   "old": "        add_header X-Content-Type-Options \"nosniff\" always;\n        return 404 '{\"error\":\"lobbies_off\"}';",
+   "new": "        return 404 '{\"error\":\"lobbies_off\"}';"
+  }
+ ]
+}
