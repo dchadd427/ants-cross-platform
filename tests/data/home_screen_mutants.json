@@ -319,8 +319,8 @@
   {
    "id": "games_is_on",
    "file": "web/home/home.js",
-   "old": "var games = stub('hchip games', TEXT.games);",
-   "new": "var games = button('hchip games', TEXT.games);",
+   "old": "var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');",
+   "new": "var gamesBtn = button('hchip games', ''), gamesPill = el('span', 'pill');",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -697,15 +697,15 @@
   {
    "id": "opening_does_not_make_the_bars_inert",
    "file": "web/home/home.js",
-   "old": "going = true; closeMenu(); inert(held);",
-   "new": "going = true; closeMenu();",
+   "old": "going = true; closeMenu(); gamesCall('opening'); inert(held);",
+   "new": "going = true; closeMenu(); gamesCall('opening');",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "opening_keeps_the_menu_open",
    "file": "web/home/home.js",
-   "old": "going = true; closeMenu(); inert(held);",
-   "new": "going = true; inert(held);",
+   "old": "going = true; closeMenu(); gamesCall('opening'); inert(held);",
+   "new": "going = true; gamesCall('opening'); inert(held);",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -886,15 +886,15 @@
   {
    "id": "hand_off_timer_missing",
    "file": "web/home/home.js",
-   "old": "            goingTimer = setTimeout(function () {                // it did not come: Home takes presses again, but the seat may still be the game's (a slow page), so Leave room stays off, and the page says so\n                goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);\n                try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }\n            }, OPENING_MS);\n",
-   "new": "",
+   "old": "            goingTimer = setTimeout(function () {                // it did not come yet:",
+   "new": "            goingTimer = setTimeout(function () { return;                // it did not come yet:",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "hand_off_timer_ten_times_too_long",
    "file": "web/home/home.js",
-   "old": "var OPENING_MS = 15000;",
-   "new": "var OPENING_MS = 150000;",
+   "old": "var OPENING_MS = 15000, GIVE_UP_MS = 60000;",
+   "new": "var OPENING_MS = 150000, GIVE_UP_MS = 600000;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -956,15 +956,15 @@
   {
    "id": "stalled_page_not_told",
    "file": "web/home/home.js",
-   "old": "try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }",
+   "old": "try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }",
    "new": "",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "stalled_page_that_throws_reaches_home",
    "file": "web/home/home.js",
-   "old": "try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }",
-   "new": "if (page.stalled) page.stalled();",
+   "old": "try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }",
+   "new": "if (page.stalled) page.stalled(words);",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -998,8 +998,8 @@
   {
    "id": "stalled_words_changed",
    "file": "web/lobby.html",
-   "old": "'The game did not open. Reload this page to get your seat back.'",
-   "new": "'Something went wrong.'",
+   "old": "$('banner-text').textContent = words; $('banner').className = 'banner warn';",
+   "new": "$('banner-text').textContent = 'Something went wrong.'; $('banner').className = 'banner warn';",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1026,8 +1026,8 @@
   {
    "id": "stalled_strip_is_not_a_warning",
    "file": "web/lobby.html",
-   "old": "$('banner-text').textContent = 'The game did not open. Reload this page to get your seat back.'; $('banner').className = 'banner warn';",
-   "new": "$('banner-text').textContent = 'The game did not open. Reload this page to get your seat back.'; $('banner').className = 'banner';",
+   "old": "$('banner-text').textContent = words; $('banner').className = 'banner warn';",
+   "new": "$('banner-text').textContent = words; $('banner').className = 'banner';",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1042,6 +1042,76 @@
    "file": "web/lobby.html",
    "old": "how: openHow, stalled: stalled,",
    "new": "how: openHow,",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "slow_words_changed",
+   "file": "web/home/home.js",
+   "old": "slow: 'The game is slow to open. Reload this page to get your seat back.'",
+   "new": "slow: 'Something went wrong.'",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "failed_words_changed",
+   "file": "web/home/home.js",
+   "old": "failed: 'The game did not open. Reload this page to get your seat back.'",
+   "new": "failed: 'Something went wrong.'",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "failure_words_at_the_stall",
+   "file": "web/home/home.js",
+   "old": "tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);",
+   "new": "tell(TEXT.failed); }, 0);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "failure_words_never",
+   "file": "web/home/home.js",
+   "old": "                failTimer = setTimeout(function () { failTimer = null; tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "failure_words_a_minute_after_the_stall",
+   "file": "web/home/home.js",
+   "old": "tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);",
+   "new": "tell(TEXT.failed); }, GIVE_UP_MS);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "slow_words_are_the_failure",
+   "file": "web/home/home.js",
+   "old": "                tell(TEXT.slow);\n",
+   "new": "                tell(TEXT.failed);\n",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "second_hand_off_keeps_the_failure_timer",
+   "file": "web/home/home.js",
+   "old": "            if (failTimer !== null) clearTimeout(failTimer);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_page_ignores_the_words",
+   "file": "web/lobby.html",
+   "old": "$('banner-text').textContent = words;",
+   "new": "$('banner-text').textContent = 'The game did not open.';",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "how_modal_leaves_the_page_open_to_keys",
+   "file": "web/lobby.html",
+   "old": "$('how').hidden = false; inert(true);",
+   "new": "$('how').hidden = false;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "how_modal_keeps_the_page_inert",
+   "file": "web/lobby.html",
+   "old": "$('how').hidden = true; inert(false);",
+   "new": "$('how').hidden = true;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]

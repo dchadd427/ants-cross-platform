@@ -401,7 +401,7 @@
         notback: function (a) { return a.server + ' START waits for them: wait, or press Remove on their color to start without them.'; },
         notice: function (a) { return a.server; }
     };
-    // The lines under the "Have a code?" field when the code that was typed does not lead into a room (the first two are the page's own room and one that it is in already)
+    // The lines under the "Join by code" field when the code that was typed does not lead into a room (the first two are the page's own room and one that it is in already)
     var HINT = {
         own: 'That is your own room.',
         same: 'You are in that room already.',

@@ -3,6 +3,7 @@
 .gc { position: absolute; left: 24px; bottom: 22px; z-index: 6; display: flex; flex-direction: column; width: 380px; height: 380px; max-height: calc(100% - 96px); color: var(--cream); background: var(--inset);
     border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
 .gc[data-open="false"] { height: auto; }
+.gc[hidden] { display: none; }
 .gc-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 4px 10px 4px 16px; }
 .gc[data-open="false"] .gc-head { cursor: pointer; }
 .gc-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
@@ -41,8 +42,8 @@
 
 /* a phone, or a window that is short: a strip along the bottom; it opens upward */
 @media (max-width: 720px), (max-height: 500px) {
-    .gc { left: 16px; right: 16px; bottom: 12px; width: auto; height: min(490px, calc(100% - 200px)); max-height: none; }       /* (under the bar of a phone, which is 184 px; with the strips above Home there is less room, and the panel is never a sliver: 200 px) */
-    .gc[data-open="true"] { min-height: 200px; }
+    .gc { --gc-min: 200px; left: 16px; right: 16px; bottom: 12px; width: auto; height: min(490px, calc(100% - 200px)); max-height: none; }       /* (under the bar of a phone, which is 184 px; the panel is never a sliver: 200 px, and chat.js shows the strip when Home has not got that much under its bar, with notices above it) */
+    .gc[data-open="true"] { min-height: var(--gc-min); }
     .gc[data-open="false"] { height: 62px; }
     .gc[data-open="false"] .gc-head { min-height: 56px; padding: 0 8px 0 14px; }
     .gc[data-open="false"] .gc-title { flex: none; font-size: 18px; }
@@ -54,8 +55,8 @@
     .gc-body { padding: 0 14px 12px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
-    .gc, .gc[data-open="true"] { left: 14px; right: auto; width: 420px; height: min(286px, calc(100% - 76px)); }
-    .gc[data-open="true"] { min-height: 150px; }
+    .gc, .gc[data-open="true"] { --gc-min: 150px; left: 14px; right: auto; width: 420px; height: min(286px, calc(100% - 76px)); }
+    .gc[data-open="true"] { min-height: var(--gc-min); }
     .gc[data-open="false"] { left: 16px; right: 16px; width: auto; height: 62px; }
     .gc-head { min-height: 52px; }
     .gc-line { font-size: 16px; }

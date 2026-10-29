@@ -32,8 +32,9 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_home_screen_check.js")
 NODE = shutil.which("node")
 FILES = ("home.js", "home.css")
+LATER = ("games.js", "games.css")                    # the files that load after the first paint (tests/scripts/test_web_home_games.py has their budgets)
 CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_chat.py
-HOME_BUDGET, HOME_GZIP_BUDGET = 34 * 1000, 10400     # bytes, raw and gzipped, both files together (about 32,800 and 10,030, with the loader of the dock, the timer of the hand-off and the narrow logo): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+HOME_BUDGET, HOME_GZIP_BUDGET = 38 * 1000, 11300     # bytes, raw and gzipped, both files together (about 36,600 and 10,900, with the loaders of the dock and of the Games list, the timers of the hand-off and the narrow logo): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
 LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
@@ -102,6 +103,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("leave: function () { if (handing) return; var old = client;", mount, "a page that is on its way to the game gives its seat up to nobody")
         self.assertIn("if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render();", mount)
         self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how|stalled):", mount))), ["how", "info", "leave", "make", "stalled"])
+        self.assertIn("client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },", mount, "what the Games list reads of the page (docs/HOME_SCREEN.md): its client, the look at a room, a typed code, the name, whether the page is on its way to a game, and the way to give a look up")
 
     def test_the_words_that_said_that_a_page_makes_a_room_when_it_opens_are_corrected(self):
         page = self.page
@@ -114,6 +116,7 @@ class ThePage(unittest.TestCase):
 
     def test_how_it_works_says_where_my_room_is_because_the_room_shows_it_too(self):
         self.assertIn("<h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours.", self.page)
+        self.assertIn("To let anybody in, press Quick host on Home or switch the room to Public: it is then listed under Games, where players join it from the list or by its code.</p>", self.page, "How it works says where the public rooms are and how to be in one")
         self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no My room to press")
         check = read("tests", "scripts", "web_home_check.py")
         self.assertNotIn("the front page makes a room again", check, "a plain visit of the front page makes no room: My room does")
@@ -127,8 +130,8 @@ class ThePage(unittest.TestCase):
 
 
 class TheFolder(unittest.TestCase):
-    def test_it_holds_the_two_screens_and_the_chat_dock_and_nothing_else(self):
-        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + CHAT_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
+    def test_it_holds_the_two_screens_the_games_list_and_the_chat_dock_and_nothing_else(self):
+        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
 
     def test_it_is_under_its_budgets(self):
         raw = zipped = 0
@@ -142,14 +145,18 @@ class TheFolder(unittest.TestCase):
 
     def test_a_hand_off_that_does_not_come_is_given_up_after_15_seconds(self):
         js = read("web", "home", "home.js")
-        self.assertIn("var OPENING_MS = 15000;", js)
+        self.assertIn("var OPENING_MS = 15000, GIVE_UP_MS = 60000;", js)
         self.assertIn("goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);", js, "the card goes, Home is free, Leave room stays off (the seat may still be the game's), and what a dialog holds stays held")
-        self.assertIn("try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }", js, "the page says that the game did not open")
+        self.assertIn("try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }", js, "the page says that the game is slow to open, and a minute after START that it did not")
+        self.assertIn("failTimer = setTimeout(function () { failTimer = null; tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);", js, "the wording of a failure comes a minute after START, not at 15 s")
+        self.assertIn("if (failTimer !== null) clearTimeout(failTimer);", js, "a second hand-off starts both times again")
+        self.assertIn("tell(TEXT.slow);", js)
+        self.assertIn("slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',", js)
         self.assertIn("function () { if (stalled) return; page.leave(); show('home', 'push'); }", js, "a Leave room that reaches the page all the same does nothing")
         self.assertIn("if (goingTimer !== null) clearTimeout(goingTimer);", js, "a second hand-off starts the time again")
 
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):
-        for name in FILES + CHAT_FILES + ("home",):
+        for name in FILES + LATER + CHAT_FILES + ("home",):
             self.assertNotIn(name, os.listdir(FRONT))
 
     def test_the_script_is_plain_es5_and_names_no_other_site(self):
@@ -250,7 +257,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
+    FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
              "tests/scripts/web_home_check.py", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 
     @classmethod

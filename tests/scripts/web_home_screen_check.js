@@ -265,8 +265,10 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     menuButton.click();
     box.children[3].click();
     check('How it works closes the Menu and opens the page\'s own list', box.hidden === true && env.$('how').hidden === false);
+    const behind = () => ['banner', 'rejoin', 'lobby', 'footer-bar'].map((id) => env.$(id)).concat([env.home('hbar')], env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1));
+    check('... and it is a dialog: while it is open the page behind it takes no key or tap (Home\'s bar, the Room\'s bar and the Room, the strips, the footer), as behind the map list', behind().length === 6 && behind().every((n) => n.hasAttribute('inert')) && !env.$('how').hasAttribute('inert'));
     env.$('how-close').click();
-    check('... and when the list is closed the focus is back on the Menu button (the page\'s list gives it back to what had it)', env.$('how').hidden === true && env.focused === menuButton);
+    check('... and when the list is closed the focus is back on the Menu button (the page\'s list gives it back to what had it), and everything behind it takes presses again', env.$('how').hidden === true && env.focused === menuButton && behind().every((n) => !n.hasAttribute('inert')));
     // the numbers are left out when the footer has none
     const bare = runLobby('', {}, { stayHome: true });
     bare.$('home').findAll((e) => classes(e).indexOf('hmenu') !== -1)[0].click();
@@ -424,7 +426,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     s.receive(START);
     const rbar = env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1)[0], hbar = env.home('hbar'), card = env.$('home').children[2], banner = env.$('banner'), words = env.$('banner-text'), button = env.$('banner-x'), leave = env.roomBar('leave');
     const pill = () => env.home('mine').children[1].textContent;
-    const STALLED = 'The game did not open. Reload this page to get your seat back.';
+    const STALLED = 'The game is slow to open. Reload this page to get your seat back.', FAILED = 'The game did not open. Reload this page to get your seat back.';       // (a page that is only slow says so first; a minute without the game is a failure)
     check('START: Home says "Opening the game…", both bars are inert, and no strip says that anything is wrong', card.hidden === false && rbar.hasAttribute('inert') && hbar.hasAttribute('inert') && banner.hidden === true && leave.disabled !== true);
     hold(14999);
     check('14.999 s later it still does, and there is still no strip', card.hidden === false && hbar.hasAttribute('inert') && rbar.hasAttribute('inert') && banner.hidden === true);
@@ -440,6 +442,10 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('the room is frozen on this page (a page on its way takes no message: a third player does not show) and the strip says why, and stays', pill() === '2/4' && banner.hidden === false && words.textContent === STALLED);
     env.roomBar('rhome').click();
     check('Home works: the Home button goes Home', env.screen() === 'home');
+    hold(44000);
+    check('44 s after the strip came (59 s after START) it still says "slow to open", and Leave room is still off', words.textContent === STALLED && banner.hidden === false && leave.disabled === true);
+    hold(1000);
+    check('a minute after START the same strip says "' + FAILED + '" (with its Reload button, in the warning look): the wording of a failure comes only after a minute', words.textContent === FAILED && banner.hidden === false && button.textContent === 'Reload' && banner.className === 'banner warn' && leave.disabled === true);
     button.click();
     check('Reload reloads the page', env.reloads === 1 && env.screen() === 'home');
     const again = runLobby('', Object.assign({}, env.storage.data), { stayHome: true });
@@ -476,6 +482,34 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     second.opening();
     env.advance(14000);
     check('a second hand-off starts the 15 s again (and one timer only is running for each Home)', bars.every((b) => b.hasAttribute('inert')) && (env.advance(1000), bars.every((b) => !b.hasAttribute('inert'))));
+}
+
+{   // the words that the page is given: "slow" 15 s after START, "did not open" at a minute (and the page's own timers are not the page's: a second START starts both again)
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const mountOne = (name, said) => { const host = new H.El(env, 'div', name), lobby = new H.El(env, 'div', name + 'l'); lobby.parent = env.root; return env.win.AntsHome.mount({ doc: env.doc, win: env.win, host, lobby, page: { info: () => ({ client: false, model: null, offline: 'none' }), make() {}, leave() {}, how() {}, stalled(w) { said.push(w); } } }); };
+    const SLOW = 'The game is slow to open. Reload this page to get your seat back.', FAILED = 'The game did not open. Reload this page to get your seat back.';
+    const one = [], two = [];
+    const a = mountOne('homeA', one), b = mountOne('homeB', two);
+    a.opening();
+    env.advance(14999);
+    check('nothing is said to the page before 15 s', one.length === 0);
+    env.advance(1);
+    check('15 s: "slow to open" (once)', one.length === 1 && one[0] === SLOW);
+    env.advance(44999);
+    check('... and nothing else until a minute is up', one.length === 1);
+    env.advance(1);
+    check('a minute after START: "did not open" (the second words, once), and nothing after that', one.length === 2 && one[1] === FAILED && (env.advance(120000), one.length === 2));
+    b.opening();
+    env.advance(15000);
+    b.opening();
+    env.advance(15000);
+    check('a second START after the slow words starts the times again: the slow words come again 15 s after it', two.length === 2 && two[0] === SLOW && two[1] === SLOW);
+    env.advance(30000);
+    check('... and the failure of the first START\'s minute does not come (its timer was taken back)', two.length === 2);
+    env.advance(14999);
+    check('... (a second short of a minute after the second START: not yet)', two.length === 2);
+    env.advance(1);
+    check('... the failure comes a minute after the second START', two.length === 3 && two[2] === FAILED);
 }
 
 {   // what Home never does: no network of its own, no storage, no markup, nothing that is the page's room (the client, the model, the session)
