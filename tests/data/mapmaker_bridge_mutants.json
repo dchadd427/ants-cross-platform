@@ -1,0 +1,194 @@
+{
+  "note": "Mutants of the map maker's Bridge chip for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): its place and word in the Objects palette (web/front/mapmaker_palette.js), the plain warning for pieces on dry ground in the line under the palette (web/front/mapmaker_tools.js) and the solid table (web/front/mapmaker_solid.js) against tests/scripts/web_mapmaker_edit_check.js (case O, and the palette in case F), web_mapmaker_objects_check.js and web_mapmaker_pickup_check.js; the two that start with browser_ only the real browser notices (the short window's rule in web/front/mapmaker.css: they run `web_mapmaker_browser.py --only panel`, so ANTS_WEB_URL must name a page served from this checkout); the chip's picture in the sheet is held by tests/scripts/test_map_atlas.py (tests/data/map_atlas_mutants.json) and web_mapmaker_sprites_check.js. Run from the checkout: tools/mutate.py tests/data/mapmaker_bridge_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+  "mutants": [
+    {
+      "id": "chip_before_the_fire_wall",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "[134, 'wallup04', 'Fire wall'], [37, 'bridge4', 'Bridge'], [131,",
+      "new": "[37, 'bridge4', 'Bridge'], [134, 'wallup04', 'Fire wall'], [131,",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "chip_after_the_bombs",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "[37, 'bridge4', 'Bridge'], [131, 'blackbomb', 'Black bomb'], [132, 'bluebomb', 'Blue bomb'], [130, 'greenbomb', 'Green bomb'], [129, 'redbomb', 'Red bomb']",
+      "new": "[131, 'blackbomb', 'Black bomb'], [132, 'bluebomb', 'Blue bomb'], [130, 'greenbomb', 'Green bomb'], [129, 'redbomb', 'Red bomb'], [37, 'bridge4', 'Bridge']",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "chip_label_plural",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "[37, 'bridge4', 'Bridge']",
+      "new": "[37, 'bridge4', 'Bridges']",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "chip_is_a_part_built_piece",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "[37, 'bridge4', 'Bridge']",
+      "new": "[36, 'bridge3', 'Bridge']",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "chip_is_a_part_built_piece_pickup",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "[37, 'bridge4', 'Bridge']",
+      "new": "[36, 'bridge3', 'Bridge']",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "chip_label_plural_pickup",
+      "file": "web/front/mapmaker_palette.js",
+      "old": "[37, 'bridge4', 'Bridge']",
+      "new": "[37, 'bridge4', 'Bridges']",
+      "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
+    },
+    {
+      "id": "bridge_is_solid",
+      "file": "web/front/mapmaker_solid.js",
+      "old": "'000000000000000c7000000000000000040000001000000000000000000fff1efffffffffffff7effffffffffffffffffffff020e0870000' +",
+      "new": "'000000000200000c7000000000000000040000001000000000000000000fff1efffffffffffff7effffffffffffffffffffff020e0870000' +",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "bridge_is_solid_objects",
+      "file": "web/front/mapmaker_solid.js",
+      "old": "'000000000000000c7000000000000000040000001000000000000000000fff1efffffffffffff7effffffffffffffffffffff020e0870000' +",
+      "new": "'000000000200000c7000000000000000040000001000000000000000000fff1efffffffffffff7effffffffffffffffffffff020e0870000' +",
+      "test": "node tests/scripts/web_mapmaker_objects_check.js"
+    },
+    {
+      "id": "warning_counts_the_pieces_on_water",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "Tiles.kindOf(f.tile1(r, c)) !== 'water') dry++;",
+      "new": "Tiles.kindOf(f.tile1(r, c)) === 'water') dry++;",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_ignores_the_ground",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (f.tile2(r, c) === BRIDGE && Tiles.kindOf(f.tile1(r, c)) !== 'water') dry++;",
+      "new": "if (f.tile2(r, c) === BRIDGE) dry++;",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_reads_the_wrong_layers",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (f.tile2(r, c) === BRIDGE && Tiles.kindOf(f.tile1(r, c)) !== 'water') dry++;",
+      "new": "if (f.tile1(r, c) === BRIDGE && Tiles.kindOf(f.tile2(r, c)) !== 'water') dry++;",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_reads_the_ground_of_the_turned_cell",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "Tiles.kindOf(f.tile1(r, c)) !== 'water') dry++;",
+      "new": "Tiles.kindOf(f.tile1(c, r)) !== 'water') dry++;",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_skips_the_last_row",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "for (r = 0; r < f.rows; r++) for (c = 0; c < f.columns; c++) if (f.tile2(r, c) === BRIDGE",
+      "new": "for (r = 0; r < f.rows - 1; r++) for (c = 0; c < f.columns; c++) if (f.tile2(r, c) === BRIDGE",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_skips_the_last_column",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "for (r = 0; r < f.rows; r++) for (c = 0; c < f.columns; c++) if (f.tile2(r, c) === BRIDGE",
+      "new": "for (r = 0; r < f.rows; r++) for (c = 0; c < f.columns - 1; c++) if (f.tile2(r, c) === BRIDGE",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_skips_the_first_row",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "for (r = 0; r < f.rows; r++) for (c = 0; c < f.columns; c++) if (f.tile2(r, c) === BRIDGE",
+      "new": "for (r = 1; r < f.rows; r++) for (c = 0; c < f.columns; c++) if (f.tile2(r, c) === BRIDGE",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_always_plural",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "plural(dry, 'piece is', 'pieces are')",
+      "new": "plural(dry, 'pieces are', 'pieces are')",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_always_singular",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "plural(dry, 'piece is', 'pieces are')",
+      "new": "plural(dry, 'piece is', 'piece is')",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_loses_its_second_sentence",
+      "file": "web/front/mapmaker_tools.js",
+      "old": " on dry ground. A bridge needs water under it.'",
+      "new": " on dry ground.'",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_loses_its_first_sentence",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "' on dry ground. A bridge needs water under it.'",
+      "new": "' A bridge needs water under it.'",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_for_every_object",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (state.tool === 'objects' && item.id === BRIDGE) return bridgeText(item);",
+      "new": "if (state.tool === 'objects') return bridgeText(item);",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_for_the_wrong_tile",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "var BRIDGE = 37;",
+      "new": "var BRIDGE = 36;",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_not_read_again_after_undo_and_redo",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "            showInfo();\n            env.onEdit();\n        }\n        function undo()",
+      "new": "            env.onEdit();\n        }\n        function undo()",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_not_read_again_after_a_stroke",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (n) { canvas.refreshMini(); showButtons(); showInfo(); env.onEdit(); }",
+      "new": "if (n) { canvas.refreshMini(); showButtons(); env.onEdit(); }",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_hides_the_name",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "return item.label + (dry ? ' \\u00b7 '",
+      "new": "return (dry ? '' : item.label) + (dry ? ' \\u00b7 '",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_wrong_separator",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "return item.label + (dry ? ' \\u00b7 ' + plural",
+      "new": "return item.label + (dry ? ' - ' + plural",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "browser_short_window_chips_as_tall_as_before",
+      "file": "web/front/mapmaker.css",
+      "old": ".swatches.objects { row-gap: 2px; } .swatches.objects .swatch { min-height: 22px; }",
+      "new": "",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only panel"
+    },
+    {
+      "id": "browser_short_window_rule_gone",
+      "file": "web/front/mapmaker.css",
+      "old": "@media (min-width: 601px) and (min-height: 451px) and (max-height: 740px) { .toolbtns { gap: 3px; } .swatches.objects { row-gap: 2px; } .swatches.objects .swatch { min-height: 22px; } }",
+      "new": "",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only panel"
+    }
+  ]
+}

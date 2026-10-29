@@ -460,6 +460,8 @@ def run_sprites(tab, args, check):
     page.ctrl_key("z", "KeyZ", 90)
     time.sleep(0.3)
     check(page.ev("document.getElementById('undo-btn').disabled") is True, "and Undo takes it back")
+    page.tool("objects")
+    check(page.ev("document.querySelectorAll('#palette .swatch canvas').length") == 31 and page.ev("!!document.querySelector('#palette .swatch[data-tile=\"37\"] canvas')"), "the Objects palette has 31 chips and every one is the game's picture, the Bridge's too (no flat square)")
     # the Bigger tool: the picture of the object follows the pointer
     page.tool("bigger")
     bx = page.box("#map")
@@ -2330,9 +2332,9 @@ def run_part(part, tab, args, check, tiny, junk):
             page.tool("objects")
             check(page.ev("!document.getElementById('tile-btn').hidden && document.getElementById('palette').offsetParent === null"), "a phone has the one palette button and not the row of tiles")
             page.ev("document.getElementById('tile-btn').click()")
-            check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 30), "the button opens a sheet of the 30 objects (6 rocks, 5 power-ups, the fire wall, 4 bombs, 5 clovers, 9 flowers)")
+            check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 31), "the button opens a sheet of the 31 objects (6 rocks, 5 power-ups, the fire wall, the bridge, 4 bombs, 5 clovers, 9 flowers)")
             names = page.ev("[].map.call(document.querySelectorAll('.pick'), function (b) { return b.textContent; }).join('|')")
-            check(names == "Rock 1|Rock 2|Rock 3|Rock 4|Rock 5|Rock 6|Combat ant power-up|Thief ant power-up|Bomber ant power-up|Swimmer ant power-up|Fire ant power-up|Fire wall|Black bomb|Blue bomb|Green bomb|Red bomb"
+            check(names == "Rock 1|Rock 2|Rock 3|Rock 4|Rock 5|Rock 6|Combat ant power-up|Thief ant power-up|Bomber ant power-up|Swimmer ant power-up|Fire ant power-up|Fire wall|Bridge|Black bomb|Blue bomb|Green bomb|Red bomb"
                   "|Clover 1|Clover 2|Clover 3|Clover 4|Clover patch|Flower 1a|Flower 1b|Flower 2a|Flower 2b|Flower 3a|Flower 3b|Flower 3c|Daisy flower|Flower 1", "with their names: %s" % names)
             inside = page.ev("[].every.call(document.querySelectorAll('.dlg-foot button'), function (b) { var r = b.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && r.top >= -1; })")
             check(inside, "the sheet's Close button is on the screen (the tiles scroll inside it)")

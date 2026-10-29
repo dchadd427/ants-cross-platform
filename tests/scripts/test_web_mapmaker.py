@@ -1311,6 +1311,33 @@ class TheGroundAndTheSprites(unittest.TestCase):
                         shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
                     self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
+    def test_the_checks_can_fail_on_the_broken_copies_of_the_bridge_chip(self):
+        """tests/data/mapmaker_bridge_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy of the palette, the tools or the solid table must fail the check named for it"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_bridge_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 20)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        checks = {"web_mapmaker_edit_check": EDIT_CHECK, "web_mapmaker_objects_check": OBJECTS_CHECK, "web_mapmaker_pickup_check": PICKUP_CHECK}
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS:
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    if "web_mapmaker_browser" in m["test"]:
+                        continue                # (a mutant that only the real browser can notice: tools/mutate.py runs it with ANTS_WEB_URL set)
+                    script = [v for k, v in checks.items() if k in m["test"]][0]
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, script, ["--quick"] if script == PICKUP_CHECK else [])
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
     def test_the_ants_box_is_loaded_on_demand_with_its_style_and_the_tool_hands_it_the_canvas(self):
         tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
         self.assertNotIn("front/mapmaker_ants.js", tags)
@@ -1496,6 +1523,16 @@ class TheImageCarriesThePage(unittest.TestCase):
         self.assertIn('<span id="mapmaker-build">local</span>', page)
         for href in ('href="/"', 'href="matches.html"', 'href="changelog.html"', 'href="legal.html"'):
             self.assertIn(href, page)
+
+    def test_the_objects_palette_of_seven_rows_has_its_short_window_rule(self):
+        """31 chips are seven rows of five: under 741 pixels of window height the chips are 2 pixels shorter and the rows and the tool buttons 1 pixel closer, so that the column keeps its name line with no scrollbar
+        (the browser part `panel` measures it at 1280 x 720; the rule is for desktops that are not tall, and says nothing of a phone or of a window that is tall enough)"""
+        css = read("web", "front", "mapmaker.css")
+        rules = re.findall(r"@media \(min-width: 601px\) and \(min-height: 451px\) and \(max-height: 740px\) \{([^\n]*)\}\n", css)
+        self.assertEqual(len(rules), 1)
+        for part in (".toolbtns { gap: 3px; }", ".swatches.objects { row-gap: 2px; }", ".swatches.objects .swatch { min-height: 22px; }"):
+            self.assertIn(part, rules[0])
+        self.assertEqual(len(re.findall(r"\.swatches\.objects \{ grid-template-columns: repeat\(5, 1fr\); gap: 3px; \}", css)), 1, "five chips to a row, as the picture that was approved shows")
 
     def test_the_footer_line_sits_above_the_screens_frame(self):
         """the screen's frame (classic.css, --screen-frame) lies over the last pixels of the page: the footer's bottom padding must be at least as thick as the frame, or the line is cut by the red edge (browser part `foot`)"""
