@@ -56,6 +56,8 @@ class ThePagesAndTheImage(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", ref)), "%s (loaded by %s) is not a file of web/" % (ref, ", ".join(pages)))
             if ref.startswith("front/"):
                 self.assertIn("COPY web/front/ ", self.dockerfile, ref)
+            elif ref.startswith("home/"):
+                self.assertIn("COPY web/home/ ", self.dockerfile, ref)
             elif re.match(r"^favicon\.[a-z]+$", ref):
                 self.assertIn("COPY web/favicon.* ", self.dockerfile, ref)
             else:

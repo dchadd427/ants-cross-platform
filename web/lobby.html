@@ -284,14 +284,16 @@
     @media (pointer: coarse) { .edit { position: relative; } .edit::after { content: ""; position: absolute; inset: -14px -12px; } }
 
     </style>
-<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css">
+<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="home/home.css">
 </head>
-<body>
+<body data-screen="home">
 <div class="screen" id="screen">
-<main class="wrap">
+<div class="wrap strips">
     <div class="banner" id="banner" role="status" hidden><span id="banner-text"></span><button class="btn sm" type="button" id="banner-x">OK</button></div>
     <div class="rejoin" id="rejoin" hidden><span id="rejoin-note"></span><button class="btn sm" type="button" id="rejoin-go">Rejoin it</button></div>
-
+</div>
+<div id="home"></div>
+<main class="wrap">
     <header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1><p><span class="tag">Four colonies, one picnic.</span><span class="sub">The 1998 ant war game, rebuilt for your browser.</span></p><a class="btn sm" href="/matches.html" id="watch-top" title="Matches: every match played here, with its stats and replay">Matches</a><a class="btn sm discord" href="https://discord.gg/WaWrXQnKPj" id="discord-top" target="_blank" rel="noopener noreferrer" title="Discord: chat with other players (opens the project&rsquo;s Discord invite in a new tab)"><svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg><span class="dt">Discord</span></a></header>
 
     <div class="grid" id="lobby">
@@ -335,17 +337,17 @@
     <p class="notice" id="footer-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>
     <div class="bar-row"><span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
     <nav aria-label="Footer links"><button class="lnk" type="button" id="how-open">How it works</button><a href="/matches.html" id="watch-link">Matches</a><a href="/live.html">Live now</a><a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a><a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a><a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a><a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a></nav></div>
-<p class="coffee"><a href="https://www.buymeacoffee.com/dchadd" target="_blank" rel="noopener noreferrer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous"></a></p></div></footer>
+<p class="coffee"><a href="https://www.buymeacoffee.com/dchadd" target="_blank" rel="noopener noreferrer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous" loading="lazy"></a></p></div></footer>
 </div>
 
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
-    <h3>The room</h3><p>Open the page and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color.</p>
+    <h3>The room</h3><p>Press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color.</p>
     <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
     <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their color. It asks first, and the color opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
     <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another color, their team goes along.</p>
-    <h3>START!</h3><p>The host starts the match with whoever is in. An open color stays empty. When the match is over, Leave Game takes you back to the front page, where a new room is ready.</p>
+    <h3>START!</h3><p>The host starts the match with whoever is in. An open color stays empty. When the match is over, Leave Game takes you back to the front page, where My room makes a new room.</p>
     <h3>When the host leaves</h3><p>A room lasts while anybody is in it. If the host leaves, the player who has been in the room longest becomes the host, and everybody is told. When the last player leaves, the room closes about a minute later, and a link to a room that is gone says that there is no room with that code, and offers to start a room of your own.</p>
     <div class="sheets"><img src="front/qh_quickhelp.png" alt="The original's quick help: how to win, how to move your ants, game play" width="257" height="453" loading="lazy" decoding="async"><img src="front/qh_power.png" alt="The original's game instructions: power-ups and the five special ants" width="362" height="455" loading="lazy" decoding="async"></div>
 </div></div>
@@ -369,7 +371,7 @@
 <script src="front/lobby_net.js"></script>
 <script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>
 <script src="front/map_picker.js"></script>
-<script src="shapes.js"></script><script src="map_files.js"></script>
+<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>
 <script>
     (function () {
         'use strict';
@@ -378,7 +380,7 @@
         var Chat = window.AntsLobbyChat;
         var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false, pendingMode = -1;
         try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }
-        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {           // the scripts of front/ did not come: the page cannot do anything, and says so
+        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !window.AntsHome) {           // the scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
             document.getElementById('banner-x').hidden = true;
             document.getElementById('banner').className = 'banner warn';
@@ -584,7 +586,7 @@
         // ================================================================================================================================================================================================
         // THE LOBBY: the front page is a room on the game server (docs/NETWORK_PORT.md "Protocol 16"). front/lobby_net.js keeps this page's seat in it; front/lobby_rules.js decides what the four colors and the map side
         // say and what the leader asks of the room (tests/scripts/web_lobby_rules_check.js); this part is the screen: it builds the cards, takes the pointer, the keys and the buttons, and does what the rules say.
-        //   * A plain visit makes a room with a new code and seats you in it; ?room=<code> is the link of somebody's room (a name card first). The room's code and your key are kept in this tab's session storage
+        //   * A plain visit is Home and makes no room (My room does: a new code, you in it); ?room=<code> is the link of somebody's room (a name card first). The room's code and your key are kept in this tab's session storage
         //     (LOBBY_KEY), so that a reload takes the seat back. A name is only ever set as text, never into markup.
         //   * START sends every page to the game page at once with the key of its seat (ants.rejoin.<room>.<seat>, the way the game takes a seat back); a match for one player is the game page's own single player.
         // ================================================================================================================================================================================================
@@ -712,6 +714,7 @@
             refusal = '';
             paintSide(v.side);
             gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro }); setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode); backBar.sync(model, sendPlan, warmMap);
+            Home.sync();
         }
         function paintCard(card, m) {
             var li = lis[card.seat], seat = card.seat, c = card.color;
@@ -881,7 +884,7 @@
             if (handing || !client) return;
             var entry = client.rejoinEntry();
             if (!entry) return;
-            handing = true;
+            handing = true; Home.opening();
             $('rejoin').hidden = true;
             try { window.localStorage.setItem(entry.name, entry.text); } catch (e) { /* the key is not kept: the game page can take the seat for this load only, and a reload of it cannot take the seat back */ }
             var seat = client.seat, code = client.code, name = client.name;
@@ -936,7 +939,7 @@
             connect({ code: newCode(), name: myName(), own: true });
             showBanner(kind);
         }
-        function stripRoom() { try { window.history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/')); } catch (e) { /* the address stays: it is not essential */ } }
+        function stripRoom() { try { window.history.replaceState(window.history.state, '', window.location.pathname.replace(/^\/+/, '/') + (Home.screen() === 'room' ? '#room' : '')); } catch (e) { /* the address stays: it is not essential */ } }
 
         function hook(c) {
             try { chat.attach(c); } catch (e) { if (window.console) console.error(e); }      // (the box follows every client of the page: its own room, a room that was joined, a room that was made again; if it breaks, the lobby does not)
@@ -1046,7 +1049,7 @@
             return picker;
         }
         function isHost() { return !!(model && !model.guest && !model.starting); }
-        function inert(on) { [document.querySelector('header.mast'), $('banner'), $('rejoin'), $('lobby'), $('footer-bar')].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }       // (the page behind the open list takes no key or tap)
+        function inert(on) { [document.querySelector('header.mast'), $('banner'), $('rejoin'), $('lobby'), $('footer-bar')].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); Home.inert(on); }       // (the page behind the open list takes no key or tap)
         function communityOf(file) { var e = picker && picker.find(file); return e && !e.original ? { name: e.name, info: AntsMapPicker.infoText(e), thumb: e.thumb } : backBar.info(file); }
         function warmMap(file) { if (window.AntsMapFiles && !warmed[file]) { warmed[file] = true; AntsMapFiles.warm(window, file); } }      // the game page, a moment later, finds the file in the browser's cache
         function chooseMap(entry) {
@@ -1068,7 +1071,7 @@
             if (Rules.startsAlone(model)) { startAlone(); return; }
             client.start();
         });
-        // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds a room again.
+        // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds Home, and My room makes a room again.
         function startAlone() {
             var address = soloAddress(model, myName(), pickedShape); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
             handing = true; client.leave(); forgetSession();
@@ -1345,14 +1348,14 @@
         function runLobby() {
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
-            var stored = loadSession(); if (backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); })) return;
+            var stored = loadSession(), test = backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); });
+            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: My room does)
+            if (test) return;
             if (wantedCode && !(stored && stored.code === wantedCode)) {
                 askLink(wantedCode, '');
             } else if (stored) {
                 try { back = Rematch.readBack(window.sessionStorage, stored.code, Date.now()); } catch (e) { back = null; } if (back) backBar.show(back);
                 connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });
-            } else {
-                connect({ code: newCode(), name: myName(), own: true });
             }
         }
 
@@ -1469,6 +1472,11 @@
         // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
         if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
         else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none'; else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
+
+        // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
+        var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
+            info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow,
+            leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
         // ---- go ----
         runLobby();

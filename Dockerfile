@@ -164,6 +164,9 @@ COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
 COPY web/game_menu.js /usr/share/nginx/html/game_menu.js
 COPY web/game_menu.css /usr/share/nginx/html/game_menu.css
 
+# The two screens of the front page (docs/HOME_SCREEN.md): Home's top bar, its Menu and the stand-in picture of the Yard, and the slim bar of the Room, in a folder of their own, web/home/ (home.js, home.css), served at /home/
+COPY web/home/ /usr/share/nginx/html/home/
+
 # The map maker (docs/MAP_EDITOR.md): web/mapmaker.html as the builder stage stamped it (build id, site label), with its scripts and style in web/front/ (copied above) and the map core's module (lvl_core.js, lvl_core.wasm and lvl_core_api.js, copied above)
 COPY --from=builder /src/mapmaker.html /usr/share/nginx/html/mapmaker.html
 

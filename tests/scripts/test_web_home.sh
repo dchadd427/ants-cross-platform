@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OPT-IN, not part of ./run_tests.sh: the front page, which is the lobby, and the way into and out of a game in a real browser (docs/PLAY_IN_BROWSER.md, "The front page"): opening "/" makes a ROOM on the
+# OPT-IN, not part of ./run_tests.sh: the front page, which is the lobby, and the way into and out of a game in a real browser (docs/PLAY_IN_BROWSER.md, "The front page"): My room, pressed on the page that "/" opens, makes a ROOM on the
 # game server and seats the visitor in it (a first visit: Treasure, You at Green, the other three colors open; a code of six letters and numbers and its link; the line of numbers; Screen with the shape nearest the screen
 # checked; 23 widths from 320 to 1600 px; the contrast of all text), the lobby with several people (one host and guests, each a browser of its own: the link and its name card, drag and swap, Team 1 and
 # Team 2, a bot, the pencil, Remove with its question, a typed code, a reload, a phone, and START, which hands everybody into the real game), START in THIS tab against bots (no new tab; the game's
@@ -13,7 +13,7 @@
 #
 #   ANTS_WEB_URL=http://127.0.0.1:19980/ ANTS_WS_PORT=4002 tests/scripts/test_web_home.sh [--only front|lobby|play|solo|leave|friend|old|game] [--shots DIR] [--bot-seconds N] [--server PATH] [--maps DIR]
 #
-# The page is the web image (`docker build -t ants-beta .`, run it on a port). Opening "/" makes a room, so the parts front, lobby, play, solo, leave and friend need that site's /ws and /busy to lead to
+# The page is the web image (`docker build -t ants-beta .`, run it on a port). My room makes a room (a plain visit is Home: docs/HOME_SCREEN.md), so the parts front, lobby, play, solo, leave and friend need that site's /ws and /busy to lead to
 # a game server: ANTS_WS_PORT is the port they lead to, and the check starts the native `ants_server` of this tree there (build the target ants_server; --server names another program), as
 # web_rejoin_check.py does. Without ANTS_WS_PORT those parts are left out (leave still checks the games on this computer; old and game do not need a server). A Chromium-based browser (CHROME=/path/to/it
 # to name one) and python3 are needed, nothing else. Without them, or without ANTS_WEB_URL, it says so and exits 0. Exit status: 0 every check passed (or the check could not be made because the

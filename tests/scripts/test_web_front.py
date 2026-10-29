@@ -785,12 +785,12 @@ class ThePageUsesTheArt(unittest.TestCase):
 
     def test_nothing_is_loaded_from_another_site(self):
         scripts = re.findall(r'<script[^>]*\bsrc="([^"]*)"', self.page)
-        self.assertEqual(scripts, ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js"])      # (the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
+        self.assertEqual(scripts, ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
         self.assertEqual(len(re.findall(r"<script\b", self.page)), len(scripts) + 1)       # (and the one inline script that is the page's)
         self.assertNotRegex(self.page, r'<script[^>]*type="module"')
         for name in SCRIPT_FILES:
             self.assertNotRegex(read("web", "front", name), r"https?://", name + " names no other site")
-        self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]*)">', self.page), ["front/" + name for name in LOBBY_STYLES])      # (the lobby's three stylesheets of this folder, in this order, after the page's own style, and no other)
+        self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]*)">', self.page), ["front/" + name for name in LOBBY_STYLES] + ["home/home.css"])      # (the lobby's stylesheets of this folder, in this order, after the page's own style, then the style of web/home/, and no other)
         for name in LOBBY_STYLES:
             self.assertNotRegex(read("web", "front", name), r"https?://|@import|url\(\s*[\"']?(?:https?:)?//", name + " names no other site")
         self.assertNotRegex(self.page, r'<link[^>]*href="(?:https?:)?//')

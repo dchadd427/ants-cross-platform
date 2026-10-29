@@ -517,6 +517,17 @@ void run_lobby_public_tests() {
             ASSERT_EQ(room.host.listed_age_ms(room.now), kLobbyListedAgeCapMs);
             ASSERT_EQ(kLobbyListedAgeCapMs, 30u * 24u * 3600u * 1000u);
         }
+        {   // the accessor caps the age by itself: the door asks with the server's clock, which may be ahead of the room's last pass (no idle limit here, so the room stays public for as long as it runs)
+            HostLobby::Config hc = lobby_room_config(228);
+            hc.public_idle_ms = 0;
+            Room room(hc);
+            public_room(room, 0);
+            const uint32_t day = 24u * 3600u * 1000u;
+            run_coarse(room, 29ull * day, 60 * 1000);
+            ASSERT_TRUE(room.host.is_public() && room.host.unlist_count() == 0);
+            ASSERT_TRUE(room.host.listed_age_ms(room.now) > 28u * day && room.host.listed_age_ms(room.now) < kLobbyListedAgeCapMs);
+            ASSERT_EQ(room.host.listed_age_ms(room.now + 5 * day), kLobbyListedAgeCapMs);            // (no pass has run in these five days: the accessor alone says 30 days, not 34)
+        }
     } TEST_END();
 
     TEST_CASE("N4.53 The Colors Of A Listing (Protocol 22): people + bots + open colors Are The Colors Of The Match, Whatever The Plan Is And Whoever Sits Where; A Held Seat Is A Person Who Is Not Connected; An Open Color Is Exactly One That A Newcomer Takes, And A Room With None Says Full") {

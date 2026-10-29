@@ -704,11 +704,11 @@ def main():
                 shown = wait_for(lambda: a.ev("!document.getElementById('rejoin').hidden"), 20, 0.3)
                 check(bool(shown), "the front page of the site shows the Rejoin block")
                 if shown:
-                    info = a.ev("""(function () { var go = document.getElementById('rejoin-go'), note = document.getElementById('rejoin-note'), r = go.getBoundingClientRect(), lobby = document.getElementById('lobby').getBoundingClientRect(), mast = document.querySelector('header.mast').getBoundingClientRect();
-                        return { button: go.textContent, note: note.textContent, bottom: r.bottom, cards: lobby.top, mast: mast.top, enabled: !go.disabled }; })()""")
+                    info = a.ev("""(function () { var go = document.getElementById('rejoin-go'), note = document.getElementById('rejoin-note'), r = go.getBoundingClientRect(), yard = document.getElementById('yard').getBoundingClientRect(), bar = document.querySelector('.hbar').getBoundingClientRect();
+                        return { button: go.textContent, note: note.textContent, bottom: r.bottom, cards: yard.top, mast: bar.top, enabled: !go.disabled }; })()""")
                     check(info["button"] == "Rejoin it", "its button says \"Rejoin it\" (the room's code is in the note beside it: %r)" % info["button"])
                     check(info["note"] == "Your match in room %s is still running: go back to your seat." % grouped(room), "... and the note beside it says that the match is still running, with the room's code in two groups of three (%r)" % info["note"])
-                    check(info["bottom"] <= info["mast"] and info["mast"] <= info["cards"] and info["enabled"], "... above the logo and the colors (the button ends at %.0f px, the logo begins at %.0f px, the colors at %.0f px)" % (info["bottom"], info["mast"], info["cards"]))
+                    check(info["bottom"] <= info["mast"] and info["mast"] <= info["cards"] and info["enabled"], "... above the top bar with the logo, and the Yard (the button ends at %.0f px, the bar begins at %.0f px, the Yard at %.0f px)" % (info["bottom"], info["mast"], info["cards"]))
                     a.shot(args.shots, "rejoin_button")
                     pages = lambda: len([t for t in a.browser.devtools.call("Target.getTargets")["targetInfos"] if t["type"] == "page"])
                     before_pages = pages()
@@ -806,17 +806,17 @@ def main():
                 for k, v in items.items():
                     p.ev("localStorage.setItem(%s, %s); 1" % (json.dumps(k), json.dumps(v)))
                 p.call("Page.navigate", {"url": web})
-                wait_for(lambda: p.ev("!!document.getElementById('rejoin') && !!document.querySelector('#slots li.k-person')"), 20, 0.2)       # (the page has its room: it sits in a color)
+                wait_for(lambda: p.ev("!!document.getElementById('rejoin') && !!document.querySelector('.hbar .mine')"), 20, 0.2)       # (the page is on Home: a plain visit makes no room)
                 time.sleep(0.4)
-                return p.ev("""(function () { var r = document.getElementById('rejoin'), go = document.getElementById('rejoin-go'), mast = document.querySelector('header.mast').getBoundingClientRect(),
-                    main = document.querySelector('main.wrap'), top = main.getBoundingClientRect().top + parseFloat(getComputedStyle(main).paddingTop);
+                return p.ev("""(function () { var r = document.getElementById('rejoin'), go = document.getElementById('rejoin-go'), mast = document.querySelector('.hbar').getBoundingClientRect(),
+                    top = document.getElementById('screen').getBoundingClientRect().top;
                     return { hidden: r.hidden, shown: r.getBoundingClientRect().height > 0, button: r.hidden ? '' : go.textContent, note: r.hidden ? '' : document.getElementById('rejoin-note').textContent,
                              names: Object.keys(localStorage).filter(function (k) { return k.indexOf('ants.rejoin.') === 0; }).sort(),
                              scroll: [document.documentElement.scrollWidth, window.innerWidth], gap: mast.top - top }; })()""")
 
             plain = load_front({})
             check(plain["hidden"] and not plain["shown"] and plain["button"] == "", "no entry: nothing of the Rejoin is shown (the block is hidden and takes no room)")
-            check(plain["gap"] == 0, "... and nothing else moved: the logo starts at the top of the page (a gap of %s px above it)" % plain["gap"])
+            check(plain["gap"] == 0, "... and nothing else moved: the top bar starts at the top of the page (a gap of %s px above it)" % plain["gap"])
             old = load_front({"ants.rejoin.old-room.0": entry(age_ms=4 * 3600 * 1000)})
             check(old["hidden"] and old["names"] == [], "an entry older than 3 hours: not offered, and removed from the storage (%s)" % old["names"])
             other = load_front({"ants.rejoin.other-room.1": entry(server_text="wss://other.example/ws")})

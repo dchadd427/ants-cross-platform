@@ -329,7 +329,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_heard_while_starting",
@@ -339,7 +339,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_heard_while_loading",
@@ -349,7 +349,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_in_a_room_that_is_no_lobby",
@@ -359,7 +359,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_malformed_is_no_offence",
@@ -369,7 +369,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_burst_one_more",
@@ -379,7 +379,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_two_a_second",
@@ -389,7 +389,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_excess_one_more",
@@ -399,7 +399,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_drop_is_an_offence",
@@ -409,7 +409,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_offence_is_free",
@@ -419,7 +419,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_ignored_not_counted",
@@ -429,7 +429,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_ignored_never_an_offence",
@@ -439,7 +439,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_one_more_free",
@@ -449,7 +449,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_not_forgiven",
@@ -459,7 +459,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_refresh_is_no_activity",
@@ -469,7 +469,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_no_activity",
@@ -479,7 +479,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_private_to_private_counts",
@@ -489,7 +489,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_refresh_lists_again",
@@ -499,7 +499,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_listing_time_never_set",
@@ -509,7 +509,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_change_not_shown",
@@ -519,7 +519,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "flag_never_shown",
@@ -529,7 +529,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "flag_never_cleared",
@@ -539,7 +539,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_rule_removed",
@@ -549,7 +549,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_rule_one_step_late",
@@ -559,7 +559,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_rule_not_told",
@@ -569,7 +569,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_rule_not_counted",
@@ -579,7 +579,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_time_never_restarts",
@@ -589,7 +589,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_time_runs_from_the_listing",
@@ -599,7 +599,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_zero_is_no_limit_lost",
@@ -609,7 +609,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_30_minutes_to_31",
@@ -619,7 +619,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_30_minutes_to_29",
@@ -629,7 +629,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "idle_visibility_not_activity",
@@ -639,7 +639,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "listing_age_never_capped",
@@ -649,7 +649,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "listing_age_cap_of_a_day",
@@ -659,7 +659,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "open_color_ignores_the_plan",
@@ -669,7 +669,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "open_color_ignores_the_person",
@@ -679,7 +679,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "bot_colors_count_nobody",
@@ -689,7 +689,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "bot_colors_count_held_colors",
@@ -699,7 +699,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "match_colors_leave_out_a_person_on_nobody",
@@ -709,7 +709,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "match_colors_always_four",
@@ -719,7 +719,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "connected_counts_held_seats",
@@ -729,7 +729,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "connected_counts_a_closed_link",
@@ -739,7 +739,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "client_sends_to_a_started_room",
@@ -749,7 +749,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "client_sends_without_leading",
@@ -759,7 +759,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "codec_public_flag_without_lobby",
@@ -890,7 +890,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "codec_budget_two_a_second",
@@ -900,7 +900,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "codec_budget_excess_seven",
@@ -910,7 +910,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "codec_ignored_allowance_seventeen",
@@ -920,7 +920,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "page_protocol_still_21",
@@ -1056,7 +1056,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "leader_change_unlists_always",
@@ -1066,7 +1066,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "no_leader_keeps_public",
@@ -1076,7 +1076,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "public_by_never_set",
@@ -1086,7 +1086,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "visibility_shares_the_plans_budget",
@@ -1096,7 +1096,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "plans_share_the_visibility_budget",
@@ -1106,7 +1106,7 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
    "id": "listing_nameless_host_empty",
@@ -1136,7 +1136,37 @@
    "build": [
     "test_lobby"
    ],
-   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby"
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "earlier_leader_keeps_public",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "guests_[best].join_order != public_by_)",
+   "new": "guests_[best].join_order > public_by_)",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "age_cap_only_in_the_watch",
+   "file": "include/ants_net/lobby.hpp",
+   "old": "std::min<uint32_t>(now_ms - listed_ms_, kLobbyListedAgeCapMs)",
+   "new": "(now_ms - listed_ms_)",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "hello_of_a_newer_protocol_accepted",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (hello.version != net::kProtocolVersion) reason = net::RejectReason::VersionMismatch;",
+   "new": "if (hello.version < net::kProtocolVersion) reason = net::RejectReason::VersionMismatch;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.73 timeout 900 ./build/tests/test_server/test_server"
   }
  ]
 }

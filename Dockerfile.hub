@@ -1,0 +1,30 @@
+# =============================================================================
+# The chat hub (ants-hub): the global chat service, Python 3 standard library only (docs/HUB.md).
+#   docker build -f Dockerfile.hub -t ants-hub .
+#   docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 32 --memory 192m --tmpfs /tmp -v ants-hub-data:/data \
+#       -e ANTS_HUB_PUBLIC_URL=https://beta.playants.org ants-hub
+# It listens on port 4040 inside the container and is NOT published: the site's nginx reaches it over the network of the stack (wss://<site>/hub/ws, docker/nginx.conf).
+# The settings are environment variables only: ANTS_HUB_PUBLIC_URL (the site's address; the one Origin a socket may come from), ANTS_HUB_MODS (account ids that may moderate in chat).
+# The database (chat lines kept 7 days, mutes and bans) is /data/hub.db: keep /data in a volume. Moderation: docker exec ants-hub python -m hub.admin list
+# No ANTS_BUILD_ID argument on purpose: the image depends on hub/ and nothing else, so a deploy that changes nothing in hub/ builds the same image and the chat is not restarted.
+# =============================================================================
+FROM python:3.12-slim-bookworm
+
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin hub && \
+    mkdir -p /data /app && chown hub /data
+
+WORKDIR /app
+COPY hub/ /app/hub/
+# The bytecode is made now, as root: the image is run read-only, where Python could not write it
+RUN python -m compileall -q /app/hub
+
+# Every interface inside the container (the network of the stack reaches it there; nothing is published): the program's own default is the loopback address
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ANTS_HUB_DB=/data/hub.db ANTS_HUB_PORT=4040 ANTS_HUB_HOST=0.0.0.0
+USER hub
+EXPOSE 4040
+
+# Alive = the hub answers GET /hub/healthz on its own port (the image has no curl)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["python", "-m", "hub.health"]
+
+ENTRYPOINT ["python", "-m", "hub"]

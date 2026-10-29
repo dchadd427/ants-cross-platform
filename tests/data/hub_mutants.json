@@ -1,0 +1,1863 @@
+{
+ "note": "Mutants of the chat hub (hub/, Dockerfile.hub, its two stack services, its nginx block and the deploy filter) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_*.py or test_nginx_hub.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_mutants.json --keep-going --jobs 1 --baseline-every 40. The tests use the real sockets of this machine and a real nginx program where one is installed (without one, the nginx mutants cannot be caught and show as survived).",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_text tests.scripts.test_hub_ws tests.scripts.test_hub_core tests.scripts.test_hub_server tests.scripts.test_hub_stack tests.scripts.test_nginx_hub tests.scripts.test_staging_stack tests.scripts.test_deploy_filter"
+ },
+ "mutants": [
+  {
+   "id": "text_bidi_and_format_characters_kept",
+   "file": "hub/text.py",
+   "old": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cf\", \"Cs\", \"Co\", \"Cn\"))",
+   "new": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cs\", \"Co\", \"Cn\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_private_use_kept",
+   "file": "hub/text.py",
+   "old": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cf\", \"Cs\", \"Co\", \"Cn\"))",
+   "new": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cf\", \"Cs\", \"Cn\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_unassigned_kept",
+   "file": "hub/text.py",
+   "old": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cf\", \"Cs\", \"Co\", \"Cn\"))",
+   "new": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cf\", \"Cs\", \"Co\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_surrogates_kept",
+   "file": "hub/text.py",
+   "old": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cf\", \"Cs\", \"Co\", \"Cn\"))",
+   "new": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cf\", \"Co\", \"Cn\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_control_characters_kept",
+   "file": "hub/text.py",
+   "old": "REMOVED_CATEGORIES = frozenset((\"Cc\", \"Cf\", \"Cs\", \"Co\", \"Cn\"))",
+   "new": "REMOVED_CATEGORIES = frozenset((\"Cf\", \"Cs\", \"Co\", \"Cn\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_blank_looking_letters_kept",
+   "file": "hub/text.py",
+   "old": "elif category in REMOVED_CATEGORIES or ch in FILLERS:",
+   "new": "elif category in REMOVED_CATEGORIES:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_line_and_paragraph_separators_kept",
+   "file": "hub/text.py",
+   "old": "BLANK_CATEGORIES = frozenset((\"Zs\", \"Zl\", \"Zp\"))",
+   "new": "BLANK_CATEGORIES = frozenset((\"Zs\",))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_other_spaces_kept",
+   "file": "hub/text.py",
+   "old": "BLANK_CATEGORIES = frozenset((\"Zs\", \"Zl\", \"Zp\"))",
+   "new": "BLANK_CATEGORIES = frozenset((\"Zl\", \"Zp\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_tabs_and_line_ends_not_blanks",
+   "file": "hub/text.py",
+   "old": "BLANK_CONTROLS = frozenset(\"\\t\\n\\r\\x0b\\x0c\\x85\")",
+   "new": "BLANK_CONTROLS = frozenset()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_blanks_not_collapsed",
+   "file": "hub/text.py",
+   "old": "if out and out[-1] != \" \":",
+   "new": "if out:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_edge_blank_not_trimmed",
+   "file": "hub/text.py",
+   "old": ".strip(\" \")",
+   "new": ".strip(\"\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_markup_allowed",
+   "file": "hub/text.py",
+   "old": "if \"<\" in text or \">\" in text:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_greater_than_allowed",
+   "file": "hub/text.py",
+   "old": "if \"<\" in text or \">\" in text:",
+   "new": "if \"<\" in text:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_201_code_points_allowed",
+   "file": "hub/text.py",
+   "old": "MAX_CODE_POINTS = 200",
+   "new": "MAX_CODE_POINTS = 201",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_199_code_points_only",
+   "file": "hub/text.py",
+   "old": "MAX_CODE_POINTS = 200",
+   "new": "MAX_CODE_POINTS = 199",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_801_bytes_allowed",
+   "file": "hub/text.py",
+   "old": "MAX_BYTES = 800",
+   "new": "MAX_BYTES = 801",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_bytes_not_checked",
+   "file": "hub/text.py",
+   "old": " or len(text.encode(\"utf-8\")) > MAX_BYTES",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_no_nfc_before",
+   "file": "hub/text.py",
+   "old": "for ch in unicodedata.normalize(\"NFC\", raw):",
+   "new": "for ch in raw:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_no_nfc_after",
+   "file": "hub/text.py",
+   "old": "text = unicodedata.normalize(\"NFC\", \"\".join(out)).strip(\" \")",
+   "new": "text = \"\".join(out).strip(\" \")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_marks_unlimited",
+   "file": "hub/text.py",
+   "old": "if marks <= MAX_MARKS:",
+   "new": "if True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_empty_line_allowed",
+   "file": "hub/text.py",
+   "old": "if not any(c != \" \" and not unicodedata.category(c).startswith(\"M\") for c in text):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_marks_alone_are_a_line",
+   "file": "hub/text.py",
+   "old": "if not any(c != \" \" and not unicodedata.category(c).startswith(\"M\") for c in text):",
+   "new": "if not text:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_a_space_counts_as_something_shown",
+   "file": "hub/text.py",
+   "old": "if not any(c != \" \" and not unicodedata.category(c).startswith(\"M\") for c in text):",
+   "new": "if not any(not unicodedata.category(c).startswith(\"M\") for c in text):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_huge_input_worked_on",
+   "file": "hub/text.py",
+   "old": "    if len(raw) > MAX_RAW:\n        return None, \"long\"\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "text_not_a_string_worked_on",
+   "file": "hub/text.py",
+   "old": "    if not isinstance(raw, str):\n        return None, \"bad\"\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "name_may_have_capitals",
+   "file": "hub/text.py",
+   "old": "NAME = re.compile(r\"[a-z0-9_.]{2,32}\\Z\")",
+   "new": "NAME = re.compile(r\"[A-Za-z0-9_.]{2,32}\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "name_may_be_one_letter",
+   "file": "hub/text.py",
+   "old": "NAME = re.compile(r\"[a-z0-9_.]{2,32}\\Z\")",
+   "new": "NAME = re.compile(r\"[a-z0-9_.]{1,32}\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "rate_limit_removed",
+   "file": "hub/limits.py",
+   "old": "if not bucket.take(now):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "rate_burst_4",
+   "file": "hub/limits.py",
+   "old": "burst: int = 3 ",
+   "new": "burst: int = 4 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "rate_refill_1_second",
+   "file": "hub/limits.py",
+   "old": "refill_seconds: float = 2.0 ",
+   "new": "refill_seconds: float = 1.0 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "rate_bucket_grows_without_a_cap",
+   "file": "hub/limits.py",
+   "old": "self.tokens = min(self.burst, self.tokens + max(0.0, now - self.at) / self.refill)",
+   "new": "self.tokens = self.tokens + max(0.0, now - self.at) / self.refill",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "rate_limit_per_tab_not_per_account",
+   "file": "hub/limits.py",
+   "old": "entry = self.accounts.get(account)",
+   "new": "entry = None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "duplicate_not_dropped",
+   "file": "hub/limits.py",
+   "old": "if text in said:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "duplicate_window_29_seconds",
+   "file": "hub/limits.py",
+   "old": "duplicate_seconds: float = 30.0 ",
+   "new": "duplicate_seconds: float = 29.0 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "duplicate_window_31_seconds",
+   "file": "hub/limits.py",
+   "old": "duplicate_seconds: float = 30.0 ",
+   "new": "duplicate_seconds: float = 31.0 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "violations_21",
+   "file": "hub/limits.py",
+   "old": "violations: int = 20 ",
+   "new": "violations: int = 21 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "violations_19",
+   "file": "hub/limits.py",
+   "old": "violations: int = 20 ",
+   "new": "violations: int = 19 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "violations_never_forgotten",
+   "file": "hub/limits.py",
+   "old": "while self.times and now - self.times[0] >= self.window:",
+   "new": "while False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "violation_window_edge",
+   "file": "hub/limits.py",
+   "old": "while self.times and now - self.times[0] >= self.window:",
+   "new": "while self.times and now - self.times[0] > self.window:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "violation_limit_off_by_one",
+   "file": "hub/limits.py",
+   "old": "return len(self.times) >= self.limit",
+   "new": "return len(self.times) > self.limit",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "address_header_ignored",
+   "file": "hub/limits.py",
+   "old": "for candidate in (value, peer):",
+   "new": "for candidate in (peer,):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "ipv6_counted_by_whole_address",
+   "file": "hub/limits.py",
+   "old": "return str(ipaddress.IPv6Network((int(ip) >> 64 << 64, 64)))",
+   "new": "return str(ip)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "address_limit_off",
+   "file": "hub/limits.py",
+   "old": "if self.counts.get(key, 0) >= self.limit:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "address_places_never_given_back",
+   "file": "hub/limits.py",
+   "old": "left = self.counts.get(key, 0) - 1",
+   "new": "left = self.counts.get(key, 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "sockets_per_address_9",
+   "file": "hub/limits.py",
+   "old": "sockets_per_address: int = 8\n",
+   "new": "sockets_per_address: int = 9\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "sockets_total_501",
+   "file": "hub/limits.py",
+   "old": "sockets_total: int = 500\n",
+   "new": "sockets_total: int = 501\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "frame_cap_2049",
+   "file": "hub/limits.py",
+   "old": "frame_max: int = 2048 ",
+   "new": "frame_max: int = 2049 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "history_51_lines",
+   "file": "hub/limits.py",
+   "old": "history_lines: int = 50 ",
+   "new": "history_lines: int = 51 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "history_49_lines",
+   "file": "hub/limits.py",
+   "old": "history_lines: int = 50 ",
+   "new": "history_lines: int = 49 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "retention_8_days_in_limits",
+   "file": "hub/limits.py",
+   "old": "retention_days: int = 7 ",
+   "new": "retention_days: int = 8 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "ping_every_30_seconds",
+   "file": "hub/limits.py",
+   "old": "ping_seconds: float = 25.0\n",
+   "new": "ping_seconds: float = 30.0\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "silence_61_seconds",
+   "file": "hub/limits.py",
+   "old": "silence_seconds: float = 60.0\n",
+   "new": "silence_seconds: float = 61.0\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "ban_ignored",
+   "file": "hub/chat.py",
+   "old": "if self.store.is_banned(who.account_id):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "mute_ignored",
+   "file": "hub/chat.py",
+   "old": "if self.store.muted_until(who.account_id):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "young_account_may_write",
+   "file": "hub/chat.py",
+   "old": "if who.young:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "history_ring_not_bounded",
+   "file": "hub/chat.py",
+   "old": "self.ring = collections.deque(maxlen=limits.history_lines)",
+   "new": "self.ring = collections.deque()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "history_not_read_back_after_a_restart",
+   "file": "hub/chat.py",
+   "old": "            self.ring.append(line)\n        self.deleted_seq",
+   "new": "            pass\n        self.deleted_seq",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "del_not_applied_at_once",
+   "file": "hub/chat.py",
+   "old": "                return self.mistake(peer, \"bad\")\n            self.sync_deletions()",
+   "new": "                return self.mistake(peer, \"bad\")\n            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "deleted_line_stays_in_the_history",
+   "file": "hub/chat.py",
+   "old": "                self.ring.remove(line)",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "deletion_not_announced",
+   "file": "hub/chat.py",
+   "old": "self.broadcast({\"t\": \"del\", \"id\": line_id})",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "chat_commands_for_everybody",
+   "file": "hub/chat.py",
+   "old": "if mod and line.startswith(\"/\"):",
+   "new": "if line.startswith(\"/\"):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "a_moderator_can_mute_a_moderator",
+   "file": "hub/chat.py",
+   "old": "if target is None or target in self.mods:",
+   "new": "if target is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "chat_mute_without_a_bound",
+   "file": "hub/chat.py",
+   "old": "1 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES",
+   "new": "1 <= int(words[2])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "chat_mute_zero_minutes",
+   "file": "hub/chat.py",
+   "old": "1 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES",
+   "new": "0 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "welcome_never_says_mod",
+   "file": "hub/chat.py",
+   "old": "\"mod\": you.account_id in self.mods}",
+   "new": "\"mod\": False}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "line_never_says_mod",
+   "file": "hub/chat.py",
+   "old": "entry = self.store.add_line(who.account_id, who.name, line, mod)",
+   "new": "entry = self.store.add_line(who.account_id, who.name, line, False)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "mistakes_not_counted",
+   "file": "hub/chat.py",
+   "old": "        peer.strike()",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "deep_json_crashes_the_handler",
+   "file": "hub/chat.py",
+   "old": "except (ValueError, RecursionError):",
+   "new": "except ValueError:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "an_error_is_not_sent",
+   "file": "hub/chat.py",
+   "old": "peer.send_text(dumps({\"t\": \"err\", \"code\": code}))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "welcome_login_flag_always_true",
+   "file": "hub/chat.py",
+   "old": "\"login\": bool(self.login)",
+   "new": "\"login\": True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "welcome_without_history",
+   "file": "hub/chat.py",
+   "old": "\"history\": [self.line_of(l) for l in self.recent()]}",
+   "new": "\"history\": []}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "retention_8_days_in_store",
+   "file": "hub/store.py",
+   "old": "retention_days=7, busy_ms=5000):",
+   "new": "retention_days=8, busy_ms=5000):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "old_lines_never_deleted",
+   "file": "hub/store.py",
+   "old": "(now - self.retention, chunk)).rowcount",
+   "new": "(now - self.retention - 10 ** 9, chunk)).rowcount",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "deleted_pages_not_zeroed",
+   "file": "hub/store.py",
+   "old": "PRAGMA secure_delete=ON",
+   "new": "PRAGMA secure_delete=OFF",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "log_file_not_cut_after_a_purge",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"PRAGMA wal_checkpoint(TRUNCATE)\")",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "deleted_lines_in_the_history",
+   "file": "hub/store.py",
+   "old": "WHERE deleted = 0 AND at >= ? ORDER BY id DESC LIMIT ?",
+   "new": "WHERE at >= ? ORDER BY id DESC LIMIT ?",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "mute_never_ends",
+   "file": "hub/store.py",
+   "old": "return row[0] if row and row[0] > self.clock() else 0",
+   "new": "return row[0] if row else 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "mute_zero_does_not_lift",
+   "file": "hub/store.py",
+   "old": "            if minutes <= 0:\n                self.db.execute(\"DELETE FROM mutes WHERE account = ?\", (account,))\n                return 0",
+   "new": "            if minutes <= 0:\n                return 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "ban_kept_by_name_not_account",
+   "file": "hub/store.py",
+   "old": "return self.db.execute(\"SELECT 1 FROM bans WHERE account = ?\", (account,)).fetchone() is not None",
+   "new": "return self.db.execute(\"SELECT 1 FROM bans WHERE name = ?\", (account,)).fetchone() is not None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "unban_does_nothing",
+   "file": "hub/store.py",
+   "old": "return self.db.execute(\"DELETE FROM bans WHERE account = ?\", (account,)).rowcount == 1",
+   "new": "return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "database_open_to_everybody",
+   "file": "hub/store.py",
+   "old": "os.chmod(path, 0o600)",
+   "new": "os.chmod(path, 0o666)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "deletion_numbers_repeat",
+   "file": "hub/store.py",
+   "old": "UPDATE meta SET v = v + 1 WHERE k = 'del_seq'",
+   "new": "UPDATE meta SET v = 1 WHERE k = 'del_seq'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "admin_ban_only_mutes",
+   "file": "hub/admin.py",
+   "old": "            store.ban(account, BY, name)",
+   "new": "            store.mute(account, 1, BY, name)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "admin_del_deletes_nothing",
+   "file": "hub/admin.py",
+   "old": "            if not store.delete_line(args.line_id, BY):",
+   "new": "            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "admin_makes_a_database_by_accident",
+   "file": "hub/admin.py",
+   "old": "    if not os.path.exists(args.db):",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "admin_year_bound_gone",
+   "file": "hub/admin.py",
+   "old": "if args.command == \"mute\" and not 0 <= args.minutes <= MAX_MINUTES:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "test_login_for_any_address",
+   "file": "hub/config.py",
+   "old": "    if cfg.test_login and not is_loopback(cfg.host):",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "test_login_on_unless_told_otherwise",
+   "file": "hub/config.py",
+   "old": "test_login=env.get(\"ANTS_HUB_TEST_LOGIN\", \"\") == \"1\"",
+   "new": "test_login=env.get(\"ANTS_HUB_TEST_LOGIN\", \"\") != \"0\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "secret_in_the_summary",
+   "file": "hub/config.py",
+   "old": "\"login_configured\": int(bool(self.login_client_secret))}",
+   "new": "\"login_configured\": self.login_client_secret}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+  },
+  {
+   "id": "moderators_in_the_summary",
+   "file": "hub/config.py",
+   "old": "\"mods\": len(self.mods),",
+   "new": "\"mods\": \",\".join(sorted(self.mods)),",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+  },
+  {
+   "id": "secret_in_the_text_of_the_settings",
+   "file": "hub/config.py",
+   "old": "login_client_secret: str = dataclasses.field(default=\"\", repr=False)",
+   "new": "login_client_secret: str = dataclasses.field(default=\"\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "moderators_in_the_text_of_the_settings",
+   "file": "hub/config.py",
+   "old": "mods: frozenset = dataclasses.field(default=frozenset(), repr=False)",
+   "new": "mods: frozenset = dataclasses.field(default=frozenset())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "any_origin_url_accepted",
+   "file": "hub/config.py",
+   "old": "parts.path not in (\"\", \"/\") or ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "test_login_header_accepts_any_name",
+   "file": "hub/session.py",
+   "old": "or not text.valid_name(parts[1])",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "no_login_believes_the_test_header",
+   "file": "hub/session.py",
+   "old": "class NoLogin(Sessions):\n    pass",
+   "new": "class NoLogin(Sessions):\n    def identify(self, headers):\n        return TestLogin().identify(headers)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "log_values_not_cleaned",
+   "file": "hub/log.py",
+   "old": "SAFE.sub(\"_\", str(v))[:60]",
+   "new": "str(v)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "log_values_not_cut",
+   "file": "hub/log.py",
+   "old": "SAFE.sub(\"_\", str(v))[:60]",
+   "new": "SAFE.sub(\"_\", str(v))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "log_tag_is_the_address",
+   "file": "hub/log.py",
+   "old": "return hmac.new(self.salt, address_key.encode(\"utf-8\"), hashlib.sha256).hexdigest()[:8]",
+   "new": "return address_key",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "frame_cap_off",
+   "file": "hub/ws.py",
+   "old": "        if length > self.max_payload:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "unmasked_frames_accepted",
+   "file": "hub/ws.py",
+   "old": "        if not b1 & 0x80:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "reserved_bits_ignored",
+   "file": "hub/ws.py",
+   "old": "        if b0 & 0x70:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "continuation_frames_accepted",
+   "file": "hub/ws.py",
+   "old": "        if opcode == CONT:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "unfinished_text_frames_accepted",
+   "file": "hub/ws.py",
+   "old": "        if not fin:\n            if control:",
+   "new": "        if False:\n            if control:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "binary_frames_accepted",
+   "file": "hub/ws.py",
+   "old": "        if opcode == BINARY:\n            raise ProtocolError(1003, \"binary frames are not taken\")\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "unknown_opcodes_accepted",
+   "file": "hub/ws.py",
+   "old": "        if opcode not in (TEXT, CLOSE, PING, PONG):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "long_control_frames_accepted",
+   "file": "hub/ws.py",
+   "old": "        if control and length > CONTROL_MAX:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "long_form_of_a_16_bit_length_accepted",
+   "file": "hub/ws.py",
+   "old": "            if length < 126:",
+   "new": "            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "long_form_of_a_64_bit_length_accepted",
+   "file": "hub/ws.py",
+   "old": "            if length < 65536 or length >> 63:",
+   "new": "            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "text_not_checked_for_utf8",
+   "file": "hub/ws.py",
+   "old": "return opcode, payload.decode(\"utf-8\")",
+   "new": "return opcode, payload.decode(\"utf-8\", \"replace\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "close_frames_not_checked",
+   "file": "hub/ws.py",
+   "old": "            return opcode, parse_close(payload)",
+   "new": "            return opcode, (1000, \"\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "bad_close_codes_accepted",
+   "file": "hub/ws.py",
+   "old": "    if code not in VALID_CLOSE:",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "unmasking_wrong",
+   "file": "hub/ws.py",
+   "old": "key = (mask * (n // 4 + 1))[:n]",
+   "new": "key = (mask * (n // 4 + 1))[1:n + 1]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "frames_after_a_close_read",
+   "file": "hub/ws.py",
+   "old": "            if frame[0] == CLOSE:\n                self.finished = True\n                break",
+   "new": "            if frame[0] == CLOSE:\n                self.finished = True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "frames_before_an_error_dropped",
+   "file": "hub/ws.py",
+   "old": "                self.error = e\n                self.finished = True\n                break",
+   "new": "                self.error = e\n                self.finished = True\n                frames = []\n                break",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "accept_key_wrong",
+   "file": "hub/ws.py",
+   "old": "GUID = \"258EAFA5-E914-47DA-95CA-C5AB0DC85B11\"",
+   "new": "GUID = \"258EAFA5-E914-47DA-95CA-C5AB0DC85B12\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "key_of_any_length_accepted",
+   "file": "hub/ws.py",
+   "old": "return len(base64.b64decode(key, validate=True)) == 16",
+   "new": "return True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "repeated_origin_accepted",
+   "file": "hub/http.py",
+   "old": "ONCE = frozenset((\"origin\", ",
+   "new": "ONCE = frozenset((",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "repeated_client_address_accepted",
+   "file": "hub/http.py",
+   "old": "\"x-client-address\", ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "folded_header_lines_accepted",
+   "file": "hub/http.py",
+   "old": "HEADER_LINE = re.compile(r\"([!#$%&'*+.^_`|~0-9A-Za-z-]+):",
+   "new": "HEADER_LINE = re.compile(r\"\\s*([!#$%&'*+.^_`|~0-9A-Za-z-]+):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "headers_unlimited",
+   "file": "hub/http.py",
+   "old": "    if len(lines) - 1 > MAX_HEADERS:",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "origin_not_checked",
+   "file": "hub/server.py",
+   "old": "if not self.cfg.origin or h.get(\"origin\") != self.cfg.origin:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "origin_checked_by_prefix",
+   "file": "hub/server.py",
+   "old": "if not self.cfg.origin or h.get(\"origin\") != self.cfg.origin:",
+   "new": "if not self.cfg.origin or not h.get(\"origin\", \"\").startswith(self.cfg.origin):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "origin_may_be_missing",
+   "file": "hub/server.py",
+   "old": "if not self.cfg.origin or h.get(\"origin\") != self.cfg.origin:",
+   "new": "if not self.cfg.origin or h.get(\"origin\", self.cfg.origin) != self.cfg.origin:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "hub_without_a_site_lets_everybody_in",
+   "file": "hub/server.py",
+   "old": "if not self.cfg.origin or h.get(\"origin\") != self.cfg.origin:",
+   "new": "if self.cfg.origin and h.get(\"origin\") != self.cfg.origin:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "anonymous_write_allowed",
+   "file": "hub/server.py",
+   "old": "        return None\n\n    # ---- the clock",
+   "new": "        return sessionmod.Identity(\"0\", \"anonymous\", False)\n\n    # ---- the clock",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "rubbish_identity_believed",
+   "file": "hub/server.py",
+   "old": "if who is not None and configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.name):",
+   "new": "if who is not None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "total_sockets_not_limited",
+   "file": "hub/server.py",
+   "old": "            raise http.HttpError(400, \"key\")\n        if len(self.chat.peers) >= self.limits.sockets_total:",
+   "new": "            raise http.HttpError(400, \"key\")\n        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "client_address_header_ignored",
+   "file": "hub/server.py",
+   "old": "address = limitmod.address_key(h.get(\"x-client-address\"),",
+   "new": "address = limitmod.address_key(None,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "body_accepted",
+   "file": "hub/server.py",
+   "old": "if h.get(\"content-length\", \"0\") != \"0\" or \"transfer-encoding\" in h:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "upgrade_not_checked",
+   "file": "hub/server.py",
+   "old": "if h.get(\"upgrade\", \"\").lower() != \"websocket\" or not request.has_token(\"connection\", \"upgrade\"):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "version_not_checked",
+   "file": "hub/server.py",
+   "old": "if h.get(\"sec-websocket-version\") != \"13\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "method_not_checked",
+   "file": "hub/server.py",
+   "old": "if request.method != \"GET\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "frame_budget_off",
+   "file": "hub/server.py",
+   "old": "                if not self.frames.take(now):",
+   "new": "                if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "mistakes_never_close",
+   "file": "hub/server.py",
+   "old": "        if self.strikes.add(self.hub.clock()):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "silent_sockets_never_dropped",
+   "file": "hub/server.py",
+   "old": "            elif now - peer.last_rx >= self.limits.silence_seconds:",
+   "new": "            elif False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "hub_never_pings",
+   "file": "hub/server.py",
+   "old": "            elif now - peer.last_ping >= self.limits.ping_seconds:",
+   "new": "            elif False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "online_count_never_sent",
+   "file": "hub/server.py",
+   "old": "        if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "slow_readers_never_dropped",
+   "file": "hub/server.py",
+   "old": "if self.writer.transport.get_write_buffer_size() > self.hub.limits.write_buffer_max:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "handshake_without_a_time_limit",
+   "file": "hub/server.py",
+   "old": "head = await asyncio.wait_for(reader.readuntil(b\"\\r\\n\\r\\n\"), self.limits.handshake_seconds)",
+   "new": "head = await reader.readuntil(b\"\\r\\n\\r\\n\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "sockets_not_counted_off",
+   "file": "hub/server.py",
+   "old": "                self.per_address.remove(peer.key)",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "gone_sockets_stay_in_the_chat",
+   "file": "hub/server.py",
+   "old": "self.chat.peers.discard(peer)\n                self.per_address.remove(peer.key)",
+   "new": "self.per_address.remove(peer.key)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "address_logged_whole",
+   "file": "hub/server.py",
+   "old": "peer = Peer(self, writer, address, self.log.tag(address), identity, self.clock())",
+   "new": "peer = Peer(self, writer, address, address, identity, self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+  },
+  {
+   "id": "sessions_login_flag_ignored",
+   "file": "hub/server.py",
+   "old": "self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, sessions.login)",
+   "new": "self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "deletions_by_the_command_line_not_seen",
+   "file": "hub/server.py",
+   "old": "            self.chat.sync_deletions()\n        if now >= self.next_forget:",
+   "new": "            pass\n        if now >= self.next_forget:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "sigterm_ignored",
+   "file": "hub/server.py",
+   "old": "    for sig in (signal.SIGTERM, signal.SIGINT):",
+   "new": "    for sig in (signal.SIGINT,):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+  },
+  {
+   "id": "health_never_answers",
+   "file": "hub/server.py",
+   "old": "            if request.path == HEALTH_PATH and request.method == \"GET\":",
+   "new": "            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+  },
+  {
+   "id": "health_check_always_fails",
+   "file": "hub/health.py",
+   "old": "    return 0 if ok else 1",
+   "new": "    return 1",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+  },
+  {
+   "id": "nginx_passes_every_header",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade $http_upgrade;",
+   "new": "        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_trusts_the_visitors_address_header",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_pass_request_body off;",
+   "new": "        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $http_x_client_address;\n        proxy_pass_request_body off;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_does_not_pass_the_origin",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $http_cookie;",
+   "new": "        proxy_set_header Cookie $http_cookie;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_no_limit_of_sockets",
+   "file": "docker/nginx.conf",
+   "old": "        limit_conn ants_hub_conn 16;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_hub_off_is_not_json",
+   "file": "docker/nginx.conf",
+   "old": "error_page 502 504 = @hub_off;",
+   "new": "error_page 504 = @hub_off;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_any_method",
+   "file": "docker/nginx.conf",
+   "old": "    location = /hub/ws {\n        if ($request_method != GET) { return 405; }\n",
+   "new": "    location = /hub/ws {\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_hub_name_fixed_at_start",
+   "file": "docker/nginx.conf",
+   "old": "        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;",
+   "new": "        proxy_pass http://ants-hub:4040;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_buffering_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_buffering off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 120s;",
+   "new": "        proxy_connect_timeout 3s;\n        proxy_read_timeout 120s;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "stack_hub_may_write_its_image",
+   "file": "docker-compose.stack.yml",
+   "old": "    read_only: true\n    cap_drop: [ALL]\n    security_opt: [\"no-new-privileges:true\"]\n    pids_limit: 32",
+   "new": "    cap_drop: [ALL]\n    security_opt: [\"no-new-privileges:true\"]\n    pids_limit: 32",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "stack_hub_more_processes",
+   "file": "docker-compose.stack.yml",
+   "old": "    pids_limit: 32\n    mem_limit: 192m",
+   "new": "    pids_limit: 256\n    mem_limit: 192m",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "stack_hub_publishes_a_port",
+   "file": "docker-compose.stack.yml",
+   "old": "    container_name: ants-hub\n    restart: unless-stopped\n",
+   "new": "    container_name: ants-hub\n    restart: unless-stopped\n    ports:\n      - \"4040:4040\"\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "stack_hub_gets_a_build_id",
+   "file": "docker-compose.stack.yml",
+   "old": "      dockerfile: Dockerfile.hub\n",
+   "new": "      dockerfile: Dockerfile.hub\n      args:\n        ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "stack_hub_turns_on_the_test_login",
+   "file": "docker-compose.stack.yml",
+   "old": "      ANTS_HUB_MODS: ${ANTS_HUB_MODS:-}\n    volumes:\n      - ants-hub-data:/data",
+   "new": "      ANTS_HUB_MODS: ${ANTS_HUB_MODS:-}\n      ANTS_HUB_TEST_LOGIN: \"1\"\n    volumes:\n      - ants-hub-data:/data",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "staging_hub_shares_the_volume_of_the_site",
+   "file": "docker-compose.staging.yml",
+   "old": "      - ants-staging-hub-data:/data",
+   "new": "      - ants-staging-results:/data",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "image_runs_as_root",
+   "file": "Dockerfile.hub",
+   "old": "USER hub\nEXPOSE 4040",
+   "new": "EXPOSE 4040",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "image_copies_the_whole_context",
+   "file": "Dockerfile.hub",
+   "old": "COPY hub/ /app/hub/",
+   "new": "COPY . /app/",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "image_takes_a_build_id",
+   "file": "Dockerfile.hub",
+   "old": "WORKDIR /app\n",
+   "new": "ARG ANTS_BUILD_ID=\nWORKDIR /app\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "image_health_check_needs_curl",
+   "file": "Dockerfile.hub",
+   "old": "CMD [\"python\", \"-m\", \"hub.health\"]",
+   "new": "CMD [\"curl\", \"-f\", \"http://127.0.0.1:4040/hub/healthz\"]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "deploy_filter_ignores_the_hub_image",
+   "file": "tools/deploy_filter.py",
+   "old": "for dockerfile in (\"Dockerfile\", \"Dockerfile.server\", \"Dockerfile.hub\"):",
+   "new": "for dockerfile in (\"Dockerfile\", \"Dockerfile.server\"):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_deploy_filter tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "deploy_filter_ignores_the_hub_dockerfile_itself",
+   "file": "tools/deploy_filter.py",
+   "old": "DEFINITIONS = (\"Dockerfile\", \"Dockerfile.server\", \"Dockerfile.hub\", \".dockerignore\")",
+   "new": "DEFINITIONS = (\"Dockerfile\", \"Dockerfile.server\", \".dockerignore\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_deploy_filter tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "header_pattern_backtracks",
+   "file": "hub/http.py",
+   "old": ":([\\t\\x20-\\x7e\\x80-\\xff]*)\\Z\")",
+   "new": ":[ \\t]*([\\t\\x20-\\x7e\\x80-\\xff]*?)[ \\t]*\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "header_blanks_kept_in_the_value",
+   "file": "hub/http.py",
+   "old": "h.group(2).strip(\" \\t\")",
+   "new": "h.group(2)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "request_line_end_is_a_dollar",
+   "file": "hub/http.py",
+   "old": "HTTP/1\\.[01]\\Z\")",
+   "new": "HTTP/1\\.[01]$\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "header_line_end_is_a_dollar",
+   "file": "hub/http.py",
+   "old": "\\x80-\\xff]*)\\Z\")",
+   "new": "\\x80-\\xff]*)$\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "deletion_takes_a_number_when_nothing_is_deleted",
+   "file": "hub/store.py",
+   "old": "if self.db.execute(\"SELECT 1 FROM lines WHERE id = ? AND deleted = 0\", (line_id,)).fetchone() is None:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "migration_forgets_the_deletion_counter",
+   "file": "hub/store.py",
+   "old": "SELECT 'del_seq', COALESCE(MAX(del_seq), 0) FROM lines;",
+   "new": "SELECT 'del_seq', 0 FROM lines LIMIT 1;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "deletion_counter_follows_the_lines_that_are_left",
+   "file": "hub/store.py",
+   "old": "UPDATE meta SET v = v + 1 WHERE k = 'del_seq'",
+   "new": "UPDATE meta SET v = (SELECT COALESCE(MAX(del_seq), 0) + 1 FROM lines) WHERE k = 'del_seq'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "last_deletion_from_the_lines",
+   "file": "hub/store.py",
+   "old": "\"SELECT v FROM meta WHERE k = 'del_seq'\"",
+   "new": "\"SELECT COALESCE(MAX(del_seq), 0) FROM lines\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "purge_cuts_the_log_file_only_when_lines_went",
+   "file": "hub/store.py",
+   "old": "        self.checkpoint()\n        return gone",
+   "new": "        if gone:\n            self.checkpoint()\n        return gone",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "purge_not_in_chunks",
+   "file": "hub/store.py",
+   "old": "(now - self.retention, chunk)).rowcount",
+   "new": "(now - self.retention, 10 ** 9)).rowcount",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "busy_log_file_forgotten",
+   "file": "hub/store.py",
+   "old": "self.unsettled = bool(busy)",
+   "new": "self.unsettled = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "purge_waits_for_a_reader",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"PRAGMA busy_timeout=0\")",
+   "new": "self.db.execute(\"PRAGMA busy_timeout=5000\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "checkpoint_is_passive",
+   "file": "hub/store.py",
+   "old": "PRAGMA wal_checkpoint(TRUNCATE)",
+   "new": "PRAGMA wal_checkpoint(PASSIVE)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "size_is_the_size_of_the_file",
+   "file": "hub/store.py",
+   "old": "return (pages - free) * page_size + log_file",
+   "new": "return pages * page_size + log_file",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "size_without_the_log_file",
+   "file": "hub/store.py",
+   "old": "return (pages - free) * page_size + log_file",
+   "new": "return (pages - free) * page_size",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "log_file_not_cut_again",
+   "file": "hub/server.py",
+   "old": "        elif self.store.unsettled and now >= self.next_checkpoint:",
+   "new": "        elif False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "backlog_waits_an_hour_between_chunks",
+   "file": "hub/server.py",
+   "old": "self.limits.tick_seconds if gone >= self.limits.purge_chunk else self.limits.purge_seconds",
+   "new": "self.limits.purge_seconds",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "closed_socket_never_cut",
+   "file": "hub/server.py",
+   "old": "if peer.closed_at is not None and now - peer.closed_at >= self.limits.close_grace_seconds:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "closed_socket_cut_a_tick_late",
+   "file": "hub/server.py",
+   "old": "now - peer.closed_at >= self.limits.close_grace_seconds",
+   "new": "now - peer.closed_at > self.limits.close_grace_seconds",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "close_forgets_when",
+   "file": "hub/server.py",
+   "old": "        self.closed = True\n        self.closed_at = self.hub.clock()\n        self.hub.log.event(\"close\"",
+   "new": "        self.closed = True\n        self.hub.log.event(\"close\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "crowd_never_logged",
+   "file": "hub/server.py",
+   "old": "            if biggest > self.limits.crowded_sockets:",
+   "new": "            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "crowd_logged_from_the_threshold",
+   "file": "hub/server.py",
+   "old": "            if biggest > self.limits.crowded_sockets:",
+   "new": "            if biggest >= self.limits.crowded_sockets:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "startup_note_missing",
+   "file": "hub/server.py",
+   "old": "    log.event(\"note\", what=\"sockets_are_counted_for_each_X-Client-Address_that_nginx_sets_see_docs/HUB.md\")\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+  },
+  {
+   "id": "login_layer_without_a_time_limit",
+   "file": "hub/server.py",
+   "old": "who = await asyncio.wait_for(self.sessions.identify(headers), self.limits.identify_seconds)",
+   "new": "who = await self.sessions.identify(headers)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "a_failing_login_refuses_the_visitor",
+   "file": "hub/server.py",
+   "old": "        except Exception as e:                                       # (a login that fails or is late, or hands out what is not an identity: the visitor reads, and cannot write)",
+   "new": "        except KeyError as e:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "identity_errors_are_not_caught",
+   "file": "hub/server.py",
+   "old": "        except Exception as e:                                       # (a login that fails or is late, or hands out what is not an identity: the visitor reads, and cannot write)",
+   "new": "        except (asyncio.TimeoutError, RuntimeError) as e:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "place_kept_when_the_handshake_fails",
+   "file": "hub/server.py",
+   "old": "        except BaseException:\n            self.per_address.remove(address)\n            if peer is not None:",
+   "new": "        except BaseException:\n            if peer is not None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "sockets_total_not_checked_after_the_login",
+   "file": "hub/server.py",
+   "old": "            if len(self.chat.peers) >= self.limits.sockets_total:      # (others were let in while the login layer was asked)",
+   "new": "            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "global_limit_removed",
+   "file": "hub/chat.py",
+   "old": "if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:",
+   "new": "if self.store.size() >= self.limits.db_max_bytes:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "size_guard_removed",
+   "file": "hub/chat.py",
+   "old": "if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:",
+   "new": "if not self.global_limit.ready(now):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "global_token_never_spent",
+   "file": "hub/chat.py",
+   "old": "        self.global_limit.take(now)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "account_counted_before_the_shared_limit",
+   "file": "hub/chat.py",
+   "old": "        if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:\n            return self.mistake(peer, \"rate\", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)\n        if self.account_limits.check(who.account_id, line, now):\n            return self.mistake(peer, \"rate\")                      # (this check is the last: it is the one that counts the line as said)\n",
+   "new": "        if self.account_limits.check(who.account_id, line, now):\n            return self.mistake(peer, \"rate\")\n        if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:\n            return self.mistake(peer, \"rate\", count=False)\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "line_kept_before_the_limits_are_asked",
+   "file": "hub/chat.py",
+   "old": "        now = self.clock()\n        if not self.global_limit.ready(now)",
+   "new": "        self.store.add_line(who.account_id, who.name, line, mod)\n        now = self.clock()\n        if not self.global_limit.ready(now)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "a_name_of_two_accounts_is_a_target",
+   "file": "hub/chat.py",
+   "old": "        if len(here) > 1:\n            return None\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_account_that_spoke_before_wins_over_the_one_here",
+   "file": "hub/chat.py",
+   "old": "return next(iter(here)) if here else self.store.account_of_name(name)",
+   "new": "return self.store.account_of_name(name) or next(iter(here), None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "a_moderator_by_name",
+   "file": "hub/chat.py",
+   "old": "mod = who.account_id in self.mods",
+   "new": "mod = who.account_id in self.mods or who.name in self.mods",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "rate_limit_keyed_by_name",
+   "file": "hub/chat.py",
+   "old": "self.account_limits.check(who.account_id, line, now)",
+   "new": "self.account_limits.check(who.name, line, now)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "duplicate_window_edge",
+   "file": "hub/limits.py",
+   "old": "if now - at >= self.limits.duplicate_seconds]",
+   "new": "if now - at > self.limits.duplicate_seconds]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "a_place_is_forgotten_early",
+   "file": "hub/limits.py",
+   "old": "        if left > 0:\n            self.counts[key] = left",
+   "new": "        if left > 1:\n            self.counts[key] = left",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "url_errors_are_a_traceback",
+   "file": "hub/config.py",
+   "old": "    except ValueError:                                              # (a port that is not a number, an unclosed bracket)\n        raise problem",
+   "new": "    except KeyError:\n        raise problem",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "account_ids_may_start_with_zero",
+   "file": "hub/config.py",
+   "old": "ACCOUNT_ID = re.compile(r\"[1-9][0-9]{0,19}\\Z\")",
+   "new": "ACCOUNT_ID = re.compile(r\"[0-9]{1,20}\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "admin_line_number_unbounded",
+   "file": "hub/admin.py",
+   "old": "    if args.command == \"del\" and not 0 < args.line_id < 2 ** 62:",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "write_buffer_cap_256_kb",
+   "file": "hub/limits.py",
+   "old": "write_buffer_max: int = 131072 ",
+   "new": "write_buffer_max: int = 262144 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "global_burst_51",
+   "file": "hub/limits.py",
+   "old": "global_burst: int = 50 ",
+   "new": "global_burst: int = 51 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "database_cap_one_byte_more",
+   "file": "hub/limits.py",
+   "old": "db_max_bytes: int = 67108864 ",
+   "new": "db_max_bytes: int = 67108865 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "purge_chunk_20000",
+   "file": "hub/limits.py",
+   "old": "purge_chunk: int = 2000 ",
+   "new": "purge_chunk: int = 20000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "close_grace_60_seconds",
+   "file": "hub/limits.py",
+   "old": "close_grace_seconds: float = 5.0 ",
+   "new": "close_grace_seconds: float = 60.0 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_no_rate_limit",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_hub_req burst=10 nodelay;\n        limit_req_status 503;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_rate_limit_burst_100",
+   "file": "docker/nginx.conf",
+   "old": "limit_req zone=ants_hub_req burst=10 nodelay;",
+   "new": "limit_req zone=ants_hub_req burst=100 nodelay;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_rate_500_a_second",
+   "file": "docker/nginx.conf",
+   "old": "zone=ants_hub_req:1m rate=5r/s;",
+   "new": "zone=ants_hub_req:1m rate=500r/s;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "nginx_logs_every_handshake",
+   "file": "docker/nginx.conf",
+   "old": "        access_log off;\n        limit_req zone=ants_hub_req",
+   "new": "        limit_req zone=ants_hub_req",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "stack_hub_log_grows_for_ever",
+   "file": "docker-compose.stack.yml",
+   "old": "    logging:\n      driver: json-file\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "staging_hub_log_grows_for_ever",
+   "file": "docker-compose.staging.yml",
+   "old": "    logging:\n      driver: json-file\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+  },
+  {
+   "id": "admin_refused_write_is_a_traceback",
+   "file": "hub/admin.py",
+   "old": "    except sqlite3.Error as e:                                  # (a full disk, a locked file: a message and not a traceback)",
+   "new": "    except KeyError as e:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "admin_unopenable_database_is_a_traceback",
+   "file": "hub/admin.py",
+   "old": "    except (sqlite3.Error, RuntimeError) as e:\n        err.write(\"hub.admin: the database cannot be opened",
+   "new": "    except KeyError as e:\n        err.write(\"hub.admin: the database cannot be opened",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "purge_failure_retried_at_every_tick",
+   "file": "hub/server.py",
+   "old": "            self.next_purge = now + self.limits.purge_failure_seconds         # (set first: a purge that fails is tried again in a minute, not at every tick)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "store_waits_five_seconds_for_another_writer",
+   "file": "hub/store.py",
+   "old": "            self.db.execute(\"PRAGMA busy_timeout=%d\" % self.busy_ms)\n            if new:",
+   "new": "            self.db.execute(\"PRAGMA busy_timeout=5000\")\n            if new:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "checkpoint_leaves_the_short_wait_on",
+   "file": "hub/store.py",
+   "old": "        finally:\n            self.db.execute(\"PRAGMA busy_timeout=%d\" % self.busy_ms)",
+   "new": "        finally:\n            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "newcomers_see_lines_past_their_days",
+   "file": "hub/chat.py",
+   "old": "        for line in [l for l in self.ring if l.at < cutoff]:\n            self.ring.remove(line)",
+   "new": "        for line in []:\n            self.ring.remove(line)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "old_lines_stay_in_the_memory",
+   "file": "hub/chat.py",
+   "old": "            self.ring.remove(line)\n        return list(self.ring)",
+   "new": "            pass\n        return [l for l in self.ring if l.at >= cutoff]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "a_shared_refusal_is_a_mistake_of_the_socket",
+   "file": "hub/chat.py",
+   "old": "return self.mistake(peer, \"rate\", count=False)",
+   "new": "return self.mistake(peer, \"rate\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "null_notehead_is_a_line",
+   "file": "hub/text.py",
+   "old": "\\uffa0\\U0001d159\"",
+   "new": "\\uffa0\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "access_log_on_when_the_hub_is_down",
+   "file": "docker/nginx.conf",
+   "old": "    location @hub_off {\n        access_log off;",
+   "new": "    location @hub_off {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_mask_required_only_for_text",
+   "file": "hub/ws.py",
+   "old": "        if not b1 & 0x80:\n            raise ProtocolError(1002, \"a client frame is not masked\")",
+   "new": "        if not b1 & 0x80 and opcode == TEXT:\n            raise ProtocolError(1002, \"a client frame is not masked\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "review_unmasked_ping_accepted_only",
+   "file": "hub/ws.py",
+   "old": "        if not b1 & 0x80:\n            raise ProtocolError(1002, \"a client frame is not masked\")",
+   "new": "        if not b1 & 0x80 and opcode != PING:\n            raise ProtocolError(1002, \"a client frame is not masked\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "review_payload_cap_inclusive",
+   "file": "hub/ws.py",
+   "old": "        if length > self.max_payload:",
+   "new": "        if length >= self.max_payload:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "review_64bit_high_bit_not_checked",
+   "file": "hub/ws.py",
+   "old": "if length < 65536 or length >> 63:",
+   "new": "if length < 65536:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "review_control_cap_126",
+   "file": "hub/ws.py",
+   "old": "        if control and length > CONTROL_MAX:",
+   "new": "        if control and length > CONTROL_MAX + 1:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "review_rsv3_ignored",
+   "file": "hub/ws.py",
+   "old": "        if b0 & 0x70:",
+   "new": "        if b0 & 0x30:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "review_close_codes_1005_ok",
+   "file": "hub/ws.py",
+   "old": "frozenset(range(1007, 1015))",
+   "new": "frozenset(range(1004, 1015))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "review_origin_case_insensitive",
+   "file": "hub/server.py",
+   "old": "h.get(\"origin\") != self.cfg.origin",
+   "new": "h.get(\"origin\", \"\").lower() != self.cfg.origin.lower()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review_origin_trailing_slash_ok",
+   "file": "hub/server.py",
+   "old": "h.get(\"origin\") != self.cfg.origin",
+   "new": "h.get(\"origin\", \"\").rstrip(\"/\") != self.cfg.origin",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review_per_address_limit_exclusive",
+   "file": "hub/limits.py",
+   "old": "if self.counts.get(key, 0) >= self.limit:",
+   "new": "if self.counts.get(key, 0) > self.limit:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_ipv6_group_48",
+   "file": "hub/limits.py",
+   "old": "int(ip) >> 64 << 64, 64",
+   "new": "int(ip) >> 80 << 80, 48",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_ipv4_mapped_not_unwrapped",
+   "file": "hub/limits.py",
+   "old": "        if ip.version == 6 and ip.ipv4_mapped is not None:\n            ip = ip.ipv4_mapped\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_dup_checked_after_rate",
+   "file": "hub/limits.py",
+   "old": "        if text in said:\n            return \"dup\"\n        if not bucket.take(now):\n            return \"rate\"",
+   "new": "        if not bucket.take(now):\n            return \"rate\"\n        if text in said:\n            return \"dup\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_test_login_loopback_prefix_only",
+   "file": "hub/config.py",
+   "old": "        return host == \"localhost\"",
+   "new": "        return host in (\"localhost\", \"\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_test_login_any_nonwildcard",
+   "file": "hub/config.py",
+   "old": "if cfg.test_login and not is_loopback(cfg.host):",
+   "new": "if cfg.test_login and cfg.host in (\"0.0.0.0\", \"::\") :",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_xca_prefers_peer",
+   "file": "hub/limits.py",
+   "old": "for candidate in (value, peer):",
+   "new": "for candidate in (peer, value):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_te_not_checked",
+   "file": "hub/server.py",
+   "old": " or \"transfer-encoding\" in h:",
+   "new": ":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review_ban_checked_by_name",
+   "file": "hub/chat.py",
+   "old": "self.store.is_banned(who.account_id)",
+   "new": "self.store.is_banned(who.name)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review_lt_check_before_cleaning",
+   "file": "hub/text.py",
+   "old": "    if \"<\" in text or \">\" in text:\n        return None, \"bad\"\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "review2_n03_no_slot_release_on_failure",
+   "file": "hub/server.py",
+   "old": "        except BaseException:\n            self.per_address.remove(address)\n",
+   "new": "        except BaseException:\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review2_n04_no_total_recheck",
+   "file": "hub/server.py",
+   "old": "            if len(self.chat.peers) >= self.limits.sockets_total:      # (others were let in while the login layer was asked)\n                raise http.HttpError(503, \"full\", {\"Retry-After\": \"30\"})\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review2_n05_peer_left_in_peers_on_failure",
+   "file": "hub/server.py",
+   "old": "                peer.closed = True\n                self.chat.peers.discard(peer)\n            raise",
+   "new": "                peer.closed = True\n            raise",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review2_n06_abort_grace_x1000",
+   "file": "hub/server.py",
+   "old": "now - peer.closed_at >= self.limits.close_grace_seconds",
+   "new": "now - peer.closed_at >= self.limits.close_grace_seconds * 1000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review2_n08_bucket_ready_spends",
+   "file": "hub/limits.py",
+   "old": "        self.at = now\n        return self.tokens >= 1.0",
+   "new": "        self.at = now\n        self.tokens -= 1.0 if self.tokens >= 1.0 else 0.0\n        return self.tokens >= 0.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review2_n11_purge_chunk_ignored",
+   "file": "hub/store.py",
+   "old": "(now - self.retention, chunk)",
+   "new": "(now - self.retention, 1 << 40)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review2_n12_unsettled_never_set",
+   "file": "hub/store.py",
+   "old": "        self.unsettled = bool(busy)",
+   "new": "        self.unsettled = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review2_n13_checkpoint_retry_off",
+   "file": "hub/server.py",
+   "old": "        elif self.store.unsettled and now >= self.next_checkpoint:",
+   "new": "        elif False and self.store.unsettled and now >= self.next_checkpoint:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review2_n14_meta_counter_does_not_count",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"UPDATE meta SET v = v + 1 WHERE k = 'del_seq'\")",
+   "new": "self.db.execute(\"UPDATE meta SET v = v WHERE k = 'del_seq'\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review2_n15_migration_counter_zero",
+   "file": "hub/store.py",
+   "old": "SELECT 'del_seq', COALESCE(MAX(del_seq), 0) FROM lines",
+   "new": "SELECT 'del_seq', 0 FROM lines",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review2_n16_delete_marks_deleted_lines_again",
+   "file": "hub/store.py",
+   "old": "            if self.db.execute(\"SELECT 1 FROM lines WHERE id = ? AND deleted = 0\", (line_id,)).fetchone() is None:\n                return False\n",
+   "new": "            if self.db.execute(\"SELECT 1 FROM lines WHERE id = ?\", (line_id,)).fetchone() is None:\n                return False\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review2_n18_marks_count_as_ink",
+   "file": "hub/text.py",
+   "old": "not unicodedata.category(c).startswith(\"M\") for c in text",
+   "new": "True for c in text",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "review2_n19_strip_all_unicode_blanks",
+   "file": "hub/http.py",
+   "old": "h.group(2).strip(\" \\t\")",
+   "new": "h.group(2).strip()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ws"
+  },
+  {
+   "id": "review2_n22_checkpoint_blocks_on_reader",
+   "file": "hub/store.py",
+   "old": "        self.db.execute(\"PRAGMA busy_timeout=0\")                # (the hub's one thread must not wait for a reader here: a later call tries again)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "review2_n23_crowded_threshold_off",
+   "file": "hub/server.py",
+   "old": "if biggest > self.limits.crowded_sockets:",
+   "new": "if biggest > self.limits.crowded_sockets * 100:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "review2_n24_startup_checkpoint_removed",
+   "file": "hub/server.py",
+   "old": "        store.checkpoint()                  # (what a crash left in the log file)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  }
+ ]
+}

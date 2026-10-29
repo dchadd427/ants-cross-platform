@@ -1,7 +1,8 @@
 // Runs the lobby page's client of network protocol 16 (web/front/lobby_net.js, LobbyClient) against a REAL ants_server over a WebSocket, as a browser would reach it behind the site's proxy:
 // pages that make a lobby room and join it by one code, the leader's color moves (a move to an empty color, a change of places), the plan and the teams, a new name (and a name that looks like a
 // bot's), the leader taking a person out, the leader going (the player who has been there the longest leads), a link that drops (the seat is held and taken back with the key), a key for a room that is
-// gone (the page makes the room again), a second window with the same key, START that waits for the games, and the people of the lobbies in GET /busy.
+// gone (the page makes the room again), a second window with the same key, START that waits for the games, the people of the lobbies in GET /busy, and the front page itself (web/lobby.html with web/home/home.js in the
+// fake browser of web_page_harness.js, on a real socket): a guest on Home takes START.
 // usage: node web_lobby_server_check.js web/front/lobby_net.js ws://127.0.0.1:PORT/ws http://127.0.0.1:WSPORT     (the server: --demo-rooms N --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies M)
 //        exit 0: every check holds; the failures are printed
 'use strict';
@@ -466,6 +467,42 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         A.leave();
         await step('A goes: B leads, and the room is private (B never chose it)', () => () => B.isLeader() === true && B.room.isPublic === false && B.room.flags === 3, 5000);
         B.leave();
+    });
+
+    // ---- the front page itself, on Home, against the real server (docs/HOME_SCREEN.md): the page of a guest opens on the Room by a link and goes Home; the room goes on (the page answers the server's pings and nobody ----
+    // is dropped), Home follows what the room says, and when the leader presses START the hidden Room takes the hand-off: the key of the seat is written for the game page, the tab goes to the game page and Home
+    // says that the game is opening. The page is the real web/lobby.html and web/home/home.js in the fake browser of tests/scripts/web_page_harness.js, on a real socket (the clock is the real one).
+    await scenario('the front page on Home: the room goes on while Home is up, and START reaches the page', async () => {
+        const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
+        const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
+        const room = code('p');
+        const pageSockets = [];
+        class ToTheServer extends WS { constructor() { super(wsUrl); pageSockets.push(this); } }          // (the page connects to wss://play.test/ws: that is this server)
+        const A = page('Ada', room);
+        A.connect();
+        await step('Ada makes the room', () => online(A));
+        const env = harness.runLobby('?room=' + room, { 'ants.name': 'Bea' }, { WebSocket: ToTheServer, realTime: true });
+        check('a link opens the page on the Room, behind the name card', env.screen() === 'room' && !env.$('name-step').hidden && pageSockets.length === 0);
+        env.$('name-step-go').click();
+        await step('the page joins by the link: the real room welcomes it as seat 1 and it waits for Ada', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'Waiting for Ada', 5000);
+        env.roomBar('rhome').click();
+        check('Bea presses Home: Home shows and the room is not touched (one socket, Ada heard nobody leave)', env.screen() === 'home' && pageSockets.length === 1 && A.count('left') === 0);
+        check('the leader moves Bea to color 2 and plans for the two of them (no bot to wait for)', A.move(1, 2) === true);
+        await step('... Bea is in color 2', () => () => A.seatOf('Bea') === 2);
+        check('(the plan)', A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
+        await step('Home follows what the room says: My room counts the two colors that play of the two that are in the match', () => () => env.home('mine').children[1].textContent === '2/2' && env.home('mine').getAttribute('aria-label') === 'My room, 2 of 2');
+        await sleep(2500);
+        check('2.5 seconds on Home: the page answered the server\'s pings, and Bea is still in her color (no hold, no drop)', A.count('left') === 0 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[2].name === 'Bea' && pageSockets.length === 1 && env.screen() === 'home');
+        check('Ada presses START', A.start() === true);
+        await step('START reaches the page on Home: the tab goes to the game page of its seat and name, once', () => () => env.assigned.length === 1, 5000);
+        check('... the address of the game page (the plain code, the seat, the name; no key)', JSON.stringify(env.assigned) === JSON.stringify(['https://play.test/?join=/ws&room=' + room + '&seat=2&name=Bea']), JSON.stringify(env.assigned));
+        const entry = JSON.parse(env.storage.data['ants.rejoin.' + room + '.2'] || 'null');
+        check('... the key of the seat that the room gave the page is written for the game page (32 hex digits that are not zero, this site\'s server), and it is in no address', !!entry && /^[0-9a-f]{32}$/.test(entry.k) && !/^0+$/.test(entry.k) && entry.s === 'wss://play.test/ws' && env.assigned[0].indexOf(entry.k) === -1);
+        check('... Home says "Opening the game…" and stays Home', env.screen() === 'home' && env.$('home').children[2].hidden === false && env.$('home').children[2].textContent === 'Opening the game…');
+        check('(the room waits for the games: START is on for both)', A.room.starting === true && A.room.slots[2].state === N.SLOT.Client);
+        A.leave();
+        for (const ws of pageSockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
 
     for (const c of ALL) { try { c.leave(); } catch (e) { /* closed already */ } }

@@ -27,7 +27,7 @@ DEPLOYS = [
     "VERSION", "CMakeLists.txt", "cmake/ants_stamp_build_id.cmake", "cmake/ants_test_paths.cpp.in", "include/ants_sim/sim_engine.hpp", "src/ants_sim/sim_engine.cpp", "include/ants_db/database.hpp", "src/ants_db/database.cpp",
     "third_party/sqlite/sqlite3.c", "third_party/sqlite/sqlite3.h", "third_party/sqlite/CMakeLists.txt",
     "src/ants_app/application.cpp", "web/shell.html", "web/lobby.html", "web/favicon.png", "docker/nginx.conf", "docker/resolve_build_id.sh",
-    "Dockerfile", "Dockerfile.server", ".dockerignore", "docker-compose.stack.yml",
+    "Dockerfile", "Dockerfile.server", "Dockerfile.hub", ".dockerignore", "docker-compose.stack.yml", "hub/server.py", "hub/__main__.py", "hub/ws.py",
     "CHANGELOG.md", "tools/changelog_to_html.py",
     "Original-Ants/ants.chd", "Original-Ants/Maps/TINY.LVL", "Original-Ants/INTRO.mp3", "asset_catalog/index.html", "asset_catalog/sprites/s1.png",
 ]
@@ -37,6 +37,7 @@ SKIPS = [
     "tests/test_sim/test_sim_rules.cpp", "tests/scripts/test_run_tests.py", "tests/data/edge_scroll_samples.csv", "tests/common/ants_test_paths.hpp", "tests/e2e/e2e_model.hpp",
     "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py", "tools/deploy_wait.py", "tools/deploy_webhook.sh",
     "run_tests.sh", "run_tests.bat", "start_game.sh", "start_game.bat", "build_web.sh", ".editorconfig", ".gitignore", ".gitattributes",
+    "docs/HUB.md", "tests/scripts/test_hub_ws.py", "tests/scripts/hub_client.py", "tests/data/hub_mutants.json", "hub/__pycache__/ws.cpython-312.pyc",
     "docker-compose.yml", "docker-compose.server.yml", "docker-compose.staging.yml",
     "Original-Ants/ddraw.ini", "Original-Ants/Ants.exe", "Original-Ants/chat.txt", "Original-Ants/Shaders/x.glsl",
 ]
@@ -78,7 +79,7 @@ class TheList(unittest.TestCase):
         for path in tracked.stdout.splitlines():
             counts, why = self.classifier.verdict(path)
             top = path.split("/")[0]
-            if top in ("src", "include", "cmake", "web", "asset_catalog") or (top == "third_party" and not path.endswith(".md")):
+            if top in ("src", "include", "cmake", "web", "asset_catalog", "hub") or (top == "third_party" and not path.endswith(".md")):
                 self.assertTrue(counts, "%s is under %s/, which the images copy (%s)" % (path, top, why))
             elif top in ("tests", ".github"):
                 self.assertFalse(counts, "%s: tests and CI files are in no image (%s)" % (path, why))
@@ -92,14 +93,14 @@ class TheList(unittest.TestCase):
     def test_the_sources_of_the_dockerfiles_are_derived_from_the_real_files(self):
         sources = [s for s, _ in self.classifier.sources]
         for expected in ("src/", "include/", "cmake/", "web/", "Original-Ants/", "Original-Ants/Maps/", "tools/", "asset_catalog/", "CHANGELOG.md",
-                         "docker/nginx.conf", "docker/resolve_build_id.sh", "web/favicon.*", "CMakeLists.txt", "VERSION", "third_party/"):
+                         "docker/nginx.conf", "docker/resolve_build_id.sh", "web/favicon.*", "CMakeLists.txt", "VERSION", "third_party/", "hub/"):
             self.assertIn(expected, sources)
         self.assertEqual([s for s in sources if s.startswith("docs")], [])                  # no image copies a document of docs/
         self.assertNotIn("/src/build_web/src/ants_app/index.*", sources)                  # COPY --from=builder reads another stage, not the context
 
     def test_a_new_copy_line_is_noticed(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("Dockerfile", "Dockerfile.server", ".dockerignore"):
+            for name in ("Dockerfile", "Dockerfile.server", "Dockerfile.hub", ".dockerignore"):
                 text = read(os.path.join(REPO, name))
                 if name == "Dockerfile":
                     text += "\nCOPY brand-new-folder/ /usr/share/nginx/html/new/\n"
@@ -168,13 +169,45 @@ class Pushes(unittest.TestCase):
         self.assertEqual(run_tool("--base", "abc").returncode, 2)
 
 
+class TheChatHub(unittest.TestCase):
+    """What a push of the chat hub does (docs/HUB.md "Deploys"): it counts, so the job waits for an idle game server and calls the webhook; and the stack that the webhook rebuilds gives the
+    page's and the game server's images the build id of the commit, so they are recreated too, while the hub's image does not depend on the commit."""
+
+    def test_a_push_of_the_hub_alone_deploys(self):
+        for files in (["hub/chat.py"], ["hub/ws.py", "hub/http.py"], ["Dockerfile.hub"], ["docker/nginx.conf"]):
+            out = run_tool("--files", stdin="\n".join(files) + "\n").stdout.strip()
+            self.assertTrue(out.startswith("deploy:"), "%s: %s" % (files, out))
+
+    def test_what_surrounds_the_hub_does_not(self):
+        out = run_tool("--files", stdin="docs/HUB.md\ntests/scripts/test_hub_core.py\ntests/scripts/hub_client.py\ntests/data/hub_mutants.json\nREADME.md\n").stdout.strip()
+        self.assertTrue(out.startswith("skip:"), out)
+
+    def test_the_stacks_give_the_build_id_to_the_page_and_the_game_server_and_not_to_the_hub(self):
+        for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+            text = read(os.path.join(REPO, name))
+            code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+            self.assertEqual(code.count("ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}"), 2, name)         # ants-beta and ants-server
+            self.assertNotIn("ANTS_BUILD_ID", code[code.index("  ants-hub:"):code.index("\nvolumes:")], name)
+        for dockerfile, has in (("Dockerfile", True), ("Dockerfile.server", True), ("Dockerfile.hub", False)):
+            code = "\n".join(l for l in read(os.path.join(REPO, dockerfile)).splitlines() if not l.lstrip().startswith("#"))
+            self.assertEqual("ANTS_BUILD_ID" in code, has, dockerfile)
+
+    def test_the_documents_say_so(self):
+        hub = read(os.path.join(REPO, "docs", "HUB.md"))
+        self.assertIn("a hub-only change also rebuilds and recreates the page and the game server", hub)
+        self.assertIn("recreated only when `hub/` or `Dockerfile.hub` changed", hub)
+        workflow = read(os.path.join(REPO, "docs", "WORKFLOW.md"))
+        self.assertIn("it recreates them too", workflow)
+        self.assertIn("the hub itself is recreated only when its own files changed", workflow)
+
+
 class FromGit(unittest.TestCase):
     def git(self, root, *args):
         return subprocess.run(["git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.org", *args], capture_output=True, text=True, check=True).stdout.strip()
 
     def test_the_files_between_two_revisions(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("Dockerfile", "Dockerfile.server", ".dockerignore"):
+            for name in ("Dockerfile", "Dockerfile.server", "Dockerfile.hub", ".dockerignore"):
                 write(os.path.join(root, name), read(os.path.join(REPO, name)))
             self.git(root, "init", "-q")
             os.makedirs(os.path.join(root, "src"))
@@ -258,6 +291,7 @@ class CopyLines(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             write(os.path.join(root, "Dockerfile"), "COPY . /src/\n")
             write(os.path.join(root, "Dockerfile.server"), "FROM x\n")
+            write(os.path.join(root, "Dockerfile.hub"), "FROM x\n")
             write(os.path.join(root, ".dockerignore"), "tests\n")
             classifier = df.Classifier(root, "docker-compose.stack.yml")
             self.assertTrue(classifier.verdict("anything/at/all.txt")[0])
