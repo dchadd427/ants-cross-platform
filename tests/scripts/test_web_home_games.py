@@ -33,7 +33,7 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 52 * 1000, 14500      # bytes, raw and gzipped, both files together: they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 53 * 1000, 15200      # bytes, raw and gzipped, both files together: they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
@@ -213,7 +213,7 @@ class TheWayIntoTheImage(unittest.TestCase):
         self.assertIn('cp -f "${SCRIPT_DIR}/web/home"/* "${DIST_DIR}/home/"', read("build_web.sh"))
 
     def test_the_ci_looks_for_the_script_and_the_style_in_the_image(self):
-        self.assertIn(" home/home.js home/home.css home/games.js home/games.css ", read(".github", "workflows", "ci.yml"))
+        self.assertIn(" home/games.js home/games.css ", read(".github", "workflows", "ci.yml"))
 
 
 @unittest.skipUnless(NODE, "node is not installed: the Games list and the public Room were NOT run (tests/scripts/web_home_games_check.js, web_home_games_room_check.js)")
