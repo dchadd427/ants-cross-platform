@@ -234,7 +234,8 @@
                     tail.appendChild(css); tail.appendChild(js);
                 } catch (e) { /* none */ }
             }
-            if (typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(function () { setTimeout(load, 0); }); else setTimeout(load, 0);
+            var afterPaint = typeof win.requestAnimationFrame === 'function' ? function (fn) { win.requestAnimationFrame(function () { setTimeout(fn, 0); }); } : function (fn) { setTimeout(fn, 0); };
+            afterPaint(load);
         }
         function gamesCall(name, arg) { try { if (games) games[name](arg); } catch (e) { /* the list is its own */ } }
         function wantGames() {

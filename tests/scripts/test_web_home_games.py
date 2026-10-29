@@ -89,7 +89,8 @@ class ThePage(unittest.TestCase):
         self.assertIn("lazy(GAMES, function () {", self.home)
         self.assertIn("css.href = base + '.css'; css.onload = one;", self.home)
         self.assertIn("js.src = base + '.js'; js.async = true; js.onload = one;", self.home)
-        self.assertIn("win.requestAnimationFrame(function () { setTimeout(load, 0); })", self.home, "after the first paint")
+        self.assertIn("function (fn) { win.requestAnimationFrame(function () { setTimeout(fn, 0); }); } : function (fn) { setTimeout(fn, 0); };", self.home, "after the first paint")
+        self.assertIn("afterPaint(load);", self.home)
         for call in ("gamesCall('shown', name);", "gamesCall('sync');", "gamesCall('opening');"):
             self.assertIn(call, self.home, call)
         self.assertIn("function gamesCall(name, arg) { try { if (games) games[name](arg); } catch (e) { /* the list is its own */ } }", self.home, "what goes wrong in the list stays in it")

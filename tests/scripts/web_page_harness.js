@@ -189,7 +189,7 @@ function runLobby(search, stored, options) {
             if (options.copyResult === 'throws') throw new Error('not allowed');
             return options.copyResult !== false;
         },
-        hidden: false, listeners: {}, head: new El(env, 'head', ''),
+        hidden: false, listeners: {},
         addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); },
         removeEventListener() {},
     };
@@ -268,15 +268,20 @@ function runLobby(search, stored, options) {
     const scope = options.realTime ? { WebSocket: options.WebSocket, setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (id) => clearTimeout(id) }
         : { WebSocket: options.noWebSocket ? undefined : options.WebSocket || FakeSocket, setTimeout: setTimer, clearTimeout: clearTimer, Date: options.fakeClock ? { now: () => CLOCK_START + env.clock } : undefined, Math: options.fakeClock ? fakeMath : undefined };
     env.scope = scope;                                   // (what a script of the page is run with)
-    // what the page loads after its first paint (a script and a style appended to the head): the file is run when it is appended, and its onload is called, as a browser does a moment later
+    // what the page loads after its first paint (a script and a style that it appends to the document: the page puts them in the head, else in the body, which is where this fake has them): of the files of the
+    // Games list (home/games.js, home/games.css) the file is run when it is appended and its onload is called, as a browser does a moment later; any other file stays an element that the page appended (the chat
+    // dock's checks run those themselves)
     env.lazyLoads = [];
     env.lazyErrors = [];
-    doc.head.appendChild = function (c) {
-        c.parent = doc.head; doc.head.children.push(c); env.lazyLoads.push(c.src || c.href);
+    const plainAppend = doc.body.appendChild.bind(doc.body);
+    doc.body.appendChild = function (c) {
+        plainAppend(c);
+        const file = String(c.tagName === 'script' ? c.src : c.tagName === 'link' ? c.href : '');
+        if (file !== 'home/games.js' && file !== 'home/games.css') return c;
+        env.lazyLoads.push(file);
         if (options.lazy === false) return c;
         if (c.tagName === 'script') {
-            const file = String(c.src);
-            if (options.lazy === 'script' || file !== 'home/games.js') { if (c.onerror) c.onerror({}); return c; }       // (the other parts that the page loads later, the chat dock, have checks of their own that run them)
+            if (options.lazy === 'script') { if (c.onerror) c.onerror({}); return c; }
             Object.assign(win, options.lazy && typeof options.lazy === 'object' ? options.lazy : loadFile(file, scope));
         }
         if (c.onload) { try { c.onload({}); } catch (e) { env.lazyErrors.push(String(e && e.message || e)); } }       // (a handler that throws is an error of the page, which does not reach the one that appended the file)

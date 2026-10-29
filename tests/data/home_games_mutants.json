@@ -900,8 +900,15 @@
   {
    "id": "script_asked_for_before_the_paint",
    "file": "web/home/home.js",
-   "old": "            if (typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(function () { setTimeout(load, 0); }); else setTimeout(load, 0);",
+   "old": "            afterPaint(load);",
    "new": "            load();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "script_asked_for_without_the_frame",
+   "file": "web/home/home.js",
+   "old": "win.requestAnimationFrame(function () { setTimeout(fn, 0); }); } : function (fn) { setTimeout(fn, 0); };",
+   "new": "fn(); } : function (fn) { fn(); };",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
