@@ -86,6 +86,18 @@ constexpr int32_t kBarMinWidth = 6;
 constexpr double kSmallShownFrom = 2.0;     // shown at less than half of its size
 constexpr bool thick_for(double picture_px_per_css) noexcept { return picture_px_per_css > kSmallShownFrom; }
 
+/// The number on a small canvas (a phone). The original's digits are 8 x 15 pixels at every zoom, which is 2 or 3 CSS pixels tall on a phone, so from `kPhoneFrom` picture pixels per CSS pixel the font is
+/// drawn `digit_scale` times as big and `digit_outlined` says it wears a black outline of one scaled font pixel (about 1 CSS pixel) too. The picture pixels per CSS pixel are the browser page's (a phone, a tablet, or a
+/// narrow desktop browser window); the native build never asks (Renderer::set_health_marks, scale_digits false), so a native window of any size keeps the original's digits. At less than `kPhoneFrom` both are the original's: 1, none.
+constexpr double kPhoneFrom = 1.25;
+constexpr double kDigitCssFactor = 0.8;     // the scale is the smallest whole number that makes the glyph (10 font pixels tall) about 8 CSS pixels tall: ceil(0.8 x picture pixels per CSS pixel)
+constexpr int kDigitScaleMax = 4;
+constexpr bool digit_outlined(double picture_px_per_css) noexcept { return picture_px_per_css >= kPhoneFrom; }
+inline int digit_scale(double picture_px_per_css) noexcept {
+    if (!digit_outlined(picture_px_per_css)) return 1;                       // (also a NaN, which no comparison holds)
+    return static_cast<int>(std::clamp(std::ceil(kDigitCssFactor * picture_px_per_css), 1.0, static_cast<double>(kDigitScaleMax)));     // (clamped as a double: an infinite density is no int)
+}
+
 /// The bar's height in pixels: 5 from the zoom 1.5, 3 from 0.6, 2 below; one and a half times that (rounded up) on a canvas that is shown small
 constexpr double kBarMiddleFrom = 0.6;      // (not the numbers' edge: the bars' sizes are what they were)
 constexpr int32_t bar_height(double zoom, bool thick) noexcept {

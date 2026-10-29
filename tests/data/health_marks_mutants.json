@@ -435,7 +435,7 @@
     {
       "id": "application_hands_no_marks_to_the_renderer",
       "file": "src/ants_app/application.cpp",
-      "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css);",
+      "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);",
       "new": "renderer_->set_health_marks(health::Setting{health::When::Off, health::Style::Bar}, 1.0);",
       "build": [
         "test_replay_app"
@@ -445,7 +445,7 @@
     {
       "id": "application_hands_the_default_marks",
       "file": "src/ants_app/application.cpp",
-      "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css);",
+      "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);",
       "new": "renderer_->set_health_marks(health::Setting{}, 1.0);",
       "build": [
         "test_replay_app"
@@ -525,8 +525,8 @@
     {
       "id": "number_color_not_white",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});",
-      "new": "draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 196, 24, 255});",
+      "old": "draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255}, digit_scale_, digit_outline_);",
+      "new": "draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 196, 24, 255}, digit_scale_, digit_outline_);",
       "build": [
         "test_health_marks"
       ],
@@ -535,8 +535,8 @@
     {
       "id": "number_deferred_color_not_white",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255});",
-      "new": "        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{236, 44, 44, 255});",
+      "old": "        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255}, digit_scale_, digit_outline_);",
+      "new": "        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{236, 44, 44, 255}, digit_scale_, digit_outline_);",
       "build": [
         "test_health_marks"
       ],
@@ -618,6 +618,256 @@
       "file": "src/ants_app/renderer.cpp",
       "old": " this->draw_ant_number(a, a.px + pred.dx, a.py + pred.dy); };",
       "new": " };",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "phone_from_off_by_one",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "constexpr bool digit_outlined(double picture_px_per_css) noexcept { return picture_px_per_css >= kPhoneFrom; }",
+      "new": "constexpr bool digit_outlined(double picture_px_per_css) noexcept { return picture_px_per_css > kPhoneFrom; }",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "phone_from_lower",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "constexpr double kPhoneFrom = 1.25;",
+      "new": "constexpr double kPhoneFrom = 1.2;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "phone_from_higher",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "constexpr double kPhoneFrom = 1.25;",
+      "new": "constexpr double kPhoneFrom = 1.3;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_floor_not_ceil",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "std::ceil(kDigitCssFactor * picture_px_per_css)",
+      "new": "std::floor(kDigitCssFactor * picture_px_per_css)",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_factor_smaller",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "constexpr double kDigitCssFactor = 0.8;",
+      "new": "constexpr double kDigitCssFactor = 0.7;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_factor_larger",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "constexpr double kDigitCssFactor = 0.8;",
+      "new": "constexpr double kDigitCssFactor = 0.9;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_cap_lower",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "constexpr int kDigitScaleMax = 4;",
+      "new": "constexpr int kDigitScaleMax = 3;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_always_one",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) : 1;",
+      "new": "digit_scale_ = 1;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_from_zoom_not_density",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) : 1;",
+      "new": "digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) + (picture_px_per_css >= 1.25 ? 1 : 0) : 1;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "outline_on_desktop",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);",
+      "new": "digit_outline_ = true;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "outline_missing_on_phone",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);",
+      "new": "digit_outline_ = false;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "deferred_digits_unscaled",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255}, digit_scale_, digit_outline_);",
+      "new": "        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255});",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "direct_digits_unscaled",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "ants::assets::ColorRGBA{255, 255, 255, 255}, digit_scale_, digit_outline_);\n    }\n}",
+      "new": "ants::assets::ColorRGBA{255, 255, 255, 255});\n    }\n}",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "anchor_moved_when_scaled",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "const SDL_Rect dst = placed(cur_x, y, kFixedCellW * scale, kFixedCellH * scale);",
+      "new": "const SDL_Rect dst = placed(cur_x + scale - 1, y + scale - 1, kFixedCellW * scale, kFixedCellH * scale);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "cell_advance_not_scaled",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "cur_x += kFixedCellW * scale;",
+      "new": "cur_x += kFixedCellW;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "outline_colored",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "SDL_SetTextureColorMod(glyph, 0, 0, 0);",
+      "new": "SDL_SetTextureColorMod(glyph, 0, 0, 60);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "outline_two_pixels_wide",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "placed(cur_x + ox * scale, y + oy * scale,",
+      "new": "placed(cur_x + ox * scale * 2, y + oy * scale * 2,",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "outline_no_diagonals",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "if (ox == 0 && oy == 0) continue;",
+      "new": "if (ox != 0 && oy != 0) continue;",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "outline_drawn_over_the_glyph",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "            SDL_SetTextureColorMod(glyph, color.r, color.g, color.b);\n            SDL_SetTextureAlphaMod(glyph, color.a);\n            const SDL_Rect dst",
+      "new": "            SDL_SetTextureColorMod(glyph, color.r, color.g, color.b);\n            SDL_SetTextureAlphaMod(glyph, 0);\n            const SDL_Rect dst",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "glyph_colored_by_scale",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "SDL_SetTextureColorMod(glyph, color.r, color.g, color.b);",
+      "new": "SDL_SetTextureColorMod(glyph, color.r, scale > 1 ? 200 : color.g, color.b);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_no_epsilon_guard_removed_ceil_of_exact_edge",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "std::ceil(kDigitCssFactor * picture_px_per_css)",
+      "new": "std::ceil(kDigitCssFactor * picture_px_per_css - 1e-9)",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_unclamped_cast",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "return static_cast<int>(std::clamp(std::ceil(kDigitCssFactor * picture_px_per_css), 1.0, static_cast<double>(kDigitScaleMax)));",
+      "new": "return std::clamp(static_cast<int>(std::ceil(kDigitCssFactor * picture_px_per_css)), 1, kDigitScaleMax);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "digit_scale_nan_is_scaled",
+      "file": "include/ants_app/health_marks.hpp",
+      "old": "if (!digit_outlined(picture_px_per_css)) return 1; ",
+      "new": "if (picture_px_per_css < kPhoneFrom) return 1; ",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "native_scales_digits",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) : 1;",
+      "new": "digit_scale_ = health::digit_scale(picture_px_per_css);",
+      "build": [
+        "test_health_marks"
+      ],
+      "test": "./build/tests/test_app/test_health_marks"
+    },
+    {
+      "id": "native_outlines_digits",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);",
+      "new": "digit_outline_ = health::digit_outlined(picture_px_per_css);",
       "build": [
         "test_health_marks"
       ],

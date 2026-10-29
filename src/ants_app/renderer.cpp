@@ -2251,52 +2251,6 @@ int32_t Renderer::get_text_height(FontSize size) const {
     return font_cell_height(size);
 }
 
-// The original's health number: TextOutA with the stock SYSTEM_FIXED_FONT, the raster "Fixedsys": every character is a cell of 8 x 15 pixels, the
-// glyphs are not antialiased. The Windows font itself is not available here, so the digits are drawn by hand in its style: 7 x 10 pixels with strokes of
-// one pixel, top at row 2 of the cell (the font's ascent is 12).
-static const char* const kFixedGlyphs[11][10] = {
-    {"..XXX..", ".X...X.", "X.....X", "X.....X", "X.....X", "X.....X", "X.....X", "X.....X", ".X...X.", "..XXX.."},   // 0
-    {"...X...", "..XX...", ".X.X...", "...X...", "...X...", "...X...", "...X...", "...X...", "...X...", ".XXXXX."},   // 1
-    {".XXXXX.", "X.....X", "......X", "......X", ".....X.", "....X..", "...X...", "..X....", ".X.....", "XXXXXXX"},   // 2
-    {".XXXXX.", "X.....X", "......X", "......X", "..XXXX.", "......X", "......X", "......X", "X.....X", ".XXXXX."},   // 3
-    {"....XX.", "...X.X.", "..X..X.", ".X...X.", "X....X.", "XXXXXXX", ".....X.", ".....X.", ".....X.", ".....X."},   // 4
-    {"XXXXXXX", "X......", "X......", "X......", "XXXXXX.", "......X", "......X", "......X", "X.....X", ".XXXXX."},   // 5
-    {"..XXXX.", ".X.....", "X......", "X......", "XXXXXX.", "X.....X", "X.....X", "X.....X", "X.....X", ".XXXXX."},   // 6
-    {"XXXXXXX", "......X", ".....X.", ".....X.", "....X..", "....X..", "...X...", "...X...", "..X....", "..X...."},   // 7
-    {".XXXXX.", "X.....X", "X.....X", "X.....X", ".XXXXX.", "X.....X", "X.....X", "X.....X", "X.....X", ".XXXXX."},   // 8
-    {".XXXXX.", "X.....X", "X.....X", "X.....X", "X.....X", ".XXXXXX", "......X", "......X", ".....X.", ".XXXX.."},   // 9
-    {".......", ".......", ".......", ".......", ".......", ".XXXXX.", ".......", ".......", ".......", "......."},   // -
-};
-
-void Renderer::draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) {
-    if (!renderer_ || text.empty()) return;
-    for (size_t g = 0; g < fixed_glyphs_.size(); ++g) {
-        if (fixed_glyphs_[g] != nullptr) continue;
-        std::vector<uint32_t> pixels(static_cast<size_t>(kFixedCellW * kFixedCellH), 0u);
-        for (int32_t row = 0; row < 10; ++row) {
-            for (int32_t col = 0; col < 7; ++col) {
-                if (kFixedGlyphs[g][row][col] == 'X') pixels[static_cast<size_t>((row + 2) * kFixedCellW + col)] = 0xFFFFFFFFu;     // white, opaque
-            }
-        }
-        SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, kFixedCellW, kFixedCellH);
-        if (tex == nullptr) return;
-        SDL_UpdateTexture(tex, nullptr, pixels.data(), kFixedCellW * static_cast<int32_t>(sizeof(uint32_t)));
-        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-        fixed_glyphs_[g] = tex;
-    }
-    int32_t cur_x = x;
-    for (char c : text) {
-        const int32_t g = (c >= '0' && c <= '9') ? c - '0' : (c == '-' ? 10 : -1);
-        if (g >= 0 && fixed_glyphs_[static_cast<size_t>(g)] != nullptr) {
-            SDL_SetTextureColorMod(fixed_glyphs_[static_cast<size_t>(g)], color.r, color.g, color.b);
-            SDL_SetTextureAlphaMod(fixed_glyphs_[static_cast<size_t>(g)], color.a);
-            const SDL_Rect dst = placed(cur_x, y, kFixedCellW, kFixedCellH);
-            SDL_RenderCopy(renderer_, fixed_glyphs_[static_cast<size_t>(g)], nullptr, &dst);
-        }
-        cur_x += kFixedCellW;                                  // a fixed font: every character takes a cell, drawn or not
-    }
-}
-
 // The screenshot is the picture as the window shows it: the canvas scaled into the window by SDL's logical size (CanvasLayout::fit is that arithmetic), without the black bars
 // around it. (It used to be the size of the whole window with the picture at its top left corner, which is right only when the window has the canvas's shape.)
 bool Renderer::save_screenshot(const std::string& path) {
