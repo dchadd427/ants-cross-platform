@@ -6,7 +6,7 @@ numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four color cards
 Nobody; players are dragged between colors), the map, the picture's shape (Picture: a dropdown of the seven shapes of the table, the one nearest the screen until a pick) and START! at its side, and the footer with the version and the links. A visitor who
 opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
-run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
+run it on a port), a Chromium-based browser and Python 3, and, because the check presses My room (a plain visit is Home and makes no room), the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
 native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTools protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway
 headless browser (its own profile and port; nothing of yours is touched), the parts with several people in one browser each. Parts:
 
@@ -59,6 +59,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
 import web_rejoin_check as rejoin                                            # noqa: E402  (its Server: the site's game server of this tree; its Player: a person's own browser)
 from web_aspect_check import Browser, NotReachable, Tab                    # noqa: E402
+from web_front_room import press_my_room                                     # noqa: E402
 
 # The browsers of this check are a 1440 x 900 screen unless a part says otherwise: a first visit starts in the shape nearest to it (web/shapes.js, firstVisit; web_aspect_check.py's oracle),
 # and the front page hands a shape on to the game only when the player picked one.
@@ -241,7 +242,9 @@ def lobby_of(t):
 
 
 def seated(t):
-    """The page is in its room: the room has welcomed it (the colors are not greyed out) and a person sits in a color."""
+    """The page is in its room: the room has welcomed it (the colors are not greyed out) and a person sits in a color. A plain visit opens on Home and makes no room (docs/HOME_SCREEN.md): the first
+    time that this asks about a page that holds no room, it presses My room, as a person does (web_front_room.py)."""
+    press_my_room(t.ev)
     return bool(t.ev("!document.body.classList.contains('offline') && !!document.querySelector('#slots li.k-person')"))
 
 
@@ -453,7 +456,7 @@ def main():
                 time.sleep(settle + 0.5)
 
         def clear_storage():
-            """The site's storage of this tab emptied (a page of the site that holds no room: the front page makes one at once and keeps its key in the tab's session storage)."""
+            """The site's storage of this tab emptied (a page of the site that holds no room: My room makes one and the page keeps its key in the tab's session storage)."""
             tab.open(web + "changelog.html", wait=False)
             time.sleep(1.0)
             tab.ev("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} 1")
@@ -563,7 +566,7 @@ def main():
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("front") and not can_play:
-            note("front: left out (no game server: give --ws-port; opening the front page makes a room)")
+            note("front: left out (no game server: give --ws-port; My room makes a room)")
         if wanted("front") and can_play:
             print("[web home] the front page: a first visit")
             clear_storage()
