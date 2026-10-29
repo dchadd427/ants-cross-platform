@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.152 - 2026-10-29 - Map Maker: a Bridge chip, and a hint for a bridge that is not on water
+
+**For players:**
+- **The Map Maker has a Bridge to put on a map.** In Objects, after the Fire wall and before the four bombs, there is a new chip with the game's own picture of a finished bridge. Tap to put one piece, drag for a line of pieces; the name shows under the chip when it is chosen, and Pick up calls it "Bridge".
+- **A plain hint when a bridge is not on water.** A bridge needs water under it. While the Bridge chip is chosen, the line under the palette says how many pieces of the map stand on ground that is not water: "Bridge · 2 pieces are on dry ground. A bridge needs water under it." It counts again after every step, Undo and Redo, and when you open a map. It is only a hint: the map still saves, downloads and passes the check. A phone has no such line.
+
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only). Map Maker v1.7.0.
+
+**Fixes:**
+- On a desktop window under 741 pixels high (1280 x 720 with scrollbars that take room) the Objects column was too tall for its 31 chips and cut off the name line: there the chips are 2 pixels shorter and the rows and tool buttons 1 pixel closer. Taller windows and phones look as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...660232fd)
+
 ## v0.12.151 - 2026-10-28 - Tests: the map submission checks no longer fail on a slow machine
 
 **For players:**
