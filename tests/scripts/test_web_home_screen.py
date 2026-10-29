@@ -32,7 +32,8 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_home_screen_check.js")
 NODE = shutil.which("node")
 FILES = ("home.js", "home.css")
-HOME_BUDGET, HOME_GZIP_BUDGET = 31 * 1000, 9400      # bytes, raw and gzipped, both files together (about 29,600 and 9,100): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_chat.py
+HOME_BUDGET, HOME_GZIP_BUDGET = 34 * 1000, 10400     # bytes, raw and gzipped, both files together (about 32,800 and 10,030, with the loader of the dock, the timer of the hand-off and the narrow logo): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
 LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
@@ -100,7 +101,7 @@ class ThePage(unittest.TestCase):
         mount = mount[:mount.index("// ---- go ----")]
         self.assertIn("leave: function () { if (handing) return; var old = client;", mount, "a page that is on its way to the game gives its seat up to nobody")
         self.assertIn("if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render();", mount)
-        self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how):", mount))), ["how", "info", "leave", "make"])
+        self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how|stalled):", mount))), ["how", "info", "leave", "make", "stalled"])
 
     def test_the_words_that_said_that_a_page_makes_a_room_when_it_opens_are_corrected(self):
         page = self.page
@@ -111,6 +112,13 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("ready when the page opens", read("docker", "nginx.conf"))
         self.assertNotIn("ready when the page opens", read("docs", "PLAY_IN_BROWSER.md"))
 
+    def test_how_it_works_says_where_my_room_is_because_the_room_shows_it_too(self):
+        self.assertIn("<h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours.", self.page)
+        self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no My room to press")
+        check = read("tests", "scripts", "web_home_check.py")
+        self.assertNotIn("the front page makes a room again", check, "a plain visit of the front page makes no room: My room does")
+        self.assertIn("the front page (Home), after My room, makes a room again", check)
+
     def test_the_coffee_picture_of_the_footer_that_is_not_shown_on_home_is_lazy(self):
         self.assertRegex(self.page, r'<img src="https://cdn\.buymeacoffee\.com/[^"]*" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous" loading="lazy">')
 
@@ -119,8 +127,8 @@ class ThePage(unittest.TestCase):
 
 
 class TheFolder(unittest.TestCase):
-    def test_it_holds_the_script_and_the_style_and_nothing_else(self):
-        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
+    def test_it_holds_the_two_screens_and_the_chat_dock_and_nothing_else(self):
+        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + CHAT_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
 
     def test_it_is_under_its_budgets(self):
         raw = zipped = 0
@@ -132,8 +140,16 @@ class TheFolder(unittest.TestCase):
         self.assertLess(raw, HOME_BUDGET, "home.js and home.css are %d bytes" % raw)
         self.assertLess(zipped, HOME_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
 
+    def test_a_hand_off_that_does_not_come_is_given_up_after_15_seconds(self):
+        js = read("web", "home", "home.js")
+        self.assertIn("var OPENING_MS = 15000;", js)
+        self.assertIn("goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);", js, "the card goes, Home is free, Leave room stays off (the seat may still be the game's), and what a dialog holds stays held")
+        self.assertIn("try { if (page.stalled) page.stalled(); } catch (e) { /* what the page says is its own */ }", js, "the page says that the game did not open")
+        self.assertIn("function () { if (stalled) return; page.leave(); show('home', 'push'); }", js, "a Leave room that reaches the page all the same does nothing")
+        self.assertIn("if (goingTimer !== null) clearTimeout(goingTimer);", js, "a second hand-off starts the time again")
+
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):
-        for name in FILES + ("home",):
+        for name in FILES + CHAT_FILES + ("home",):
             self.assertNotIn(name, os.listdir(FRONT))
 
     def test_the_script_is_plain_es5_and_names_no_other_site(self):
@@ -163,6 +179,15 @@ class TheStyle(unittest.TestCase):
         match = re.search(r"@media \(max-width: 389px\) \{(.*?)\n\}", self.css, re.S)
         self.assertIsNotNone(match, "a rule for 360 and 320 px (the bar does not fit at its size for a wider phone)")
         self.assertIn(".rbar .hbrand { flex: 1 1 0; min-width: 40px; max-width: 76px; } .rbar .hlogo { width: 100%; }", match.group(1))
+
+    def test_the_rooms_bar_leaves_the_logo_picture_out_below_340_px_and_the_h1_keeps_its_name(self):
+        match = re.search(r"@media \(max-width: 339px\) \{ \.rbar \.hbrand \{([^}]*)\} \}", self.css)
+        self.assertIsNotNone(match, "a rule for 320 px (the logo is 40 px wide at 360 and 320: too small to read)")
+        body = match.group(1)
+        self.assertIn("position: absolute;", body)
+        self.assertIn("clip: rect(0 0 0 0);", body)
+        self.assertNotRegex(body, r"display: *none|visibility: *hidden", "the heading and its name (the picture's alt) stay for a screen reader")
+        self.assertLess(self.css.index("max-width: 389px"), self.css.index("max-width: 339px"), "the narrower rule comes after the wider one")
 
     def test_the_menu_scrolls_inside_itself_when_the_window_is_short(self):
         box = next(body for selector, body in self.rules if selector.strip() == ".hmenubox")
@@ -225,8 +250,8 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
-             "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
+    FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
+             "tests/scripts/web_home_check.py", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 
     @classmethod
     def setUpClass(cls):

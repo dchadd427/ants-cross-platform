@@ -343,7 +343,7 @@
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
-    <h3>The room</h3><p>Press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color.</p>
+    <h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color.</p>
     <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
     <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their color. It asks first, and the color opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
     <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another color, their team goes along.</p>
@@ -680,7 +680,7 @@
             hideBanner();
             if (kind === 'busy') tryAgain();
             else if (kind === 'away') takeBack();
-            else if (kind === 'version') window.location.reload();
+            else if (kind === 'version' || kind === 'stalled') window.location.reload();
         });
 
         // ---- the cards ----
@@ -890,6 +890,11 @@
             var seat = client.seat, code = client.code, name = client.name;
             forgetSession(); leaveBack();              // (Back from the match makes a room again: this one is the match's now)
             window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);
+        }
+        function stalled() {                          // Home's 15 s are up and the hand-off is still here: this page's room is frozen (a page on its way takes no message) and its seat may still be the game's, so say it, with the Reload that gets the seat back ("Rejoin it")
+            if (!handing) return;
+            bannerKind = 'stalled'; $('banner-text').textContent = 'The game did not open. Reload this page to get your seat back.'; $('banner').className = 'banner warn';
+            $('banner-x').hidden = false; $('banner-x').textContent = 'Reload'; $('banner').hidden = false;
         }
         function shownTeam(seat) {
             if (!model) return 0;
@@ -1475,7 +1480,7 @@
 
         // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
         var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
-            info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow,
+            info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow, stalled: stalled,
             leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
         // ---- go ----

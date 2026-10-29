@@ -1,0 +1,67 @@
+/* The global chat dock of Home (web/home/chat.js, docs/HOME_SCREEN.md "The chat dock"), loaded after the first paint. The colors, .btn and the frame are the page's own (web/lobby.html). A desktop: a panel 380 x 380 in the
+   lower-left corner that the minus button folds to its header. A phone or a short window: a strip 62 px high along the bottom that opens upward. Every target is at least 44 px; nothing scrolls sideways. */
+.gc { position: absolute; left: 24px; bottom: 22px; z-index: 6; display: flex; flex-direction: column; width: 380px; height: 380px; max-height: calc(100% - 96px); color: var(--cream); background: var(--inset);
+    border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.gc[data-open="false"] { height: auto; }
+.gc-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 4px 10px 4px 16px; }
+.gc[data-open="false"] .gc-head { cursor: pointer; }
+.gc-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
+.gc-short, .gc-peek { display: none; }
+.gc-unread { flex: none; min-width: 24px; padding: 0 9px; font-size: 15px; line-height: 22px; text-align: center; color: var(--cream); background: #0b1a17; border: 1px solid #1f5a49; border-radius: 12px; }
+.gc-unread[hidden], .gc-online[hidden] { display: none; }
+.gc-online { flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; color: #a8cfc0; }
+.gc-dot { display: block; width: 11px; height: 11px; border-radius: 50%; background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
+.gc[data-state="offline"] .gc-dot { background: #7f9c92; box-shadow: 0 0 0 1px #000; }
+.gc[data-state="connecting"] .gc-dot { background: var(--gold); box-shadow: 0 0 0 1px #000; animation: gc-pulse 1.1s ease-in-out infinite; }
+@keyframes gc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.gc-fold { flex: none; min-width: 46px; min-height: 46px; padding: 0; }
+.gc-mark { display: block; width: 18px; height: 3px; background: var(--cream); border-radius: 1px; }
+.gc[data-open="false"] .gc-mark { width: 12px; height: 12px; margin-top: 5px; background: none; border: solid var(--cream); border-width: 3px 0 0 3px; border-radius: 0; transform: rotate(45deg); }
+
+/* the body: the log (the newest line at the bottom, as the Room's own chat), a note, the field and Send */
+.gc-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0 16px 14px; }
+.gc-log { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px; background: #0a1016; border: 2px solid var(--edge); border-radius: 6px; box-shadow: inset 0 0 0 1px #17382f; }
+.gc-log > :first-child { margin-top: auto; }
+.gc-line { font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+.gc-who, .gc-pw { color: #9fe0b8; }
+.gc-me .gc-who { color: var(--gold); }
+.gc-badge { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.gc-sys { font-size: 14px; line-height: 1.35; color: #a8cfc0; }
+.gc[data-state="offline"] .gc-log { filter: saturate(.5) brightness(.94); }
+.gc-note { margin-top: 8px; font-size: 15px; line-height: 1.35; color: #f2c48c; }
+.gc-note:empty { display: none; }
+.gc-news { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.gc-form { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 10px; }
+.gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }
+.gc-input { min-width: 0; min-height: 48px; padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
+.gc-input::placeholder { color: #7f9c92; opacity: 1; }
+.gc-send { min-height: 48px; }
+.gc-guest { flex: none; margin-top: 8px; font-size: 14px; line-height: 1.35; color: #a8cfc0; }
+.gc-slot { flex: none; margin-top: 8px; }
+
+/* a phone, or a window that is short: a strip along the bottom; it opens upward */
+@media (max-width: 720px), (max-height: 500px) {
+    .gc { left: 16px; right: 16px; bottom: 12px; width: auto; height: min(490px, calc(100% - 200px)); max-height: none; }       /* (under the bar of a phone, which is 184 px; with the strips above Home there is less room, and the panel is never a sliver: 200 px) */
+    .gc[data-open="true"] { min-height: 200px; }
+    .gc[data-open="false"] { height: 62px; }
+    .gc[data-open="false"] .gc-head { min-height: 56px; padding: 0 8px 0 14px; }
+    .gc[data-open="false"] .gc-title { flex: none; font-size: 18px; }
+    .gc[data-open="false"] .gc-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .gc[data-open="false"] .gc-short, .gc[data-open="false"] .gc-peek { display: block; }
+    .gc[data-open="false"] .gc-peek { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; color: #a8cfc0; }
+    .gc[data-open="false"] .gc-online { display: none; }
+    .gc[data-open="true"] { left: 10px; right: 10px; }
+    .gc-body { padding: 0 14px 12px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+    .gc, .gc[data-open="true"] { left: 14px; right: auto; width: 420px; height: min(286px, calc(100% - 76px)); }
+    .gc[data-open="true"] { min-height: 150px; }
+    .gc[data-open="false"] { left: 16px; right: 16px; width: auto; height: 62px; }
+    .gc-head { min-height: 52px; }
+    .gc-line { font-size: 16px; }
+    .gc-body { padding-bottom: 10px; }
+}
+/* a narrow phone (320 and 340): the heading and the count fit on one line; a window that is low (a phone held sideways, or a small phone with notices above Home): the guest line gives its place to the log */
+@media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }
+@media (max-width: 720px) and (max-height: 640px), (max-height: 500px) { .gc-guest { display: none; } }
+@media (prefers-reduced-motion: reduce) { .gc-dot { animation: none; } }

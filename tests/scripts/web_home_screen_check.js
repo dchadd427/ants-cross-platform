@@ -411,10 +411,77 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('the page opens the list and makes Home\'s bars inert with the rest of the page behind it (and the footer, the logo row and the strips)', env.$('picker-panel').children.length > 0 && rbar.hasAttribute('inert') && env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert'));
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 7. A hand-off that fails or is stopped: after 15 s Home takes presses again (the page is still here)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{   // the hand-off that fails or is stopped: after 15 s Home is Home again, the page says that the game did not open, and Leave room stays off (a slow game page still takes the seat)
+    const env = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
+    env.home('mine').click();
+    const s = env.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
+    env.roomBar('rhome').click();
+    const START = roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 });
+    const hold = (ms) => { for (let t = 0; t < ms; t += 1000) { env.advance(Math.min(1000, ms - t)); s.receive(START); } };       // (the time goes by, and the server goes on talking: a silent link would be a lost one)
+    s.receive(START);
+    const rbar = env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1)[0], hbar = env.home('hbar'), card = env.$('home').children[2], banner = env.$('banner'), words = env.$('banner-text'), button = env.$('banner-x'), leave = env.roomBar('leave');
+    const pill = () => env.home('mine').children[1].textContent;
+    const STALLED = 'The game did not open. Reload this page to get your seat back.';
+    check('START: Home says "Opening the game…", both bars are inert, and no strip says that anything is wrong', card.hidden === false && rbar.hasAttribute('inert') && hbar.hasAttribute('inert') && banner.hidden === true && leave.disabled !== true);
+    hold(14999);
+    check('14.999 s later it still does, and there is still no strip', card.hidden === false && hbar.hasAttribute('inert') && rbar.hasAttribute('inert') && banner.hidden === true);
+    hold(1);
+    check('after 15 s (the page is still here: the hand-off failed, was stopped or is slow) the card goes and both bars take presses again', card.hidden === true && !hbar.hasAttribute('inert') && !rbar.hasAttribute('inert'));
+    check('... the notice strip says "' + STALLED + '" with a Reload button, in the warning look', banner.hidden === false && words.textContent === STALLED && button.hidden === false && button.textContent === 'Reload' && banner.className === 'banner warn');
+    check('... Leave room is off (disabled, and said so to a screen reader): a Leave now would take the seat out from under a game page that is only slow', leave.disabled === true && leave.getAttribute('aria-disabled') === 'true');
+    env.home('mine').click();
+    check('... and My room works (the Room shows)', env.screen() === 'room' && pill() === '2/4');
+    leave.click();
+    check('a press that reaches Leave room all the same does nothing: no Leave is sent, the socket stays, the Room stays', env.screen() === 'room' && s.sent.every((b) => b[0] !== NET0.MSG.Leave) && !s.closed && env.sockets.length === 1);
+    s.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [C, 'Zed'], [E, '']], { you: 0, leader: 0, flags: 7 }));
+    check('the room is frozen on this page (a page on its way takes no message: a third player does not show) and the strip says why, and stays', pill() === '2/4' && banner.hidden === false && words.textContent === STALLED);
+    env.roomBar('rhome').click();
+    check('Home works: the Home button goes Home', env.screen() === 'home');
+    button.click();
+    check('Reload reloads the page', env.reloads === 1 && env.screen() === 'home');
+    const again = runLobby('', Object.assign({}, env.storage.data), { stayHome: true });
+    check('the page that comes up after it offers the seat back, as the strip said: "Rejoin it" (the key was written for the game page), on Home, and it made no room', again.$('rejoin').hidden === false && again.$('rejoin-go').textContent === 'Rejoin it' && again.sockets.length === 0 && again.screen() === 'home');
+}
+{   // a page that is not stalled never says so, and a page without the word for it is not harmed
+    const env = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
+    env.home('mine').click();
+    const s = env.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
+    for (let t = 0; t < 60; t++) { env.advance(1000); s.receive(roomMessage([[C, 'Sam'], [E, ''], [E, ''], [E, '']], { you: 0, leader: 0 })); }
+    check('a room that never starts has no strip and a Leave room that works', env.$('banner').hidden === true && env.roomBar('leave').disabled !== true);
+    const host = new H.El(env, 'div', 'home4'), lobby = new H.El(env, 'div', 'lobby4');
+    lobby.parent = env.root;
+    const plain = env.win.AntsHome.mount({ doc: env.doc, win: env.win, host, lobby, page: { info: () => ({ client: false, model: null, offline: 'none' }), make() {}, leave() {}, how() {} } });
+    plain.opening();
+    env.advance(15000);
+    const throwing = env.win.AntsHome.mount({ doc: env.doc, win: env.win, host: new H.El(env, 'div', 'home5'), lobby, page: { info: () => ({ client: false, model: null, offline: 'none' }), make() {}, leave() {}, how() {}, stalled() { throw new Error('words that break'); } } });
+    let threw = false;
+    throwing.opening();
+    try { env.advance(15000); } catch (e) { threw = true; }
+    check('a page that has no stalled() (or whose stalled() throws) is not harmed: Home takes presses again all the same', !threw && host.findAll((e) => e.tagName === 'header').every((b) => !b.hasAttribute('inert')));
+}
+{   // the timer does not free what a dialog holds
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const host = new H.El(env, 'div', 'home2'), lobby = new H.El(env, 'div', 'lobby2');
+    lobby.parent = env.root;
+    const second = env.win.AntsHome.mount({ doc: env.doc, win: env.win, host, lobby, page: { info: () => ({ client: false, model: null, offline: 'none' }), make() {}, leave() {}, how() {} } });
+    const bars = host.findAll((e) => e.tagName === 'header').concat(env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1).slice(-1));
+    second.inert(true); second.opening();
+    env.advance(15000);
+    check('a dialog that is still open when the 15 s are up keeps the bars inert (the timer gives back only what START took)', bars.every((b) => b.hasAttribute('inert')) && (second.inert(false), bars.every((b) => !b.hasAttribute('inert'))));
+    second.opening(); second.opening();
+    env.advance(14000);
+    second.opening();
+    env.advance(14000);
+    check('a second hand-off starts the 15 s again (and one timer only is running for each Home)', bars.every((b) => b.hasAttribute('inert')) && (env.advance(1000), bars.every((b) => !b.hasAttribute('inert'))));
+}
+
 {   // what Home never does: no network of its own, no storage, no markup, nothing that is the page's room (the client, the model, the session)
     const code = fs.readFileSync(path.join(lobbyDir, 'home', 'home.js'), 'utf8');
-    check('home.js makes no request and keeps nothing (no fetch, XMLHttpRequest, WebSocket, localStorage, sessionStorage) and writes no markup', !/\bfetch\b|XMLHttpRequest|WebSocket|localStorage|sessionStorage|innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(code.replace(/\/\/.*$/gm, '')));
-    check('... its only calls into the page are info, make, leave and how', [...code.matchAll(/\bpage\.(\w+)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i).sort().join() === 'how,info,leave,make');
+    check('home.js makes no request of its own and keeps nothing (no fetch, XMLHttpRequest, WebSocket, localStorage, sessionStorage; the chat dock\'s two files are asked for by a link and a script element) and writes no markup', !/\bfetch\b|XMLHttpRequest|WebSocket|localStorage|sessionStorage|innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(code.replace(/\/\/.*$/gm, '')));
+    check('... its only calls into the page are info, make, leave, how and stalled', [...code.matchAll(/\bpage\.(\w+)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i).sort().join() === 'how,info,leave,make,stalled');
 }
 
 console.log('home screens: ' + checks + ' checks, ' + failures + ' failed');

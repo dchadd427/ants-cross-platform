@@ -277,6 +277,7 @@ function runLobby(search, stored, options) {
     new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', 'clearTimeout', 'fetch', 'BroadcastChannel', 'Math', lobbyScript)(win, doc, history, nav, () => 0, scope.setTimeout, scope.clearTimeout, fetchSpy, undefined, fakeMath);
     env.storage = storage;
     env.session = session;
+    env.scope = scope;                                   // (what a script of the page is run with: the WebSocket, setTimeout and clearTimeout of this page; the chat dock's check loads web/home/chat.js with it)
     env.win = win;
     env.body = doc.body;
     env.$ = (id) => env.elements[id];

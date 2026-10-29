@@ -26,7 +26,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
   * play     START with a bot in every other color takes THIS tab to the game page (no new tab): the arguments are the site's door, the room's code, the seat, the name and the shape and nothing else (the server holds the
              plan), the address keeps the code and the shape, the key of the seat is in the browser, and the match starts by itself (no START of the player's, the "Get ready" dialog closes by itself); the server's status
              lists the three bots (Bot (Medium), seats 1 - 3) and the player, the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first and, with Yes, goes back to the front page
-             in the same tab, which makes a room again for the same name;
+             in the same tab, which opens on Home: My room there makes a room again for the same name;
   * solo     START with nobody else in the match (every other color Nobody) takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
              with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs, at Green; Classic 4:3, chosen under Screen, reaches that game (and with nothing chosen the page hands on no shape at all: the game page picks its own, 16:10 at 1440 x 900);
   * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game button takes THIS tab back
@@ -1409,7 +1409,7 @@ def main():
                         front_ready()
                         remembered = lobby()
                         check(code_of(remembered) != code and card_of(remembered, "green")["name"] == "Bob" and remembered["map"] == "treasure" and tab.ev("localStorage.getItem('ants.name')") == "Bob" and not remembered["guest"],
-                              "menu: the front page makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
+                              "menu: the front page (Home), after My room, makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
                         note("the front page after the Menu of a match that goes on: rejoin line %s (%r)" % ("shown" if remembered["rejoin"] else "not shown", tab.ev("document.getElementById('rejoin-note').textContent")))
             else:
                 check(False, "the game page of the room is ready")
