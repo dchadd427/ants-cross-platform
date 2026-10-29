@@ -42,6 +42,7 @@ class FakePeer:
         self.identity = identity
         self.sent = []
         self.strikes = 0
+        self.charges = 0
         self.closed = None
 
     def send_text(self, data):
@@ -49,6 +50,9 @@ class FakePeer:
 
     def strike(self):
         self.strikes += 1
+
+    def charge(self):
+        self.charges += 1
 
     def kinds(self, kind):
         return [m for m in self.sent if m["t"] == kind]
@@ -1006,13 +1010,13 @@ class TheSettings(unittest.TestCase):
         self.assertFalse(config.load({"ANTS_HUB_HOST": "0.0.0.0"}).test_login)
 
     def test_a_secret_is_never_in_the_summary_or_the_text_of_the_settings(self):
-        secret, client, mod = "canary-secret-8c1d5e", "canary-client-id-77", "7777777777"
+        secret, client, mod = "canary-secret-8c1d5e", "4242424242420077", "7777777777"
         cfg = config.load({"ANTS_HUB_DISCORD_CLIENT_SECRET": secret, "ANTS_HUB_DISCORD_CLIENT_ID": client, "ANTS_HUB_MODS": mod, "ANTS_HUB_PUBLIC_URL": "https://x.example.org"})
         for text in (repr(cfg), str(cfg), json.dumps(cfg.summary())):
             for canary in (secret, client, mod):
                 self.assertNotIn(canary, text)
         self.assertEqual(cfg.summary()["mods"], 1)
-        self.assertEqual(cfg.login_client_secret, secret)             # (it is read: the login layer that comes later needs it)
+        self.assertEqual(cfg.login_client_secret, secret)             # (it is read: the Discord login needs it)
 
 
 def identify(sessions, headers):

@@ -993,8 +993,6 @@ def wait_for_port(proc, log_path, timeout=10):
 class TheProcess(unittest.TestCase):
     """`python -m hub` as the image runs it, and `python -m hub.admin` against the same database."""
 
-    SECRET = "canary-secret-3f9a7c1e5d"
-    CLIENT_ID = "canary-client-8812"
     MODS = "5551234567,5559876543"
     COOKIE = "ants_hub=canary-cookie-6d2b"
 
@@ -1033,7 +1031,7 @@ class TheProcess(unittest.TestCase):
         c.close()
 
     def test_everything_end_to_end_and_the_log_holds_no_secret(self):
-        extra = {"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_MODS": self.MODS, "ANTS_HUB_DISCORD_CLIENT_SECRET": self.SECRET, "ANTS_HUB_DISCORD_CLIENT_ID": self.CLIENT_ID}
+        extra = {"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_MODS": self.MODS}                # (the Discord settings and their canaries: tests/scripts/test_hub_login.py, which runs the process with them)
         proc, port, folder, log_path, env = self.run_hub(extra)
         db = env["ANTS_HUB_DB"]
         headers = {"X-Client-Address": "203.0.113.77", "Cookie": self.COOKIE}
@@ -1077,7 +1075,7 @@ class TheProcess(unittest.TestCase):
             self.assertIn(" note what=sockets_are_counted_for_each_X-Client-Address", text)          # (the dependence on the proxy setting is said at every start)
             self.assertIn(" listening port=", text)
             self.assertIn(" open ", text)
-            for canary in (self.SECRET, self.CLIENT_ID, "5551234567", "5559876543", self.COOKIE, "canary-cookie", chat_text, "hello again", "203.0.113.77", "127.0.0.1", "6101", "alice", "moddy",
+            for canary in ("5551234567", "5559876543", self.COOKIE, "canary-cookie", chat_text, "hello again", "203.0.113.77", "127.0.0.1", "6101", "alice", "moddy",
                            "X-Hub-Test-Login", "Traceback", folder):
                 self.assertNotIn(canary, text, "the log shows " + canary)
             for line in text.splitlines():

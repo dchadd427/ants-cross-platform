@@ -11,9 +11,11 @@ MAX_HEADERS = 60
 REQUEST_LINE = re.compile(r"([A-Z]{1,10}) (/[!-~]{0,1999}) HTTP/1\.[01]\Z")
 HEADER_LINE = re.compile(r"([!#$%&'*+.^_`|~0-9A-Za-z-]+):([\t\x20-\x7e\x80-\xff]*)\Z")        # (the blanks around the value are cut after the match: a pattern that did it itself backtracked, quadratically, on a long run of blanks)
 ONCE = frozenset(("origin", "upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "x-client-address", "content-length", "transfer-encoding", "host",
-                  "cookie", "x-hub-test-login"))
-REASONS = {101: "Switching Protocols", 200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 408: "Request Timeout",
+                  "cookie", "x-hub-test-login", "sec-fetch-site"))
+REASONS = {101: "Switching Protocols", 200: "OK", 302: "Found", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 408: "Request Timeout",
            426: "Upgrade Required", 429: "Too Many Requests", 431: "Request Header Fields Too Large", 500: "Internal Server Error", 503: "Service Unavailable"}
+HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
+HEADER_VALUE = re.compile(r"[\t\x20-\x7e]*\Z")              # (no line end, no other control character, nothing past ASCII: a value that came from outside cannot start another header)
 
 
 class HttpError(Exception):
@@ -34,6 +36,11 @@ class Request:
 
     def has_token(self, name, token):
         return token in [t.strip().lower() for t in self.headers.get(name, "").split(",")]
+
+    def split(self):
+        """(path, query) of the request target: the part before the first "?" and the part after it (no decoding: a path is exactly what a route names)."""
+        path, _, query = self.path.partition("?")
+        return path, query
 
 
 def parse_head(head):
@@ -65,11 +72,18 @@ def parse_head(head):
     return Request(m.group(1), m.group(2), headers)
 
 
-def response(status, body=None, headers=None):
-    """The bytes of a response that closes the connection; a body is a JSON value."""
-    payload = b"" if body is None else json.dumps(body, separators=(",", ":")).encode("utf-8")
+def response(status, body=None, headers=None, page=None):
+    """The bytes of a response that closes the connection; a body is a JSON value, `page` is a text of HTML instead. `headers` is a dict, or a list of (name, value) pairs where a name may
+    come twice (Set-Cookie). A name or a value that could start another header or another response is a ValueError, never written."""
+    payload = page.encode("utf-8") if page is not None else b"" if body is None else json.dumps(body, separators=(",", ":")).encode("utf-8")
     lines = ["HTTP/1.1 %d %s" % (status, REASONS.get(status, "Status"))]
     if status != 101:
-        lines += ["Content-Type: application/json", "Content-Length: %d" % len(payload), "Cache-Control: no-store", "X-Content-Type-Options: nosniff", "Connection: close"]
-    lines += ["%s: %s" % kv for kv in (headers or {}).items()]
+        if status != 302:
+            lines.append("Content-Type: " + ("text/html; charset=utf-8" if page is not None else "application/json"))
+        lines += ["Content-Length: %d" % len(payload), "Cache-Control: no-store", "X-Content-Type-Options: nosniff", "Connection: close"]
+    pairs = list(headers.items()) if isinstance(headers, dict) else list(headers or [])
+    for name, value in pairs:
+        if not HEADER_NAME.match(name) or not HEADER_VALUE.match(str(value)):
+            raise ValueError("a header that is not safe to write")
+    lines += ["%s: %s" % kv for kv in pairs]
     return ("\r\n".join(lines) + "\r\n\r\n").encode("latin-1") + payload
