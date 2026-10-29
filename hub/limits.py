@@ -48,8 +48,10 @@ class Limits:
     state_seconds: float = 600.0        # how long a login may take, from /hub/login to /hub/callback
     session_seconds: float = 30 * 86400.0       # how long a login lasts (30 days)
     sessions_per_account: int = 10      # logins that one account keeps at a time (browsers, phones); the oldest go first
-    discord_connect_seconds: float = 4.0        # to Discord: the connection ...
-    discord_seconds: float = 8.0                # ... and a whole call, from the first byte sent to the last byte read
+    sessions_total: int = 100000        # logins that the hub keeps in all (a crowd of throwaway accounts cannot make the table grow without end): the oldest go first
+    discord_connect_seconds: float = 3.0        # to Discord: the connection ...
+    discord_seconds: float = 6.0                # ... a whole call, from the first byte sent to the last byte read ...
+    discord_total_seconds: float = 10.0         # ... and the two calls of a login together (nginx waits 15 seconds for the hub's answer)
     discord_body_max: int = 32768       # what is read of an answer of Discord (the head and the body together); more is an answer that is not Discord's
 
 

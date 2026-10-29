@@ -997,14 +997,20 @@ class TheCrowdIsLogged(RigTest):
 class TheBacklogIsPurgedInChunks(RigTest):
     rig_args = dict(purge_chunk=100, purge_seconds=3600.0, tick_seconds=0.05, deletions_seconds=100.0)
 
-    def test_old_lines_go_a_chunk_at_a_time_while_the_hub_serves(self):
-        old = storemod.Store(self.rig.db, clock=lambda: time.time() - 8 * 86400)
-        for n in range(350):
+    def setUp(self):
+        self.rig = hub_rig.Rig(**self.rig_args)
+        old = storemod.Store(self.rig.db, clock=lambda: time.time() - 8 * 86400)        # (the backlog is there before the hub starts: a hub that purged while the lines were still being
+        for n in range(350):                                                             # written, on a slow disk, would see a short backlog and rest for an hour)
             old.add_line("1", "ann", "old line %d" % n, False)
         old.close()
         fresh = storemod.Store(self.rig.db)
         fresh.add_line("1", "ann", "fresh line", False)
         fresh.close()
+        self.rig.__enter__()
+        self.clients = []
+        self.addCleanup(self.finish)
+
+    def test_old_lines_go_a_chunk_at_a_time_while_the_hub_serves(self):
         c = self.connect()
         self.assertTrue(self.settle(lambda: self.log_events().count("purge") >= 4, 10), self.rig.log_text.getvalue())
         self.assertEqual(sorted(set(re.findall(r" purge lines=(\d+)", self.rig.log_text.getvalue()))), ["100", "50"])

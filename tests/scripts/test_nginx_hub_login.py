@@ -38,6 +38,7 @@ sys.path.insert(0, HERE)
 import fake_discord as fd  # noqa: E402
 import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
+import quick_http  # noqa: E402
 import test_nginx_stats as stats  # noqa: E402  (the readers of the file)
 from login_flow import Visitor  # noqa: E402
 from hub import login as loginmod  # noqa: E402
@@ -168,7 +169,10 @@ class TheText(unittest.TestCase):
             self.assertNotRegex(block, r"\$(request|request_uri|args|query_string|arg_\w+)\b")
 
     def test_the_timeouts_hold_a_hub_that_waits_for_discord_and_no_longer(self):
-        self.assertIn("proxy_read_timeout 15s;", CALLBACK)                                     # (the hub waits 8 seconds for Discord)
+        self.assertIn("proxy_read_timeout 15s;", CALLBACK)
+        from hub import limits                                                                 # (the hub waits for Discord for less than nginx waits for the hub, with time over for the rest of the login)
+        self.assertLessEqual(limits.Limits().discord_total_seconds + 3, 15)
+        self.assertLess(limits.Limits().discord_seconds, limits.Limits().discord_total_seconds)
         for name, block in PAGES.items():
             self.assertIn("proxy_connect_timeout 3s;", block, name)
             if name != "callback":
@@ -187,18 +191,18 @@ def free_port():
     return port
 
 
-class Stand(http.server.ThreadingHTTPServer):
+class Stand(quick_http.QuickThreadingHTTPServer):
     """A server that records the headers of what arrives and answers {"ok":true}."""
 
     daemon_threads = True
 
     def __init__(self):
         self.seen = []
-        owner = self
+        stand = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_ANY(self):
-                owner.seen.append((self.command, self.path, [(k.lower(), v) for k, v in self.headers.items()]))
+                stand.seen.append((self.command, self.path, [(k.lower(), v) for k, v in self.headers.items()]))
                 body = b'{"ok":true}'
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

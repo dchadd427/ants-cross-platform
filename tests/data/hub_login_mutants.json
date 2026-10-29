@@ -490,8 +490,8 @@
   {
    "id": "forget_for_a_reader",
    "file": "hub/login.py",
-   "old": "if who is None:\n            return self.fail(401, \"login\"",
-   "new": "if False:\n            return self.fail(401, \"login\"",
+   "old": "if who is None:\n                return self.fail(401, \"login\"",
+   "new": "if False:\n                return self.fail(401, \"login\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
   },
   {
@@ -586,10 +586,10 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout tests.scripts.test_hub_login.TheForget"
   },
   {
-   "id": "discord_secret_in_the_address",
+   "id": "discord_secret_in_a_header",
    "file": "hub/discord.py",
-   "old": "await self.call(\"POST\", \"/oauth2/token\", {",
-   "new": "await self.call(\"POST\", \"/oauth2/token?client_secret=\" + self.client_secret, {",
+   "old": "await self.call(\"POST\", \"/oauth2/token\", {\"Content-Type\"",
+   "new": "await self.call(\"POST\", \"/oauth2/token\", {\"X-Client-Secret\": self.client_secret, \"Content-Type\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
   },
   {
@@ -647,6 +647,83 @@
    "old": "self.limits.discord_seconds)\n        except DiscordError:",
    "new": "self.limits.discord_seconds * 30)\n        except DiscordError:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong.test_every_way_for_the_exchange_to_fail_is_a_calm_page_and_no_login"
+  },
+  {
+   "id": "discord_two_calls_have_no_total",
+   "file": "hub/discord.py",
+   "old": "self.both(code), self.limits.discord_total_seconds)",
+   "new": "self.both(code), self.limits.discord_total_seconds * 30)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_total_timeout_is_a_login",
+   "file": "hub/discord.py",
+   "old": "        except asyncio.TimeoutError:\n            raise DiscordError(\"down\")\n        finally:",
+   "new": "        except asyncio.TimeoutError:\n            return (\"261842000123456789\", \"maple.leaf\")\n        finally:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_total_longer_than_nginx_waits",
+   "file": "hub/limits.py",
+   "old": "discord_total_seconds: float = 10.0",
+   "new": "discord_total_seconds: float = 30.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login"
+  },
+  {
+   "id": "discord_a_call_may_take_the_whole_total",
+   "file": "hub/limits.py",
+   "old": "discord_seconds: float = 6.0",
+   "new": "discord_seconds: float = 12.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login"
+  },
+  {
+   "id": "login_total_cap_removed",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)\", (total,))",
+   "new": "self.db.execute(\"SELECT ?\", (total,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
+  },
+  {
+   "id": "login_total_cap_keeps_the_oldest",
+   "file": "hub/store.py",
+   "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)",
+   "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
+  },
+  {
+   "id": "login_total_cap_is_ten_times_more",
+   "file": "hub/limits.py",
+   "old": "sessions_total: int = 100000",
+   "new": "sessions_total: int = 1000000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll tests.scripts.test_hub_login.TheLimitsAreWhatTheDocsSay"
+  },
+  {
+   "id": "me_database_trouble_is_a_crash",
+   "file": "hub/login.py",
+   "old": "        try:\n            who = self.who_of(request.headers)\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        return http.response(200, {\"login\": True",
+   "new": "        who = self.who_of(request.headers)\n        return http.response(200, {\"login\": True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "logout_database_trouble_is_a_crash",
+   "file": "hub/login.py",
+   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "new": "        except ZeroDivisionError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "forget_database_trouble_is_a_crash",
+   "file": "hub/login.py",
+   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
+   "new": "        except ZeroDivisionError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "forget_database_trouble_says_ok",
+   "file": "hub/login.py",
+   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
+   "new": "        except sqlite3.OperationalError:\n            return http.response(200, {\"ok\": True})\n        self.hub.end_logins(account=who.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
   },
   {
    "id": "discord_token_of_any_shape",
@@ -849,7 +926,7 @@
    "file": "hub/login.py",
    "old": "self.log.event(\"login_failed\", kind=\"bug\", error=type(e).__name__)",
    "new": "self.log.event(\"login_failed\", kind=\"bug\", error=str(e))",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret tests.scripts.test_hub_login.TheBugsAreCalm"
   },
   {
    "id": "log_holds_the_code",
@@ -912,7 +989,7 @@
    "file": "hub/login.py",
    "old": "self.log.event(\"login_failed\", kind=e.kind, status=e.status, tag=self.log.tag(address))",
    "new": "self.log.event(\"login_failed\", kind=e.kind, status=e.status, tag=self.log.tag(address), why=str(e.args))",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret tests.scripts.test_hub_login.TheBugsAreCalm"
   },
   {
    "id": "failed_logins_not_logged",
@@ -980,15 +1057,15 @@
   {
    "id": "age_default_zero",
    "file": "hub/config.py",
-   "old": "env.get(\"ANTS_HUB_MIN_ACCOUNT_DAYS\", \"7\")",
+   "old": "env.get(\"ANTS_HUB_MIN_ACCOUNT_DAYS\", str(MIN_ACCOUNT_DAYS))",
    "new": "env.get(\"ANTS_HUB_MIN_ACCOUNT_DAYS\", \"0\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings tests.scripts.test_hub_login.TheProcess"
   },
   {
    "id": "age_default_a_day",
    "file": "hub/config.py",
-   "old": "min_account_days: int = 7",
-   "new": "min_account_days: int = 1",
+   "old": "MIN_ACCOUNT_DAYS = 7  ",
+   "new": "MIN_ACCOUNT_DAYS = 1  ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
   },
   {
@@ -1281,7 +1358,7 @@
   {
    "id": "nginx_callback_times_out_before_discord",
    "file": "docker/nginx.conf",
-   "old": "proxy_read_timeout 15s;                                   # (the hub gives Discord 8 seconds for the two calls)",
+   "old": "proxy_read_timeout 15s;                                   # (the hub gives Discord 10 seconds for the two calls)",
    "new": "proxy_read_timeout 3s;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },

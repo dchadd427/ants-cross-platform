@@ -6,7 +6,7 @@ loopback port, over plain http (the hub allows that to a fake Discord on a loopb
     GET  /api/v10/users/@me      who the token belongs to
 
 and every way that a real service goes wrong: a status (400, 401, 429, 500, ...), no answer at all, an answer that drips, one that is far too big (by its length, in chunks, or in its head), JSON
-that is cut off or is not JSON, an answer of the wrong shape (a token that is a number, an id that is not digits, a name with a line end in it), a redirect, a connection that is cut. `token_mode` and
+that is cut off or is not JSON, a message with both chunks and a length, an answer of the wrong shape (a token that is a number, an id that is not digits, a name with a line end in it), a redirect, a connection that is cut. `token_mode` and
 `me_mode` pick one; `requests` keeps what the hub sent (the secret is in the body of the exchange and nowhere else).
 """
 import json
@@ -140,6 +140,9 @@ class FakeDiscord:
             return h.wfile.write(raw(status, data))
         if mode.startswith("status:"):
             return h.wfile.write(raw(int(mode[7:]), {"error": "x", "message": "canary-error-body"}))
+        if mode.startswith("slow:"):                         # an answer that comes, after this many seconds
+            time.sleep(float(mode[5:]))
+            return h.wfile.write(raw(status, data))
         if mode == "hang":
             time.sleep(30)
             return None
@@ -179,6 +182,10 @@ class FakeDiscord:
             parts = [body[:mid], body[mid:]]
             wire = b"".join(b"%x\r\n%s\r\n" % (len(p), p) for p in parts) + b"0\r\n\r\n"
             return h.wfile.write(b"HTTP/1.1 %d OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n" % status + wire)
+        if mode == "chunked_length":                         # both a length and chunks: a message that two readers read in two ways
+            body = json.dumps(data).encode()
+            wire = b"%x\r\n%s\r\n0\r\n\r\n" % (len(body), body)
+            return h.wfile.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % len(wire) + wire)
         if mode == "nolength":
             return h.wfile.write(b"HTTP/1.1 %d OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" % status + json.dumps(data).encode())
         if mode == "notjson":

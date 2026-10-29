@@ -58,10 +58,15 @@ class Discord:
             raise DiscordError("busy")
         self.inflight += 1
         try:
-            token = await self.token(code)
-            return await self.me(token)
+            return await asyncio.wait_for(self.both(code), self.limits.discord_total_seconds)
+        except asyncio.TimeoutError:
+            raise DiscordError("down")
         finally:
             self.inflight -= 1
+
+    async def both(self, code):
+        token = await self.token(code)
+        return await self.me(token)
 
     async def token(self, code):
         form = urllib.parse.urlencode({"client_id": self.client_id, "client_secret": self.client_secret, "grant_type": "authorization_code", "code": code, "redirect_uri": self.redirect})

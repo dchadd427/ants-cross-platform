@@ -9,6 +9,7 @@ ACCOUNT_ID = re.compile(r"[1-9][0-9]{0,19}\Z")           # a Discord id: digits,
 CLIENT_ID = re.compile(r"[0-9]{5,30}\Z")                 # the number of the Discord application
 CLIENT_SECRET = re.compile(r"[\x21-\x7e]{8,256}\Z")      # printable characters, no blank
 MAX_MIN_ACCOUNT_DAYS = 3650
+MIN_ACCOUNT_DAYS = 7                                                         # the default age that a Discord account needs to write (ANTS_HUB_MIN_ACCOUNT_DAYS)
 
 
 class ConfigError(Exception):
@@ -25,7 +26,7 @@ class Config:
     test_login: bool = False
     login_client_id: str = dataclasses.field(default="", repr=False)
     login_client_secret: str = dataclasses.field(default="", repr=False)    # the Discord login's (hub/login.py); never printed
-    min_account_days: int = 7                                               # a Discord account younger than this cannot write (its age is in its id)
+    min_account_days: int = MIN_ACCOUNT_DAYS                                               # a Discord account younger than this cannot write (its age is in its id)
     discord_test_url: str = ""                                              # TESTS ONLY: where the fake Discord of the tests listens (a loopback address, refused for any other)
 
     @property
@@ -103,7 +104,7 @@ def load(env):
     if cfg.login_client_secret and not CLIENT_SECRET.match(cfg.login_client_secret):
         raise ConfigError("ANTS_HUB_DISCORD_CLIENT_SECRET must be 8 to 256 printable characters with no blank")
     try:
-        cfg.min_account_days = int(env.get("ANTS_HUB_MIN_ACCOUNT_DAYS", "7").strip())
+        cfg.min_account_days = int(env.get("ANTS_HUB_MIN_ACCOUNT_DAYS", str(MIN_ACCOUNT_DAYS)).strip())
     except ValueError:
         raise ConfigError("ANTS_HUB_MIN_ACCOUNT_DAYS must be a number of days")
     if not 0 <= cfg.min_account_days <= MAX_MIN_ACCOUNT_DAYS:

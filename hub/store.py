@@ -163,12 +163,14 @@ class Store:
 
     # ---- logins ---------------------------------------------------------------------------------------------------------------------------
 
-    def add_session(self, key, account, name, seconds, keep):
-        """Keep a login: `key` is the SHA-256 (hex) of the cookie's value, never the value; it runs out after `seconds`. An account keeps at most `keep` of them: the oldest go."""
+    def add_session(self, key, account, name, seconds, keep, total):
+        """Keep a login: `key` is the SHA-256 (hex) of the cookie's value, never the value; it runs out after `seconds`. An account keeps at most `keep` of them, and all accounts together
+        `total`: the oldest go."""
         now = int(self.clock())
         with self.transaction():
             self.db.execute("INSERT INTO sessions (id, account, name, created, expires) VALUES (?, ?, ?, ?, ?)", (key, account, name, now, now + int(seconds)))
             self.db.execute("DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)", (account, account, keep))
+            self.db.execute("DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,))
 
     def session(self, key):
         """(account, name, expires) of the login whose key this is, or None when there is none or it has run out."""

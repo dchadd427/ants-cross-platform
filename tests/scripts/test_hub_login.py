@@ -258,6 +258,19 @@ class TheStatesAreBounded(LoginTest):
         self.assertEqual(last.callback(last.at_discord(r.get("location"))).status, 302)
 
 
+    def test_a_state_that_ran_out_is_swept_when_the_next_login_starts_and_when_the_hub_ticks(self):
+        count = lambda: self.rig.call(lambda: len(self.rig.hub.sessions.states))
+        for _ in range(3):
+            self.visitor().start()
+        self.assertEqual(count(), 3)
+        self.tick(601)
+        self.visitor().start()
+        self.assertEqual(count(), 1)
+        self.tick(601)
+        self.rig.call(self.rig.hub.sessions.forget_idle, self.rig.hub.clock(), self.rig.store.clock())
+        self.assertEqual(count(), 0)
+
+
 # ===================================================================================================================================================
 class TheCallback(LoginTest):
     def test_a_good_login_keeps_the_id_and_the_name_and_hands_out_the_cookie(self):
@@ -364,11 +377,27 @@ class TheCallback(LoginTest):
             out = w.callback(hc_url(parts, query))
             self.assert_page(out, 400)
             self.assertEqual(self.token_requests(), [], label)
-        for label, raw_query in (("state twice", "code=%s&state=%s&state=%s" % (q["code"], q["state"], q["state"])), ("code twice", "code=%s&code=%s&state=%s" % (q["code"], q["code"], q["state"])),
-                                 ("junk", "code=%s&state=%s&%s" % (q["code"], q["state"], "x" * 2000))):
-            self.assertEqual(v.callback(parts.path + "?" + raw_query).status, 400, label)
+        for label, make in (("state twice", lambda c, s: "code=%s&state=%s&state=%s" % (c, s, s)), ("code twice", lambda c, s: "code=%s&code=%s&state=%s" % (c, c, s)),
+                            ("junk", lambda c, s: "code=%s&state=%s&%s" % (c, s, "x" * 2000)), ("long", lambda c, s: "code=%s&state=%s&x=%s" % (c, s, "y" * 1500)),
+                            ("many fields", lambda c, s: "code=%s&state=%s&%s" % (c, s, "&".join("a%d=1" % i for i in range(40))))):
+            w = self.visitor()                                                       # (a state is good for one callback: each odd query has a state of its own)
+            w.at_discord(w.start().get("location"))
+            self.assertEqual(w.callback(parts.path + "?" + make(w.code, w.state)).status, 400, label)
+            self.assert_no_login(w)
         self.assertEqual(self.token_requests(), [])
         self.assert_no_login(v)
+
+    def test_a_code_of_a_shape_that_discord_never_sends_is_refused_before_discord_is_asked(self):
+        for label, code in (("empty", ""), ("a blank", "ab%20cd"), ("a line end", "ab%0Acd"), ("too long", "a" * 513), ("not ascii", "caf%C3%A9"), ("a control character", "ab%01cd")):
+            w = self.visitor()
+            w.start()
+            out = w.callback(CALLBACK + "?code=%s&state=%s" % (code, w.state))
+            self.assert_page(out, 400, "That login has run out")
+            self.assertEqual((self.token_requests(), self.rows()), ([], []), label)
+        w = self.visitor()
+        w.start()
+        self.assertEqual(w.callback(CALLBACK + "?code=%s&state=%s" % ("a" * 512, w.state)).status, 400)                  # (the longest that is allowed: Discord's page for it)
+        self.assertEqual(len(self.token_requests()), 1)
 
     def test_a_cookie_of_the_state_that_came_twice_is_nobodys(self):
         v = self.visitor()
@@ -420,7 +449,7 @@ class TheCallback(LoginTest):
     def test_a_visitor_who_said_no_gets_a_page_and_nothing_is_kept(self):
         v = self.visitor()
         r = v.start()
-        out = v.callback(CALLBACK + "?error=access_denied&error_description=The+resource+owner+denied&state=" + v.state)
+        out = v.callback(CALLBACK + "?error=access_denied&error_description=Access+was+denied&state=" + v.state)
         self.assert_page(out, 400, "Login cancelled")
         self.assertNotIn("denied", out.text())                                  # (what Discord says is never shown)
         self.assertEqual((self.token_requests(), self.rows()), ([], []))
@@ -473,6 +502,29 @@ class TheCookie(LoginTest):
         self.assertEqual(socket.expect_close(3), 1000)                           # (and the socket that it let in)
         self.assertNotIn(first, self.visitor().login().text())
 
+    def test_a_value_is_not_made_of_a_small_number_of_bits(self):
+        values = []
+        for _ in range(12):
+            v = self.visitor()
+            v.login()
+            values.append(v.session())
+        self.assertEqual(len(set(values)), 12)
+        for value in values:
+            for period in (1, 2, 4, 8, 16):
+                self.assertNotEqual(value, value[:period] * (32 // period), value)
+
+    def test_a_value_that_is_not_the_shape_of_ours_is_not_even_looked_up(self):
+        good = self.member().session()
+        seen = []
+        real = self.rig.store.session
+        self.rig.call(setattr, self.rig.store, "session", lambda key: seen.append(key) or real(key))
+        who_of = self.rig.hub.sessions.who_of
+        for cookie in ("__Host-ants_hub=" + good.upper(), "__Host-ants_hub=" + good[:31], "__Host-ants_hub=caf\u00e9", "__Host-ants_hub=" + "g" * 32, "__Host-ants_hub=", "__Host-ants_hub=" + good + "0"):
+            self.assertIsNone(self.rig.call(who_of, {"cookie": cookie}), cookie)
+        self.assertEqual(seen, [])
+        self.assertEqual(self.rig.call(who_of, {"cookie": "__Host-ants_hub=" + good}).name, "maple.leaf")
+        self.assertEqual(seen, [sha(good)])
+
     def test_a_value_that_a_visitor_picked_is_never_adopted(self):
         v = self.visitor()
         v.jar.cookies["__Host-ants_hub"] = "ab" * 16                             # (session fixation: the visitor has a value of its own, and the attacker knows it)
@@ -514,6 +566,29 @@ class TheCapOfLoginsForAnAccount(LoginTest):
         self.assertEqual(len(self.rows()), 4)                                    # (the cap is for each account)
         self.assertEqual(self.socket(headers={"Cookie": "__Host-ants_hub=" + values[0]}).welcome["you"], None)
         self.assertEqual(self.socket(headers={"Cookie": "__Host-ants_hub=" + values[4]}).welcome["you"]["name"], "maple.leaf")
+
+
+class TheCapOfLoginsInAll(LoginTest):
+    limits = dict(sessions_total=3)
+
+    def test_a_crowd_of_accounts_cannot_make_the_table_grow_and_the_oldest_go(self):
+        keys = []
+        for n in range(6):
+            self.fake.user = (str(333333333333333300 + n), "crowd.%d" % n)
+            v = self.visitor()
+            v.login()
+            keys.append(sha(v.session()))
+        self.assertEqual(sorted(r[0] for r in self.rows()), sorted(keys[3:]))
+
+
+class TheLimitsAreWhatTheDocsSay(unittest.TestCase):
+    def test_the_defaults_of_the_login_are_the_numbers_of_the_row_of_the_table(self):
+        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
+            row = next(line for line in f if line.startswith("| the login's pages |"))
+        d = limitmod.Limits()
+        self.assertEqual((d.sessions_per_account, d.sessions_total, d.discord_total_seconds, d.session_seconds), (10, 100000, 10.0, 30 * 86400.0))
+        self.assertIn("10 seconds for Discord's two calls in all", row)
+        self.assertIn("10 logins kept for an account and 100,000 in all (the oldest go)", row)
 
 
 class TheSessionsAreKept(LoginTest):
@@ -661,6 +736,14 @@ class TheAgeSettingZero(LoginTest):
         c.say("hello")
         self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["text"], "hello")
 
+    def test_zero_days_does_not_mind_an_id_that_is_from_the_future_either(self):
+        self.fake.user = (FUTURE, "from.next.month")
+        v = self.visitor()
+        v.login()
+        c = self.socket(v)
+        c.say("hello")
+        self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["text"], "hello")
+
 
 class TheBansAndMutesStandWhateverTheAccountDoes(LoginTest):
     def test_a_banned_account_can_read_and_log_in_and_cannot_write_and_nothing_it_does_lifts_it(self):
@@ -723,6 +806,32 @@ class TheMe(LoginTest):
         self.assertEqual(v.call("GET", "/hub/me", origin=hc.SITE).status, 200)
         self.assertEqual(v.call("POST", "/hub/me").status, 405)
         self.assertEqual(v.call("GET", "/hub/me?x=1").status, 404)
+
+
+class TheDatabaseThatCannotBeUsed(LoginTest):
+    """A write lock held by another process (or a full disk) for longer than the hub waits: each page says so and the hub goes on."""
+
+    def failing(self, name):
+        def fail(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        self.rig.call(setattr, self.rig.store, name, fail)
+
+    def test_the_callback_that_cannot_keep_the_login_is_the_calm_page_and_no_login(self):
+        v = self.visitor()
+        back = v.at_discord(v.start().get("location"))
+        self.failing("add_session")
+        out = v.callback(back)
+        self.assert_page(out, 503, UNAVAILABLE)
+        self.assertIsNone(v.session())
+        self.assertRegex(self.rig.log_text.getvalue(), r" login_failed kind=database error=OperationalError")
+
+    def test_me_logout_and_forget_say_busy_and_do_nothing(self):
+        v = self.member()
+        for name, method, path in (("session", "GET", "/hub/me"), ("delete_session", "POST", "/hub/logout"), ("forget", "POST", "/hub/forget")):
+            self.failing(name)
+            r = v.call(method, path)
+            self.assertEqual((r.status, r.json()), (503, {"error": "busy"}), path)
+        self.assertEqual(hc.http_get(self.rig.port, "/hub/healthz")[0], 200)
 
 
 class TheLogout(LoginTest):
@@ -843,7 +952,7 @@ class TheLimitsOfTheSessionPages(LoginTest):
 class TheCallbackWhenDiscordGoesWrong(LoginTest):
     limits = dict(discord_seconds=1.0, discord_connect_seconds=1.0, login_inflight=4)
     TOKEN = ("status:401", "status:403", "status:429", "status:500", "status:503", "status:404", "status:204", "status:200", "hang", "drip", "close", "partial", "huge", "huge_stream", "huge_chunked",
-             "huge_head", "notjson", "cutoff", "array", "nan", "deep", "redirect301", "redirect302", "redirect307", "redirect308")
+             "huge_head", "notjson", "cutoff", "array", "nan", "deep", "chunked_length", "redirect301", "redirect302", "redirect307", "redirect308")
 
     def go(self, v=None):
         v = v or self.visitor()
@@ -877,6 +986,14 @@ class TheCallbackWhenDiscordGoesWrong(LoginTest):
             self.assert_calm(v, r, "me " + mode, took)
         self.assertEqual(len(self.me_requests()), len(self.TOKEN))
 
+    def test_json_that_is_not_an_object_is_a_call_that_failed_and_not_a_bug_of_the_hub(self):
+        for mode in ("array", "notjson", "cutoff", "nan", "deep"):
+            self.fake.token_mode = mode
+            self.go()
+        log = self.rig.log_text.getvalue()
+        self.assertNotIn("kind=bug", log)
+        self.assertEqual(log.count(" login_failed kind=down"), 5)
+
     def test_a_code_that_discord_refuses_asks_the_visitor_to_try_again(self):
         self.fake.token_mode = "status:400"
         v, r, _ = self.go()
@@ -889,6 +1006,17 @@ class TheCallbackWhenDiscordGoesWrong(LoginTest):
         self.assert_page(r, 503, UNAVAILABLE)
         log = self.rig.log_text.getvalue()
         self.assertRegex(log, r" login_failed kind=config status=401 ")
+
+    def test_two_slow_calls_are_more_than_the_hub_waits_for_the_login(self):
+        self.rig.__exit__(None, None, None)
+        self.rig = hub_rig.Rig(discord=self.fake, discord_seconds=2.0, discord_connect_seconds=1.0, discord_total_seconds=1.4, sockets_per_address=100)
+        self.rig.__enter__()
+        self.fake.token_mode = self.fake.me_mode = "slow:0.8"                               # (each call is in time, the two are not)
+        v, r, took = self.go()
+        self.assert_calm(v, r, "two slow calls", took)
+        self.assertLess(took, 2.4)
+        self.fake.token_mode = self.fake.me_mode = "slow:0.3"
+        self.assertEqual(self.visitor().login().status, 302)
 
     def test_an_answer_of_the_wrong_shape_is_no_login(self):
         token = {"access_token": 5}, {"access_token": ""}, {"access_token": "abc\r\nX-Evil: 1"}, {"access_token": "a b"}, {"access_token": "x" * 600}, {"access_token": None}, {"token_type": "mac"}, \
@@ -961,7 +1089,13 @@ class TheCallbackWhenDiscordGoesWrong(LoginTest):
         for _ in range(3):
             v = self.visitor()
             visitors.append((v, v.at_discord(v.start().get("location"))))
-        threads = [threading.Thread(target=lambda p=pair: p[0].callback(p[1])) for pair in visitors]
+        def wait_for_discord(pair):
+            try:
+                pair[0].callback(pair[1])
+            except OSError:                                                              # (a connection that the hub has to turn away while it is full of heads: no matter here)
+                pass
+
+        threads = [threading.Thread(target=wait_for_discord, args=(pair,)) for pair in visitors]
         for t in threads:
             t.start()
         time.sleep(0.4)                                                                  # (three logins wait for Discord; the hub takes only two connections that have not finished their head)
@@ -1173,6 +1307,30 @@ class TheLogHoldsNothingSecret(LoginTest):
             self.assertRegex(line, r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ [a-z_]+( [a-z_]+=[A-Za-z0-9_.:/-]*)*$", line)
 
 
+class TheBugsAreCalm(LoginTest):
+    def test_a_bug_in_the_callback_is_a_calm_page_and_a_line_with_the_kind_of_error_and_not_its_text(self):
+        async def broken(code):
+            raise RuntimeError("canary-bug-text " + code)
+        self.rig.call(setattr, self.rig.hub.sessions.discord, "who", broken)
+        v = self.visitor()
+        r = v.login()
+        self.assert_page(r, 503, UNAVAILABLE)
+        self.assertEqual(r.all("set-cookie"), [CLEARED_STATE])
+        log = self.rig.log_text.getvalue()
+        self.assertRegex(log, r" login_failed kind=bug error=RuntimeError$")
+        self.assertNotIn("canary-bug-text", log)
+        self.assertNotIn(v.code, log)
+        self.assertEqual(self.rows(), [])
+        self.assertEqual(self.visitor().call("GET", "/hub/me").status, 200)                  # (the hub goes on)
+
+    def test_the_line_for_a_call_that_failed_holds_the_kind_the_status_and_the_tag_and_nothing_else(self):
+        self.fake.token_mode = "status:500"
+        self.visitor().login()
+        lines = [line for line in self.rig.log_text.getvalue().splitlines() if " login_failed" in line]
+        self.assertEqual(len(lines), 1)
+        self.assertRegex(lines[0], r"^\S+ login_failed kind=down status=500 tag=[0-9a-f]+$")
+
+
 class TheProcess(unittest.TestCase):
     """`python -m hub` with the Discord settings, as the image runs it, in front of the fake Discord: the secrets come from the environment and are in no log and on no command line."""
 
@@ -1219,7 +1377,7 @@ class TheProcess(unittest.TestCase):
         started = time.monotonic()
         out = w.login()
         self.assertEqual(out.status, 503)
-        self.assertLess(time.monotonic() - started, 12.0)                         # (the real limits: 8 seconds for a call)
+        self.assertLess(time.monotonic() - started, 12.0)                         # (the real limits: 6 seconds for a call, 10 for the two)
         self.assertEqual(hc.http_get(port, "/hub/healthz")[0], 200)
         proc.send_signal(signal.SIGTERM)
         self.assertEqual(proc.wait(10), 0)

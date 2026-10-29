@@ -1824,8 +1824,8 @@
   {
    "id": "docs_forget_the_login_place",
    "file": "docs/HOME_SCREEN.md",
-   "old": "`#gchat-login-slot` is the place of the login chip",
-   "new": "The login chip has a place",
+   "old": "In `#gchat-login-slot`: \"Chatting as",
+   "new": "In the dock: \"Chatting as",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

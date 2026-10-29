@@ -225,7 +225,7 @@ class DiscordLogin(session.Sessions):
             return self.page("name", back, gone)
         value = secrets.token_hex(16)
         try:
-            self.store.add_session(digest(value), account, name, self.limits.session_seconds, self.limits.sessions_per_account)
+            self.store.add_session(digest(value), account, name, self.limits.session_seconds, self.limits.sessions_per_account, self.limits.sessions_total)
             old = cookies.get(COOKIE)
             if old and VALUE.match(old):                                      # (a login that this browser had is over: a new one never takes over the value of an old one)
                 self.store.delete_session(digest(old))
@@ -255,7 +255,10 @@ class DiscordLogin(session.Sessions):
         refused = self.guard(request, address, "GET")
         if refused:
             return refused
-        who = self.who_of(request.headers)
+        try:
+            who = self.who_of(request.headers)
+        except sqlite3.OperationalError:
+            return self.fail(503, "busy")
         return http.response(200, {"login": True, "you": {"name": who.name, "mod": who.account_id in self.cfg.mods} if who else None})
 
     async def logout(self, request, address):
@@ -276,10 +279,10 @@ class DiscordLogin(session.Sessions):
         refused = self.guard(request, address, "POST")
         if refused:
             return refused
-        who = self.who_of(request.headers)
-        if who is None:
-            return self.fail(401, "login", [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
         try:
+            who = self.who_of(request.headers)
+            if who is None:
+                return self.fail(401, "login", [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
             lines = self.store.forget(who.account_id)
         except sqlite3.OperationalError:
             return self.fail(503, "busy")
