@@ -1042,6 +1042,87 @@ class TheSessions(unittest.TestCase):
             self.assertTrue(inspect.iscoroutinefunction(sessions.identify), type(sessions).__name__)
 
 
+class TheDatabaseThatCannotBeUsed(WorldTest):
+    """A write that fails because another process holds the database's write lock longer than the hub waits (or the disk refuses): the sender is told, the socket stays, nothing is counted against it."""
+
+    def locked(self, name):
+        return mock.patch.object(self.w.store, name, side_effect=sqlite3.OperationalError("database is locked"))
+
+    def test_a_line_that_could_not_be_kept_is_answered_rate_and_is_no_mistake_and_costs_no_token(self):
+        seen = []
+        self.w.chat.on_store_error = seen.append
+        with self.locked("add_line"):
+            self.w.say(self.alice, "hello")
+        self.assertEqual(self.alice.codes(), ["rate"])
+        self.assertEqual((self.alice.strikes, self.alice.charges, self.alice.closed), (0, 1, None))     # (not a mistake, but one frame of its budget more: the refusal is not free)
+        self.assertEqual(len(seen), 1)
+        self.assertIsInstance(seen[0], sqlite3.OperationalError)
+        self.assertEqual(self.bob.sent, [])                                                             # (nobody saw a line)
+        self.assertEqual(self.w.store.recent_lines(10), [])
+        for n in range(3):
+            self.w.say(self.alice, "hello")                                                              # (the same text at once, and the full burst of 3 are still there: nothing was spent)
+            self.w.clock.now += 0.001
+        self.assertEqual([m["text"] for m in self.bob.kinds("line")], ["hello"])
+        self.assertEqual(self.alice.codes(), ["rate", "rate", "rate"])                                   # (the second and third are the same text: dup, as always)
+
+    def test_the_global_limit_gets_its_token_back_too(self):
+        w = World(limits=dataclasses.replace(LIMITS, global_burst=1, global_refill_seconds=1e9))
+        self.addCleanup(w.close)
+        alice = w.join(ALICE)
+        with mock.patch.object(w.store, "add_line", side_effect=sqlite3.OperationalError("database is locked")):
+            w.say(alice, "one")
+        w.say(alice, "two")                                                                              # (the one token of all accounts together was not used by the line that was not kept)
+        self.assertEqual(alice.codes(), ["rate"])
+        self.assertEqual([m["text"] for m in alice.kinds("line")], ["two"])
+
+    def test_a_moderator_s_command_that_could_not_be_done_is_answered_bad_and_the_socket_stays(self):
+        mod = self.w.join(MOD)
+        self.w.say(self.alice, "an ugly line")
+        line_id = self.w.store.recent_lines(1)[0].id
+        for name, command in (("mute", "/mute alice 5"), ("delete_line", "/del %d" % line_id)):
+            with self.locked(name):
+                self.w.say(mod, command)
+        self.assertEqual(mod.codes(), ["bad", "bad"])
+        self.assertEqual((mod.strikes, mod.charges, mod.closed), (0, 2, None))
+        self.assertEqual(self.w.store.muted_until("1001"), 0)                                            # (the command did not happen, and is typed again)
+        self.w.say(mod, "/mute alice 5")
+        self.assertEqual(mod.codes(), ["bad", "bad"])
+        self.assertTrue(self.w.store.muted_until("1001"))
+
+    def test_a_read_that_fails_is_the_same(self):
+        for name in ("is_banned", "muted_until", "size"):
+            peer = self.w.join(ALICE)
+            self.w.clock.now += 100
+            with self.locked(name):
+                self.w.say(peer, "hello %s" % name)
+            self.assertEqual((peer.codes(), peer.strikes, peer.closed), (["rate"], 0, None), name)
+
+    def test_any_other_database_error_is_still_the_hubs_to_deal_with(self):
+        with mock.patch.object(self.w.store, "add_line", side_effect=sqlite3.IntegrityError("not a lock")):
+            with self.assertRaises(sqlite3.IntegrityError):                                              # (the socket's task ends and the hub closes it with 1011, hub/server.py)
+                self.w.say(self.alice, "hello")
+
+
+class TheFreeRefusalsCostAFrame(unittest.TestCase):
+    def test_a_refusal_that_is_not_a_mistake_takes_a_frame_of_the_budget_and_an_empty_budget_is_a_mistake(self):
+        from hub import server as serverlib
+        clock = Clock(10.0)
+        struck = []
+        hub = types_namespace(limits=limitmod.Limits(frame_burst=3, frame_refill_seconds=1e9), clock=clock)
+        peer = serverlib.Peer.__new__(serverlib.Peer)
+        peer.hub = hub
+        peer.frames = limitmod.TokenBucket(3, 1e9, clock())
+        peer.strike = lambda: struck.append(1)
+        for n in range(5):
+            peer.charge()
+        self.assertEqual(len(struck), 2)                                                                  # (3 frames of budget: 3 refusals are free of mistakes, the 4th and 5th are mistakes)
+
+
+def types_namespace(**kw):
+    import types
+    return types.SimpleNamespace(**kw)
+
+
 class TheCommandLine(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()

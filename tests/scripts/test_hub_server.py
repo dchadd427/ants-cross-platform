@@ -6,6 +6,7 @@ Most classes run the hub in a thread of this process (tests/scripts/hub_rig.py) 
 The client is tests/scripts/hub_client.py, which shares no code with the hub. Reproducible (fixed seeds); ANTS_HUB_FUZZ_SCALE=10 runs ten times more.
 """
 import asyncio
+import contextlib
 import io
 import json
 import os
@@ -21,6 +22,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -457,6 +459,56 @@ class TheHistoryOnTheWire(RigTest):
         self.assertEqual([h["text"] for h in history], ["line %d" % n for n in range(10, 60)])
 
 
+class TheLockedDatabaseOnTheWire(RigTest):
+    """The review's finding: a write lock that another process holds for longer than the hub waits (0.3 seconds) made the line or the moderator's command raise, and the sender was cut off with 1011."""
+    rig_args = dict(LOOSE, mods="9001", **FAST)
+
+    def test_a_line_and_a_command_that_could_not_be_written_are_answered_and_the_socket_stays(self):
+        alice, mod, reader = self.connect("1001:alice"), self.connect("9001:moddy"), self.connect()
+        blocker = sqlite3.connect(self.rig.db, isolation_level=None)                  # (an administrator's tool that hangs while it holds the write lock)
+        self.addCleanup(blocker.close)
+        blocker.execute("BEGIN IMMEDIATE")
+        started = time.monotonic()
+        alice.say("hello")
+        self.assertEqual(next(m for m in iter(alice.recv_json, None) if m["t"] == "err"), {"t": "err", "code": "rate"})
+        self.assertGreater(time.monotonic() - started, 0.25)                           # (it waited its 0.3 seconds, and no longer)
+        self.assertLess(time.monotonic() - started, 2.5)
+        mod.say("/mute alice 5")
+        self.assertIn({"t": "err", "code": "bad"}, mod.drain(1.2))
+        alice.send(hc.frame(1, b'{"t":"ping"}'))
+        self.assertIn("online", [m["t"] for m in alice.drain(0.4)])                    # (the socket is open and answers)
+        self.assertEqual([m for m in reader.drain(0.3) if m["t"] == "line"], [])
+        blocker.execute("ROLLBACK")
+        alice.say("hello")
+        self.assertEqual(next(m for m in reader.drain(0.5) if m["t"] == "line")["text"], "hello")      # (the same text, at once: its token and its place in the 30 seconds were not used up)
+        mod.say("/mute alice 5")
+        time.sleep(0.2)
+        alice.drain(0.2)
+        alice.say("after the mute")
+        self.assertIn({"t": "err", "code": "muted"}, alice.drain(0.5))
+        log = self.rig.log_text.getvalue()
+        self.assertEqual(log.count(" error kind=OperationalError where=store"), 1)       # (one line for the two failures that came within ten seconds, the class of the error and nothing of the text)
+        self.assertNotIn("hello", log)
+        self.assertNotIn("alice", log)
+        self.assertNotIn("1011", log)
+
+    def test_the_reads_of_a_busy_database_do_not_cut_the_socket_either(self):
+        alice = self.connect("1001:alice")
+        for _ in range(3):
+            alice.say("hello")
+            self.assertIn(alice.recv_json()["t"], ("line", "err"))
+
+
+class TheFreeRefusalsCostFramesOnTheWire(RigTest):
+    rig_args = dict(FAST, burst=1000, refill_seconds=0.001, global_burst=1, global_refill_seconds=1e9, frame_burst=10, frame_refill_seconds=1e9, violations=3)
+
+    def test_a_socket_that_keeps_asking_while_the_hub_is_busy_is_cut_off_sooner_than_it_would_have_been(self):
+        alice = self.connect("1001:alice")
+        for n in range(10):                                                              # (the first line is kept; the other nine are answered `rate` with no mistake counted: without the charge they cost nine frames of the ten)
+            alice.say("line number %d" % n)
+        self.assertEqual(alice.expect_close(3), 1008)
+
+
 class TheModeratorsOnTheWire(RigTest):
     rig_args = dict(LOOSE, mods="9001", **FAST)
 
@@ -724,6 +776,79 @@ class TheFailingPurge(unittest.TestCase):
             self.assertEqual(store.db.execute("PRAGMA busy_timeout").fetchone()[0], expected)
             store.checkpoint()
             self.assertEqual(store.db.execute("PRAGMA busy_timeout").fetchone()[0], expected)      # (the short wait of the checkpoint does not stay)
+
+
+class TheProgramUsesTheShortWaitAndTheMinuteThatTheDocumentsPromise(unittest.TestCase):
+    """The settings that the process itself chooses (hub/server.py main() and serve()): the tests above build their own store and limits, so a change of these two choices was not seen by any of them."""
+
+    def test_main_opens_the_database_with_the_short_wait_for_another_writer(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        seen = {}
+
+        async def fake_serve(cfg, store, sessions, log):
+            seen["busy_ms"] = store.busy_ms
+            seen["pragma"] = store.db.execute("PRAGMA busy_timeout").fetchone()[0]
+
+        with mock.patch.object(server, "serve", fake_serve), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(server.main({"ANTS_HUB_DB": os.path.join(folder.name, "hub.db"), "ANTS_HUB_PUBLIC_URL": hc.SITE}), 0)
+        self.assertEqual(seen, {"busy_ms": 300, "pragma": 300})                     # (not the 5 seconds of the command line: the one thread of the hub must not wait for seconds)
+
+    def test_serve_makes_its_hub_with_the_default_limits_and_a_failed_purge_waits_a_minute(self):
+        defaults = limitmod.Limits()
+        self.assertEqual((defaults.purge_failure_seconds, defaults.purge_seconds, defaults.tick_seconds), (60.0, 3600.0, 1.0))
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        made = []
+
+        class Spy(server.Hub):
+            def __init__(self, *args, **kw):
+                super().__init__(*args, **kw)
+                made.append((args, kw, self))
+
+            async def start(self, host, port):
+                return 1
+
+            async def stop(self):
+                return None
+
+        async def run():
+            task = asyncio.ensure_future(server.serve(configmod.load({"ANTS_HUB_PUBLIC_URL": hc.SITE}), store, sessionmod.NoLogin(), logmod.Log(io.StringIO())))
+            await asyncio.sleep(0.2)
+            os.kill(os.getpid(), signal.SIGTERM)
+            await asyncio.wait_for(task, 5)
+
+        store = storemod.Store(os.path.join(folder.name, "hub.db"))
+        self.addCleanup(store.close)
+        with mock.patch.object(server, "Hub", Spy):
+            asyncio.run(run())
+        (args, kw, hub), = made
+        self.assertEqual(len(args), 4)                                                # (cfg, store, sessions, log: no limits of its own: the defaults)
+        self.assertEqual(kw, {})
+        self.assertEqual(hub.limits, defaults)
+
+    def test_a_purge_that_fails_with_the_default_limits_is_tried_again_after_a_minute_and_not_before(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = os.path.join(folder.name, "hub.db")
+        store = storemod.Store(path, busy_ms=50)
+        self.addCleanup(store.close)
+        hub = server.Hub(configmod.load({"ANTS_HUB_PUBLIC_URL": hc.SITE}), store, sessionmod.NoLogin(), logmod.Log(io.StringIO()), clock=lambda: 0.0)       # (no limits given: what the program runs with)
+        calls = []
+        real_purge = store.purge
+        store.purge = lambda chunk: calls.append(chunk) or real_purge(chunk)
+        blocker = sqlite3.connect(path, isolation_level=None)
+        self.addCleanup(blocker.close)
+        blocker.execute("BEGIN IMMEDIATE")
+        with self.assertRaises(sqlite3.OperationalError):
+            hub.on_tick(1000.0)
+        self.assertEqual(hub.next_purge, 1060.0)
+        for second in range(1, 60):
+            hub.on_tick(1000.0 + second)
+        self.assertEqual(len(calls), 1)
+        blocker.execute("ROLLBACK")
+        hub.on_tick(1060.0)
+        self.assertEqual(len(calls), 2)
 
 
 class FakeTransport:

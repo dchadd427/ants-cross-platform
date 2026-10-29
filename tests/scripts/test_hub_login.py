@@ -630,6 +630,14 @@ class TheModeratorsOfTheSettings(LoginTest):
         self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["mod"], True)
 
 
+class TheMeOfAModerator(LoginTest):
+    mods = OLD
+
+    def test_me_says_mod(self):
+        v = self.member()
+        self.assertEqual(v.call("GET", "/hub/me").json()["you"], {"name": "maple.leaf", "mod": True})
+
+
 class TheAgeSetting(LoginTest):
     env = {"ANTS_HUB_MIN_ACCOUNT_DAYS": "30"}
 
@@ -860,6 +868,7 @@ class TheCallbackWhenDiscordGoesWrong(LoginTest):
             self.assert_calm(v, r, mode, took)
             self.assertEqual(len(self.token_requests()) - before, 1, mode)           # (never a second try)
             self.assertEqual(self.me_requests(), [], mode)
+            self.assertEqual([r for r in self.fake.requests if r[1] == "/followed"], [], mode)      # (a redirect is not followed)
 
     def test_every_way_for_the_question_to_fail_is_a_calm_page_and_no_login(self):
         for mode in self.TOKEN:
@@ -898,7 +907,7 @@ class TheCallbackWhenDiscordGoesWrong(LoginTest):
 
     def test_a_name_that_is_not_a_name_is_refused_and_never_shown(self):
         names = ("Maple", "m", "x" * 33, "with space", "evil\r\nSet-Cookie: a=b", "<script>alert(1)</script>", "m\u00e4ple", "", "\u202eevil", "a\u200bb", "line\nbreak", "tab\tx", "semi;colon", "quote\"",
-                 "back\\slash", "%0d%0a", "al\u0131ce", "\ud835\udc00bc")
+                 "back\\slash", "%0d%0a", "al\u0131ce", "\ud835\udc00bc", "mod", "admin", "moderator", "system", "hub", "ants", "everyone", "here")           # (the last eight could pass for the hub's own voice)
         for name in names:
             self.fake.me_mode = "merge:" + json.dumps({"username": name})
             v, r, _ = self.go()
@@ -942,6 +951,24 @@ class TheCallbackWhenDiscordGoesWrong(LoginTest):
         self.assertLess(time.monotonic() - started, 0.5)
         t.join(5)
         self.assert_page(result[0], 503, UNAVAILABLE)
+
+    def test_a_login_that_waits_for_discord_does_not_hold_a_place_of_the_handshakes(self):
+        self.rig.__exit__(None, None, None)
+        self.rig = hub_rig.Rig(discord=self.fake, pending_total=2, discord_seconds=1.5, discord_connect_seconds=1.0, login_inflight=3, sockets_per_address=100)
+        self.rig.__enter__()
+        self.fake.token_mode = "hang"
+        visitors = []
+        for _ in range(3):
+            v = self.visitor()
+            visitors.append((v, v.at_discord(v.start().get("location"))))
+        threads = [threading.Thread(target=lambda p=pair: p[0].callback(p[1])) for pair in visitors]
+        for t in threads:
+            t.start()
+        time.sleep(0.4)                                                                  # (three logins wait for Discord; the hub takes only two connections that have not finished their head)
+        c = self.socket()
+        self.assertEqual(c.welcome["t"], "welcome")
+        for t in threads:
+            t.join(5)
 
     def test_only_a_few_logins_wait_for_discord_at_one_time_the_rest_get_the_page_at_once(self):
         self.fake.token_mode = "hang"
@@ -1005,6 +1032,21 @@ class TheDiscordClient(unittest.TestCase):
                 self.run_call(self.client(discord_body_max=2048, discord_seconds=2.0))
             self.assertEqual(e.exception.kind, "down", mode)
             self.assertLess(time.monotonic() - started, 1.5, mode)
+            if mode != "huge_head":
+                time.sleep(0.3)
+                self.assertLess(self.fake.sent, 30000000, "%s: the hub kept reading (%d bytes of about 98 million)" % (mode, self.fake.sent))             # (it hung up at its cap: the socket's own buffers hold a few megabytes at the most)
+
+    def test_the_token_is_nowhere_in_the_client_or_the_login_when_the_call_is_over(self):
+        client = self.client()
+        self.fake.user = (OLD, "maple.leaf")
+        code = "c0de"
+        with self.fake.lock:
+            self.fake.codes[code] = self.fake.user
+        self.assertEqual(self.run_call(client, code), (OLD, "maple.leaf"))
+        token = next(iter(self.fake.tokens))
+        for obj in (client, client.limits, client.ssl):
+            self.assertNotIn(token, repr(getattr(obj, "__dict__", {})), type(obj).__name__)
+        self.assertEqual(client.inflight, 0)
 
     def test_the_whole_call_has_a_time_not_only_each_read(self):
         self.fake.token_mode = "drip"
@@ -1048,6 +1090,25 @@ class TheDiscordClient(unittest.TestCase):
 
 
 # ===================================================================================================================================================
+class TheLimitTable(unittest.TestCase):
+    def test_a_crowd_of_addresses_cannot_make_the_table_grow_without_end(self):
+        rate = limitmod.RateByAddress(burst=2, refill_seconds=60.0, keys_max=5)
+        for n in range(5):
+            self.assertTrue(rate.take("a%d" % n, 0.0))
+        self.assertFalse(rate.take("another", 0.0))                       # (the table is full of addresses that are not idle: a new one is refused, and the table does not grow)
+        self.assertEqual(len(rate.buckets), 5)
+        self.assertTrue(rate.take("a1", 0.0))                              # (an address that is in it goes on)
+        self.assertTrue(rate.take("another", 200.0))                        # (the others are full again, so they are forgotten, and there is room)
+        self.assertLessEqual(len(rate.buckets), 5)
+
+    def test_an_address_has_a_burst_and_a_pace(self):
+        rate = limitmod.RateByAddress(burst=3, refill_seconds=2.0)
+        self.assertEqual([rate.take("x", 0.0) for _ in range(4)], [True, True, True, False])
+        self.assertTrue(rate.take("x", 2.0))
+        self.assertFalse(rate.take("x", 2.1))
+        self.assertTrue(rate.take("y", 2.1))
+
+
 class TheHeadersAreSafe(LoginTest):
     def test_nothing_that_came_from_outside_can_start_another_header(self):
         from hub import http

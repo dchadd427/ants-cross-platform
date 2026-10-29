@@ -11,7 +11,6 @@ that is cut off or is not JSON, an answer of the wrong shape (a token that is a 
 """
 import json
 import secrets
-import socket
 import socketserver
 import threading
 import time
@@ -40,6 +39,7 @@ class FakeDiscord:
         self.used = set()
         self.tokens = {}                                 # access token -> user
         self.requests = []                               # (method, path, query, headers, body text)
+        self.sent = 0                                    # the bytes that the last "huge" answer got out before the hub hung up on it
         self.lock = threading.Lock()
         fake = self
 
@@ -156,23 +156,19 @@ class FakeDiscord:
                 h.wfile.flush()
                 time.sleep(0.4)
             return None
-        if mode == "huge":                                   # a length that is far past any answer of Discord, and the bytes of it
-            h.wfile.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100000000\r\n\r\n")
-            chunk = b"x" * 65536
-            for _ in range(1500):
-                h.wfile.write(chunk)
-            return None
-        if mode == "huge_stream":                            # no length at all, and no end
-            h.wfile.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"x\": \"")
-            chunk = b"x" * 65536
-            for _ in range(1500):
-                h.wfile.write(chunk)
-            return None
-        if mode == "huge_chunked":
-            h.wfile.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n")
-            chunk = b"x" * 4096
-            for _ in range(1500):
-                h.wfile.write(b"1000\r\n" + chunk + b"\r\n")
+        if mode in ("huge", "huge_stream", "huge_chunked"):
+            self.sent = 0
+            heads = {"huge": b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100000000\r\n\r\n",           # a length that is far past any answer of Discord, and the bytes of it
+                     "huge_stream": b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"x\": \"",     # no length at all, and no end
+                     "huge_chunked": b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n"}
+            piece = b"1000\r\n" + b"x" * 4096 + b"\r\n" if mode == "huge_chunked" else b"x" * 65536
+            try:
+                h.wfile.write(heads[mode])
+                for _ in range(1500):                       # (about 98 MB, if the hub keeps reading)
+                    h.wfile.write(piece)
+                    self.sent += len(piece)
+            except OSError:
+                pass
             return None
         if mode == "huge_head":
             h.wfile.write(b"HTTP/1.1 200 OK\r\n" + b"".join(b"X-Pad-%d: %s\r\n" % (i, b"y" * 200) for i in range(400)) + b"\r\n{}")
@@ -197,7 +193,7 @@ class FakeDiscord:
             return h.wfile.write(raw_text(200, "[" * 100000 + "]" * 100000))
         if mode.startswith("redirect"):
             code = int(mode[8:] or 302)
-            return h.wfile.write(raw(code, None, {"Location": "http://127.0.0.1:1/evil"}))
+            return h.wfile.write(raw(code, None, {"Location": self.url + "/followed"}))             # (an address of this fake: a hub that followed the redirect would be seen asking for it)
         if mode.startswith("shape:"):
             return h.wfile.write(raw(200, json.loads(mode[6:])))
         if mode.startswith("merge:"):                        # the real answer with fields replaced
@@ -218,12 +214,3 @@ def raw(status, body=None, headers=None, payload=None):
 
 def raw_text(status, text):
     return raw(status, None, {"Content-Type": "application/json"}, text.encode())
-
-
-def hang_until_closed(port, seconds=0.3):
-    """Whether something still listens on the port (used to see that a test left no server behind)."""
-    try:
-        socket.create_connection(("127.0.0.1", port), timeout=seconds).close()
-        return True
-    except OSError:
-        return False
