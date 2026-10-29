@@ -219,6 +219,7 @@ void HostLobby::sync_room_flags() {
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) games = static_cast<uint8_t>(games | (in_game(s) || guests_[s].reserved ? 1u << s : 0u));      // (the rematch: a person who is not back is on the game page)
     room_.in_game = games;
     room_.flags = starting_.active ? static_cast<uint8_t>(room_.flags | kRoomStarting) : static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomStarting));
+    room_.flags = public_ ? static_cast<uint8_t>(room_.flags | kRoomPublic) : static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomPublic));      // (protocol 22)
 }
 
 void HostLobby::broadcast_room() {
@@ -279,6 +280,9 @@ void HostLobby::elect_leader() {
         }
     }
     room_.leader = best;
+    // Protocol 22: a room is public because its leader said so. Whoever leads next, because that leader left, was thrown out or came back in another color (the lead goes with the person, so the seat does not
+    // tell), chose nothing and inherits nothing: the room is private again, and every caller shows the Room message.
+    if (public_ && (best == kNoLeader || guests_[best].join_order != public_by_)) public_ = false;
 }
 
 void HostLobby::remove_guest(uint8_t seat, bool notify_reject, RejectReason reason) {
@@ -678,6 +682,22 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             if (++guests_[seat].ignored_removes > kIgnoredRemovesAllowed) violation(seat);
             return;
         }
+        case MsgType::Visibility: {                                       // (protocol 22) the leader makes a lobby room public or private
+            VisibilityMsg m;
+            if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room is never public: the message is garbage there)
+            // Only the leader is heard, while the room is open and its START does not wait; what it says is shown to everybody (and decides whether the room is listed), so it has a budget of its own. As for the plans: one
+            // that cannot be heard is no offence at first, every one after kIgnoredVisibilityAllowed is a violation; one beyond the budget is dropped, and a connection that goes on beyond it is flooding.
+            if (phase_ == Phase::Room && !starting_.active && seat == room_.leader) {
+                switch (guests_[seat].visibility.take(now_ms, kVisibilityBurst, kVisibilityPerSecond, kVisibilityExcessBurst)) {
+                    case ChatBudget::Verdict::Relay: apply_visibility(m.is_public, now_ms); return;
+                    case ChatBudget::Verdict::Drop: return;
+                    case ChatBudget::Verdict::Offence: return violation(seat);
+                }
+            }
+            ++ignored_visibility_;
+            if (++guests_[seat].ignored_visibility > kIgnoredVisibilityAllowed) violation(seat);
+            return;
+        }
         case MsgType::Chat: {                                             // (protocol 11) a line for the room: in the waiting room and while the map loads
             ChatMsg m;
             if (!decode(msg, m)) return violation(seat);                  // the match's rules: at most kMaxChatChars printable characters, a flag that is 0 or 1
@@ -784,6 +804,7 @@ void HostLobby::update(uint32_t now_ms) {
     }
     if (cfg_.lobby_room && phase_ == Phase::Room) expire_orphans(now_ms);
     if (cfg_.lobby_room) pump_start(now_ms);
+    if (cfg_.lobby_room) watch_idle(now_ms);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -811,19 +832,50 @@ void HostLobby::hold_guest(uint8_t seat, uint32_t now_ms) {
 void HostLobby::forgive(Guest& g, uint32_t now_ms) const noexcept {
     if (cfg_.forgive_ms == 0 || !time_reached(now_ms, g.forgive_at_ms)) return;
     g.forgive_at_ms = now_ms + cfg_.forgive_ms;
-    for (uint32_t* count : {&g.violations, &g.ignored_start_requests, &g.ignored_seat_moves, &g.ignored_plans, &g.ignored_names, &g.ignored_removes}) {
+    for (uint32_t* count : {&g.violations, &g.ignored_start_requests, &g.ignored_seat_moves, &g.ignored_plans, &g.ignored_names, &g.ignored_removes, &g.ignored_visibility}) {
         if (*count > 0) --*count;
     }
 }
 
 // The color a joiner takes: the one it asked for when nobody holds it and the plan calls it Open, else the lowest such color; 255 when there is none (the room is Full for it)
 uint8_t HostLobby::joiner_seat(uint8_t want) const noexcept {
-    const auto takes = [this](uint8_t s) { return room_.slots[s].state == SlotState::Empty && room_.plan[s] == PlanKind::Open; };
-    if (want < sim::MAX_PLAYERS && takes(want)) return want;
+    if (want < sim::MAX_PLAYERS && open_color(want)) return want;
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
-        if (takes(s)) return s;
+        if (open_color(s)) return s;
     }
     return 255;
+}
+
+// A color a newcomer can take: nobody holds it (a held or kept seat is somebody) and the plan calls it Open
+bool HostLobby::open_color(uint8_t seat) const noexcept {
+    return room_.slots[seat].state == SlotState::Empty && room_.plan[seat] == PlanKind::Open;
+}
+
+size_t HostLobby::open_colors() const noexcept {
+    size_t n = 0;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) n += open_color(s) ? 1u : 0u;
+    return n;
+}
+
+// The colors that nobody holds and the plan gives to a bot (Easy, Medium, Hard): the bots that START would seat. A color that a person holds is theirs, whatever the plan keeps underneath it.
+size_t HostLobby::bot_colors() const noexcept {
+    size_t n = 0;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) n += room_.slots[s].state == SlotState::Empty && plan_fill_level(room_.plan[s]) != FillLevel::None ? 1u : 0u;
+    return n;
+}
+
+// The colors of the match: those that a person or a bot holds or may come to hold. A color that nobody holds and the plan calls Nobody stays out; a person on a color the plan calls Nobody plays (START seats every person).
+size_t HostLobby::match_colors() const noexcept {
+    size_t n = 0;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) n += room_.slots[s].state != SlotState::Empty || room_.plan[s] != PlanKind::Nobody ? 1u : 0u;
+    return n;
+}
+
+// The people whose connection is open (the host of a LAN room is a seat, not a connection; a lobby room has none). A seat that is held, kept or a bot's has no connection.
+size_t HostLobby::connected() const noexcept {
+    size_t n = 0;
+    for (const Guest& g : guests_) n += g.conn != nullptr && g.conn->is_open() ? 1u : 0u;
+    return n;
 }
 
 // The plan has a bot for a color that nobody holds: then one person is enough to start (can_start_filled), as for a leader's fill
@@ -1026,6 +1078,37 @@ void HostLobby::apply_plan(const PlanMsg& plan) {
     broadcast_room();
 }
 
+// The leader's choice (already heard: the leader, an open room, within the budget). A change is shown to everybody and is use of the room; so is "public" said to a room that is public, the leader's page looking
+// at it still, which keeps it from becoming private for being idle (watch_idle). "Private" said to a private room changes nothing and is nothing.
+void HostLobby::apply_visibility(bool want_public, uint32_t now_ms) {
+    if (want_public == public_ && !want_public) return;
+    ++visibility_acts_;
+    if (want_public == public_) return;                          // (the refresh: nothing to show)
+    public_ = want_public;
+    if (public_) {
+        listed_ms_ = now_ms;
+        public_by_ = guests_[room_.leader].join_order;                // (the leader is a guest: the room is public for as long as this person leads, see elect_leader)
+    }
+    broadcast_room();
+}
+
+// A public room in which nothing has been done for public_idle_ms becomes private: nobody is looking at it any more, and a list of games must not show rooms that nobody uses. Called at the end of every update, so
+// a message that was heard in this pass has moved activity() already. The room is shown to everybody (the flag goes), and the age of a listing is kept from going round with the 32-bit clock.
+void HostLobby::watch_idle(uint32_t now_ms) {
+    const uint32_t act = activity();
+    if (act != seen_activity_) {
+        seen_activity_ = act;
+        active_ms_ = now_ms;
+    }
+    if (!public_) return;
+    if (now_ms - listed_ms_ > kLobbyListedAgeCapMs) listed_ms_ = now_ms - kLobbyListedAgeCapMs;
+    if (cfg_.public_idle_ms != 0 && now_ms - active_ms_ >= cfg_.public_idle_ms) {
+        public_ = false;
+        ++unlists_;
+        broadcast_room();
+    }
+}
+
 // The leader asked to start: the request stands until every person is a game, and everybody is shown that the room waits (RoomMsg flag kRoomStarting)
 void HostLobby::arm_start(uint8_t seat, uint32_t now_ms) {
     ++start_arms_;
@@ -1128,6 +1211,11 @@ bool ClientLobby::request_remove(uint8_t seat) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !room_.lobby() || !conn_->is_open()) return false;
     if (seat >= sim::MAX_PLAYERS || seat == seat_ || room_.slots[seat].state != SlotState::Client) return false;       // (a person other than this machine's own: a bot's and an empty color hold nobody)
     return conn_->send(encode(RemoveMsg{seat, seating_hash(room_)}));                                                // (the guard: the seats as this machine shows them)
+}
+
+bool ClientLobby::request_visibility(bool make_public) {
+    if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !room_.lobby() || room_.starting() || !conn_->is_open()) return false;        // (a START that waits hears nobody: the room counts such a message as ignored)
+    return conn_->send(encode(VisibilityMsg{make_public}));
 }
 
 bool ClientLobby::chat(const std::string& text) {

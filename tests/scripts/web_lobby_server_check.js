@@ -442,6 +442,33 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         O.leave();
     });
 
+    // ---- public rooms (protocol 22): the leader's page makes the room public and private, and every page sees it ------------------------------------------------------------------------------
+    await scenario('public rooms: the leader makes the room public and private; a new room is private; a page that does not lead cannot; the flag goes to every page', async () => {
+        const A = page('Pia', code('p'));
+        const B = page('Sam', code('p'));
+        A.connect();
+        await step('the first page makes the room: private', () => online(A), 5000);
+        check('(a new room is private)', A.room.isPublic === false && A.room.lobby === true);
+        B.connect();
+        await step('the second page joins', () => online(B), 5000);
+        check('(a page that does not lead sends nothing)', B.setPublic(true) === false);
+        check('A makes the room public', A.setPublic(true) === true);
+        await step('both pages see the room public', () => () => A.room.isPublic === true && B.room.isPublic === true);
+        check('(the flag is a bit of the flags the page decoded: lobby, leader starts, public)', A.room.flags === 11 && B.room.flags === 11, String(A.room.flags));
+        check('A says public again (the page\'s refresh): it is sent, and the room stays public', A.setPublic(true) === true);
+        await sleep(1300);
+        check('(nothing changed: both pages still see it public)', A.room.isPublic === true && B.room.isPublic === true);
+        check('A makes the room private', A.setPublic(false) === true);
+        await step('both pages see it private', () => () => A.room.isPublic === false && B.room.isPublic === false && B.room.flags === 3);
+        check('(nobody was thrown out and the links stay up)', A.status === 'online' && B.status === 'online' && A.count('refused') === 0 && B.count('refused') === 0);
+        await sleep(1400);                                                                          // (the page keeps a little under the server's pace: a request is back)
+        check('A makes the room public again', A.setPublic(true) === true);
+        await step('both pages see it public', () => () => A.room.isPublic === true && B.room.isPublic === true);
+        A.leave();
+        await step('A goes: B leads, and the room is private (B never chose it)', () => () => B.isLeader() === true && B.room.isPublic === false && B.room.flags === 3, 5000);
+        B.leave();
+    });
+
     // ---- the front page itself, on Home, against the real server (docs/HOME_SCREEN.md): the page of a guest opens on the Room by a link and goes Home; the room goes on (the page answers the server's pings and nobody ----
     // is dropped), Home follows what the room says, and when the leader presses START the hidden Room takes the hand-off: the key of the seat is written for the game page, the tab goes to the game page and Home
     // says that the game is opening. The page is the real web/lobby.html and web/home/home.js in the fake browser of tests/scripts/web_page_harness.js, on a real socket (the clock is the real one).

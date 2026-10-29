@@ -56,6 +56,11 @@
 // game of the desktop or a phone's app, which has no "Back to the lobby") gets no seat: the color is free in the lobby that follows, for them or anybody to join by the code (the server keeps no seat either
 // for a person whom the match dropped: Room::take_rematch).
 //
+// (8) Public rooms (protocol 22, docs/NETWORK_PORT.md "Protocol 22"). A new lobby room is private. The leader of an open lobby room, while its START does not wait, makes it public or private with VisibilityMsg (within a budget of its
+// own: flood.hpp); the Room message shows it (kRoomPublic) and the server lists the room (is_public(), listed_age_ms()). A room whose people have done nothing with it for Config::public_idle_ms (activity() has not moved: answered pings are no
+// use) becomes private by itself, unlist_count() counts those; a Visibility that says public to a public room is the leader's page looking at it still, and counts as use, so it keeps the room public.
+// A room is public because its leader said so: when another person leads (the leader left or was thrown out), it is private again and the new leader chooses for itself.
+//
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
 
@@ -79,6 +84,10 @@ inline constexpr uint32_t kLobbyHoldMs = 60u * 1000u;
 inline constexpr uint32_t kLobbyStartWaitMs = 90u * 1000u;
 /// ... and a connection of a lobby room from which nothing has come for this long is closed (HostLobby::Config::silence_ms): a client that is alive answers a ping every second
 inline constexpr uint32_t kLobbySilenceMs = 30u * 1000u;
+/// ... and a public lobby room (protocol 22) in which nothing has been done for this long becomes private (HostLobby::Config::public_idle_ms)
+inline constexpr uint32_t kLobbyPublicIdleMs = 30u * 60u * 1000u;
+/// ... and how long a public room's listing is counted as old (listed_ms() stops growing there: the 32-bit clock goes round in 49.7 days)
+inline constexpr uint32_t kLobbyListedAgeCapMs = 30u * 24u * 3600u * 1000u;
 /// ... and a guest of a lobby room is forgiven one violation and one ignored request of each kind this often (HostLobby::Config::forgive_ms): a lobby lives as long as its people stay
 inline constexpr uint32_t kLobbyForgiveMs = 60u * 1000u;
 /// ... and a lobby room that the server opened again after its match (the rematch) holds the seat of a person of the match for their key this long at the most (HostLobby::Config::reserve_ms): the life of a key in
@@ -163,6 +172,8 @@ public:
         uint64_t bot_name_key{0};
         uint32_t hold_ms{kLobbyHoldMs};
         uint32_t start_wait_ms{kLobbyStartWaitMs};
+        /// Protocol 22 (a lobby room only): a public room in which nothing has been done for this long (activity() has not moved, and no Visibility said public again) becomes private. 0: never.
+        uint32_t public_idle_ms{kLobbyPublicIdleMs};
         /// A lobby room closes the connection of a guest from which nothing has come for this long while the room is open (its seat is held then, as for any connection that ends): no TCP or proxy tells a server that a
         /// browser which went to sleep is gone, and a room that lives while a person is in it must not live for ever on a link that died.
         uint32_t silence_ms{kLobbySilenceMs};
@@ -315,6 +326,25 @@ public:
     uint32_t ignored_removes() const noexcept { return ignored_removes_; }
     /// People that the leader removed (a RemoveMsg that was done)
     uint32_t removals() const noexcept { return removals_; }
+    /// Protocol 22: the room is public (its leader said so, and neither the idle time nor another person's lead has made it private since). Always false for a room that is no lobby room.
+    bool is_public() const noexcept { return public_; }
+    /// ... since when, by the clock of update() (the Visibility that made it public), as an age at `now_ms`: how long it has been listed, in ms (0 for a private room); it stops growing at kLobbyListedAgeCapMs
+    uint32_t listed_age_ms(uint32_t now_ms) const noexcept { return public_ ? std::min<uint32_t>(now_ms - listed_ms_, kLobbyListedAgeCapMs) : 0u; }
+    /// VisibilityMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room, the START waits): no offence up to kIgnoredVisibilityAllowed per guest, a violation each after those
+    uint32_t ignored_visibility() const noexcept { return ignored_visibility_; }
+    /// Visibility messages that were done: a room made public or private, and the repeat of "public" to a public room (the leader's page looking at its room still: use of the room, activity())
+    uint32_t visibility_acts() const noexcept { return visibility_acts_; }
+    /// Rooms that became private by themselves for their idle time (public_idle_ms; a change of leader is not counted)
+    uint32_t unlist_count() const noexcept { return unlists_; }
+    /// The people of the room whose connection is open now (a held seat, a reserved seat and a bot are not): what a listing of the room needs besides its colors
+    size_t connected() const noexcept;
+    /// Colors that nobody holds and the plan calls Open: the ones a newcomer can take (joiner_seat takes the lowest)
+    size_t open_colors() const noexcept;
+    /// The colors of a listing: those that a person holds (a guest, also one whose seat is held), those that nobody holds and the plan gives to a bot, and those in the match at all (a color that nobody holds and the plan
+    /// calls Nobody is not; a person on such a color plays): people_colors() + bot_colors() + open_colors() == match_colors()
+    size_t people_colors() const noexcept { return humans(); }
+    size_t bot_colors() const noexcept;
+    size_t match_colors() const noexcept;
     /// Plans that changed the room (a map, a kind, a team), seats that were held after their connection ended, and holds that ran out
     uint32_t plan_changes() const noexcept { return plan_changes_; }
     uint32_t holds() const noexcept { return holds_; }
@@ -322,9 +352,9 @@ public:
     /// Connections that were closed for their silence (silence_ms)
     uint32_t silences() const noexcept { return silences_; }
     /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a color moves, the plan or a name changes, a person is removed, a line of chat is said, a START is asked for
-    /// (a ping, a link that comes back, a seat that is held or gives up are not). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the owner may give
+    /// (a ping, a link that comes back, a seat that is held or gives up are not; a Visibility that was done is, protocol 22). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the server may give
     /// the place of such a room up when it needs it.
-    uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + chat_.total()); }
+    uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + visibility_acts_ + chat_.total()); }
 
     /// The rematch (see (7) above). What this lobby room's match was made of: its plan and every person that its Start seated with a key whose game played in a web browser or did not say what it runs on (empty
     /// `people` for a room that is no lobby room or whose match has not begun). The color of a person whose game is not in a browser is left free (its plan is the match's: an open color).
@@ -374,6 +404,8 @@ private:
         uint32_t ignored_names{0};               // ... and those that were ignored (the first kIgnoredNamesAllowed are free)
         ChatBudget removes;                      // the RemoveMsgs of this guest that could be done (flood.hpp: a burst of kRemoveBurst, then kRemovesPerSecond a second)
         uint32_t ignored_removes{0};             // ... and those that were ignored (the first kIgnoredRemovesAllowed are free)
+        ChatBudget visibility;                   // the VisibilityMsgs of this guest that could be heard (flood.hpp: a burst of kVisibilityBurst, then kVisibilityPerSecond a second)
+        uint32_t ignored_visibility{0};          // ... and those that were ignored (the first kIgnoredVisibilityAllowed are free)
         uint32_t forgive_at_ms{0};               // a lobby room: when one violation and one ignored request of each kind are forgiven next
         bool reserved{false};                    // a lobby room that was opened again after its match: the seat waits for its person of the match (see (7) above), since reserved_since_ms
         uint32_t reserved_since_ms{0};
@@ -420,6 +452,9 @@ private:
     std::string not_back_notice() const;                                  // the rematch: the leader's notice of a START that waits for the persons who are not back
     void forgive(Guest& g, uint32_t now_ms) const noexcept;
     void apply_plan(const PlanMsg& plan);
+    void apply_visibility(bool want_public, uint32_t now_ms);             // protocol 22: the leader's choice (already heard: the leader, an open room, within the budget)
+    bool open_color(uint8_t seat) const noexcept;                          // nobody holds the color and the plan calls it Open
+    void watch_idle(uint32_t now_ms);                                      // protocol 22: a public room in which nothing has been done for public_idle_ms becomes private
     void rename(uint8_t seat, const std::string& raw);                    // protocol 16: the person of `seat` goes by this name (a name that looks like a bot's is not taken)
     uint8_t joiner_seat(uint8_t want) const noexcept;
     bool plan_asks_bots() const noexcept;
@@ -452,6 +487,14 @@ private:
     uint32_t renames_{0};
     uint32_t ignored_removes_{0};
     uint32_t removals_{0};
+    bool public_{false};                     // protocol 22: the room is public (a lobby room only) ...
+    uint32_t listed_ms_{0};                  // ... since this time of the clock of the pass that heard the leader
+    uint32_t public_by_{0};                  // ... by the guest with this join_order, the leader who said so: when somebody else leads, the room is private again (elect_leader)
+    uint32_t ignored_visibility_{0};
+    uint32_t visibility_acts_{0};
+    uint32_t unlists_{0};
+    uint32_t seen_activity_{0};              // activity() at the last look of watch_idle, and since when it is what it is
+    uint32_t active_ms_{0};
     uint32_t plan_changes_{0};
     uint32_t holds_{0};
     uint32_t hold_expiries_{0};
@@ -529,6 +572,11 @@ public:
     /// this machine leads an open room that the last Room message shows as a lobby room and the seat holds a person who is not this machine's own (a bot's and an empty seat hold nobody). True means the request
     /// was sent, not that the server did it: the Room message shows the seat free when it did (it says nothing to a request that it cannot honour: the seating has changed, a match loads).
     bool request_remove(uint8_t seat);
+    /// The leader of a lobby room (protocol 22) makes the room public or private (VisibilityMsg). False (nothing is sent) unless this machine leads an open room that the last Room message shows as a lobby room whose START does
+    /// not wait. True means the request was sent, not that the server did it: the Room message shows the flag when it did. Saying public to a room that is public is the refresh that keeps it so (see (8) at the top).
+    bool request_visibility(bool make_public);
+    /// The last Room message shows the room as public
+    bool room_is_public() const noexcept { return room_.is_public(); }
     /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
     /// (a longer line is cut), not empty. The room relays it to everybody, this machine included: the line comes back through take_chat(). False when nothing was sent.
     bool chat(const std::string& text);

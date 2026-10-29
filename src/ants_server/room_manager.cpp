@@ -1107,6 +1107,22 @@ bool RoomManager::status(const std::string& code, RoomStatus& out, uint32_t now_
     return true;
 }
 
+std::vector<LobbyListing> RoomManager::lobbies(uint32_t now_ms) const {
+    std::vector<LobbyListing> list;
+    for (const auto& entry : rooms_) {
+        LobbyListing row;
+        if (entry.second->listing(now_ms, row)) list.push_back(std::move(row));
+    }
+    // the best first: more people (a lone host is listed, behind the rooms that have company), then the room that has been public the longest, then the code (a total order: the same answer every time)
+    std::sort(list.begin(), list.end(), [](const LobbyListing& a, const LobbyListing& b) {
+        if (a.people != b.people) return a.people > b.people;
+        if (a.age_ms != b.age_ms) return a.age_ms > b.age_ms;
+        return a.code < b.code;
+    });
+    if (list.size() > kMaxListedLobbies) list.resize(kMaxListedLobbies);
+    return list;
+}
+
 BusyCounts RoomManager::busy(uint32_t now_ms) const {
     BusyCounts counts;
     for (const auto& entry : rooms_) {

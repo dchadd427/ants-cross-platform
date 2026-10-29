@@ -456,6 +456,12 @@
    "new": "if ((false && window.count >= per_window) || window.spent_ms >= budget_ms) return false;"
   },
   {
+   "id": "window_time_not_counted",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    window_.spent_ms += static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());\n",
+   "new": "    (void)began;\n"
+  },
+  {
    "id": "picture_for_anybody",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    if (!who.valid) return not_found();                                             // (a visitor gets what an unknown path gets)",

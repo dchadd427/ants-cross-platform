@@ -80,7 +80,7 @@
 //   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
 //                      restart records, so a match is also not kept when the disk has less than 256 MiB free, or when 120 matches were kept in the last hour
 //   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays, the match history and the matches that run now (GET /replays, GET /replays/<file>, GET /history, GET /history/<id>,
-//                      GET /live, GET /live/<id>; no secret, nothing else answers): 0 = off, the default. This machine only; the site's reverse proxy passes the paths to it (docker/nginx.conf). The control interface
+//                      GET /live, GET /live/<id>, GET /maps, GET /lobbies (the public list of games, network protocol 22); no secret, nothing else answers): 0 = off, the default. This machine only; the site's reverse proxy passes the paths to it (docker/nginx.conf). The control interface
 //                      lists and gives the files and the history too (all of them), and deletes them, behind its secret whatever this says
 //   --replay-any-interface
 //                      the replay port listens on every interface (for a container only, like --ws-any-interface)
@@ -864,7 +864,7 @@ int main(int argc, char** argv) {
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
     if (replay_http) {
         log("public replays on port " + std::to_string(replay_http->port()) + (o.replay_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
-            ": GET /replays, GET /replays/<file>, GET /history, GET /history/<id>, GET /live, GET /live/<id> and GET /maps, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
+            ": GET /replays, GET /replays/<file>, GET /history, GET /history/<id>, GET /live, GET /live/<id>, GET /maps and GET /lobbies, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so the replays and the live matches answer 404")));
     }
     if (http) {
         using ants::server::SecretSource;
@@ -917,7 +917,7 @@ int main(int argc, char** argv) {
             test_map_http->update(now, [&](const ants::ctl::HttpRequest& request) { return test_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });
             ants::server::upkeep_test_maps(rooms, *test_store, static_cast<int64_t>(std::time(nullptr)), now);          // (once a minute: the maps that are six hours old)
         }
-        if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request); });
+        if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request, now); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
             stats.count_ended(s);                                  // (a match that ran 600 ticks counts, public rooms too; a shorter one, or a room that never began, counts nothing)
             const bool demo = s.public_room;

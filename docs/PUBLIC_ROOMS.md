@@ -1,0 +1,34 @@
+# Public rooms and the list of games (network protocol 22)
+
+The leader of a lobby room ([`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120)) can open it to everybody, and the game server lists the rooms that a newcomer can join in `GET /lobbies` of its public door. A new room is private. This release is the server and the protocol only: no page sends the message yet (the page that shows the list comes later), so a player sees nothing. No rule of the simulation, golden hash or lock-step rule changes.
+
+## The protocol
+
+* `kProtocolVersion` goes from 21 to **22**: one message and one Room flag are new. A Hello of 21 is refused with `VersionMismatch`, and so is a Hello of 22 by a server of 21 (the Hello's layout is unchanged). Recordings play on their rules number ([`REPLAYS.md`](REPLAYS.md#the-file)), so none is stranded; the restart records of 21 are refused for their protocol, as with every bump.
+* **Visibility** (type 35, client to server, `MsgType::Last`): `[35][public u8]`, two bytes, 0 private or 1 public; nothing else is a Visibility. It is heard under a Plan's conditions: from the leader of an open lobby room whose START does not wait. Any other is ignored and counted (`ignored_visibility`; free up to 16 per connection, then a violation each; a minute forgives one), and in a room that is no lobby room it is garbage. Budget (`flood.hpp`): a burst of 3, then 1 a second; 6 more are tolerated and dropped, each one after that is a violation. The budget is the Visibility's own: it uses none of a Plan's.
+* **Room**: the flags have **`kRoomPublic`** (8), only with `kRoomLobby` (the decoder refuses it otherwise). A desktop game that joins a public lobby decodes the flag and shows nothing of it.
+* **The choice is the leader's.** A color move, a held seat and a newcomer leave it, but **another person's lead ends it**: when the leader left or was thrown out, the room is private and the new leader chooses for itself. The lead that goes with a person to another color is the same person (`HostLobby::elect_leader` compares the person's join order, not the seat). A lobby that the server opens again after a match is a new room, private.
+* **The idle rule.** A public room in which nothing has been done for **30 minutes** (`HostLobby::activity()`: a join, a color move, a changed plan or name, a removal, a line of chat, a START, a Visibility that was done; not a ping, nor a link that comes back) becomes private by itself, and everybody is told. "Public" said to a public room shows nothing and counts as use, so a page can keep its room public by repeating it (none does yet; the page for the list will, every ten minutes, on a visible tab only: the repeat is also a free heartbeat for the pool of [`SERVER.md`](SERVER.md#lobby-rooms)). "Private" said to a private room does nothing and is not use. The age of a listing is capped at 30 days (`kLobbyListedAgeCapMs`), so the 32-bit clock cannot make a room that has been public for 49.7 days look young.
+
+## The list
+
+`GET /lobbies` of the public door (`--replay-port`; the site's nginx passes it: "Replays" in [`SERVER.md`](SERVER.md#replays)): read only, no secret, GET only. A query is a 404 (an empty `?` answers as for `/live`); the real listener answers another method with 405 before the handler. It does not need the replay store (a server without replays answers it; one without lobby rooms answers an empty list). The answer is `Cache-Control: no-store` JSON:
+
+```json
+{"format":1,"lobbies":[{"code":"k7m2xq","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":1,"free":1,"size":4,"age":95}],"count":1}
+```
+
+* **Listed** (`Room::listing`) while the room is public, waits (no match loads or runs), its START does not wait, a person's connection is open (a room that only holds seats is out within a minute), a color is free for a newcomer and no seat is kept for a person of its last match.
+* **Order** (`RoomManager::lobbies`, a total order): more people first, then the longer public, then the smaller code; at most **50**, the best 50. `count` is the number of rows listed.
+* **A row** has these nine fields and nothing else: `code`, `host` (the leader's name, also while the leader's seat is held; a leader who gave no name is "Player" and its color's number), `map` (the file), `mode` (`"highest-score"` or `"187"`), `people` (persons; a held seat counts), `bots` (colors that nobody holds and the plan gives to a bot), `free` (colors that a newcomer takes), `size` (colors in the match: `people + bots + free`; a person on a color that the plan calls Nobody still plays, so the color counts) and `age` (seconds public).
+* **Never** an address, a key, a platform, another person's name, plan letters or chat: the test of the answer searches the whole text for the keys' hex and the pages' addresses.
+* **It can be crowded out.** The order is people first, every connection is a person and no limit per address exists (as for the pool), so a crowd of small lobbies can push another out of the 50. Names are text as typed (printable ASCII, up to 32 characters, `< > " \` among them): a page shows them as text (`textContent`), as for `/live`.
+* **The status** of a lobby room (`GET /rooms/<code>`, the list of rooms, the result file) has `"public"`, the leader's choice.
+
+## Tests
+
+* The codec: `test_lockstep` N2.113 (the message, every value, every prefix, an extra byte, the type byte, every Room flag byte), N2.111 and `tests/data/lobby_messages.txt` (the bytes both ways, with the page's `web_lobby_net_check.js`), N2.3 (the fuzz draws every type byte and holds a public lobby Room among its seeds).
+* The lobby: `test_lobby` N4.50 - N4.54 (who is heard; a leader who goes or is thrown out takes the choice with it; a lead that goes with a person to another color, a held seat and a key do not; the Visibility's budget and its forgiveness; the idle rule to the step, across the 32-bit clock; the colors of a listing by hand and by a random walk; the Hello of 21) and the rematch's lead in `test_lobby_rematch.cpp`.
+* The list and the door: `test_server` S3.232 - S3.242 (shape and numbers, each filter, the order, the cap, no key or address, the door's methods and paths, no replay store, the idle rule on a real server, the status, the rematch's kept seats, a leader who leaves, a host with no name).
+* The page and the real program: `web_lobby_client_check.js` (the page's pace, replayed through the server's own bucket), `web_lobby_net_check.js`, `web_lobby_server_check.js` (the real client against a real server) and the demo part of `tests/scripts/test_ants_server.sh`.
+* Mutants: `tests/data/public_rooms_mutants.json` (`python3 tools/mutate.py tests/data/public_rooms_mutants.json --keep-going --jobs 4`; every mutant is caught), the page's own on a copy in `tests/scripts/test_web_lobby_net.py`.

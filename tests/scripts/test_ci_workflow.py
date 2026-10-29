@@ -237,12 +237,12 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         self.assertIn("lvl_tool\" --selftest", self.runner)
         self.assertIn("e2e_runner", self.runner)
 
-    def test_the_web_job_builds_both_images_and_checks_the_stacks_and_the_label(self):
+    def test_the_web_job_builds_the_three_images_and_checks_the_stacks_and_the_label(self):
         block = "\n".join(job_block("web"))
-        for needle in ("docker build -t ants-beta .", "docker build -f Dockerfile.server -t ants-server .", "nginx -t", "docker compose -f docker-compose.stack.yml config --quiet",
+        for needle in ("docker build -t ants-beta .", "docker build -f Dockerfile.server -t ants-server .", "docker build -f Dockerfile.hub -t ants-hub .", "nginx -t", "docker compose -f docker-compose.stack.yml config --quiet",
                        "docker compose -f docker-compose.staging.yml config --quiet", "--build-arg ANTS_SITE_LABEL=staging", "(staging)</title>", "! grep -qi staging"):
             self.assertIn(needle, block)
-        self.assertNotIn("--target", block)          # (both images are built whole: the server is the last stage of Dockerfile.server, see the next test)
+        self.assertNotIn("--target", block)          # (the images are built whole: the server is the last stage of Dockerfile.server, see the next test)
 
     def test_the_server_is_the_last_stage_of_its_dockerfile_because_the_ci_and_the_stacks_build_it_without_a_target(self):
         stages = re.findall(r"(?m)^FROM\s+\S+\s+AS\s+(\S+)\s*$", read(os.path.join(REPO, "Dockerfile.server")))

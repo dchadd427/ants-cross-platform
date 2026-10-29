@@ -50,6 +50,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
         o.set("lobby", JsonValue::make_bool(true));
         o.set("starting", JsonValue::make_bool(s.starting));        // the leader's START waits for every person's game
         o.set("plan", JsonValue::make_string(s.plan));              // the leader's plan: a letter for each color and the teams ("omne 0+1")
+        o.set("public", JsonValue::make_bool(s.lobby_public));      // the leader made the room public (network protocol 22): it is on the public list while a newcomer can join it
     }
     o.set("seat_moves", JsonValue::make_int(s.seat_moves));
     o.set("ignored_seat_moves", JsonValue::make_int(s.ignored_seat_moves));
@@ -453,6 +454,32 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
     return live_missing(false, std::string());
 }
 
+// GET /lobbies of the public door: the public list of games (RoomManager::lobbies), read only. Only what a visitor may see: the room's code (the link, public on purpose), the leader's name, the map's file name, the mode and numbers;
+// never an address, a key, a platform, another person's name or chat. A query or another method is a 404, as for /live; a server that offers no lobby rooms has an empty list.
+ctl::HttpResponse handle_public_lobbies(const RoomManager& rooms, const ctl::HttpRequest& request, uint32_t now_ms) {
+    if (request.method != "GET" || !request.query.empty()) return error_response(404, "not found");
+    JsonValue list = JsonValue::make_array();
+    for (const LobbyListing& l : rooms.lobbies(now_ms)) {
+        JsonValue e = JsonValue::make_object();
+        e.set("code", JsonValue::make_string(l.code));
+        e.set("host", JsonValue::make_string(l.host));
+        e.set("map", JsonValue::make_string(l.map));
+        e.set("mode", JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(l.mode))));
+        e.set("people", JsonValue::make_int(l.people));
+        e.set("bots", JsonValue::make_int(l.bots));
+        e.set("free", JsonValue::make_int(l.free_colors));
+        e.set("size", JsonValue::make_int(l.size));
+        e.set("age", JsonValue::make_int(l.age_ms / 1000));
+        list.push_back(std::move(e));
+    }
+    const int64_t count = static_cast<int64_t>(list.items().size());
+    JsonValue o = JsonValue::make_object();
+    o.set("format", JsonValue::make_int(1));
+    o.set("lobbies", std::move(list));
+    o.set("count", JsonValue::make_int(count));                  // (the number of entries listed, at most kMaxListedLobbies)
+    return json_response(200, o);
+}
+
 }  // namespace
 
 // The file and the picture of an APPROVED map of the players (the site's nginx asks here only when its own folder of the library's maps has no file of that name): a GET of "/maps/files/<name>.lvl" or
@@ -499,7 +526,8 @@ static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::Htt
 
 // The public door (ants_server --replay-port): the list and the files of the replays, and the matches that run now, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read. The
 // players' names are public here (the names that were typed, "Green (Ann)"); no address or room code is in the list or in a file.
-ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request) {
+ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request, uint32_t now_ms) {
+    if (request.path == "/lobbies") return handle_public_lobbies(rooms, request, now_ms);
     if (request.path == "/history" || request.path.compare(0, 9, "/history/") == 0) return handle_public_history(rooms, request);
     if (request.path == "/live" || request.path.compare(0, 6, "/live/") == 0) return handle_public_live(rooms, request);
     if (request.path == "/maps/all") {                                                       // the newest version's list: the same and the approved Extended maps (docs/MAP_SUBMISSIONS.md "The lists")

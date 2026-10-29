@@ -1,4 +1,4 @@
-// The fixtures of the room tests (test_lobby.cpp holds main(); the cases are in test_lobby_basics.cpp, test_lobby_rejoin.cpp, test_lobby_rooms.cpp and test_lobby_rematch.cpp).
+// The fixtures of the room tests (test_lobby.cpp holds main(); the cases are in test_lobby_basics.cpp, test_lobby_rejoin.cpp, test_lobby_rooms.cpp, test_lobby_rematch.cpp and test_lobby_public.cpp).
 // Inline or in an anonymous namespace.
 #pragma once
 #include "ants_net/lobby.hpp"
@@ -115,6 +115,18 @@ struct Room {
         }
     }
 };
+
+// The room's clock in steps of `step` ms, for the hours of a reservation or of a public room (every link speaks within a step: the silence limit is far above it)
+inline void run_coarse(Room& room, uint64_t ms, uint32_t step) {
+    for (uint64_t elapsed = 0; elapsed < ms; elapsed += step) {
+        room.now += static_cast<uint32_t>(std::min<uint64_t>(step, ms - elapsed));
+        room.net.set_time(room.now);
+        room.host.update(room.now);
+        for (auto& g : room.guests) {
+            if (!g.frozen) g.lobby->update(room.now);
+        }
+    }
+}
 
 // A server's room (the host holds no seat) that gives every guest a key. The keys come from a seeded generator, so that a test can tell them apart and repeat them.
 inline HostLobby::Config keyed_server_config(uint32_t seed, const std::string& room_code = std::string()) {
@@ -324,3 +336,4 @@ void run_lobby_basics_tests();
 void run_lobby_rejoin_tests();
 void run_lobby_rooms_tests();
 void run_lobby_rematch_tests();
+void run_lobby_public_tests();

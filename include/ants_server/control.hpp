@@ -34,7 +34,8 @@
 //   match so far as an incomplete .antsrep file with a `live` chunk (application/octet-stream, made at most once a second), or 404 {"error": "no such live match", "ended": bool, "replay": "<file>"}
 //   (ended: the match is over, remembered for 15 minutes; replay: the file it was kept as, "" when it was not); GET /history and GET /history/<id> as above; GET /maps -> 200 {"format": 1, "maps":
 //   [{"file", "width", "height", "minutes", "players", "description", "plays", "thumb" (an address on the site, left out when the map has no picture), "original": true (only the six maps of the original game)}]}
-//   (map_store.hpp: the originals first, then the others by file name; plays are 0 without a database); 404 for everything else: handle_public_replays)
+//   (map_store.hpp: the originals first, then the others by file name; plays are 0 without a database); GET /lobbies -> 200 {"format": 1, "lobbies": [{"code", "host" (the leader's name), "map", "mode", "people", "bots",
+//   "free", "size", "age" (seconds listed)}], "count"}, the public lobby rooms that a newcomer can join now, at most 50, the best first (network protocol 22, docs/SERVER.md "Lobby rooms"); 404 for everything else: handle_public_replays)
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "mode" ("highest-score" | "187"), "expected", "joined", "early_start", "leader": seat | null (while the room waits or
 // loads), "ignored_start_requests", "seat_moves" (the colors the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
@@ -79,8 +80,8 @@ ctl::HttpResponse handle_public_history(const RoomManager& rooms, const ctl::Htt
 bool parse_history_query(const std::string& raw, HistoryQuery& query, std::string& error);
 
 /// The public door of the replays (ants_server --replay-port, ctl::HttpServer::listen_public): GET /replays (the newest 200 files that this build can read), GET /replays/<file>, GET /history (the list of the
-/// match history, with the query of its filters) and GET /history/<id>, GET /live (the matches that run now) and GET /live/<id> (one of them so far), nothing else, no other query. Every other request is 404 (a /live/<id> that cannot be given has the JSON body above). A server that keeps no replays has nothing to show.
-/// What a file or the list says of the players is a color with the name that the player typed ("Green (Ann)"; the color alone when nothing was typed) or a computer player's "Bot (Medium)": never an address or a room code.
-ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request);
+/// match history, with the query of its filters) and GET /history/<id>, GET /live (the matches that run now) and GET /live/<id> (one of them so far), GET /lobbies (the public list of games, which `now_ms` ages), nothing else, no other query. Every other request is 404 (a /live/<id> that cannot be given has the JSON body above). A server that keeps no replays has nothing to show.
+/// What a file or the list of replays says of the players is a color with the name that the player typed ("Green (Ann)"; the color alone when nothing was typed) or a computer player's "Bot (Medium)": never an address or a room code. The list of games holds the codes of public rooms (their links) and their leaders' names, and nothing else of a room.
+ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request, uint32_t now_ms);
 
 }  // namespace ants::server

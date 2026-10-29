@@ -22,6 +22,7 @@
 #include "ants_server/map_store.hpp"
 #include "ants_server/submissions.hpp"
 #include "ants_server/submissions_http.hpp"
+#include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -64,6 +65,11 @@ using ctl::HttpResponse;
 
 const char* const kSecret = "0123456789abcdef0123456789abcdef0123";
 const char* const kOwnerPassword = "correct horse battery staple";
+
+// The checking budget of every Api below, unless a test sets its own: SubmissionApiConfig::check_budget_ms is real time (1,500 ms in a window by default, spent by the sends themselves), so a slow or busy
+// machine used it up in the middle of a test, and the next send in the window was answered 503 (the first send of a process also pays for the one-time scan of the map library). An hour is more than
+// any runner needs; the budget itself is held by API1.6 (none at all) and API1.6c (a real send that takes longer than the budget).
+constexpr uint32_t kBudgetNoRunnerUsesUp = 3600u * 1000u;
 
 std::string tiny() {
     std::ifstream in(fs::path(maps_dir()) / "TINY.LVL", std::ios::binary);
@@ -133,6 +139,7 @@ struct Api {
         SubmissionApiConfig ac;
         if (owner_on) ac.session_secret = kSecret;
         ac.attempts_per_hour = 1000;
+        ac.check_budget_ms = kBudgetNoRunnerUsesUp;
         if (tune) tune(ac);
         api = std::make_unique<SubmissionApi>(*store, *accounts, ac);
         api->set_on_approved_changed([this] { ++refreshed; });
@@ -349,6 +356,22 @@ int main() {
             ASSERT_TRUE(junk.status == 400 && parse_text(junk.body).get("error").str() == "not_a_map");
         }
         ASSERT_EQ(flood.submit("Good%20Map", "203.0.113.2").status, 201);                       // (thirty junk files from thirty addresses did not make the server busy)
+    } TEST_END();
+
+    TEST_CASE("API1.6c The time of the checks is the budget: a send that takes longer than it closes the window (the next send is answered 503 busy, with the code and a sentence), and the next window starts clean") {
+        Api t([](SubmissionApiConfig& c) { c.check_budget_ms = 1; c.checks_per_window = 100; c.checks_per_address_window = 100; });
+        const std::string slow = grown_tiny(256, 256);                                               // (checking this big map takes about ten milliseconds: well over the 1 ms of the budget, and a slower machine only takes longer)
+        ASSERT_TRUE(!slow.empty());
+        HttpRequest big = t.req("POST", "/submissions", "kind=extended&name=Slow%20Map&maker=Mia", {{"content-type", "application/octet-stream"}, {"x-client-address", "203.0.113.1"}}, slow);
+        const HttpResponse first = t.call(big);
+        ASSERT_MSG(first.status == 201, std::to_string(first.status) + " " + first.body.substr(0, 160));      // (the window was open: a send is checked whatever it costs)
+        const HttpResponse busy = t.submit("Quick%20Map", "203.0.113.2");
+        ASSERT_MSG(busy.status == 503, std::to_string(busy.status) + " " + busy.body.substr(0, 160));
+        const ctl::JsonValue body = parse_text(busy.body);
+        ASSERT_TRUE(body.get("error").str() == "busy" && body.get("message").str().size() > 10);
+        ASSERT_EQ(t.submit("Quick%20Map", "203.0.113.2").status, 503);                               // (it stays closed for the rest of the window)
+        t.now_ms += 10000;
+        ASSERT_EQ(t.submit("Quick%20Map", "203.0.113.2").status, 201);                               // (the next window: the time is counted again from nothing)
     } TEST_END();
 
     TEST_CASE("API2.1 The session cookie: a sign-in makes it (HttpOnly, Secure, SameSite=Strict, 12 hours); a changed, forged, old, over-long or out-of-date one is nobody; the generation of the user's sessions decides") {
