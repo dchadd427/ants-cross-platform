@@ -129,7 +129,12 @@ class TheServices(unittest.TestCase):
     def test_the_settings_it_is_given(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
-            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_MODS", "ANTS_HUB_PUBLIC_URL"], name)
+            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_MODS",
+                                                                                     "ANTS_HUB_PUBLIC_URL"], name)
+            self.assertIn("ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}\n", hub + "\n", name)           # (from the stack's environment, and nothing in the file: no default, no value)
+            self.assertIn("ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}\n", hub + "\n", name)
+            self.assertIn("ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}\n", hub + "\n", name)
+            self.assertNotIn("ANTS_HUB_TEST", hub, name)
         self.assertIn("ANTS_HUB_PUBLIC_URL: ${ANTS_HUB_PUBLIC_URL:-https://beta.playants.org}", service(self.files["stack"], "ants-hub"))
         self.assertIn("ANTS_HUB_PUBLIC_URL: ${ANTS_HUB_PUBLIC_URL:-}", service(self.files["staging"], "ants-hub"))      # (the staging site has an address of its own: no default)
 
@@ -138,8 +143,13 @@ class TheServices(unittest.TestCase):
                      os.path.join("docker", "nginx.conf"), os.path.join(".github", "workflows", "ci.yml")):
             text = code(read(os.path.join(REPO, path)))
             self.assertNotIn("ANTS_HUB_TEST_LOGIN", text, path)
+            self.assertNotIn("ANTS_HUB_TEST_DISCORD_URL", text, path)                       # (the fake Discord of the tests: no deployment can point the login at it)
             self.assertNotIn("X-Hub-Test-Login", text, path)
-            self.assertNotRegex(text, r"ANTS_HUB_DISCORD_CLIENT_SECRET\s*[:=]\s*\S", path)
+            for name in ("ANTS_HUB_DISCORD_CLIENT_SECRET", "ANTS_HUB_DISCORD_CLIENT_ID"):
+                for line in text.splitlines():
+                    if name in line:                                                          # (a stack file takes the secret and the id from the stack's environment, with no value of its own)
+                        self.assertEqual(line.strip(), "%s: ${%s:-}" % (name, name), path)
+                        self.assertTrue(path.startswith("docker-compose.st"), path)
 
     def test_the_game_servers_service_is_not_changed_by_the_hub(self):
         for name, text in self.files.items():

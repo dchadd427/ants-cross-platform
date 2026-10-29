@@ -44,10 +44,14 @@
 #   ANTS_ADMIN_SESSION_SECRET=<32+ characters>      the secret that signs the sign-in cookie of the owner's page (a long random text: openssl rand -hex 32). Without it every /admin/api path answers 404.
 #                                                   The accounts are made on the server, not here: docs/MAP_SUBMISSIONS.md, "Deploying" (docker exec -it ants-server ants_server --admin-create <username> --db /results/ants.db)
 #
-#   ANTS_HUB_PUBLIC_URL=https://beta.playants.org   the chat hub (service ants-hub, docs/HUB.md): the address of this site, the one Origin that a chat socket may come from (optional; this is the default). Empty
-#                                                   or wrong: the hub refuses every socket and the page says "Chat is offline"
-#   ANTS_HUB_MODS=<account id>,<account id>         the accounts that may type /mute name minutes and /del id in the chat (optional; digits only, comma separated; none by default). The hub
-#                                                   has no login yet: until the login arrives nobody can write, whatever this says. Moderation from a terminal: docker exec ants-hub python -m hub.admin list
+#   ANTS_HUB_PUBLIC_URL=https://beta.playants.org   the chat hub (service ants-hub, docs/HUB.md): the address of this site, the one Origin that a chat socket may come from, and the base of the Discord login's way back
+#                                                   (<this address>/hub/callback; optional; this is the default). Empty or wrong: the hub refuses every socket and the page says "Chat is offline"
+#   ANTS_HUB_DISCORD_CLIENT_ID, ANTS_HUB_DISCORD_CLIENT_SECRET    the Discord application of the chat's login (docs/HUB.md, "Login": the site's operator makes the application, adds the redirect
+#                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment (Portainer) and never from a file of
+#                                                   the repository; without them the chat is read-only for everybody and says so. The secret is read by the hub and printed nowhere
+#   ANTS_HUB_MIN_ACCOUNT_DAYS=7                     a Discord account younger than this many days cannot write in the chat (0 lets every account write; optional; this is the default)
+#   ANTS_HUB_MODS=<account id>,<account id>         the accounts that may type /mute name minutes and /del id in the chat (optional; digits only, comma separated; none by default; the account
+#                                                   ids are Discord's). Moderation from a terminal: docker exec ants-hub python -m hub.admin list
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
@@ -118,7 +122,8 @@ services:
 
   # The global chat (docs/HUB.md): wss://<site>/hub/ws, passed by the page's nginx over the network above (port 4040, not published on the host). The site starts and works without it (nginx finds it by name
   # when a request comes; "Chat is offline" until it is there). Its database (the chat lines of the last 7 days, mutes and bans) is the volume ants-hub-data: keep it. No ANTS_BUILD_ID: a deploy that
-  # changes nothing in hub/ builds the same image, and the chat is not restarted. Reading is open to everybody; writing needs a login, which this version of the hub does not have yet.
+  # changes nothing in hub/ builds the same image, and the chat is not restarted. Reading is open to everybody; writing needs the Discord login, which is on only where the two settings of the application
+  # are given (the hub then also needs to reach discord.com over https: the network below lets it out).
   ants-hub:
     build:
       context: .
@@ -127,6 +132,9 @@ services:
     restart: unless-stopped
     environment:
       ANTS_HUB_PUBLIC_URL: ${ANTS_HUB_PUBLIC_URL:-https://beta.playants.org}
+      ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}
+      ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}
+      ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}
       ANTS_HUB_MODS: ${ANTS_HUB_MODS:-}
     volumes:
       - ants-hub-data:/data

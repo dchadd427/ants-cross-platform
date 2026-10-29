@@ -29,6 +29,7 @@ VALUE = re.compile(r"[0-9a-f]{32}\Z")
 CODE = re.compile(r"[\x21-\x7e]{1,512}\Z")
 NEXT = {"home": "/", "room": "/#room"}      # where the visitor goes back to: a fixed list, chosen by a word
 DISCORD_EPOCH_MS = 1420070400000            # the time that the first bits of a Discord id count from
+RESERVED = frozenset(("mod", "admin", "moderator", "administrator", "system", "server", "staff", "ants", "ants.bot", "hub", "everyone", "here"))      # (names that could pass for the hub's own voice)
 MAX_QUERY = 1500
 
 PAGES = {                                   # kind -> (status, heading, line)
@@ -219,7 +220,7 @@ class DiscordLogin(session.Sessions):
         except discordmod.DiscordError as e:
             self.log.event("login_failed", kind=e.kind, status=e.status, tag=self.log.tag(address))
             return self.page("rejected" if e.kind == "rejected" else "unavailable", back, gone)
-        if not config.ACCOUNT_ID.match(account) or not text.valid_name(name):
+        if not config.ACCOUNT_ID.match(account) or not text.valid_name(name) or name in RESERVED:
             self.log.event("login_failed", kind="name", tag=self.log.tag(address))
             return self.page("name", back, gone)
         value = secrets.token_hex(16)
