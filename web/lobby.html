@@ -284,14 +284,16 @@
     @media (pointer: coarse) { .edit { position: relative; } .edit::after { content: ""; position: absolute; inset: -14px -12px; } }
 
     </style>
-<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css">
+<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="home/home.css">
 </head>
-<body>
+<body data-screen="home">
 <div class="screen" id="screen">
-<main class="wrap">
+<div class="wrap strips">
     <div class="banner" id="banner" role="status" hidden><span id="banner-text"></span><button class="btn sm" type="button" id="banner-x">OK</button></div>
     <div class="rejoin" id="rejoin" hidden><span id="rejoin-note"></span><button class="btn sm" type="button" id="rejoin-go">Rejoin it</button></div>
-
+</div>
+<div id="home"></div>
+<main class="wrap">
     <header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1><p><span class="tag">Four colonies, one picnic.</span><span class="sub">The 1998 ant war game, rebuilt for your browser.</span></p><a class="btn sm" href="/matches.html" id="watch-top" title="Matches: every match played here, with its stats and replay">Matches</a><a class="btn sm discord" href="https://discord.gg/WaWrXQnKPj" id="discord-top" target="_blank" rel="noopener noreferrer" title="Discord: chat with other players (opens the project&rsquo;s Discord invite in a new tab)"><svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg><span class="dt">Discord</span></a></header>
 
     <div class="grid" id="lobby">
@@ -369,7 +371,7 @@
 <script src="front/lobby_net.js"></script>
 <script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>
 <script src="front/map_picker.js"></script>
-<script src="shapes.js"></script><script src="map_files.js"></script>
+<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>
 <script>
     (function () {
         'use strict';
@@ -378,7 +380,7 @@
         var Chat = window.AntsLobbyChat;
         var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false, pendingMode = -1;
         try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }
-        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {           // the scripts of front/ did not come: the page cannot do anything, and says so
+        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !window.AntsHome) {           // the scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
             document.getElementById('banner-x').hidden = true;
             document.getElementById('banner').className = 'banner warn';
@@ -712,6 +714,7 @@
             refusal = '';
             paintSide(v.side);
             gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro }); setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode); backBar.sync(model, sendPlan, warmMap);
+            Home.sync();
         }
         function paintCard(card, m) {
             var li = lis[card.seat], seat = card.seat, c = card.color;
@@ -881,7 +884,7 @@
             if (handing || !client) return;
             var entry = client.rejoinEntry();
             if (!entry) return;
-            handing = true;
+            handing = true; Home.opening();
             $('rejoin').hidden = true;
             try { window.localStorage.setItem(entry.name, entry.text); } catch (e) { /* the key is not kept: the game page can take the seat for this load only, and a reload of it cannot take the seat back */ }
             var seat = client.seat, code = client.code, name = client.name;
@@ -936,7 +939,7 @@
             connect({ code: newCode(), name: myName(), own: true });
             showBanner(kind);
         }
-        function stripRoom() { try { window.history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/')); } catch (e) { /* the address stays: it is not essential */ } }
+        function stripRoom() { try { window.history.replaceState(window.history.state, '', window.location.pathname.replace(/^\/+/, '/') + window.location.hash); } catch (e) { /* the address stays: it is not essential */ } }
 
         function hook(c) {
             try { chat.attach(c); } catch (e) { if (window.console) console.error(e); }      // (the box follows every client of the page: its own room, a room that was joined, a room that was made again; if it breaks, the lobby does not)
@@ -1046,7 +1049,7 @@
             return picker;
         }
         function isHost() { return !!(model && !model.guest && !model.starting); }
-        function inert(on) { [document.querySelector('header.mast'), $('banner'), $('rejoin'), $('lobby'), $('footer-bar')].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }       // (the page behind the open list takes no key or tap)
+        function inert(on) { [document.querySelector('header.mast'), $('banner'), $('rejoin'), $('lobby'), $('footer-bar')].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); Home.inert(on); }       // (the page behind the open list takes no key or tap)
         function communityOf(file) { var e = picker && picker.find(file); return e && !e.original ? { name: e.name, info: AntsMapPicker.infoText(e), thumb: e.thumb } : backBar.info(file); }
         function warmMap(file) { if (window.AntsMapFiles && !warmed[file]) { warmed[file] = true; AntsMapFiles.warm(window, file); } }      // the game page, a moment later, finds the file in the browser's cache
         function chooseMap(entry) {
@@ -1345,14 +1348,14 @@
         function runLobby() {
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
-            var stored = loadSession(); if (backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); })) return;
+            var stored = loadSession(), test = backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); });
+            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: My room does)
+            if (test) return;
             if (wantedCode && !(stored && stored.code === wantedCode)) {
                 askLink(wantedCode, '');
             } else if (stored) {
                 try { back = Rematch.readBack(window.sessionStorage, stored.code, Date.now()); } catch (e) { back = null; } if (back) backBar.show(back);
                 connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });
-            } else {
-                connect({ code: newCode(), name: myName(), own: true });
             }
         }
 
@@ -1469,6 +1472,11 @@
         // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
         if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
         else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none'; else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
+
+        // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
+        var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
+            info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow,
+            leave: function () { var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
         // ---- go ----
         runLobby();

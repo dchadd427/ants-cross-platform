@@ -456,14 +456,14 @@ class TheFrontPageMarkup(PageCase):
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():
                 self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
         for name in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
         self.assertIn("root.AntsLobbyRules = api", self.rules)
         self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))
         self.assertIn("root.AntsLobbyChat = api", read("web", "front", "lobby_chat.js"))
         self.assertIn("root.AntsRematch = api", read("web", "front", "rematch.js"))
-        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false, pendingMode = -1;\n        try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }\n        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {", self.script)
+        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false, pendingMode = -1;\n        try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }\n        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !window.AntsHome) {", self.script)
         self.assertIn("'This page could not load all of its parts. Reload it to try again.'", self.script)     # (a script that did not come: the page says so and does nothing else)
 
 
