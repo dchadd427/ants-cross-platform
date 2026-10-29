@@ -956,8 +956,8 @@
   {
    "id": "image_check_without_the_list",
    "file": ".github/workflows/ci.yml",
-   "old": " home/home.js home/home.css home/games.js home/games.css ",
-   "new": " home/home.js home/home.css ",
+   "old": " home/games.js home/games.css ",
+   "new": " ",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

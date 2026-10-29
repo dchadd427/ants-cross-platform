@@ -6,8 +6,8 @@
 //   entry), picker (the map list's script is loaded too), noWebSocket, WebSocket, realTime, noHome (without web/home/home.js: the page says that it could not load all of
 //   its parts), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room),
 //   fakeClock (Date.now() of the scripts that the page loads is the fake clock's: env.advance(ms) moves it, so the pace of the client's requests and the waits of web/home/games.js follow the clock that the
-//   timers follow), lazy (what the page loads after its first paint, web/home/games.js and games.css: true, the default, loads them when the page asks, which is when env.advance(0) runs the page's own
-//   timer; false: nothing comes; 'script': the script fails to load; an object: what the script puts on the window, for a script that is broken). env.hide(true | false) hides the tab or shows it (visibilitychange).
+//   timers follow), lazy (what the page loads after its first paint, web/home/games.js and games.css: true loads them when the page asks, which is when env.advance(0) runs the page's own
+//   timer; without it nothing comes, as a page whose script is slow; 'script': the script fails to load; an object: what the script puts on the window, for a script that is broken). env.hide(true | false) hides the tab or shows it (visibilitychange).
 // Used by tests/scripts/web_name_check.js (the page's rules, its name card, its room), tests/scripts/web_home_screen_check.js (Home and the Room) and tests/scripts/web_lobby_server_check.js.
 'use strict';
 const fs = require('fs');
@@ -279,7 +279,7 @@ function runLobby(search, stored, options) {
         const file = String(c.tagName === 'script' ? c.src : c.tagName === 'link' ? c.href : '');
         if (file !== 'home/games.js' && file !== 'home/games.css') return c;
         env.lazyLoads.push(file);
-        if (options.lazy === false) return c;
+        if (!options.lazy) return c;
         if (c.tagName === 'script') {
             if (options.lazy === 'script') { if (c.onerror) c.onerror({}); return c; }
             Object.assign(win, options.lazy && typeof options.lazy === 'object' ? options.lazy : loadFile(file, scope));

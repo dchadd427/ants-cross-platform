@@ -47,7 +47,7 @@ const listOf = (rows) => ({ format: 1, lobbies: rows, count: rows.length });
 async function page(o) {
     o = o || {};
     const site = o.site || fakeSite();
-    const env = runLobby(o.search || '', o.stored || { 'ants.name': 'Maya' }, Object.assign({ stayHome: true, fakeClock: true, fetch: site.fetch }, o.options || {}));
+    const env = runLobby(o.search || '', o.stored || { 'ants.name': 'Maya' }, Object.assign({ stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch }, o.options || {}));
     site.clock = () => env.clock;
     env.site = site;
     env.looks = () => site.calls.length;

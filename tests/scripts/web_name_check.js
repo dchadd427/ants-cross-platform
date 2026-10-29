@@ -730,7 +730,7 @@ async function codeBox(env) {
     return { input: part('joinbox').children[0], go: part('gcgo'), hint: part('hint') };
 }
 {
-    const env = runLobby('', { 'ants.name': 'Maya' });
+    const env = runLobby('', { 'ants.name': 'Maya' }, { lazy: true });
     const own = env.arrive({ key: KEY });
     const ownCode = helloRoom(own.sent[0]);
     env.roomBar('rhome').click();
@@ -765,7 +765,7 @@ async function codeBox(env) {
 }
 {
     const typedJoin = async (typed, name) => {
-        const e = runLobby('', {});
+        const e = runLobby('', {}, { lazy: true });
         e.arrive({ key: KEY });
         e.roomBar('rhome').click();
         const box = await codeBox(e);
@@ -803,7 +803,7 @@ async function codeBox(env) {
     const asked = ok.last().open();
     asked.receive(reject(6));
     check('a typed code whose room is lost later (a restart): the Hello that asks again has no block, and its NoSuchRoom is the busy strip, not the card of a link (only a link\'s first Hello is told "no room with that code")', ok.sockets.length === 3 && hex(ok.sockets[2].sent[0]) === hex(helloBytes('Zed', 'k7m2xq', { join: true })) && !ok.$('banner').hidden && ok.$('banner-x').textContent === 'Try again' && ok.$('name-step').hidden);
-    const away = runLobby('', {});
+    const away = runLobby('', {}, { lazy: true });
     away.arrive({ key: KEY });
     away.roomBar('rhome').click();
     const awayBox = await codeBox(away);
@@ -1061,7 +1061,7 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
     link.type('name-step-input', 'Zed');
     link.$('name-step-go').click();
     check('... and the field says it is no longer wrong when the name is good (aria-invalid goes back to false, the message is empty, the page joins)', link.sockets.length === 1 && link.$('name-step-input').getAttribute('aria-invalid') === 'false' && link.$('name-step-msg').textContent === '');
-    const typed = runLobby('', {});
+    const typed = runLobby('', {}, { lazy: true });
     typed.arrive();
     typed.roomBar('rhome').click();
     const typedBox = await codeBox(typed);

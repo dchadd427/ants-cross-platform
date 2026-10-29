@@ -76,7 +76,7 @@ const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, fi
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const site = fakeSite();
-    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch });
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch });
     check('before the page has painted, nothing of the list is asked for: no script, no style, no look at /lobbies', env.lazyLoads.filter((f) => /games/.test(f)).length === 0 && site.calls.length === 0);
     check('... Quick host, Quick join and Games are drawn and disabled (nothing on the bar is a button that does nothing)', ['host', 'join', 'games'].every((c) => env.home(c).disabled === true && env.home(c).getAttribute('aria-disabled') === 'true'));
     env.advance(0);
