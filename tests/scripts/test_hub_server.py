@@ -620,6 +620,28 @@ class TheLoginRace(RigTest):
         self.assertEqual(len(self.rig.hub.chat.peers), 1)
 
 
+class TheFullHubDoesNotAskTheLoginLayer(RigTest):
+    rig_args = dict(sockets_total=1)
+
+    def test_a_handshake_that_will_be_refused_for_the_total_costs_the_login_layer_nothing(self):
+        asked = []
+
+        class Counting:
+            login = True
+
+            async def identify(self, headers):
+                asked.append(1)
+                return None
+
+        self.rig.hub.sessions = Counting()
+        self.assertEqual(self.connect().status, "HTTP/1.1 101 Switching Protocols")
+        self.assertEqual(asked, [1])
+        refused = hc.Client(self.rig.port, headers={"X-Client-Address": "203.0.113.5"})
+        self.clients.append(refused)
+        self.assertEqual(refused.status.split()[1], "503")
+        self.assertEqual(asked, [1])                                    # (refused before anything was looked up)
+
+
 class TheHubTidiesTheDatabase(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
