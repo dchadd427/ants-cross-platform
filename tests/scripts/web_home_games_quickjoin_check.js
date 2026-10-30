@@ -103,6 +103,24 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     pressEscape(again);
     check('Escape on that card is "Go to the room" too (the page is in that room: the card is only the way there)', card(again) === null && again.screen() === 'room');
 }
+{   // what a screen reader is told: the card is described by its line, and the join that has no strip is told by a line that nobody sees
+    const readOf = (env) => { const id = card(env).getAttribute('aria-describedby'); const hit = find(card(env), 'gcline').filter((p) => p.id === id); return hit.length === 1 ? textOf(hit[0]) : null; };
+    const toldOf = (env) => { const n = find(env.body, 'sr'); return n.length === 1 && n[0].getAttribute('role') === 'status' ? textOf(n[0]) : null; };
+    const env = await withRooms(ROWS);
+    check('the line that tells a join is there from the start (a status line, empty: a live region must be in the page before its words come)', toldOf(env) === '');
+    await press(env);
+    check('the card "Finding a game…" is described by its line (aria-describedby names the line, so the title is read, then "Looking through 5 open games for the best one.")', title(env) === 'Finding a game…' && readOf(env) === 'Looking through 5 open games for the best one.' && toldOf(env) === '');
+    welcomeOf(env.last(), 1, ['Pebble', 'Maya'], PRIVATE);
+    check('the card "Joined Pebble’s room" is described by "Opening the room…", and the page tells it: "Joined Pebble’s room."', title(env) === 'Joined Pebble’s room' && readOf(env) === 'Opening the room…' && toldOf(env) === 'Joined Pebble’s room.');
+    await wait(env, 1600);
+    check('... the card closes by itself with no strip, and what was told stays (a screen reader has read it; nothing visible is added)', card(env) === null && env.screen() === 'room' && stripOf(env).hidden === true && toldOf(env) === 'Joined Pebble’s room.');
+    env.roomBar('rhome').click();
+    await press(env);
+    check('the next press empties the line (the same words told again are heard again), and the question is described by its line', toldOf(env) === '' && title(env) === 'Leave Pebble’s room?' && /^You are in Pebble’s room\./.test(readOf(env)));
+    const none = await withRooms([]);
+    await press(none);
+    check('the card "No open games right now." is described by "Nobody is waiting for a player. Host one, and others can join you."', title(none) === 'No open games right now.' && readOf(none) === 'Nobody is waiting for a player. Host one, and others can join you.' && toldOf(none) === '');
+}
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 3. The rooms that cannot be had
@@ -252,7 +270,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     check('(a Join of the list waits for its room)', wait2.sockets.length === 1 && first(popOf(wait2), 'gjoining').hidden === false);
     wait2.home('join').click();
     await flush();
-    check('Quick join pressed while a Join of the list waits does nothing (no card, no second client more)', card(wait2) === null && wait2.sockets.length === 1);
+    check('Quick join pressed while a Join of the list waits starts nothing (no card, no second client more) and says why on the strip', card(wait2) === null && wait2.sockets.length === 1 && /^Joining .+… Wait for it, or cancel it in the list\.$/.test(stripText(wait2)));
     const fresh = await withRooms([row('zz1111', 'Old', { free: 2, age: 5 })]);
     fresh.site.body = listOf([row('zz1111', 'Old', { free: 2, age: 5 }), row('yy2222', 'New', { people: 3, free: 1, age: 9 })]);
     await wait(fresh, 1500);
@@ -455,6 +473,40 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     await wait(env, 1500);
     await press(env);
     check('START that waits (the match is on its way): Quick join says "Your match is running." and opens nothing', card(env) === null && stripText(env) === 'Your match is running.' && env.sockets.length === 1);
+}
+{   // a match of this browser that is still running (the Rejoin strip is up), as Quick host answers it
+    const env = await withRooms(ROWS, { stored: { 'ants.name': 'Maya', 'ants.rejoin.k7m2xq.1': JSON.stringify({ k: hex(KEY), s: 'wss://play.test/ws', t: Date.now() }) } });
+    await wait(env, 1200);
+    const looks = env.looks();
+    await press(env);
+    check('Quick join while a match of yours is still running (the Rejoin strip is up): "Your match is running." with a Rejoin button, no card, no look at the list and no socket', card(env) === null && stripText(env) === 'Your match is running.' && textOf(stripButtons(env)[0]) === 'Rejoin' && textOf(stripButtons(env)[1]) === 'OK'
+          && env.sockets.length === 0 && env.looks() === looks && env.screen() === 'home');
+    tap(stripButtons(env)[0]);
+    check('... and Rejoin is the strip\'s own: the tab goes to the match', env.assigned.length === 1 && /[?&]room=k7m2xq&seat=1/.test(env.assigned[0]));
+}
+{   // a Join of the list waits: a press on Quick join (or Quick host) is answered on the strip
+    const env = await withRooms(ROWS);
+    tap(env.home('games'));
+    await flush();
+    tap(joinOf(rowsOf(env)[1]));
+    const probe = env.last();
+    check('(a Join of the list is on its way: its line shows in the list)', env.sockets.length === 1 && askedFor(probe) === 'c1v3rr' && textOf(first(popOf(env), 'gjoining')) !== '' && popOf(env).hidden === false);
+    await press(env);
+    check('Quick join while it waits opens no card and no second client, and the strip says why: "Joining Clover’s room… Wait for it, or cancel it in the list." (a warning)', card(env) === null && env.sockets.length === 1 && stripText(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && stripOf(env).className.indexOf('warn') !== -1 && stripOf(env).hidden === false);
+    tap(env.home('games'));
+    check('(the list is put away, and the Join still waits)', popOf(env).hidden === true && env.sockets.length === 1);
+    await press(env);
+    check('... a press on Quick join shows the list again, with the line and the Cancel of that Join, and the strip says it too', popOf(env).hidden === false && textOf(first(popOf(env), 'gjoining')) !== '' && stripText(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && card(env) === null && env.sockets.length === 1);
+    tap(stripButtons(env)[0]);
+    check('(OK puts the strip away)', stripOf(env).hidden === true);
+    tap(env.home('host'));
+    check('Quick host says the same and sends nothing', stripText(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && stripOf(env).hidden === false && env.sockets.length === 1 && env.screen() === 'home');
+    probe.open().receive(reject(1));
+    await flush();
+    check('the Join ends (the room is full): the strip about it goes, and the list says what happened', stripOf(env).hidden === true && textOf(first(popOf(env), 'gpnote')) === 'That room is full.');
+    tap(env.home('join'));
+    await flush();
+    check('(and Quick join works again)', card(env) !== null && title(env) === 'Finding a game…');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

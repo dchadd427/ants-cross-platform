@@ -33,7 +33,7 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 71 * 1000, 20000      # bytes, raw and gzipped, both files together (about 68,500 and 19,200, with Quick join, its cards and the question before Leave room): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 71 * 1000, 20000      # bytes, raw and gzipped, both files together (about 70,300 and 19,700, with Quick join, its cards and the question before Leave room): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
@@ -209,7 +209,7 @@ class TheStyle(unittest.TestCase):
             made.update(m.group(1).split())
         for m in re.finditer(r"button\('([\w -]+)'", read("web", "home", "games.js")):
             made.update(m.group(1).split())
-        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes"}      # (the page's: web/lobby.html; and the answer that is the page's own teal button: only the tests look for it by its class)
+        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr"}      # (the page's: web/lobby.html, "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
         for name in sorted(made - theirs):
             self.assertRegex(self.css, r"\." + re.escape(name) + r"\b", "the class %s has no style" % name)
 

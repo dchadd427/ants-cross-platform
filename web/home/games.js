@@ -39,7 +39,7 @@
         private: 'Private', privateSub: 'link only', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Private room', visLabel: 'Who can find this room',
         noteHow: 'Public rooms show your name and map in the Games list.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
         ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
-        noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', opening: 'The game is opening. If it does not, reload this page.',
+        noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
@@ -145,6 +145,7 @@
             else banner.parentNode.insertBefore(strip, banner.nextSibling || null);
         }
         placeStrip();
+        var told = el('p', 'sr'); told.setAttribute('role', 'status'); doc.body.appendChild(told);       // (a join that has no strip, the card that closes by itself: a screen reader is told by this line, which nobody sees)
         function clearNotice(kind) { if (!kind || kind === noticeKind) { strip.hidden = true; noticeKind = ''; } }
         // kind: what the notice is (a later one replaces it), tone: '' or 'warn', actions: [{ text, run }]: run says false when it could not do it (the notice stays); OK is always the last button
         function notice(kind, text, tone, actions) {
@@ -158,7 +159,7 @@
             strip.hidden = false;
         }
         function rejoinOffered() { var s = doc.getElementById('rejoin'); return !!s && !s.hidden; }
-        function matchRunning(c) { return !!(c && c.room && c.room.starting); }
+        function matchRunning(c) { return !!(c && c.room && c.room.starting) || rejoinOffered(); }    // (a START that waits, or a match of this browser that is still running: the Rejoin strip is up)
         function runningNotice() {
             notice('running', TEXT.running, 'warn', rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []);
         }
@@ -290,13 +291,18 @@
             track(client());
             ctl.show('room', 'push');
         }
+        function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the strip says why nothing else starts
+            openList();
+            notice('joining', popJoinText.textContent + TEXT.joinFirst, 'warn', []);
+        }
         function quickHost() {
-            if (joining || finding) return;
+            if (finding) return;
+            if (joining) { stillJoining(); return; }
             if (over()) { itsWay(); return; }
             closeAll();
             if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)
             var c = client();
-            if (matchRunning(c) || rejoinOffered()) { runningNotice(); return; }
+            if (matchRunning(c)) { runningNotice(); return; }
             if (!c || (c.room && !c.room.lobby)) { startHost(); return; }       // (no room, a refused one, or a room that a game made: a room of our own)
             if (!c.room) { startPending(c); ctl.show('room', 'push'); return; }  // (the page's room is on its way: it gets Visibility(public) when it is ready)
             if (!c.isLeader()) {
@@ -338,6 +344,8 @@
             (o.lines || []).forEach(function (t) { var p = el('p', 'gcline', t); lines.push(p); box.appendChild(p); });
             if (o.row) box.appendChild(rowNode(o.row, null, o.best));
             (o.after || []).forEach(function (t) { box.appendChild(el('p', 'gcline', t)); });
+            var first = box.querySelector('.gcline');
+            if (first) { first.id = 'gc-line'; box.setAttribute('aria-describedby', 'gc-line'); }       // (the first line is what a screen reader reads after the title)
             if (o.bar) { bar = el('div', 'gbar ' + o.bar); bar.appendChild(el('i')); box.appendChild(bar); }
             d = { shade: shade, opener: o.opener || doc.activeElement, onClose: o.onClose || null, bar: bar, lines: lines, timer: null };
             (o.acts || []).forEach(function (a, n) {
@@ -468,6 +476,7 @@
         }
         function busy(on, what) {                          // a Join is on its way (up to 15 s): the buttons wait, and the list says what it waits for, with a way out
             var was = joining;
+            if (!on) clearNotice('joining');
             joining = on; joinButtons.forEach(function (b) { b.disabled = on; }); codeGo.disabled = on;
             popJoin.hidden = !on; popJoinText.textContent = on ? what || TEXT.joiningCode : '';
             if (on === was) return;
@@ -537,7 +546,7 @@
         function welcomed(row) {                           // the page is in the room: the card says so, and the Room opens by itself or at a press
             finding = false;
             var seen = { code: row.code, host: row.host, map: row.map, mapKey: row.mapKey, mapName: row.mapName, people: row.people + 1, bots: row.bots, free: row.free - 1, size: row.size };
-            dropCard();
+            dropCard(); told.textContent = 'Joined ' + possessive(row.host) + ' room.';
             card({ mark: 'check', title: 'Joined ' + possessive(row.host) + ' room', row: seen, after: [TEXT.roomOpening], bar: 'fill', acts: [{ text: TEXT.goRoom, cls: 'gyes' }], focus: 0, timer: JOINED_MS, onClose: function () { if (!gone) ctl.show('room', 'push'); } });
         }
         function tries(cands, mine) {                      // up to three rooms, one after the other (a room that is gone, full or started is a reason for the next)
@@ -562,12 +571,13 @@
             next();
         }
         function quickJoin() {
-            if (joining || finding) return;
+            if (finding) return;
+            if (joining) { stillJoining(); return; }
             if (over()) { itsWay(); return; }
             var c = client();
             if (matchRunning(c)) { closeAll(); runningNotice(); return; }
             var opener = parts.quickJoin, mine;
-            finding = true; mine = ++joinSeq;
+            finding = true; mine = ++joinSeq; told.textContent = '';
             findingCard(mine, 0, opener);
             look1(guard(function () {
                 if (mine !== joinSeq) return;

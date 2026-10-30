@@ -254,6 +254,34 @@ async function flows() {
             await host.context().close(); await guest.context().close(); await rae.context().close(); await tess.context().close();
         }
 
+        // ---- 1e. a match of this browser that is still running (the page's Rejoin offer is up): Quick join, Join and Join by code open nothing and say so, with Rejoin (real clicks, no socket) ------------------------------------
+        {
+            const ctx = await browser.newContext({ viewport: { width: SIZES[2][1], height: SIZES[2][2] }, deviceScaleFactor: 1 });
+            await ctx.addInitScript((entry) => { try { window.localStorage.setItem('ants.name', 'Maya'); window.localStorage.setItem('ants.rejoin.k7m2xq.1', entry); } catch (e) { /* none */ } }, JSON.stringify({ k: '00112233445566778899aabbccddeeff', s: fake.url.replace(/^http/, 'ws') + '/ws', t: Date.now() }));
+            const page = await ctx.newPage();
+            const sockets = [];
+            page.errors = [];
+            page.on('pageerror', (e) => page.errors.push(String(e)));
+            page.on('websocket', (ws) => { if (!/\/hub\/ws$/.test(ws.url())) sockets.push(ws.url()); });       // (the game server's door: the chat dock's own socket is another)
+            await page.goto(fake.url + '/');
+            await lit(page);
+            check('(a match of this browser is still running: the page offers to rejoin it)', await page.evaluate(() => !document.getElementById('rejoin').hidden));
+            const said = () => page.evaluate(() => { const s = document.querySelector('.gstrip'); return s.hidden ? null : s.textContent; });
+            await page.click('.quick.join');
+            check('Quick join with the Rejoin offer up (a real click): "Your match is running." with Rejoin, no card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0 && sockets.length === 0);
+            await page.click('.gstrip .btn:last-child');
+            await page.click('.hchip.games'); await page.waitForSelector('.glist .gitem');
+            await page.click('.gjoin');
+            check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the list put away, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.querySelector('.gpop').hidden)) && sockets.length === 0);
+            await page.click('.gstrip .btn:last-child');
+            await page.click('.hchip.games'); await page.waitForSelector('.gcode input');
+            await page.fill('.gcode input', 'abc234');
+            await page.click('.gcgo');
+            check('Join by code with the Rejoin offer up: the same words, no name card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.getElementById('name-step').hidden)) && sockets.length === 0);
+            check('(no script error in this page)', page.errors.length === 0, page.errors.join(' | '));
+            await ctx.close();
+        }
+
         // ---- 2. the pictures: the scenes of the approved pictures, at their three sizes ----------------------------------------------------------------------------------------------------
         if (shotsDir) {
             fs.mkdirSync(shotsDir, { recursive: true });

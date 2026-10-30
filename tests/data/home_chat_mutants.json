@@ -2282,6 +2282,34 @@
    "old": "if (refused !== undefined) { if (!field.value) field.value = refused.text; delete said[refused.text]; }",
    "new": "{ if (!field.value) field.value = refused.text; delete said[refused.text]; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_half_rule_is_measured_on_the_newest_line",
+   "file": "web/home/chat.js",
+   "old": "points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = 0;",
+   "new": "points(key) * 2 >= points(unanswered[unanswered.length - 1].key) && within(key, unanswered[unanswered.length - 1].key)) at = 0;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_half_is_measured_on_the_newest_line",
+   "file": "web/home/chat.js",
+   "old": "points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = 0;",
+   "new": "points(key) * 2 >= points(unanswered[unanswered.length - 1].key) && within(key, unanswered[0].key)) at = 0;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_part_is_looked_for_in_the_newest_line",
+   "file": "web/home/chat.js",
+   "old": "points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = 0;",
+   "new": "points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[unanswered.length - 1].key)) at = 0;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "an_echo_of_the_oldest_takes_the_newest_line_out",
+   "file": "web/home/chat.js",
+   "old": "points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = 0;",
+   "new": "points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = unanswered.length - 1;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }

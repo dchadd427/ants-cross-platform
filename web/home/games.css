@@ -103,3 +103,5 @@
 /* ---- a phone upright and a short window ---- */
 @media (max-width: 720px) { .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
 @media (max-height: 500px) and (orientation: landscape) { .gptitle { font-size: 20px; } .gpop { padding: 10px 14px 12px; } .gcbtns .btn { min-height: 44px; } .gconfirm { padding: 12px 16px; } .gctitle { font-size: 22px; } .gcline { margin-bottom: 10px; } }
+@media (max-height: 350px), (max-width: 260px) { .gshade { padding: 8px; } .gmark { margin-bottom: 6px; } .gmark.shadow .ant { --k: 1; } .gcline { margin-bottom: 8px; } .gcbtns .gyes.big { min-height: 48px; font-size: 22px; } .gcnote { margin: 6px 0; } .gbar, .gconfirm .gitem { margin-bottom: 10px; } }       /* (a short window or a zoomed phone: the none card, with its two buttons, stands in it without a scroll) */
+@media (max-width: 260px) { .gconfirm { padding: 10px; } .gctitle { margin-bottom: 6px; font-size: 20px; } .gcline { font-size: 14px; } .gcnote { font-size: 13px; } }
