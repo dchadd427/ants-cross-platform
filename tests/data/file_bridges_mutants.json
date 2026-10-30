@@ -1,0 +1,111 @@
+{
+ "note": "Mutants of the bridge pieces that a map file holds (the bridge helpers of Grid and TileCell, the loader's timer, the swimmer's build and demolish, the drowning of DestroyBridgeAt, the 180 s lifetime) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/file_bridges_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/GAME_REVERSE_ENGINEERING.md 5.37 (the ids 34 .. 37 are the bridge and the id 38 is not; a piece of a file has no timer; a built bridge lasts 3,600 ticks and only with more than 180 s left; the demolish has four passes and no terrain test; a swimmer only splashes; a part-built piece refuses the click).",
+ "defaults": {
+  "build": "test_file_bridges",
+  "test": "./build/tests/test_sim/test_file_bridges"
+ },
+ "mutants": [
+  {
+   "id": "completed_bridge_counts_38",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "        return interactive_id == TILE_BRIDGE4;\n    }\n    constexpr bool has_any_bridge()",
+   "new": "        return interactive_id == TILE_BRIDGE4 || interactive_id == TILE_BRIDGE4B;\n    }\n    constexpr bool has_any_bridge()"
+  },
+  {
+   "id": "any_bridge_counts_38",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "        return interactive_id >= TILE_BRIDGE1 && interactive_id <= TILE_BRIDGE4;\n    }\n    constexpr bool has_partial_bridge()",
+   "new": "        return (interactive_id >= TILE_BRIDGE1 && interactive_id <= TILE_BRIDGE4) || interactive_id == TILE_BRIDGE4B;\n    }\n    constexpr bool has_partial_bridge()"
+  },
+  {
+   "id": "bridge_at_counts_38",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "        return id >= TILE_BRIDGE1 && id <= TILE_BRIDGE4;\n    }\n\n    bool has_lunchbox_at",
+   "new": "        return (id >= TILE_BRIDGE1 && id <= TILE_BRIDGE4) || id == TILE_BRIDGE4B;\n    }\n\n    bool has_lunchbox_at"
+  },
+  {
+   "id": "stage_of_38_is_4",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "            return static_cast<int>(id - TILE_BRIDGE1 + 1);\n        }\n        return 0;",
+   "new": "            return static_cast<int>(id - TILE_BRIDGE1 + 1);\n        }\n        if (id == TILE_BRIDGE4B) return 4;\n        return 0;"
+  },
+  {
+   "id": "regress_counts_38",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "    if (cell.interactive_id == TILE_BRIDGE4) {\n        cell.interactive_id = TILE_BRIDGE3;",
+   "new": "    if (cell.interactive_id == TILE_BRIDGE4 || cell.interactive_id == TILE_BRIDGE4B) {\n        cell.interactive_id = TILE_BRIDGE3;"
+  },
+  {
+   "id": "file_bridge_gets_a_timer",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "            cell.interactive_owner = 255;\n            cell.timer_ticks = 0;\n            cell.is_food = false;",
+   "new": "            cell.interactive_owner = 255;\n            cell.timer_ticks = c2.tile_index == TILE_BRIDGE4 ? LIFETIME_180S_TICKS : 0u;\n            cell.is_food = false;"
+  },
+  {
+   "id": "life_one_tick_short",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "constexpr uint32_t LIFETIME_180S_TICKS = 3600u;",
+   "new": "constexpr uint32_t LIFETIME_180S_TICKS = 3599u;"
+  },
+  {
+   "id": "life_one_tick_long",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "constexpr uint32_t LIFETIME_180S_TICKS = 3600u;",
+   "new": "constexpr uint32_t LIFETIME_180S_TICKS = 3601u;"
+  },
+  {
+   "id": "built_bridge_gets_no_timer",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "        grid_.get_cell_mut(static_cast<uint32_t>(b0.x), static_cast<uint32_t>(b0.y)).timer_ticks = LIFETIME_180S_TICKS;\n        arm_structure_lifetime(b0.x, b0.y);",
+   "new": "        arm_structure_lifetime(b0.x, b0.y);"
+  },
+  {
+   "id": "timer_armed_late_in_the_match",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "        if (match_time_remaining_ms_ <= effect_spec::kStructureLifetimeMs) {",
+   "new": "        if (false) {"
+  },
+  {
+   "id": "demolish_in_three_passes",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "    if (cell.interactive_id != TILE_BRIDGE1 && cell.interactive_id == a.orig_b4 && cell.interactive_owner == a.player_id) {",
+   "new": "    if (cell.interactive_id != TILE_BRIDGE2 && cell.interactive_id == a.orig_b4 && cell.interactive_owner == a.player_id) {"
+  },
+  {
+   "id": "no_drowning_on_land",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "            if (act != AntUnit::kActionDrown && act != AntUnit::kActionDeath) drown(*a, t);",
+   "new": "            if (grid_.terrain_class_at(t) == movement::kTerrainWater && act != AntUnit::kActionDrown && act != AntUnit::kActionDeath) drown(*a, t);"
+  },
+  {
+   "id": "swimmer_drowns_with_the_rest",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "        if (type_of(*a) == AntType::Swimmer) {                // 0x100f96f",
+   "new": "        if (type_of(*a) == AntType::Swimmer && false) {                // 0x100f96f"
+  },
+  {
+   "id": "part_built_accepts_a_build",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    if (grid_.terrain_class_at(t) != movement::kTerrainWater) return false;\n    if (!grid_.get_cell(t).is_empty_overlay()) return false;\n    if (grid_.is_solid_object(t)) return false;\n    if (is_special_base_tile(t)) return false;\n    return stationary_only ? !occupied_stationary(t) : (occupant_at(t) == nullptr);\n}\n\n// FUN_0101d7f9",
+   "new": "    if (grid_.terrain_class_at(t) != movement::kTerrainWater && !grid_.get_cell(t).has_partial_bridge()) return false;\n    if (!grid_.get_cell(t).is_empty_overlay() && !grid_.get_cell(t).has_partial_bridge()) return false;\n    if (grid_.is_solid_object(t)) return false;\n    if (is_special_base_tile(t)) return false;\n    return stationary_only ? !occupied_stationary(t) : (occupant_at(t) == nullptr);\n}\n\n// FUN_0101d7f9"
+  },
+  {
+   "id": "water_target_ignores_layer_2",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    if (grid_.terrain_class_at(t) != movement::kTerrainWater) return false;\n    if (!grid_.get_cell(t).is_empty_overlay()) return false;\n    if (grid_.is_solid_object(t)) return false;\n    if (is_special_base_tile(t)) return false;\n    return stationary_only ? !occupied_stationary(t) : (occupant_at(t) == nullptr);\n}\n\n// FUN_0101d7f9",
+   "new": "    if (grid_.terrain_class_at(t) != movement::kTerrainWater) return false;\n    if (grid_.is_solid_object(t)) return false;\n    if (is_special_base_tile(t)) return false;\n    return stationary_only ? !occupied_stationary(t) : (occupant_at(t) == nullptr);\n}\n\n// FUN_0101d7f9"
+  },
+  {
+   "id": "placed_on_38_stays_dry",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "        if (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge()) {\n            unit_ptr->in_water = true;",
+   "new": "        if (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge() && cell.interactive_id != TILE_BRIDGE4B) {\n            unit_ptr->in_water = true;"
+  },
+  {
+   "id": "part_built_is_water_for_walkers",
+   "file": "src/ants_sim/movement_tables.cpp",
+   "old": "    return std::find(std::begin(data::kBridgeTiles), std::end(data::kBridgeTiles), tile_id) !=\n           std::end(data::kBridgeTiles);",
+   "new": "    return tile_id == data::kBridgeTiles[3];"
+  }
+ ]
+}
