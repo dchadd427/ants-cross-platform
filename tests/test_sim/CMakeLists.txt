@@ -216,6 +216,24 @@ target_link_libraries(test_file_bombs PRIVATE ants_test_paths)
 
 add_test(NAME test_file_bombs COMMAND test_file_bombs)
 
+# Bridges that a map file holds (layer-2 ids 34 .. 38, docs/GAME_REVERSE_ENGINEERING.md 5.37): the pieces 34 .. 37 are bridges with no timer, the id 38 is none; a swimmer's build and demolish on them
+add_executable(test_file_bridges
+    test_file_bridges.cpp
+)
+
+target_link_libraries(test_file_bridges PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_file_bridges PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_link_libraries(test_file_bridges PRIVATE ants_test_paths)
+
+add_test(NAME test_file_bridges COMMAND test_file_bridges)
+
 # Engine-fact probes of the bomb throw, the hit knockback, fire walls, defuse and power-up pick-up (docs/reverse_engineering/bomb_gates.md); no rule is changed by them
 add_executable(test_bomb_facts
     test_bomb_facts.cpp
