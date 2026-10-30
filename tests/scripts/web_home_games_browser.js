@@ -282,6 +282,40 @@ async function flows() {
             await ctx.close();
         }
 
+        // ---- 1f. the cards in short and narrow windows (docs/HOME_SCREEN.md): at 568 x 320 and at 195 x 422 (a 390 x 844 phone zoomed to 200 %: the same CSS pixels) both buttons of the empty card and of the question stand inside the card, the card inside the window and nothing scrolls
+        // inside it; at 390 x 844 and 1280 x 800 the cards are not compact (the shade's 16 px, the title's 26 px) --------------------------------------------------------------------------------------------
+        for (const [label, w, h, compact, narrow] of [['568 x 320', 568, 320, true, false], ['195 x 422 (200 % zoom)', 195, 422, true, true], ['390 x 844', 390, 844, false, false], ['1280 x 800', 1280, 800, false, false]]) {
+            const size = ['x', w, h];
+            const look = (page) => page.evaluate(() => {
+                const box = document.querySelector('.gconfirm'), shade = document.querySelector('.gshade'), r = box.getBoundingClientRect(), cs = getComputedStyle(shade);
+                const btns = Array.from(box.querySelectorAll('button')).map((b) => b.getBoundingClientRect());
+                return { inWindow: r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth, buttonsIn: btns.length >= 1 && btns.every((q) => q.top >= r.top && q.bottom <= r.bottom && q.left >= r.left && q.right <= r.right), noScroll: box.scrollHeight <= box.clientHeight + 1,
+                         pad: cs.paddingTop, title: getComputedStyle(box.querySelector('.gctitle')).fontSize, buttons: btns.length };
+            });
+            const verdict = (what, v) => {
+                check(label + ': ' + what + ' card inside the window, both buttons inside the card, nothing scrolls inside it', v.inWindow && v.buttonsIn && v.noScroll, JSON.stringify(v));
+                check(label + ': ' + what + ' card is ' + (compact ? 'compact (shade 8 px' + (narrow ? ', title 20 px' : '') + ')' : 'not compact (shade 16 px, title at least 22 px)'),
+                      compact ? v.pad === '8px' && (!narrow || v.title === '20px') : v.pad === '16px' && parseFloat(v.title) >= 22, JSON.stringify(v));
+            };
+            const none = await newPage(browser, emptySite, 'Maya', size); await lit(none);
+            await none.click('.quick.join'); await none.waitForSelector('.gconfirm .gcbtns'); await none.waitForTimeout(300);
+            const nv = await look(none);
+            check(label + ': the empty card has its two buttons', nv.buttons === 2, JSON.stringify(nv));
+            verdict('the empty', nv);
+            await none.context().close();
+            const rae = await newPage(browser, fake, 'Rae', size); await lit(rae);
+            await rae.click('.hchip.mine'); await rae.waitForSelector('#slots li');
+            const room = await rae.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
+            const tess = await newPage(browser, fake, 'Tess', size, '/?room=' + room);
+            await tess.click('#name-step-go');
+            await until('Tess is in', async () => (await rae.evaluate(() => document.getElementById('slots').textContent.indexOf('Tess') !== -1)), 10000);
+            await rae.click('.rhome'); await rae.click('.quick.join'); await rae.waitForSelector('.gconfirm .gcbtns'); await rae.waitForTimeout(300);
+            const cv = await look(rae);
+            check(label + ': the question has its two buttons', cv.buttons === 2, JSON.stringify(cv));
+            verdict('the question', cv);
+            await rae.context().close(); await tess.context().close();
+        }
+
         // ---- 2. the pictures: the scenes of the approved pictures, at their three sizes ----------------------------------------------------------------------------------------------------
         if (shotsDir) {
             fs.mkdirSync(shotsDir, { recursive: true });
