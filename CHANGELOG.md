@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - On a desktop window under 741 pixels high (1280 x 720 with scrollbars that take room) the Objects column was too tall for its 31 chips and cut off the name line: there the chips are 2 pixels shorter and the rows and tool buttons 1 pixel closer. Taller windows and phones look as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...660232fd)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...bfbcbda8)
 
 ## v0.12.151 - 2026-10-28 - Tests: the map submission checks no longer fail on a slow machine
 
