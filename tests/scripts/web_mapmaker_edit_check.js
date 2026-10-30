@@ -416,13 +416,14 @@ function fakeDom() {
 
 function toolsPage(file, opts) {
     opts = opts || {};
-    const doc = fakeDom(), el = (tag) => doc.createElement(tag), log = { dirty: [], edits: 0, minis: 0, refreshes: 0, rebased: 0 };
+    const doc = fakeDom(), el = (tag) => doc.createElement(tag), log = { dirty: [], edits: 0, minis: 0, refreshes: 0, rebased: 0, scrolls: [] };
     const autoBtn = el('button'), autoMob = el('button');
     autoBtn.appendChild(el('span')); autoBtn.appendChild(el('span'));
     autoMob.appendChild(el('span')); autoMob.appendChild(el('span'));
     const host = { tools: [], box: el('div'), title: el('h3'), swatches: el('div'), name: el('div'), tile: el('button'), hint: el('p'), brushes: [], fill: el('button'), autoEdges: [autoBtn, autoMob], undo: el('button'), redo: el('button'),
         stepper: el('div'), stepperLabel: el('span'), stepLess: el('button'), stepValue: el('output'), stepMore: el('button') };
     host.stepper.hidden = true;
+    host.name.scrollIntoView = (where) => { log.scrolls.push(where); };          // (the line asks the browser to show all of itself in the column that scrolls)
     host.tile.appendChild(el('i')); host.tile.appendChild(el('span'));
     const sheets = [], said = [];
     for (const t of Palette.TOOLS) { const b = el('button'); b.setAttribute('data-tool', t.id); b.disabled = true; host.tools.push(b); }
@@ -1483,6 +1484,7 @@ function caseO() {
         tap(p, 3, 3);
         check(Edit.tile(p.file(), 2, at(3, 3)) === 37 && (Edit.flags(p.file(), 1, at(3, 3)) & 1) === 0 && p.said.length === 0 && p.log.edits >= 1, 'a tap puts a bridge piece on dry ground: no solid bit, nothing refused, the page is told of the edit (' + p.log.edits + ')' + tag);
         equal(line(p), 'Bridge \u00b7 1 piece is on dry ground. A bridge needs water under it.', 'one piece on dry ground: the approved words, in the singular' + tag);
+        equal(p.log.scrolls, [{ block: 'nearest' }], 'the warning asks to be shown whole, in the column that scrolls, and only as far as it needs (nothing else is moved)' + tag);
         tap(p, 3, 4); tap(p, 11, 15);
         equal(line(p), 'Bridge \u00b7 3 pieces are on dry ground. A bridge needs water under it.', 'three pieces (one in the last row and the last column): the plural' + tag);
         // a drag puts a line of pieces; they are counted when the stroke ends
@@ -1490,12 +1492,14 @@ function caseO() {
         t.begin({ row: 8, column: 2 }); t.extend({ row: 8, column: 2 }, { row: 8, column: 6 }); t.end();
         equal([pieces(p.file()), line(p)], [8, dry(8)], 'a drag of five cells makes eight pieces on dry ground' + tag);
         // only the Bridge chip says it: another chip of the same palette says its own name, and the warning comes back with the chip
+        const asked = p.log.scrolls.length;
         chip(p, 302).click();
         equal(line(p), 'Rock 1', 'the Rock chip says Rock 1 though the map has bridges on dry ground' + tag);
         chip(p, 134).click();
         equal(line(p), 'Fire wall', 'and the Fire wall its name' + tag);
+        equal(p.log.scrolls.length, asked, 'a line with no warning asks for no scrolling' + tag);
         chip(p, 37).click();
-        equal(line(p), dry(8), 'the Bridge chip says the count again' + tag);
+        equal([line(p), p.log.scrolls.length], [dry(8), asked + 1], 'the Bridge chip says the count again, and asks to be shown whole again' + tag);
         // water under a piece takes it off the count (the Water chip of the Ground tool; the line is read again when Objects is chosen)
         p.button('ground').click(); p.host.swatches.children[4].click();
         check(p.tools.state().ground === WATER && line(p) === 'Water', 'the Ground tool paints Water and says Water' + tag);
@@ -1509,6 +1513,9 @@ function caseO() {
         p.button('ground').click(); tap(p, 11, 15);
         p.button('objects').click();
         equal([pieces(p.file()), line(p)], [8, 'Bridge'], 'water under every piece: the line is the chip\'s name only, and no piece was lost or refused on the way' + tag);
+        const settled = p.log.scrolls.length;
+        chip(p, 37).click();
+        equal(p.log.scrolls.length, settled, 'the chip\'s name alone (no warning) asks for no scrolling' + tag);
         check(p.said.length === 0, 'nothing was refused' + tag);
         // the eraser takes a piece away (Erase has no palette: the line is read when Objects is chosen again)
         p.button('erase').click(); tap(p, 11, 15); p.button('objects').click();
@@ -1549,6 +1556,18 @@ function caseO() {
         const w = toolsPage(g);
         w.button('objects').click(); chip(w, 37).click();
         equal(line(w), dry(COLUMNS), 'a whole row of pieces on gravel, row 0 too' + tag);
+    }
+    // a part-built piece (bridge1 to bridge3, tiles 34 to 36) on gravel is not counted: the hint is about the finished bridge that the chip places (tile 37)
+    for (const version of [8, 9]) {
+        const tag = ' (version ' + version + ')';
+        const f = open(version, ROWS, COLUMNS);
+        [[2, 2, 34], [2, 4, 35], [2, 6, 36]].forEach(([r, c, id]) => put(f, 2, r, c, id, 0, version === 8 ? (r | (c << 8)) : 0));
+        const q = toolsPage(f);
+        q.button('objects').click(); chip(q, 37).click();
+        equal([line(q), q.log.scrolls.length], ['Bridge', 0], 'three part-built pieces (tiles 34 to 36) on gravel are not counted: the hint is about the finished bridge that the chip places' + tag);
+        put(f, 2, 2, 8, 37, 0, version === 8 ? (2 | (8 << 8)) : 0);
+        chip(q, 37).click();
+        equal(line(q), dry(1), 'and one finished piece (tile 37) beside them is the only one counted' + tag);
     }
     // the warning is for the Objects tool with the Bridge chip: the other tools say what they said before
     const r = toolsPage(open(9, ROWS, COLUMNS));

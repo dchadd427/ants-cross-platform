@@ -169,6 +169,7 @@ def wait_for(condition, timeout=8.0, step=0.1):
 
 import web_mapmaker_browser_edges as _edges                  # noqa: E402  (Fix edges: its own file; the Play part reads the bytes with the same helpers)
 _edges.wait_for = wait_for
+import web_mapmaker_browser_bridge as bridge_part                  # noqa: E402  (the Bridge chip's cases of the panel part: its own file, this one is at the limit of lines)
 EDGES_JS, edges_bytes = _edges.EDGES_JS, _edges.edges_bytes
 
 
@@ -460,8 +461,6 @@ def run_sprites(tab, args, check):
     page.ctrl_key("z", "KeyZ", 90)
     time.sleep(0.3)
     check(page.ev("document.getElementById('undo-btn').disabled") is True, "and Undo takes it back")
-    page.tool("objects")
-    check(page.ev("document.querySelectorAll('#palette .swatch canvas').length") == 31 and page.ev("!!document.querySelector('#palette .swatch[data-tile=\"37\"] canvas')"), "the Objects palette has 31 chips and every one is the game's picture, the Bridge's too (no flat square)")
     # the Bigger tool: the picture of the object follows the pointer
     page.tool("bigger")
     bx = page.box("#map")
@@ -2278,6 +2277,7 @@ def run_part(part, tab, args, check, tiny, junk):
                 check(not found["wide"] and not found["tall"] and found["outside"] == [], "%d x %d, %s: the tools column has no scrollbar and every button is inside it (%s)" % (w, h, tool, found))
                 if h >= 800:
                     check(found["note"], "%d x %d, %s: the note under the palette shows" % (w, h, tool))
+            bridge_part.panel_case(page, tab, check, w, h, wait_for)
             if (w, h) == (1280, 720):
                 page.tool("ants")
                 page.shot(args.shots, "mapmaker-panel-1280x720-ants")

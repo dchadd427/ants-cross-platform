@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the map maker's Bridge chip for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): its place and word in the Objects palette (web/front/mapmaker_palette.js), the plain warning for pieces on dry ground in the line under the palette (web/front/mapmaker_tools.js) and the solid table (web/front/mapmaker_solid.js) against tests/scripts/web_mapmaker_edit_check.js (case O, and the palette in case F), web_mapmaker_objects_check.js and web_mapmaker_pickup_check.js; the two that start with browser_ only the real browser notices (the short window's rule in web/front/mapmaker.css: they run `web_mapmaker_browser.py --only panel`, so ANTS_WEB_URL must name a page served from this checkout); the chip's picture in the sheet is held by tests/scripts/test_map_atlas.py (tests/data/map_atlas_mutants.json) and web_mapmaker_sprites_check.js. Run from the checkout: tools/mutate.py tests/data/mapmaker_bridge_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+  "note": "Mutants of the map maker's Bridge chip for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): its place and word in the Objects palette (web/front/mapmaker_palette.js), the plain warning for pieces on dry ground in the line under the palette (web/front/mapmaker_tools.js) and the solid table (web/front/mapmaker_solid.js) against tests/scripts/web_mapmaker_edit_check.js (case O, and the palette in case F), web_mapmaker_objects_check.js and web_mapmaker_pickup_check.js; the three that start with browser_ only the real browser notices (the short window's rule in web/front/mapmaker.css, and the column that scrolls to show the whole warning: they run `web_mapmaker_browser.py --only panel`, so ANTS_WEB_URL must name a page served from this checkout); the chip's picture in the sheet is held by tests/scripts/test_map_atlas.py (tests/data/map_atlas_mutants.json) and web_mapmaker_sprites_check.js. Run from the checkout: tools/mutate.py tests/data/mapmaker_bridge_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
   "mutants": [
     {
       "id": "chip_before_the_fire_wall",
@@ -144,8 +144,8 @@
     {
       "id": "warning_for_the_wrong_tile",
       "file": "web/front/mapmaker_tools.js",
-      "old": "var BRIDGE = 37;",
-      "new": "var BRIDGE = 36;",
+      "old": "var BRIDGE = 37, warned = false;",
+      "new": "var BRIDGE = 36, warned = false;",
       "test": "node tests/scripts/web_mapmaker_edit_check.js"
     },
     {
@@ -177,6 +177,48 @@
       "test": "node tests/scripts/web_mapmaker_edit_check.js"
     },
     {
+      "id": "warning_not_shown_whole",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (warned && host.name && host.name.scrollIntoView) host.name.scrollIntoView({ block: 'nearest' });",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_scrolled_to_the_top",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "host.name.scrollIntoView({ block: 'nearest' });",
+      "new": "host.name.scrollIntoView({ block: 'start' });",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "every_line_scrolled_into_view",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (warned && host.name && host.name.scrollIntoView)",
+      "new": "if (host.name && host.name.scrollIntoView)",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_flag_never_cleared",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "            warned = false;\n            if (state.tool === 'ground' || state.tool === 'objects') {",
+      "new": "            if (state.tool === 'ground' || state.tool === 'objects') {",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_never_asks_to_be_shown",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "            warned = dry > 0;\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
+      "id": "warning_counts_part_built_pieces",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "f.tile2(r, c) === BRIDGE && Tiles.kindOf(",
+      "new": "f.tile2(r, c) >= 34 && f.tile2(r, c) <= BRIDGE && Tiles.kindOf(",
+      "test": "node tests/scripts/web_mapmaker_edit_check.js"
+    },
+    {
       "id": "browser_short_window_chips_as_tall_as_before",
       "file": "web/front/mapmaker.css",
       "old": ".swatches.objects { row-gap: 2px; } .swatches.objects .swatch { min-height: 22px; }",
@@ -187,6 +229,13 @@
       "id": "browser_short_window_rule_gone",
       "file": "web/front/mapmaker.css",
       "old": "@media (min-width: 601px) and (min-height: 451px) and (max-height: 740px) { .toolbtns { gap: 3px; } .swatches.objects { row-gap: 2px; } .swatches.objects .swatch { min-height: 22px; } }",
+      "new": "",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only panel"
+    },
+    {
+      "id": "browser_warning_not_shown_whole",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (warned && host.name && host.name.scrollIntoView) host.name.scrollIntoView({ block: 'nearest' });",
       "new": "",
       "test": "python3 tests/scripts/web_mapmaker_browser.py --web $ANTS_WEB_URL --only panel"
     }
