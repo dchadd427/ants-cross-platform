@@ -24,6 +24,7 @@ import threading
 import time
 import unittest
 import urllib.parse
+from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -223,6 +224,13 @@ class TheLimitsOfStart(LoginTest):
         self.assertEqual(v.start().status, 302)                                  # the pace gives one back
         self.assertEqual(v.start().status, 429)
 
+    def test_a_link_of_another_site_is_turned_away_before_the_allowance_is_asked(self):
+        v = self.visitor()
+        for site in ("cross-site", "same-site", "cross-site", "same-site", "cross-site", "cross-site"):
+            self.assert_page(v.start(site=site), 403, "Log in from the front page")
+        self.assertEqual(self.rig.call(lambda: len(self.rig.hub.sessions.rate_login.buckets)), 0)
+        self.assertEqual([v.start(site="same-origin").status for _ in range(4)], [302, 302, 302, 429])      # (the visitor's own three tries are all there)
+
     def test_the_address_is_the_one_nginx_names_not_the_one_the_visitor_writes_in_a_header(self):
         v = self.visitor()
         for _ in range(3):
@@ -399,6 +407,18 @@ class TheCallback(LoginTest):
         self.assertEqual(w.callback(CALLBACK + "?code=%s&state=%s" % ("a" * 512, w.state)).status, 400)                  # (the longest that is allowed: Discord's page for it)
         self.assertEqual(len(self.token_requests()), 1)
 
+    def test_a_cookie_that_is_the_state_but_for_one_character_is_refused_wherever_the_character_is(self):
+        for at in (0, 5, 6, 7, 15, 30, 31):                                         # (a state that is compared on its first few characters only would let a forged cookie through)
+            w = self.visitor()
+            w.start()
+            state = w.state
+            forged = state[:at] + ("0" if state[at] != "0" else "1") + state[at + 1:]
+            self.assertEqual(len(forged), 32)
+            w.jar.cookies["__Host-ants_oauth"] = forged
+            out = w.callback(CALLBACK + "?code=abcdef&state=" + state)
+            self.assert_page(out, 400, "That login has run out")
+            self.assertEqual((self.token_requests(), self.rows()), ([], []), at)
+
     def test_a_cookie_of_the_state_that_came_twice_is_nobodys(self):
         v = self.visitor()
         r = v.start()
@@ -513,6 +533,29 @@ class TheCookie(LoginTest):
             for period in (1, 2, 4, 8, 16):
                 self.assertNotEqual(value, value[:period] * (32 // period), value)
 
+    def test_the_value_is_what_the_system_gave_as_128_random_bits_and_not_a_function_of_the_time(self):
+        with mock.patch.object(loginmod.secrets, "token_hex", side_effect=lambda n: ("%02x" % n) * n) as made:
+            v = self.visitor()
+            self.assertEqual(v.login().status, 302)
+        self.assertEqual(v.session(), "10" * 16)                                     # (the one that the system's source of randomness made, 16 bytes of it, and nothing else)
+        self.assertIn((16,), {call.args for call in made.call_args_list})
+        self.assertEqual([r[0] for r in self.rows()], [sha("10" * 16)])
+        frozen = 1_800_000_000.0
+        self.rig.call(setattr, self.rig.store, "clock", lambda: frozen)
+        values = []
+        with mock.patch("time.time", return_value=frozen):
+            for _ in range(12):                                                      # (twelve logins in one instant: all different, none a digest of the time)
+                w = self.visitor()
+                self.assertEqual(w.login().status, 302)
+                values.append(w.session())
+        self.assertEqual(len(set(values)), 12)
+        for value in values:
+            for derived in (hashlib.sha256(str(frozen).encode()).hexdigest()[:32], hashlib.md5(str(frozen).encode()).hexdigest(), hashlib.sha256(str(int(frozen * 1000)).encode()).hexdigest()[:32],
+                            "%032x" % int(frozen * 1000), "%032x" % int(frozen)):
+                self.assertNotEqual(value, derived)
+            self.assertGreaterEqual(len(set(value)), 7)
+        self.assertEqual(len(set("".join(values))), 16)
+
     def test_a_value_that_is_not_the_shape_of_ours_is_not_even_looked_up(self):
         good = self.member().session()
         seen = []
@@ -587,6 +630,9 @@ class TheLimitsAreWhatTheDocsSay(unittest.TestCase):
             row = next(line for line in f if line.startswith("| the login's pages |"))
         d = limitmod.Limits()
         self.assertEqual((d.sessions_per_account, d.sessions_total, d.discord_total_seconds, d.session_seconds), (10, 100000, 10.0, 30 * 86400.0))
+        self.assertEqual(d.discord_body_max, 32 * 1024)                              # (what a call may read: six of them in flight must stay far inside the container's memory)
+        self.assertLessEqual(d.login_inflight * d.discord_body_max * 8, 8 * 1024 * 1024)
+        self.assertEqual(d.deleted_announce_max, 100)
         self.assertIn("10 seconds for Discord's two calls in all", row)
         self.assertIn("10 logins kept for an account and 100,000 in all (the oldest go)", row)
 
@@ -834,6 +880,131 @@ class TheDatabaseThatCannotBeUsed(LoginTest):
         self.assertEqual(hc.http_get(self.rig.port, "/hub/healthz")[0], 200)
 
 
+class TheForgetOfAHugeBacklog(LoginTest):
+    """The review's finding: a forget answered every socket with one `del` frame for each line, in one loop on the hub's one thread: 20,000 lines for 100 readers held the hub for seven seconds."""
+    READERS = 60
+    LINES = 20000
+
+    def bulk(self, account, name, count):
+        def insert():
+            store = self.rig.store
+            with store.transaction():
+                store.db.executemany("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, 0)", [(int(store.clock()), account, name, "bulk line %d" % n) for n in range(count)])
+        self.rig.call(insert)
+
+    def test_a_forget_of_twenty_thousand_lines_does_not_hold_the_other_sockets_and_each_gets_the_newest_hundred_frames(self):
+        v = self.member()
+        self.bulk(OLD, "maple.leaf", self.LINES)
+        ids = sorted(row[0] for row in self.rows("lines"))
+        readers = [self.socket() for _ in range(self.READERS)]
+        done = {}
+
+        def forget():
+            started = time.monotonic()
+            done["status"] = v.call("POST", "/hub/forget").status
+            done["took"] = time.monotonic() - started
+
+        thread = threading.Thread(target=forget)
+        thread.start()
+        worst = 0.0
+        pinger = readers[0]
+        while thread.is_alive():
+            sent = time.monotonic()
+            pinger.send(hc.frame(1, b'{"t":"ping"}'))
+            while pinger.recv_json(20)["t"] != "online":
+                pass
+            worst = max(worst, time.monotonic() - sent)
+            time.sleep(0.005)
+        thread.join()
+        self.assertEqual(done["status"], 200)
+        self.assertLess(worst, 1.5, "a ping on another socket waited %.2f seconds while the account was forgotten" % worst)
+        self.assertLess(done["took"], 3.0)
+        heard = [m["id"] for m in readers[1].drain(0.5) if m["t"] == "del"]
+        self.assertEqual(heard, ids[-100:])                                           # (the newest hundred, which are the only ones that a screen of a hundred lines can hold)
+        self.assertEqual(self.rows("lines"), [])
+        self.assertEqual(self.rig.call(lambda: self.rig.store.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0]), 0)
+
+    def test_a_line_that_a_moderator_deleted_from_the_command_line_and_that_was_not_announced_yet_goes_off_the_screens_with_the_forget(self):
+        self.rig.__exit__(None, None, None)
+        self.rig = hub_rig.Rig(discord=self.fake, deletions_seconds=1000.0, sockets_per_address=100)         # (the hub looks for deletions of the command line every 1000 seconds)
+        self.rig.__enter__()
+        v = self.member()
+        reader = self.socket()
+        mine = self.socket(v)
+        mine.say("an unlucky line")
+        line = next(m for m in reader.drain(0.5) if m["t"] == "line")
+        self.rig.call(lambda: self.rig.store.delete_line(line["id"], "command line"))                          # (what `python -m hub.admin del` does: the hub is not told)
+        self.assertEqual(v.call("POST", "/hub/forget").status, 200)
+        self.assertIn({"t": "del", "id": line["id"]}, reader.drain(0.6))
+        self.assertEqual(self.rows("lines"), [])
+
+
+class TheLogFileIsCutWhenSomethingIsForgotten(LoginTest):
+    """What forget and logout delete is not left in the log file of the database (hub.db-wal) until the next hourly cut: the legal page says that it is deleted."""
+    limits = dict(tick_seconds=0.05, checkpoint_retry_seconds=0.2, sessions_per_account=2)
+
+    def files(self):
+        out = b""
+        for suffix in ("-wal", ""):
+            try:
+                with open(self.rig.db + suffix, "rb") as f:
+                    out += f.read()
+            except OSError:
+                pass
+        return out
+
+    def setUp(self):
+        super().setUp()
+        end = time.monotonic() + 8.0                                                  # (the hub's own first cut may still be on its way: the premise of each test is a file that is cut and a hub that asks for nothing)
+        while time.monotonic() < end and (self.rig.call(lambda: self.rig.store.unsettled) or os.path.getsize(self.rig.db + "-wal") > 0):
+            time.sleep(0.05)
+        time.sleep(0.5)
+        self.assertFalse(self.rig.call(lambda: self.rig.store.unsettled))
+
+    def wait_until_gone(self, needles, seconds=6.0):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and any(n in self.files() for n in needles):
+            time.sleep(0.05)
+        return [n for n in needles if n in self.files()]
+
+    def test_a_forget_leaves_neither_the_lines_nor_the_name_nor_the_hash_of_a_login_in_either_file(self):
+        v = self.member()
+        key = sha(v.session()).encode()
+        c = self.socket(v)
+        c.say("a line with canary-wal-3f5a9c in it")
+        time.sleep(0.3)
+        needles = (b"canary-wal-3f5a9c", b"maple.leaf", key)
+        self.assertEqual([n for n in needles if n not in self.files()], [], "the premise: before the forget they are in the files")
+        self.assertEqual(v.call("POST", "/hub/forget").status, 200)
+        for needle in needles:
+            self.assertNotIn(needle, self.files(), needle)                           # (at once: the answer of the forget is the proof that it was cut)
+
+    def test_a_logout_leaves_no_hash_of_the_login_in_either_file_within_seconds(self):
+        v = self.member()
+        key = sha(v.session()).encode()
+        self.assertIn(key, self.files())
+        self.assertEqual(v.call("POST", "/hub/logout").status, 200)
+        self.assertEqual(self.wait_until_gone([key]), [])
+
+    def test_the_logins_that_went_over_the_cap_of_an_account_are_gone_from_the_files_within_seconds(self):
+        v = self.visitor()
+        v.login()
+        first = sha(v.session()).encode()
+        self.assertIn(first, self.files())
+        for _ in range(2):
+            self.visitor().login()
+        self.assertEqual(len(self.rows()), 2)
+        self.assertEqual(self.wait_until_gone([first]), [])
+
+    def test_a_login_that_replaces_the_old_one_of_a_browser_leaves_no_hash_of_the_old_one(self):
+        v = self.visitor()
+        v.login()
+        first = sha(v.session()).encode()
+        self.assertIn(first, self.files())
+        v.login()
+        self.assertEqual(self.wait_until_gone([first]), [])
+
+
 class TheLogout(LoginTest):
     def test_it_ends_this_login_and_the_sockets_of_it_and_clears_the_cookie(self):
         v, w = self.member(), self.visitor()
@@ -1049,6 +1220,17 @@ class TheCallbackWhenDiscordGoesWrong(LoginTest):
             self.assert_calm(v, r, str(bad))
         self.assertEqual(self.rows(), [])
 
+    def test_the_names_that_could_pass_for_the_hub_and_their_lookalikes_are_refused(self):
+        for name in ("admin.", "adm1n", "system_", "4dmin", "a.d.m.i.n", "ants2", "m0d", "mod1", "h.u.b", "everyone_", "ants.bot", "4nts.b0t", "_here", "s3rver", "st4ff", "moderat0r"):
+            self.fake.me_mode = "merge:" + json.dumps({"username": name})
+            v, r, _ = self.go()
+            self.assert_page(r, 400, "This Discord name cannot be used here")
+        self.assertEqual(self.rows(), [])
+        for name in ("moderate", "hubert", "antsy", "administrate", "herd", "maple.leaf", "m0dern", "servers", "stuff", "1337"):
+            self.fake.me_mode = "merge:" + json.dumps({"username": name})
+            self.assertEqual(self.visitor().login().status, 302, name)
+        self.assertEqual(len(self.rows()), 10)
+
     def test_names_that_are_names_pass(self):
         for name in ("ab", "x" * 32, "a.b_c9", "9", "_.", "maple.leaf", "0123456789"):
             if len(name) < 2:
@@ -1222,6 +1404,66 @@ class TheDiscordClient(unittest.TestCase):
         self.assertEqual(e.exception.kind, "down")
         self.assertEqual(served, [])                                               # (it hung up before it sent the secret)
 
+    def make_certificates(self, folder, names):
+        """A certificate authority and, signed by it, one certificate for each (file name, subjectAltName) of `names`. Returns the authority's file."""
+        def run(*args):
+            subprocess.run(["openssl"] + list(args), check=True, capture_output=True, cwd=folder)
+        run("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "ca.pem", "-days", "2", "-subj", "/CN=test-authority", "-addext", "keyUsage=critical,keyCertSign,cRLSign", "-addext", "basicConstraints=critical,CA:TRUE")
+        for name, alt in names:
+            run("req", "-newkey", "rsa:2048", "-nodes", "-keyout", name + ".key", "-out", name + ".csr", "-subj", "/CN=" + name)
+            with open(os.path.join(folder, name + ".cnf"), "w") as f:
+                f.write("subjectAltName=%s\nbasicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\n" % alt)
+            run("x509", "-req", "-in", name + ".csr", "-CA", "ca.pem", "-CAkey", "ca.key", "-CAcreateserial", "-out", name + ".pem", "-days", "2", "-extfile", name + ".cnf")
+        return os.path.join(folder, "ca.pem")
+
+    def tls_server(self, folder, name):
+        import socketserver
+        import ssl
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(os.path.join(folder, name + ".pem"), os.path.join(folder, name + ".key"))
+        served = []
+
+        class Handler(socketserver.BaseRequestHandler):
+            def handle(self):
+                try:
+                    served.append(self.request.recv(100))
+                except OSError:
+                    pass
+
+        server = socketserver.TCPServer(("127.0.0.1", 0), Handler)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server.server_address[1], served
+
+    def test_a_certificate_of_a_trusted_authority_for_another_name_is_refused_and_one_for_this_address_is_not(self):
+        import shutil
+        if not shutil.which("openssl"):
+            self.skipTest("no openssl program here")
+        folder = tempfile.mkdtemp(prefix="hub-tls-")
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        try:
+            ca = self.make_certificates(folder, (("other", "DNS:other.example"), ("right", "IP:127.0.0.1")))
+        except subprocess.CalledProcessError as e:
+            self.skipTest("this openssl cannot make the test certificates: %s" % e.stderr[-200:])
+        with mock.patch.dict(os.environ, {"SSL_CERT_FILE": ca}):                    # (the authority is trusted the way that the system's are: the client's own default context)
+            port, served = self.tls_server(folder, "right")
+            client = self.client(test=False)
+            client.api = "https://127.0.0.1:%d/api/v10" % port
+            with self.assertRaises(discordmod.DiscordError):
+                self.run_call(client)
+            if len(served) != 1 and sys.platform != "linux":
+                self.skipTest("the certificates of this machine's openssl are not accepted by this Python's strict checks, so the test would prove nothing")
+            self.assertEqual(len(served), 1, "the control: a certificate for this address is accepted, and the request goes out")
+            port, served = self.tls_server(folder, "other")
+            client = self.client(test=False)
+            client.api = "https://127.0.0.1:%d/api/v10" % port
+            with self.assertRaises(discordmod.DiscordError) as e:
+                self.run_call(client)
+            self.assertEqual(e.exception.kind, "down")
+            self.assertEqual(served, [])                                             # (a certificate that the authority signed, for another name: it hung up before it sent the secret)
+
 
 # ===================================================================================================================================================
 class TheLimitTable(unittest.TestCase):
@@ -1390,6 +1632,65 @@ class TheProcess(unittest.TestCase):
         self.assertIn(" warning what=a_fake_discord_is_on", text)
         for line in text.splitlines():
             self.assertRegex(line, r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ [a-z_]+( [a-z_]+=[A-Za-z0-9_.:/-]*)*$", line)
+
+
+class TheOldPythonIsRefused(unittest.TestCase):
+    def run_as(self, version):
+        code = "import sys, runpy; sys.version_info = %r; runpy.run_module('hub', run_name='__main__')" % (version,)
+        return subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True, timeout=30, env=dict(os.environ, ANTS_HUB_PORT="0", PYTHONDONTWRITEBYTECODE="1"))
+
+    def test_python_3_11_is_refused_with_a_clear_message_and_before_anything_starts(self):
+        r = self.run_as((3, 11, 9, "final", 0))
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.stdout, "")
+        self.assertIn("Python 3.12 or newer is needed (this is 3.11)", r.stderr)
+        self.assertNotIn("start port", r.stderr)
+
+    def test_the_documents_say_it(self):
+        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
+            self.assertIn("Python 3.12 or newer", f.read())
+        with open(os.path.join(REPO, "Dockerfile.hub"), encoding="utf-8") as f:
+            self.assertIn("FROM python:3.12", f.read())
+
+
+class TheDocumentsSayWhatAnOperatorNeedsToKnow(unittest.TestCase):
+    def setUp(self):
+        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
+            self.text = f.read()
+        with open(os.path.join(REPO, "Dockerfile.hub"), encoding="utf-8") as f:
+            self.image = f.read()
+
+    def paragraph(self, start):
+        i = self.text.index(start)
+        return self.text[i:self.text.index("\n", i)]
+
+    def test_the_checklist_starts_with_the_trusted_proxies_and_ends_with_a_fresh_account(self):
+        checklist = self.paragraph("**What the site's operator does once.**")
+        self.assertLess(checklist.index("(0)"), checklist.index("(1)"))
+        before = checklist[:checklist.index("(1)")]
+        for words in ("Before the login goes live", "docker/trusted-proxies.conf", "must name"):
+            self.assertIn(words, before)
+        self.assertIn("Too many tries", checklist)
+        self.assertIn("fresh Discord account", checklist)
+        self.assertIn("prompt=none", checklist)
+        self.assertIn("Login cancelled", checklist)
+
+    def test_a_rollback_is_said_to_need_the_volume_of_before(self):
+        self.assertIn("schema 3", self.paragraph("`/data/hub.db` (SQLite, WAL"))
+        self.assertIn("does not start", self.paragraph("`/data/hub.db` (SQLite, WAL"))
+        self.assertIn("schema 3", self.image)
+
+    def test_the_one_exception_to_no_access_log_is_said(self):
+        nginx = self.paragraph("The pages of [the login](#login) are exact locations")
+        self.assertIn("The one exception to \"no access log\"", nginx)
+        self.assertIn("414", nginx)
+        self.assertIn("query included", nginx)
+
+    def test_forget_and_logout_are_said_to_cut_the_log_file(self):
+        data = self.paragraph("`/data/hub.db` (SQLite, WAL")
+        self.assertIn("Forget and logout leave nothing in the log file", data)
+        self.assertIn("within 10 seconds", data)
+        self.assertIn("the newest 100", self.paragraph("| `POST /hub/forget`"))
 
 
 class TheSettings(unittest.TestCase):

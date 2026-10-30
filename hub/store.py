@@ -20,7 +20,7 @@ class Store:
         self.busy_ms = busy_ms                      # how long a write waits for another process's write (the hub uses a short time: its one thread must not wait for seconds)
         self.clock = clock
         self.retention = retention_days * 86400
-        self.unsettled = False                      # True while the log file could not be cut because a reader held it
+        self.unsettled = False                      # True while the log file is to be cut: a reader held it, or a login ended (the hub's clock cuts it at its next look)
         new = not os.path.exists(path)
         self.db = sqlite3.connect(path, timeout=5.0, isolation_level=None)
         try:
@@ -169,8 +169,10 @@ class Store:
         now = int(self.clock())
         with self.transaction():
             self.db.execute("INSERT INTO sessions (id, account, name, created, expires) VALUES (?, ?, ?, ?, ?)", (key, account, name, now, now + int(seconds)))
-            self.db.execute("DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)", (account, account, keep))
-            self.db.execute("DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,))
+            over = self.db.execute("DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)", (account, account, keep)).rowcount
+            over += self.db.execute("DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,)).rowcount
+        if over:
+            self.unsettled = True                   # (the logins that went over the caps are in the log file until it is cut)
 
     def session(self, key):
         """(account, name, expires) of the login whose key this is, or None when there is none or it has run out."""
@@ -178,18 +180,28 @@ class Store:
         return tuple(row) if row else None
 
     def delete_session(self, key):
+        """End one login. What was deleted is still in the log file until it is cut: `unsettled` asks the hub's clock to cut it at its next look (within ten seconds, and many logins ending
+        at once cost one cut), so that the hash of the login does not stay in a file for the hour that is the pause between two purges."""
         with self.transaction():
-            return self.db.execute("DELETE FROM sessions WHERE id = ?", (key,)).rowcount == 1
+            gone = self.db.execute("DELETE FROM sessions WHERE id = ?", (key,)).rowcount == 1
+        self.unsettled = True
+        return gone
 
     def forget(self, account):
         """Everything that ties this account's id or name to the site, except what keeps the others safe: all its logins and all its chat lines go, and the name is wiped from its mute
-        and ban (they stay, by id: forgetting must not lift one). Returns the ids of the lines that went, so that the screens can drop them."""
+        and ban (they stay, by id: forgetting must not lift one). Returns the ids of the lines that went (those that a moderator had deleted from the command line too, if the screens were not told
+        yet), so that the screens can drop them. The log file is cut at once, so that neither the lines, nor the name, nor the hashes of the logins are left in it (a reader that holds the file
+        up leaves them there until a later look: `unsettled`)."""
         with self.transaction():
-            ids = [r[0] for r in self.db.execute("SELECT id FROM lines WHERE account = ? AND deleted = 0", (account,))]
+            ids = [r[0] for r in self.db.execute("SELECT id FROM lines WHERE account = ?", (account,))]
             self.db.execute("DELETE FROM sessions WHERE account = ?", (account,))
             self.db.execute("DELETE FROM lines WHERE account = ?", (account,))
             self.db.execute("UPDATE mutes SET name = '' WHERE account = ?", (account,))
             self.db.execute("UPDATE bans SET name = '' WHERE account = ?", (account,))
+        try:
+            self.checkpoint()
+        except sqlite3.OperationalError:            # (the forgetting is done and is told: the cut is tried again by the hub's clock)
+            self.unsettled = True
         return ids
 
     # ---- mutes and bans -------------------------------------------------------------------------------------------------------------------

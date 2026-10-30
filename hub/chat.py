@@ -169,19 +169,20 @@ class Chat:
         return next(iter(here)) if here else self.store.account_of_name(name)
 
     def drop_lines(self, ids):
-        """Take lines off every screen at once (the lines of an account that forgot itself: they are deleted from the database by the store, which does not mark them for sync_deletions)."""
+        """Take lines off every screen at once (the lines of an account that forgot itself, the lines that were deleted from the command line). The number of frames is bounded, whatever the number
+        of lines: a page keeps 100 lines at most and the id of a line only ever grows, so the lines that can be on a screen are the newest 100 of the deleted ones, and the older ones need no frame.
+        (One frame for each of 300,000 lines, to each of 500 sockets, is a loop that holds the hub's one thread for minutes.)"""
         gone = set(ids)
         for line in [l for l in self.ring if l.id in gone]:
             self.ring.remove(line)
-        for line_id in ids:
+        for line_id in sorted(gone)[-self.limits.deleted_announce_max:]:
             self.broadcast({"t": "del", "id": line_id})
 
     # ---- the clock's work -----------------------------------------------------------------------------------------------------------------
 
     def sync_deletions(self):
-        """Tell everybody about the lines that were deleted since the last look (by a /del here, or by the command line in another process)."""
-        for seq, line_id in self.store.deletions_since(self.deleted_seq):
-            self.deleted_seq = seq
-            for line in [l for l in self.ring if l.id == line_id]:
-                self.ring.remove(line)
-            self.broadcast({"t": "del", "id": line_id})
+        """Tell everybody about the lines that were deleted since the last look (by a /del here, or by the command line in another process): a bounded number of frames, see drop_lines."""
+        rows = self.store.deletions_since(self.deleted_seq)
+        if rows:
+            self.deleted_seq = rows[-1][0]
+            self.drop_lines([line_id for _, line_id in rows])

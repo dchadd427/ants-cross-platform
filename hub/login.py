@@ -30,6 +30,20 @@ CODE = re.compile(r"[\x21-\x7e]{1,512}\Z")
 NEXT = {"home": "/", "room": "/#room"}      # where the visitor goes back to: a fixed list, chosen by a word
 DISCORD_EPOCH_MS = 1420070400000            # the time that the first bits of a Discord id count from
 RESERVED = frozenset(("mod", "admin", "moderator", "administrator", "system", "server", "staff", "ants", "ants.bot", "hub", "everyone", "here"))      # (names that could pass for the hub's own voice)
+LOOKALIKE = str.maketrans("013457", "oieast")           # (0 o, 1 i, 3 e, 4 a, 5 s, 7 t: a digit for the letter that it looks like)
+
+
+def squash(name):
+    """What a name looks like at a glance: no dots or underscores, no digits at its end, a digit for the letter that it looks like read as that letter ("adm1n", "admin.", "system_", "4dmin2"
+    are all "admin" and "system" to a reader of the log)."""
+    return re.sub(r"[._]", "", name.lower()).rstrip("0123456789").translate(LOOKALIKE)
+
+
+RESERVED_SQUASHED = frozenset(squash(n) for n in RESERVED)
+
+
+def reserved(name):
+    return name in RESERVED or squash(name) in RESERVED_SQUASHED
 MAX_QUERY = 1500
 
 PAGES = {                                   # kind -> (status, heading, line)
@@ -166,11 +180,11 @@ class DiscordLogin(session.Sessions):
     async def start(self, request, address):
         if request.method != "GET":
             return self.fail(405, "method", {"Allow": "GET"})
+        site = request.headers.get("sec-fetch-site")
+        if site is not None and site not in ("same-origin", "none"):        # (a link of another site, or of a sibling subdomain, cannot start a login: only the front page's button, or the address typed;
+            return self.page("site")                                         # and it is turned away before the limit is asked, so that a hostile page cannot spend a visitor's tries)
         if not self.rate_login.take(address, self.hub.clock()):
             return self.page("busy")
-        site = request.headers.get("sec-fetch-site")
-        if site is not None and site not in ("same-origin", "none"):        # (a link of another site, or of a sibling subdomain, cannot start a login: only the front page's button, or the address typed)
-            return self.page("site")
         wanted = params_of(request.split()[1]).get("next")
         back = wanted if wanted in NEXT else "home"                          # (a word of the list, else Home: the address is never made from what was sent)
         wall = self.store.clock()
@@ -220,7 +234,7 @@ class DiscordLogin(session.Sessions):
         except discordmod.DiscordError as e:
             self.log.event("login_failed", kind=e.kind, status=e.status, tag=self.log.tag(address))
             return self.page("rejected" if e.kind == "rejected" else "unavailable", back, gone)
-        if not config.ACCOUNT_ID.match(account) or not text.valid_name(name) or name in RESERVED:
+        if not config.ACCOUNT_ID.match(account) or not text.valid_name(name) or reserved(name):
             self.log.event("login_failed", kind="name", tag=self.log.tag(address))
             return self.page("name", back, gone)
         value = secrets.token_hex(16)

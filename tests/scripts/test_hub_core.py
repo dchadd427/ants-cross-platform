@@ -517,6 +517,42 @@ class TheModerators(WorldTest):
         self.w.chat.sync_deletions()
         self.assertEqual(self.reader.kinds("del"), [{"t": "del", "id": 1}, {"t": "del", "id": 2}])
 
+    def test_a_run_of_deletions_from_the_command_line_is_the_newest_hundred_frames_and_every_line_leaves_the_ring(self):
+        other = storemod.Store(self.w.db, clock=self.w.wall)
+        self.addCleanup(other.close)
+        for n in range(30):
+            self.w.say(self.alice, "line %d" % n)
+            self.w.clock.now += 3.0
+        ring_ids = [l.id for l in self.w.chat.ring]
+        with other.transaction():
+            other.db.executemany("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, 0)", [(int(self.w.wall()), "9", "bulk", "bulk %d" % n) for n in range(450)])
+        ids = [row[0] for row in other.db.execute("SELECT id FROM lines ORDER BY id")]
+        for line_id in ids[:420]:                                                    # (a script that deletes four hundred lines with the command line within one look of the hub)
+            other.delete_line(line_id, "command line")
+        self.w.chat.sync_deletions()
+        self.assertEqual([m["id"] for m in self.reader.kinds("del")], ids[:420][-100:])
+        self.assertEqual(len(self.bob.kinds("del")), 100)
+        self.assertEqual([l.id for l in self.w.chat.ring if l.id in ids[:420]], [])
+        self.assertEqual(self.w.chat.deleted_seq, other.last_deletion())
+        self.assertEqual(self.w.chat.sync_deletions(), None)
+        self.assertEqual(len(self.reader.kinds("del")), 100)                         # (and the next look finds nothing new)
+        self.assertGreater(len(ring_ids), 0)
+
+    def test_dropping_lines_announces_the_newest_hundred_of_any_number_and_clears_the_ring(self):
+        for n in range(5):
+            self.w.say(self.alice, "line %d" % n)
+            self.w.clock.now += 3.0
+        ring_ids = [l.id for l in self.w.chat.ring]
+        self.assertEqual(len(ring_ids), 5)
+        self.w.chat.drop_lines(list(range(1000, 301000)) + ring_ids)
+        self.assertEqual([m["id"] for m in self.reader.kinds("del")], list(range(300900, 301000)))
+        self.assertEqual(list(self.w.chat.ring), [])                                 # (the ring is cleared of all of them, announced or not)
+        self.w.chat.drop_lines([])
+        self.assertEqual(len(self.reader.kinds("del")), 100)
+        small = self.w.join(None)
+        self.w.chat.drop_lines({7, 3, 5})
+        self.assertEqual([m["id"] for m in small.kinds("del")], [3, 5, 7])
+
     def test_a_blank_run_in_a_command_is_one_blank(self):
         self.w.say(self.alice, "hi")
         self.w.say(self.mod, "/mute   alice    5")
@@ -952,6 +988,38 @@ class TheStore(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "file modes")
     def test_the_file_is_private(self):
         self.assertEqual(os.stat(self.db).st_mode & 0o077, 0)
+
+    def test_a_forget_is_done_and_told_when_the_cut_of_the_log_file_fails_and_the_cut_is_asked_for_again(self):
+        self.store.add_line("7", "gone", "a line", False)
+        self.store.add_session("a" * 64, "7", "gone", 100, 10, 100)
+
+        def fail(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+
+        self.store.checkpoint = fail
+        ids = self.store.forget("7")
+        self.assertEqual(ids, [1])
+        self.assertIsNone(self.store.session("a" * 64))
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0], 0)
+        self.assertTrue(self.store.unsettled)                                        # (the hub's clock cuts the file at its next look)
+
+    def test_a_forget_gives_back_the_ids_of_the_lines_that_a_moderator_deleted_and_the_screens_were_not_told_of(self):
+        a = self.store.add_line("7", "gone", "one", False)
+        b = self.store.add_line("7", "gone", "two", False)
+        self.store.delete_line(a.id, "command line")
+        self.assertEqual(sorted(self.store.forget("7")), [a.id, b.id])
+
+    def test_a_login_that_ends_asks_for_the_cut_of_the_log_file_and_a_cut_that_works_says_it_is_done(self):
+        self.store.add_session("b" * 64, "7", "gone", 100, 10, 100)
+        self.store.checkpoint()
+        self.assertFalse(self.store.unsettled)
+        self.assertTrue(self.store.delete_session("b" * 64))
+        self.assertTrue(self.store.unsettled)
+        self.store.checkpoint()
+        self.assertFalse(self.store.unsettled)
+        self.assertFalse(self.store.delete_session("c" * 64))                        # (a login that was not there is the same)
+        self.assertTrue(self.store.unsettled)
+
 
 
 class TheSettings(unittest.TestCase):

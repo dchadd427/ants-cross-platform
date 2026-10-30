@@ -10,6 +10,7 @@ class Limits:
     line_code_points: int = 200         # a chat line, after the text rules (NFC)
     line_bytes: int = 800               # ... and in UTF-8
     history_lines: int = 50             # lines sent on connect, kept in memory
+    deleted_announce_max: int = 100     # `del` frames for one bulk deletion (a forget, a run of deletions from the command line): the pages keep 100 lines, ids only grow, so only the newest 100 can be on a screen
     retention_days: int = 7             # lines kept in the database for moderation
     burst: int = 3                      # lines an account may send at once ...
     refill_seconds: float = 2.0         # ... then one every this long, across all its tabs

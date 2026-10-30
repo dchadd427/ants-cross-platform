@@ -568,7 +568,7 @@ class TheSiteConfiguration(Scratch):
         self.assertIn("log_format ants_noquery ", text, "but the log format stays, a location that is left would not know it")
         self.assertGreater(text.count("resolver 127.0.0.11"), 10)
         self.assertEqual(text.count("resolver_timeout 1s;"), text.count("resolver 127.0.0.11"), "a game server that is not there is not waited for for 30 seconds where Docker's resolver is not")
-        self.assertEqual(text.count("access_log off;"), 13)          # (the four paths that logged to the image's output: the submissions, their single ids, the admin API and the test maps; and the hub's door and its answer for a hub that is not there, which have none of their own; and the five pages of the hub's login with the two answers that they share, which log nothing at all: their addresses hold a code)
+        self.assertEqual(text.count("access_log off;"), 14)          # (the four paths that logged to the image's output: the submissions, their single ids, the admin API and the test maps; and the hub's door and its answer for a hub that is not there, which have none of their own; and the five pages of the hub's login with the three answers that they share, which log nothing at all: their addresses hold a code)
 
     def test_the_list_of_maps_is_answered_from_a_file_and_the_rest_of_the_conf_is_as_it_was(self):
         plain = wd.site_config(read("docker", "nginx.conf"), "/w/fs", "/w/cache", 1234)

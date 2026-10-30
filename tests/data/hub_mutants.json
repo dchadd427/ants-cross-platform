@@ -413,15 +413,15 @@
   {
    "id": "deleted_line_stays_in_the_history",
    "file": "hub/chat.py",
-   "old": "                self.ring.remove(line)",
-   "new": "                pass",
+   "old": "        for line in [l for l in self.ring if l.id in gone]:\n            self.ring.remove(line)",
+   "new": "        for line in []:\n            self.ring.remove(line)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "deletion_not_announced",
    "file": "hub/chat.py",
-   "old": "self.ring.remove(line)\n            self.broadcast({\"t\": \"del\", \"id\": line_id})",
-   "new": "self.ring.remove(line)\n            pass",
+   "old": "self.broadcast({\"t\": \"del\", \"id\": line_id})",
+   "new": "pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {

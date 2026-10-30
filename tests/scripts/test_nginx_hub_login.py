@@ -50,6 +50,7 @@ WS_HUB = stats.block_of(CONF, "location = /hub/ws ")
 OFF = stats.block_of(CONF, "location @hub_off ")
 PAGE_OFF = stats.block_of(CONF, "location @hub_page_off ")
 PAGE_LIMIT = stats.block_of(CONF, "location @hub_page_limit ")
+PAGE_SITE = stats.block_of(CONF, "location @hub_page_site ")
 PAGES = {"login": LOGIN, "callback": CALLBACK, "me": ME, "logout": LOGOUT, "forget": FORGET}
 CANARY = "canary-query-5b81e3"
 
@@ -63,7 +64,7 @@ class TheText(unittest.TestCase):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         for name in PAGES:
             self.assertEqual([l for l in locations if l == "= /hub/" + name], ["= /hub/" + name])
-        self.assertTrue(all(PAGES.values()) and PAGE_OFF and PAGE_LIMIT)
+        self.assertTrue(all(PAGES.values()) and PAGE_OFF and PAGE_LIMIT and PAGE_SITE)
 
     def test_only_the_one_method_goes_through_and_the_checks_come_first(self):
         self.assertIn("if ($request_method != GET) { return 405; }", LOGIN)
@@ -77,6 +78,13 @@ class TheText(unittest.TestCase):
         for name, block in PAGES.items():
             for check in ("$request_method", "limit_req "):
                 self.assertLess(block.index(check), block.index("proxy_pass "), (name, check))
+        self.assertIn('if ($http_sec_fetch_site ~ "^(cross-site|same-site)$") { return 403; }', LOGIN)       # (a link of another site: the page "Log in from the front page", and the allowance of the visitor is not spent)
+        self.assertLess(LOGIN.index("$http_sec_fetch_site ~"), LOGIN.index("limit_req "))
+        self.assertIn("error_page 403 = @hub_page_site;", LOGIN)
+        self.assertNotIn("$http_sec_fetch_site ~", CALLBACK)                                 # (Discord's way back is cross-site, on purpose)
+        self.assertIn("return 403 ", PAGE_SITE)
+        self.assertIn("Log in from the front page", PAGE_SITE)
+        self.assertIn("access_log off;", PAGE_SITE)
         for name in ("me", "logout", "forget"):
             for check in ("$is_args", "$http_sec_fetch_site"):
                 self.assertLess(PAGES[name].index(check), PAGES[name].index("limit_req "), (name, check))     # (a request that is refused does not use up the allowance)
@@ -248,6 +256,7 @@ def mini_conf(tmp, port, hub_port, stand_port, dead_port, error_level="error"):
     blocks.append("location @hub_off {%s}" % stats.block_of(CONF, "location @hub_off "))
     blocks.append("location @hub_page_off {%s}" % stats.block_of(CONF, "location @hub_page_off "))
     blocks.append("location @hub_page_limit {%s}" % stats.block_of(CONF, "location @hub_page_limit "))
+    blocks.append("location @hub_page_site {%s}" % stats.block_of(CONF, "location @hub_page_site "))
     for header in ("location = /ws ", "location = /busy ", "location ^~ /admin/api/ "):
         blocks.append(block(header, stand_port))
     blocks.append("location @submit_off {return 503 'off';}")
@@ -446,6 +455,19 @@ class TheBlocksRun(unittest.TestCase):
         # the pages that look at a login or end one: twenty a minute, a burst of ten more
         answers = [hc.request(front.port, "GET", "/hub/me", {"Sec-Fetch-Site": "same-origin"}).status for _ in range(14)]
         self.assertEqual(answers.count(429), 3)
+
+    def test_a_link_of_another_site_to_the_login_is_turned_away_before_the_allowance_of_the_visitor_is_spent(self):
+        front = self.more()
+        for site in ("cross-site", "same-site"):
+            answers = [hc.request(front.port, "GET", "/hub/login", {"Sec-Fetch-Site": site}) for _ in range(12)]
+            self.assertEqual({r.status for r in answers}, {403}, site)
+            self.assertIn("Log in from the front page", answers[0].text())
+            self.assertEqual(answers[0].get("cache-control"), "no-store")
+        self.assertEqual(self.rig.call(lambda: len(self.rig.hub.sessions.rate_login.buckets)), 0)       # (the hub was not asked)
+        for site in ("same-origin", "none"):
+            self.assertEqual(hc.request(front.port, "GET", "/hub/login", {"Sec-Fetch-Site": site}).status, 302, site)      # (the visitor's own tries are all there)
+        self.assertEqual(hc.request(front.port, "GET", "/hub/login").status, 302)                      # (an old browser says nothing: it is the hub's to judge)
+        self.assertEqual(hc.request(front.port, "GET", "/hub/callback?code=x&state=" + "0" * 32, {"Sec-Fetch-Site": "cross-site"}).status, 400)      # (the way back from Discord is cross-site and goes through)
 
     # ---- the logs -------------------------------------------------------------------------------------------------------------------
 
