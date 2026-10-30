@@ -207,6 +207,10 @@ function caseA() {
         const mush = items(f, 24, 10);
         check(mush.length === 1 && mush[0].k === 'obj' && mush[0].fp.length === 16 && mush[0].hill === -1, 'a bigger object is picked whole' + tag);
         equal(Pick.describe(f, mush, 'one', 0), { name: 'Mushroom', rest: ' \u00b7 16 cells' }, 'and called a mushroom, from the fixed list' + tag);
+        put(f, 2, 12, 12, 37, 0, f.version === 8 ? (12 | (12 << 8)) : 0);          // a Bridge piece (the finished one): one cell, no solid bit
+        const bridge = items(f, 12, 12);
+        check(bridge.length === 1 && bridge[0].k === 'obj' && bridge[0].fp.length === 1 && bridge[0].hill === -1, 'a Bridge piece is picked, one cell' + tag);
+        equal(Pick.describe(f, bridge, 'one', 0), { name: 'Bridge', rest: ' \u00b7 1 cell' }, 'and called Bridge, with the palette\'s word' + tag);
         const pile = items(f, 15, 15);
         check(pile.length === 1 && pile[0].k === 'pile' && pile[0].fp.length === 1, 'a pile is picked, and the stage object of its cell with it, not as an object' + tag);
         equal(Pick.describe(f, pile, 'one', 0), { name: 'Food pile', rest: ' \u00b7 Pretzel \u00b7 30 bites of 25 points' }, 'a food pile says what it is, its bites and points' + tag);
@@ -231,8 +235,8 @@ function caseA() {
     const big = items(f, 11, 11);
     check(big.length === 1 && big[0].k === 'pile' && big[0].fp.length === 4, 'a pile whose stage covers four cells is picked from any of them, with its four cells');
     // the word for an object that is not in the lists, and for ones that are
-    equal([Pick.nameOf(ROCK), Pick.nameOf(62), Pick.nameOf(131), Pick.nameOf(134), Pick.nameOf(404), Pick.nameOf(410), Pick.nameOf(GRASS), Pick.nameOf(289), Pick.nameOf(349), Pick.nameOf(5), Pick.nameOf(290)],
-        ['rock', 'combat ant power-up', 'black bomb', 'fire wall', 'clover', 'flower', 'grass', 'rock', 'rubber duck', 'object', 'rock'], 'the plain words for tiles, from the palette and a short list');
+    equal([Pick.nameOf(ROCK), Pick.nameOf(62), Pick.nameOf(131), Pick.nameOf(134), Pick.nameOf(404), Pick.nameOf(410), Pick.nameOf(GRASS), Pick.nameOf(289), Pick.nameOf(349), Pick.nameOf(5), Pick.nameOf(290), Pick.nameOf(37)],
+        ['rock', 'combat ant power-up', 'black bomb', 'fire wall', 'clover', 'flower', 'grass', 'rock', 'rubber duck', 'object', 'rock', 'bridge'], 'the plain words for tiles, from the palette and a short list');
 }
 
 // ================= B =================

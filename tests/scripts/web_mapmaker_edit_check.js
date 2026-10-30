@@ -20,6 +20,7 @@
 //   K2 Hills, Ants and Food put their thing on water (no tool refuses a place for its ground) and Fill with water takes none of them away
 //   L  the Bigger tool on a fake page: the letter K, the one button and its sheet of 29 named objects, a tap that puts one whole, a hill in the way, Erase and undo, and the solid bit of a rock
 //   M  the properties of the map (mapmaker_props.js) as ONE step of the history: splices of the header and the eggs, the layers that move when the description grows, undo and redo byte for byte
+//   O  the Bridge chip on a fake page: its place and name in the palette, one tap or a drag puts pieces (no solid bit), and the plain warning in the line under the palette when pieces stand on ground that is not water
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -348,8 +349,10 @@ function caseF() {
     for (const row of Palette.GROUND) check(row[0] >= 431 && row[0] <= 669, 'ground ' + row[1] + ' is a ground tile (ids 431 to 669)');
     for (const row of Palette.OBJECTS.concat(Palette.PLANTS)) check(row[0] < 431, 'object ' + row[1] + ' is an object tile');
     const ground = Palette.items('ground'), objects = Palette.items('objects');
-    check(ground.length === 5 && objects.length === 30 && Palette.items('plants').length === 14 && Palette.items('erase').length === 0 && Palette.items('move').length === 0, 'the palettes: 5 kinds of ground, 30 objects (with 14 plants, 4 bombs and fire wall), none for the eraser and Move');
+    check(ground.length === 5 && objects.length === 31 && Palette.items('plants').length === 14 && Palette.items('erase').length === 0 && Palette.items('move').length === 0, 'the palettes: 5 kinds of ground, 31 objects (with 14 plants, 4 bombs, the fire wall and the bridge), none for the eraser and Move');
     equal(ground.map((i) => [i.id, i.name, i.label, i.kind]), [[485, 'g01a', 'Gravel', 'gravel'], [487, 'd01a', 'Dirt', 'dirt'], [571, 's01a', 'Slate', 'slate'], [439, 'M01a', 'Mud', 'mud'], [476, 'w01a', 'Water', 'water']], 'the five kinds of ground and the plain tile of each: no grass, no sand');
+    equal(objects.slice(11, 17).map((i) => [i.id, i.name, i.label]), [[134, 'wallup04', 'Fire wall'], [37, 'bridge4', 'Bridge'], [131, 'blackbomb', 'Black bomb'], [132, 'bluebomb', 'Blue bomb'], [130, 'greenbomb', 'Green bomb'], [129, 'redbomb', 'Red bomb']], 'the Bridge chip (the finished piece, tile 37) stands after the Fire wall and before the four bombs');
+    check(Palette.itemOf('objects', 37).label === 'Bridge' && Palette.itemOf('plants', 37) === null && Palette.itemOf('bigger', 37) === null, 'it is a small object (not a plant, not a bigger one) and its label is Bridge');
     check(ground.every((i) => i.color === Tiles.css(i.id, Tiles.EMPTY2)) && objects.every((i) => i.color === Tiles.css(0, i.id)), 'every swatch is the color the canvas draws that tile in');
     const keys = Palette.TOOLS.map((t) => t.key);
     check(new Set(keys).size === keys.length && keys.every((k) => k.length === 1), 'every tool has its own letter');
@@ -377,7 +380,7 @@ function caseF() {
         check(set.points >= 10 && set.points <= 50 && set.units > 0, n + ' stages: a pile of ' + set.units + ' bites of ' + set.points + ' points');
     }
     check(Blocks.MIN_STAGES === 2 && Blocks.MAX_STAGES === 6 && Blocks.MIN_ANTS === 1 && Blocks.MAX_ANTS === 64, 'the ranges of the steppers');
-    check(new Set(Palette.GROUND.concat(Palette.OBJECTS, Palette.PLANTS).map((r) => r[2])).size === 35, 'every label is different');
+    check(new Set(Palette.GROUND.concat(Palette.OBJECTS, Palette.PLANTS).map((r) => r[2])).size === 36, 'every label is different');
 }
 
 // ---- G: the tools on a fake page ----
@@ -413,13 +416,14 @@ function fakeDom() {
 
 function toolsPage(file, opts) {
     opts = opts || {};
-    const doc = fakeDom(), el = (tag) => doc.createElement(tag), log = { dirty: [], edits: 0, minis: 0, refreshes: 0, rebased: 0 };
+    const doc = fakeDom(), el = (tag) => doc.createElement(tag), log = { dirty: [], edits: 0, minis: 0, refreshes: 0, rebased: 0, scrolls: [] };
     const autoBtn = el('button'), autoMob = el('button');
     autoBtn.appendChild(el('span')); autoBtn.appendChild(el('span'));
     autoMob.appendChild(el('span')); autoMob.appendChild(el('span'));
     const host = { tools: [], box: el('div'), title: el('h3'), swatches: el('div'), name: el('div'), tile: el('button'), hint: el('p'), brushes: [], fill: el('button'), autoEdges: [autoBtn, autoMob], undo: el('button'), redo: el('button'),
         stepper: el('div'), stepperLabel: el('span'), stepLess: el('button'), stepValue: el('output'), stepMore: el('button') };
     host.stepper.hidden = true;
+    host.name.scrollIntoView = (where) => { log.scrolls.push(where); };          // (the line asks the browser to show all of itself in the column that scrolls)
     host.tile.appendChild(el('i')); host.tile.appendChild(el('span'));
     const sheets = [], said = [];
     for (const t of Palette.TOOLS) { const b = el('button'); b.setAttribute('data-tool', t.id); b.disabled = true; host.tools.push(b); }
@@ -455,7 +459,7 @@ function caseG() {
     p.host.swatches.children[1].click();
     check(p.tools.state().ground === 487 && p.host.name.textContent === 'Dirt', 'a swatch chooses a tile and its name shows');
     p.button('objects').click();
-    check(p.host.swatches.children.length === 30 && p.host.title.textContent === 'Objects' && p.tools.state().tool === 'objects', 'Objects has its own palette of 30');
+    check(p.host.swatches.children.length === 31 && p.host.title.textContent === 'Objects' && p.tools.state().tool === 'objects', 'Objects has its own palette of 31');
     check(p.tools.state().ground === 487, 'and the ground that was chosen is kept');
     p.button('erase').click();
     check(p.host.box.hidden && p.host.tile.hidden && p.host.fill.disabled && p.brush(5).disabled === false, 'Erase has no palette (nor the phone\'s palette button) and no Fill, and keeps the brushes');
@@ -1456,7 +1460,126 @@ function caseN() {
     check(digest(ae3.file().bytes) === beforeAutoBytes && ae3.host.undo.disabled === true, 'one Undo restores the stroke, the auto-placed edge pieces and the dictionary byte for byte');
 }
 
-const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['K2 Hills, Ants and Food on water', caseK2], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN]];
+// ---- O: the Bridge chip on a fake page ----
+// A bridge needs water under it (the game builds one on water only), but the editor never refuses a piece on dry ground: the map saves and passes the check either way. The only sign is one plain
+// sentence in the line under the palette while the Bridge chip is chosen; it counts the pieces of the whole map that stand on a cell whose ground is not water, again after every step.
+function caseO() {
+    const EMPTY2 = 0x7FFE, WATER = 476, WATER_EDGE = 477, MUD_TO_WATER = 431;          // w01a, wm02a (water, with mud on one side), MW02a (mud, with water on one side)
+    const ROWS = 12, COLUMNS = 16, at = (r, c) => r * COLUMNS + c;
+    const dry = (n) => 'Bridge \u00b7 ' + (n === 1 ? '1 piece is' : n + ' pieces are') + ' on dry ground. A bridge needs water under it.';
+    const chip = (pg, id) => pg.host.swatches.children.filter((b) => b.getAttribute('data-tile') === String(id))[0];
+    const tap = (pg, r, c) => { const t = pg.painter(); t.begin({ row: r, column: c }); t.end(); };
+    const line = (pg) => pg.host.name.textContent;
+    const pieces = (f) => { let n = 0; for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.columns; c++) if (f.tile2(r, c) === 37) n++; return n; };
+    // the engine's own water class and the page's idea of water are the same ground tiles (so the warning is about the cells that a swimmer can build on)
+    const odd = []; for (let id = 431; id <= 669; id++) if ((Ground.terrain(id) === 2) !== (Tiles.kindOf(id) === 'water')) odd.push(id);
+    check(odd.length === 0 && Tiles.kindOf(WATER) === 'water' && Tiles.kindOf(WATER_EDGE) === 'water' && Tiles.kindOf(MUD_TO_WATER) === 'mud' && Tiles.kindOf(485) === 'gravel', 'water is the ground tiles of the engine\'s water class (w01a and the wm pieces), not mud that blends toward water: ' + odd.slice(0, 6).join(', '));
+    for (const version of [8, 9]) {
+        const tag = ' (version ' + version + ')';
+        const p = toolsPage(open(version, ROWS, COLUMNS));
+        p.button('objects').click();
+        chip(p, 37).click();
+        check(p.tools.state().objects === 37 && p.host.swatches.children.length === 31 && line(p) === 'Bridge', 'the chip is chosen, and on a map with no bridge the line says its name and nothing more' + tag);
+        // one tap on gravel: a piece with no solid bit, no refusal, and the singular
+        tap(p, 3, 3);
+        check(Edit.tile(p.file(), 2, at(3, 3)) === 37 && (Edit.flags(p.file(), 1, at(3, 3)) & 1) === 0 && p.said.length === 0 && p.log.edits >= 1, 'a tap puts a bridge piece on dry ground: no solid bit, nothing refused, the page is told of the edit (' + p.log.edits + ')' + tag);
+        equal(line(p), 'Bridge \u00b7 1 piece is on dry ground. A bridge needs water under it.', 'one piece on dry ground: the approved words, in the singular' + tag);
+        equal(p.log.scrolls, [{ block: 'nearest' }], 'the warning asks to be shown whole, in the column that scrolls, and only as far as it needs (nothing else is moved)' + tag);
+        tap(p, 3, 4); tap(p, 11, 15);
+        equal(line(p), 'Bridge \u00b7 3 pieces are on dry ground. A bridge needs water under it.', 'three pieces (one in the last row and the last column): the plural' + tag);
+        // a drag puts a line of pieces; they are counted when the stroke ends
+        const t = p.painter();
+        t.begin({ row: 8, column: 2 }); t.extend({ row: 8, column: 2 }, { row: 8, column: 6 }); t.end();
+        equal([pieces(p.file()), line(p)], [8, dry(8)], 'a drag of five cells makes eight pieces on dry ground' + tag);
+        // only the Bridge chip says it: another chip of the same palette says its own name, and the warning comes back with the chip
+        const asked = p.log.scrolls.length;
+        chip(p, 302).click();
+        equal(line(p), 'Rock 1', 'the Rock chip says Rock 1 though the map has bridges on dry ground' + tag);
+        chip(p, 134).click();
+        equal(line(p), 'Fire wall', 'and the Fire wall its name' + tag);
+        equal(p.log.scrolls.length, asked, 'a line with no warning asks for no scrolling' + tag);
+        chip(p, 37).click();
+        equal([line(p), p.log.scrolls.length], [dry(8), asked + 1], 'the Bridge chip says the count again, and asks to be shown whole again' + tag);
+        // water under a piece takes it off the count (the Water chip of the Ground tool; the line is read again when Objects is chosen)
+        p.button('ground').click(); p.host.swatches.children[4].click();
+        check(p.tools.state().ground === WATER && line(p) === 'Water', 'the Ground tool paints Water and says Water' + tag);
+        tap(p, 3, 3); tap(p, 3, 4);
+        p.button('objects').click();
+        equal(line(p), dry(6), 'water under two pieces: six are still on dry ground' + tag);
+        p.button('ground').click();
+        for (let c = 2; c <= 6; c++) tap(p, 8, c);
+        p.button('objects').click();
+        equal(line(p), dry(1), 'water under the five of the line: one piece is left, told in the singular' + tag);
+        p.button('ground').click(); tap(p, 11, 15);
+        p.button('objects').click();
+        equal([pieces(p.file()), line(p)], [8, 'Bridge'], 'water under every piece: the line is the chip\'s name only, and no piece was lost or refused on the way' + tag);
+        const settled = p.log.scrolls.length;
+        chip(p, 37).click();
+        equal(p.log.scrolls.length, settled, 'the chip\'s name alone (no warning) asks for no scrolling' + tag);
+        check(p.said.length === 0, 'nothing was refused' + tag);
+        // the eraser takes a piece away (Erase has no palette: the line is read when Objects is chosen again)
+        p.button('erase').click(); tap(p, 11, 15); p.button('objects').click();
+        equal(pieces(p.file()), 7, 'Erase takes a piece away' + tag);
+        // undo and redo while the chip is chosen: the line follows each step (the piece comes back on the gravel that was under it before the water)
+        p.doc.key('z', { ctrlKey: true });
+        equal([Edit.tile(p.file(), 2, at(11, 15)), line(p)], [37, 'Bridge'], 'Undo gives the piece back, on the water that is still under it' + tag);
+        p.doc.key('z', { ctrlKey: true });
+        equal(line(p), dry(1), 'a second Undo takes the water from under it: the warning' + tag);
+        p.doc.key('y', { ctrlKey: true });
+        equal(line(p), 'Bridge', 'Redo puts the water back: no warning' + tag);
+        p.doc.key('z', { ctrlKey: true }); p.doc.key('z', { ctrlKey: true }); p.doc.key('z', { ctrlKey: true });
+        equal(line(p), dry(3), 'three Undos more take the water from under three pieces (the one at the foot and the last two of the line)' + tag);
+        p.doc.key('z', { ctrlKey: true, shiftKey: true });
+        equal(line(p), dry(2), 'and a Redo (with Shift) puts the water under one of them back' + tag);
+    }
+    // the ground under a piece in the shapes that a map can have: water and a water piece that blends toward mud are water, mud that blends toward water and every other kind are dry
+    const s = toolsPage(open(9, ROWS, COLUMNS));
+    s.button('objects').click(); chip(s, 37).click(); tap(s, 4, 4);
+    for (const [id, name, want] of [[WATER, 'plain water', 'Bridge'], [WATER_EDGE, 'a water piece that blends toward mud', 'Bridge'], [MUD_TO_WATER, 'mud that blends toward water', dry(1)], [439, 'plain mud', dry(1)], [485, 'gravel', dry(1)], [487, 'dirt', dry(1)], [571, 'slate', dry(1)]]) {
+        put(s.file(), 1, 4, 4, id, 0, 0xCDCD);
+        chip(s, 37).click();
+        equal(line(s), want, 'a piece on ' + name);
+    }
+    // a map that is opened from a file: bridges on water give no warning, a bridge on dry ground does (a whole row of them, row 0 too, is counted)
+    for (const version of [8, 9]) {
+        const tag = ' (version ' + version + ')';
+        const f = open(version, ROWS, COLUMNS);
+        for (let c = 2; c < 8; c++) { put(f, 1, 5, c, c % 2 ? WATER : WATER_EDGE, 0, 0xCDCD); put(f, 2, 5, c, 37, 0, version === 8 ? (5 | (c << 8)) : 0); }
+        const q = toolsPage(f);
+        q.button('objects').click(); chip(q, 37).click();
+        equal(line(q), 'Bridge', 'a map opened with six bridge pieces on water: no warning' + tag);
+        put(f, 2, 9, 9, 37, 0, version === 8 ? (9 | (9 << 8)) : 0);
+        chip(q, 37).click();
+        equal(line(q), dry(1), 'the same map with one piece on gravel: the warning' + tag);
+        const g = open(version, ROWS, COLUMNS);
+        for (let c = 0; c < COLUMNS; c++) put(g, 2, 0, c, 37, 0, version === 8 ? (c << 8) : 0);
+        const w = toolsPage(g);
+        w.button('objects').click(); chip(w, 37).click();
+        equal(line(w), dry(COLUMNS), 'a whole row of pieces on gravel, row 0 too' + tag);
+    }
+    // a part-built piece (bridge1 to bridge3, tiles 34 to 36) on gravel is not counted: the hint is about the finished bridge that the chip places (tile 37)
+    for (const version of [8, 9]) {
+        const tag = ' (version ' + version + ')';
+        const f = open(version, ROWS, COLUMNS);
+        [[2, 2, 34], [2, 4, 35], [2, 6, 36]].forEach(([r, c, id]) => put(f, 2, r, c, id, 0, version === 8 ? (r | (c << 8)) : 0));
+        const q = toolsPage(f);
+        q.button('objects').click(); chip(q, 37).click();
+        equal([line(q), q.log.scrolls.length], ['Bridge', 0], 'three part-built pieces (tiles 34 to 36) on gravel are not counted: the hint is about the finished bridge that the chip places' + tag);
+        put(f, 2, 2, 8, 37, 0, version === 8 ? (2 | (8 << 8)) : 0);
+        chip(q, 37).click();
+        equal(line(q), dry(1), 'and one finished piece (tile 37) beside them is the only one counted' + tag);
+    }
+    // the warning is for the Objects tool with the Bridge chip: the other tools say what they said before
+    const r = toolsPage(open(9, ROWS, COLUMNS));
+    r.button('objects').click(); chip(r, 37).click(); tap(r, 2, 2);
+    check(Edit.tile(r.file(), 2, at(2, 2)) === 37 && line(r) === dry(1), 'a piece is on dry ground');
+    r.button('ground').click();
+    equal(line(r), 'Gravel', 'with the Ground tool the line is the ground\'s');
+    r.button('hills').click();
+    check(/^Green: /.test(line(r)) && !/bridge/i.test(line(r)), 'and the Hills tool\'s too');
+}
+
+const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['K2 Hills, Ants and Food on water', caseK2], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN], ['O the Bridge chip on a fake page', caseO]];
 for (const [name, fn] of cases) {
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

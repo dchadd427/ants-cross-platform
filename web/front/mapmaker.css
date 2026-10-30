@@ -292,6 +292,8 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 /* a desktop that is not tall: shorter tools, the short note, no kind tags, a 2-line description; under 781 px the note goes */
 @media (min-width: 601px) and (min-height: 451px) and (max-height: 860px) { .tools { padding: 8px 10px; gap: 4px; } .toolbtns { gap: 4px; } .tool { min-height: 34px; padding: 4px 10px; } .toolnote .dsk, .side .sidetags { display: none; } .toolnote .mob { display: inline; } .sumbox .desc { -webkit-line-clamp: 2; } }
 @media (min-width: 601px) and (min-height: 451px) and (max-height: 780px) { .side { gap: 8px; } .toolnote { display: none; } .swatch.team { min-height: 28px; } }
+/* seven rows of chips since the Bridge: under 741 pixels of height they are 2 pixels shorter and the rows and tool buttons 1 pixel closer, so the column keeps its name line with no scrollbar */
+@media (min-width: 601px) and (min-height: 451px) and (max-height: 740px) { .toolbtns { gap: 3px; } .swatches.objects { row-gap: 2px; } .swatches.objects .swatch { min-height: 22px; } }
 
 /* a narrow desktop window (601 to 1200 pixels): the top bar wraps, the name box on a line of its own, so no button is cut and none covers the name (eight buttons since Submit for approval) */
 @media (min-width: 1221px) and (max-width: 1480px) { .edmenu { gap: 4px; } .edmenu .btn.sm { padding-left: 6px; padding-right: 6px; font-size: 14px; } }
