@@ -36,7 +36,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_check.js")
 HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 39000, 12400           # bytes, raw and gzipped, both files together (about 37,700 and 11,900, with the dock's fit to the room under Home's bar and its queue of lines that wait for an answer): they load after the first paint, so they cost the first look nothing
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 51000, 15900           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with the dock's fit to the room under Home's bar and its queue of lines that wait for an answer): they load after the first paint, so they cost the first look nothing
 
 
 def read(*parts):
@@ -98,7 +98,7 @@ class TheLoaderInHome(unittest.TestCase):
 
     def test_the_dock_is_mounted_when_both_files_are_there_and_whatever_goes_wrong_stays_in_it(self):
         self.assertIn("var parts = 2;", self.js)
-        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); inert(held); dockShown(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); } } catch (e) { dock = null; } }", self.js)
         self.assertIn("[bar, rbar, dock && dock.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
@@ -142,8 +142,15 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertIn("if (text !== undefined) e.textContent = text;", self.js)
 
     def test_it_keeps_nothing_in_the_browser_and_asks_for_nothing_else(self):
-        self.assertNotRegex(self.code, r"localStorage|sessionStorage|indexedDB|document\.cookie|\bfetch\b|XMLHttpRequest|navigator\.|importScripts|\bimport\b|postMessage|BroadcastChannel")
+        self.assertNotRegex(self.code, r"localStorage|sessionStorage|indexedDB|document\.cookie|XMLHttpRequest|navigator\.|importScripts|\bimport\b|postMessage|BroadcastChannel")
         self.assertNotRegex(self.code, r"https?://", "no other site, no address but the page's own host")
+        self.assertEqual(len(re.findall(r"\bfetch\b", self.code)), 2, "the one call is `var f = env.fetch || win.fetch;`: a POST of the page to the hub's logout and forget, and nothing else")
+        self.assertIn("var f = env.fetch || win.fetch;", self.js)
+        self.assertIn("f.call(win, path, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' })", self.js)
+        self.assertEqual(sorted(re.findall(r"leave\((LOGOUT|FORGET)\)", self.code)), ["FORGET", "LOGOUT"])
+        self.assertIn("var LOGIN = '/hub/login?next=', LOGOUT = '/hub/logout', FORGET = '/hub/forget';", self.js)
+        self.assertNotRegex(self.code, r"discord\.com|Authorization|access_token|location\.(search|hash|href)|\.href\b", "no token, no address of Discord, nothing read from the address")
+        self.assertEqual(len(re.findall(r"location\.assign\(", self.code)), 1, "the one navigation: to the hub's login page")
         self.assertEqual(self.code.count("/hub/ws"), 1)
         self.assertIn("var PATH = '/hub/ws', VERSION = 1;", self.js)
         self.assertIn("(loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + PATH", self.js, "the page's own site, secure where the page is")
@@ -165,10 +172,13 @@ class TheFolderAndTheScript(unittest.TestCase):
         for words in ("Chat is offline", "reconnecting…", "Chat is read-only for now", "Slow down a little", "Log in with Discord to chat", "Global chat"):
             self.assertIn(words, self.js)
 
-    def test_the_place_of_the_login_chip_is_made_hidden_and_never_shown_here(self):
+    def test_the_login_place_is_made_hidden_and_shown_only_for_a_named_visitor_where_the_hub_has_a_login(self):
         self.assertIn("slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;", self.js)
-        self.assertEqual(self.code.count("slot.hidden"), 1, "nothing shows it before the login change")
-        self.assertNotRegex(self.code, r"el\('button'[^)]*[Ll]og\s?in|\bslot\.appendChild|\bslot\.textContent", "no login button")
+        self.assertIn("slot.hidden = !(live && you && login);", self.js, "the account line: the welcome names the visitor and the hub has a login; nothing else shows it")
+        self.assertIn("chip.hidden = !(live && login);", self.js, "the bar's chip: only where the hub offers a login, and not while the hub is not there")
+        self.assertIn("var ask = live && !you && login;", self.js, "the field is off and asks for the login only where one is offered")
+        self.assertIn("send.hidden = !you; enter.hidden = !!you;", self.js, "Send for a named visitor, Log in for the others, never both")
+        self.assertEqual(self.code.count("login = m.login === true;"), 1, "whether there is a login is what the hub says, nothing else")
 
     def test_the_log_and_the_controls_have_their_names_and_the_dock_its_focus_handling(self):
         for needle in ("log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite');", "log.setAttribute('tabindex', '0');", "note.setAttribute('role', 'status');",
@@ -263,12 +273,27 @@ class TheStyle(unittest.TestCase):
         self.assertIn("clip: rect(0 0 0 0);", news)
         self.assertNotRegex(news, r"display: *none|visibility: *hidden", "a screen reader reads it")
 
+    def test_the_login_in_the_bar_and_in_the_dock(self):
+        self.assertIn("@media (max-width: 720px), (max-height: 500px) { .hbar .hlogin { padding: 0; } .hlogin .gc-cn { display: none; } }", self.css, "on a phone, held either way, the chip is the mark or the circle only (46 x 46, as drawn): the breakpoints are the dock's")
+        name = self.rule(".gc-an")
+        self.assertIn("overflow-wrap: anywhere;", name)
+        self.assertIn("min-width: 0;", name)
+        cut = self.rule(".gc-cn")
+        for declaration in ("overflow: hidden;", "text-overflow: ellipsis;", "white-space: nowrap;", "max-width: 11em;"):
+            self.assertIn(declaration, cut, "a long name is cut in the bar and does not push the Menu button off the bar")
+        for selector in (".gc-link", ".gc-forget"):
+            self.assertRegex(self.rule(selector), r"min-height: (4[4-9]|[5-9]\d)px;", selector)
+        self.assertIn("min-width: 44px;", self.rule(".gc-link"))
+        self.assertIn("-webkit-mask: var(--dc) no-repeat center / contain; mask: var(--dc) no-repeat center / contain;", self.css, "the mark takes the color of the text around it")
+
     def test_the_hidden_parts_are_hidden_even_where_the_style_gives_them_a_display(self):
         self.assertIn(".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }", self.css)
         self.assertIn(".gc-unread[hidden], .gc-online[hidden] { display: none; }", self.css)
 
     def test_nothing_is_loaded_from_another_site_and_there_is_no_picture(self):
-        self.assertNotRegex(self.css, r"https?://|@import|url\(")
+        self.assertNotRegex(self.css, r"https?://|@import")
+        self.assertEqual(re.findall(r"url\(([^)]*)\)", self.css), [re.search(r"url\((\"data:image/svg\+xml,[^\"]*\")\)", self.css).group(1)], "the mark of Discord, drawn as data: no other picture, no file")
+        self.assertNotRegex(self.css, r"url\(\"(?!data:image/svg\+xml,)")
 
     def test_a_link_that_is_down_dims_the_log(self):
         self.assertIn('.gc[data-state="offline"] .gc-log { filter: saturate(.5) brightness(.94); }', self.css)

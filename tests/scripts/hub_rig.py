@@ -16,10 +16,14 @@ SITE = "https://chat.example.org"
 
 
 class Rig:
-    def __init__(self, mods="", test_login=True, origin=SITE, db=None, **limit_overrides):
+    def __init__(self, mods="", test_login=True, origin=SITE, db=None, discord=None, env=None, **limit_overrides):
+        """discord: a tests/scripts/fake_discord.FakeDiscord: the hub then has the real Discord login (and no test login), with the fake as its Discord. env: more settings."""
         self.folder = None if db else tempfile.TemporaryDirectory()
         self.db = db or os.path.join(self.folder.name, "hub.db")
-        env = {"ANTS_HUB_DB": self.db, "ANTS_HUB_PUBLIC_URL": origin, "ANTS_HUB_HOST": "127.0.0.1", "ANTS_HUB_MODS": mods}
+        env = dict(env or {}, ANTS_HUB_DB=self.db, ANTS_HUB_PUBLIC_URL=origin, ANTS_HUB_HOST="127.0.0.1", ANTS_HUB_MODS=mods)
+        if discord is not None:
+            test_login = False
+            env.update(ANTS_HUB_DISCORD_CLIENT_ID=discord.client_id, ANTS_HUB_DISCORD_CLIENT_SECRET=discord.client_secret, ANTS_HUB_TEST_DISCORD_URL=discord.url)
         if test_login:
             env["ANTS_HUB_TEST_LOGIN"] = "1"
         self.cfg = config.load(env)

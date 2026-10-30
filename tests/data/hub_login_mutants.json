@@ -1,0 +1,1737 @@
+{
+ "note": "Mutants of the chat hub's Discord login (hub/login.py, hub/discord.py, the sessions of hub/store.py, hub/server.py's pages, docker/nginx.conf's pages and cookie rules, the stack files, web/legal.html) and of the three follow-ups of the hub's review, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_login.py, test_nginx_hub_login.py, test_hub_core.py, test_hub_server.py, test_hub_stack.py or test_web_legal.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_login_mutants.json --keep-going --jobs 1 --baseline-every 40. The nginx mutants need an nginx program on the machine (without one they cannot be caught and show as survived); the page's own mutants are tests/data/home_chat_mutants.json.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_login tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub tests.scripts.test_hub_core tests.scripts.test_hub_server tests.scripts.test_hub_stack tests.scripts.test_web_legal"
+ },
+ "mutants": [
+  {
+   "id": "state_not_compared_with_the_cookie",
+   "file": "hub/login.py",
+   "old": "if not isinstance(state, str) or not VALUE.match(state) or not hmac.compare_digest(mine.encode(\"ascii\"), state.encode(\"ascii\")):",
+   "new": "if not isinstance(state, str) or not VALUE.match(state):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "state_not_known_to_the_hub",
+   "file": "hub/login.py",
+   "old": "if kept is None or kept[0] <= self.store.clock():",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "state_reusable",
+   "file": "hub/login.py",
+   "old": "kept = self.states.pop(digest(state), None)",
+   "new": "kept = self.states.get(digest(state))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "state_never_runs_out",
+   "file": "hub/login.py",
+   "old": "if kept is None or kept[0] <= self.store.clock():",
+   "new": "if kept is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "state_runs_out_after_a_day",
+   "file": "hub/login.py",
+   "old": "self.states[digest(state)] = (wall + self.limits.state_seconds, back)",
+   "new": "self.states[digest(state)] = (wall + 86400, back)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "state_ten_minutes_become_an_hour",
+   "file": "hub/limits.py",
+   "old": "state_seconds: float = 600.0",
+   "new": "state_seconds: float = 3600.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "state_predictable",
+   "file": "hub/login.py",
+   "old": "state = secrets.token_hex(16)",
+   "new": "state = hashlib.sha256(str(int(self.store.clock())).encode()).hexdigest()[:32]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "state_cookie_not_required",
+   "file": "hub/login.py",
+   "old": "state, mine = params.get(\"state\"), cookies.get(STATE_COOKIE)",
+   "new": "state, mine = params.get(\"state\"), cookies.get(STATE_COOKIE) or params.get(\"state\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "state_cookie_taken_from_the_last_of_two",
+   "file": "hub/login.py",
+   "old": "found[name] = None if name in found else value.strip()",
+   "new": "found[name] = value.strip()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "states_not_bounded",
+   "file": "hub/login.py",
+   "old": "while len(self.states) > self.limits.login_states_max:",
+   "new": "while False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStatesAreBounded"
+  },
+  {
+   "id": "expired_states_never_swept",
+   "file": "hub/login.py",
+   "old": "while self.states and next(iter(self.states.values()))[0] <= wall:",
+   "new": "while False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback tests.scripts.test_hub_login.TheStatesAreBounded"
+  },
+  {
+   "id": "error_param_ignored",
+   "file": "hub/login.py",
+   "old": "if params.get(\"error\") is not None:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "code_not_checked_for_shape",
+   "file": "hub/login.py",
+   "old": "if not isinstance(code, str) or not CODE.match(code):",
+   "new": "if not isinstance(code, str):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "query_of_any_length",
+   "file": "hub/login.py",
+   "old": "if len(query) > MAX_QUERY:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback tests.scripts.test_hub_login.TheHeadersAreSafe"
+  },
+  {
+   "id": "duplicate_parameters_believed",
+   "file": "hub/login.py",
+   "old": "found[name] = None if name in found else value\n    return found",
+   "new": "found[name] = value\n    return found",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "next_from_the_query",
+   "file": "hub/login.py",
+   "old": "back = wanted if wanted in NEXT else \"home\"",
+   "new": "back = wanted or \"home\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "next_list_has_an_outsider",
+   "file": "hub/login.py",
+   "old": "NEXT = {\"home\": \"/\", \"room\": \"/#room\"}",
+   "new": "NEXT = {\"home\": \"/\", \"room\": \"/#room\", \"evil\": \"https://evil.example/\", \"evil.example\": \"//evil.example\"}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "way_back_always_the_room",
+   "file": "hub/login.py",
+   "old": "(\"Location\", NEXT[back])",
+   "new": "(\"Location\", NEXT[\"room\"])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "login_start_from_another_site",
+   "file": "hub/login.py",
+   "old": "if site is not None and site not in (\"same-origin\", \"none\"):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "login_start_from_a_typed_address_refused",
+   "file": "hub/login.py",
+   "old": "if site is not None and site not in (\"same-origin\", \"none\"):",
+   "new": "if site is not None and site != \"same-origin\":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "login_start_any_method",
+   "file": "hub/login.py",
+   "old": "if request.method != \"GET\":\n            return self.fail(405, \"method\", {\"Allow\": \"GET\"})\n        site = request.headers.get(\"sec-fetch-site\")",
+   "new": "site = request.headers.get(\"sec-fetch-site\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "callback_any_method",
+   "file": "hub/login.py",
+   "old": "if request.method != \"GET\":\n            return self.fail(405, \"method\", {\"Allow\": \"GET\"})\n        if not self.rate_callback",
+   "new": "if not self.rate_callback",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_cookie_without_httponly",
+   "file": "hub/login.py",
+   "old": "\"%s=%s; Path=/; Max-Age=%d; Secure; HttpOnly; SameSite=%s\" % (name, value, seconds, same_site)",
+   "new": "\"%s=%s; Path=/; Max-Age=%d; Secure; SameSite=%s\" % (name, value, seconds, same_site)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_cookie_without_secure",
+   "file": "hub/login.py",
+   "old": "\"%s=%s; Path=/; Max-Age=%d; Secure; HttpOnly; SameSite=%s\" % (name, value, seconds, same_site)",
+   "new": "\"%s=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=%s\" % (name, value, seconds, same_site)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_cookie_same_site_lax",
+   "file": "hub/login.py",
+   "old": "cookie_line(COOKIE, value, int(self.limits.session_seconds), \"Strict\")",
+   "new": "cookie_line(COOKIE, value, int(self.limits.session_seconds), \"Lax\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_cookie_same_site_none",
+   "file": "hub/login.py",
+   "old": "cookie_line(COOKIE, value, int(self.limits.session_seconds), \"Strict\")",
+   "new": "cookie_line(COOKIE, value, int(self.limits.session_seconds), \"None\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_cookie_without_path",
+   "file": "hub/login.py",
+   "old": "\"%s=%s; Path=/; Max-Age=%d; Secure; HttpOnly; SameSite=%s\" % (name, value, seconds, same_site)",
+   "new": "\"%s=%s; Path=/hub; Max-Age=%d; Secure; HttpOnly; SameSite=%s\" % (name, value, seconds, same_site)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_cookie_with_a_domain",
+   "file": "hub/login.py",
+   "old": "\"%s=%s; Path=/; Max-Age=%d; Secure; HttpOnly; SameSite=%s\" % (name, value, seconds, same_site)",
+   "new": "\"%s=%s; Path=/; Domain=example.org; Max-Age=%d; Secure; HttpOnly; SameSite=%s\" % (name, value, seconds, same_site)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_cookie_without_the_host_prefix",
+   "file": "hub/login.py",
+   "old": "COOKIE = \"__Host-ants_hub\"",
+   "new": "COOKIE = \"ants_hub\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "state_cookie_without_the_host_prefix",
+   "file": "hub/login.py",
+   "old": "STATE_COOKIE = \"__Host-ants_oauth\"",
+   "new": "STATE_COOKIE = \"ants_oauth\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "state_cookie_same_site_strict",
+   "file": "hub/login.py",
+   "old": "cookie_line(STATE_COOKIE, state, int(self.limits.state_seconds), \"Lax\")",
+   "new": "cookie_line(STATE_COOKIE, state, int(self.limits.state_seconds), \"Strict\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "session_cookie_for_a_year",
+   "file": "hub/limits.py",
+   "old": "session_seconds: float = 30 * 86400.0",
+   "new": "session_seconds: float = 365 * 86400.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback tests.scripts.test_hub_login.TheSessionsAreKept"
+  },
+  {
+   "id": "session_cookie_of_a_few_bits",
+   "file": "hub/login.py",
+   "old": "value = secrets.token_hex(16)\n        try:",
+   "new": "value = secrets.token_hex(2) * 8\n        try:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "session_value_per_account",
+   "file": "hub/login.py",
+   "old": "value = secrets.token_hex(16)\n        try:",
+   "new": "value = digest(account)[:32]\n        try:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "session_id_kept_raw",
+   "file": "hub/login.py",
+   "old": "return hashlib.sha256(value.encode(\"ascii\")).hexdigest()",
+   "new": "return value",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_value_taken_over",
+   "file": "hub/login.py",
+   "old": "value = secrets.token_hex(16)\n        try:",
+   "new": "value = cookies.get(COOKIE) if cookies.get(COOKIE) and VALUE.match(cookies.get(COOKIE)) else secrets.token_hex(16)\n        try:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "old_login_of_the_browser_stays",
+   "file": "hub/login.py",
+   "old": "self.store.delete_session(digest(old))\n                self.hub.end_logins(session=digest(old))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "old_sockets_of_the_browser_stay",
+   "file": "hub/login.py",
+   "old": "                self.hub.end_logins(session=digest(old))",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "cookie_of_a_wrong_shape_believed",
+   "file": "hub/login.py",
+   "old": "if not value or not VALUE.match(value):",
+   "new": "if not value:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "login_cap_removed",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)\", (account, account, keep))",
+   "new": "self.db.execute(\"SELECT ?, ?, ?\", (account, account, keep))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsForAnAccount"
+  },
+  {
+   "id": "login_cap_keeps_the_oldest",
+   "file": "hub/store.py",
+   "old": "ORDER BY created DESC, rowid DESC LIMIT ?",
+   "new": "ORDER BY created ASC, rowid ASC LIMIT ?",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsForAnAccount"
+  },
+  {
+   "id": "login_cap_of_all_accounts",
+   "file": "hub/store.py",
+   "old": "DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY",
+   "new": "DELETE FROM sessions WHERE ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsForAnAccount"
+  },
+  {
+   "id": "expired_login_accepted",
+   "file": "hub/store.py",
+   "old": "WHERE id = ? AND expires > ?\", (key, int(self.clock()))",
+   "new": "WHERE id = ? AND ? > 0\", (key, int(self.clock()))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSessionsAreKept"
+  },
+  {
+   "id": "expired_logins_never_cleaned",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM sessions WHERE expires <= ?\", (now,))",
+   "new": "self.db.execute(\"DELETE FROM sessions WHERE expires <= ? - 99999999999\", (now,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSessionsAreKept"
+  },
+  {
+   "id": "purge_takes_every_login",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM sessions WHERE expires <= ?\", (now,))",
+   "new": "self.db.execute(\"DELETE FROM sessions WHERE expires <= ? + 99999999999\", (now,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSessionsAreKept"
+  },
+  {
+   "id": "socket_outlives_its_login",
+   "file": "hub/server.py",
+   "old": "elif peer.identity is not None and peer.identity.expires and wall >= peer.identity.expires:",
+   "new": "elif False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSessionsAreKept"
+  },
+  {
+   "id": "login_lasts_an_hour",
+   "file": "hub/limits.py",
+   "old": "session_seconds: float = 30 * 86400.0",
+   "new": "session_seconds: float = 3600.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback tests.scripts.test_hub_login.TheSessionsAreKept"
+  },
+  {
+   "id": "identify_believes_the_test_header",
+   "file": "hub/login.py",
+   "old": "    async def identify(self, headers):\n        return self.who_of(headers)",
+   "new": "    async def identify(self, headers):\n        return await session.TestLogin().identify(headers) or self.who_of(headers)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket"
+  },
+  {
+   "id": "socket_from_another_site_with_the_right_origin",
+   "file": "hub/server.py",
+   "old": "if h.get(\"sec-fetch-site\", \"same-origin\") != \"same-origin\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket"
+  },
+  {
+   "id": "socket_from_a_typed_address",
+   "file": "hub/server.py",
+   "old": "if h.get(\"sec-fetch-site\", \"same-origin\") != \"same-origin\":",
+   "new": "if h.get(\"sec-fetch-site\", \"same-origin\") not in (\"same-origin\", \"none\"):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket"
+  },
+  {
+   "id": "young_accounts_write",
+   "file": "hub/login.py",
+   "old": "return session.Identity(row[0], row[1], self.young(row[0]), key, row[2])",
+   "new": "return session.Identity(row[0], row[1], False, key, row[2])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket tests.scripts.test_hub_login.TheAgeSetting"
+  },
+  {
+   "id": "old_accounts_are_young",
+   "file": "hub/login.py",
+   "old": "return self.store.clock() * 1000 - made < days * 86400 * 1000",
+   "new": "return self.store.clock() * 1000 - made > days * 86400 * 1000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket"
+  },
+  {
+   "id": "age_setting_ignored",
+   "file": "hub/login.py",
+   "old": "days = self.cfg.min_account_days",
+   "new": "days = 7",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheAgeSetting tests.scripts.test_hub_login.TheAgeSettingZero"
+  },
+  {
+   "id": "age_from_the_wrong_epoch",
+   "file": "hub/login.py",
+   "old": "DISCORD_EPOCH_MS = 1420070400000",
+   "new": "DISCORD_EPOCH_MS = 1451606400000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket"
+  },
+  {
+   "id": "age_zero_is_everybody_young",
+   "file": "hub/login.py",
+   "old": "if days <= 0:\n            return False",
+   "new": "if False:\n            return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheAgeSettingZero"
+  },
+  {
+   "id": "banned_accounts_write",
+   "file": "hub/chat.py",
+   "old": "if self.store.is_banned(who.account_id):\n                return self.mistake(peer, \"banned\")",
+   "new": "if False:\n                return self.mistake(peer, \"banned\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheBansAndMutesStandWhateverTheAccountDoes"
+  },
+  {
+   "id": "muted_accounts_write",
+   "file": "hub/chat.py",
+   "old": "if self.store.muted_until(who.account_id):\n                return self.mistake(peer, \"muted\")",
+   "new": "if False:\n                return self.mistake(peer, \"muted\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheBansAndMutesStandWhateverTheAccountDoes"
+  },
+  {
+   "id": "moderators_not_marked",
+   "file": "hub/login.py",
+   "old": "who.account_id in self.cfg.mods} if who else None",
+   "new": "False} if who else None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheMeOfAModerator"
+  },
+  {
+   "id": "logout_without_the_origin",
+   "file": "hub/login.py",
+   "old": "return origin == self.cfg.origin and site == \"same-origin\"",
+   "new": "return site == \"same-origin\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "logout_without_the_fetch_site",
+   "file": "hub/login.py",
+   "old": "return origin == self.cfg.origin and site == \"same-origin\"",
+   "new": "return origin == self.cfg.origin",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "logout_with_any_origin",
+   "file": "hub/login.py",
+   "old": "return origin == self.cfg.origin and site == \"same-origin\"",
+   "new": "return origin is not None and site == \"same-origin\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
+  },
+  {
+   "id": "me_from_any_site",
+   "file": "hub/login.py",
+   "old": "return (origin is None or origin == self.cfg.origin) and site == \"same-origin\"",
+   "new": "return origin is None or origin == self.cfg.origin",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheMe"
+  },
+  {
+   "id": "me_from_any_origin",
+   "file": "hub/login.py",
+   "old": "return (origin is None or origin == self.cfg.origin) and site == \"same-origin\"",
+   "new": "return site == \"same-origin\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheMe"
+  },
+  {
+   "id": "pages_of_the_session_take_any_method",
+   "file": "hub/login.py",
+   "old": "if request.method != method:\n            return self.fail(405, \"method\", {\"Allow\": method})\n        if request.split()[1]:",
+   "new": "if request.split()[1]:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout tests.scripts.test_hub_login.TheMe"
+  },
+  {
+   "id": "pages_of_the_session_take_a_query",
+   "file": "hub/login.py",
+   "old": "if request.split()[1]:\n            return self.fail(404, \"not_found\")\n        if not self.rate_session",
+   "new": "if not self.rate_session",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout tests.scripts.test_hub_login.TheMe"
+  },
+  {
+   "id": "logout_keeps_the_login",
+   "file": "hub/login.py",
+   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")",
+   "new": "pass\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
+  },
+  {
+   "id": "logout_keeps_the_sockets",
+   "file": "hub/login.py",
+   "old": "                self.hub.end_logins(session=digest(value))\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "new": "                pass\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
+  },
+  {
+   "id": "logout_leaves_the_cookie",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"logout\", tag=self.log.tag(address))\n        return http.response(200, {\"ok\": True}, [(\"Set-Cookie\", cookie_line(COOKIE, \"\", 0, \"Strict\"))])",
+   "new": "self.log.event(\"logout\", tag=self.log.tag(address))\n        return http.response(200, {\"ok\": True})",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
+  },
+  {
+   "id": "logout_ends_every_login_of_the_account",
+   "file": "hub/login.py",
+   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))",
+   "new": "self.store.forget(self.who_of(request.headers).account_id)\n                self.hub.end_logins(session=digest(value))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
+  },
+  {
+   "id": "forget_for_a_reader",
+   "file": "hub/login.py",
+   "old": "if who is None:\n                return self.fail(401, \"login\"",
+   "new": "if False:\n                return self.fail(401, \"login\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "forget_lifts_the_ban",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"UPDATE bans SET name = '' WHERE account = ?\", (account,))",
+   "new": "self.db.execute(\"DELETE FROM bans WHERE account = ?\", (account,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheBansAndMutesStandWhateverTheAccountDoes"
+  },
+  {
+   "id": "forget_lifts_the_mute",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"UPDATE mutes SET name = '' WHERE account = ?\", (account,))",
+   "new": "self.db.execute(\"DELETE FROM mutes WHERE account = ?\", (account,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheBansAndMutesStandWhateverTheAccountDoes"
+  },
+  {
+   "id": "forget_keeps_the_name_of_the_ban",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"UPDATE bans SET name = '' WHERE account = ?\", (account,))",
+   "new": "self.db.execute(\"SELECT 1\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheBansAndMutesStandWhateverTheAccountDoes"
+  },
+  {
+   "id": "forget_keeps_the_lines",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))",
+   "new": "self.db.execute(\"SELECT 1\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "forget_takes_every_line",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))",
+   "new": "self.db.execute(\"DELETE FROM lines WHERE account = ? OR 1\", (account,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "forget_keeps_the_logins",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))",
+   "new": "self.db.execute(\"SELECT 1\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "forget_ends_every_login",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))",
+   "new": "self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "forget_keeps_the_sockets",
+   "file": "hub/login.py",
+   "old": "self.hub.end_logins(account=who.account_id)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "forget_keeps_the_lines_on_the_screens",
+   "file": "hub/login.py",
+   "old": "self.hub.chat.drop_lines(lines)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "forget_lines_not_taken_from_the_history",
+   "file": "hub/chat.py",
+   "old": "for line in [l for l in self.ring if l.id in gone]:\n            self.ring.remove(line)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "forget_tells_nobody",
+   "file": "hub/chat.py",
+   "old": "        for line_id in sorted(gone)[-self.limits.deleted_announce_max:]:\n            self.broadcast({\"t\": \"del\", \"id\": line_id})",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "end_logins_closes_everybody",
+   "file": "hub/server.py",
+   "old": "if who is not None and not peer.closed and ((session is not None and who.session == session) or (account is not None and who.account_id == account)):",
+   "new": "if who is not None and not peer.closed:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "end_logins_closes_nobody",
+   "file": "hub/server.py",
+   "old": "peer.close(1000, \"logged out\")",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "discord_secret_in_a_header",
+   "file": "hub/discord.py",
+   "old": "await self.call(\"POST\", \"/oauth2/token\", {\"Content-Type\"",
+   "new": "await self.call(\"POST\", \"/oauth2/token\", {\"X-Client-Secret\": self.client_secret, \"Content-Type\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "discord_secret_not_sent",
+   "file": "hub/discord.py",
+   "old": "\"client_secret\": self.client_secret, ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "discord_wrong_redirect",
+   "file": "hub/discord.py",
+   "old": "self.redirect = cfg.origin + \"/hub/callback\"",
+   "new": "self.redirect = cfg.origin + \"/callback\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "discord_scope_widened",
+   "file": "hub/discord.py",
+   "old": "(\"response_type\", \"code\"), (\"scope\", \"identify\"),",
+   "new": "(\"response_type\", \"code\"), (\"scope\", \"identify email guilds\"),",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "discord_prompt_dropped",
+   "file": "hub/discord.py",
+   "old": ", (\"prompt\", \"none\"))",
+   "new": ")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart"
+  },
+  {
+   "id": "discord_plain_http_spoken",
+   "file": "hub/discord.py",
+   "old": "if not secure and not (self.test and parts.scheme == \"http\"):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDiscordClient"
+  },
+  {
+   "id": "discord_certificate_not_checked",
+   "file": "hub/discord.py",
+   "old": "self.ssl = ssl_context or ssl.create_default_context()",
+   "new": "self.ssl = ssl_context or ssl._create_unverified_context()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDiscordClient"
+  },
+  {
+   "id": "discord_answer_not_capped",
+   "file": "hub/discord.py",
+   "old": "room = self.limits.discord_body_max",
+   "new": "room = 10 ** 12",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDiscordClient"
+  },
+  {
+   "id": "discord_a_whole_call_has_no_time",
+   "file": "hub/discord.py",
+   "old": "self.limits.discord_seconds)\n        except DiscordError:",
+   "new": "self.limits.discord_seconds * 30)\n        except DiscordError:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong.test_every_way_for_the_exchange_to_fail_is_a_calm_page_and_no_login"
+  },
+  {
+   "id": "discord_two_calls_have_no_total",
+   "file": "hub/discord.py",
+   "old": "self.both(code), self.limits.discord_total_seconds)",
+   "new": "self.both(code), self.limits.discord_total_seconds * 30)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_total_timeout_is_a_login",
+   "file": "hub/discord.py",
+   "old": "        except asyncio.TimeoutError:\n            raise DiscordError(\"down\")\n        finally:",
+   "new": "        except asyncio.TimeoutError:\n            return (\"261842000123456789\", \"maple.leaf\")\n        finally:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_total_longer_than_nginx_waits",
+   "file": "hub/limits.py",
+   "old": "discord_total_seconds: float = 10.0",
+   "new": "discord_total_seconds: float = 30.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login"
+  },
+  {
+   "id": "discord_a_call_may_take_the_whole_total",
+   "file": "hub/limits.py",
+   "old": "discord_seconds: float = 6.0",
+   "new": "discord_seconds: float = 12.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login"
+  },
+  {
+   "id": "login_total_cap_removed",
+   "file": "hub/store.py",
+   "old": "self.db.execute(\"DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)\", (total,))",
+   "new": "self.db.execute(\"SELECT ?\", (total,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
+  },
+  {
+   "id": "login_total_cap_keeps_the_oldest",
+   "file": "hub/store.py",
+   "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)",
+   "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
+  },
+  {
+   "id": "login_total_cap_is_ten_times_more",
+   "file": "hub/limits.py",
+   "old": "sessions_total: int = 100000",
+   "new": "sessions_total: int = 1000000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll tests.scripts.test_hub_login.TheLimitsAreWhatTheDocsSay"
+  },
+  {
+   "id": "me_database_trouble_is_a_crash",
+   "file": "hub/login.py",
+   "old": "        try:\n            who = self.who_of(request.headers)\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        return http.response(200, {\"login\": True",
+   "new": "        who = self.who_of(request.headers)\n        return http.response(200, {\"login\": True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "logout_database_trouble_is_a_crash",
+   "file": "hub/login.py",
+   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "new": "        except ZeroDivisionError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "forget_database_trouble_is_a_crash",
+   "file": "hub/login.py",
+   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
+   "new": "        except ZeroDivisionError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "forget_database_trouble_says_ok",
+   "file": "hub/login.py",
+   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
+   "new": "        except sqlite3.OperationalError:\n            return http.response(200, {\"ok\": True})\n        self.hub.end_logins(account=who.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "discord_token_of_any_shape",
+   "file": "hub/discord.py",
+   "old": "or not TOKEN.match(token) or",
+   "new": "or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_token_type_any",
+   "file": "hub/discord.py",
+   "old": "str(data.get(\"token_type\", \"\")).lower() != \"bearer\" or",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_scope_any",
+   "file": "hub/discord.py",
+   "old": "\"identify\" not in scopes.split(\" \")",
+   "new": "False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_id_of_any_shape",
+   "file": "hub/discord.py",
+   "old": "or not config.ACCOUNT_ID.match(account) or not isinstance(name, str):",
+   "new": "or not isinstance(name, str):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_error_status_is_a_login",
+   "file": "hub/discord.py",
+   "old": "        if status == 200:\n            return\n",
+   "new": "        if status < 500:\n            return\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_json_may_be_a_list",
+   "file": "hub/discord.py",
+   "old": "if not isinstance(data, dict):\n            if status == 200:\n                raise DiscordError(\"down\", status)\n            data = {}",
+   "new": "if False:\n            data = {}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_chunked_with_a_length",
+   "file": "hub/discord.py",
+   "old": "if fields[\"transfer-encoding\"].lower() != \"chunked\" or \"content-length\" in fields:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong tests.scripts.test_hub_login.TheDiscordClient"
+  },
+  {
+   "id": "discord_token_kept_in_the_client",
+   "file": "hub/discord.py",
+   "old": "token = await self.token(code)",
+   "new": "token = self.last = await self.token(code)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDiscordClient"
+  },
+  {
+   "id": "discord_no_limit_of_logins_that_wait",
+   "file": "hub/discord.py",
+   "old": "if self.inflight >= self.limits.login_inflight:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_inflight_never_given_back",
+   "file": "hub/discord.py",
+   "old": "        finally:\n            self.inflight -= 1",
+   "new": "        finally:\n            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong tests.scripts.test_hub_login.TheDiscordClient"
+  },
+  {
+   "id": "discord_retried",
+   "file": "hub/discord.py",
+   "old": "return await asyncio.wait_for(self.exchange(method, self.api + path, headers, body), self.limits.discord_seconds)",
+   "new": "await asyncio.wait_for(self.exchange(method, self.api + path, headers, body), self.limits.discord_seconds)\n            return await asyncio.wait_for(self.exchange(method, self.api + path, headers, body), self.limits.discord_seconds)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "discord_error_page_names_the_reason",
+   "file": "hub/login.py",
+   "old": "return self.page(\"rejected\" if e.kind == \"rejected\" else \"unavailable\", back, gone)",
+   "new": "return self.page(\"rejected\", back, gone)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "login_name_not_checked",
+   "file": "hub/login.py",
+   "old": "if not config.ACCOUNT_ID.match(account) or not text.valid_name(name):",
+   "new": "if not config.ACCOUNT_ID.match(account):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "reserved_names_taken",
+   "file": "hub/login.py",
+   "old": "        if reserved(name):\n",
+   "new": "        if False:\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "login_page_without_a_limit",
+   "file": "hub/login.py",
+   "old": "if not self.rate_login.take(address, self.hub.clock()):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfStart"
+  },
+  {
+   "id": "callback_without_a_limit",
+   "file": "hub/login.py",
+   "old": "if not self.rate_callback.take(address, self.hub.clock()):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfTheCallback"
+  },
+  {
+   "id": "session_pages_without_a_limit",
+   "file": "hub/login.py",
+   "old": "if not self.rate_session.take(address, self.hub.clock()):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfTheSessionPages"
+  },
+  {
+   "id": "limit_of_the_login_is_one_for_all",
+   "file": "hub/login.py",
+   "old": "self.rate_callback = limitmod.RateByAddress(self.limits.login_burst, self.limits.login_refill_seconds)",
+   "new": "self.rate_callback = self.rate_login",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfTheCallback"
+  },
+  {
+   "id": "limit_of_an_address_is_the_header",
+   "file": "hub/server.py",
+   "old": "address = limitmod.address_key(h.get(\"x-client-address\"), peername[0] if peername else \"\")\n        writer.write(await route(request, address))",
+   "new": "address = limitmod.address_key(h.get(\"x-forwarded-for\"), peername[0] if peername else \"\")\n        writer.write(await route(request, address))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfStart"
+  },
+  {
+   "id": "limit_never_refills",
+   "file": "hub/limits.py",
+   "old": "self.tokens = min(self.burst, self.tokens + max(0.0, now - self.at) / self.refill)",
+   "new": "self.tokens = min(self.burst, self.tokens)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfStart"
+  },
+  {
+   "id": "limit_table_without_a_cap",
+   "file": "hub/limits.py",
+   "old": "        if bucket is None:\n            if len(self.buckets) >= self.keys_max:",
+   "new": "        if bucket is None:\n            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitTable"
+  },
+  {
+   "id": "pages_take_a_body",
+   "file": "hub/server.py",
+   "old": "if h.get(\"content-length\", \"0\") != \"0\" or \"transfer-encoding\" in h:\n            raise http.HttpError(400, \"body\")\n        peername",
+   "new": "if False:\n            raise http.HttpError(400, \"body\")\n        peername",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheLogout"
+  },
+  {
+   "id": "login_holds_a_handshake_place",
+   "file": "hub/server.py",
+   "old": "self.pending -= 1                                     # (the place of a connection that has not finished its handshake: this one has, and may wait for Discord)\n                pending = False",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong.test_a_login_that_waits_for_discord_does_not_hold_a_place_of_the_handshakes"
+  },
+  {
+   "id": "header_injection_allowed",
+   "file": "hub/http.py",
+   "old": "if not HEADER_NAME.match(name) or not HEADER_VALUE.match(str(value)):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheHeadersAreSafe"
+  },
+  {
+   "id": "header_values_with_a_line_end",
+   "file": "hub/http.py",
+   "old": "HEADER_VALUE = re.compile(r\"[\\t\\x20-\\x7e]*\\Z\")",
+   "new": "HEADER_VALUE = re.compile(r\"[\\r\\n\\t\\x20-\\x7e]*\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheHeadersAreSafe"
+  },
+  {
+   "id": "cookie_header_may_come_twice",
+   "file": "hub/http.py",
+   "old": "\"cookie\", \"x-hub-test-login\", \"sec-fetch-site\"))",
+   "new": "\"x-hub-test-login\", \"sec-fetch-site\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket"
+  },
+  {
+   "id": "page_without_a_content_security_policy",
+   "file": "hub/login.py",
+   "old": "PAGE_HEADERS = ((\"Content-Security-Policy\", \"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\"), (\"Referrer-Policy\", \"no-referrer\"),\n                (\"X-Frame-Options\", \"DENY\"))",
+   "new": "PAGE_HEADERS = ((\"Referrer-Policy\", \"no-referrer\"),)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "redirect_keeps_the_referrer",
+   "file": "hub/login.py",
+   "old": "(\"Location\", NEXT[back]), (\"Referrer-Policy\", \"no-referrer\"), ",
+   "new": "(\"Location\", NEXT[back]), ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "login_bug_shows_the_error",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login_failed\", kind=\"bug\", error=type(e).__name__)",
+   "new": "self.log.event(\"login_failed\", kind=\"bug\", error=str(e))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret tests.scripts.test_hub_login.TheBugsAreCalm"
+  },
+  {
+   "id": "log_holds_the_code",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login\", tag=self.log.tag(address))",
+   "new": "self.log.event(\"login\", tag=self.log.tag(address), code=code)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+  },
+  {
+   "id": "log_holds_the_state",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login\", tag=self.log.tag(address))",
+   "new": "self.log.event(\"login\", tag=self.log.tag(address), state=state)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+  },
+  {
+   "id": "log_holds_the_cookie",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login\", tag=self.log.tag(address))",
+   "new": "self.log.event(\"login\", tag=self.log.tag(address), cookie=value)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+  },
+  {
+   "id": "log_holds_the_account",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login\", tag=self.log.tag(address))",
+   "new": "self.log.event(\"login\", tag=self.log.tag(address), account=account)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+  },
+  {
+   "id": "log_holds_the_name",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login\", tag=self.log.tag(address))",
+   "new": "self.log.event(\"login\", tag=self.log.tag(address), name=name)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+  },
+  {
+   "id": "log_holds_the_address",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login\", tag=self.log.tag(address))",
+   "new": "self.log.event(\"login\", tag=self.log.tag(address), address=address)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+  },
+  {
+   "id": "log_holds_the_secret",
+   "file": "hub/server.py",
+   "old": "log.event(\"start\", **cfg.summary())",
+   "new": "log.event(\"start\", **cfg.summary(), key=cfg.login_client_secret)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheProcess"
+  },
+  {
+   "id": "log_holds_the_client_id",
+   "file": "hub/config.py",
+   "old": "\"min_account_days\": self.min_account_days}",
+   "new": "\"min_account_days\": self.min_account_days, \"id\": self.login_client_id}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheProcess"
+  },
+  {
+   "id": "log_holds_the_answer_of_discord",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login_failed\", kind=e.kind, status=e.status, tag=self.log.tag(address))",
+   "new": "self.log.event(\"login_failed\", kind=e.kind, status=e.status, tag=self.log.tag(address), why=str(e.args))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogHoldsNothingSecret tests.scripts.test_hub_login.TheBugsAreCalm"
+  },
+  {
+   "id": "failed_logins_not_logged",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"login_failed\", kind=e.kind, status=e.status, tag=self.log.tag(address))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong tests.scripts.test_hub_login.TheLogHoldsNothingSecret"
+  },
+  {
+   "id": "secret_of_any_shape",
+   "file": "hub/config.py",
+   "old": "CLIENT_SECRET = re.compile(r\"[\\x21-\\x7e]{8,256}\\Z\")",
+   "new": "CLIENT_SECRET = re.compile(r\".*\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "client_id_of_any_shape",
+   "file": "hub/config.py",
+   "old": "CLIENT_ID = re.compile(r\"[0-9]{5,30}\\Z\")",
+   "new": "CLIENT_ID = re.compile(r\".*\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "login_on_without_the_site",
+   "file": "hub/config.py",
+   "old": "return bool(self.login_client_id and self.login_client_secret and self.origin)",
+   "new": "return bool(self.login_client_id and self.login_client_secret)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "login_on_with_the_id_only",
+   "file": "hub/config.py",
+   "old": "return bool(self.login_client_id and self.login_client_secret and self.origin)",
+   "new": "return bool(self.login_client_id and self.origin)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "fake_discord_on_a_public_address",
+   "file": "hub/config.py",
+   "old": "or not is_loopback(host) or parts.username",
+   "new": "or parts.username",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "fake_discord_in_a_hub_on_every_interface",
+   "file": "hub/config.py",
+   "old": "        if not is_loopback(cfg.host):\n            raise ConfigError(\"ANTS_HUB_TEST_DISCORD_URL is for tests only: it needs ANTS_HUB_HOST to be a loopback address\")",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "test_login_and_discord_login_together",
+   "file": "hub/config.py",
+   "old": "    if cfg.test_login and cfg.login_on:",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "age_setting_unbounded",
+   "file": "hub/config.py",
+   "old": "if not 0 <= cfg.min_account_days <= MAX_MIN_ACCOUNT_DAYS:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "age_default_zero",
+   "file": "hub/config.py",
+   "old": "env.get(\"ANTS_HUB_MIN_ACCOUNT_DAYS\", str(MIN_ACCOUNT_DAYS))",
+   "new": "env.get(\"ANTS_HUB_MIN_ACCOUNT_DAYS\", \"0\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings tests.scripts.test_hub_login.TheProcess"
+  },
+  {
+   "id": "age_default_a_day",
+   "file": "hub/config.py",
+   "old": "MIN_ACCOUNT_DAYS = 7  ",
+   "new": "MIN_ACCOUNT_DAYS = 1  ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "the_secret_is_in_the_text_of_the_settings",
+   "file": "hub/config.py",
+   "old": "login_client_secret: str = dataclasses.field(default=\"\", repr=False)",
+   "new": "login_client_secret: str = dataclasses.field(default=\"\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings"
+  },
+  {
+   "id": "hub_without_the_login_has_the_pages",
+   "file": "hub/server.py",
+   "old": "self.routes = getattr(sessions, \"routes\", None) or {}",
+   "new": "self.routes = {'/hub/me': lambda r, a: None}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSettings.test_a_hub_without_the_settings_has_no_login_pages_and_says_login_false"
+  },
+  {
+   "id": "login_false_with_the_settings",
+   "file": "hub/login.py",
+   "old": "    login = True\n\n    def __init__(self, cfg):",
+   "new": "    login = False\n\n    def __init__(self, cfg):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket"
+  },
+  {
+   "id": "line_write_error_cuts_the_socket",
+   "file": "hub/chat.py",
+   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except sqlite3.OperationalError as e:",
+   "new": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except ZeroDivisionError as e:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
+  },
+  {
+   "id": "command_error_cuts_the_socket",
+   "file": "hub/chat.py",
+   "old": "            try:\n                return self.command(peer, line)\n            except sqlite3.OperationalError as e:",
+   "new": "            try:\n                return self.command(peer, line)\n            except ZeroDivisionError as e:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
+  },
+  {
+   "id": "read_error_cuts_the_socket",
+   "file": "hub/chat.py",
+   "old": "        except sqlite3.OperationalError as e:\n            return self.trouble(peer, e, \"rate\")\n        if who.young:",
+   "new": "        except ZeroDivisionError as e:\n            return self.trouble(peer, e, \"rate\")\n        if who.young:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "failed_line_is_a_mistake",
+   "file": "hub/chat.py",
+   "old": "        self.mistake(peer, code, count=False)\n\n    def on_say",
+   "new": "        self.mistake(peer, code)\n\n    def on_say",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
+  },
+  {
+   "id": "failed_line_costs_its_token",
+   "file": "hub/chat.py",
+   "old": "            self.account_limits.refund(who.account_id, line)       # (the line was not kept: it did not cost a token, and the same text may be tried again)",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
+  },
+  {
+   "id": "failed_line_costs_the_global_token",
+   "file": "hub/chat.py",
+   "old": "            self.global_limit.give_back()\n            return self.trouble(peer, e, \"rate\")",
+   "new": "            return self.trouble(peer, e, \"rate\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed"
+  },
+  {
+   "id": "failed_command_is_said_rate",
+   "file": "hub/chat.py",
+   "old": "return self.trouble(peer, e, \"bad\")                # (a moderator is told that the command did not happen, and may type it again)",
+   "new": "return self.trouble(peer, e, \"rate\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
+  },
+  {
+   "id": "trouble_is_never_logged",
+   "file": "hub/server.py",
+   "old": "        self.chat.on_store_error = self.store_trouble",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
+  },
+  {
+   "id": "trouble_is_logged_every_time",
+   "file": "hub/server.py",
+   "old": "            self.next_trouble_log = now + 10.0",
+   "new": "            self.next_trouble_log = now",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
+  },
+  {
+   "id": "free_refusals_are_free",
+   "file": "hub/chat.py",
+   "old": "        else:\n            peer.charge()",
+   "new": "        else:\n            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheFreeRefusalsCostFramesOnTheWire"
+  },
+  {
+   "id": "charge_takes_nothing",
+   "file": "hub/server.py",
+   "old": "        if not self.frames.take(self.hub.clock()):\n            self.strike()\n\n    def write",
+   "new": "        if False:\n            self.strike()\n\n    def write",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheFreeRefusalsCostAFrame tests.scripts.test_hub_server.TheFreeRefusalsCostFramesOnTheWire"
+  },
+  {
+   "id": "charge_takes_two",
+   "file": "hub/server.py",
+   "old": "        if not self.frames.take(self.hub.clock()):\n            self.strike()\n\n    def write",
+   "new": "        if not (self.frames.take(self.hub.clock()) and self.frames.take(self.hub.clock())):\n            self.strike()\n\n    def write",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheFreeRefusalsCostAFrame"
+  },
+  {
+   "id": "main_waits_five_seconds_for_a_writer",
+   "file": "hub/server.py",
+   "old": "store = storemod.Store(cfg.db, busy_ms=300)",
+   "new": "store = storemod.Store(cfg.db)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProgramUsesTheShortWaitAndTheMinuteThatTheDocumentsPromise"
+  },
+  {
+   "id": "failed_purge_tried_at_every_tick",
+   "file": "hub/limits.py",
+   "old": "purge_failure_seconds: float = 60.0",
+   "new": "purge_failure_seconds: float = 0.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProgramUsesTheShortWaitAndTheMinuteThatTheDocumentsPromise"
+  },
+  {
+   "id": "serve_makes_its_own_limits",
+   "file": "hub/server.py",
+   "old": "    hub = Hub(cfg, store, sessions, log)\n    port = await hub.start(cfg.host, cfg.port)",
+   "new": "    hub = Hub(cfg, store, sessions, log, limitmod.Limits(purge_failure_seconds=1.0))\n    port = await hub.start(cfg.host, cfg.port)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProgramUsesTheShortWaitAndTheMinuteThatTheDocumentsPromise"
+  },
+  {
+   "id": "nginx_callback_in_the_access_log",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/callback {\n        if ($request_method != GET) { return 405; }\n        access_log off;",
+   "new": "location = /hub/callback {\n        if ($request_method != GET) { return 405; }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_login_in_the_access_log",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/login {\n        if ($request_method != GET) { return 405; }\n        if ($http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }          # (a link or an image of another site cannot start a login, and it is turned away before the allowance: a hostile page cannot spend a visitor's tries)\n        access_log off;",
+   "new": "location = /hub/login {\n        if ($request_method != GET) { return 405; }\n        if ($http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }          # (a link or an image of another site cannot start a login, and it is turned away before the allowance: a hostile page cannot spend a visitor's tries)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_callback_error_log_whole",
+   "file": "docker/nginx.conf",
+   "old": "        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_callback",
+   "new": "        limit_req zone=ants_hub_callback",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_login_error_log_whole",
+   "file": "docker/nginx.conf",
+   "old": "        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_login",
+   "new": "        limit_req zone=ants_hub_login",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_page_that_ends_a_login_in_the_access_log",
+   "file": "docker/nginx.conf",
+   "old": "    location @hub_page_off {\n        access_log off;",
+   "new": "    location @hub_page_off {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_page_of_the_limit_in_the_access_log",
+   "file": "docker/nginx.conf",
+   "old": "    location @hub_page_limit {\n        access_log off;",
+   "new": "    location @hub_page_limit {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_me_in_the_access_log",
+   "file": "docker/nginx.conf",
+   "old": "        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_hub_session burst=10 nodelay;\n        limit_req_status 429;\n        error_page 502 504 = @hub_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";",
+   "new": "        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        limit_req zone=ants_hub_session burst=10 nodelay;\n        limit_req_status 429;\n        error_page 502 504 = @hub_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_callback_passes_the_whole_cookie",
+   "file": "docker/nginx.conf",
+   "old": "proxy_set_header Cookie $hub_cookie_state;",
+   "new": "proxy_set_header Cookie $http_cookie;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_socket_passes_the_whole_cookie",
+   "file": "docker/nginx.conf",
+   "old": "proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)",
+   "new": "proxy_set_header Cookie $http_cookie;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_game_socket_gets_the_cookie",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Cookie \"\";                               # (the hub's login cookie is for the site's path /, so the browser sends it here too: the game server never sees a cookie)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_busy_gets_the_cookie",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Cookie \"\";                               # (no cookie of the visitor reaches the game server)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_admin_api_gets_every_cookie",
+   "file": "docker/nginx.conf",
+   "old": "proxy_set_header Cookie $admin_cookie;",
+   "new": "proxy_set_header Cookie $http_cookie;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_admin_cookie_map_takes_any",
+   "file": "docker/nginx.conf",
+   "old": "\"~(?:^|;[ ]*)(?<admin_c>ants_admin=[^; ]*)\" $admin_c;",
+   "new": "\"~(?<admin_c>.*)\" $admin_c;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_session_cookie_map_takes_any_shape",
+   "file": "docker/nginx.conf",
+   "old": "(?<hub_s>__Host-ants_hub=[0-9a-f]{32})",
+   "new": "(?<hub_s>__Host-ants_hub=[^;]*)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_login_limit_is_gone",
+   "file": "docker/nginx.conf",
+   "old": "limit_req zone=ants_hub_login burst=5 nodelay;",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_callback_limit_is_gone",
+   "file": "docker/nginx.conf",
+   "old": "limit_req zone=ants_hub_callback burst=5 nodelay;",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_login_rate_is_a_second",
+   "file": "docker/nginx.conf",
+   "old": "zone=ants_hub_login:1m rate=10r/m;",
+   "new": "zone=ants_hub_login:1m rate=10r/s;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_logout_without_the_fetch_site_check",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/logout {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }",
+   "new": "location = /hub/logout {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_forget_takes_a_get",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/forget {\n        if ($request_method != POST) { return 405; }",
+   "new": "location = /hub/forget {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_me_takes_a_query",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/me {\n        if ($request_method != GET) { return 405; }\n        if ($is_args) { return 404; }",
+   "new": "location = /hub/me {\n        if ($request_method != GET) { return 405; }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_login_takes_a_post",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/login {\n        if ($request_method != GET) { return 405; }",
+   "new": "location = /hub/login {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_callback_rewrites_the_redirect",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Cookie $hub_cookie_state;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_redirect off;",
+   "new": "        proxy_set_header Cookie $hub_cookie_state;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_callback_passes_every_header",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_state;",
+   "new": "        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_state;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_callback_times_out_before_discord",
+   "file": "docker/nginx.conf",
+   "old": "proxy_read_timeout 15s;                                   # (the hub gives Discord 10 seconds for the two calls)",
+   "new": "proxy_read_timeout 3s;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_hub_off_page_for_login_is_json",
+   "file": "docker/nginx.conf",
+   "old": "error_page 502 504 = @hub_page_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie",
+   "new": "error_page 502 504 = @hub_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "stack_secret_has_a_value",
+   "file": "docker-compose.stack.yml",
+   "old": "ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}",
+   "new": "ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-hunter2hunter2}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "staging_secret_has_a_value",
+   "file": "docker-compose.staging.yml",
+   "old": "ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}",
+   "new": "ANTS_HUB_DISCORD_CLIENT_SECRET: hunter2hunter2",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "stack_client_id_has_a_value",
+   "file": "docker-compose.stack.yml",
+   "old": "ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}",
+   "new": "ANTS_HUB_DISCORD_CLIENT_ID: 4242424242420001",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "stack_sets_the_fake_discord",
+   "file": "docker-compose.stack.yml",
+   "old": "      ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}\n",
+   "new": "      ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}\n      ANTS_HUB_TEST_DISCORD_URL: http://127.0.0.1:4999\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "stack_age_default_zero",
+   "file": "docker-compose.stack.yml",
+   "old": "ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}",
+   "new": "ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-0}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "image_names_the_fake_discord",
+   "file": "Dockerfile.hub",
+   "old": "ANTS_HUB_PORT=4040 ANTS_HUB_HOST=0.0.0.0",
+   "new": "ANTS_HUB_PORT=4040 ANTS_HUB_HOST=0.0.0.0 ANTS_HUB_TEST_DISCORD_URL=http://127.0.0.1:4999",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "legal_forgets_to_say_what_is_kept",
+   "file": "web/legal.html",
+   "old": "They are kept so that the site knows who you are, and for nothing else.",
+   "new": "They are used.",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_seven_days",
+   "file": "web/legal.html",
+   "old": "Chat lines are kept for 7 days,",
+   "new": "Chat lines are kept for a while,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_cookies",
+   "file": "web/legal.html",
+   "old": "<code>__Host-ants_hub</code>, a random number that says which login is yours (30 days, deleted when you log out)",
+   "new": "a cookie",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_to_say_how_to_forget",
+   "file": "web/legal.html",
+   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username from the site&rsquo;s records; a ban or a mute, if there is one, stays.",
+   "new": "Ask us.",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_names_a_token",
+   "file": "web/legal.html",
+   "old": "and it keeps no Discord access token",
+   "new": "and it keeps the Discord access token",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "forget_announces_every_line",
+   "file": "hub/chat.py",
+   "old": "for line_id in sorted(gone)[-self.limits.deleted_announce_max:]:",
+   "new": "for line_id in sorted(gone):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "forget_announces_the_oldest_hundred",
+   "file": "hub/chat.py",
+   "old": "for line_id in sorted(gone)[-self.limits.deleted_announce_max:]:",
+   "new": "for line_id in sorted(gone)[:self.limits.deleted_announce_max]:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "announce_bound_is_a_million",
+   "file": "hub/limits.py",
+   "old": "deleted_announce_max: int = 100 ",
+   "new": "deleted_announce_max: int = 1000000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheLimitsAreWhatTheDocsSay"
+  },
+  {
+   "id": "sync_deletions_announces_each",
+   "file": "hub/chat.py",
+   "old": "self.drop_lines([line_id for _, line_id in rows])",
+   "new": "[self.broadcast({\"t\": \"del\", \"id\": line_id}) for _, line_id in rows]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore "
+  },
+  {
+   "id": "sync_deletions_forgets_the_counter",
+   "file": "hub/chat.py",
+   "old": "self.deleted_seq = rows[-1][0]\n",
+   "new": "pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore "
+  },
+  {
+   "id": "drop_lines_leaves_the_ring",
+   "file": "hub/chat.py",
+   "old": "for line in [l for l in self.ring if l.id in gone]:\n            self.ring.remove(line)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore "
+  },
+  {
+   "id": "forget_skips_what_the_command_line_deleted",
+   "file": "hub/store.py",
+   "old": "AND (deleted = 0 OR del_seq > ?)\", (account, int(since)))]",
+   "new": "AND deleted = 0\", (account,))]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "forget_does_not_cut_the_log_file",
+   "file": "hub/store.py",
+   "old": "        try:\n            self.checkpoint()\n        except sqlite3.OperationalError:            # (the forgetting",
+   "new": "        try:\n            pass\n        except sqlite3.OperationalError:            # (the forgetting",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
+  },
+  {
+   "id": "forget_fails_when_the_cut_fails",
+   "file": "hub/store.py",
+   "old": "        except sqlite3.OperationalError:            # (the forgetting is done and is told",
+   "new": "        except ZeroDivisionError:            # (the forgetting is done and is told",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore "
+  },
+  {
+   "id": "logout_does_not_ask_for_the_cut",
+   "file": "hub/store.py",
+   "old": "        self.unsettled = True\n        return gone\n",
+   "new": "        return gone\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
+  },
+  {
+   "id": "the_cap_does_not_ask_for_the_cut",
+   "file": "hub/store.py",
+   "old": "        if over:\n            self.unsettled = True",
+   "new": "        if False:\n            self.unsettled = True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
+  },
+  {
+   "id": "state_compared_on_six_characters",
+   "file": "hub/login.py",
+   "old": "hmac.compare_digest(mine.encode(\"ascii\"), state.encode(\"ascii\"))",
+   "new": "hmac.compare_digest(mine[:6].encode(\"ascii\"), state[:6].encode(\"ascii\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
+  },
+  {
+   "id": "session_value_from_the_clock",
+   "file": "hub/login.py",
+   "old": "value = secrets.token_hex(16)\n        try:",
+   "new": "value = hashlib.sha256(str(self.store.clock()).encode()).hexdigest()[:32]\n        try:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "session_value_of_sixty_four_bits",
+   "file": "hub/login.py",
+   "old": "value = secrets.token_hex(16)\n        try:",
+   "new": "value = secrets.token_hex(8) * 2\n        try:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCookie"
+  },
+  {
+   "id": "body_cap_is_32_megabytes",
+   "file": "hub/limits.py",
+   "old": "discord_body_max: int = 32768 ",
+   "new": "discord_body_max: int = 33554432 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsAreWhatTheDocsSay"
+  },
+  {
+   "id": "hostname_is_not_checked",
+   "file": "hub/discord.py",
+   "old": "self.ssl = ssl_context or ssl.create_default_context()",
+   "new": "self.ssl = ssl_context or (lambda c: (setattr(c, \"check_hostname\", False), c)[1])(ssl.create_default_context())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDiscordClient"
+  },
+  {
+   "id": "lookalikes_of_reserved_names_pass",
+   "file": "hub/login.py",
+   "old": "        if reserved(name):\n",
+   "new": "        if name in RESERVED:\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "reserved_squash_keeps_the_dots",
+   "file": "hub/login.py",
+   "old": "re.sub(r\"[._]\", \"\", name.lower())",
+   "new": "name.lower()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "reserved_squash_strips_the_digits_at_the_end",
+   "file": "hub/login.py",
+   "old": "re.sub(r\"[._]\", \"\", name.lower()).translate(LOOKALIKE)",
+   "new": "re.sub(r\"[._]\", \"\", name.lower()).rstrip(\"0123456789\").translate(LOOKALIKE)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "reserved_digits_are_not_letters",
+   "file": "hub/login.py",
+   "old": "re.sub(r\"[._]\", \"\", name.lower()).translate(LOOKALIKE)",
+   "new": "re.sub(r\"[._]\", \"\", name.lower())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "reserved_lookalike_one_is_not_i",
+   "file": "hub/login.py",
+   "old": "str.maketrans(\"013457\", \"oieast\")",
+   "new": "str.maketrans(\"013457\", \"oleast\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "old_python_is_allowed",
+   "file": "hub/__main__.py",
+   "old": "if sys.version_info < (3, 12):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheOldPythonIsRefused"
+  },
+  {
+   "id": "python_3_11_is_allowed",
+   "file": "hub/__main__.py",
+   "old": "if sys.version_info < (3, 12):",
+   "new": "if sys.version_info < (3, 11):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheOldPythonIsRefused"
+  },
+  {
+   "id": "old_python_is_refused_without_a_word",
+   "file": "hub/__main__.py",
+   "old": "sys.stderr.write(\"hub: Python 3.12 or newer is needed (this is %d.%d); see docs/HUB.md\\n\" % tuple(sys.version_info[:2]))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheOldPythonIsRefused"
+  },
+  {
+   "id": "a_link_of_another_site_spends_the_allowance",
+   "file": "hub/login.py",
+   "old": "        site = request.headers.get(\"sec-fetch-site\")\n",
+   "new": "        if not self.rate_login.take(address, self.hub.clock()):\n            return self.page(\"busy\")\n        site = request.headers.get(\"sec-fetch-site\")\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfStart"
+  },
+  {
+   "id": "nginx_login_spends_the_allowance_of_a_link_of_another_site",
+   "file": "docker/nginx.conf",
+   "old": "        if ($http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }          # (a link or an image",
+   "new": "        # (a link or an image",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_login_lets_a_sibling_site_in",
+   "file": "docker/nginx.conf",
+   "old": "$http_sec_fetch_site ~ \"^(cross-site|same-site)$\"",
+   "new": "$http_sec_fetch_site ~ \"^cross-site$\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_login_turns_the_callback_away_too",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/callback {\n        if ($request_method != GET) { return 405; }",
+   "new": "location = /hub/callback {\n        if ($request_method != GET) { return 405; }\n        if ($http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "nginx_site_page_is_not_a_page",
+   "file": "docker/nginx.conf",
+   "old": "return 403 '<!doctype html>",
+   "new": "return 200 '<!doctype html>",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
+  },
+  {
+   "id": "docs_forget_the_trusted_proxies",
+   "file": "docs/HUB.md",
+   "old": "(0) **Before the login goes live:** `docker/trusted-proxies.conf` must name",
+   "new": "(0) `docker/trusted-proxies.conf` should name",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
+  },
+  {
+   "id": "docs_forget_the_fresh_account",
+   "file": "docs/HUB.md",
+   "old": "**Try it with a fresh Discord account** that never authorized the application",
+   "new": "Try it",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
+  },
+  {
+   "id": "docs_forget_the_rollback",
+   "file": "docs/HUB.md",
+   "old": "**The schema is 3** (`PRAGMA user_version`; the `sessions` table came with it). A hub of an earlier version does not start on such a database",
+   "new": "The schema is 3. A hub of an earlier version reads such a database",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
+  },
+  {
+   "id": "docs_forget_the_one_exception",
+   "file": "docs/HUB.md",
+   "old": "**The one exception to \"no access log\":**",
+   "new": "**A note:**",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
+  },
+  {
+   "id": "docs_forget_the_python",
+   "file": "docs/HUB.md",
+   "old": "Python 3.12 or newer, standard library only",
+   "new": "Python 3, standard library only",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheOldPythonIsRefused"
+  },
+  {
+   "id": "image_comment_forgets_the_schema",
+   "file": "Dockerfile.hub",
+   "old": "It is schema 3: a hub of an",
+   "new": "It is a database: a hub of an",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
+  },
+  {
+   "id": "reserved_page_says_the_name_is_bad",
+   "file": "hub/login.py",
+   "old": "return self.page(\"reserved\", back, gone)",
+   "new": "return self.page(\"name\", back, gone)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "reserved_is_not_in_the_log",
+   "file": "hub/login.py",
+   "old": "kind=\"reserved\"",
+   "new": "kind=\"name\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "forget_ignores_the_hubs_last_look",
+   "file": "hub/store.py",
+   "old": "AND (deleted = 0 OR del_seq > ?)\", (account, int(since)))]",
+   "new": "\", (account,))]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "forget_only_the_live_lines",
+   "file": "hub/store.py",
+   "old": "AND (deleted = 0 OR del_seq > ?)",
+   "new": "AND (deleted = 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "forget_is_not_told_the_last_look",
+   "file": "hub/login.py",
+   "old": "self.store.forget(who.account_id, self.hub.chat.deleted_seq)",
+   "new": "self.store.forget(who.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "forget_is_told_the_start_as_the_last_look",
+   "file": "hub/login.py",
+   "old": "self.store.forget(who.account_id, self.hub.chat.deleted_seq)",
+   "new": "self.store.forget(who.account_id, 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  }
+ ]
+}

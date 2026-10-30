@@ -1,7 +1,8 @@
 """The hub process: HTTP head, WebSocket upgrade, one task per socket, and a clock that pings, drops the silent, counts who is online and keeps the database tidy.
 
-The only door is wss://<site>/hub/ws (docker/nginx.conf passes it here, with the visitor's address in X-Client-Address, and nothing else of the request but the headers named in
-docs/HUB.md). Every refusal is an HTTP answer before the upgrade: 403 for an Origin that is not the site, 429 for a ninth socket of one address, 503 for the 501st socket.
+The door of the chat is wss://<site>/hub/ws (docker/nginx.conf passes it here, with the visitor's address in X-Client-Address, and nothing else of the request but the headers named in
+docs/HUB.md). Every refusal is an HTTP answer before the upgrade: 403 for an Origin that is not the site, 429 for a ninth socket of one address, 503 for the 501st socket. The pages of the
+Discord login (hub/login.py) are the other five paths that nginx passes: each is one request and one answer, and a hub without the login has none of them.
 """
 import asyncio
 import os
@@ -39,6 +40,12 @@ class Peer:
     def strike(self):
         if self.strikes.add(self.hub.clock()):
             self.close(1008, "too many mistakes")
+
+    def charge(self):
+        """A refusal that is no mistake of the client's (the hub is busy, the database is full or locked) costs one frame of its budget more, so a client that keeps asking is no cheaper than one
+        that makes mistakes: when the budget is gone, it is a mistake."""
+        if not self.frames.take(self.hub.clock()):
+            self.strike()
 
     def write(self, frame):
         if self.closed or self.writer.is_closing():
@@ -92,6 +99,8 @@ class Hub:
         self.limits = limits or limitmod.Limits()
         self.clock = clock
         self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, sessions.login)
+        self.chat.on_store_error = self.store_trouble
+        self.next_trouble_log = float("-inf")
         self.per_address = limitmod.PerAddress(self.limits.sockets_per_address)
         self.pending = 0
         self.server = None
@@ -100,6 +109,9 @@ class Hub:
         self.online_shown = 0
         self.online_at = float("-inf")
         self.next_deletions = self.next_forget = self.next_purge = self.next_checkpoint = self.next_crowded = float("-inf")
+        self.routes = getattr(sessions, "routes", None) or {}
+        if hasattr(sessions, "attach"):
+            sessions.attach(self)
 
     async def start(self, host, port):
         self.server = await asyncio.start_server(self.handle, host, port, limit=8192, backlog=128)
@@ -134,6 +146,11 @@ class Hub:
             request = http.parse_head(head)
             if request.path == HEALTH_PATH and request.method == "GET":
                 return writer.write(http.response(200, {"ok": True}))
+            route = self.routes.get(request.split()[0])
+            if route is not None:
+                self.pending -= 1                                     # (the place of a connection that has not finished its handshake: this one has, and may wait for Discord)
+                pending = False
+                return await self.page(route, request, writer)
             if request.path != WS_PATH:
                 raise http.HttpError(404, "not_found")
             peer = await self.upgrade(request, reader, writer)
@@ -159,6 +176,15 @@ class Hub:
                 self.log.event("gone", tag=peer.tag, online=len(self.chat.peers))
             writer.close()
 
+    async def page(self, route, request, writer):
+        """One of the login's pages: no body is read (one that is sent is refused), and the answer ends the connection."""
+        h = request.headers
+        if h.get("content-length", "0") != "0" or "transfer-encoding" in h:
+            raise http.HttpError(400, "body")
+        peername = writer.get_extra_info("peername")
+        address = limitmod.address_key(h.get("x-client-address"), peername[0] if peername else "")
+        writer.write(await route(request, address))
+
     async def upgrade(self, request, reader, writer):
         """Check the handshake and take the socket in: an HttpError says no; otherwise the 101 and the welcome are written and the Peer is returned."""
         h = request.headers
@@ -166,6 +192,8 @@ class Hub:
             raise http.HttpError(405, "method", {"Allow": "GET"})
         if not self.cfg.origin or h.get("origin") != self.cfg.origin:
             raise http.HttpError(403, "origin")
+        if h.get("sec-fetch-site", "same-origin") != "same-origin":          # (a browser that says that the page is of another site: its Origin was the site's, but this is not the site's page)
+            raise http.HttpError(403, "fetch_site")
         if h.get("content-length", "0") != "0" or "transfer-encoding" in h:
             raise http.HttpError(400, "body")
         if h.get("upgrade", "").lower() != "websocket" or not request.has_token("connection", "upgrade"):
@@ -199,6 +227,21 @@ class Hub:
         self.log.event("open", tag=peer.tag, online=len(self.chat.peers), account="yes" if peer.identity else "no")
         return peer
 
+    def store_trouble(self, error):
+        """The database could not be used for a message: one line in the log every ten seconds at the most (the class of the error, which says locked or full or refused)."""
+        now = self.clock()
+        if now >= self.next_trouble_log:
+            self.next_trouble_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="store")
+
+    def end_logins(self, session=None, account=None):
+        """The sockets of a login that was ended (its session key), or of every login of an account, are closed: a socket never outlives the login that it was let in with. The page
+        connects again, as a reader."""
+        for peer in list(self.chat.peers):
+            who = peer.identity
+            if who is not None and not peer.closed and ((session is not None and who.session == session) or (account is not None and who.account_id == account)):
+                peer.close(1000, "logged out")
+
     async def identify(self, headers):
         try:
             who = await asyncio.wait_for(self.sessions.identify(headers), self.limits.identify_seconds)
@@ -219,10 +262,13 @@ class Hub:
                 self.log.event("error", kind=type(e).__name__, where="tick")
 
     def on_tick(self, now):
+        wall = self.store.clock()
         for peer in list(self.chat.peers):
             if peer.closed:
                 if peer.closed_at is not None and now - peer.closed_at >= self.limits.close_grace_seconds:
                     peer.writer.transport.abort()                     # (a closed socket whose reader never takes the rest of the output would stay for ever)
+            elif peer.identity is not None and peer.identity.expires and wall >= peer.identity.expires:
+                peer.close(1000, "the login ran out")                  # (a login of 30 days, and a socket that is older than that)
             elif now - peer.last_rx >= self.limits.silence_seconds:
                 peer.close(1001, "silent")
             elif now - peer.last_ping >= self.limits.ping_seconds:
@@ -238,6 +284,8 @@ class Hub:
         if now >= self.next_forget:
             self.next_forget = now + 60.0
             self.chat.account_limits.forget_idle(now)
+            if hasattr(self.sessions, "forget_idle"):
+                self.sessions.forget_idle(now, wall)
         if now >= self.next_purge:
             self.next_purge = now + self.limits.purge_failure_seconds         # (set first: a purge that fails is tried again in a minute, not at every tick)
             gone = self.store.purge(self.limits.purge_chunk)
@@ -279,6 +327,10 @@ def main(env=None):
     log.event("note", what="sockets_are_counted_for_each_X-Client-Address_that_nginx_sets_see_docs/HUB.md")
     if cfg.test_login:
         log.event("warning", what="test_login_is_on")
+    if cfg.discord_test_url:
+        log.event("warning", what="a_fake_discord_is_on")
+    if (cfg.login_client_id or cfg.login_client_secret) and not cfg.login_on:
+        log.event("warning", what="discord_login_off_needs_id_secret_and_site_address")
     store = storemod.Store(cfg.db, busy_ms=300)                      # (the one thread of the hub waits at most this long for another process's write)
     try:
         store.checkpoint()                  # (what a crash left in the log file)
