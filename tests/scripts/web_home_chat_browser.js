@@ -71,6 +71,7 @@ async function main() {
     const settled = (page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))));       // (the page has had a frame, so that its styles, its measures and its observers are done)
     const waitState = async (page, want, ms) => { const end = Date.now() + (ms || 6000); while (Date.now() < end) { if ((await state(page)) === want) return true; await sleep(50); } return (await state(page)) === want; };
     const noSideways = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth);
+    const shownButtons = (page) => page.evaluate(() => [...document.querySelectorAll('#gchat button')].filter((b) => b.getClientRects().length > 0).map((b) => b.className));       // (the buttons that can be seen: the login's are in the page and hidden until a hub offers a login)
     const targets = (page) => page.evaluate(() => [...document.querySelectorAll('#gchat button, #gchat input, #gchat a, #gchat [tabindex]')].filter((e) => e.offsetParent !== null || e.getClientRects().length).map((e) => { const r = e.getBoundingClientRect(); return { tag: e.tagName.toLowerCase() + '.' + e.className, w: Math.round(r.width), h: Math.round(r.height) }; }));
 
     // ---- the three sizes: read only (the approved x_home / x_chat_out), a writer (x_chat_in), folded (x_collapsed), offline ----
@@ -80,7 +81,7 @@ async function main() {
         const { page, context } = await open(size);
         check(size + ': the dock is mounted on Home by the page itself, after its two files came (home/chat.js, home/chat.css)', (await state(page)) !== null && site.requests.indexOf('/home/chat.js') !== -1 && site.requests.indexOf('/home/chat.css') !== -1);
         check(size + ': it welcomes with the history and says that the chat is read-only (no field, no Send, no login button)', await waitState(page, size === 'desktop' ? 'live/true' : 'live/false')
-              && (await page.evaluate(() => document.querySelector('#gchat .gc-form').hidden && document.querySelector('#gchat-login-slot').hidden && document.querySelectorAll('#gchat button').length === 2)));
+              && (await page.evaluate(() => document.querySelector('#gchat .gc-form').hidden && document.querySelector('#gchat-login-slot').hidden)) && JSON.stringify(await shownButtons(page)) === JSON.stringify(['btn gc-fold']), JSON.stringify(await shownButtons(page)));
         const d = await rect(page, '#gchat');
         if (size === 'desktop') {
             check('desktop: the panel is 380 x 380 in the lower-left corner (the approved picture: 24 px from the left, 22 px from the bottom)', d.w === 380 && d.h === 380 && d.x === 24 && Hh - d.bottom >= 18 && Hh - d.bottom <= 26, JSON.stringify(d));
@@ -139,7 +140,7 @@ async function main() {
         hub.set({ login: true, you: null, mode: 'normal', online: 12, history: HISTORY });
         const { page, context } = await open(size);
         await waitState(page, size === 'desktop' ? 'live/true' : 'live/false');
-        check(size + ': a hub with a login and nobody named: "Log in with Discord to chat" (and still no button, no field)', (await page.evaluate(() => document.querySelector('#gchat .gc-form').hidden && document.querySelectorAll('#gchat button').length === 2)) && (size !== 'desktop' ? true : (await dockText(page, '.gc-note')) === 'Log in with Discord to chat'));
+        check(size + ': a hub with a login and nobody named: "Log in with Discord to chat" (the field is off and says so, no Send, the Log in button is where Send would be)', (await page.evaluate(() => { const f = document.querySelector('#gchat .gc-form'); return !f.hidden && f.querySelector('input').disabled && document.querySelector('#gchat-login-slot').hidden; })) && (size !== 'desktop' ? JSON.stringify(await shownButtons(page)) === JSON.stringify(['btn gc-fold']) : JSON.stringify(await shownButtons(page)) === JSON.stringify(['btn gc-fold', 'btn gc-send gc-login']) && (await page.getAttribute('#gchat .gc-input', 'placeholder')) === 'Log in with Discord to chat'), JSON.stringify(await shownButtons(page)));       // (a strip or a folded panel shows the fold button only: the bar's chip is the Log in there)
         if (size === 'desktop') await page.click('#gchat .gc-fold');
         hub.say('clover', 'new room: Treasure, 3 of 4', true); hub.say('pebble', 'joining!'); hub.say('juniper', 'me too');
         await sleep(250);

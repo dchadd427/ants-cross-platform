@@ -1,5 +1,5 @@
 """The chat itself: who may say what, the last lines, moderation. No sockets here: a peer is any object with `identity`, `send_text(bytes)`, `close(code, reason)` and `strike()`
-(hub/server.py has the real one), so the tests drive this with plain fakes.
+(hub/server.py has the real one), so the tests drive this with plain fakes. `charge()` is a refusal that is not counted as a mistake: it costs the socket a frame more.
 
 Messages (JSON, "v":1; docs/HUB.md has the table):
   up    {"t":"say","text":"..."}   {"t":"ping"}
@@ -10,6 +10,7 @@ all accounts together and the size of the database allow it (`rate` otherwise); 
 import collections
 import json
 import re
+import sqlite3
 
 from . import PROTOCOL, text as textrules
 from .limits import AccountLimits, TokenBucket
@@ -32,6 +33,7 @@ class Chat:
         self.account_limits = AccountLimits(limits)
         self.global_limit = TokenBucket(limits.global_burst, limits.global_refill_seconds, clock())      # all accounts together: what the database is asked to keep
         self.peers = set()
+        self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
         self.ring = collections.deque(maxlen=limits.history_lines)
         for line in store.recent_lines(limits.history_lines):
             self.ring.append(line)
@@ -86,19 +88,32 @@ class Chat:
         raise ValueError(name)
 
     def mistake(self, peer, code, count=True):
-        """Tell the peer what was wrong and count it; the twentieth within a minute closes the socket. (`count=False` is for a refusal that is not the client's doing.)"""
+        """Tell the peer what was wrong and count it; the twentieth within a minute closes the socket. (`count=False` is for a refusal that is not the client's doing: it is not a mistake, but
+        it is not free either: it costs the socket a frame more of its budget of frames, so a client that keeps asking runs out of it twice as fast.)"""
         peer.send_text(dumps({"t": "err", "code": code}))
         if count:
             peer.strike()
+        else:
+            peer.charge()
+
+    def trouble(self, peer, error, code):
+        """The database could not be used for this message (another process holds its write lock longer than the hub waits, the disk is full or refuses): the peer is told `code`, which is
+        not its doing and no mistake, and the socket stays."""
+        if self.on_store_error:
+            self.on_store_error(error)
+        self.mistake(peer, code, count=False)
 
     def on_say(self, peer, raw):
         who = peer.identity
         if who is None:
             return self.mistake(peer, "login")
-        if self.store.is_banned(who.account_id):
-            return self.mistake(peer, "banned")
-        if self.store.muted_until(who.account_id):
-            return self.mistake(peer, "muted")
+        try:
+            if self.store.is_banned(who.account_id):
+                return self.mistake(peer, "banned")
+            if self.store.muted_until(who.account_id):
+                return self.mistake(peer, "muted")
+        except sqlite3.OperationalError as e:
+            return self.trouble(peer, e, "rate")
         if who.young:
             return self.mistake(peer, "young")
         line, why = textrules.clean_line(raw)
@@ -106,14 +121,26 @@ class Chat:
             return self.mistake(peer, why)
         mod = who.account_id in self.mods
         if mod and line.startswith("/"):
-            return self.command(peer, line)
+            try:
+                return self.command(peer, line)
+            except sqlite3.OperationalError as e:
+                return self.trouble(peer, e, "bad")                # (a moderator is told that the command did not happen, and may type it again)
         now = self.clock()
-        if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:
+        try:
+            full = self.store.size() >= self.limits.db_max_bytes
+        except sqlite3.OperationalError as e:
+            return self.trouble(peer, e, "rate")
+        if not self.global_limit.ready(now) or full:
             return self.mistake(peer, "rate", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)
         if self.account_limits.check(who.account_id, line, now):
             return self.mistake(peer, "rate")                      # (this check is the last: it is the one that counts the line as said)
         self.global_limit.take(now)
-        entry = self.store.add_line(who.account_id, who.name, line, mod)
+        try:
+            entry = self.store.add_line(who.account_id, who.name, line, mod)
+        except sqlite3.OperationalError as e:
+            self.account_limits.refund(who.account_id, line)       # (the line was not kept: it did not cost a token, and the same text may be tried again)
+            self.global_limit.give_back()
+            return self.trouble(peer, e, "rate")
         self.ring.append(entry)
         self.broadcast(dict({"t": "line"}, **self.line_of(entry)))
 
@@ -141,12 +168,21 @@ class Chat:
             return None
         return next(iter(here)) if here else self.store.account_of_name(name)
 
+    def drop_lines(self, ids):
+        """Take lines off every screen at once (the lines of an account that forgot itself, the lines that were deleted from the command line). The number of frames is bounded, whatever the number
+        of lines: a page keeps 100 lines at most and the id of a line only ever grows, so the lines that can be on a screen are the newest 100 of the deleted ones, and the older ones need no frame.
+        (One frame for each of 300,000 lines, to each of 500 sockets, is a loop that holds the hub's one thread for minutes.)"""
+        gone = set(ids)
+        for line in [l for l in self.ring if l.id in gone]:
+            self.ring.remove(line)
+        for line_id in sorted(gone)[-self.limits.deleted_announce_max:]:
+            self.broadcast({"t": "del", "id": line_id})
+
     # ---- the clock's work -----------------------------------------------------------------------------------------------------------------
 
     def sync_deletions(self):
-        """Tell everybody about the lines that were deleted since the last look (by a /del here, or by the command line in another process)."""
-        for seq, line_id in self.store.deletions_since(self.deleted_seq):
-            self.deleted_seq = seq
-            for line in [l for l in self.ring if l.id == line_id]:
-                self.ring.remove(line)
-            self.broadcast({"t": "del", "id": line_id})
+        """Tell everybody about the lines that were deleted since the last look (by a /del here, or by the command line in another process): a bounded number of frames, see drop_lines."""
+        rows = self.store.deletions_since(self.deleted_seq)
+        if rows:
+            self.deleted_seq = rows[-1][0]
+            self.drop_lines([line_id for _, line_id in rows])

@@ -1,4 +1,4 @@
-"""hub.db: the chat lines kept for moderation, and who is muted or banned (docs/HUB.md, "Data").
+"""hub.db: the chat lines kept for moderation, who is muted or banned, and the logins (docs/HUB.md, "Data").
 
 Everything is keyed by account id, so a mute or a ban survives a restart, a new session and a rename. The chat process and `python -m hub.admin` open the same file (WAL, so they
 do not block each other). A line is kept `retention_days` (7) and then deleted for good: the delete zeroes the freed pages (secure_delete) and the log file is cut. A line that a
@@ -11,7 +11,7 @@ import sqlite3
 import time
 
 Line = collections.namedtuple("Line", "id at account name text mod")
-SCHEMA = 2
+SCHEMA = 3
 
 
 class Store:
@@ -20,7 +20,7 @@ class Store:
         self.busy_ms = busy_ms                      # how long a write waits for another process's write (the hub uses a short time: its one thread must not wait for seconds)
         self.clock = clock
         self.retention = retention_days * 86400
-        self.unsettled = False                      # True while the log file could not be cut because a reader held it
+        self.unsettled = False                      # True while the log file is to be cut: a reader held it, or a login ended (the hub's clock cuts it at its next look)
         new = not os.path.exists(path)
         self.db = sqlite3.connect(path, timeout=5.0, isolation_level=None)
         try:
@@ -60,6 +60,14 @@ class Store:
                 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL);
                 INSERT OR IGNORE INTO meta (k, v) SELECT 'del_seq', COALESCE(MAX(del_seq), 0) FROM lines;
                 PRAGMA user_version = 2;
+                COMMIT;""")
+        if version < 3:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, account TEXT NOT NULL, name TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS sessions_account ON sessions (account);
+                CREATE INDEX IF NOT EXISTS sessions_expires ON sessions (expires);
+                PRAGMA user_version = 3;
                 COMMIT;""")
 
     def close(self):
@@ -121,12 +129,13 @@ class Store:
         return self.db.execute("SELECT id, at, account, name, text, deleted FROM lines ORDER BY id DESC LIMIT ?", (count,)).fetchall()
 
     def purge(self, chunk=2000):
-        """Delete up to `chunk` lines that are past their time (call again while it returns `chunk`: a long backlog is not one long wait) and the mutes that are over, then cut the log
-        file. Returns how many lines went."""
+        """Delete up to `chunk` lines that are past their time (call again while it returns `chunk`: a long backlog is not one long wait), the mutes that are over and the logins that
+        have run out, then cut the log file. Returns how many lines went."""
         now = int(self.clock())
         with self.transaction():
             gone = self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE at < ? LIMIT ?)", (now - self.retention, chunk)).rowcount
             self.db.execute("DELETE FROM mutes WHERE until <= ?", (now,))
+            self.db.execute("DELETE FROM sessions WHERE expires <= ?", (now,))
         self.checkpoint()
         return gone
 
@@ -151,6 +160,50 @@ class Store:
         except OSError:
             log_file = 0
         return (pages - free) * page_size + log_file
+
+    # ---- logins ---------------------------------------------------------------------------------------------------------------------------
+
+    def add_session(self, key, account, name, seconds, keep, total):
+        """Keep a login: `key` is the SHA-256 (hex) of the cookie's value, never the value; it runs out after `seconds`. An account keeps at most `keep` of them, and all accounts together
+        `total`: the oldest go."""
+        now = int(self.clock())
+        with self.transaction():
+            self.db.execute("INSERT INTO sessions (id, account, name, created, expires) VALUES (?, ?, ?, ?, ?)", (key, account, name, now, now + int(seconds)))
+            over = self.db.execute("DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)", (account, account, keep)).rowcount
+            over += self.db.execute("DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,)).rowcount
+        if over:
+            self.unsettled = True                   # (the logins that went over the caps are in the log file until it is cut)
+
+    def session(self, key):
+        """(account, name, expires) of the login whose key this is, or None when there is none or it has run out."""
+        row = self.db.execute("SELECT account, name, expires FROM sessions WHERE id = ? AND expires > ?", (key, int(self.clock()))).fetchone()
+        return tuple(row) if row else None
+
+    def delete_session(self, key):
+        """End one login. What was deleted is still in the log file until it is cut: `unsettled` asks the hub's clock to cut it at its next look (within ten seconds, and many logins ending
+        at once cost one cut), so that the hash of the login does not stay in a file for the hour that is the pause between two purges."""
+        with self.transaction():
+            gone = self.db.execute("DELETE FROM sessions WHERE id = ?", (key,)).rowcount == 1
+        self.unsettled = True
+        return gone
+
+    def forget(self, account, since=0):
+        """Everything that ties this account's id or name to the site, except what keeps the others safe: all its logins and all its chat lines go, and the name is wiped from its mute
+        and ban (they stay, by id: forgetting must not lift one). Returns the ids of the lines that went and that a screen may still show: the lines that were not deleted, and the ones that a
+        moderator deleted from the command line after the deletion numbered `since` (the hub's last look: it did not tell the screens yet). A line that was deleted and announced before is on
+        no screen, and must not use up the few frames that a bulk drop is allowed (hub/chat.py drop_lines). The log file is cut at once, so that neither the lines, nor the name, nor the hashes
+        of the logins are left in it (a reader that holds the file up leaves them there until a later look: `unsettled`)."""
+        with self.transaction():
+            ids = [r[0] for r in self.db.execute("SELECT id FROM lines WHERE account = ? AND (deleted = 0 OR del_seq > ?)", (account, int(since)))]
+            self.db.execute("DELETE FROM sessions WHERE account = ?", (account,))
+            self.db.execute("DELETE FROM lines WHERE account = ?", (account,))
+            self.db.execute("UPDATE mutes SET name = '' WHERE account = ?", (account,))
+            self.db.execute("UPDATE bans SET name = '' WHERE account = ?", (account,))
+        try:
+            self.checkpoint()
+        except sqlite3.OperationalError:            # (the forgetting is done and is told: the cut is tried again by the hub's clock)
+            self.unsettled = True
+        return ids
 
     # ---- mutes and bans -------------------------------------------------------------------------------------------------------------------
 

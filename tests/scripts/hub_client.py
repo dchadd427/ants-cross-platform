@@ -83,6 +83,72 @@ def http_get(port, path, headers=None, timeout=5.0):
     return int(status.split()[1]), body
 
 
+class Response:
+    """An HTTP answer: `status` (int), `headers` (a list of (lower-case name, value): a name may come twice), `body` (bytes)."""
+
+    def __init__(self, status, headers, body):
+        self.status, self.headers, self.body = status, headers, body
+
+    def get(self, name):
+        return next((v for k, v in self.headers if k == name.lower()), None)
+
+    def all(self, name):
+        return [v for k, v in self.headers if k == name.lower()]
+
+    def json(self):
+        return json.loads(self.body.decode("utf-8"))
+
+    def text(self):
+        return self.body.decode("utf-8", "replace")
+
+
+def request(port, method, path, headers=None, body=b"", timeout=10.0, send_length=True, host="chat.example.org"):
+    """One HTTP request to a loopback port and the whole answer (the connection is closed by the server). `headers` is a dict or a list of (name, value) pairs; none is added but Host, Connection
+    and, for a body or a POST, Content-Length (send_length=False leaves it out)."""
+    pairs = list(headers.items()) if isinstance(headers, dict) else list(headers or [])
+    lines = ["%s %s HTTP/1.1" % (method, path), "Host: " + host, "Connection: close"]
+    if send_length and (body or method == "POST"):
+        lines.append("Content-Length: %d" % len(body))
+    lines += ["%s: %s" % kv for kv in pairs]
+    with socket.create_connection(("127.0.0.1", port), timeout=timeout) as s:
+        s.sendall(("\r\n".join(lines) + "\r\n\r\n").encode("latin-1") + body)
+        data = b""
+        while True:
+            try:
+                chunk = s.recv(65536)
+            except socket.timeout:
+                break
+            if not chunk:
+                break
+            data += chunk
+    head, _, payload = data.partition(b"\r\n\r\n")
+    rows = head.decode("latin-1").split("\r\n")
+    out = []
+    for row in rows[1:]:
+        name, _, value = row.partition(":")
+        out.append((name.strip().lower(), value.strip()))
+    return Response(int(rows[0].split()[1]), out, payload)
+
+
+class Jar:
+    """The cookies of one browser, as far as the login's tests need: Set-Cookie of an answer stores or (Max-Age=0) removes one, header() is what the browser would send back."""
+
+    def __init__(self):
+        self.cookies = {}
+
+    def update(self, response):
+        for value in response.all("set-cookie"):
+            first = value.split(";")[0]
+            name, _, val = first.partition("=")
+            if "max-age=0" in value.lower().replace(" ", "") or not val:
+                self.cookies.pop(name, None)
+            else:
+                self.cookies[name] = val
+
+    def header(self):
+        return "; ".join("%s=%s" % kv for kv in self.cookies.items())
+
+
 class Client:
     def __init__(self, port, origin=SITE, headers=None, key=None, path="/hub/ws", drop=(), timeout=5.0, login=None, trailer=b""):
         """Connect and do the handshake; `status` is the HTTP status line, `reply_headers` the answer's headers. login="1001:maple.leaf" sends the test-login header; `trailer` is sent in the same write as the handshake."""

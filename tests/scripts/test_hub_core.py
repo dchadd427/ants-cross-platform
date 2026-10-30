@@ -42,6 +42,7 @@ class FakePeer:
         self.identity = identity
         self.sent = []
         self.strikes = 0
+        self.charges = 0
         self.closed = None
 
     def send_text(self, data):
@@ -49,6 +50,9 @@ class FakePeer:
 
     def strike(self):
         self.strikes += 1
+
+    def charge(self):
+        self.charges += 1
 
     def kinds(self, kind):
         return [m for m in self.sent if m["t"] == kind]
@@ -513,6 +517,42 @@ class TheModerators(WorldTest):
         self.w.chat.sync_deletions()
         self.assertEqual(self.reader.kinds("del"), [{"t": "del", "id": 1}, {"t": "del", "id": 2}])
 
+    def test_a_run_of_deletions_from_the_command_line_is_the_newest_hundred_frames_and_every_line_leaves_the_ring(self):
+        other = storemod.Store(self.w.db, clock=self.w.wall)
+        self.addCleanup(other.close)
+        for n in range(30):
+            self.w.say(self.alice, "line %d" % n)
+            self.w.clock.now += 3.0
+        ring_ids = [l.id for l in self.w.chat.ring]
+        with other.transaction():
+            other.db.executemany("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, 0)", [(int(self.w.wall()), "9", "bulk", "bulk %d" % n) for n in range(450)])
+        ids = [row[0] for row in other.db.execute("SELECT id FROM lines ORDER BY id")]
+        for line_id in ids[:420]:                                                    # (a script that deletes four hundred lines with the command line within one look of the hub)
+            other.delete_line(line_id, "command line")
+        self.w.chat.sync_deletions()
+        self.assertEqual([m["id"] for m in self.reader.kinds("del")], ids[:420][-100:])
+        self.assertEqual(len(self.bob.kinds("del")), 100)
+        self.assertEqual([l.id for l in self.w.chat.ring if l.id in ids[:420]], [])
+        self.assertEqual(self.w.chat.deleted_seq, other.last_deletion())
+        self.assertEqual(self.w.chat.sync_deletions(), None)
+        self.assertEqual(len(self.reader.kinds("del")), 100)                         # (and the next look finds nothing new)
+        self.assertGreater(len(ring_ids), 0)
+
+    def test_dropping_lines_announces_the_newest_hundred_of_any_number_and_clears_the_ring(self):
+        for n in range(5):
+            self.w.say(self.alice, "line %d" % n)
+            self.w.clock.now += 3.0
+        ring_ids = [l.id for l in self.w.chat.ring]
+        self.assertEqual(len(ring_ids), 5)
+        self.w.chat.drop_lines(list(range(1000, 301000)) + ring_ids)
+        self.assertEqual([m["id"] for m in self.reader.kinds("del")], list(range(300900, 301000)))
+        self.assertEqual(list(self.w.chat.ring), [])                                 # (the ring is cleared of all of them, announced or not)
+        self.w.chat.drop_lines([])
+        self.assertEqual(len(self.reader.kinds("del")), 100)
+        small = self.w.join(None)
+        self.w.chat.drop_lines({7, 3, 5})
+        self.assertEqual([m["id"] for m in small.kinds("del")], [3, 5, 7])
+
     def test_a_blank_run_in_a_command_is_one_blank(self):
         self.w.say(self.alice, "hi")
         self.w.say(self.mod, "/mute   alice    5")
@@ -949,6 +989,48 @@ class TheStore(unittest.TestCase):
     def test_the_file_is_private(self):
         self.assertEqual(os.stat(self.db).st_mode & 0o077, 0)
 
+    def test_a_forget_is_done_and_told_when_the_cut_of_the_log_file_fails_and_the_cut_is_asked_for_again(self):
+        self.store.add_line("7", "gone", "a line", False)
+        self.store.add_session("a" * 64, "7", "gone", 100, 10, 100)
+
+        def fail(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+
+        self.store.checkpoint = fail
+        ids = self.store.forget("7")
+        self.assertEqual(ids, [1])
+        self.assertIsNone(self.store.session("a" * 64))
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0], 0)
+        self.assertTrue(self.store.unsettled)                                        # (the hub's clock cuts the file at its next look)
+
+    def test_a_forget_gives_back_the_ids_of_the_lines_that_a_moderator_deleted_and_the_screens_were_not_told_of(self):
+        a = self.store.add_line("7", "gone", "one", False)
+        b = self.store.add_line("7", "gone", "two", False)
+        self.store.delete_line(a.id, "command line")
+        self.assertEqual(sorted(self.store.forget("7")), [a.id, b.id])
+
+    def test_a_forget_gives_back_the_deletions_after_the_hubs_last_look_and_the_live_lines_and_not_the_old_deletions(self):
+        lines = [self.store.add_line("7", "gone", "line %d" % n, False) for n in range(10)]
+        for line in lines[:4]:
+            self.store.delete_line(line.id, "command line")                           # (long ago: the hub knew them)
+        last_look = self.store.last_deletion()
+        self.store.delete_line(lines[4].id, "command line")                            # (after the last look: the screens were not told)
+        self.assertEqual(sorted(self.store.forget("7", last_look)), sorted([lines[4].id] + [l.id for l in lines[5:]]))
+        self.store.add_line("8", "other", "x", False)
+        self.assertEqual(self.store.forget("9"), [])
+
+    def test_a_login_that_ends_asks_for_the_cut_of_the_log_file_and_a_cut_that_works_says_it_is_done(self):
+        self.store.add_session("b" * 64, "7", "gone", 100, 10, 100)
+        self.store.checkpoint()
+        self.assertFalse(self.store.unsettled)
+        self.assertTrue(self.store.delete_session("b" * 64))
+        self.assertTrue(self.store.unsettled)
+        self.store.checkpoint()
+        self.assertFalse(self.store.unsettled)
+        self.assertFalse(self.store.delete_session("c" * 64))                        # (a login that was not there is the same)
+        self.assertTrue(self.store.unsettled)
+
+
 
 class TheSettings(unittest.TestCase):
     def test_defaults_are_a_hub_nobody_can_reach_and_nobody_can_write_to(self):
@@ -1006,13 +1088,13 @@ class TheSettings(unittest.TestCase):
         self.assertFalse(config.load({"ANTS_HUB_HOST": "0.0.0.0"}).test_login)
 
     def test_a_secret_is_never_in_the_summary_or_the_text_of_the_settings(self):
-        secret, client, mod = "canary-secret-8c1d5e", "canary-client-id-77", "7777777777"
+        secret, client, mod = "canary-secret-8c1d5e", "4242424242420077", "7777777777"
         cfg = config.load({"ANTS_HUB_DISCORD_CLIENT_SECRET": secret, "ANTS_HUB_DISCORD_CLIENT_ID": client, "ANTS_HUB_MODS": mod, "ANTS_HUB_PUBLIC_URL": "https://x.example.org"})
         for text in (repr(cfg), str(cfg), json.dumps(cfg.summary())):
             for canary in (secret, client, mod):
                 self.assertNotIn(canary, text)
         self.assertEqual(cfg.summary()["mods"], 1)
-        self.assertEqual(cfg.login_client_secret, secret)             # (it is read: the login layer that comes later needs it)
+        self.assertEqual(cfg.login_client_secret, secret)             # (it is read: the Discord login needs it)
 
 
 def identify(sessions, headers):
@@ -1036,6 +1118,87 @@ class TheSessions(unittest.TestCase):
         import inspect
         for sessions in (session.Sessions(), session.NoLogin(), session.TestLogin()):
             self.assertTrue(inspect.iscoroutinefunction(sessions.identify), type(sessions).__name__)
+
+
+class TheDatabaseThatCannotBeUsed(WorldTest):
+    """A write that fails because another process holds the database's write lock longer than the hub waits (or the disk refuses): the sender is told, the socket stays, nothing is counted against it."""
+
+    def locked(self, name):
+        return mock.patch.object(self.w.store, name, side_effect=sqlite3.OperationalError("database is locked"))
+
+    def test_a_line_that_could_not_be_kept_is_answered_rate_and_is_no_mistake_and_costs_no_token(self):
+        seen = []
+        self.w.chat.on_store_error = seen.append
+        with self.locked("add_line"):
+            self.w.say(self.alice, "hello")
+        self.assertEqual(self.alice.codes(), ["rate"])
+        self.assertEqual((self.alice.strikes, self.alice.charges, self.alice.closed), (0, 1, None))     # (not a mistake, but one frame of its budget more: the refusal is not free)
+        self.assertEqual(len(seen), 1)
+        self.assertIsInstance(seen[0], sqlite3.OperationalError)
+        self.assertEqual(self.bob.sent, [])                                                             # (nobody saw a line)
+        self.assertEqual(self.w.store.recent_lines(10), [])
+        for n in range(3):
+            self.w.say(self.alice, "hello")                                                              # (the same text at once, and the full burst of 3 are still there: nothing was spent)
+            self.w.clock.now += 0.001
+        self.assertEqual([m["text"] for m in self.bob.kinds("line")], ["hello"])
+        self.assertEqual(self.alice.codes(), ["rate", "rate", "rate"])                                   # (the second and third are the same text: dup, as always)
+
+    def test_the_global_limit_gets_its_token_back_too(self):
+        w = World(limits=dataclasses.replace(LIMITS, global_burst=1, global_refill_seconds=1e9))
+        self.addCleanup(w.close)
+        alice = w.join(ALICE)
+        with mock.patch.object(w.store, "add_line", side_effect=sqlite3.OperationalError("database is locked")):
+            w.say(alice, "one")
+        w.say(alice, "two")                                                                              # (the one token of all accounts together was not used by the line that was not kept)
+        self.assertEqual(alice.codes(), ["rate"])
+        self.assertEqual([m["text"] for m in alice.kinds("line")], ["two"])
+
+    def test_a_moderator_s_command_that_could_not_be_done_is_answered_bad_and_the_socket_stays(self):
+        mod = self.w.join(MOD)
+        self.w.say(self.alice, "an ugly line")
+        line_id = self.w.store.recent_lines(1)[0].id
+        for name, command in (("mute", "/mute alice 5"), ("delete_line", "/del %d" % line_id)):
+            with self.locked(name):
+                self.w.say(mod, command)
+        self.assertEqual(mod.codes(), ["bad", "bad"])
+        self.assertEqual((mod.strikes, mod.charges, mod.closed), (0, 2, None))
+        self.assertEqual(self.w.store.muted_until("1001"), 0)                                            # (the command did not happen, and is typed again)
+        self.w.say(mod, "/mute alice 5")
+        self.assertEqual(mod.codes(), ["bad", "bad"])
+        self.assertTrue(self.w.store.muted_until("1001"))
+
+    def test_a_read_that_fails_is_the_same(self):
+        for name in ("is_banned", "muted_until", "size"):
+            peer = self.w.join(ALICE)
+            self.w.clock.now += 100
+            with self.locked(name):
+                self.w.say(peer, "hello %s" % name)
+            self.assertEqual((peer.codes(), peer.strikes, peer.closed), (["rate"], 0, None), name)
+
+    def test_any_other_database_error_is_still_the_hubs_to_deal_with(self):
+        with mock.patch.object(self.w.store, "add_line", side_effect=sqlite3.IntegrityError("not a lock")):
+            with self.assertRaises(sqlite3.IntegrityError):                                              # (the socket's task ends and the hub closes it with 1011, hub/server.py)
+                self.w.say(self.alice, "hello")
+
+
+class TheFreeRefusalsCostAFrame(unittest.TestCase):
+    def test_a_refusal_that_is_not_a_mistake_takes_a_frame_of_the_budget_and_an_empty_budget_is_a_mistake(self):
+        from hub import server as serverlib
+        clock = Clock(10.0)
+        struck = []
+        hub = types_namespace(limits=limitmod.Limits(frame_burst=3, frame_refill_seconds=1e9), clock=clock)
+        peer = serverlib.Peer.__new__(serverlib.Peer)
+        peer.hub = hub
+        peer.frames = limitmod.TokenBucket(3, 1e9, clock())
+        peer.strike = lambda: struck.append(1)
+        for n in range(5):
+            peer.charge()
+        self.assertEqual(len(struck), 2)                                                                  # (3 frames of budget: 3 refusals are free of mistakes, the 4th and 5th are mistakes)
+
+
+def types_namespace(**kw):
+    import types
+    return types.SimpleNamespace(**kw)
 
 
 class TheCommandLine(unittest.TestCase):

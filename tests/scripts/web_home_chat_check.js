@@ -35,6 +35,8 @@ function same(label, got, want) {
     check(label, a === b, 'got ' + a + ', wanted ' + b);
 }
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const shows = (e) => { for (let x = e; x; x = x.parent) if (x.hidden) return false; return true; };                  // (an element is on the screen when it and every box around it is not hidden)
+const buttonsShown = (root) => root.findAll((e) => e.tagName === 'button' && shows(e)).map((e) => e.textContent || e.getAttribute('aria-label'));
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // the fakes: a clock, a hub's socket, the page that the dock is mounted into
@@ -98,9 +100,19 @@ function rig(o) {
     const errors = [];
     const hidden = (on) => { doc.hidden = on; (doc.listeners.visibilitychange || []).forEach((fn) => fn({})); };
     doc.hidden = !!o.hidden;
-    const dock = Chat.mount({ doc, win, host, now: clock.now, random: o.random || (() => 0), WebSocket: o.noWebSocket ? undefined : HubSocket, error: (e) => errors.push(e) });
+    // the login: the bar's chip (a hidden button, as home.js makes it), where a press on Log in goes, and the page's fetch (a thenable that the test answers by hand: r.answer(response), r.refuse())
+    const went = [], fetches = [];
+    let chip = null, pending = null;
+    if (o.chip) { chip = new El(env, 'button', ''); chip.className = 'btn hlogin'; chip.hidden = true; chip.textContent = 'Log in'; }
+    win.assign = (url) => went.push(url);
+    win.location.assign = (url) => went.push(url);
+    const fetcher = o.noFetch ? undefined : (path, init) => { fetches.push({ path, init }); if (o.fetchThrows) throw new Error('no network'); return { then(ok, bad) { pending = { ok, bad }; } }; };
+    const dock = Chat.mount({ doc, win, host, chip, screen: o.screen, fetch: fetcher, now: clock.now, random: o.random || (() => 0), WebSocket: o.noWebSocket ? undefined : HubSocket, error: (e) => errors.push(e) });
     if (o.home !== false) dock.shown(true);                // (the page tells the dock which screen shows, right after it is mounted)
-    const r = { env, clock, Chat, doc, win, host, sockets, dock, errors, hidden, HubSocket, watch, root: dock.root };
+    const r = { env, clock, Chat, doc, win, host, sockets, dock, errors, hidden, HubSocket, watch, root: dock.root, chip, went, fetches };
+    r.answer = (response) => { const p = pending; pending = null; p.ok(response); };
+    r.refuse = () => { const p = pending; pending = null; p.bad(new Error('the network')); };
+    r.pending = () => pending !== null;
     r.s = () => sockets[sockets.length - 1];
     r.log = () => one(dock.root, 'gc-log');
     r.rows = () => r.log().children.slice(1);
@@ -170,17 +182,19 @@ function rig(o) {
     check('the welcome shows the history oldest first as "name: text", the mod\'s line marked, and how many are here', eq(r.rowTexts(), ['pebble: anyone up for Islands?', 'mod clover: I have a room open', 'juniper: joining!']) && one(r.rows()[1], 'gc-badge').textContent === 'mod '
           && cls(r.rows()[1]).indexOf('gc-mod') !== -1 && cls(r.rows()[0]).indexOf('gc-mod') === -1 && r.on() === '7 here now' && box.getAttribute('data-state') === 'live');
     check('a name and a line each sit in a <bdi> (the right-to-left letters of one do not reorder the other)', eq(r.rows()[0].children.map((c) => c.tagName), ['bdi', 'span', 'bdi']));
-    check('login:false and nobody named: "Chat is read-only for now" and the guest line; NO field, NO Send, NO login button (the login chip\'s place is empty and hidden)',
+    check('login:false and nobody named: "Chat is read-only for now" and the guest line; NO field, NO Send, NO login button (the only button on the screen is the fold button; the login\'s place is hidden)',
         r.note() === 'Chat is read-only for now' && r.form().hidden === true && one(box, 'gc-guest').hidden === false && one(box, 'gc-guest').textContent === 'You can read as a guest. Playing and watching stay anonymous.'
-        && r.root.findAll((e) => e.tagName === 'button').length === 2 && r.dock.slot.hidden === true && r.dock.slot.children.length === 0 && r.dock.slot.textContent === '' && r.dock.slot.id === 'gchat-login-slot' && box.getAttribute('data-you') === 'no');
+        && eq(buttonsShown(r.root), ['Fold chat']) && r.dock.slot.hidden === true && r.dock.slot.id === 'gchat-login-slot' && box.getAttribute('data-you') === 'no');
     same('a press on Send that is not there sends nothing: say() says why', [r.dock.say('hi'), r.s().sent.length, r.note()], ['readonly', 0, 'Chat is read-only for now']);
     check('the welcome\'s lines are the past: no unread count', r.pill() === '' && r.errors.length === 0);
 }
 {   // a hub with a login, a reader who is not logged in: the words ask for the login, and there is still no button
     const r = rig();
     r.live(W({ login: true, you: null }));
-    check('login:true and nobody named: "Log in with Discord to chat", no field, no Send, no button (the login is a later change: its place stays empty and hidden)', r.note() === 'Log in with Discord to chat' && r.form().hidden === true
-          && r.root.findAll((e) => e.tagName === 'button').length === 2 && r.dock.slot.hidden === true && r.dock.slot.children.length === 0);
+    check('login:true and nobody named: the field is off and says "Log in with Discord to chat", Send is gone and a Log in button is in its place (as in the approved picture); the account line is not shown',
+          r.form().hidden === false && r.field().disabled === true && r.field().getAttribute('placeholder') === 'Log in with Discord to chat' && r.field().getAttribute('aria-label') === 'Log in with Discord to chat'
+          && one(r.root, 'gc-send').hidden === true && one(r.root, 'gc-login').hidden === false && one(r.root, 'gc-login').textContent === 'Log in' && one(r.root, 'gc-login').getAttribute('aria-label') === 'Log in with Discord'
+          && r.note() === '' && one(r.root, 'gc-guest').hidden === false && r.dock.slot.hidden === true && buttonsShown(r.root).length === 2);
 }
 {   // a writer: the welcome names the visitor
     const r = rig();
@@ -972,7 +986,134 @@ function bring(env) {                                     // the two files arriv
 {
     const code = chatSource.replace(/\/\/.*/g, '');
     check('chat.js builds nothing from markup, runs nothing from text, keeps nothing in the browser and makes no link', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|localStorage|sessionStorage|indexedDB|document\.cookie|createElement\(['"]a['"]\)|setAttribute\(['"](href|src|style|on)/.test(code));
-    check('chat.js names no other site (no http:// or https:// address at all) and loads nothing', !/https?:\/\//.test(code) && !/\bfetch\b|XMLHttpRequest|importScripts|\bimport\b/.test(code));
+    check('chat.js names no other site (no http:// or https:// address at all) and loads nothing', !/https?:\/\//.test(code) && !/XMLHttpRequest|importScripts|\bimport\b/.test(code));
+    check('the one thing that it asks for is a POST of the page itself to the two pages of the login (/hub/logout, /hub/forget): `fetch` is in one line, and it is that one', (code.match(/\bfetch\b/g) || []).length === 2 && code.indexOf('var f = env.fetch || win.fetch;') !== -1
+        && /f\.call\(win, path, \{ method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' \}\)/.test(code) && /leave\(LOGOUT\)/.test(code) && /leave\(FORGET\)/.test(code) && (code.match(/\bleave\(/g) || []).length === 3);
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 8. The login: the Log in button and the bar's chip, the account line with Log out and Forget me, and what the page may do about it (docs/HUB.md "Login", docs/HOME_SCREEN.md)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{   // a hub with a login, a visitor who is not logged in
+    const r = rig({ chip: true });
+    check('before the hub has spoken the chip is hidden (a page that cannot reach the hub offers no login), and so is the account line', r.chip.hidden === true && r.dock.slot.hidden === true);
+    r.live(W({ login: true, you: null }));
+    check('login:true and nobody named: the chip is shown, with the mark of Discord and "Log in" (not the circle), and says what it does', r.chip.hidden === false && one(r.chip, 'gc-dc').hidden === false && one(r.chip, 'gc-av').hidden === true && one(r.chip, 'gc-cn').textContent === 'Log in'
+          && r.chip.getAttribute('aria-label') === 'Log in with Discord' && r.chip.children.length === 3);
+    r.chip.click();
+    same('a press on the chip is a navigation of the page to /hub/login?next=home (a full page, not a request): the one address, once; no socket message, nothing else', [r.went, r.sockets.length, r.s().sent.length, r.fetches.length], [['/hub/login?next=home'], 1, 0, 0]);
+    one(r.root, 'gc-login').click();
+    same('... and the Log in button of the dock goes to the same place', r.went, ['/hub/login?next=home', '/hub/login?next=home']);
+    const room = rig({ chip: true, screen: () => 'room' });
+    room.live(W({ login: true })); room.chip.click();
+    const odd = rig({ chip: true, screen: () => '/evil?x=1' });
+    odd.live(W({ login: true })); odd.chip.click(); one(odd.root, 'gc-login').click();
+    same('from the Room the way back is the Room (next=room); a screen that is neither is Home: the address is made from one of two words, never from what the page says', [room.went, odd.went], [['/hub/login?next=room'], ['/hub/login?next=home', '/hub/login?next=home']]);
+    check('a login that the page cannot start (a navigation that throws) throws nothing at the page', (() => { const q = rig({ chip: true }); q.win.location.assign = () => { throw new Error('blocked'); }; q.live(W({ login: true })); q.chip.click(); return q.errors.length === 1 && q.dock.state() === 'live'; })());
+    r.s().fail();
+    check('the hub goes: the chip goes with it (no login is offered to a page that cannot reach the hub), and comes back with the welcome', r.chip.hidden === true && (r.clock.advance(1500), r.s().open().recv(W({ login: true })), r.chip.hidden === false));
+    const none = rig({ chip: true });
+    none.live(W({ login: false, you: null }));
+    check('login:false: no chip, no button on the screen but the fold button, nothing to press', none.chip.hidden === true && eq(buttonsShown(none.root), ['Fold chat']));
+    const bare = rig();
+    bare.live(W({ login: true }));
+    check('a page that has no chip (home.js without the bar) still has the dock\'s button, and nothing throws', one(bare.root, 'gc-login').hidden === false && bare.errors.length === 0);
+}
+{   // a logged-in visitor
+    const r = rig({ chip: true });
+    r.live(W({ login: true, you: YOU, history: HISTORY }));
+    check('named: the field and Send, no Log in button, the guest line gone, no word of "read-only" or "log in"', r.form().hidden === false && r.field().disabled === false && r.field().getAttribute('placeholder') === 'Say something to everyone' && one(r.root, 'gc-send').hidden === false
+          && one(r.root, 'gc-login').hidden === true && one(r.root, 'gc-guest').hidden === true && r.note() === '');
+    check('the place of the login says "Chatting as maple.leaf" with Log out and a small menu (More), in its own box (#gchat-login-slot), the name as text in a <bdi>', r.dock.slot.hidden === false && r.dock.slot.id === 'gchat-login-slot' && r.dock.slot.textContent.indexOf('Chatting as maple.leaf') === 0
+          && one(r.dock.slot, 'gc-an').tagName === 'bdi' && one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && one(r.dock.slot, 'gc-link').textContent === 'Log out' && one(r.dock.slot, 'gc-more').getAttribute('aria-label') === 'More');
+    check('the chip is the circle with the first letter and the name, and its words say who: "Chatting as maple.leaf"', r.chip.hidden === false && one(r.chip, 'gc-av').hidden === false && one(r.chip, 'gc-av').textContent === 'm' && one(r.chip, 'gc-dc').hidden === true && one(r.chip, 'gc-cn').textContent === 'maple.leaf'
+          && r.chip.getAttribute('aria-label') === 'Chatting as maple.leaf');
+    check('Forget me is not on the screen until the small menu is opened (and the menu is not either)', one(r.root, 'gc-menu').hidden === true && buttonsShown(r.root).indexOf('Forget me') === -1 && one(r.root, 'gc-more').getAttribute('aria-expanded') === 'false');
+    one(r.root, 'gc-more').click();
+    check('More opens it: a sentence that says what Forget me does (the lines go, every login goes, a ban or a mute stays) and the button; the toggle says it is open', one(r.root, 'gc-menu').hidden === false && one(r.root, 'gc-more').getAttribute('aria-expanded') === 'true'
+          && one(r.root, 'gc-mnote').textContent === 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.' && buttonsShown(r.root).indexOf('Forget me') !== -1);
+    r.root.fire('keydown', { key: 'Escape' });
+    check('Escape puts the small menu away first (and the focus goes back to More), and the panel stays; the next Escape folds the panel', one(r.root, 'gc-menu').hidden === true && r.root.getAttribute('data-open') === 'true' && r.env.focused === one(r.root, 'gc-more') && (r.root.fire('keydown', { key: 'Escape' }), r.root.getAttribute('data-open') === 'false'));
+    r.dock.open(true);
+    r.chip.click();
+    check('a press on the name chip opens the dock if it is folded and puts the focus on Log out (a chip that does nothing is a dead button)', r.root.getAttribute('data-open') === 'true' && r.env.focused === one(r.root, 'gc-link'));
+    r.dock.open(false); r.chip.click();
+    check('... also from a folded dock', r.root.getAttribute('data-open') === 'true' && r.went.length === 0);
+    r.s().fail();
+    check('the link goes: the account line and the chip go until the hub speaks again (a Log out now could not reach it)', r.dock.slot.hidden === true && r.chip.hidden === true);
+}
+{   // Log out
+    const r = rig({ chip: true });
+    const first = r.live(W({ login: true, you: YOU, history: HISTORY }));
+    one(r.root, 'gc-link').click();
+    same('Log out is ONE POST of the page to /hub/logout, same origin, with its cookie, never cached, no redirect followed, and nothing else (no body, no header of its own)', [r.fetches.length, r.fetches[0].path, r.fetches[0].init], [1, '/hub/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }]);
+    check('while it is on its way both buttons are off (a second press is nothing)', one(r.root, 'gc-link').disabled === true && one(r.root, 'gc-forget').disabled === true && (one(r.root, 'gc-link').click(), r.fetches.length === 1) && r.sockets.length === 1);
+    r.answer({ ok: true, status: 200 });
+    check('answered: the socket that was let in with the login is dropped and a new one is made AT ONCE (no wait of a second): the page asks to be told who it is now', first.closes === 1 && r.sockets.length === 2 && r.s() !== first && r.s().url === 'wss://play.test/hub/ws' && r.clock.timers.every((t) => t.fn.toString().length > 0));
+    check('... the person is nobody on the screen at once (no field to write in, the Log in button, the chip says Log in), whatever the hub says next', r.field().disabled === true && one(r.root, 'gc-login').hidden === false && r.dock.slot.hidden === true && r.chip.hidden === false && one(r.chip, 'gc-cn').textContent === 'Log in' && r.root.getAttribute('data-you') === 'no');
+    check('... and a say() in that moment sends nothing (the new socket is not open): "Chat is offline"', r.dock.say('hello') === 'offline' && first.sent.filter((x) => x.indexOf('say') !== -1).length === 0);
+    r.s().open().recv(W({ login: true, you: null, history: HISTORY }));
+    check('the new welcome has nobody named: read-only with the Log in button; the buttons of the account are not on the screen; the old socket was never written to again', r.field().disabled === true && buttonsShown(r.root).join() === 'Fold chat,Log in' && first.sent.length === 0 && r.dock.state() === 'live' && r.errors.length === 0);
+}
+{   // Log out that does not work
+    const refusals = {
+        'a hub that says no (the answer is not ok)': (r) => r.answer({ ok: false, status: 403 }),
+        'no answer at all (the network)': (r) => r.refuse(),
+        'an answer that is nothing': (r) => r.answer(undefined),
+        'an answer that says ok in words': (r) => r.answer({ ok: 'yes' }),
+    };
+    Object.keys(refusals).forEach((label) => {
+        const r = rig({ chip: true });
+        const first = r.live(W({ login: true, you: YOU }));
+        one(r.root, 'gc-link').click();
+        refusals[label](r);
+        check(label + ': "That did not work, try again" for a few seconds, the visitor is still who they were, the socket stays, the buttons are on again', r.note() === 'That did not work, try again' && r.field().disabled === false && first.closes === 0 && r.sockets.length === 1 && one(r.root, 'gc-link').disabled === false && r.dock.slot.hidden === false);
+        r.clock.advance(6001);
+        check('... and the words go', r.note() === '');
+    });
+    const t = rig({ fetchThrows: true });
+    t.live(W({ login: true, you: YOU })); one(t.root, 'gc-link').click();
+    check('a fetch that throws is the same: the words, nothing dropped, nothing thrown at the page', t.note() === 'That did not work, try again' && t.sockets.length === 1 && t.errors.length === 0 && one(t.root, 'gc-link').disabled === false);
+    const n = rig({ noFetch: true });
+    n.live(W({ login: true, you: YOU })); one(n.root, 'gc-link').click();
+    check('a browser without fetch: the same words (it cannot log out; it can still read and write)', n.note() === 'That did not work, try again' && n.field().disabled === false && n.sockets.length === 1);
+}
+{   // Forget me
+    const r = rig({ chip: true });
+    const first = r.live(W({ login: true, you: YOU, history: HISTORY }));
+    one(r.root, 'gc-more').click();
+    one(r.root, 'gc-forget').click();
+    same('Forget me is ONE POST of the page to /hub/forget, the same kind of request as Log out', [r.fetches.length, r.fetches[0].path, r.fetches[0].init], [1, '/hub/forget', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }]);
+    r.s().recv({ t: 'del', id: 1 }); r.s().recv({ t: 'del', id: 2 });
+    r.answer({ ok: true });
+    r.s().open().recv(W({ login: true, you: null, history: HISTORY.slice(2) }));
+    check('the lines of the account are taken off the screen as the hub says (del), the visitor is a reader after it, the small menu is shut, and the log holds what the hub keeps', first.closes === 1 && r.rowTexts().join('|') === 'juniper: joining!' && r.field().disabled === true && one(r.root, 'gc-menu').hidden === true && r.errors.length === 0);
+    const two = rig();
+    two.live(W({ login: true, you: YOU }));
+    one(two.root, 'gc-link').click();
+    one(two.root, 'gc-more').click(); one(two.root, 'gc-forget').click();
+    check('Forget me while Log out is on its way is not a second request (one thing at a time)', two.fetches.length === 1);
+}
+{   // the name is text, whatever it is
+    const hostile = ['<img src=x onerror=alert(1)>', '\u202eevil\u202c', 'x'.repeat(80), '\ud83d\ude00smile', 'a\u200bb'];
+    hostile.forEach((name) => {
+        const r = rig({ chip: true });
+        r.live(W({ login: true, you: { name, mod: false } }));
+        const shown = one(r.dock.slot, 'gc-an').textContent, circle = one(r.chip, 'gc-av').textContent, named = one(r.chip, 'gc-cn').textContent;
+        check('a name from the hub is shown as the text it is, cleaned and cut like a line\'s: ' + JSON.stringify(name).slice(0, 30), shown === named && shown.length <= 33 && !/[\u202a-\u202e\u200b\u3164\u2800]/.test(shown + circle) && circle.length <= 2
+              && r.env.innerHTMLWrites.length === 0 && r.errors.length === 0 && r.chip.all().every((e) => Object.keys(e.attributes).every((k) => ['class', 'aria-label'].indexOf(k) !== -1)));
+    });
+    const r = rig({ chip: true });
+    r.live(W({ login: true, you: { name: '\ud83d\ude00smile', mod: false } }));
+    check('the circle holds the first CODE POINT of the name (a pair of surrogates is not cut in two)', one(r.chip, 'gc-av').textContent === '\ud83d\ude00');
+    const q = rig({ chip: true });
+    q.live(W({ login: true, you: { name: '\u3164\u2800\ufe0f', mod: false } }));
+    check('a name of nothing that shows is nobody: the visitor is a reader, the account line is not shown', q.dock.slot.hidden === true && q.field().disabled === true);
+}
+{   // the words are the agreed ones, and the page reads no cookie
+    check('the words of the login: "Log in", "Log in with Discord", "Chatting as ", "Log out", "Forget me"', [Pure.TEXT.login, Pure.TEXT.loginWith, Pure.TEXT.chatting, Pure.TEXT.logout, Pure.TEXT.forget].join('|') === 'Log in|Log in with Discord|Chatting as |Log out|Forget me');
+    check('chat.js never touches the cookie, a token or the address of Discord', !/document\.cookie|discord\.com|Authorization|access_token|\.href\b|location\.search|location\.hash/.test(chatSource.replace(/\/\/.*/g, '')));
 }
 
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');
