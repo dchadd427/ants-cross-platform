@@ -100,7 +100,7 @@ class TheBudgetChecksAreNotVacuous(unittest.TestCase):
     (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's. The chat's own are in lobby_chat_mutants.json (test_web_lobby_chat.py)."""
 
     FILES = ("web/front/lobby_net.js", "tests/scripts/web_lobby_client_check.js", "tests/data/lobby_messages.txt", "include/ants_net/flood.hpp",      # (the check reads the golden messages and, from the header, the server's limits)
-             "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js", "web/shapes.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js", "web/home/home.js")      # (and the page in a fake browser: a team press that the page's pace refuses)
+             "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js", "web/shapes.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js", "web/home/home.js", "web/home/games.js")      # (and the page in a fake browser: a team press that the page's pace refuses)
 
     @classmethod
     def setUpClass(cls):

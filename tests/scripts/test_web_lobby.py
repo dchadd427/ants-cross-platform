@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """The front page (run by ./run_tests.sh --fast and by the CI). The front page (web/lobby.html, at "/") is a LOBBY: a room that lives on the game server (network protocol 16). A plain visit makes a room and
 seats you in its first color; the page shows the room's code and a link to send (Copy link, Share), the four colors (Black top left, Green top right, Red bottom left, Blue bottom right) where the host drags a
-player onto another color, sets a color to Open, a bot of a level or Nobody, and presses Team 1 / Team 2, the map and START!; a link to somebody's room asks for a name first, "Have a code?" takes a typed code,
+player onto another color, sets a color to Open, a bot of a level or Nobody, and presses Team 1 / Team 2, the map and START!; a link to somebody's room asks for a name first, Join by code (in the Games list) takes a typed code,
 and START sends every page to the game page (web/shell.html) in the same tab with the key of its seat (a match for one is the game page's own single player). The game page has a Menu button back.
 
   - what needs no browser and no markup is RUN (node, when it is installed): the rules of the addresses that the page still makes (a game on this computer),
     the game page's whitelist (the six maps by key, the levels, the teams, the room's block, a cleaned name: never the text of the address), the two pages agreeing, and that everything the page reads from
     its two scripts is there (tests/scripts/web_lobby_check.js). The rules of the lobby itself (front/lobby_rules.js) are run by tests/scripts/web_lobby_rules_check.js, its client of the game server
     (front/lobby_net.js) by tests/scripts/web_lobby_net_check.js and web_lobby_client_check.js;
-  - what the PAGE is is read from the file: the markup (the room, the four colors, the invitation, "Have a code?", the map and START, How it works, the name card, the footer), the wiring of the script to it (the
+  - what the PAGE is is read from the file: the markup (the room, the four colors, the invitation, the map and START, How it works, the name card, the footer), the wiring of the script to it (the
     ids, the attributes the cards are made with and the listeners find, which element shows the code and the link), the looks that carry a rule (START, the team buttons: 4.5 : 1 in every state), the room-code and
     create-block wiring of the links, that START and the old addresses go to this tab, that nothing opens a new tab but the links that leave the game, the Menu link of the game page, one name for the catalog link
     on both pages, the Dockerfile that copies the lobby and the game page's second path, the CI's page check, and the documents.
@@ -235,43 +235,40 @@ class TheFrontPageMarkup(PageCase):
         self.found(phone, r"\.share \{ display: inline-flex; \}")
         self.found(phone, r"\.invite #copy \{ width: 100%; \}")
 
-    def test_have_a_code_opens_a_line_and_a_typed_code_asks_for_a_name_then_looks_at_the_room_before_it_leaves_this_one(self):
-        self.assertIn('<span class="rt"><button type="button" id="havecode">Have a code?</button></span>', self.markup)
-        self.assertIn('<div class="joinbox" id="joinbox" hidden><input type="text" id="joincode" placeholder="6 letters and numbers, like k7m 2xq" aria-label="Room code" aria-describedby="joinhint" '
-                      'autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">Join</button></div>', self.markup)
-        self.assertIn('<p class="hint" id="joinhint" role="status"></p>', self.markup)
-        self.assertLess(self.markup.index('id="joinbox"'), self.markup.index('id="joinhint"'))
-        self.assertLess(self.markup.index('id="invite-line"'), self.markup.index('id="havecode"'))                  # (under the invitation, inside the room's panel)
-        panel = self.markup[self.markup.index('<section class="panel" aria-labelledby="room-h">'):]
-        self.assertIn('id="havecode"', panel[:panel.index("</section>")])
+    def test_join_by_code_is_the_games_lists_and_a_typed_code_asks_for_a_name_then_looks_at_the_room_before_it_leaves_this_one(self):
+        for gone in ('id="havecode"', 'id="joinbox"', 'id="joincode"', 'id="joingo"', 'id="joinhint"', "Have a code?", 'class="rt"'):
+            self.assertNotIn(gone, self.markup, gone + ": the field is in the Games list now (web/home/games.js), and the card's link is gone")
+        for gone in ("$('havecode')", "$('joinbox')", "$('joincode')", "$('joingo')", "$('joinhint')"):
+            self.assertNotIn(gone, self.script, gone)
         script = self.script
-        # the line: a press opens it or closes it, clears an old hint and puts the cursor in the field; typing clears the hint; Enter and Join do the same
-        self.assertIn("$('joinbox').hidden = !$('joinbox').hidden;", script)
-        self.assertIn("if (!$('joinbox').hidden) $('joincode').focus();", script)
-        self.assertIn("$('joincode').addEventListener('input', function () { $('joinhint').textContent = ''; });", script)
-        self.assertIn("$('joincode').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });", script)
-        self.assertIn("$('joingo').addEventListener('click', joinTyped);", script)
-        # the code: blanks and capitals do not matter (Rules.typedCode), a code that is none is explained under the field, this page's own room is not left for itself, and the name card comes first
-        self.assertIn("var typed = Rules.typedCode($('joincode').value), hint = $('joinhint');", script)
-        self.assertIn("if (!typed.ok) { hint.textContent = typed.why; return; }", script)
-        self.assertIn("if (client && typed.code === client.code) { hint.textContent = ownRoom ? Rules.HINT.own : Rules.HINT.same; return; }", script)
+        # the code: blanks and capitals do not matter (Rules.typedCode), a code that is none is explained, this page's own room is not left for itself, a question may come first (before), then the name card
+        self.assertIn("function joinTyped(text, done, before) {", script)
+        self.assertIn("var typed = Rules.typedCode(text);", script)
+        self.assertIn("if (!typed.ok) return typed.why;", script)
+        self.assertIn("if (client && typed.code === client.code) return ownRoom ? Rules.HINT.own : Rules.HINT.same;", script)
         self.assertIn("title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',", script)
-        self.assertIn("done: function (name) { probe(typed.code, name); },", script)
-        self.assertIn("back: function () { /* the page's own room stays */ }", script)
+        self.assertIn("done: function (name) { probe(typed.code, name, done); },", script)
+        self.assertIn("back: function () { done(null); }", script)
+        typed = script[script.index("function joinTyped(text, done, before) {"):script.index("function probe(code, name, done) {")]
+        self.assertLess(typed.index("Rules.typedCode(text)"), typed.index("(before || function (go) { go(); })("), "the code is looked at before any question")
+        self.assertLess(typed.index("(before || function (go) { go(); })("), typed.index("askName({"), "and the question comes before the name card")
         # the look at the room: a client of its own that must find the room (join: true makes none), and this page's room is let go of only when that room has welcomed it
-        probe = script[script.index("function probe(code, name) {"):]
+        probe = script[script.index("function probe(code, name, done) {"):]
         probe = probe[:probe.index("p.connect();")]
-        self.assertIn("p = makeClient({ code: code, name: name, join: true })", probe)
+        self.assertIn("p = lastProbe = makeClient({ code: code, name: name, join: true })", probe)
         self.assertIn("join: !!p.join", script)
         self.assertLess(probe.index("p.on('welcome'"), probe.index("if (old) old.leave();"))
         self.assertLess(probe.index("client = p;"), probe.index("if (old) old.leave();"))
-        self.assertIn("if (e.reason === R.Full) failed(Rules.HINT.full);", probe)
-        self.assertIn("else if (e.reason === R.MatchRunning) failed(Rules.HINT.running);", probe)
-        self.assertIn("else if (e.reason === R.VersionMismatch) showBanner('version');", probe)
-        self.assertIn("else failed(Rules.TEXT.noroom());", probe)
+        self.assertIn("if (e.reason === R.Full) failed('full', Rules.HINT.full);", probe)
+        self.assertIn("else if (e.reason === R.MatchRunning) failed('running', Rules.HINT.running);", probe)
+        self.assertIn("else if (e.reason === R.VersionMismatch) { showBanner('version'); failed('version', Rules.TEXT.version()); }", probe)
+        self.assertIn("else failed('noroom', Rules.TEXT.noroom());", probe)
+        self.assertIn("tell({ ok: true, code: code });", probe)
+        self.assertIn("if (!adopted) { p.leave(); failed('silent',", probe, "a server that does not answer is given up, and the second client is let go of")
         self.assertNotIn("joinUrl(", script)                                          # a typed code never makes an address of the game page
         # there is no "More ways to play": the map selection screen is the only way to play
         for gone in ("More ways to play", "morebox", "more-here", "more-windows", "testRoom", "Play every color"):
+            self.assertNotIn(gone, self.page, gone)
             self.assertNotIn(gone, self.page, gone)
 
     def test_how_it_works_is_a_dialog_behind_a_footer_button_with_its_steps_and_the_two_sheets(self):
@@ -290,8 +287,8 @@ class TheFrontPageMarkup(PageCase):
             self.assertIn('<img src="%s"' % sheet, how)
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", sheet)), sheet)
         script = self.script
-        self.assertIn("function openHow() { howOpener = document.activeElement; $('how').hidden = false; $('how-close').focus(); }", script)       # (the focus goes into the dialog and comes back to what opened it)
-        self.assertIn("function closeHow() { $('how').hidden = true; if (howOpener && howOpener.focus) howOpener.focus(); }", script)
+        self.assertIn("function openHow() { howOpener = document.activeElement; $('how').hidden = false; inert(true); $('how-close').focus(); }", script)       # (the focus goes into the dialog, and the page behind it takes no key or tap, as behind the map list)
+        self.assertIn("function closeHow() { $('how').hidden = true; inert(false); if (howOpener && howOpener.focus) howOpener.focus(); }", script)       # (and comes back to what opened it)
         self.assertIn("$('how').addEventListener('click', function (e) { if (e.target === $('how')) closeHow(); });", script)
         self.assertIn("if (!$('how').hidden) { closeHow(); return; }", script)                                      # (Escape)
         self.assertIn("$('how-open').addEventListener('click', openHow);", script)
@@ -443,10 +440,8 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',", script)           # (the name card of a typed code)
         self.assertIn("var code = codeText(offer.room);", script)                                                 # (the Rejoin button's words)
         # typed: Rules.typedCode takes blanks and capitals; a link's code must be 1 - 32 letters, digits, - and _ (the older eight-character codes work), in the three places that read one
-        self.assertIn("var typed = Rules.typedCode($('joincode').value), hint = $('joinhint');", script)
+        self.assertIn("var typed = Rules.typedCode(text);", script)
         self.assertEqual(script.count("/^[A-Za-z0-9_-]{1,32}$/.test(wanted)"), 1)
-        self.assertIn('placeholder="6 letters and numbers, like k7m 2xq"', self.markup)
-        self.assertIn('autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">', self.markup)
 
     def test_every_element_that_the_script_asks_for_is_in_the_markup_once_and_the_two_scripts_are_loaded_before_it(self):
         ids = re.findall(r'\sid="([^"]+)"', self.markup)
@@ -591,7 +586,7 @@ class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_notes_say_where_the_lobby_is_and_what_it_does(self):
         page = read("docs", "PLAY_IN_BROWSER.md")
         for needle in ("`/play.html?map=", "## The front page: Home, and a room one press away", "### Your room", "### START!", "### The notices", "### The old addresses", "**Host**", "**You**", "**Open**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**",
-                       "**Remove**", "**Keep**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "**Rejoin it**", "**Start a room of my own instead**", "/four.html", "`--start-when`", "**Menu**",
+                       "**Remove**", "**Keep**", "**Copy link**", "**Share**", "**START!**", "**Join by code**", "**Rejoin it**", "**Start a room of my own instead**", "/four.html", "`--start-when`", "**Menu**",
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`", "`ants.lobby`", "`k7m 2xq`"):
             self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")

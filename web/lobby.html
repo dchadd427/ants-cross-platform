@@ -69,11 +69,9 @@
     .invite input { appearance: none; width: 100%; min-height: 48px; padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); text-overflow: ellipsis; }
     .invite .btn { min-height: 52px; }
     .invite-note { margin-top: 10px; font-size: 15px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; }
-    .invite-note button { background: none; border: 0; color: var(--cream); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 0; }
     .joinbox { display: flex; gap: 10px; margin-top: 10px; }
     .hint { margin-top: 6px; font-size: 14px; color: #f2c48c; }
     .hint:empty { display: none; }
-    .invite-note .rt { display: inline-flex; flex-wrap: wrap; gap: 4px 16px; }
     .banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 14px; padding: 10px 14px; background: var(--inset); border: 3px solid var(--frame-hi); border-radius: 4px; color: var(--cream); box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
     .banner span { flex: 1 1 220px; }
     .banner.warn { border-color: var(--gold); }
@@ -304,9 +302,7 @@
                 <button class="btn" type="button" id="copy">Copy link</button>
                 <button class="btn share" type="button" id="share" hidden>Share</button>
             </div>
-            <div class="invite-note"><span id="invite-line">Players who open this link take the next free color.</span><span class="rt"><button type="button" id="havecode">Have a code?</button></span></div>
-            <div class="joinbox" id="joinbox" hidden><input type="text" id="joincode" placeholder="6 letters and numbers, like k7m 2xq" aria-label="Room code" aria-describedby="joinhint" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">Join</button></div>
-            <p class="hint" id="joinhint" role="status"></p>
+            <div class="invite-note"><span id="invite-line">Players who open this link take the next free color.</span></div>
 
             <ul class="slots" id="slots" aria-label="The four colors"></ul>
             <p class="slots-note" id="slots-note" role="status"></p>
@@ -343,7 +339,7 @@
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
-    <h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color.</p>
+    <h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color. To let anybody in, press Quick host on Home or switch the room to Public: it is then listed under Games, where players join it from the list or by its code.</p>
     <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
     <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their color. It asks first, and the color opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
     <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another color, their team goes along.</p>
@@ -612,7 +608,7 @@
         var dirty = false;                            // something changed while the cards could not be drawn
         var skipClick = false;
         var bannerKind = '';
-        var handing = false;                          // the page is on its way to the game page (or to a game for one): no more messages
+        var handing = false, lastProbe = null;                          // the page is on its way to the game page (or to a game for one): no more messages; lastProbe: the second client of the last Join (the Games list's Cancel lets it go)
         var lastStarting = false;
         var lastParams = null;                        // what the client was made from, to make it again (Try again, Use this window)
         var fixSent = '';                             // the correction of the room's teams that was sent for this plan
@@ -891,9 +887,9 @@
             forgetSession(); leaveBack();              // (Back from the match makes a room again: this one is the match's now)
             window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);
         }
-        function stalled() {                          // Home's 15 s are up and the hand-off is still here: this page's room is frozen (a page on its way takes no message) and its seat may still be the game's, so say it, with the Reload that gets the seat back ("Rejoin it")
+        function stalled(words) {                     // Home's 15 s are up and the hand-off is still here (and again when a minute is up, with other words): this page's room is frozen (a page on its way takes no message) and its seat may still be the game's, so say it, with the Reload that gets the seat back ("Rejoin it")
             if (!handing) return;
-            bannerKind = 'stalled'; $('banner-text').textContent = 'The game did not open. Reload this page to get your seat back.'; $('banner').className = 'banner warn';
+            bannerKind = 'stalled'; $('banner-text').textContent = words; $('banner').className = 'banner warn';
             $('banner-x').hidden = false; $('banner-x').textContent = 'Reload'; $('banner').hidden = false;
         }
         function shownTeam(seat) {
@@ -1277,30 +1273,30 @@
             $('share').hidden = false;
             $('share').addEventListener('click', function () { try { navigator.share({ url: roomLink() }).catch(function () { /* the sheet was closed */ }); } catch (e) { /* no share sheet */ } });
         }
-        $('havecode').addEventListener('click', function () {
-            $('joinbox').hidden = !$('joinbox').hidden;
-            $('joinhint').textContent = '';
-            if (!$('joinbox').hidden) $('joincode').focus();
-        });
-        $('joincode').addEventListener('input', function () { $('joinhint').textContent = ''; });
-        $('joincode').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });
-        $('joingo').addEventListener('click', joinTyped);
-        // A code that was typed: the name card first, then a look at the room while this page's own stays (a code with no room is answered, and nothing is lost)
-        function joinTyped() {
-            var typed = Rules.typedCode($('joincode').value), hint = $('joinhint');
-            if (!typed.ok) { hint.textContent = typed.why; return; }
-            if (client && typed.code === client.code) { hint.textContent = ownRoom ? Rules.HINT.own : Rules.HINT.same; return; }
-            askName({
-                title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',
-                done: function (name) { probe(typed.code, name); },
-                back: function () { /* the page's own room stays */ }
+        // A code that was typed (Join by code, in the Games list: web/home/games.js): the line for a code that leads nowhere, or '' when the join is on its way: before(go) may ask a question first, go() opens the name card, and
+        // the look at the room follows when the name is done (done gets what probe says, or null when the visitor keeps the room that is theirs)
+        function joinTyped(text, done, before) {
+            var typed = Rules.typedCode(text);
+            if (!typed.ok) return typed.why;
+            if (client && typed.code === client.code) return ownRoom ? Rules.HINT.own : Rules.HINT.same;
+            (before || function (go) { go(); })(function () {
+                askName({
+                    title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',
+                    done: function (name) { probe(typed.code, name, done); },
+                    back: function () { done(null); }                 // (the page's own room stays)
+                });
             });
+            return '';
         }
-        function probe(code, name) {
-            var hint = $('joinhint'), p = makeClient({ code: code, name: name, join: true }), adopted = false;
-            function failed(text) { hint.textContent = text; }
+        // A look at the room of a code while this page's own room stays (a code with no room is answered, and nothing is lost): a second client that only joins and never makes a room, which is the page's client, and the old one
+        // is let go of, only when the room WELCOMES it. done({ ok: true }) or done({ ok: false, kind: 'full' | 'running' | 'version' | 'noroom' | 'silent', text }), once. Returns the second client.
+        function probe(code, name, done) {
+            var p = lastProbe = makeClient({ code: code, name: name, join: true }), adopted = false, told = false, timer = setTimeout(function () { if (!adopted) { p.leave(); failed('silent', 'The server did not answer. Try again in a moment.'); } }, 15000);
+            function tell(result) { clearTimeout(timer); if (!told && done) { told = true; done(result); } }
+            function failed(kind, text) { tell({ ok: false, kind: kind, text: text }); }
             p.on('welcome', function (e) {
-                if (adopted || handing) return;
+                if (adopted) return;
+                if (handing) { adopted = true; clearTimeout(timer); p.leave(); return; }       // (the page is on its way to a game: this one is let go of at once, and says nothing)
                 adopted = true;
                 var old = client;
                 client = p;
@@ -1310,24 +1306,25 @@
                 model = null; lastStarting = false; localSides = [0, 0, 0, 0]; picked = -1; removing = -1; painted = {};
                 if (old) old.leave();
                 hook(p);
-                $('joinbox').hidden = true; $('joincode').value = ''; hint.textContent = '';
                 hideBanner();
                 onWelcome(e);
+                tell({ ok: true, code: code });
             });
             p.on('refused', function (e) {
                 var R = Net.REJECT;
                 if (adopted) return;
-                if (e.reason === R.Full) failed(Rules.HINT.full);
-                else if (e.reason === R.MatchRunning) failed(Rules.HINT.running);
-                else if (e.reason === R.VersionMismatch) showBanner('version');
-                else failed(Rules.TEXT.noroom());
+                if (e.reason === R.Full) failed('full', Rules.HINT.full);
+                else if (e.reason === R.MatchRunning) failed('running', Rules.HINT.running);
+                else if (e.reason === R.VersionMismatch) { showBanner('version'); failed('version', Rules.TEXT.version()); }
+                else failed('noroom', Rules.TEXT.noroom());
             });
             p.connect();
+            return p;
         }
         // ---- how it works ----
         var howOpener = null;
-        function openHow() { howOpener = document.activeElement; $('how').hidden = false; $('how-close').focus(); }
-        function closeHow() { $('how').hidden = true; if (howOpener && howOpener.focus) howOpener.focus(); }
+        function openHow() { howOpener = document.activeElement; $('how').hidden = false; inert(true); $('how-close').focus(); }       // (the page behind it takes no key or tap, as behind the map list)
+        function closeHow() { $('how').hidden = true; inert(false); if (howOpener && howOpener.focus) howOpener.focus(); }
         $('how-open').addEventListener('click', openHow);
         $('how-close').addEventListener('click', closeHow);
         $('how').addEventListener('click', function (e) { if (e.target === $('how')) closeHow(); });
@@ -1481,6 +1478,7 @@
         // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
         var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
             info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow, stalled: stalled,
+            client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },
             leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
         // ---- go ----

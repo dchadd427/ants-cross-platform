@@ -67,6 +67,8 @@ async function main() {
     }
     const dockText = (page, selector) => page.evaluate((s) => { const e = document.querySelector('#gchat ' + s); return e ? e.innerText : null; }, selector);
     const state = (page) => page.evaluate(() => { const d = document.getElementById('gchat'); return d ? d.getAttribute('data-state') + '/' + d.getAttribute('data-open') : null; });
+    const writer = (page, ms) => page.waitForFunction(() => { const f = document.querySelector('#gchat .gc-form'); return !!f && !f.hidden; }, null, { timeout: ms || 8000 }).then(() => true, () => false);       // (the dock has a welcome that names the visitor: not the old one, which a hub that was dropped a moment ago has not been told is gone)
+    const settled = (page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))));       // (the page has had a frame, so that its styles, its measures and its observers are done)
     const waitState = async (page, want, ms) => { const end = Date.now() + (ms || 6000); while (Date.now() < end) { if ((await state(page)) === want) return true; await sleep(50); } return (await state(page)) === want; };
     const noSideways = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth);
     const targets = (page) => page.evaluate(() => [...document.querySelectorAll('#gchat button, #gchat input, #gchat a, #gchat [tabindex]')].filter((e) => e.offsetParent !== null || e.getClientRects().length).map((e) => { const r = e.getBoundingClientRect(); return { tag: e.tagName.toLowerCase() + '.' + e.className, w: Math.round(r.width), h: Math.round(r.height) }; }));
@@ -86,7 +88,7 @@ async function main() {
             await shot(page, 'x_home', size);
             hub.set({ you: { name: 'maple.leaf', mod: false }, login: true });
             hub.drop();
-            check('desktop: a hub that now names the visitor: after the retry the field and Send are there', await waitState(page, 'live/true', 8000) && (await page.evaluate(() => !document.querySelector('#gchat .gc-form').hidden)));
+            check('desktop: a hub that now names the visitor: after the retry the field and Send are there', await writer(page) && await waitState(page, 'live/true', 8000));
             hub.say('maple.leaf', 'quick join works nice');
             await sleep(150);
             await shot(page, 'x_chat_in', size);
@@ -107,7 +109,7 @@ async function main() {
             await shot(page, 'x_chat_out', size);
             hub.set({ you: { name: 'maple.leaf', mod: false }, login: true });
             hub.drop();
-            check(size + ': a hub that names the visitor after a retry: the field and Send are in the open panel', await waitState(page, 'live/true', 8000));
+            check(size + ': a hub that names the visitor after a retry: the field and Send are in the open panel', await writer(page) && await waitState(page, 'live/true', 8000));
             hub.say('maple.leaf', 'quick join works nice');
             await sleep(150);
             await shot(page, 'x_chat_in', size);
@@ -150,8 +152,9 @@ async function main() {
         await context.close();
     }
 
-    // ---- both strips above Home (a notice and the Rejoin button): the open panel is never a sliver, clears the bar where there is room for that, and the "Opening the game" card is above it ----
-    for (const [W, Hh, name] of [[320, 568, 'phone_small'], [360, 640, 'phone_360'], [390, 844, 'phone'], [568, 320, 'side_small'], [844, 390, 'side'], [1280, 800, 'desktop']]) {
+    // ---- both strips above Home (a notice and the Rejoin button): the dock keeps under Home's bar: the open panel when there is room for it (never a sliver), the strip when there is not, nothing when not even that fits; it covers no
+    // button of the bar at any size, and the "Opening the game" card is above it ----
+    for (const [W, Hh, name] of [[320, 568, 'phone_small'], [360, 640, 'phone_360'], [390, 844, 'phone'], [568, 320, 'side_small'], [667, 375, 'side_667'], [844, 390, 'side'], [1280, 800, 'desktop'], [320, 480, 'phone_tiny']]) {
         hub.set({ login: false, you: null, mode: 'normal', online: 7, history: HISTORY });
         const context = await browser.newContext({ viewport: { width: W, height: Hh }, deviceScaleFactor: 1 });
         await context.addInitScript((port) => { try { localStorage.setItem('ants.rejoin.abcdef.0', JSON.stringify({ k: '0f1e2d3c4b5a69788796a5b4c3d2e1f0', s: 'ws://127.0.0.1:' + port + '/ws', t: Date.now() })); } catch (e) { /* no storage */ } }, hub.port);
@@ -160,15 +163,32 @@ async function main() {
         await page.goto(site.url + '/', { waitUntil: 'load' });
         await page.waitForSelector('#gchat', { timeout: 5000 });
         await page.evaluate(() => document.querySelector('.hbar .mine').click());       // (My room: the game server is not there: the notice strip)
-        await sleep(900);
+        await page.waitForFunction(() => !document.getElementById('banner').hidden, null, { timeout: 15000 });
         await page.evaluate(() => document.querySelector('.rbar .rhome').click());
-        await sleep(200);
+        await page.waitForFunction(() => document.body.getAttribute('data-screen') === 'home', null, { timeout: 5000 });
         if ((await state(page)) === 'live/false' || (await state(page)) === 'offline/false' || (await state(page)) === 'connecting/false') await page.evaluate(() => document.querySelector('#gchat .gc-head').click());
-        await sleep(300);
-        const m = await page.evaluate(() => { const r = (sel) => { const e = document.querySelector(sel); if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { top: Math.round(q.top), bottom: Math.round(q.bottom), height: Math.round(q.height) }; }; return { banner: r('#banner'), rejoin: r('#rejoin'), home: r('#home'), bar: r('.hbar'), dock: r('#gchat') }; });
-        check(name + ' (' + W + ' x ' + Hh + ') with both strips above Home: the open panel is not a sliver (' + m.dock.height + ' px high)', !!m.banner && !!m.rejoin && m.dock.height >= (W <= 720 && Hh > 500 ? 200 : W > 720 && Hh > 500 ? 380 : 150), JSON.stringify(m));
-        if (name !== 'phone_small' && name !== 'side_small') check(name + ': ... and it clears the bar (top ' + m.dock.top + ', the bar ends at ' + m.bar.bottom + ')', m.dock.top >= m.bar.bottom - 1 || name === 'desktop', JSON.stringify(m));
-        check(name + ': nothing scrolls sideways, and the dock is inside the window', (await noSideways(page)) && m.dock.bottom <= Hh);
+        await settled(page);
+        const m = await page.evaluate(() => {
+            const r = (sel) => { const e = document.querySelector(sel); if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { left: Math.round(q.left), right: Math.round(q.right), top: Math.round(q.top), bottom: Math.round(q.bottom), height: Math.round(q.height) }; };
+            const dock = r('#gchat'), buttons = [...document.querySelectorAll('.hbar button')].map((b) => b.getBoundingClientRect()).filter((q) => q.width > 0 && q.height > 0);
+            const covered = dock ? buttons.filter((q) => q.left < dock.right && q.right > dock.left && q.top < dock.bottom && q.bottom > dock.top).length : 0;
+            const d = document.getElementById('gchat');
+            return { banner: r('#banner'), rejoin: r('#rejoin'), home: r('#home'), bar: r('.hbar'), dock, covered, open: d ? d.getAttribute('data-open') : null, hidden: d ? d.hidden : null, least: d ? parseFloat(getComputedStyle(d).getPropertyValue('--gc-min')) || 0 : 0 };
+        });
+        check(name + ' (' + W + ' x ' + Hh + ') with both strips above Home: the dock covers no button of the bar (' + (m.dock ? (m.open === 'true' ? 'the panel, ' : 'the strip, ') + m.dock.height + ' px high' : 'not shown') + ')', !!m.banner && !!m.rejoin && m.covered === 0, JSON.stringify(m));
+        check(name + ': ... an open panel is never a sliver (at least ' + m.least + ' px), a window with no room for it shows the strip (62 px) and one with no room for that shows nothing', m.dock === null ? m.hidden === true : m.open === 'true' ? m.dock.height >= m.least : m.dock.height <= 62 + 2, JSON.stringify(m));
+        if (name !== 'desktop') check(name + ': ... and the dock never starts above the end of the bar (top ' + (m.dock ? m.dock.top : '-') + ', the bar ends at ' + m.bar.bottom + ')', m.dock === null || m.dock.top >= m.bar.bottom - 1, JSON.stringify(m));
+        if (name === 'phone_small' || name === 'side_small') check(name + ': a window with these two notices has no room for the open panel (it needs ' + m.least + ' px and 12 under them): the strip stands in, and the wish to open it is kept', m.dock !== null && m.open === 'false' && m.dock.height <= 64, JSON.stringify(m));
+        if (name === 'phone_tiny') check(name + ': a window with nothing under the bar shows no dock at all', m.dock === null && m.hidden === true, JSON.stringify(m));
+        if (name === 'phone' || name === 'side' || name === 'desktop') check(name + ': a window with room has the open panel', m.open === 'true' && m.dock !== null, JSON.stringify(m));
+        check(name + ': nothing scrolls sideways, and the dock is inside the window', (await noSideways(page)) && (m.dock === null || m.dock.bottom <= Hh));
+        if (name === 'phone_small') {                                  // the notices go (the page's own OK and the strip's): the panel that was wished for is back
+            await page.evaluate(() => { document.getElementById('rejoin').hidden = true; document.getElementById('banner').hidden = true; });
+            await page.waitForFunction(() => { const d = document.getElementById('gchat'); return !!d && d.getAttribute('data-open') === 'true'; }, null, { timeout: 5000 }).catch(() => {});
+            await settled(page);
+            const back = await page.evaluate(() => { const d = document.getElementById('gchat'), q = d.getBoundingClientRect(); return { open: d.getAttribute('data-open'), height: Math.round(q.height) }; });
+            check(name + ': when the notices are gone the panel is back as the visitor left it, without a press (Home\'s height changed, not the window\'s)', back.open === 'true' && back.height >= 200, JSON.stringify(back));
+        }
         await shot(page, 'strips', name);
         await context.close();
     }
