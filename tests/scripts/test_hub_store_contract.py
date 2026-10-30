@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The contract of the hub's data (hub/store/base.py; docs/HUB.md, "Data"): the same checks run against every backend.
 
-A backend is a subclass of `Contract` and a `unittest.TestCase` that says how to make a store (`make_store(clock)`) and how to make writes fail (`refusing_writes(store)`).
+A backend is a subclass of `Contract` that says how to make a store (`make_store(clock)`) and how to make writes fail (`refusing_writes(store)`).
 SQLite is the default and always runs. A backend that needs a server (the hook at the bottom) is SKIPPED, visibly, when no server is configured: it never passes without one.
 """
 import contextlib
@@ -28,8 +28,13 @@ class Clock:
         return self.now
 
 
-class Contract:
-    """The checks. Not a test case by itself: a backend mixes it into one."""
+class Contract(unittest.TestCase):
+    """The checks. They run only in a backend's subclass (the class itself is skipped)."""
+
+    @classmethod
+    def setUpClass(cls):
+        if cls is Contract:
+            raise unittest.SkipTest("the checks themselves: a backend's subclass runs them")
 
     def make_store(self, clock):
         raise NotImplementedError
@@ -268,7 +273,7 @@ class Contract:
         self.assertEqual(self.store.lines(10), [])
 
 
-class SqliteContract(Contract, unittest.TestCase):
+class SqliteContract(Contract):
     """The default backend: one file."""
 
     def make_store(self, clock):
@@ -316,7 +321,10 @@ SQL_SERVER = os.environ.get("ANTS_HUB_TEST_SQL_URL", "")
 
 
 @unittest.skipUnless(SQL_SERVER, "no SQL server configured (set ANTS_HUB_TEST_SQL_URL to run the contract against one)")
-class SqlContract(Contract, unittest.TestCase):
+class SqlContract(Contract):
+    def test_the_hook_is_wired_to_a_backend(self):
+        self.fail("a SQL server is configured and no SQL backend is wired into this hook yet")
+
     def make_store(self, clock):
         self.fail("a SQL backend is configured but not wired into this hook yet")
 
