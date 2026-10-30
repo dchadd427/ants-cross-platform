@@ -169,6 +169,7 @@ def wait_for(condition, timeout=8.0, step=0.1):
 
 import web_mapmaker_browser_edges as _edges                  # noqa: E402  (Fix edges: its own file; the Play part reads the bytes with the same helpers)
 _edges.wait_for = wait_for
+import web_mapmaker_browser_bridge as bridge_part                  # noqa: E402  (the Bridge chip's cases of the panel part: its own file, this one is at the limit of lines)
 EDGES_JS, edges_bytes = _edges.EDGES_JS, _edges.edges_bytes
 
 
@@ -2276,6 +2277,7 @@ def run_part(part, tab, args, check, tiny, junk):
                 check(not found["wide"] and not found["tall"] and found["outside"] == [], "%d x %d, %s: the tools column has no scrollbar and every button is inside it (%s)" % (w, h, tool, found))
                 if h >= 800:
                     check(found["note"], "%d x %d, %s: the note under the palette shows" % (w, h, tool))
+            bridge_part.panel_case(page, tab, check, w, h, wait_for)
             if (w, h) == (1280, 720):
                 page.tool("ants")
                 page.shot(args.shots, "mapmaker-panel-1280x720-ants")
@@ -2330,9 +2332,9 @@ def run_part(part, tab, args, check, tiny, junk):
             page.tool("objects")
             check(page.ev("!document.getElementById('tile-btn').hidden && document.getElementById('palette').offsetParent === null"), "a phone has the one palette button and not the row of tiles")
             page.ev("document.getElementById('tile-btn').click()")
-            check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 30), "the button opens a sheet of the 30 objects (6 rocks, 5 power-ups, the fire wall, 4 bombs, 5 clovers, 9 flowers)")
+            check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 31), "the button opens a sheet of the 31 objects (6 rocks, 5 power-ups, the fire wall, the bridge, 4 bombs, 5 clovers, 9 flowers)")
             names = page.ev("[].map.call(document.querySelectorAll('.pick'), function (b) { return b.textContent; }).join('|')")
-            check(names == "Rock 1|Rock 2|Rock 3|Rock 4|Rock 5|Rock 6|Combat ant power-up|Thief ant power-up|Bomber ant power-up|Swimmer ant power-up|Fire ant power-up|Fire wall|Black bomb|Blue bomb|Green bomb|Red bomb"
+            check(names == "Rock 1|Rock 2|Rock 3|Rock 4|Rock 5|Rock 6|Combat ant power-up|Thief ant power-up|Bomber ant power-up|Swimmer ant power-up|Fire ant power-up|Fire wall|Bridge|Black bomb|Blue bomb|Green bomb|Red bomb"
                   "|Clover 1|Clover 2|Clover 3|Clover 4|Clover patch|Flower 1a|Flower 1b|Flower 2a|Flower 2b|Flower 3a|Flower 3b|Flower 3c|Daisy flower|Flower 1", "with their names: %s" % names)
             inside = page.ev("[].every.call(document.querySelectorAll('.dlg-foot button'), function (b) { var r = b.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && r.top >= -1; })")
             check(inside, "the sheet's Close button is on the screen (the tiles scroll inside it)")

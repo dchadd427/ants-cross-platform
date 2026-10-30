@@ -494,19 +494,13 @@ Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either man
 
 > See 5.37 (later, Capstone-verified); this block differs (the bridge stages and the collapse timer, a 2500 ms poll).
 
-Both temporary field structures created by specialized ants have strictly reverse-engineered lifespans and unique destruction behaviors:
-
 1. **Firewall Lifetime (Exact: 180 seconds / 3 minutes):**
 
    - When placed (`0x0101e864`), `wallup04` (index 134) is written to Layer 2.
 
-   - A match timer entity (`0x1024d85` with vtable `0x1004c28`) is registered at `0x101e8e0` with expiration threshold `0x2bf20` ms (**180,000 ms = 180 seconds**):
+   - A match timer entity (`0x1024d85` with vtable `0x1004c28`) is registered at `0x101e8e0` with the expiration `match_time_remaining - 0x2bf20` ms (**180,000 ms = 180 seconds**).
 
-     ```
-     expire_time = match_time_remaining - 180000 ms
-     ```
-
-   - When the timer fires (`0x01024de7`), if Layer 2 is still tile 134, it clears the tile with `0x7ffe` (empty), triggering fire burnout sound (`fireburnout.wav`).
+   - When the timer fires (`0x01024de7`) and Layer 2 is still tile 134, the tile is cleared (`0x7ffe`) and the burnout sound (`fireburnout.wav`) plays.
 
    - If the match has less than 180 seconds remaining, the firewall persists until the end of the match.
 
@@ -517,14 +511,9 @@ Both temporary field structures created by specialized ants have strictly revers
 
    - Once fully constructed (`bridge4` at `0x0101ebd3`), a match timer entity (`0x1024d85` with vtable `0x1004c40`) is registered with the same `0x2bf20` ms (**180,000 ms = 180 seconds**) lifespan.
 
-   - **Universal Traversal (Allied & Enemy Ants):**
-     - Once constructed, a bridge converts that water tile into passable ground for **any ant in the game**.
-     - Traversal is **not restricted to friendly ants**; hostile enemy ants and allied ants alike can freely path and walk across it.
+   - **Universal Traversal:** once constructed, a bridge turns that water tile into passable ground for **any ant**, enemy and allied alike.
 
-   - **180-Second Collapse & Instant Drowning:**
-     - When 180 seconds elapse (`0x01024e66` -> `0x0100f8bf`), the bridge tile collapses and is erased from Layer 2 (`0x7ffe`).
-     - **Catastrophic Collapse & Drowning:** The engine scans all units currently occupying the collapsing bridge tile (`0x0100f8fc`). Any non-swimmer ant (`ant_type != 5`, including enemy and friendly ants) standing on top of the bridge at the exact moment of collapse **falls into deep water and drowns instantly** (`0x0100f948`, playing drowning audio).
-     - Swimmer ants (`ant_type == 5`) are immune to drowning, plunge into swimming mode, and survive unaffected.
+   - **180-Second Collapse & Instant Drowning:** when 180 seconds elapse (`0x01024e66` -> `0x0100f8bf`), the bridge tile collapses and is erased from Layer 2 (`0x7ffe`); the engine scans the units on it (`0x0100f8fc`) and every non-swimmer ant (`ant_type != 5`, enemy or friendly) there at that moment **falls into deep water and drowns instantly** (`0x0100f948`, drowning audio); swimmer ants (`ant_type == 5`) plunge into swimming mode and survive unaffected.
 
 ### 5.4 Thief Ant Infiltration & 50-Point Steal Mechanics (Disasm `0x0101d57c`)
 
@@ -2333,12 +2322,14 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
   needs a completed bridge, gives the tile to the demolisher's team at once, removes one stage per pass (0x24, 0x23, 0x22) and destroys
   the tile at the end of the fourth pass (1920 / 2000 ms); an interrupted demolish restores the completed bridge. Destroying a bridge
   (demolish, or the timer `FUN_01024e66`) runs `FUN_0100f8bf`: every non-swimmer on the tile drowns, a swimmer only splashes (dsplash).
-  **The collapse timer is a separate task entry** (list at `game + 0x4aec`, task object `FUN_01024d88`, polled every 2500 ms by the scheduler, `0x1024dd1`;
-  re-read in the audit of 2026-09-30, fixed in v0.0.54): the stage tiles change underneath it. Only the completion of a build arms it (`0x101ec84`) and only
+  **The collapse timer is a separate task entry** (list at `game + 0x4aec`, task object `FUN_01024d88`, polled every 2500 ms by the scheduler, `0x1024dd1`; fixed in v0.0.54): the stage tiles change underneath it. Only the completion of a build arms it (`0x101ec84`) and only
   the completion of a demolish cancels it (`FUN_0101edfe`, called at `0x101edbd`); the restore path of an interrupted demolish (`0x101ed58`, `SetTile(0x25)`) never
   touches it, so the restored bridge still collapses at its old deadline. `BridgeTimeout` (`0x1024e66`) acts only when layer 2 holds exactly 0x25 at that moment
   (`sub ax, 0x25`); the task is used up either way, so a timer that runs out while the bridge is half demolished does nothing and a bridge restored afterwards
-  stays for good. The remake keeps the timer in the cell (`timer_ticks`), steps and restores the stage with `set_bridge_stage` (timer untouched) and collapses only a 0x25 tile.
+  stays for good. So a bridge that the map file holds (0x25, or a part-built 0x22 to 0x24) has no timer (a fire wall's task is armed only by the end of an ignite)
+  and lasts the whole match; only a swimmer's demolish (finished piece 0x25, four passes) removes it, drowning every non-swimmer on the tile whatever the ground under it (no
+  terrain test in the original); a swimmer's special click on a part-built piece 0x22 to 0x24 is refused with "Can't do that...". The remake keeps the timer in the cell (`timer_ticks`), steps and
+  restores the stage with `set_bridge_stage` (timer untouched), collapses only a 0x25 tile; a file bridge keeps `timer_ticks` 0 (set at load in `grid.cpp`, skipped by the timer step of `sim_engine.cpp`) and never collapses.
 
 * **Solid tiles and pick-ups** *(implemented)*: fire walls, power-ups, lunchboxes, food and the placeholder are solid for every ant that
   does not carry the matching order (power-up order onto that very tile, harvest order onto that food, raid, a fire ant on a fire wall).
