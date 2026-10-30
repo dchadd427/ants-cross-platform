@@ -1,6 +1,6 @@
 # Public rooms and the list of games (network protocol 22)
 
-The leader of a lobby room ([`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120)) can open it to everybody, and the game server lists the rooms that a newcomer can join in `GET /lobbies` of its public door. A new room is private. The front page sends the message (the Room's Public | Private switch and Quick host) and shows the list (the Games popover): [`HOME_SCREEN.md`](HOME_SCREEN.md#games-quick-host-and-the-public-room). No rule of the simulation, golden hash or lock-step rule changes.
+The leader of a lobby room ([`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120)) can open it to everybody, and the game server lists the rooms that a newcomer can join in `GET /lobbies` of its public door. A new room is private. The front page sends the message (the Room's Public | Private switch and Quick host) and shows the list (the Games popover): [`HOME_SCREEN.md`](HOME_SCREEN.md#games-quick-host-and-the-public-room). Public rooms change no rule of the simulation, golden hash or lock-step rule. The same protocol number holds one small rule fix of the simulation: the layer-2 id 38 (`bridge4b`) is no bridge any more, as in the original ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md), 5.37). A map that holds it plays differently from protocol 21; no map of the library does, so no library play and no state hash of it changes ([`REPLAYS.md`](REPLAYS.md#the-file): the rules number stays 5).
 
 ## The protocol
 

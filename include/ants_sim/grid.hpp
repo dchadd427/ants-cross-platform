@@ -27,7 +27,7 @@ constexpr uint16_t TILE_BRIDGE1  = 34u;
 constexpr uint16_t TILE_BRIDGE2  = 35u;
 constexpr uint16_t TILE_BRIDGE3  = 36u;
 constexpr uint16_t TILE_BRIDGE4  = 37u;  // Completed bridge (bridge4a)
-constexpr uint16_t TILE_BRIDGE4B = 38u;  // Completed bridge (bridge4b)
+constexpr uint16_t TILE_BRIDGE4B = 38u;  // bridge4b: a picture only, no bridge (the original knows the ids 34 .. 37 alone, docs/GAME_REVERSE_ENGINEERING.md 5.37)
 constexpr uint16_t TILE_LUNCHBOX = 356u; // Dropped food lunchbox (Anim 356, Sprite 513)
 constexpr uint16_t TILE_RESERVED = 160u; // 0xa0: invisible, solid placeholder while a bomb or fire wall is being placed
 
@@ -130,10 +130,10 @@ struct TileCell {
     }
     constexpr bool has_fire() const noexcept { return interactive_id == TILE_FIREWALL; }
     constexpr bool has_completed_bridge() const noexcept {
-        return interactive_id == TILE_BRIDGE4 || interactive_id == TILE_BRIDGE4B;
+        return interactive_id == TILE_BRIDGE4;
     }
     constexpr bool has_any_bridge() const noexcept {
-        return (interactive_id >= TILE_BRIDGE1 && interactive_id <= TILE_BRIDGE4) || interactive_id == TILE_BRIDGE4B;
+        return interactive_id >= TILE_BRIDGE1 && interactive_id <= TILE_BRIDGE4;
     }
     constexpr bool has_partial_bridge() const noexcept {
         return interactive_id >= TILE_BRIDGE1 && interactive_id < TILE_BRIDGE4;
@@ -430,7 +430,7 @@ public:
     bool has_bridge_at(TileCoord pos) const noexcept {
         if (!in_bounds(pos)) return false;
         uint16_t id = get_cell(pos).interactive_id;
-        return (id >= TILE_BRIDGE1 && id <= TILE_BRIDGE4) || id == TILE_BRIDGE4B;
+        return id >= TILE_BRIDGE1 && id <= TILE_BRIDGE4;
     }
 
     bool has_lunchbox_at(TileCoord pos) const noexcept {
@@ -444,7 +444,6 @@ public:
         if (id >= TILE_BRIDGE1 && id <= TILE_BRIDGE4) {
             return static_cast<int>(id - TILE_BRIDGE1 + 1);
         }
-        if (id == TILE_BRIDGE4B) return 4;
         return 0;
     }
 
