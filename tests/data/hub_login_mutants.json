@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the chat hub's Discord login (hub/login.py, hub/discord.py, the sessions of hub/store.py, hub/server.py's pages, docker/nginx.conf's pages and cookie rules, the stack files, web/legal.html) and of the three follow-ups of the hub's review, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_login.py, test_nginx_hub_login.py, test_hub_core.py, test_hub_server.py, test_hub_stack.py or test_web_legal.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_login_mutants.json --keep-going --jobs 1 --baseline-every 40. The nginx mutants need an nginx program on the machine (without one they cannot be caught and show as survived); the page's own mutants are tests/data/home_chat_mutants.json.",
+ "note": "Mutants of the chat hub's Discord login (hub/login.py, hub/discord.py, the sessions of hub/store/, hub/server.py's pages, docker/nginx.conf's pages and cookie rules, the stack files, web/legal.html) and of the three follow-ups of the hub's review, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_login.py, test_nginx_hub_login.py, test_hub_core.py, test_hub_server.py, test_hub_stack.py or test_web_legal.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_login_mutants.json --keep-going --jobs 1 --baseline-every 40. The nginx mutants need an nginx program on the machine (without one they cannot be caught and show as survived); the page's own mutants are tests/data/home_chat_mutants.json.",
  "baseline": {
   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_login tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub tests.scripts.test_hub_core tests.scripts.test_hub_server tests.scripts.test_hub_stack tests.scripts.test_web_legal"
  },
@@ -279,42 +279,42 @@
   },
   {
    "id": "login_cap_removed",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)\", (account, account, keep))",
    "new": "self.db.execute(\"SELECT ?, ?, ?\", (account, account, keep))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsForAnAccount"
   },
   {
    "id": "login_cap_keeps_the_oldest",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "ORDER BY created DESC, rowid DESC LIMIT ?",
    "new": "ORDER BY created ASC, rowid ASC LIMIT ?",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsForAnAccount"
   },
   {
    "id": "login_cap_of_all_accounts",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY",
    "new": "DELETE FROM sessions WHERE ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsForAnAccount"
   },
   {
    "id": "expired_login_accepted",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "WHERE id = ? AND expires > ?\", (key, int(self.clock()))",
    "new": "WHERE id = ? AND ? > 0\", (key, int(self.clock()))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSessionsAreKept"
   },
   {
    "id": "expired_logins_never_cleaned",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"DELETE FROM sessions WHERE expires <= ?\", (now,))",
    "new": "self.db.execute(\"DELETE FROM sessions WHERE expires <= ? - 99999999999\", (now,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSessionsAreKept"
   },
   {
    "id": "purge_takes_every_login",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"DELETE FROM sessions WHERE expires <= ?\", (now,))",
    "new": "self.db.execute(\"DELETE FROM sessions WHERE expires <= ? + 99999999999\", (now,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSessionsAreKept"
@@ -462,15 +462,15 @@
   {
    "id": "logout_keeps_the_login",
    "file": "hub/login.py",
-   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")",
-   "new": "pass\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")",
+   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")",
+   "new": "pass\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
   {
    "id": "logout_keeps_the_sockets",
    "file": "hub/login.py",
-   "old": "                self.hub.end_logins(session=digest(value))\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
-   "new": "                pass\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "old": "                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "new": "                pass\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
   {
@@ -496,49 +496,49 @@
   },
   {
    "id": "forget_lifts_the_ban",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"UPDATE bans SET name = '' WHERE account = ?\", (account,))",
    "new": "self.db.execute(\"DELETE FROM bans WHERE account = ?\", (account,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheBansAndMutesStandWhateverTheAccountDoes"
   },
   {
    "id": "forget_lifts_the_mute",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"UPDATE mutes SET name = '' WHERE account = ?\", (account,))",
    "new": "self.db.execute(\"DELETE FROM mutes WHERE account = ?\", (account,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheBansAndMutesStandWhateverTheAccountDoes"
   },
   {
    "id": "forget_keeps_the_name_of_the_ban",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"UPDATE bans SET name = '' WHERE account = ?\", (account,))",
    "new": "self.db.execute(\"SELECT 1\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheBansAndMutesStandWhateverTheAccountDoes"
   },
   {
    "id": "forget_keeps_the_lines",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))",
    "new": "self.db.execute(\"SELECT 1\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
   },
   {
    "id": "forget_takes_every_line",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))",
    "new": "self.db.execute(\"DELETE FROM lines WHERE account = ? OR 1\", (account,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
   },
   {
    "id": "forget_keeps_the_logins",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))",
    "new": "self.db.execute(\"SELECT 1\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
   },
   {
    "id": "forget_ends_every_login",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))",
    "new": "self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
@@ -678,14 +678,14 @@
   },
   {
    "id": "login_total_cap_removed",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)\", (total,))",
    "new": "self.db.execute(\"SELECT ?\", (total,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
   },
   {
    "id": "login_total_cap_keeps_the_oldest",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)",
    "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
@@ -700,29 +700,29 @@
   {
    "id": "me_database_trouble_is_a_crash",
    "file": "hub/login.py",
-   "old": "        try:\n            who = self.who_of(request.headers)\n        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        return http.response(200, {\"login\": True",
+   "old": "        try:\n            who = self.who_of(request.headers)\n        except StoreError:\n            return self.fail(503, \"busy\")\n        return http.response(200, {\"login\": True",
    "new": "        who = self.who_of(request.headers)\n        return http.response(200, {\"login\": True",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
   },
   {
    "id": "logout_database_trouble_is_a_crash",
    "file": "hub/login.py",
-   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "old": "        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "new": "        except ZeroDivisionError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
   },
   {
    "id": "forget_database_trouble_is_a_crash",
    "file": "hub/login.py",
-   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
+   "old": "        except StoreError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
    "new": "        except ZeroDivisionError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
   },
   {
    "id": "forget_database_trouble_says_ok",
    "file": "hub/login.py",
-   "old": "        except sqlite3.OperationalError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
-   "new": "        except sqlite3.OperationalError:\n            return http.response(200, {\"ok\": True})\n        self.hub.end_logins(account=who.account_id)",
+   "old": "        except StoreError:\n            return self.fail(503, \"busy\")\n        self.hub.end_logins(account=who.account_id)",
+   "new": "        except StoreError:\n            return http.response(200, {\"ok\": True})\n        self.hub.end_logins(account=who.account_id)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
   },
   {
@@ -1092,21 +1092,21 @@
   {
    "id": "line_write_error_cuts_the_socket",
    "file": "hub/chat.py",
-   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except sqlite3.OperationalError as e:",
+   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except StoreError as e:",
    "new": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except ZeroDivisionError as e:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
    "id": "command_error_cuts_the_socket",
    "file": "hub/chat.py",
-   "old": "            try:\n                return self.command(peer, line)\n            except sqlite3.OperationalError as e:",
+   "old": "            try:\n                return self.command(peer, line)\n            except StoreError as e:",
    "new": "            try:\n                return self.command(peer, line)\n            except ZeroDivisionError as e:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
    "id": "read_error_cuts_the_socket",
    "file": "hub/chat.py",
-   "old": "        except sqlite3.OperationalError as e:\n            return self.trouble(peer, e, \"rate\")\n        if who.young:",
+   "old": "        except StoreError as e:\n            return self.trouble(peer, e, \"rate\")\n        if who.young:",
    "new": "        except ZeroDivisionError as e:\n            return self.trouble(peer, e, \"rate\")\n        if who.young:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed"
   },
@@ -1490,35 +1490,35 @@
   },
   {
    "id": "forget_skips_what_the_command_line_deleted",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "AND (deleted = 0 OR del_seq > ?)\", (account, int(since)))]",
    "new": "AND deleted = 0\", (account,))]",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
   },
   {
    "id": "forget_does_not_cut_the_log_file",
-   "file": "hub/store.py",
-   "old": "        try:\n            self.checkpoint()\n        except sqlite3.OperationalError:            # (the forgetting",
-   "new": "        try:\n            pass\n        except sqlite3.OperationalError:            # (the forgetting",
+   "file": "hub/store/sqlite.py",
+   "old": "        try:\n            self.checkpoint()\n        except StoreError:            # (the forgetting",
+   "new": "        try:\n            pass\n        except StoreError:            # (the forgetting",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
   },
   {
    "id": "forget_fails_when_the_cut_fails",
-   "file": "hub/store.py",
-   "old": "        except sqlite3.OperationalError:            # (the forgetting is done and is told",
+   "file": "hub/store/sqlite.py",
+   "old": "        except StoreError:            # (the forgetting is done and is told",
    "new": "        except ZeroDivisionError:            # (the forgetting is done and is told",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore "
   },
   {
    "id": "logout_does_not_ask_for_the_cut",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "        self.unsettled = True\n        return gone\n",
    "new": "        return gone\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
   },
   {
    "id": "the_cap_does_not_ask_for_the_cut",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "        if over:\n            self.unsettled = True",
    "new": "        if False:\n            self.unsettled = True",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
@@ -1707,14 +1707,14 @@
   },
   {
    "id": "forget_ignores_the_hubs_last_look",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "AND (deleted = 0 OR del_seq > ?)\", (account, int(since)))]",
    "new": "\", (account,))]",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
   },
   {
    "id": "forget_only_the_live_lines",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "AND (deleted = 0 OR del_seq > ?)",
    "new": "AND (deleted = 0)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The hub's rules without a socket (hub/chat.py, limits.py, store.py, config.py, session.py, admin.py; docs/HUB.md): who may say what, the limits, the last 50 lines, bans and mutes,
+"""The hub's rules without a socket (hub/chat.py, limits.py, store/, config.py, session.py, admin.py; docs/HUB.md): who may say what, the limits, the last 50 lines, bans and mutes,
 history that is kept 7 days and then deleted for good, the moderators' commands and the command line.
 
 The chat is driven with plain fake peers and a fake clock, so every limit is tested at its edge in no time. The sockets, the timers and the real process are tests/scripts/test_hub_server.py.
@@ -994,7 +994,7 @@ class TheStore(unittest.TestCase):
         self.store.add_session("a" * 64, "7", "gone", 100, 10, 100)
 
         def fail(*a, **k):
-            raise sqlite3.OperationalError("database is locked")
+            raise storemod.StoreError("database is locked")
 
         self.store.checkpoint = fail
         ids = self.store.forget("7")
@@ -1124,7 +1124,7 @@ class TheDatabaseThatCannotBeUsed(WorldTest):
     """A write that fails because another process holds the database's write lock longer than the hub waits (or the disk refuses): the sender is told, the socket stays, nothing is counted against it."""
 
     def locked(self, name):
-        return mock.patch.object(self.w.store, name, side_effect=sqlite3.OperationalError("database is locked"))
+        return mock.patch.object(self.w.store, name, side_effect=storemod.StoreError("database is locked"))
 
     def test_a_line_that_could_not_be_kept_is_answered_rate_and_is_no_mistake_and_costs_no_token(self):
         seen = []
@@ -1134,7 +1134,7 @@ class TheDatabaseThatCannotBeUsed(WorldTest):
         self.assertEqual(self.alice.codes(), ["rate"])
         self.assertEqual((self.alice.strikes, self.alice.charges, self.alice.closed), (0, 1, None))     # (not a mistake, but one frame of its budget more: the refusal is not free)
         self.assertEqual(len(seen), 1)
-        self.assertIsInstance(seen[0], sqlite3.OperationalError)
+        self.assertIsInstance(seen[0], storemod.StoreError)
         self.assertEqual(self.bob.sent, [])                                                             # (nobody saw a line)
         self.assertEqual(self.w.store.recent_lines(10), [])
         for n in range(3):
@@ -1147,7 +1147,7 @@ class TheDatabaseThatCannotBeUsed(WorldTest):
         w = World(limits=dataclasses.replace(LIMITS, global_burst=1, global_refill_seconds=1e9))
         self.addCleanup(w.close)
         alice = w.join(ALICE)
-        with mock.patch.object(w.store, "add_line", side_effect=sqlite3.OperationalError("database is locked")):
+        with mock.patch.object(w.store, "add_line", side_effect=storemod.StoreError("database is locked")):
             w.say(alice, "one")
         w.say(alice, "two")                                                                              # (the one token of all accounts together was not used by the line that was not kept)
         self.assertEqual(alice.codes(), ["rate"])
@@ -1272,7 +1272,7 @@ class TheCommandLine(unittest.TestCase):
             with mock.patch.object(storemod.Store, "transaction", side_effect=sqlite3.OperationalError("database or disk is full")):
                 status, out, err = self.run_admin(*command)
             self.assertEqual((status, out), (1, ""), command)
-            self.assertEqual(err, "hub.admin: the database refused it (OperationalError)\n", command)
+            self.assertEqual(err, "hub.admin: the database refused it (StoreError)\n", command)
 
     def test_a_file_that_is_not_a_database_is_a_message_too(self):
         path = os.path.join(self.folder.name, "garbage.db")
@@ -1281,6 +1281,20 @@ class TheCommandLine(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         self.assertEqual(admin.run(["--db", path, "list"], out, err), 1)
         self.assertIn("the database cannot be opened", err.getvalue())
+
+    def test_a_database_that_is_damaged_in_the_middle_of_a_command_is_a_message_and_not_a_traceback(self):
+        path = os.path.join(self.folder.name, "damaged.db")
+        store = storemod.Store(path)
+        for n in range(300):
+            store.add_line("1001", "alice", "line %d with some text to fill the pages" % n, False)
+        store.close()
+        with open(path, "r+b") as f:                        # (the first two pages stay, so that it opens: the rest is noise)
+            f.seek(8192)
+            f.write(bytes((i * 7919 + 13) % 251 for i in range(os.path.getsize(path) - 8192)))
+        for command in (("list",), ("ban", "1001"), ("del", "1"), ("mute", "1001", "5")):
+            out, err = io.StringIO(), io.StringIO()
+            self.assertEqual(admin.run(["--db", path] + list(command), out, err), 1, command)
+            self.assertRegex(err.getvalue(), r"^hub\.admin: the database refused it \(\w+\)\n$", command)
 
     def test_del(self):
         status, out, _ = self.run_admin("del", "1")

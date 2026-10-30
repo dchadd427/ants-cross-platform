@@ -10,10 +10,10 @@ all accounts together and the size of the database allow it (`rate` otherwise); 
 import collections
 import json
 import re
-import sqlite3
 
 from . import PROTOCOL, text as textrules
 from .limits import AccountLimits, TokenBucket
+from .store import StoreError
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
@@ -112,7 +112,7 @@ class Chat:
                 return self.mistake(peer, "banned")
             if self.store.muted_until(who.account_id):
                 return self.mistake(peer, "muted")
-        except sqlite3.OperationalError as e:
+        except StoreError as e:
             return self.trouble(peer, e, "rate")
         if who.young:
             return self.mistake(peer, "young")
@@ -123,12 +123,12 @@ class Chat:
         if mod and line.startswith("/"):
             try:
                 return self.command(peer, line)
-            except sqlite3.OperationalError as e:
+            except StoreError as e:
                 return self.trouble(peer, e, "bad")                # (a moderator is told that the command did not happen, and may type it again)
         now = self.clock()
         try:
             full = self.store.size() >= self.limits.db_max_bytes
-        except sqlite3.OperationalError as e:
+        except StoreError as e:
             return self.trouble(peer, e, "rate")
         if not self.global_limit.ready(now) or full:
             return self.mistake(peer, "rate", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)
@@ -137,7 +137,7 @@ class Chat:
         self.global_limit.take(now)
         try:
             entry = self.store.add_line(who.account_id, who.name, line, mod)
-        except sqlite3.OperationalError as e:
+        except StoreError as e:
             self.account_limits.refund(who.account_id, line)       # (the line was not kept: it did not cost a token, and the same text may be tried again)
             self.global_limit.give_back()
             return self.trouble(peer, e, "rate")

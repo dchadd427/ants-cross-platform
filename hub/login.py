@@ -18,10 +18,10 @@ import hashlib
 import hmac
 import re
 import secrets
-import sqlite3
 import urllib.parse
 
 from . import config, discord as discordmod, http, limits as limitmod, session, text
+from .store import StoreError
 
 COOKIE = "__Host-ants_hub"                  # the login: a random 128-bit value, Path=/, Secure, HttpOnly, SameSite=Strict (only its SHA-256 is kept)
 STATE_COOKIE = "__Host-ants_oauth"          # the state of a login on its way: SameSite=Lax, because Discord's way back is a navigation from another site
@@ -249,7 +249,7 @@ class DiscordLogin(session.Sessions):
             if old and VALUE.match(old):                                      # (a login that this browser had is over: a new one never takes over the value of an old one)
                 self.store.delete_session(digest(old))
                 self.hub.end_logins(session=digest(old))
-        except sqlite3.OperationalError as e:
+        except StoreError as e:
             self.log.event("login_failed", kind="database", error=type(e).__name__)
             return self.page("unavailable", back, gone)
         self.log.event("login", tag=self.log.tag(address))
@@ -276,7 +276,7 @@ class DiscordLogin(session.Sessions):
             return refused
         try:
             who = self.who_of(request.headers)
-        except sqlite3.OperationalError:
+        except StoreError:
             return self.fail(503, "busy")
         return http.response(200, {"login": True, "you": {"name": who.name, "mod": who.account_id in self.cfg.mods} if who else None})
 
@@ -289,7 +289,7 @@ class DiscordLogin(session.Sessions):
             if value and VALUE.match(value):
                 self.store.delete_session(digest(value))
                 self.hub.end_logins(session=digest(value))
-        except sqlite3.OperationalError:
+        except StoreError:
             return self.fail(503, "busy")
         self.log.event("logout", tag=self.log.tag(address))
         return http.response(200, {"ok": True}, [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
@@ -303,7 +303,7 @@ class DiscordLogin(session.Sessions):
             if who is None:
                 return self.fail(401, "login", [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
             lines = self.store.forget(who.account_id, self.hub.chat.deleted_seq)
-        except sqlite3.OperationalError:
+        except StoreError:
             return self.fail(503, "busy")
         self.hub.end_logins(account=who.account_id)
         self.hub.chat.drop_lines(lines)

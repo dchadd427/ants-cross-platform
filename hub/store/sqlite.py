@@ -4,17 +4,29 @@ Everything is keyed by account id, so a mute or a ban survives a restart, a new 
 do not block each other). A line is kept `retention_days` (7) and then deleted for good: the delete zeroes the freed pages (secure_delete) and the log file is cut. A line that a
 moderator deletes stays in the file, marked, until its time is up; the hub learns of a deletion that the command line made by reading `del_seq`.
 """
-import collections
 import contextlib
+import functools
 import os
 import sqlite3
 import time
 
-Line = collections.namedtuple("Line", "id at account name text mod")
+from .base import PUBLIC, Line, StoreBase, StoreError
+
 SCHEMA = 3
 
 
-class Store:
+def refusal_as_store_error(method, errors=sqlite3.OperationalError):
+    """The contract's error: a locked file or a full disk (sqlite3.OperationalError) reaches the caller as StoreError. Any other error is not the store being busy and passes as it is."""
+    @functools.wraps(method)
+    def mapped(*args, **kwargs):
+        try:
+            return method(*args, **kwargs)
+        except errors as e:
+            raise StoreError("the database refused it") from e
+    return mapped
+
+
+class Store(StoreBase):
     def __init__(self, path, clock=time.time, retention_days=7, busy_ms=5000):
         self.path = path
         self.busy_ms = busy_ms                      # how long a write waits for another process's write (the hub uses a short time: its one thread must not wait for seconds)
@@ -201,7 +213,7 @@ class Store:
             self.db.execute("UPDATE bans SET name = '' WHERE account = ?", (account,))
         try:
             self.checkpoint()
-        except sqlite3.OperationalError:            # (the forgetting is done and is told: the cut is tried again by the hub's clock)
+        except StoreError:            # (the forgetting is done and is told: the cut is tried again by the hub's clock)
             self.unsettled = True
         return ids
 
@@ -239,3 +251,8 @@ class Store:
 
     def bans(self):
         return self.db.execute("SELECT account, name, at, by FROM bans ORDER BY at").fetchall()
+
+
+for _name in PUBLIC + ("checkpoint",):          # (every operation of the contract, and the one that only this file has, speaks StoreError, whatever the file does)
+    setattr(Store, _name, refusal_as_store_error(getattr(Store, _name)))
+Store.__init__ = refusal_as_store_error(Store.__init__, sqlite3.Error)         # (a file that cannot be opened: any error of the library)
