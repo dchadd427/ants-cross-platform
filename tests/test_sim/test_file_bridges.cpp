@@ -1,9 +1,9 @@
 // Bridges that a map FILE holds (docs/GAME_REVERSE_ENGINEERING.md 5.37, "Bridges"). The original's bridge pieces are the layer-2 ids 34 .. 37 (0x22 .. 0x25) and no other: 37 is the completed
 // bridge, 34 .. 36 are the pieces of a build in progress, and a piece that a file holds has no collapse timer (only the completion of a swimmer's build arms one, and only with more than 180 s of
 // the match left). The id 38 ("bridge4b") is no bridge at all: the terrain class of a cell compares 0x22 .. 0x25 alone, so a water cell that holds 38 stays water. The cases that exist in the library
-// are 395 cells of 37 in 16 community maps (the editor leaves the dictionary entry ".") and four part-built pieces; no map holds 38.
+// are 395 cells of 37 in 14 community maps (the editor leaves the dictionary entry ".") and four part-built pieces in two others; no map holds 38.
 // New file for the topic; its own small check() that counts and goes on (the shared tests/common/test_assert.hpp macros return from the case at the first failure, which the loops here do not want).
-// The world is TINY with layer 2 emptied and a river of layer-1 water (tile 476) over the columns 12 .. 18 for the whole height; the banks are land.
+// The world is TINY with its objects and food piles taken away (the four hills stay), plain grass everywhere, and a river of layer-1 water (tile 476) over the columns 12 .. 18 for the whole height.
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/grid.hpp"
