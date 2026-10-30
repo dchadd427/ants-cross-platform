@@ -196,6 +196,18 @@ int main() {
         }
     });
 
+    run_case("FBR1.2 The Loader's Name Rule Treats 38 As Any Other Object: A Land Cell That Holds 38 Is An Obstacle Overlay Only When Its Entry Is Named Like A Rock; \".\", Empty, \"bridge4b\" And \"broken1\" Make None", [] {
+        const char* names[5] = {".", "", "bridge4b", "broken1", "rock1"};
+        for (const char* name : names) {
+            LevelData level = river();
+            put(level, 9, 14, kInert);
+            name_tile(level, kInert, name);
+            Grid g;
+            CHECK(g.init_from_level(level));
+            CHECK(g.get_cell(9u, 14u).interactive_id == kInert && g.get_cell(9u, 14u).is_obstacle_overlay == (std::string(name) == "rock1"));
+        }
+    });
+
     run_case("FBR2.1 A Non-Swimmer Of Each Team Crosses A Strip Of 37 Over The River: It Arrives On The Other Bank, Never Drowns", [] {
         LevelData level = river();
         const int rows[4] = {5, 11, 14, 17};
@@ -261,6 +273,29 @@ int main() {
         const uint32_t worker = sim.spawn_unit(1, AntType::Worker, TileCoord{12, 11});
         run(sim, 2500);                                                    // (125 s of the 150 s that are left)
         CHECK(cell(sim, 12, 11).has_completed_bridge() && cell(sim, 12, 11).timer_ticks == 0 && well(sim, worker));
+    });
+
+    run_case("FBR4.3 The Lifetime Task Is Armed While More Than 180 Seconds Of The Match Are Left, At Exactly 180,000 Ms It Is Not: A Build That Ends With 180,050 Ms On The Clock Gets The Timer, With 180,000 Ms None", [] {
+        int ticks = 0;                                                     // the ticks from the click to the end of the build (the clip's, not the clock's)
+        {
+            SimulationEngine sim;
+            start(sim, river());
+            const uint32_t swimmer = sim.spawn_unit(0, AntType::Swimmer, TileCoord{11, 11});
+            sim.issue_order(special_click(swimmer, 12, 11));
+            while (ticks < 300 && cell(sim, 12, 11).timer_ticks == 0) { sim.tick(); ++ticks; }
+        }
+        CHECK(ticks > 10 && ticks < 300);
+        for (int more = 0; more <= 1; ++more) {                            // the clock runs on 50 ms before the build's last step: it reads X - 50 * ticks there
+            SimulationEngine sim;
+            start(sim, river());
+            const uint32_t swimmer = sim.spawn_unit(0, AntType::Swimmer, TileCoord{11, 11});
+            sim.set_match_time_remaining_ms(static_cast<uint32_t>(180000 + 50 * ticks + 50 * more));
+            sim.issue_order(special_click(swimmer, 12, 11));
+            run(sim, ticks - 1);
+            CHECK(!cell(sim, 12, 11).has_completed_bridge());
+            sim.tick();
+            CHECK(cell(sim, 12, 11).has_completed_bridge() && cell(sim, 12, 11).timer_ticks == (more == 1 ? kBuiltLife : 0u));
+        }
     });
 
     run_case("FBR5.1 A Swimmer's Click On A File Bridge Is A Demolish: Four Passes (37, 36, 35, 34, Gone) About 10 Ticks Apart; A Worker On It, Enemy Or Friendly, Drowns At The Last Pass; A Swimmer On It Splashes And Lives; The Neighbors Stay", [] {
@@ -341,6 +376,18 @@ int main() {
             CHECK(well(sim, ant[k]) && sim.get_unit(ant[k]).pos == (TileCoord{20, rows[k]}));
             CHECK(cell(sim, kRiver0, rows[k]).interactive_id == 34 + k && cell(sim, kRiver0, rows[k]).timer_ticks == 0);
             expect_refused(level, rows[k], static_cast<uint16_t>(34 + k));
+        }
+    });
+
+    run_case("FBR6.2 The Cursor Of A Swimmer's Special Click (A Valid Target) Accepts A Completed Bridge And Plain Water, Not A Part-Built Piece Or A 38", [] {
+        LevelData level = river();
+        for (int k = 0; k < 5; ++k) put(level, kRiver0 + k, 11, static_cast<uint16_t>(34 + k));
+        SimulationEngine sim;
+        start(sim, level);
+        for (int k = 0; k < 6; ++k) {                                      // x = 12 .. 16 hold 34 .. 38, x = 17 is plain water
+            const bool valid = (k == 3 || k == 5);
+            CHECK(sim.is_special_target_valid(AntType::Swimmer, TileCoord{kRiver0 + k, 11}, false, 0) == valid);
+            CHECK(!sim.is_special_target_valid(AntType::Swimmer, TileCoord{kRiver0 + k, 11}, true, 0));       // (a lone swimmer without the pedestal has none)
         }
     });
 

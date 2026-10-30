@@ -510,7 +510,7 @@ Both temporary field structures created by specialized ants have strictly revers
 
    - If the match has less than 180 seconds remaining, the firewall persists until the end of the match.
 
-2. **Bridge Construction & Lifetime (180 seconds):** the stages `bridge1` .. `bridge4` are the layer-2 ids 34 .. 37; the completed bridge arms a match timer of `0x2bf20` ms = 180 s and is passable ground for any ant, friend or enemy; when the timer fires (`0x01024e66` -> `0x0100f8bf`) the tile is erased (`0x7ffe`) and every non-swimmer on it drowns, a swimmer survives. The exact rules are in 5.37, "Bridges".
+2. **Bridge Construction & Lifetime (180 seconds):** the stages `bridge1` .. `bridge4` are the layer-2 ids 34 .. 37; the completed bridge arms a match timer of `0x2bf20` ms = 180 s and is passable ground for any ant, friend or enemy; when it fires the tile is erased (`0x7ffe`) and the non-swimmers on it drown, a swimmer survives (the exact rules: 5.37, "Bridges").
 
 ### 5.4 Thief Ant Infiltration & 50-Point Steal Mechanics (Disasm `0x0101d57c`)
 
@@ -2325,11 +2325,11 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
   touches it, so the restored bridge still collapses at its old deadline. `BridgeTimeout` (`0x1024e66`) acts only when layer 2 holds exactly 0x25 at that moment
   (`sub ax, 0x25`); the task is used up either way, so a timer that runs out while the bridge is half demolished does nothing and a bridge restored afterwards
   stays for good. The remake keeps the timer in the cell (`timer_ticks`), steps and restores the stage with `set_bridge_stage` (timer untouched) and collapses only a 0x25 tile.
-  **Bridge pieces of a map file** *(implemented; `FUN_01008b90` via `FUN_01008af7`)*: the pieces are the layer-2 ids 0x22 .. 0x25 and no other. A file cell of 0x25 is a completed bridge with no collapse timer (only a swimmer's
-  finished build arms one); 0x22 .. 0x24 stay for good as walkable ground (class 3). A swimmer's special click on a part-built piece, or on any water cell with something on layer 2, is refused (order 0xd needs an empty layer 2,
-  order 0xe exactly 0x25): the can't clip and "Can't do that...". **The id 0x26 (38, `bridge4b`) is inert**: a water cell that holds it stays water (a non-swimmer cannot walk onto it, a thrown or placed one drowns), and it is in
-  none of the program's tile lists, so its picture loads only when the map's dictionary names entry 38 something other than "."; the remake counted it as a bridge until protocol 22. The demolish has no terrain test:
-  `FUN_0100f8bf` drowns every non-swimmer on the tile, on plain grass too.
+  **Bridge pieces of a map file** *(implemented; `FUN_01008b90` via `FUN_01008af7`)*: the pieces are the layer-2 ids 0x22 .. 0x25 and no other. A file cell of 0x25 is a completed bridge with no collapse timer (only a swimmer's finished
+  build, action 16 from `0x10212bb`, arms one: the timer task, vtable `0x1004c40`); 0x22 .. 0x24 stay for good, walkable (class 3). A swimmer's special click on a part-built piece, or on any
+  water cell with something on layer 2, is refused (order 0xd needs an empty layer 2, order 0xe exactly 0x25): the can't clip and "Can't do that...". **The id 0x26 (38, `bridge4b`) is inert**: a water cell that holds it stays
+  water (a non-swimmer cannot walk onto it, a thrown or placed one drowns), and it is in none of the program's tile lists, so its picture loads only when the map's dictionary names entry 38 something other than ".". The demolish
+  has no terrain test: `FUN_0100f8bf` scans the units on the tile (`0x100f8fc`) and drowns every non-swimmer (`0x100f948`), on plain grass too.
 
 * **Solid tiles and pick-ups** *(implemented)*: fire walls, power-ups, lunchboxes, food and the placeholder are solid for every ant that
   does not carry the matching order (power-up order onto that very tile, harvest order onto that food, raid, a fire ant on a fire wall).

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the bridge pieces that a map file holds (the bridge helpers of Grid and TileCell, the loader's timer, the swimmer's build and demolish, the drowning of DestroyBridgeAt, the 180 s lifetime) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/file_bridges_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/GAME_REVERSE_ENGINEERING.md 5.37 (the ids 34 .. 37 are the bridge and the id 38 is not; a piece of a file has no timer; a built bridge lasts 3,600 ticks and only with more than 180 s left; the demolish has four passes and no terrain test; a swimmer only splashes; a part-built piece refuses the click).",
+ "note": "Mutants of the bridge pieces that a map file holds (the bridge helpers of Grid and TileCell, the loader's timer, the swimmer's build and demolish, the drowning of DestroyBridgeAt, the 180 s lifetime) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/file_bridges_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/GAME_REVERSE_ENGINEERING.md 5.37 (the ids 34 .. 37 are the bridge and the id 38 is not; a piece of a file has no timer; a built bridge lasts 3,600 ticks and only with more than 180 s left; the demolish has four passes and no terrain test; a swimmer only splashes; a part-built piece refuses the click; the loader's name rule and the cursor of the click treat 38 as no bridge; the lifetime task needs more than 180,000 ms).",
  "defaults": {
   "build": "test_file_bridges",
   "test": "./build/tests/test_sim/test_file_bridges"
@@ -106,6 +106,24 @@
    "file": "src/ants_sim/movement_tables.cpp",
    "old": "    return std::find(std::begin(data::kBridgeTiles), std::end(data::kBridgeTiles), tile_id) !=\n           std::end(data::kBridgeTiles);",
    "new": "    return tile_id == data::kBridgeTiles[3];"
+  },
+  {
+   "id": "loader_exempts_38_from_the_overlay",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "                               (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4)) {",
+   "new": "                               (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4) ||\n                               c2.tile_index == TILE_BRIDGE4B) {"
+  },
+  {
+   "id": "cursor_accepts_part_built_pieces",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "            return impl.grid_.get_cell(tile).has_completed_bridge() || impl.valid_water(tile, false);",
+   "new": "            return impl.grid_.get_cell(tile).has_any_bridge() || impl.valid_water(tile, false);"
+  },
+  {
+   "id": "lifetime_needs_strictly_less",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "        if (match_time_remaining_ms_ <= effect_spec::kStructureLifetimeMs) {",
+   "new": "        if (match_time_remaining_ms_ < effect_spec::kStructureLifetimeMs) {"
   }
  ]
 }
