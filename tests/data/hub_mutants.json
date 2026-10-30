@@ -503,77 +503,77 @@
   },
   {
    "id": "retention_8_days_in_store",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "retention_days=7, busy_ms=5000):",
    "new": "retention_days=8, busy_ms=5000):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "old_lines_never_deleted",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "(now - self.retention, chunk)).rowcount",
    "new": "(now - self.retention - 10 ** 9, chunk)).rowcount",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "deleted_pages_not_zeroed",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "PRAGMA secure_delete=ON",
    "new": "PRAGMA secure_delete=OFF",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "log_file_not_cut_after_a_purge",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"PRAGMA wal_checkpoint(TRUNCATE)\")",
    "new": "pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "deleted_lines_in_the_history",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "WHERE deleted = 0 AND at >= ? ORDER BY id DESC LIMIT ?",
    "new": "WHERE at >= ? ORDER BY id DESC LIMIT ?",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "mute_never_ends",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "return row[0] if row and row[0] > self.clock() else 0",
    "new": "return row[0] if row else 0",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "mute_zero_does_not_lift",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "            if minutes <= 0:\n                self.db.execute(\"DELETE FROM mutes WHERE account = ?\", (account,))\n                return 0",
    "new": "            if minutes <= 0:\n                return 0",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "ban_kept_by_name_not_account",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "return self.db.execute(\"SELECT 1 FROM bans WHERE account = ?\", (account,)).fetchone() is not None",
    "new": "return self.db.execute(\"SELECT 1 FROM bans WHERE name = ?\", (account,)).fetchone() is not None",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "unban_does_nothing",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "return self.db.execute(\"DELETE FROM bans WHERE account = ?\", (account,)).rowcount == 1",
    "new": "return False",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "database_open_to_everybody",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "os.chmod(path, 0o600)",
    "new": "os.chmod(path, 0o666)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "deletion_numbers_repeat",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "UPDATE meta SET v = v + 1 WHERE k = 'del_seq'",
    "new": "UPDATE meta SET v = 1 WHERE k = 'del_seq'",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
@@ -1203,77 +1203,77 @@
   },
   {
    "id": "deletion_takes_a_number_when_nothing_is_deleted",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "if self.db.execute(\"SELECT 1 FROM lines WHERE id = ? AND deleted = 0\", (line_id,)).fetchone() is None:",
    "new": "if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "migration_forgets_the_deletion_counter",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "SELECT 'del_seq', COALESCE(MAX(del_seq), 0) FROM lines;",
    "new": "SELECT 'del_seq', 0 FROM lines LIMIT 1;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "deletion_counter_follows_the_lines_that_are_left",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "UPDATE meta SET v = v + 1 WHERE k = 'del_seq'",
    "new": "UPDATE meta SET v = (SELECT COALESCE(MAX(del_seq), 0) + 1 FROM lines) WHERE k = 'del_seq'",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "last_deletion_from_the_lines",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "\"SELECT v FROM meta WHERE k = 'del_seq'\"",
    "new": "\"SELECT COALESCE(MAX(del_seq), 0) FROM lines\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "purge_cuts_the_log_file_only_when_lines_went",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "        self.checkpoint()\n        return gone",
    "new": "        if gone:\n            self.checkpoint()\n        return gone",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "purge_not_in_chunks",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "(now - self.retention, chunk)).rowcount",
    "new": "(now - self.retention, 10 ** 9)).rowcount",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "busy_log_file_forgotten",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.unsettled = bool(busy)",
    "new": "self.unsettled = False",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "purge_waits_for_a_reader",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"PRAGMA busy_timeout=0\")",
    "new": "self.db.execute(\"PRAGMA busy_timeout=5000\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "checkpoint_is_passive",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "PRAGMA wal_checkpoint(TRUNCATE)",
    "new": "PRAGMA wal_checkpoint(PASSIVE)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "size_is_the_size_of_the_file",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "return (pages - free) * page_size + log_file",
    "new": "return pages * page_size + log_file",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "size_without_the_log_file",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "return (pages - free) * page_size + log_file",
    "new": "return (pages - free) * page_size",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
@@ -1547,14 +1547,14 @@
   {
    "id": "admin_refused_write_is_a_traceback",
    "file": "hub/admin.py",
-   "old": "    except sqlite3.Error as e:                                  # (a full disk, a locked file: a message and not a traceback)",
+   "old": "    except storemod.StoreError as e:                                  # (a full disk, a locked file: a message and not a traceback)",
    "new": "    except KeyError as e:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "admin_unopenable_database_is_a_traceback",
    "file": "hub/admin.py",
-   "old": "    except (sqlite3.Error, RuntimeError) as e:\n        err.write(\"hub.admin: the database cannot be opened",
+   "old": "    except (storemod.StoreError, RuntimeError) as e:\n        err.write(\"hub.admin: the database cannot be opened",
    "new": "    except KeyError as e:\n        err.write(\"hub.admin: the database cannot be opened",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
@@ -1567,14 +1567,14 @@
   },
   {
    "id": "store_waits_five_seconds_for_another_writer",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "            self.db.execute(\"PRAGMA busy_timeout=%d\" % self.busy_ms)\n            if new:",
    "new": "            self.db.execute(\"PRAGMA busy_timeout=5000\")\n            if new:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   },
   {
    "id": "checkpoint_leaves_the_short_wait_on",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "        finally:\n            self.db.execute(\"PRAGMA busy_timeout=%d\" % self.busy_ms)",
    "new": "        finally:\n            pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
@@ -1784,14 +1784,14 @@
   },
   {
    "id": "review2_n11_purge_chunk_ignored",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "(now - self.retention, chunk)",
    "new": "(now - self.retention, 1 << 40)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "review2_n12_unsettled_never_set",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "        self.unsettled = bool(busy)",
    "new": "        self.unsettled = False",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
@@ -1805,21 +1805,21 @@
   },
   {
    "id": "review2_n14_meta_counter_does_not_count",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "self.db.execute(\"UPDATE meta SET v = v + 1 WHERE k = 'del_seq'\")",
    "new": "self.db.execute(\"UPDATE meta SET v = v WHERE k = 'del_seq'\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "review2_n15_migration_counter_zero",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "SELECT 'del_seq', COALESCE(MAX(del_seq), 0) FROM lines",
    "new": "SELECT 'del_seq', 0 FROM lines",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "review2_n16_delete_marks_deleted_lines_again",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "            if self.db.execute(\"SELECT 1 FROM lines WHERE id = ? AND deleted = 0\", (line_id,)).fetchone() is None:\n                return False\n",
    "new": "            if self.db.execute(\"SELECT 1 FROM lines WHERE id = ?\", (line_id,)).fetchone() is None:\n                return False\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
@@ -1840,7 +1840,7 @@
   },
   {
    "id": "review2_n22_checkpoint_blocks_on_reader",
-   "file": "hub/store.py",
+   "file": "hub/store/sqlite.py",
    "old": "        self.db.execute(\"PRAGMA busy_timeout=0\")                # (the hub's one thread must not wait for a reader here: a later call tries again)\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
@@ -1858,6 +1858,34 @@
    "old": "        store.checkpoint()                  # (what a crash left in the log file)\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "store_refusal_not_a_store_error",
+   "file": "hub/store/sqlite.py",
+   "old": "        except errors as e:\n            raise StoreError",
+   "new": "        except ZeroDivisionError as e:\n            raise StoreError",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_open_error_not_a_store_error",
+   "file": "hub/store/sqlite.py",
+   "old": "Store.__init__ = refusal_as_store_error(Store.__init__, sqlite3.Error)",
+   "new": "Store.__init__ = refusal_as_store_error(Store.__init__)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_deletion_counter_lowered_by_purge",
+   "file": "hub/store/sqlite.py",
+   "old": "            gone = self.db.execute(\"DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE at < ? LIMIT ?)\", (now - self.retention, chunk)).rowcount\n",
+   "new": "            gone = self.db.execute(\"DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE at < ? LIMIT ?)\", (now - self.retention, chunk)).rowcount\n            self.db.execute(\"UPDATE meta SET v = COALESCE((SELECT MAX(del_seq) FROM lines), 0) WHERE k = 'del_seq'\")\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_contract_names_a_sqlite_only_operation",
+   "file": "hub/store/sqlite.py",
+   "old": "for _name in PUBLIC + (\"checkpoint\",):",
+   "new": "for _name in PUBLIC[1:] + (\"checkpoint\",):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   }
  ]
 }
