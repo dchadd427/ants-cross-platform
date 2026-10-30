@@ -43,7 +43,8 @@ BIGGER = [1323, 1324, 1321, 1322, 1320, 1326, 301, 237, 1329, 1327, 242, 346, 32
 ANT_FACE_IDS = [i for faces in ANT_FACES.values() for i in faces]
 PARTED = [300, 328]      # the two other objects of a library map whose picture has several parts (medrock8, stick2a): fetched one by one they would show their first part only, so they are in the sheet
 COMMON_SMALL = [134, 317, 318, 294, 336, 344, 309, 341, 340, 302, 303, 305]      # small and in the most library maps (the power-ups and rocks above are the others)
-IN_THE_SHEET = sorted(set(list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + list(ANT_TYPES.values()) + ANT_FACE_IDS + FOOD_STAGES + PLANTS + BIGGER + COMMON_SMALL + PARTED))
+CHIP_ONLY = [37]      # the finished bridge, the Bridge chip of the Objects palette (mapmaker_palette.js): a chip draws from the sheet only, so every chip of the palette is in it
+IN_THE_SHEET = sorted(set(CHIP_ONLY + list(range(302, 309)) + list(range(62, 67)) + list(range(129, 133)) + list(range(245, 249)) + [ANT] + list(ANT_TYPES.values()) + ANT_FACE_IDS + FOOD_STAGES + PLANTS + BIGGER + COMMON_SMALL + PARTED))
 # every other animation of one part (a sprite): fetched one by one when a map shows it. A tile of a map is the animation of its dictionary name (docs/MAP_EDITOR.md, "Sprites"), so any of the
 # 1,344 can be one, and the page cannot know which before it reads the map; an animation of several parts that the sheet does not hold (a menu screen, a piece of an ant) is left out
 FAR_RANGES = [(0, 1343)]

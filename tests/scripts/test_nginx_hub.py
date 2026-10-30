@@ -43,7 +43,9 @@ WS = stats.block_of(CONF, "location = /ws ")
 class TheText(unittest.TestCase):
     def test_it_is_an_exact_location_and_the_only_one_of_its_name(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
-        self.assertEqual([l for l in locations if "hub" in l], ["= /hub/ws", "@hub_off"])
+        self.assertEqual([l for l in locations if "hub" in l].count("= /hub/ws"), 1)
+        self.assertEqual(sorted(l for l in locations if "hub" in l),                       # (the pages of the login are tests/scripts/test_nginx_hub_login.py)
+                         sorted(["= /hub/ws", "@hub_off", "= /hub/login", "= /hub/callback", "= /hub/me", "= /hub/logout", "= /hub/forget", "@hub_page_off", "@hub_page_limit", "@hub_page_site"]))
         self.assertTrue(HUB and OFF)
 
     def test_only_a_get_without_a_query_goes_through_and_the_checks_come_first(self):
@@ -128,6 +130,9 @@ def free_port():
     return port
 
 
+COOKIE = "__Host-ants_hub=" + "a1" * 16
+
+
 class Recorder:
     """A login layer that remembers the headers of each handshake and believes a header of its own (so that the test can give a socket an identity through nginx)."""
     login = True
@@ -138,7 +143,7 @@ class Recorder:
     async def identify(self, headers):
         from hub import session
         self.seen.append(dict(headers))
-        return session.Identity("1001", "alice", False) if headers.get("cookie") == "ants_hub=ok" else None
+        return session.Identity("1001", "alice", False) if headers.get("cookie") == COOKIE else None
 
 
 @unittest.skipUnless(nginx_binary(), "no nginx program on this machine")
@@ -168,7 +173,7 @@ class TheBlockRuns(unittest.TestCase):
     def start_nginx(cls, hub_port, drop=()):
         """nginx with the real text of the zones and the block; `drop` names directives to cut out (the tests of one limit do not want the other in the way)."""
         port = free_port()
-        zones = "\n  ".join(re.findall(r"limit_(?:conn|req)_zone \$binary_remote_addr zone=ants_hub_\w+:[^;]+;", HEAD))
+        zones = "\n  ".join(re.findall(r"limit_(?:conn|req)_zone \$binary_remote_addr zone=ants_hub_(?:conn|req):[^;]+;", HEAD) + ["map $http_cookie $hub_cookie_session {%s}" % stats.block_of(HEAD, "map $http_cookie $hub_cookie_session ")])
         assert zones.count("limit_") == 2, zones
         block = HUB.replace("resolver 127.0.0.11 valid=10s ipv6=off;", "").replace("set $ants_hub ants-hub:4040;", "set $ants_hub 127.0.0.1:%d;" % hub_port)
         for directive in drop:
@@ -214,7 +219,7 @@ class TheBlockRuns(unittest.TestCase):
         return c
 
     def test_the_upgrade_works_and_a_line_goes_through(self):
-        a = self.connect(headers={"Cookie": "ants_hub=ok"})
+        a = self.connect(headers={"Cookie": COOKIE})
         self.assertEqual(a.status, "HTTP/1.1 101 Switching Protocols")
         welcome = a.recv_json()
         self.assertEqual(welcome["you"], {"name": "alice", "mod": False})
@@ -224,7 +229,7 @@ class TheBlockRuns(unittest.TestCase):
         self.assertEqual(next(m for m in b.drain(0.5) if m["t"] == "line")["text"], "through nginx")
 
     def test_the_hub_gets_the_upgrade_headers_the_visitors_cookie_and_the_address_nginx_saw_and_nothing_else(self):
-        c = self.connect(headers={"Cookie": "ants_hub=ok", "X-Client-Address": "9.9.9.9", "X-Forwarded-For": "8.8.8.8", "X-Hub-Test-Login": "1001:mallory", "Authorization": "Bearer secret-token",
+        c = self.connect(headers={"Cookie": "a=b; ants_admin=v2.canary-admin-cookie; %s; __Host-ants_oauth=%s; z=1" % (COOKIE, "b2" * 16), "X-Client-Address": "9.9.9.9", "X-Forwarded-For": "8.8.8.8", "X-Hub-Test-Login": "1001:mallory", "Authorization": "Bearer secret-token",
                                   "User-Agent": "test-agent", "Accept-Language": "en", "Sec-Fetch-Site": "same-origin", "X-Custom": "1", "Referer": "https://evil.example/"})
         self.assertTrue(c.ok)
         c.recv_json()
@@ -232,10 +237,11 @@ class TheBlockRuns(unittest.TestCase):
         self.assertEqual(sorted(seen), sorted(["host", "upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "origin", "cookie", "sec-fetch-site", "x-client-address"]))
         self.assertEqual(seen["x-client-address"], "127.0.0.1")                  # the address of the connection, never the visitor's own header
         self.assertEqual(seen["origin"], hc.SITE)
-        self.assertEqual(seen["cookie"], "ants_hub=ok")
+        self.assertEqual(seen["cookie"], COOKIE)                                   # (the login's cookie, and none of the visitor's others: not the admin page's, not the state of a login)
         self.assertEqual(seen["sec-fetch-site"], "same-origin")
         self.assertEqual(seen["upgrade"].lower(), "websocket")
         self.assertNotIn("secret-token", str(seen))
+        self.assertNotIn("canary-admin-cookie", str(seen))
 
     def test_refusals_of_the_hub_reach_the_visitor(self):
         c = self.connect(origin="https://evil.example")

@@ -16,8 +16,10 @@
 #   ANTS_TEST_MAP_PORT                                         as in docker-compose.stack.yml (the test-map door of the Map Maker's "With other players", on at 4031 by default, 0 = off; inside the container, not published)
 #   ANTS_BOT_MATCH_EVERY_MIN                                   as in docker-compose.stack.yml (the server's own match of computer players, 60 minutes by default)
 #   ANTS_HUB_PUBLIC_URL                                        the address of the STAGING site (https://<the staging host>): the chat hub lets in sockets from that origin only, so without it the staging chat
-#                                                              is offline (no default here: the production address would be wrong). ANTS_HUB_MODS as in docker-compose.stack.yml. The hub (service ants-hub) is
-#                                                              docs/HUB.md; its data is the volume ants-staging-hub-data
+#                                                              is offline (no default here: the production address would be wrong); the Discord login's way back is <that address>/hub/callback, which the
+#                                                              Discord application must list (the staging site needs its own entry, or its own application). ANTS_HUB_DISCORD_CLIENT_ID,
+#                                                              ANTS_HUB_DISCORD_CLIENT_SECRET (from this stack's environment only), ANTS_HUB_MIN_ACCOUNT_DAYS and ANTS_HUB_MODS as in docker-compose.stack.yml. The hub
+#                                                              (service ants-hub) is docs/HUB.md; its data is the volume ants-staging-hub-data
 services:
   ants-beta:
     build:
@@ -78,6 +80,9 @@ services:
     restart: unless-stopped
     environment:
       ANTS_HUB_PUBLIC_URL: ${ANTS_HUB_PUBLIC_URL:-}
+      ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}
+      ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}
+      ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}
       ANTS_HUB_MODS: ${ANTS_HUB_MODS:-}
     volumes:
       - ants-staging-hub-data:/data

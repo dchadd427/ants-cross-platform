@@ -1,0 +1,26 @@
+{
+ "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
+ "mutants": [
+  {
+   "id": "short_window_rule_applies_at_normal_sizes",
+   "file": "web/home/games.css",
+   "old": "@media (max-height: 350px), (max-width: 260px) {",
+   "new": "@media (min-width: 0px) {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "short_window_rule_never_applies",
+   "file": "web/home/games.css",
+   "old": "@media (max-height: 350px), (max-width: 260px) {",
+   "new": "@media (max-height: 0px) {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "narrow_window_rule_dropped",
+   "file": "web/home/games.css",
+   "old": "@media (max-width: 260px) { .gconfirm {",
+   "new": "@media (max-width: 0px) { .gconfirm {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  }
+ ]
+}

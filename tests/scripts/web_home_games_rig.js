@@ -80,7 +80,7 @@ const stripOf = (env) => first(env.root, 'gstrip');
 const stripText = (env) => (stripOf(env).hidden ? '' : stripOf(env).children[0].textContent);
 const stripButtons = (env) => stripOf(env).children[1].children;
 const pillOf = (env) => env.home('games').children[1];
-const dialogOf = (env) => first(env.$('home'), 'gconfirm');
+const dialogOf = (env) => first(env.body, 'gconfirm');       // (the card is the body's: it is over both screens)
 const visibilities = (sock) => sock.sent.filter((b) => b[0] === 35).map((b) => b[1]);
 const leaves = (sock) => sock.sent.filter((b) => b[0] === NET0.MSG.Leave).length;
 const seatsOf = (names) => [[C, names[0]], [names[1] ? C : E, names[1] || ''], [names[2] ? C : E, names[2] || ''], [names[3] ? C : E, names[3] || '']];

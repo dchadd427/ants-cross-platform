@@ -91,7 +91,7 @@
         mine.appendChild(mineName); mine.appendChild(minePill);
         var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');
         gamesPill.hidden = true; gamesBtn.appendChild(el('span', 'name', TEXT.games)); gamesBtn.appendChild(gamesPill);
-        var right = el('div', 'hright'), login = button('hlogin', TEXT.login); login.hidden = true;       // (the login chip: a piece that comes later, never shown before it)
+        var right = el('div', 'hright'), login = button('hlogin', TEXT.login); login.hidden = true;       // (the login chip: the chat dock fills it and shows it where the hub offers a login)
         var menuHome = menuButton();
         right.appendChild(login); right.appendChild(menuHome);
         [logo(), quickHost, quickJoin, mine, gamesBtn, right].forEach(function (n) { bar.appendChild(n); });
@@ -113,7 +113,7 @@
         var homeBtn = button('rhome', '', function () { show('home', 'push'); });
         var chev = el('span', 'chev', '‹'); chev.setAttribute('aria-hidden', 'true');
         homeBtn.appendChild(chev); homeBtn.appendChild(el('span', '', TEXT.home));
-        var leave = button('leave', TEXT.leave, function () { if (stalled) return; page.leave(); show('home', 'push'); });
+        var leave = button('leave', TEXT.leave, function () { if (stalled) return; var go = function () { page.leave(); show('home', 'push'); }; if (!asking(go)) go(); });
         var menuRoom = menuButton();
         [homeBtn, logo(), el('span', 'grow'), leave, menuRoom].forEach(function (n) { rbar.appendChild(n); });
         env.lobby.parentNode.insertBefore(rbar, env.lobby);
@@ -242,13 +242,14 @@
             var afterPaint = typeof win.requestAnimationFrame === 'function' ? function (fn) { win.requestAnimationFrame(function () { setTimeout(fn, 0); }); } : function (fn) { setTimeout(fn, 0); };
             afterPaint(load);
         }
+        function asking(go) { try { return !!games && !!games.leaving(go, leave); } catch (e) { return false; } }       // (the Games list asks before a room with other people in it is left; it says whether it asks)
         function gamesCall(name, arg) { try { if (games) games[name](arg); } catch (e) { /* the list is its own */ } }
         function wantGames() {
             if (askedGames) return;
             askedGames = true;
             lazy(GAMES, function () {
                 if (!win.AntsHomeGames) return;
-                games = win.AntsHomeGames.mount({ doc: doc, win: win, host: host, page: page, parts: { quickHost: quickHost, games: gamesBtn, pill: gamesPill }, ctl: { show: show, screen: function () { return screen; } }, handoff: going || stalled });
+                games = win.AntsHomeGames.mount({ doc: doc, win: win, host: host, page: page, parts: { quickHost: quickHost, quickJoin: quickJoin, games: gamesBtn, pill: gamesPill }, ctl: { show: show, screen: function () { return screen; } }, handoff: going || stalled });
                 gamesCall('shown', screen);
                 if (stalled) gamesCall('stalled', said);          // (the part came after START: it mounts waiting for the game, and after 15 s it says why its buttons are off)
                 gamesCall('inert', held || going);
@@ -285,7 +286,7 @@
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host }); inert(held); dockShown(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');

@@ -224,8 +224,8 @@
   {
    "id": "rate_limit_per_tab_not_per_account",
    "file": "hub/limits.py",
-   "old": "entry = self.accounts.get(account)",
-   "new": "entry = None",
+   "old": "entry = self.accounts.get(account)\n        if entry is None:\n            entry = self.accounts[account] = [TokenBucket(",
+   "new": "entry = None\n        if entry is None:\n            entry = self.accounts[account] = [TokenBucket(",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -413,8 +413,8 @@
   {
    "id": "deleted_line_stays_in_the_history",
    "file": "hub/chat.py",
-   "old": "                self.ring.remove(line)",
-   "new": "                pass",
+   "old": "        for line in [l for l in self.ring if l.id in gone]:\n            self.ring.remove(line)",
+   "new": "        for line in []:\n            self.ring.remove(line)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -623,9 +623,9 @@
   {
    "id": "secret_in_the_summary",
    "file": "hub/config.py",
-   "old": "\"login_configured\": int(bool(self.login_client_secret))}",
-   "new": "\"login_configured\": self.login_client_secret}",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
+   "old": "\"login_configured\": int(self.login_on),",
+   "new": "\"login_configured\": self.login_client_secret,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess tests.scripts.test_hub_login.TheSettings tests.scripts.test_hub_login.TheProcess"
   },
   {
    "id": "moderators_in_the_summary",
@@ -651,8 +651,8 @@
   {
    "id": "any_origin_url_accepted",
    "file": "hub/config.py",
-   "old": "parts.path not in (\"\", \"/\") or ",
-   "new": "",
+   "old": "not host or parts.username or parts.password or parts.path not in (\"\", \"/\") or ",
+   "new": "not host or parts.username or parts.password or ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -896,15 +896,15 @@
   {
    "id": "client_address_header_ignored",
    "file": "hub/server.py",
-   "old": "address = limitmod.address_key(h.get(\"x-client-address\"),",
-   "new": "address = limitmod.address_key(None,",
+   "old": "address = limitmod.address_key(h.get(\"x-client-address\"), peername[0] if peername else \"\")\n        if not self.per_address.try_add(address):",
+   "new": "address = limitmod.address_key(None, peername[0] if peername else \"\")\n        if not self.per_address.try_add(address):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   },
   {
    "id": "body_accepted",
    "file": "hub/server.py",
-   "old": "if h.get(\"content-length\", \"0\") != \"0\" or \"transfer-encoding\" in h:",
-   "new": "if False:",
+   "old": "if h.get(\"content-length\", \"0\") != \"0\" or \"transfer-encoding\" in h:\n            raise http.HttpError(400, \"body\")\n        if h.get(\"upgrade\"",
+   "new": "if False:\n            raise http.HttpError(400, \"body\")\n        if h.get(\"upgrade\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   },
   {
@@ -1043,15 +1043,15 @@
   {
    "id": "nginx_trusts_the_visitors_address_header",
    "file": "docker/nginx.conf",
-   "old": "        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_pass_request_body off;",
-   "new": "        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $http_x_client_address;\n        proxy_pass_request_body off;",
+   "old": "        proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $remote_addr;\n",
+   "new": "        proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $http_x_client_address;\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
    "id": "nginx_does_not_pass_the_origin",
    "file": "docker/nginx.conf",
-   "old": "        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $http_cookie;",
-   "new": "        proxy_set_header Cookie $http_cookie;",
+   "old": "        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)\n",
+   "new": "        proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
@@ -1064,8 +1064,8 @@
   {
    "id": "nginx_hub_off_is_not_json",
    "file": "docker/nginx.conf",
-   "old": "error_page 502 504 = @hub_off;",
-   "new": "error_page 504 = @hub_off;",
+   "old": "limit_conn_status 429;\n        error_page 502 504 = @hub_off;",
+   "new": "limit_conn_status 429;\n        error_page 504 = @hub_off;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
@@ -1078,8 +1078,8 @@
   {
    "id": "nginx_hub_name_fixed_at_start",
    "file": "docker/nginx.conf",
-   "old": "        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;",
-   "new": "        proxy_pass http://ants-hub:4040;",
+   "old": "        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade",
+   "new": "        proxy_pass http://ants-hub:4040;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
@@ -1372,15 +1372,15 @@
   {
    "id": "global_limit_removed",
    "file": "hub/chat.py",
-   "old": "if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:",
-   "new": "if self.store.size() >= self.limits.db_max_bytes:",
+   "old": "if not self.global_limit.ready(now) or full:",
+   "new": "if full:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "size_guard_removed",
    "file": "hub/chat.py",
-   "old": "if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:",
-   "new": "if not self.global_limit.ready(now):",
+   "old": "full = self.store.size() >= self.limits.db_max_bytes",
+   "new": "full = False",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1393,15 +1393,15 @@
   {
    "id": "account_counted_before_the_shared_limit",
    "file": "hub/chat.py",
-   "old": "        if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:\n            return self.mistake(peer, \"rate\", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)\n        if self.account_limits.check(who.account_id, line, now):\n            return self.mistake(peer, \"rate\")                      # (this check is the last: it is the one that counts the line as said)\n",
-   "new": "        if self.account_limits.check(who.account_id, line, now):\n            return self.mistake(peer, \"rate\")\n        if not self.global_limit.ready(now) or self.store.size() >= self.limits.db_max_bytes:\n            return self.mistake(peer, \"rate\", count=False)\n",
+   "old": "        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)\n        if self.account_limits.check(who.account_id, line, now):\n            return self.mistake(peer, \"rate\")                      # (this check is the last: it is the one that counts the line as said)\n",
+   "new": "        if self.account_limits.check(who.account_id, line, now):\n            return self.mistake(peer, \"rate\")\n        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "line_kept_before_the_limits_are_asked",
    "file": "hub/chat.py",
-   "old": "        now = self.clock()\n        if not self.global_limit.ready(now)",
-   "new": "        self.store.add_line(who.account_id, who.name, line, mod)\n        now = self.clock()\n        if not self.global_limit.ready(now)",
+   "old": "        now = self.clock()\n        try:\n            full = self.store.size()",
+   "new": "        self.store.add_line(who.account_id, who.name, line, mod)\n        now = self.clock()\n        try:\n            full = self.store.size()",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1729,8 +1729,8 @@
   {
    "id": "review_te_not_checked",
    "file": "hub/server.py",
-   "old": " or \"transfer-encoding\" in h:",
-   "new": ":",
+   "old": " or \"transfer-encoding\" in h:\n            raise http.HttpError(400, \"body\")\n        if h.get(\"upgrade\"",
+   "new": ":\n            raise http.HttpError(400, \"body\")\n        if h.get(\"upgrade\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   },
   {

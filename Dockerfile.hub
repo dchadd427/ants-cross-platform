@@ -1,11 +1,15 @@
 # =============================================================================
-# The chat hub (ants-hub): the global chat service, Python 3 standard library only (docs/HUB.md).
+# The chat hub (ants-hub): the global chat service and its login with Discord, Python 3.12 (this image's) and the standard library only (docs/HUB.md).
 #   docker build -f Dockerfile.hub -t ants-hub .
 #   docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 32 --memory 192m --tmpfs /tmp -v ants-hub-data:/data \
 #       -e ANTS_HUB_PUBLIC_URL=https://beta.playants.org ants-hub
-# It listens on port 4040 inside the container and is NOT published: the site's nginx reaches it over the network of the stack (wss://<site>/hub/ws, docker/nginx.conf).
-# The settings are environment variables only: ANTS_HUB_PUBLIC_URL (the site's address; the one Origin a socket may come from), ANTS_HUB_MODS (account ids that may moderate in chat).
-# The database (chat lines kept 7 days, mutes and bans) is /data/hub.db: keep /data in a volume. Moderation: docker exec ants-hub python -m hub.admin list
+# It listens on port 4040 inside the container and is NOT published: the site's nginx reaches it over the network of the stack (wss://<site>/hub/ws and the pages /hub/login, /hub/callback,
+# /hub/me, /hub/logout and /hub/forget, docker/nginx.conf). For the login the container needs outbound https to discord.com and to nothing else.
+# The settings are environment variables only: ANTS_HUB_PUBLIC_URL (the site's address; the one Origin a socket may come from), ANTS_HUB_MODS (account ids that may moderate in chat),
+# ANTS_HUB_DISCORD_CLIENT_ID and ANTS_HUB_DISCORD_CLIENT_SECRET (the Discord application of the login: without both, and the site's address, the chat is read-only for everybody),
+# ANTS_HUB_MIN_ACCOUNT_DAYS (how old a Discord account must be to write; 7).
+# The database (chat lines kept 7 days, mutes and bans, and the logins: the SHA-256 of a cookie, an account id and a name, 30 days) is /data/hub.db: keep /data in a volume. It is schema 3: a hub of an
+# earlier version does not start on it. Moderation: docker exec ants-hub python -m hub.admin list
 # No ANTS_BUILD_ID argument on purpose: the image depends on hub/ and nothing else, so a deploy that changes nothing in hub/ builds the same image and the chat is not restarted.
 # =============================================================================
 FROM python:3.12-slim-bookworm

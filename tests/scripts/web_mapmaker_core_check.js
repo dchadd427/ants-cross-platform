@@ -186,8 +186,10 @@ function caseF(core) {
         file = paint(file, ed, 'ground', 476, [[0, 0]], 5);
         file = paint(file, ed, 'objects', 302, [[5, 5], [5, 6], [30, 30]], 3);
         file = paint(file, ed, 'objects', 63, [[12, 12]], 1);
+        file = paint(file, ed, 'objects', 37, [[0, 0], [0, 1], [20, 20]], 1);              // Bridge pieces, two on water and one on slate: the checker finds nothing either way
         file = paint(file, ed, 'erase', null, [[5, 5]], 1);
         const tag = ' (' + kind + ')';
+        check([[0, 0], [0, 1], [20, 20]].every(([r, c]) => file.tile2(r, c) === 37 && file.tile1(r, c) === (r === 20 ? 571 : 476)), 'the Bridge pieces stand where they were put: two on water, one on slate' + tag);
         const read = core.readReport(file.bytes, 'extended').json;
         check(read.loaded && read.rows === file.rows && read.columns === file.columns, 'the core reads the map that was drawn on' + tag);
         equal(codes(file.bytes), blankCodes, 'and finds nothing new in it: a tile outside the dictionary, a name of "." and an anchor in the wrong place are all findings' + tag);
@@ -201,7 +203,7 @@ function caseF(core) {
         check(core.checkMap(written.bytes, 'extended').json.works === core.checkMap(file.bytes, 'extended').json.works, 'with the same answer to the check' + tag);
         let n = 0;
         while (ed.undo()) n++;
-        check(n === 6 && cellsDigest(ed.file) === cellsDigest(File.parse(made.bytes)), 'six undos put every cell back' + tag);
+        check(n === 7 && cellsDigest(ed.file) === cellsDigest(File.parse(made.bytes)), 'seven undos put every cell back' + tag);
         check(start !== digestOf(file.bytes) && digestOf(written.bytes) !== digestOf(made.bytes), 'and the drawn map is not the blank one' + tag);
     }
     // a map of the library: a hill goes whole, and the check says so; undo brings it back

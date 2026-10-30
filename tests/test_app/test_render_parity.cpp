@@ -1342,7 +1342,7 @@ void test_dynamic_items(Renderer& r, const assets::AssetArchive& arc) {
         static const char* bridge_names[4] = { "bridge1", "bridge2", "bridge3", "bridge4" };
         items.push_back({3 * (s - 1), 4, arc.find_animation_id(bridge_names[s - 1])});
     }
-    grid.get_cell_mut(12, 4).interactive_id = sim::TILE_BRIDGE4B;
+    grid.get_cell_mut(12, 4).interactive_id = sim::TILE_BRIDGE4B;      // (only the picture: the id is no bridge in the simulation, the renderer draws the cell's template all the same)
     items.push_back({12, 4, arc.find_animation_id("bridge4b")});
     grid.drop_lunchbox(0, 7, 25);
     items.push_back({0, 7, arc.find_animation_id("lunchbox")});

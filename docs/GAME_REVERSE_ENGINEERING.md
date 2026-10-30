@@ -494,37 +494,17 @@ Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either man
 
 > See 5.37 (later, Capstone-verified); this block differs (the bridge stages and the collapse timer, a 2500 ms poll).
 
-Both temporary field structures created by specialized ants have strictly reverse-engineered lifespans and unique destruction behaviors:
-
 1. **Firewall Lifetime (Exact: 180 seconds / 3 minutes):**
 
    - When placed (`0x0101e864`), `wallup04` (index 134) is written to Layer 2.
 
-   - A match timer entity (`0x1024d85` with vtable `0x1004c28`) is registered at `0x101e8e0` with expiration threshold `0x2bf20` ms (**180,000 ms = 180 seconds**):
+   - A match timer entity (`0x1024d85` with vtable `0x1004c28`) is registered at `0x101e8e0` with the expiration `match_time_remaining - 0x2bf20` ms (**180,000 ms = 180 seconds**).
 
-     ```
-     expire_time = match_time_remaining - 180000 ms
-     ```
-
-   - When the timer fires (`0x01024de7`), if Layer 2 is still tile 134, it clears the tile with `0x7ffe` (empty), triggering fire burnout sound (`fireburnout.wav`).
+   - When the timer fires (`0x01024de7`) and Layer 2 is still tile 134, the tile is cleared (`0x7ffe`) and the burnout sound (`fireburnout.wav`) plays.
 
    - If the match has less than 180 seconds remaining, the firewall persists until the end of the match.
 
-2. **Bridge Construction & Lifetime (Exact: 180 seconds / 3 minutes):**
-
-   - Swimmer Ant shovels water (`0x10212bb`, action 16) through progressive stages:
-     - `bridge1` (index 34) -> `bridge2` (index 35) -> `bridge3` (index 36) -> `bridge4` (index 37).
-
-   - Once fully constructed (`bridge4` at `0x0101ebd3`), a match timer entity (`0x1024d85` with vtable `0x1004c40`) is registered with the same `0x2bf20` ms (**180,000 ms = 180 seconds**) lifespan.
-
-   - **Universal Traversal (Allied & Enemy Ants):**
-     - Once constructed, a bridge converts that water tile into passable ground for **any ant in the game**.
-     - Traversal is **not restricted to friendly ants**; hostile enemy ants and allied ants alike can freely path and walk across it.
-
-   - **180-Second Collapse & Instant Drowning:**
-     - When 180 seconds elapse (`0x01024e66` -> `0x0100f8bf`), the bridge tile collapses and is erased from Layer 2 (`0x7ffe`).
-     - **Catastrophic Collapse & Drowning:** The engine scans all units currently occupying the collapsing bridge tile (`0x0100f8fc`). Any non-swimmer ant (`ant_type != 5`, including enemy and friendly ants) standing on top of the bridge at the exact moment of collapse **falls into deep water and drowns instantly** (`0x0100f948`, playing drowning audio).
-     - Swimmer ants (`ant_type == 5`) are immune to drowning, plunge into swimming mode, and survive unaffected.
+2. **Bridge Construction & Lifetime (180 seconds):** the stages `bridge1` .. `bridge4` are the layer-2 ids 34 .. 37; the completed bridge arms a match timer of `0x2bf20` ms = 180 s and is passable ground for any ant, friend or enemy; when it fires the tile is erased (`0x7ffe`) and the non-swimmers on it drown, a swimmer survives (the exact rules: 5.37, "Bridges").
 
 ### 5.4 Thief Ant Infiltration & 50-Point Steal Mechanics (Disasm `0x0101d57c`)
 
@@ -2333,12 +2313,16 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
   needs a completed bridge, gives the tile to the demolisher's team at once, removes one stage per pass (0x24, 0x23, 0x22) and destroys
   the tile at the end of the fourth pass (1920 / 2000 ms); an interrupted demolish restores the completed bridge. Destroying a bridge
   (demolish, or the timer `FUN_01024e66`) runs `FUN_0100f8bf`: every non-swimmer on the tile drowns, a swimmer only splashes (dsplash).
-  **The collapse timer is a separate task entry** (list at `game + 0x4aec`, task object `FUN_01024d88`, polled every 2500 ms by the scheduler, `0x1024dd1`;
-  re-read in the audit of 2026-09-30, fixed in v0.0.54): the stage tiles change underneath it. Only the completion of a build arms it (`0x101ec84`) and only
+  **The collapse timer is a separate task entry** (list at `game + 0x4aec`, task object `FUN_01024d88`, polled every 2500 ms by the scheduler, `0x1024dd1`; fixed in v0.0.54): the stage tiles change underneath it. Only the completion of a build arms it (`0x101ec84`) and only
   the completion of a demolish cancels it (`FUN_0101edfe`, called at `0x101edbd`); the restore path of an interrupted demolish (`0x101ed58`, `SetTile(0x25)`) never
   touches it, so the restored bridge still collapses at its old deadline. `BridgeTimeout` (`0x1024e66`) acts only when layer 2 holds exactly 0x25 at that moment
   (`sub ax, 0x25`); the task is used up either way, so a timer that runs out while the bridge is half demolished does nothing and a bridge restored afterwards
   stays for good. The remake keeps the timer in the cell (`timer_ticks`), steps and restores the stage with `set_bridge_stage` (timer untouched) and collapses only a 0x25 tile.
+  **Bridge pieces of a map file** *(implemented; `FUN_01008b90` via `FUN_01008af7`)*: the pieces are the layer-2 ids 0x22 .. 0x25 and no other. A file cell of 0x25 is a completed bridge with no collapse timer (only a swimmer's finished
+  build, action 16 from `0x10212bb`, arms one: the timer task, vtable `0x1004c40`); 0x22 .. 0x24 stay for good, walkable (class 3). A swimmer's special click on a part-built piece, or on any
+  water cell with something on layer 2, is refused (order 0xd needs an empty layer 2, order 0xe exactly 0x25): the can't clip and "Can't do that...". **The id 0x26 (38, `bridge4b`) is inert**: a water cell that holds it stays
+  water (a non-swimmer cannot walk onto it, a thrown or placed one drowns), and it is in none of the program's tile lists, so its picture loads only when the map's dictionary names entry 38 something other than ".". The demolish
+  has no terrain test: `FUN_0100f8bf` scans the units on the tile (`0x100f8fc`) and drowns every non-swimmer (`0x100f948`), on plain grass too.
 
 * **Solid tiles and pick-ups** *(implemented)*: fire walls, power-ups, lunchboxes, food and the placeholder are solid for every ant that
   does not carry the matching order (power-up order onto that very tile, harvest order onto that food, raid, a fire ant on a fire wall).

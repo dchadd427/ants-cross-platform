@@ -2,7 +2,7 @@
 // against a scripted game server and a fake GET /lobbies:
 //   1. the pure parts: a row of the list on a table (every field of the shape, every wrong type and range, markup and look-alike characters in a name), the list (extra fields, duplicates, 10,000 rows, a top level that is
 //      no list), the waits (30 s, 5 s, doubled after a failure up to a cap, +-20 %), the count ("50+"), the seats;
-//   2. the way in: nothing is lit before the script comes, Quick host and Games are lit by it and Quick join is not, a script that does not come leaves the page as it was;
+//   2. the way in: nothing is lit before the script comes, Quick host, Quick join and Games are lit by it, a script that does not come leaves the page as it was;
 //   3. the looks at /lobbies with the fake clock: the first one when the page is up, 30 s, 5 s while the popover is open and at once when it opens, none while the tab is hidden or the Room shows, one at a time,
 //      the jitter's bounds, the wait that doubles after every failure and starts again after a good answer, a look that never ends, the list that is off (404, 503, garbage, a network that fails);
 //   4. the popover: the rows as text (a name with markup, a map's file name), the seats as dots, the count on the Games button, the page's own room left out, the empty state, "Games list is off right now", Escape and a
@@ -84,7 +84,7 @@ const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, fi
     env.advance(0);
     await flush();
     same('after the first paint the page loads the style and the script, once (from its own folder)', env.lazyLoads.filter((f) => /games/.test(f)), ['home/games.css', 'home/games.js']);
-    check('... then Quick host and Games are lit (a plain button that takes a press, with no mark of being disabled) and Quick join is not (it comes with a later piece)', [env.home('host'), env.home('games')].every((b) => b.disabled === false && b.getAttribute('aria-disabled') === null) && env.home('join').disabled === true && env.home('join').getAttribute('aria-disabled') === 'true');
+    check('... then Quick host, Quick join and Games are lit (a plain button that takes a press, with no mark of being disabled)', [env.home('host'), env.home('join'), env.home('games')].every((b) => b.disabled === false && b.getAttribute('aria-disabled') === null));
     check('... Games names its popup, says that it is closed and has its count (none yet: the first look has not answered) beside its name', env.home('games').getAttribute('aria-haspopup') === 'dialog' && env.home('games').getAttribute('aria-expanded') === 'false' && env.home('games').children[0].textContent === 'Games');
     check('... and the page looked at the list once, at its own address, with no query and no cookies', site.calls.length === 1 && site.calls[0].url === '/lobbies' && site.calls[0].init.credentials === 'omit' && site.calls[0].init.cache === 'no-store');
     env.advance(0);
@@ -234,7 +234,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     await flush();
     same('it is put under the bar, no taller than what is left of the window (a wide window: 450 px wide, at the Games button; the fake window is 1280 x 800 and the bar ends at 100)', [pop.style.top, pop.style.left, pop.style.width, pop.style.maxHeight], ['108px', '10px', '450px', '680px']);
     check('Games opens it: it is a dialog that is not modal, named "Open games", and the button says that it is open', pop.hidden === false && pop.getAttribute('role') === 'dialog' && pop.getAttribute('aria-label') === 'Open games' && pop.getAttribute('aria-modal') === null && env.home('games').getAttribute('aria-expanded') === 'true');
-    check('... the heading says how many are waiting', first(pop, 'gptitle').textContent === 'Open games' && first(pop, 'gpcount').textContent === '4 waiting');
+    check('... the heading says how many are waiting', first(pop, 'gptitle').textContent === 'Open games' && first(pop, 'gpcount').textContent === '4 waiting · updates live');
     const rows = rowsOf(env);
     same('... the rows are the list\'s own, in its order (the best first)', rows.map((li) => textOf(first(li, 'gname'))), ['Pebble', 'Clover', 'Juniper', 'Fern']);
     same('... each names its map (an original by its name, a map of the players by its file without the ending)', rows.map((li) => textOf(first(li, 'gmapname'))), ['Islands', 'Treasure', 'My Own Map', 'Medium']);
@@ -292,7 +292,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     tap(env.home('games'));
     await flush();
     same('... and of the popover', rowsOf(env).map((li) => textOf(first(li, 'gname'))), ['Clover']);
-    check('... the heading says 1 waiting', first(popOf(env), 'gpcount').textContent === '1 waiting');
+    check('... the heading says 1 waiting', first(popOf(env), 'gpcount').textContent === '1 waiting · updates live');
     site.body = listOf([row(code, 'Maya', {})]);
     await wait(env, 5000);
     check('a list with nothing but the page\'s own room is empty: "none waiting", the empty state with Host one!, no list, the count 0', first(popOf(env), 'gpcount').textContent === 'none waiting' && first(popOf(env), 'gempty').hidden === false && first(popOf(env), 'glist').hidden === true && pillOf(env).textContent === '0');
@@ -305,7 +305,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     check('60 rows are 50 rows and the count says "50+" (the server lists 50 at most, and there may be more)', pillOf(env).textContent === '50+' && env.home('games').getAttribute('aria-label') === 'Games, 50+ open');
     tap(env.home('games'));
     await flush();
-    check('... 50 rows are drawn and the heading says "50+ waiting"', rowsOf(env).length === 50 && first(popOf(env), 'gpcount').textContent === '50+ waiting');
+    check('... 50 rows are drawn and the heading says "50+ waiting"', rowsOf(env).length === 50 && first(popOf(env), 'gpcount').textContent === '50+ waiting · updates live');
     site.body = listOf(Array.from({ length: 49 }, (_, i) => row('r' + String(i).padStart(5, '0'), 'H' + i)));
     await wait(env, 5000);
     check('49 are "49"', pillOf(env).textContent === '49' && rowsOf(env).length === 49);
@@ -365,13 +365,13 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 }
 {   // the rows are made again only when what they show has changed: the age of a row is not shown, and a press that straddles a look is not lost
     const site = fakeSite();
-    site.body = listOf([row('aaaaaa', 'Ann', { age: 10 }), row('bbbbbb', 'Bea')]);
+    site.body = listOf([row('aaaaaa', 'Ann', { age: 30 }), row('bbbbbb', 'Bea', { age: 10 })]);
     const env = await page({ site });
     tap(env.home('games'));
     await flush();
     const before = rowsOf(env), button = joinOf(before[0]);
     button.focus();
-    site.body = listOf([row('aaaaaa', 'Ann', { age: 40 }), row('bbbbbb', 'Bea', { age: 99 })]);
+    site.body = listOf([row('aaaaaa', 'Ann', { age: 60 }), row('bbbbbb', 'Bea', { age: 40 })]);
     await wait(env, 6000);
     check('a look that finds the same rooms (only older) leaves the rows and their buttons as they were: the same nodes, the focus where it was', site.calls.length >= 3 && rowsOf(env).length === 2 && rowsOf(env)[0] === before[0] && joinOf(rowsOf(env)[0]) === button && env.focused === button);
     site.body = listOf([row('aaaaaa', 'Ann', { people: 3, free: 1 }), row('bbbbbb', 'Bea')]);

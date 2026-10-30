@@ -318,7 +318,7 @@ class TheText(unittest.TestCase):
             text = "\n".join(l for l in open(os.path.join(REPO, name), encoding="utf-8").read().splitlines() if not l.lstrip().startswith("#"))
             self.assertIn('"--submit-port", "${ANTS_SUBMIT_PORT:-0}"', text, name)                  # (off until the stack says so)
             self.assertNotIn("ants-admin-login", text, name)                                       # (no helper container: the game server signs people in)
-            self.assertNotIn("DISCORD", text, name)
+            self.assertNotIn("DISCORD", re.sub(r"ANTS_HUB_DISCORD_CLIENT_(?:ID|SECRET)", "", text), name)       # (the game server's sign-in is not Discord's; the hub's login settings are the hub's: test_hub_stack.py)
             self.assertNotIn("ANTS_PUBLIC_URL", text, name)
             self.assertEqual(text.count("ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}"), 1, name)       # (the server's: the one setting that stays)
         self.assertIn("4030", RAW)

@@ -683,8 +683,8 @@
     {
       "id": "refresh_not_handed_over",
       "file": "web/front/mapmaker_tools.js",
-      "old": "if (ants) ants.refresh(); if (pick) pick.refresh(); }",
-      "new": "if (ants) ants.refresh(); }",
+      "old": "            if (pick) pick.refresh();\n        }",
+      "new": "        }",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
