@@ -272,7 +272,7 @@
             var e = lineOf(m);
             if (!e || known(e.id)) return;
             e.own = !!you && e.who === you.name; e.fresh = !e.own && !seen();
-            if (e.own) { var key = nfc(e.text), at = -1; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; if (at < 0 && unanswered.length && within(key, unanswered[0].key)) at = 0; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
+            if (e.own) { var key = nfc(e.text), at = -1; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; if (at < 0 && unanswered.length && points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = 0; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
             render();

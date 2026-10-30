@@ -56,6 +56,18 @@ async function step(label, fn, ms) {
 const RUN = Math.random().toString(36).slice(2, 4).padEnd(2, '0');
 const code = (n) => 'e2e' + RUN + n;
 
+// The same for a condition that is looked up with a request (the real list): fn returns a promise of a value that is true when the step holds
+async function stepLater(label, fn, ms) {
+    const t0 = Date.now();
+    for (;;) {
+        let v = false;
+        try { v = await fn(); } catch (e) { v = false; }
+        if (v) { check(label, true); return true; }
+        if (Date.now() - t0 > (ms || 5000)) { check(label, false, 'timeout'); return false; }
+        await sleep(100);
+    }
+}
+
 // A scenario that breaks (an event that never came and so has no data) is one failed check; the next scenario still runs
 async function scenario(title, fn) {
     try { await fn(); } catch (e) { check('scenario ' + title + ' ran to its end', false, e && e.message); }
@@ -541,6 +553,153 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         priv.click();
         await step('the host presses Private: the guest\'s chip says so', () => () => B.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vistag') !== -1)[0].textContent === 'Private room', 8000);
         check('... and the real list has lost the room', (await listed()).lobbies.every((x) => x.code !== room));
+        for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
+    });
+
+    // ---- Quick join against the real server and its real door (docs/HOME_SCREEN.md): a page presses it and lands in the room of another page; the question when others are in its own room; nothing to join; a room that is full
+    // or started is skipped for the next one and no more than three are tried; a Cancel while a try waits leaves no seat behind. The pages of the front page are the real one in the fake browser; the hosts are plain clients;
+    // the list that a page sees is the real door's, kept to the hosts of this scenario (rooms of the scenarios before are still in it), with the rooms that went full or started a moment after the list was made added by hand.
+    await scenario('Quick join: the best open room of the real list, the question when others are in the room, a room that is full or started is skipped, three tries at most, Cancel leaves no seat behind', async () => {
+        if (!listBase) { console.log('SKIP: no public door was given: Quick join was NOT run against the real list'); return; }
+        const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
+        const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
+        const sockets = [];
+        let slow = false;
+        class ToTheServer extends WS {
+            constructor() {
+                super(wsUrl); sockets.push(this);
+                if (slow) { slow = false; let handler = null; Object.defineProperty(this, 'onmessage', { get: () => (handler ? (ev) => setTimeout(() => handler(ev), 1500) : null), set: (fn) => { handler = fn; } }); }       // (a server that answers a second and a half late)
+            }
+        }
+        let keep = (x) => /^Qj/.test(x.host), extra = () => [];
+        const aList = async (url) => {
+            if (url !== '/lobbies') throw new Error('no ' + url + ' here');
+            const data = await (await fetch(listBase + '/lobbies', { cache: 'no-store' })).json();
+            data.lobbies = data.lobbies.filter(keep).concat(extra());
+            data.count = data.lobbies.length;
+            return { status: 200, headers: { get: () => null }, text: () => Promise.resolve(JSON.stringify(data)) };
+        };
+        const realRows = async () => (await (await fetch(listBase + '/lobbies', { cache: 'no-store' })).json()).lobbies.filter((x) => /^Qj/.test(x.host));
+        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: aList });
+        const hostOf = (name, room) => { const c = page(name, room); c.connect(); return c; };
+        const publicHost = async (name, room) => { const c = hostOf(name, room); await step(name + ' makes a room', () => online(c), 5000); c.setPublic(true); await stepLater(name + '\'s room is in the real list', async () => (await realRows()).some((x) => x.code === room), 5000); return c; };
+        const cardOf = (env) => env.body.findAll((n) => String(n.className).split(/\s+/).indexOf('gconfirm') !== -1)[0] || null;
+        const inCard = (env, cls) => { const c = cardOf(env); const e = c && c.findAll((n) => String(n.className).split(/\s+/).indexOf(cls) !== -1)[0]; return e || null; };
+        const cardTitle = (env) => { const e = inCard(env, 'gctitle'); return e ? e.textContent : null; };
+        const lit = (env) => () => !env.home('join').disabled;
+        const seats = (c) => (c.room ? c.room.slots.filter((x) => x.state === N.SLOT.Client).length : 0);
+
+        // one: the best room of the list, and the second page is in it
+        const H1 = await publicHost('Qjone', code('j1'));
+        const B = onPage('Qjbee');
+        await step('the page lights Quick join', () => lit(B), 5000);
+        await step('the page knows the open room (the count on Games)', () => () => B.home('games').children[1].textContent === '1' && !B.home('games').children[1].hidden, 8000);
+        B.home('join').click();
+        await step('Quick join: the page is in the room of the first host, as a guest (the Room shows, the heading is the host\'s name)', () => () => B.screen() === 'room' && B.$('room-h').textContent === 'Qjone’s room' && B.$('code').textContent.replace(' ', '') === code('j1'), 8000);
+        check('(no card is left, no strip says anything, and the host sees the guest)', cardOf(B) === null && B.$('home').findAll((n) => String(n.className).split(/\s+/).indexOf('gstrip') !== -1).every((n) => n.hidden) && seats(H1) === 2 && H1.seatOf('Qjbee') !== -1);
+        check('... and the real list says two people', (await realRows()).find((x) => x.code === code('j1')).people === 2);
+        B.roomBar('leave').click();
+        await step('the guest presses Leave room (a guest is asked: the host is there) and answers: Home shows, and the host is alone again', () => {
+            const yes = inCard(B, 'gyes');
+            if (!yes) return false;
+            yes.click();
+            return () => B.screen() === 'home' && seats(H1) === 1;
+        }, 8000);
+
+        // two: another person in the page's own room: the question, then the Welcome of the other room lets the old one go
+        const C = onPage('Qjcee');
+        await step('a second page lights Quick join', () => lit(C), 5000);
+        C.home('mine').click();
+        await step('it makes a room of its own', () => () => C.screen() === 'room' && C.$('code').textContent.length > 0, 8000);
+        const own = C.$('code').textContent.replace(' ', '');
+        const D = hostOf('Qjdee', own);
+        await step('another person joins the room of that page', () => online(D), 5000);
+        await step('... and the page sees it', () => () => C.$('slots').textContent.indexOf('Qjdee') !== -1, 8000);
+        C.roomBar('rhome').click();
+        await step('Home again, with its list: the room of the first host is there, with a free color', () => () => C.home('games').children[1].textContent === '1', 8000);
+        C.home('join').click();
+        await step('Quick join asks first ("Leave your room?", "Qjdee is in your room…", the room of the first host with its BEST tag), and nothing is left yet', () => () => cardTitle(C) === 'Leave your room?' && /Qjdee is in your room/.test(inCard(C, 'gcline').textContent) && !!inCard(C, 'gbest') && seats(D) === 2, 8000);
+        inCard(C, 'gstay').click();
+        check('"Stay here": the card goes, the page stays in its own room (the other person is still there), nobody joined the first host', cardOf(C) === null && seats(D) === 2 && seats(H1) === 1 && D.count('left') === 0);
+        C.home('join').click();
+        await step('Quick join asks again', () => () => cardTitle(C) === 'Leave your room?', 8000);
+        inCard(C, 'gyes').click();
+        await step('"Leave and join": the page is in the room of the first host (the Room opens by itself)', () => () => C.screen() === 'room' && C.$('room-h').textContent === 'Qjone’s room' && seats(H1) === 2, 10000);
+        await step('... and the other person is alone in the old room, and leads it', () => () => D.seatOf('Qjcee') === -1 && D.isLeader() === true, 8000);
+        D.leave();
+        C.roomBar('leave').click();
+        await step('the guest leaves that room too (asked: the host is there)', () => { const yes = inCard(C, 'gyes'); if (!yes) return false; yes.click(); return () => C.screen() === 'home' && seats(H1) === 1; }, 8000);
+        H1.leave();
+        await sleep(300);
+
+        // three: nothing is open: Host one!
+        keep = () => false;
+        const E = onPage('Qjeee');
+        await step('a page lights Quick join', () => lit(E), 5000);
+        E.home('join').click();
+        await step('nothing is open: the card says so and offers Host one!', () => () => cardTitle(E) === 'No open games right now.' && !!inCard(E, 'gyes') && inCard(E, 'gyes').textContent === 'Host one!', 8000);
+        keep = (x) => /^Qj/.test(x.host);
+        inCard(E, 'gyes').click();
+        await step('Host one! is Quick host: a real room, public at the real door', () => () => E.screen() === 'room' && E.root.findAll((n) => n.getAttribute && n.getAttribute('aria-pressed') === 'true' && /Public/.test(n.textContent) && String(n.className).indexOf('vbtn') !== -1).length === 1, 8000);
+        await stepLater('... and the real list has it', async () => (await realRows()).some((x) => x.host === 'Qjeee'), 5000);
+        E.roomBar('leave').click();
+        await sleep(300);
+
+        // four: a full room and a started room (that were listed a moment ago) are skipped for the next one; a room that is no more is skipped too
+        const G = await publicHost('Qjgood', code('j4'));
+        const F = hostOf('Qjfull', code('j5'));
+        await step('the full room has its host', () => online(F), 5000);
+        const fill = ['Qjf2', 'Qjf3', 'Qjf4'].map((n) => hostOf(n, code('j5')));
+        await step('... and three more in it', () => () => fill.every((c) => c.status === 'online' && c.room !== null) && seats(F) === 4, 8000);
+        const S = hostOf('Qjstart', code('j6'));
+        const S2 = hostOf('Qjstart2', code('j6'));
+        await step('a room of two that will START', () => () => online(S)() && online(S2)(), 8000);
+        check('(its leader sets the plan for the two of them and presses START: the room waits for the games)', S.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
+        await sleep(400);
+        check('(START)', S.start() === true);
+        await step('the room says that START waits', () => () => S.room.starting === true, 8000);
+        const stale = (codeOf, host, age) => ({ code: codeOf, host: host, map: 'TINY.LVL', mode: 'highest-score', people: 3, bots: 0, free: 1, size: 4, age: age });
+        extra = () => [stale(code('j5'), 'Qjfull', 9999), stale(code('j6'), 'Qjstart', 9998)];
+        const Bb = onPage('Qjbee2');
+        await step('a page lights Quick join', () => lit(Bb), 5000);
+        await step('its list has the three rooms (the good one, and the two that went full and started after the list was made)', () => () => Bb.home('games').children[1].textContent === '3', 8000);
+        const socketsBefore = sockets.length;
+        Bb.home('join').click();
+        await step('Quick join tries the full room (the best by the list), the started room, then the good one: the page is in the room of the good host', () => () => Bb.screen() === 'room' && Bb.$('room-h').textContent === 'Qjgood’s room', 12000);
+        check('(three second clients were opened, one for each room, in that order: the full one, the started one, the good one)', sockets.length - socketsBefore === 3);
+        check('... the good room has the guest, the full room is as it was (four people, nobody was let in or thrown out), the started room still waits', seats(G) === 2 && seats(F) === 4 && S.room.starting === true);
+        Bb.roomBar('leave').click();
+        await step('(the guest leaves)', () => { const yes = inCard(Bb, 'gyes'); if (!yes) return false; yes.click(); return () => Bb.screen() === 'home' && seats(G) === 1; }, 8000);
+
+        // five: three tries at most, whatever the list holds
+        extra = () => [stale(code('j5'), 'Qjfull', 9999), stale(code('j6'), 'Qjstart', 9998), stale('e2e' + RUN + 'no1', 'Qjgone1', 9997), stale('e2e' + RUN + 'no2', 'Qjgone2', 9996)];
+        const Cc = onPage('Qjcee2');
+        await step('a page lights Quick join', () => lit(Cc), 5000);
+        await step('its list has five rooms (the good one, the full one, the started one and two that are gone)', () => () => Cc.home('games').children[1].textContent === '5', 8000);
+        const before5 = sockets.length;
+        Cc.home('join').click();
+        await step('the best three are all refused (full, started, gone): the card says that nothing is open, and offers Host one!', () => () => cardTitle(Cc) === 'No open games right now.', 12000);
+        check('exactly three second clients were opened (the good room, the fourth by the list, was not tried), and nobody sits in it', sockets.length - before5 === 3 && seats(G) === 1 && Cc.screen() === 'home');
+        inCard(Cc, 'gstay').click();
+
+        // six: Cancel while a try waits (the server answers late): the second client is let go of, and no seat is left behind
+        extra = () => [];
+        const Dd = onPage('Qjdee2');
+        await step('a page lights Quick join', () => lit(Dd), 5000);
+        await step('its list has the good room', () => () => Dd.home('games').children[1].textContent === '1', 8000);
+        slow = true;
+        Dd.home('join').click();
+        await step('Quick join asks the good room (the answer will come 1.5 s late)', () => () => seats(G) === 2, 5000);
+        await sleep(800);
+        const stop = inCard(Dd, 'gstay');
+        check('(the Cancel of the card takes presses after 700 ms)', !!stop && stop.disabled === false);
+        stop.click();
+        await step('Cancel: the card goes, the seat that the second client took is given up (a Leave), and the host is alone again', () => () => cardOf(Dd) === null && seats(G) === 1, 5000);
+        await sleep(1800);
+        const rowG = (await realRows()).find((x) => x.code === code('j4'));
+        check('the late Welcome changes nothing: the page is still on Home with no room, the host has nobody, and the real list says one person', Dd.screen() === 'home' && seats(G) === 1 && !!rowG && rowG.people === 1);
+        for (const c of [G, F, S, S2, ...fill]) { try { c.leave(); } catch (e) { /* gone already */ } }
         for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
 

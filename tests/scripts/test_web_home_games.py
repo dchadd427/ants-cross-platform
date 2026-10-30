@@ -12,7 +12,7 @@ drawn as text only.
   - the style: every target at least 44 px high and wide, a layout for a phone, a short window and a wide one, nothing loaded from another site, nothing that scrolls sideways;
   - the way into the image: the Dockerfile, the local web build and the CI's list of the image's files carry the two files;
   - the code RUNS in the fake browser of tests/scripts/web_page_harness.js (node, when it is installed: tests/scripts/web_home_games_check.js, the list and its looks; web_home_games_room_check.js, the switch, Quick host
-    and Join), and against a real server in tests/scripts/web_lobby_server_check.js; the real browser is the opt-in tests/scripts/web_home_games_browser.js;
+    and Join; web_home_games_quickjoin_check.js, Quick join and the question before Leave room), and against a real server in tests/scripts/web_lobby_server_check.js; the real browser is the opt-in tests/scripts/web_home_games_browser.js;
   - tests/data/home_games_mutants.json changes one thing at a time in a COPY of the files (a guest that can flip the switch, a second room made by Quick host, a list drawn as markup, a room left before the new one
     welcomes the page, a look while the tab is hidden, no backoff, a repeat from a hidden tab, a state that was only assumed, the page's own room in the list, no question with others in the room, a count that is not
     capped, a list that is off and throws, ...): the checks must then fail (the last class of this file; tools/mutate.py runs the same list).
@@ -30,10 +30,10 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HOME = os.path.join(REPO, "web", "home")
 FRONT = os.path.join(REPO, "web", "front")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
-CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js")]
+CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 60 * 1000, 17000      # bytes, raw and gzipped, both files together (about 57,300 and 16,300): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 71 * 1000, 20000      # bytes, raw and gzipped, both files together (about 68,500 and 19,200, with Quick join, its cards and the question before Leave room): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
@@ -183,6 +183,12 @@ class TheStyle(unittest.TestCase):
         self.assertEqual(re.findall(r"url\(", self.css), [], "no picture at all: the pictures of a row are the page's own (an <img>)")
         self.assertNotRegex(self.css, r"overflow-x: *(scroll|auto)")
 
+    def test_the_card_is_fixed_over_the_whole_window_so_that_it_stands_over_both_screens(self):
+        shade = next(body for selector, body in self.rules if selector.strip() == ".gshade")
+        self.assertIn("position: fixed;", shade)
+        self.assertIn("inset: 0;", shade)
+        self.assertNotIn("position: absolute", shade, "the card is the body's: Home's div is not shown on the Room, and Leave room asks there")
+
     def test_the_popover_is_over_the_page_under_the_menu_and_the_card_is_over_the_popover(self):
         z = {sel.strip(): int(re.search(r"z-index: (\d+)", body).group(1)) for sel, body in self.rules if re.search(r"z-index: (\d+)", body)}
         self.assertEqual(sorted(z), [".gpop", ".gshade"])
@@ -236,7 +242,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_games_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the copy with
     nothing changed must pass"""
     FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
-             "tests/scripts/web_home_games_room_check.js", "tests/scripts/web_home_games_rig.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"] \
+             "tests/scripts/web_home_games_room_check.js", "tests/scripts/web_home_games_quickjoin_check.js", "tests/scripts/web_home_games_rig.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"] \
         + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 
     @classmethod
