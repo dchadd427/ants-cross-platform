@@ -1,6 +1,6 @@
 # Public rooms and the list of games (network protocol 22)
 
-The leader of a lobby room ([`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120)) can open it to everybody, and the game server lists the rooms that a newcomer can join in `GET /lobbies` of its public door. A new room is private. The front page sends the message (the Room's Public | Private switch and Quick host) and shows the list (the Games popover): [`HOME_SCREEN.md`](HOME_SCREEN.md#games-quick-host-and-the-public-room). Public rooms change no rule of the simulation, golden hash or lock-step rule. The same number also holds one rule fix that only a map with the layer-2 id 38 shows ([`REPLAYS.md`](REPLAYS.md#the-file)).
+The leader of a lobby room ([`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120)) can open it to everybody, and the game server lists the rooms that a newcomer can join in `GET /lobbies` of its public door. A new room is private. The front page sends the message (the Room's Public | Private switch and Quick host) and shows the list (the Games popover): [`HOME_SCREEN.md`](HOME_SCREEN.md#games-quick-join-quick-host-and-the-public-room). Public rooms change no rule of the simulation, golden hash or lock-step rule. The same number also holds one rule fix that only a map with the layer-2 id 38 shows ([`REPLAYS.md`](REPLAYS.md#the-file)).
 
 ## The protocol
 
