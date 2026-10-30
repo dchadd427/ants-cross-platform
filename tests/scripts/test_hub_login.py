@@ -859,7 +859,7 @@ class TheDatabaseThatCannotBeUsed(LoginTest):
 
     def failing(self, name):
         def fail(*a, **k):
-            raise sqlite3.OperationalError("database is locked")
+            raise storemod.StoreError("database is locked")
         self.rig.call(setattr, self.rig.store, name, fail)
 
     def test_the_callback_that_cannot_keep_the_login_is_the_calm_page_and_no_login(self):
@@ -869,7 +869,7 @@ class TheDatabaseThatCannotBeUsed(LoginTest):
         out = v.callback(back)
         self.assert_page(out, 503, UNAVAILABLE)
         self.assertIsNone(v.session())
-        self.assertRegex(self.rig.log_text.getvalue(), r" login_failed kind=database error=OperationalError")
+        self.assertRegex(self.rig.log_text.getvalue(), r" login_failed kind=database error=StoreError")
 
     def test_me_logout_and_forget_say_busy_and_do_nothing(self):
         v = self.member()

@@ -513,7 +513,7 @@ class TheLockedDatabaseOnTheWire(RigTest):
         mod.say("/mute alice 5")
         self.assertIn({"t": "err", "code": "muted"}, self.say_until_muted(alice))
         log = self.rig.log_text.getvalue()
-        self.assertEqual(log.count(" error kind=OperationalError where=store"), 1)       # (one line for the two failures that came within ten seconds, the class of the error and nothing of the text)
+        self.assertEqual(log.count(" error kind=StoreError where=store"), 1)       # (one line for the two failures that came within ten seconds, the class of the error and nothing of the text)
         self.assertNotIn("hello", log)
         self.assertNotIn("alice", log)
         self.assertNotIn("1011", log)
@@ -788,7 +788,7 @@ class TheFailingPurge(unittest.TestCase):
         self.addCleanup(blocker.close)
         blocker.execute("BEGIN IMMEDIATE")
         started = time.monotonic()
-        with self.assertRaises(sqlite3.OperationalError):
+        with self.assertRaises(storemod.StoreError):
             hub.on_tick(1000.0)
         self.assertLess(time.monotonic() - started, 2.0)                     # (the write waited its 100 ms and not the 5 seconds of the command line)
         self.assertEqual(calls, [2000])
@@ -874,7 +874,7 @@ class TheProgramUsesTheShortWaitAndTheMinuteThatTheDocumentsPromise(unittest.Tes
         blocker = sqlite3.connect(path, isolation_level=None)
         self.addCleanup(blocker.close)
         blocker.execute("BEGIN IMMEDIATE")
-        with self.assertRaises(sqlite3.OperationalError):
+        with self.assertRaises(storemod.StoreError):
             hub.on_tick(1000.0)
         self.assertEqual(hub.next_purge, 1060.0)
         for second in range(1, 60):
