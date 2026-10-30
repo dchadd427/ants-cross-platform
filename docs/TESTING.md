@@ -16,8 +16,6 @@ To run all test suites:
 ./run_tests.sh
 ```
 
-The parallel runner is described in [`WORKFLOW.md`](WORKFLOW.md#the-three-test-tiers) ("The three test tiers").
-
 It runs the same suites as CI's Linux and macOS jobs. CI also builds on Windows and builds the web and server images ([Continuous Integration](#continuous-integration)).
 
 On Windows, `run_tests.bat` runs only some of the suites (1, 1.2 - 1.5, 2, 2.1, 2.2, 3 and 4). The other test programs are built by the same project, and `ctest -C Release --output-on-failure` in the build folder runs them all.
