@@ -17,7 +17,7 @@
     var OBJECTS = [
         [302, 'smlrock1', 'Rock 1'], [303, 'smlrock2', 'Rock 2'], [304, 'smlrock3', 'Rock 3'], [305, 'smlrock4', 'Rock 4'], [307, 'smlrock6', 'Rock 5'], [308, 'smlrock7', 'Rock 6'],
         [62, 'pu_comb', 'Combat ant power-up'], [63, 'pu_thief', 'Thief ant power-up'], [64, 'pu_bomb', 'Bomber ant power-up'], [65, 'pu_swim', 'Swimmer ant power-up'], [66, 'pu_mason', 'Fire ant power-up'],
-        [134, 'wallup04', 'Fire wall'], [131, 'blackbomb', 'Black bomb'], [132, 'bluebomb', 'Blue bomb'], [130, 'greenbomb', 'Green bomb'], [129, 'redbomb', 'Red bomb']
+        [134, 'wallup04', 'Fire wall'], [37, 'bridge4', 'Bridge'], [131, 'blackbomb', 'Black bomb'], [132, 'bluebomb', 'Blue bomb'], [130, 'greenbomb', 'Green bomb'], [129, 'redbomb', 'Red bomb']
     ];
     var PLANTS = [
         [404, 'clover1', 'Clover 1'], [405, 'clover2', 'Clover 2'], [406, 'clover3', 'Clover 3'], [407, 'clover4', 'Clover 4'], [408, 'clovers', 'Clover patch'],

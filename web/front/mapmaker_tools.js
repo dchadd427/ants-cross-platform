@@ -141,12 +141,23 @@
             canvas.refresh();
         }
 
+        // The Bridge chip (37, the finished piece): a soft warning, never a refusal, for the pieces on a cell whose ground is not water, counted again whenever the line is shown (the game builds on water only)
+        var BRIDGE = 37, warned = false;
+        function bridgeText(item) {
+            var f = env.file ? env.file() : null, dry = 0, r, c;
+            if (f) for (r = 0; r < f.rows; r++) for (c = 0; c < f.columns; c++) if (f.tile2(r, c) === BRIDGE && Tiles.kindOf(f.tile1(r, c)) !== 'water') dry++;
+            warned = dry > 0;
+            return item.label + (dry ? ' \u00b7 ' + plural(dry, 'piece is', 'pieces are') + ' on dry ground. A bridge needs water under it.' : '');
+        }
+
         // What the map has of the thing that the tool puts, in a few words (the line under the palette)
         function infoText() {
+            warned = false;
             if (state.tool === 'ground' || state.tool === 'objects') {
                 var item = itemOf(state.tool, tileOf());
                 if (!item) return '';
                 if (isPlant()) return item.label + ' \u00b7 ' + (state.dropper ? 'drops a power-up every ' + state.dropper + 's' : 'ants walk under it');
+                if (state.tool === 'objects' && item.id === BRIDGE) return bridgeText(item);
                 return state.tool === 'objects' ? item.label : (item.custom ? item.label + ' (' + item.name + ')' : item.label + (ground ? ': tap it again for all its tiles' : ''));
             }
             if (state.tool === 'bigger') return bigText(bigNow());
@@ -170,7 +181,12 @@
             showPalette();
         }
 
-        function showInfo() { if (host.name) host.name.textContent = infoText(); if (ants) ants.refresh(); if (pick) pick.refresh(); }
+        function showInfo() {
+            if (host.name) host.name.textContent = infoText();
+            if (warned && host.name && host.name.scrollIntoView) host.name.scrollIntoView({ block: 'nearest' });      // (the sentence is four lines: the column scrolls just far enough to show all of it, and the page never moves)
+            if (ants) ants.refresh();
+            if (pick) pick.refresh();
+        }
 
         // The team swatches: a chip and the team's name
         function teamButton(team, cls, onPick) {

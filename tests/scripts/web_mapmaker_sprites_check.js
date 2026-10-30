@@ -39,7 +39,7 @@ if (!ATLAS) {
     if (made.status !== 0) { console.log('the atlas could not be made: ' + made.stdout + made.stderr); process.exit(1); }
 }
 const load = (name) => require(path.join(FRONT, name));
-const File = load('mapmaker_file.js'), Tiles = load('mapmaker_tiles.js'), Sprites = load('mapmaker_sprites.js'), View = load('mapmaker_view.js'), Blocks = load('mapmaker_blocks.js'), Edit = load('mapmaker_edit.js');
+const File = load('mapmaker_file.js'), Tiles = load('mapmaker_tiles.js'), Sprites = load('mapmaker_sprites.js'), View = load('mapmaker_view.js'), Blocks = load('mapmaker_blocks.js'), Edit = load('mapmaker_edit.js'), Palette = load('mapmaker_palette.js');
 
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
@@ -475,6 +475,11 @@ async function caseH() {
     const rock = rig.sprites.chip(host, true, 302, 26) && rig.env.log.filter((c) => c.op === 'drawImage').pop();
     check(rock.a[6] === 13 * 3 && rock.a[7] === 13 * 3, 'a small picture is grown by one and a half, not more');
     check(rig.sprites.chip({ style: {}, appendChild() {} }, true, 410, 30) === true && rig.sprites.chip({ style: {}, appendChild() {} }, true, 99, 30) === false && rig.sprites.chip({ style: {}, appendChild() {} }, false, 300, 30) === false && rig.sprites.chip({ style: {}, appendChild() {} }, true, 347, 30) === false, 'a plant has a chip in the sheet; no chip for a tile that has no picture in the sheet');
+    // a chip draws from the sheet only: every small object and plant of the Objects palette has its picture there (the Bridge chip's among them: the game's own picture of the finished bridge, tile 37)
+    const flat = Palette.OBJECTS.concat(Palette.PLANTS).filter((row) => rig.sprites.chip({ style: {}, appendChild() {} }, true, row[0], 18) !== true).map((row) => row[0] + ' ' + row[2]);
+    check(flat.length === 0 && Palette.OBJECTS.some((row) => row[0] === 37), 'every chip of the Objects palette has its picture in the sheet (a chip with none is a flat square): ' + flat.join(', '));
+    host.children = [];
+    check(rig.sprites.chip(host, true, 37, 18) === true && host.children.length === 1 && INDEX.objects.items['37'] !== undefined, 'the Bridge chip is a canvas with the sheet\'s picture of tile 37');
     const cold = Sprites.create({ doc: rig.env.doc, win: rig.env.win });
     check(cold.chip({ style: {}, appendChild() {} }, false, 485, 30) === false, 'and none before the atlas is in');
 }

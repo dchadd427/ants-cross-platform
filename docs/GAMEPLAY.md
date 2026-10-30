@@ -143,7 +143,7 @@ A special order plays the original's action clip, with its frame sounds. A melee
 
 - Swims in water. For every other ant water is not walkable, and one that lands in it drowns.
 - Builds a bridge on a water tile in three passes of about 0.5 s (the first of the bridge's four stages is laid at once) and demolishes a finished one in four passes.
-- A finished bridge collapses after 180 s while more than 180 s of match time remain.
+- A finished bridge collapses after 180 s while more than 180 s of match time remain (a bridge that the map file holds has no timer and stays the whole match: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md), 5.37).
 - When a bridge is destroyed, by a demolish or by the timer, the shared bridge-collapse scan drowns every non-swimmer on its tile. A swimmer only splashes.
 
 ### Thief

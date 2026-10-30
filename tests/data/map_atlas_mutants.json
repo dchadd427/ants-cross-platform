@@ -84,6 +84,13 @@
       "old": " or GROUND_FIRST <= ident <= GROUND_LAST or len(parts_table.get(ident, ())) != 1:",
       "new": " or len(parts_table.get(ident, ())) != 1:",
       "test": "python3 tests/scripts/test_map_atlas.py"
+    },
+    {
+      "id": "atlas_bridge_chip_not_in_the_sheet",
+      "file": "tools/map_atlas.py",
+      "old": "CHIP_ONLY = [37]",
+      "new": "CHIP_ONLY = []",
+      "test": "python3 tests/scripts/test_map_atlas.py"
     }
   ]
 }

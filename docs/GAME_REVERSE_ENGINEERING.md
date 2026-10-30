@@ -494,19 +494,13 @@ Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either man
 
 > See 5.37 (later, Capstone-verified); this block differs (the bridge stages and the collapse timer, a 2500 ms poll).
 
-Both temporary field structures created by specialized ants have strictly reverse-engineered lifespans and unique destruction behaviors:
-
 1. **Firewall Lifetime (Exact: 180 seconds / 3 minutes):**
 
    - When placed (`0x0101e864`), `wallup04` (index 134) is written to Layer 2.
 
-   - A match timer entity (`0x1024d85` with vtable `0x1004c28`) is registered at `0x101e8e0` with expiration threshold `0x2bf20` ms (**180,000 ms = 180 seconds**):
+   - A match timer entity (`0x1024d85` with vtable `0x1004c28`) is registered at `0x101e8e0` with the expiration `match_time_remaining - 0x2bf20` ms (**180,000 ms = 180 seconds**).
 
-     ```
-     expire_time = match_time_remaining - 180000 ms
-     ```
-
-   - When the timer fires (`0x01024de7`), if Layer 2 is still tile 134, it clears the tile with `0x7ffe` (empty), triggering fire burnout sound (`fireburnout.wav`).
+   - When the timer fires (`0x01024de7`) and Layer 2 is still tile 134, the tile is cleared (`0x7ffe`) and the burnout sound (`fireburnout.wav`) plays.
 
    - If the match has less than 180 seconds remaining, the firewall persists until the end of the match.
 
@@ -2319,8 +2313,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
   needs a completed bridge, gives the tile to the demolisher's team at once, removes one stage per pass (0x24, 0x23, 0x22) and destroys
   the tile at the end of the fourth pass (1920 / 2000 ms); an interrupted demolish restores the completed bridge. Destroying a bridge
   (demolish, or the timer `FUN_01024e66`) runs `FUN_0100f8bf`: every non-swimmer on the tile drowns, a swimmer only splashes (dsplash).
-  **The collapse timer is a separate task entry** (list at `game + 0x4aec`, task object `FUN_01024d88`, polled every 2500 ms by the scheduler, `0x1024dd1`;
-  re-read in the audit of 2026-09-30, fixed in v0.0.54): the stage tiles change underneath it. Only the completion of a build arms it (`0x101ec84`) and only
+  **The collapse timer is a separate task entry** (list at `game + 0x4aec`, task object `FUN_01024d88`, polled every 2500 ms by the scheduler, `0x1024dd1`; fixed in v0.0.54): the stage tiles change underneath it. Only the completion of a build arms it (`0x101ec84`) and only
   the completion of a demolish cancels it (`FUN_0101edfe`, called at `0x101edbd`); the restore path of an interrupted demolish (`0x101ed58`, `SetTile(0x25)`) never
   touches it, so the restored bridge still collapses at its old deadline. `BridgeTimeout` (`0x1024e66`) acts only when layer 2 holds exactly 0x25 at that moment
   (`sub ax, 0x25`); the task is used up either way, so a timer that runs out while the bridge is half demolished does nothing and a bridge restored afterwards
