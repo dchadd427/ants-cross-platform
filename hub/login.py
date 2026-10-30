@@ -34,9 +34,10 @@ LOOKALIKE = str.maketrans("013457", "oieast")           # (0 o, 1 i, 3 e, 4 a, 5
 
 
 def squash(name):
-    """What a name looks like at a glance: no dots or underscores, no digits at its end, a digit for the letter that it looks like read as that letter ("adm1n", "admin.", "system_", "4dmin2"
-    are all "admin" and "system" to a reader of the log)."""
-    return re.sub(r"[._]", "", name.lower()).rstrip("0123456789").translate(LOOKALIKE)
+    """What a name looks like at a glance: no dots or underscores, a digit for the letter that it looks like read as that letter ("adm1n", "admin.", "a.d.m.i.n", "system_" are all "admin" and
+    "system" to a reader). Digits at the end are not dropped: "system32", "hub99" and "ants1998" are names of real people, and a lookalike gains nothing (a moderator is the hub's `mod` flag, by
+    Discord id, never a name)."""
+    return re.sub(r"[._]", "", name.lower()).translate(LOOKALIKE)
 
 
 RESERVED_SQUASHED = frozenset(squash(n) for n in RESERVED)
@@ -53,6 +54,7 @@ PAGES = {                                   # kind -> (status, heading, line)
     "cookie": (400, "Your browser did not keep the login cookie", "Allow cookies for this site and press Log in again."),
     "denied": (400, "Login cancelled", "Nothing was kept. The chat can still be read without logging in."),
     "name": (400, "This Discord name cannot be used here", "The chat takes names of lower-case letters, digits, underscores and dots."),
+    "reserved": (400, "This Discord name cannot be used here", "It looks too much like a name that the chat keeps for itself. Change your Discord username and log in again."),
     "busy": (429, "Too many tries", "Wait a minute and press Log in again."),
     "site": (403, "Log in from the front page", "Open the front page and press Log in there."),
 }
@@ -234,9 +236,12 @@ class DiscordLogin(session.Sessions):
         except discordmod.DiscordError as e:
             self.log.event("login_failed", kind=e.kind, status=e.status, tag=self.log.tag(address))
             return self.page("rejected" if e.kind == "rejected" else "unavailable", back, gone)
-        if not config.ACCOUNT_ID.match(account) or not text.valid_name(name) or reserved(name):
+        if not config.ACCOUNT_ID.match(account) or not text.valid_name(name):
             self.log.event("login_failed", kind="name", tag=self.log.tag(address))
             return self.page("name", back, gone)
+        if reserved(name):
+            self.log.event("login_failed", kind="reserved", tag=self.log.tag(address))
+            return self.page("reserved", back, gone)
         value = secrets.token_hex(16)
         try:
             self.store.add_session(digest(value), account, name, self.limits.session_seconds, self.limits.sessions_per_account, self.limits.sessions_total)
@@ -297,7 +302,7 @@ class DiscordLogin(session.Sessions):
             who = self.who_of(request.headers)
             if who is None:
                 return self.fail(401, "login", [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
-            lines = self.store.forget(who.account_id)
+            lines = self.store.forget(who.account_id, self.hub.chat.deleted_seq)
         except sqlite3.OperationalError:
             return self.fail(503, "busy")
         self.hub.end_logins(account=who.account_id)

@@ -187,13 +187,14 @@ class Store:
         self.unsettled = True
         return gone
 
-    def forget(self, account):
+    def forget(self, account, since=0):
         """Everything that ties this account's id or name to the site, except what keeps the others safe: all its logins and all its chat lines go, and the name is wiped from its mute
-        and ban (they stay, by id: forgetting must not lift one). Returns the ids of the lines that went (those that a moderator had deleted from the command line too, if the screens were not told
-        yet), so that the screens can drop them. The log file is cut at once, so that neither the lines, nor the name, nor the hashes of the logins are left in it (a reader that holds the file
-        up leaves them there until a later look: `unsettled`)."""
+        and ban (they stay, by id: forgetting must not lift one). Returns the ids of the lines that went and that a screen may still show: the lines that were not deleted, and the ones that a
+        moderator deleted from the command line after the deletion numbered `since` (the hub's last look: it did not tell the screens yet). A line that was deleted and announced before is on
+        no screen, and must not use up the few frames that a bulk drop is allowed (hub/chat.py drop_lines). The log file is cut at once, so that neither the lines, nor the name, nor the hashes
+        of the logins are left in it (a reader that holds the file up leaves them there until a later look: `unsettled`)."""
         with self.transaction():
-            ids = [r[0] for r in self.db.execute("SELECT id FROM lines WHERE account = ?", (account,))]
+            ids = [r[0] for r in self.db.execute("SELECT id FROM lines WHERE account = ? AND (deleted = 0 OR del_seq > ?)", (account, int(since)))]
             self.db.execute("DELETE FROM sessions WHERE account = ?", (account,))
             self.db.execute("DELETE FROM lines WHERE account = ?", (account,))
             self.db.execute("UPDATE mutes SET name = '' WHERE account = ?", (account,))

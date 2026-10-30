@@ -34,7 +34,7 @@ import fake_discord as fd  # noqa: E402
 import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
 from login_flow import Visitor  # noqa: E402
-from hub import config as configmod, discord as discordmod, limits as limitmod, login as loginmod  # noqa: E402
+from hub import config as configmod, discord as discordmod, limits as limitmod, login as loginmod, store as storemod  # noqa: E402
 
 CALLBACK = hc.SITE + "/hub/callback"
 SESSION_COOKIE = re.compile(r"^__Host-ants_hub=([0-9a-f]{32}); Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Strict$")
@@ -924,6 +924,27 @@ class TheForgetOfAHugeBacklog(LoginTest):
         self.assertEqual(self.rows("lines"), [])
         self.assertEqual(self.rig.call(lambda: self.rig.store.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0]), 0)
 
+    def test_the_lines_that_were_deleted_and_announced_long_ago_do_not_use_up_the_frames_of_a_forget(self):
+        self.rig.__exit__(None, None, None)
+        self.rig = hub_rig.Rig(discord=self.fake, sockets_per_address=100)
+        before = storemod.Store(self.rig.db)                                         # (the database as a hub that was restarted finds it: 220 lines of the account, the newest 119 of them deleted from the command line)
+        for n in range(220):
+            before.add_line(OLD, "maple.leaf", "old line %d" % n, False)
+        ids = [row[0] for row in before.db.execute("SELECT id FROM lines ORDER BY id")]
+        for line_id in ids[-119:]:
+            before.delete_line(line_id, "command line")
+        before.close()
+        self.rig.__enter__()
+        v = self.member()
+        reader = self.socket()
+        shown = [h["id"] for h in reader.welcome["history"]]
+        self.assertEqual(shown, ids[51:101])                                          # (the page shows the last 50 lines that are alive)
+        self.assertEqual(v.call("POST", "/hub/forget").status, 200)
+        heard = [m["id"] for m in reader.drain(0.6) if m["t"] == "del"]
+        self.assertEqual(sorted(set(shown) - set(heard)), [], "a line that is on the page was not taken off it")
+        self.assertEqual(sorted(set(heard) & set(ids[101:])), [], "a deletion of long ago used up a frame")
+        self.assertEqual(self.rows("lines"), [])
+
     def test_a_line_that_a_moderator_deleted_from_the_command_line_and_that_was_not_announced_yet_goes_off_the_screens_with_the_forget(self):
         self.rig.__exit__(None, None, None)
         self.rig = hub_rig.Rig(discord=self.fake, deletions_seconds=1000.0, sockets_per_address=100)         # (the hub looks for deletions of the command line every 1000 seconds)
@@ -1220,16 +1241,24 @@ class TheCallbackWhenDiscordGoesWrong(LoginTest):
             self.assert_calm(v, r, str(bad))
         self.assertEqual(self.rows(), [])
 
-    def test_the_names_that_could_pass_for_the_hub_and_their_lookalikes_are_refused(self):
-        for name in ("admin.", "adm1n", "system_", "4dmin", "a.d.m.i.n", "ants2", "m0d", "mod1", "h.u.b", "everyone_", "ants.bot", "4nts.b0t", "_here", "s3rver", "st4ff", "moderat0r"):
+    def test_the_names_that_could_pass_for_the_hub_and_their_lookalikes_are_refused_with_a_page_that_says_why(self):
+        for name in ("admin.", "adm1n", "system_", "4dmin", "a.d.m.i.n", "m0d", "h.u.b", "everyone_", "ants.bot", "4nts.b0t", "_here", "s3rver", "st4ff", "moderat0r", "mod", "admin"):
             self.fake.me_mode = "merge:" + json.dumps({"username": name})
             v, r, _ = self.go()
             self.assert_page(r, 400, "This Discord name cannot be used here")
+            self.assertIn("It looks too much like a name that the chat keeps for itself", r.text(), name)
+            self.assertNotIn("lower-case letters", r.text(), name)                    # (the page for a name that is not a name says another thing)
         self.assertEqual(self.rows(), [])
-        for name in ("moderate", "hubert", "antsy", "administrate", "herd", "maple.leaf", "m0dern", "servers", "stuff", "1337"):
+        self.fake.me_mode = "merge:" + json.dumps({"username": "With Space"})
+        v, r, _ = self.go()
+        self.assertIn("lower-case letters", r.text())
+        self.assertIn(" login_failed kind=reserved", self.rig.log_text.getvalue())
+        for n, name in enumerate(("moderate", "hubert", "antsy", "administrate", "modest", "model", "systems", "antsfan", "system32", "hub99", "server2", "here1", "everyone2", "ants1998", "mod1", "ants2",
+                                  "herd", "maple.leaf", "m0dern", "servers", "stuff", "1337")):
+            self.fake.user = (fd.snowflake(900 + n), "ignored")
             self.fake.me_mode = "merge:" + json.dumps({"username": name})
-            self.assertEqual(self.visitor().login().status, 302, name)
-        self.assertEqual(len(self.rows()), 10)
+            self.assertEqual(self.visitor().login().status, 302, name)               # (the digits at the end of a real name are not a lookalike of anything)
+        self.assertEqual(len(self.rows()), 22)
 
     def test_names_that_are_names_pass(self):
         for name in ("ab", "x" * 32, "a.b_c9", "9", "_.", "maple.leaf", "0123456789"):
@@ -1674,6 +1703,11 @@ class TheDocumentsSayWhatAnOperatorNeedsToKnow(unittest.TestCase):
         self.assertIn("fresh Discord account", checklist)
         self.assertIn("prompt=none", checklist)
         self.assertIn("Login cancelled", checklist)
+
+    def test_the_rule_for_lookalikes_of_the_reserved_names_is_said_with_its_reason(self):
+        text = self.paragraph("A visitor's username is untrusted text")
+        for words in ("a page of its own that says why", "`adm1n`", "`system32`", "`hub99`", "a lookalike gains nothing", "by Discord id, never by a name"):
+            self.assertIn(words, text)
 
     def test_a_rollback_is_said_to_need_the_volume_of_before(self):
         self.assertIn("schema 3", self.paragraph("`/data/hub.db` (SQLite, WAL"))

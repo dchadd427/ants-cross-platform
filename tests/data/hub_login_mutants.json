@@ -812,15 +812,15 @@
   {
    "id": "login_name_not_checked",
    "file": "hub/login.py",
-   "old": "if not config.ACCOUNT_ID.match(account) or not text.valid_name(name) or reserved(name):",
+   "old": "if not config.ACCOUNT_ID.match(account) or not text.valid_name(name):",
    "new": "if not config.ACCOUNT_ID.match(account):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_names_taken",
    "file": "hub/login.py",
-   "old": "or not text.valid_name(name) or reserved(name):",
-   "new": "or not text.valid_name(name):",
+   "old": "        if reserved(name):\n",
+   "new": "        if False:\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
@@ -1491,8 +1491,8 @@
   {
    "id": "forget_skips_what_the_command_line_deleted",
    "file": "hub/store.py",
-   "old": "for r in self.db.execute(\"SELECT id FROM lines WHERE account = ?\", (account,))]",
-   "new": "for r in self.db.execute(\"SELECT id FROM lines WHERE account = ? AND deleted = 0\", (account,))]",
+   "old": "AND (deleted = 0 OR del_seq > ?)\", (account, int(since)))]",
+   "new": "AND deleted = 0\", (account,))]",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
   },
   {
@@ -1561,8 +1561,8 @@
   {
    "id": "lookalikes_of_reserved_names_pass",
    "file": "hub/login.py",
-   "old": "or not text.valid_name(name) or reserved(name):",
-   "new": "or not text.valid_name(name) or name in RESERVED:",
+   "old": "        if reserved(name):\n",
+   "new": "        if name in RESERVED:\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
@@ -1573,17 +1573,17 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
-   "id": "reserved_squash_keeps_the_digits_at_the_end",
+   "id": "reserved_squash_strips_the_digits_at_the_end",
    "file": "hub/login.py",
-   "old": ".rstrip(\"0123456789\").translate(LOOKALIKE)",
-   "new": ".translate(LOOKALIKE)",
+   "old": "re.sub(r\"[._]\", \"\", name.lower()).translate(LOOKALIKE)",
+   "new": "re.sub(r\"[._]\", \"\", name.lower()).rstrip(\"0123456789\").translate(LOOKALIKE)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_digits_are_not_letters",
    "file": "hub/login.py",
-   "old": ".rstrip(\"0123456789\").translate(LOOKALIKE)",
-   "new": ".rstrip(\"0123456789\")",
+   "old": "re.sub(r\"[._]\", \"\", name.lower()).translate(LOOKALIKE)",
+   "new": "re.sub(r\"[._]\", \"\", name.lower())",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
@@ -1690,6 +1690,48 @@
    "old": "It is schema 3: a hub of an",
    "new": "It is a database: a hub of an",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
+  },
+  {
+   "id": "reserved_page_says_the_name_is_bad",
+   "file": "hub/login.py",
+   "old": "return self.page(\"reserved\", back, gone)",
+   "new": "return self.page(\"name\", back, gone)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "reserved_is_not_in_the_log",
+   "file": "hub/login.py",
+   "old": "kind=\"reserved\"",
+   "new": "kind=\"name\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
+  },
+  {
+   "id": "forget_ignores_the_hubs_last_look",
+   "file": "hub/store.py",
+   "old": "AND (deleted = 0 OR del_seq > ?)\", (account, int(since)))]",
+   "new": "\", (account,))]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "forget_only_the_live_lines",
+   "file": "hub/store.py",
+   "old": "AND (deleted = 0 OR del_seq > ?)",
+   "new": "AND (deleted = 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "forget_is_not_told_the_last_look",
+   "file": "hub/login.py",
+   "old": "self.store.forget(who.account_id, self.hub.chat.deleted_seq)",
+   "new": "self.store.forget(who.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "forget_is_told_the_start_as_the_last_look",
+   "file": "hub/login.py",
+   "old": "self.store.forget(who.account_id, self.hub.chat.deleted_seq)",
+   "new": "self.store.forget(who.account_id, 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
   }
  ]
 }

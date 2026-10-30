@@ -1009,6 +1009,16 @@ class TheStore(unittest.TestCase):
         self.store.delete_line(a.id, "command line")
         self.assertEqual(sorted(self.store.forget("7")), [a.id, b.id])
 
+    def test_a_forget_gives_back_the_deletions_after_the_hubs_last_look_and_the_live_lines_and_not_the_old_deletions(self):
+        lines = [self.store.add_line("7", "gone", "line %d" % n, False) for n in range(10)]
+        for line in lines[:4]:
+            self.store.delete_line(line.id, "command line")                           # (long ago: the hub knew them)
+        last_look = self.store.last_deletion()
+        self.store.delete_line(lines[4].id, "command line")                            # (after the last look: the screens were not told)
+        self.assertEqual(sorted(self.store.forget("7", last_look)), sorted([lines[4].id] + [l.id for l in lines[5:]]))
+        self.store.add_line("8", "other", "x", False)
+        self.assertEqual(self.store.forget("9"), [])
+
     def test_a_login_that_ends_asks_for_the_cut_of_the_log_file_and_a_cut_that_works_says_it_is_done(self):
         self.store.add_session("b" * 64, "7", "gone", 100, 10, 100)
         self.store.checkpoint()
