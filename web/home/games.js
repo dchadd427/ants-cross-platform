@@ -406,10 +406,8 @@
             top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
-            if (best && !onList) top.appendChild(el('span', 'gbest', TEXT.best));
-            text.appendChild(top);
-            if (best && onList) text.appendChild(el('span', 'gbest', TEXT.best));
-            text.appendChild(line); li.appendChild(pic); li.appendChild(text);
+            if (best) top.appendChild(el('span', 'gbest', TEXT.best));       // (beside the map's name; a narrow row wraps it under)
+            text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text);
             if (onList) {
                 var b = button('gjoin', TEXT.join, guard(function () { joinRow(row); }));
                 b.setAttribute('aria-label', 'Join ' + possessive(row.host) + ' room, ' + seats.count + ' seats taken, ' + seats.bots + ', ' + row.mapName); b.setAttribute('data-code', row.code);

@@ -42,7 +42,8 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     tap(env.home('games'));
     await flush();
     same('the Games list shows the rooms best first (not as the server listed them)', rowsOf(env).map((li) => textOf(first(li, 'gname'))), ['Pebble', 'Clover', 'Juniper', 'Basil', 'Fern']);
-    check('the first row (what Quick join takes) is tagged BEST, in a line of its own under the name, and no other row is', first(rowsOf(env)[0], 'gbest') !== null && textOf(first(rowsOf(env)[0], 'gbest')) === 'BEST' && find(popOf(env), 'gbest').length === 1);
+    check('the first row (what Quick join takes) is tagged BEST, beside the name and the map\'s name in the line of the name (a narrow row wraps it under, as the phone\'s picture draws it), and no other row is', first(rowsOf(env)[0], 'gbest') !== null && textOf(first(rowsOf(env)[0], 'gbest')) === 'BEST' && find(popOf(env), 'gbest').length === 1
+          && first(rowsOf(env)[0], 'gbest').parent === first(rowsOf(env)[0], 'gtop') && first(rowsOf(env)[0], 'gtop').children.map((c) => classes(c)[0]).join() === 'gname,gmapname,gbest');
     check('the heading says that the list is live ("5 waiting · updates live")', textOf(first(popOf(env), 'gpcount')) === '5 waiting · updates live');
     env.site.reject = true;
     await wait(env, 12000);

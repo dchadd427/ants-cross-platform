@@ -1640,16 +1640,9 @@
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
-   "id": "qj_best_tag_not_drawn_in_the_list",
+   "id": "qj_best_tag_is_not_drawn",
    "file": "web/home/games.js",
-   "old": "if (best && onList) text.appendChild(el('span', 'gbest', TEXT.best));",
-   "new": "",
-   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
-  },
-  {
-   "id": "qj_best_tag_not_drawn_in_the_card",
-   "file": "web/home/games.js",
-   "old": "if (best && !onList) top.appendChild(el('span', 'gbest', TEXT.best));",
+   "old": "            if (best) top.appendChild(el('span', 'gbest', TEXT.best));       // (beside the map's name; a narrow row wraps it under)\n",
    "new": "",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -2267,6 +2260,20 @@
    "file": "web/home/games.js",
    "old": "cls: 'gyes big', run: quickHost",
    "new": "cls: 'gyes', run: quickHost",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_best_tag_is_under_the_name_not_beside_it",
+   "file": "web/home/games.js",
+   "old": "if (best) top.appendChild(el('span', 'gbest', TEXT.best));       // (beside the map's name; a narrow row wraps it under)\n            text.appendChild(top); text.appendChild(line);",
+   "new": "text.appendChild(top); if (best) text.appendChild(el('span', 'gbest', TEXT.best)); text.appendChild(line);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_best_tag_is_before_the_name",
+   "file": "web/home/games.js",
+   "old": "top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));",
+   "new": "if (best) top.appendChild(el('span', 'gbest', TEXT.best)); top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]
