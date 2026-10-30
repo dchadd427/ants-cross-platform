@@ -34,7 +34,7 @@ NODE = shutil.which("node")
 FILES = ("home.js", "home.css")
 LATER = ("games.js", "games.css")                    # the files that load after the first paint (tests/scripts/test_web_home_games.py has their budgets)
 CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_chat.py
-HOME_BUDGET, HOME_GZIP_BUDGET = 38 * 1000, 11300     # bytes, raw and gzipped, both files together (about 36,600 and 10,900, with the loaders of the dock and of the Games list, the timers of the hand-off and the narrow logo): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+HOME_BUDGET, HOME_GZIP_BUDGET = 38 * 1000, 11300     # bytes, raw and gzipped, both files together (about 36,900 and 11,000, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo and the question before Leave room): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
 LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
@@ -152,7 +152,7 @@ class TheFolder(unittest.TestCase):
         self.assertIn("if (failTimer !== null) clearTimeout(failTimer);", js, "a second hand-off starts both times again")
         self.assertIn("tell(TEXT.slow);", js)
         self.assertIn("slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',", js)
-        self.assertIn("function () { if (stalled) return; page.leave(); show('home', 'push'); }", js, "a Leave room that reaches the page all the same does nothing")
+        self.assertIn("function () { if (stalled) return; var go = function () { page.leave(); show('home', 'push'); }; if (!asking(go)) go(); }", js, "a Leave room that reaches the page all the same does nothing; one that may go asks the Games list first (a room with other people in it is asked about)")
         self.assertIn("if (goingTimer !== null) clearTimeout(goingTimer);", js, "a second hand-off starts the time again")
 
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):

@@ -60,8 +60,8 @@
   {
    "id": "leave_button_stays_on_the_room",
    "file": "web/home/home.js",
-   "old": "function () { if (stalled) return; page.leave(); show('home', 'push'); }",
-   "new": "function () { if (stalled) return; page.leave(); }",
+   "old": "function () { if (stalled) return; var go = function () { page.leave(); show('home', 'push'); }; if (!asking(go)) go(); }",
+   "new": "function () { if (stalled) return; var go = function () { page.leave(); }; if (!asking(go)) go(); }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -984,8 +984,8 @@
   {
    "id": "leave_press_goes_through_when_stalled",
    "file": "web/home/home.js",
-   "old": "function () { if (stalled) return; page.leave(); show('home', 'push'); }",
-   "new": "function () { page.leave(); show('home', 'push'); }",
+   "old": "function () { if (stalled) return; var go = function () { page.leave(); show('home', 'push'); }; if (!asking(go)) go(); }",
+   "new": "function () { var go = function () { page.leave(); show('home', 'push'); }; if (!asking(go)) go(); }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

@@ -104,8 +104,9 @@ const FIVE = () => ({ format: 1, count: 5, lobbies: [
 const SIZES = [['phone', 390, 844], ['side', 844, 390], ['desktop', 1280, 800]];
 const NOTICES = { public: 'Your room is public now', joined: 'Joined' };
 
-async function newPage(browser, site, name, size, search) {
+async function newPage(browser, site, name, size, search, silent) {
     const ctx = await browser.newContext({ viewport: { width: size[1], height: size[2] }, deviceScaleFactor: 1 });
+    if (silent) await ctx.addInitScript(() => { const Real = window.WebSocket; window.WebSocket = function (url, p) { return /\/ws$/.test(String(url)) && !/\/hub\/ws$/.test(String(url)) ? { close() {}, send() {}, readyState: 0 } : new Real(url, p); }; });       // (a game server that says nothing: a try that waits)
     await ctx.addInitScript((n) => { try { if (n && !window.localStorage.getItem('ants.name')) window.localStorage.setItem('ants.name', n); } catch (e) { /* none */ } }, name);
     const page = await ctx.newPage();
     page.errors = [];
@@ -128,7 +129,7 @@ async function flows() {
         // ---- 1. two contexts against the real server --------------------------------------------------------------------------------------------------------------------------------------------
         const maple = await newPage(browser, live, 'Maple', SIZES[2]);
         await lit(maple);
-        check('the page opens on Home and loads the Games list after its first paint (Quick host and Games are lit, Quick join is not)', await screenOf(maple) === 'home' && await maple.evaluate(() => document.querySelector('.quick.join').disabled === true));
+        check('the page opens on Home and loads the Games list after its first paint (Quick host, Quick join and Games are lit)', await screenOf(maple) === 'home' && await maple.evaluate(() => document.querySelector('.quick.join').disabled === false));
         await maple.click('.quick.host');
         await until('the room is public', async () => (await maple.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
         check('Quick host in a real browser: the Room shows, the switch says Public (the real room said so) and the notice is there', await screenOf(maple) === 'room' && (await textOf(maple, '.gstrip')).indexOf(NOTICES.public) !== -1);
@@ -207,10 +208,84 @@ async function flows() {
             await host.context().close(); await guest.context().close();
         }
 
+        // ---- 1d. Quick join and the question before Leave room, with real clicks against the real server, at 1280 and 390 px ---------------------------------------------------------------------------------------------
+        for (const size of [SIZES[2], SIZES[0]]) {
+            const label = size[0] + ' ' + size[1] + 'x' + size[2];
+            const host = await newPage(browser, live, 'Maple', size); await lit(host);
+            await host.click('.quick.host');
+            await until('the room is public', async () => (await host.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
+            const code = await host.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
+            const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
+            await until('the real list holds the room', async () => (await (await guest.request.get(live.url + '/lobbies')).json()).lobbies.some((x) => x.code === code), 10000);
+            await guest.dblclick('.quick.join');
+            await until('the guest is in the Room of the host', async () => (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room', 15000).catch(() => null);
+            check(label + ': Quick join (a real double click on it) takes the page to the best open room, once: the host\'s Room, as a guest, with no strip and no card left', (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room' && (await guest.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0 && (await guest.evaluate(() => document.querySelector('.gstrip').hidden)));
+            check('... and the host sees the guest, once', (await host.evaluate(() => document.getElementById('slots').textContent.split('Sage').length - 1)) === 1);
+            // Leave room asks when there are other people in the room: a real click on Stay here, and then on Leave room
+            await guest.click('.rbar .leave');
+            await guest.waitForSelector('.gconfirm');
+            check(label + ': Leave room in a room with other people asks first ("Leave Maple’s room?", "Leave room" and "Stay here", every target 44 px high)', (await textOf(guest, '.gctitle')) === 'Leave Maple’s room?' && (await guest.evaluate(() => Array.from(document.querySelectorAll('.gconfirm .btn')).every((b) => b.getBoundingClientRect().height >= 44))));
+            await guest.click('.gstay');
+            check('"Stay here" (a real click) leaves the Room as it was, with the focus on Leave room', (await screenOf(guest)) === 'room' && (await guest.evaluate(() => !document.querySelector('.gconfirm') && document.activeElement.classList.contains('leave'))));
+            await guest.click('.rbar .leave');
+            await guest.waitForSelector('.gconfirm');
+            await guest.click('.gyes');
+            await until('the guest is Home', async () => (await screenOf(guest)) === 'home', 8000);
+            check('"Leave room" (a real click) leaves it: Home shows and the page holds no room (My room has no count)', (await screenOf(guest)) === 'home' && (await guest.evaluate(() => document.querySelector('.hchip.mine .pill').hidden)));
+            await until('the host is alone', async () => (await host.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') === -1)), 10000);
+            check('... and the host\'s Room no longer shows Sage', await host.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') === -1));
+            await host.click('.rbar .leave');
+            await until('the host is Home at once (alone in the room: no question)', async () => (await screenOf(host)) === 'home', 5000).catch(() => null);
+            check(label + ': Leave room when alone leaves at once (no card)', (await screenOf(host)) === 'home' && (await host.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0);
+            // a page with another person in its own room: Quick join asks, with the best room in the card
+            const rae = await newPage(browser, fake, 'Rae', size); await lit(rae);
+            await rae.click('.hchip.mine');
+            await rae.waitForSelector('#slots li');
+            const raeRoom = await rae.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
+            const tess = await newPage(browser, fake, 'Tess', size, '/?room=' + raeRoom);
+            await tess.click('#name-step-go');
+            await until('Tess is in', async () => (await rae.evaluate(() => document.getElementById('slots').textContent.indexOf('Tess') !== -1)), 10000);
+            await rae.click('.rhome');
+            await rae.click('.quick.join');
+            await rae.waitForSelector('.gconfirm');
+            check(label + ': Quick join with another person in the own room asks first ("Leave your room?", "Tess is in your room…", the best room with its BEST tag, "Leave and join" and "Stay here")', (await textOf(rae, '.gctitle')) === 'Leave your room?' && /Tess is in your room/.test(await textOf(rae, '.gcline')) && (await textOf(rae, '.gconfirm .gbest')) === 'BEST' && (await textOf(rae, '.gconfirm .gname')) === 'Pebble');
+            await rae.click('.gstay');
+            check('"Stay here" (a real click) takes the card away, changes nothing, and the focus is on Quick join', (await rae.evaluate(() => !document.querySelector('.gconfirm') && document.activeElement.classList.contains('join'))) && (await screenOf(rae)) === 'home');
+            await host.context().close(); await guest.context().close(); await rae.context().close(); await tess.context().close();
+        }
+
+        // ---- 1e. a match of this browser that is still running (the page's Rejoin offer is up): Quick join, Join and Join by code open nothing and say so, with Rejoin (real clicks, no socket) ------------------------------------
+        {
+            const ctx = await browser.newContext({ viewport: { width: SIZES[2][1], height: SIZES[2][2] }, deviceScaleFactor: 1 });
+            await ctx.addInitScript((entry) => { try { window.localStorage.setItem('ants.name', 'Maya'); window.localStorage.setItem('ants.rejoin.k7m2xq.1', entry); } catch (e) { /* none */ } }, JSON.stringify({ k: '00112233445566778899aabbccddeeff', s: fake.url.replace(/^http/, 'ws') + '/ws', t: Date.now() }));
+            const page = await ctx.newPage();
+            const sockets = [];
+            page.errors = [];
+            page.on('pageerror', (e) => page.errors.push(String(e)));
+            page.on('websocket', (ws) => { if (!/\/hub\/ws$/.test(ws.url())) sockets.push(ws.url()); });       // (the game server's door: the chat dock's own socket is another)
+            await page.goto(fake.url + '/');
+            await lit(page);
+            check('(a match of this browser is still running: the page offers to rejoin it)', await page.evaluate(() => !document.getElementById('rejoin').hidden));
+            const said = () => page.evaluate(() => { const s = document.querySelector('.gstrip'); return s.hidden ? null : s.textContent; });
+            await page.click('.quick.join');
+            check('Quick join with the Rejoin offer up (a real click): "Your match is running." with Rejoin, no card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0 && sockets.length === 0);
+            await page.click('.gstrip .btn:last-child');
+            await page.click('.hchip.games'); await page.waitForSelector('.glist .gitem');
+            await page.click('.gjoin');
+            check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the list put away, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.querySelector('.gpop').hidden)) && sockets.length === 0);
+            await page.click('.gstrip .btn:last-child');
+            await page.click('.hchip.games'); await page.waitForSelector('.gcode input');
+            await page.fill('.gcode input', 'abc234');
+            await page.click('.gcgo');
+            check('Join by code with the Rejoin offer up: the same words, no name card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.getElementById('name-step').hidden)) && sockets.length === 0);
+            check('(no script error in this page)', page.errors.length === 0, page.errors.join(' | '));
+            await ctx.close();
+        }
+
         // ---- 2. the pictures: the scenes of the approved pictures, at their three sizes ----------------------------------------------------------------------------------------------------
         if (shotsDir) {
             fs.mkdirSync(shotsDir, { recursive: true });
-            const shot = async (page, scene, size) => { await page.waitForSelector('#toast', { state: 'hidden', timeout: 6000 }).catch(() => {}); await page.waitForTimeout(250); await page.screenshot({ path: path.join(shotsDir, 'games4_' + scene + '_' + size[0] + '.png') }); };
+            const shot = async (page, scene, size) => { await page.waitForSelector('#toast', { state: 'hidden', timeout: 6000 }).catch(() => {}); await page.waitForTimeout(250); await page.screenshot({ path: path.join(shotsDir, (scene.indexOf('qj_') === 0 ? 'quickjoin5_' + scene.slice(3) : 'games4_' + scene) + '_' + size[0] + '.png') }); };
             const reach = async (page) => { const bad = await page.evaluate(() => { const w = document.documentElement.clientWidth, out = []; document.querySelectorAll('button, input, select, a').forEach((e) => { const r = e.getBoundingClientRect(); if (!r.width || !r.height || e.closest('[hidden]')) return; if (r.right > w + 1 || r.left < -1) out.push('off the window: ' + (e.className || e.tagName)); }); return out; }); return bad; };
             const small = (page, root) => page.evaluate((q) => Array.from(document.querySelectorAll(q + ' button, ' + q + ' input')).filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !e.closest('[hidden]') && (r.height < 43.5 || r.width < 43.5); }).map((e) => (e.className || e.tagName) + ' ' + Math.round(e.getBoundingClientRect().width) + 'x' + Math.round(e.getBoundingClientRect().height)), root);
             for (const size of SIZES) {
@@ -222,6 +297,8 @@ async function flows() {
                 check(label + ': Home has no sideways scroll and every control is inside the window', (await p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)) && (await reach(p)).length === 0, JSON.stringify(await reach(p)));
                 await p.click('.hchip.games'); await p.waitForSelector('.glist .gitem');
                 await shot(p, 'games', size);
+                const best = await p.evaluate(() => { const r = document.querySelector('.glist .gitem'), n = r.querySelector('.gname').getBoundingClientRect(), m = r.querySelector('.gmapname').getBoundingClientRect(), b = r.querySelector('.gbest').getBoundingClientRect(); return { nameTop: Math.round(n.top), nameBottom: Math.round(n.bottom), mapRight: Math.round(m.right), bestTop: Math.round(b.top), bestBottom: Math.round(b.bottom), bestLeft: Math.round(b.left) }; });
+                check(label + ': the BEST tag ' + (size[0] === 'phone' ? 'wraps under the name (the row is too narrow for it, as the phone picture draws it)' : 'stands beside the name and the map\'s name, on their line (the picture draws it so)'), size[0] === 'phone' ? best.bestTop >= best.nameBottom - 1 : best.bestTop >= best.nameTop - 1 && best.bestBottom <= best.nameBottom + 1 && best.bestLeft >= best.mapRight, JSON.stringify(best));
                 check(label + ': the Games list shows five rows, and every target in it is at least 44 px high and wide', (await p.evaluate(() => document.querySelectorAll('.glist .gitem').length)) === 5 && (await small(p, '.gpop')).length === 0, JSON.stringify(await small(p, '.gpop')));
                 check(label + ': the list is inside the window and scrolls inside itself (it is no taller than what is left under the bar)', await p.evaluate(() => { const r = document.querySelector('.gpop').getBoundingClientRect(); return r.bottom <= window.innerHeight + 1 && r.right <= window.innerWidth + 1 && r.left >= 0 && r.top > 0; }));
                 await p.evaluate(() => { const j = document.querySelector('.gjoining'); j.hidden = false; j.firstChild.textContent = 'Joining Pebble’s room…'; });       // (the line of a Join that waits: shown by hand, the real one lasts a moment)
@@ -290,6 +367,50 @@ async function flows() {
                 await shot(guest, 'joined', size);
                 check(label + ': a Join from the real list brings the guest to the host\'s Room, with the notice', (await textOf(guest, '.gstrip')).indexOf('Joined') === 0 && (await textOf(guest, '.vistag')) === 'Public room');
                 await host.context().close(); await guest.context().close();
+                // Quick join: the cards of the approved pictures (finding: a game server that says nothing; joined: the real one; none: an empty list; confirm: another person in the own room), and the question before Leave room
+                const qf = await newPage(browser, fake, 'Maple', size, undefined, true); await lit(qf);
+                await qf.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && !p.hidden; });
+                await qf.click('.quick.join');
+                await qf.waitForSelector('.gconfirm .gbar');
+                await shot(qf, 'qj_finding', size);
+                check(label + ': the card "Finding a game…" has its four seats, its line, its bar and a Cancel of 44 px, inside the window', (await textOf(qf, '.gctitle')) === 'Finding a game…' && (await qf.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(), b = document.querySelector('.gconfirm .btn').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight && b.height >= 44 && document.querySelectorAll('.gconfirm .gdot').length === 4; })));
+                await qf.context().close();
+                const qh = await newPage(browser, live, 'Maple', size); await lit(qh);
+                await qh.click('.quick.host');
+                await qh.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public');
+                const qg = await newPage(browser, live, 'Sage', size); await lit(qg);
+                await qg.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
+                await qg.click('.quick.join');
+                await qg.waitForSelector('.gmark.check');
+                await shot(qg, 'qj_joined', size);
+                check(label + ': the card "Joined Maple’s room" shows the room, its bar and "Go to the room" (44 px), and the Room opens by itself', (await textOf(qg, '.gctitle')) === 'Joined Maple’s room' && (await textOf(qg, '.gconfirm .gyes')) === 'Go to the room');
+                await qg.waitForFunction(() => document.body.getAttribute('data-screen') === 'room', null, { timeout: 5000 });
+                await qh.context().close(); await qg.context().close();
+                const qn = await newPage(browser, emptySite, 'Maple', size); await lit(qn);
+                await qn.click('.quick.join');
+                await qn.waitForSelector('.gconfirm .ant');
+                await shot(qn, 'qj_none', size);
+                check(label + ': the card "No open games right now." offers Host one! and Not now, every target 44 px high, inside the window', (await textOf(qn, '.gctitle')) === 'No open games right now.' && (await qn.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && Array.from(document.querySelectorAll('.gconfirm .btn')).every((b) => b.getBoundingClientRect().height >= 44); })));
+                await qn.context().close();
+                const qa = await newPage(browser, fake, 'Maple', size); await lit(qa);
+                await qa.click('.hchip.mine');
+                await qa.waitForSelector('#slots li');
+                const qRoom = await qa.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
+                const qb = await newPage(browser, fake, 'Sage', size, '/?room=' + qRoom);
+                await qb.click('#name-step-go');
+                await until('Sage is in', async () => (await qa.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
+                await qa.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && !p.hidden; }).catch(() => null);
+                await qa.click('.rbar .leave');
+                await qa.waitForSelector('.gconfirm');
+                await shot(qa, 'qj_leave', size);
+                check(label + ': the question before Leave room is the card of the other questions, inside the window', (await textOf(qa, '.gctitle')) === 'Leave your room?' && (await qa.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; })));
+                await qa.click('.gstay');
+                await qa.click('.rhome');
+                await qa.click('.quick.join');
+                await qa.waitForSelector('.gconfirm .gbest');
+                await shot(qa, 'qj_confirm', size);
+                check(label + ': the question of Quick join shows the best room with its BEST tag, inside the window', (await textOf(qa, '.gctitle')) === 'Leave your room?' && (await qa.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; })));
+                await qa.context().close(); await qb.context().close();
             }
         }
     } finally {
