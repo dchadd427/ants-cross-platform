@@ -11,6 +11,7 @@ ACCOUNT is an account id (digits, no leading zero), or a name that has said some
 Exit status: 0 done, 1 nothing to do (no such account, line or ban), 2 wrong use.
 """
 import argparse
+import sqlite3
 import os
 import sys
 import time
@@ -106,7 +107,7 @@ def run(argv, out=None, err=None, env=None):
                 return 1
             out.write("%s unbanned\n" % account)
         return 0
-    except storemod.StoreError as e:                                  # (a full disk, a locked file: a message and not a traceback)
+    except (storemod.StoreError, sqlite3.Error) as e:             # (a full disk, a locked file, a damaged file: a message and not a traceback)
         err.write("hub.admin: the database refused it (%s)\n" % type(e).__name__)
         return 1
     finally:

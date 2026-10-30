@@ -1547,8 +1547,15 @@
   {
    "id": "admin_refused_write_is_a_traceback",
    "file": "hub/admin.py",
-   "old": "    except storemod.StoreError as e:                                  # (a full disk, a locked file: a message and not a traceback)",
+   "old": "    except (storemod.StoreError, sqlite3.Error) as e:             # (a full disk, a locked file, a damaged file: a message and not a traceback)",
    "new": "    except KeyError as e:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "admin_damaged_database_is_a_traceback",
+   "file": "hub/admin.py",
+   "old": "    except (storemod.StoreError, sqlite3.Error) as e:             # (a full disk, a locked file, a damaged file: a message and not a traceback)",
+   "new": "    except storemod.StoreError as e:                              # (a full disk, a locked file, a damaged file: a message and not a traceback)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {

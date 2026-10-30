@@ -1282,6 +1282,20 @@ class TheCommandLine(unittest.TestCase):
         self.assertEqual(admin.run(["--db", path, "list"], out, err), 1)
         self.assertIn("the database cannot be opened", err.getvalue())
 
+    def test_a_database_that_is_damaged_in_the_middle_of_a_command_is_a_message_and_not_a_traceback(self):
+        path = os.path.join(self.folder.name, "damaged.db")
+        store = storemod.Store(path)
+        for n in range(300):
+            store.add_line("1001", "alice", "line %d with some text to fill the pages" % n, False)
+        store.close()
+        with open(path, "r+b") as f:                        # (the first two pages stay, so that it opens: the rest is noise)
+            f.seek(8192)
+            f.write(bytes((i * 7919 + 13) % 251 for i in range(os.path.getsize(path) - 8192)))
+        for command in (("list",), ("ban", "1001"), ("del", "1"), ("mute", "1001", "5")):
+            out, err = io.StringIO(), io.StringIO()
+            self.assertEqual(admin.run(["--db", path] + list(command), out, err), 1, command)
+            self.assertRegex(err.getvalue(), r"^hub\.admin: the database refused it \(\w+\)\n$", command)
+
     def test_del(self):
         status, out, _ = self.run_admin("del", "1")
         self.assertEqual((status, out), (0, "line 1 deleted\n"))
