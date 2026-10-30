@@ -58,13 +58,13 @@ class Contract:
 
     def test_a_refused_write_is_a_store_error_and_leaves_nothing_behind(self):
         self.say(1)
+        writes = (lambda: self.say(2), lambda: self.store.delete_line(1, "me"), lambda: self.store.purge(), lambda: self.store.forget("1001"),
+                  lambda: self.store.mute("1001", 5, "me"), lambda: self.store.ban("1001", "me"), lambda: self.store.unban("1001"),
+                  lambda: self.store.add_session("k", "1001", "alice", 60, 10, 100), lambda: self.store.delete_session("k"))
         with self.refusing_writes(self.store):
-            with self.assertRaises(base.StoreError):
-                self.say(2)
-            with self.assertRaises(base.StoreError):
-                self.store.ban("1001", "me")
-            with self.assertRaises(base.StoreError):
-                self.store.delete_line(1, "me")
+            for write in writes:
+                with self.assertRaises(base.StoreError):
+                    write()
         self.assertEqual([l.text for l in self.store.recent_lines(10)], ["line 1"])
         self.assertFalse(self.store.is_banned("1001"))
         self.assertEqual(self.store.last_deletion(), 0)

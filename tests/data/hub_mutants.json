@@ -1881,10 +1881,10 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {
-   "id": "store_contract_names_a_sqlite_only_operation",
+   "id": "store_last_operation_speaks_the_librarys_error",
    "file": "hub/store/sqlite.py",
    "old": "for _name in PUBLIC + (\"checkpoint\",):",
-   "new": "for _name in PUBLIC[1:] + (\"checkpoint\",):",
+   "new": "for _name in PUBLIC[:-1] + (\"checkpoint\",):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   }
  ]
