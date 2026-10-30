@@ -25,6 +25,8 @@
     var REFRESH_MS = 600000;                             // a public room that the leader looks at says "public" again every 10 minutes (the server's idle rule is 30)
     var ACTIVE_MS = 1200000;                             // a leader who has touched nothing for this long (no pointer, key or touch) is not at the Room: the repeat stops, and the server's idle rule goes on
     var ASK_MS = 10000;                                  // a Private that was asked for is told from a room that went private by itself for this long
+    var TRIES_MAX = 3, TRY_GAP_MS = 300;                 // Quick join tries this many rooms, one after the other, with a wait of 0 to this many ms (random) between two
+    var JOINED_MS = 1500;                                // the card "Joined Pebble's room" stands this long, then the Room shows (a press on its button is quicker)
     var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long: it stands where the Join button stood, and the second press of a double press is not a Cancel
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
@@ -36,7 +38,8 @@
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
         private: 'Private', privateSub: 'link only', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Private room', visLabel: 'Who can find this room',
         noteHow: 'Public rooms show your name and map in the Games list.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
-        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', joiningCode: 'Joining the room…', opening: 'The game is opening. If it does not, reload this page.',
+        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
+        noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
@@ -75,6 +78,8 @@
         var wait = Math.min(cap, base * Math.pow(2, Math.min(failures, 10)));
         return Math.round(wait * (1 - JITTER + 2 * JITTER * Math.min(1, Math.max(0, random))));
     }
+    // The rooms, best first: the fullest that still has a free seat (the fewest free seats), then the oldest; rooms that tie keep the list's order (a sort is stable). Quick join takes the first, and the list says which that is.
+    function bestOrder(rows) { return rows.slice().sort(function (a, b) { return a.free - b.free || b.age - a.age; }); }
     function countText(n) { return n >= ROWS_MAX ? ROWS_MAX + '+' : String(n); }                  // (the server lists 50 at most: 50 may be more)
     // What a row's seats say: the kinds of the dots (a person, a computer player, an open seat: in that order) and the words
     function seatsOf(row) {
@@ -88,7 +93,7 @@
 
     // ---- the screens ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // mount({ doc, win, host (Home's div), page (web/lobby.html's bridge: client(), make(), leave(), join(code, name, done), typed(text, done, before), name()), parts: { quickHost, games, pill } (Home's buttons),
-    //         ctl: { show(screen, how), screen() }, handoff (START is on its way already: the part mounts waiting), later, cancel, random, now (the clocks: tests give their own) }) returns { sync, shown, opening, stalled, inert, poll, state }
+    //         ctl: { show(screen, how), screen() }, handoff (START is on its way already: the part mounts waiting), later, cancel, random, now (the clocks: tests give their own) }) returns { sync, shown, leaving, opening, stalled, inert, poll, state }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page, parts = env.parts, ctl = env.ctl;
         var rules = win.AntsLobbyRules, Net = win.AntsLobbyNet;
@@ -97,7 +102,7 @@
 
         var rows = [], loaded = false, off = false, failures = 0, isOpen = false, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
-        var dialog = null, noticeKind = '', quiet = [];
+        var dialog = null, noticeKind = '', quiet = [], finding = false;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -140,6 +145,7 @@
             else banner.parentNode.insertBefore(strip, banner.nextSibling || null);
         }
         placeStrip();
+        var told = el('p', 'sr'); told.setAttribute('role', 'status'); doc.body.appendChild(told);       // (a join that has no strip, the card that closes by itself: a screen reader is told by this line, which nobody sees)
         function clearNotice(kind) { if (!kind || kind === noticeKind) { strip.hidden = true; noticeKind = ''; } }
         // kind: what the notice is (a later one replaces it), tone: '' or 'warn', actions: [{ text, run }]: run says false when it could not do it (the notice stays); OK is always the last button
         function notice(kind, text, tone, actions) {
@@ -153,7 +159,7 @@
             strip.hidden = false;
         }
         function rejoinOffered() { var s = doc.getElementById('rejoin'); return !!s && !s.hidden; }
-        function matchRunning(c) { return !!(c && c.room && c.room.starting); }
+        function matchRunning(c) { return !!(c && c.room && c.room.starting) || rejoinOffered(); }    // (a START that waits, or a match of this browser that is still running: the Rejoin strip is up)
         function runningNotice() {
             notice('running', TEXT.running, 'warn', rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []);
         }
@@ -285,13 +291,18 @@
             track(client());
             ctl.show('room', 'push');
         }
+        function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the strip says why nothing else starts
+            openList();
+            notice('joining', popJoinText.textContent + TEXT.joinFirst, 'warn', []);
+        }
         function quickHost() {
-            if (joining) return;
+            if (finding) return;
+            if (joining) { stillJoining(); return; }
             if (over()) { itsWay(); return; }
             closeAll();
             if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)
             var c = client();
-            if (matchRunning(c) || rejoinOffered()) { runningNotice(); return; }
+            if (matchRunning(c)) { runningNotice(); return; }
             if (!c || (c.room && !c.room.lobby)) { startHost(); return; }       // (no room, a refused one, or a room that a game made: a room of our own)
             if (!c.room) { startPending(c); ctl.show('room', 'push'); return; }  // (the page's room is on its way: it gets Visibility(public) when it is ready)
             if (!c.isLeader()) {
@@ -309,29 +320,61 @@
         function inertOthers(on, except) {
             var kids = host.children || [], i;
             if (on) for (i = 0; i < kids.length; i++) if (except.indexOf(kids[i]) === -1) { kids[i].setAttribute('inert', ''); quiet.push(kids[i]); }
-            if (on) { strip.setAttribute('inert', ''); quiet.push(strip); }               // (the notice is outside Home's div, and just as much behind the question)
             if (!on) { quiet.forEach(function (k) { k.removeAttribute('inert'); }); quiet = []; }
         }
-        function ask(o, yes) {                             // o: { title, line, row (a row of the list to show), yes (the words of the button), stay (the words of the other) }
-            if (dialog) return;
-            var shade = el('div', 'gshade'), box = el('div', 'gconfirm'), title = el('h2', 'gctitle', o.title), line = el('p', 'gcline', o.line), actions = el('div', 'gcbtns');
-            var go = button('gyes', o.yes, guard(function () { closeAsk(false); yes(); })), stay = button('gstay', o.stay || TEXT.stay, guard(function () { closeAsk(true); }));
-            box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); title.id = 'gc-title'; box.setAttribute('aria-labelledby', 'gc-title');
-            box.appendChild(title); box.appendChild(line);
-            if (o.row) box.appendChild(rowNode(o.row, null));
-            actions.appendChild(go); actions.appendChild(stay); box.appendChild(actions);
-            shade.appendChild(box);
-            host.appendChild(shade);
-            dialog = { shade: shade, opener: doc.activeElement };
-            inertOthers(true, [shade]);
-            if (stay.focus) stay.focus();
+        function hold(on) { try { if (page.hold) page.hold(on); } catch (e) { /* the page's own */ } }       // (the page behind a card takes no key or tap, whichever screen shows)
+        function holdOff(b) {                              // a button that stands where another stood takes no press for a moment (a double press is not an answer)
+            b.disabled = true;
+            if (cancelTimer !== null) cancel(cancelTimer);
+            cancelTimer = later(guard(function () { cancelTimer = null; b.disabled = false; }), CANCEL_AFTER_MS);
         }
+        // One card over the page (the approved pictures): o = { mark (dots, check, shadow), title, lines, row, best, after (lines after the row), bar (busy, fill), stack, opener (has the focus again), focus (an act's index), onClose (closed with no answer that runs), timer (ms),
+        // acts [{ text, cls, run, back (the focus goes back), before (a line above), wait (takes no press for a moment) }] }
+        function card(o) {
+            if (dialog) return;
+            var shade = el('div', 'gshade'), box = el('div', 'gconfirm'), title = el('h2', 'gctitle', o.title), btns = el('div', 'gcbtns' + (o.stack || (o.acts || []).length === 1 ? ' solo' : '')), d, mark, bar, lines = [], focus = null, i;
+            box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); title.id = 'gc-title'; box.setAttribute('aria-labelledby', 'gc-title');
+            if (o.mark) {
+                mark = el('div', 'gmark ' + o.mark); mark.setAttribute('aria-hidden', 'true');
+                if (o.mark === 'dots') for (i = 0; i < 4; i++) mark.appendChild(el('i', 'gdot ' + (i ? 'open' : 'player c0')));
+                if (o.mark === 'shadow') mark.appendChild(el('span', 'ant ant-green'));
+                box.appendChild(mark);
+            }
+            box.appendChild(title);
+            (o.lines || []).forEach(function (t) { var p = el('p', 'gcline', t); lines.push(p); box.appendChild(p); });
+            if (o.row) box.appendChild(rowNode(o.row, null, o.best));
+            (o.after || []).forEach(function (t) { box.appendChild(el('p', 'gcline', t)); });
+            var first = box.querySelector('.gcline');
+            if (first) { first.id = 'gc-line'; box.setAttribute('aria-describedby', 'gc-line'); }       // (the first line is what a screen reader reads after the title)
+            if (o.bar) { bar = el('div', 'gbar ' + o.bar); bar.appendChild(el('i')); box.appendChild(bar); }
+            d = { shade: shade, opener: o.opener || doc.activeElement, onClose: o.onClose || null, bar: bar, lines: lines, timer: null };
+            (o.acts || []).forEach(function (a, n) {
+                var b = button(a.cls, a.text, guard(function () { if (a.run && dialog === d) d.onClose = null; closeAsk(!!a.back); if (a.run) a.run(); }));
+                if (a.before) { box.appendChild(btns); box.appendChild(el('p', 'gcnote', a.before)); btns = el('div', 'gcbtns' + (o.stack || (o.acts || []).length === 1 ? ' solo' : '')); }
+                btns.appendChild(b);
+                if (a.wait) holdOff(b);
+                if (n === o.focus) focus = b;
+            });
+            box.appendChild(btns);
+            shade.appendChild(box);
+            doc.body.appendChild(shade);
+            dialog = d;
+            inertOthers(true, [shade]); hold(true);
+            if (o.timer) d.timer = later(guard(function () { d.timer = null; if (dialog === d) closeAsk(false); }), o.timer);
+            box.setAttribute('tabindex', '-1');
+            (focus || box).focus();       // (a card whose only button waits has the focus itself: Escape and a screen reader's reading start there)
+        }
+        function ask(o, yes) {                             // o: { title, line, row, best, yes (the words of the button), stay (the words of the other) }: the answer that changes nothing has the focus
+            card({ title: o.title, lines: [o.line], row: o.row, best: o.best, opener: o.opener, acts: [{ text: o.yes, cls: 'gyes', run: yes }, { text: o.stay || TEXT.stay, cls: 'gstay', back: true }], focus: 1 });
+        }
+        function dropCard() { if (dialog) { dialog.onClose = null; closeAsk(false); } }       // (a card that gives way to another one: nothing that its closing would do is done)
         function closeAsk(back) {
             if (!dialog) return;
             var d = dialog; dialog = null;
             if (d.shade.parentNode) d.shade.parentNode.removeChild(d.shade);
-            inertOthers(false, []);
+            inertOthers(false, []); hold(false);
             if (back && d.opener && d.opener.focus) d.opener.focus();
+            if (d.onClose) d.onClose();
         }
 
         // ---- the list's popover -------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -356,7 +399,7 @@
         codeInput.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter') joinTyped(); }));
         codeGo.addEventListener('click', guard(function () { joinTyped(); }));
 
-        function visibleRows() { var own = ownCode(); return rows.filter(function (r) { return r.code !== own; }); }
+        function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }
         function paintPill() {
             var n = visibleRows().length, shown = loaded && !off;
             parts.pill.hidden = !shown;
@@ -364,13 +407,14 @@
             parts.games.setAttribute('aria-label', shown ? 'Games, ' + countText(n) + ' open' : 'Games');
         }
         // One row: the map's picture (an original's own), who hosts, which map, the seats as dots and as n/size, the bots, and (in the list) the Join button
-        function rowNode(row, onList) {
+        function rowNode(row, onList, best) {
             var li = el(onList ? 'li' : 'div', 'gitem'), seats = seatsOf(row), pic = el('span', 'gmap'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
             if (row.mapKey) { var img = el('img'); img.src = 'front/preview_' + row.mapKey + '.png'; img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300'); pic.appendChild(img); }
             pic.setAttribute('aria-hidden', 'true'); dots.setAttribute('aria-hidden', 'true');
             top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
+            if (best) top.appendChild(el('span', 'gbest', TEXT.best));       // (beside the map's name; a narrow row wraps it under)
             text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text);
             if (onList) {
                 var b = button('gjoin', TEXT.join, guard(function () { joinRow(row); }));
@@ -381,7 +425,7 @@
         }
         function paintList() {
             var shown = visibleRows(), active = doc.activeElement, focusCode = active && active.getAttribute ? active.getAttribute('data-code') : null;
-            popCount.textContent = !loaded || off ? '' : shown.length === 0 ? TEXT.none : countText(shown.length) + ' waiting';
+            popCount.textContent = !loaded || off ? '' : shown.length === 0 ? TEXT.none : countText(shown.length) + ' waiting' + TEXT.live;
             popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length); popList.hidden = !(loaded && !off && shown.length); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
             var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
@@ -389,7 +433,7 @@
             paintedSig = sig;
             while (popList.firstChild) popList.removeChild(popList.firstChild);
             joinButtons = [];
-            shown.forEach(function (r) { popList.appendChild(rowNode(r, true)); });
+            shown.forEach(function (r, n) { popList.appendChild(rowNode(r, true, n === 0 && shown.length > 1)); });
             busy(joining, popJoinText.textContent);
             if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
         }
@@ -421,17 +465,18 @@
         function needsAsk(c) {                             // somebody is in the room that this page leaves: a guest always (the host is there), the leader when others are
             return !!(c && c.room && c.room.lobby && (!c.isLeader() || others(c).length > 0));
         }
-        function askLeave(c, row, go) {
+        function askLeave(c, row, go, more) {             // more: { yes (the words of the answer), best (the row is the best), opener (what has the focus again when it is not answered) }
             var names = others(c), leader = c.isLeader();
             ask({
                 title: leader ? 'Leave your room?' : 'Leave ' + hostLabel(c) + ' room?',
                 line: leader ? (names.length === 1 ? names[0] + ' is in your room. If you go, ' + names[0] + ' becomes the host.' : names.length + ' people are in your room. If you go, the one who has been there longest becomes the host.')
                     : 'You are in ' + hostLabel(c) + ' room. You can come back by its link while there is a free color.',
-                row: row, yes: TEXT.leaveJoin
+                row: row, best: more && more.best, yes: (more && more.yes) || TEXT.leaveJoin, opener: more && more.opener
             }, go);
         }
         function busy(on, what) {                          // a Join is on its way (up to 15 s): the buttons wait, and the list says what it waits for, with a way out
             var was = joining;
+            if (!on) clearNotice('joining');
             joining = on; joinButtons.forEach(function (b) { b.disabled = on; }); codeGo.disabled = on;
             popJoin.hidden = !on; popJoinText.textContent = on ? what || TEXT.joiningCode : '';
             if (on === was) return;
@@ -456,7 +501,7 @@
             ctl.show('room', 'push');
         }
         function joinRow(row) {
-            if (joining) return;
+            if (joining || finding) return;
             if (over()) { itsWay(); return; }
             var c = client();
             if (matchRunning(c)) { closeAll(); runningNotice(); return; }
@@ -468,7 +513,7 @@
             if (needsAsk(c)) askLeave(c, row, go); else go();
         }
         function joinTyped() {                             // the page checks the code first (a line for one that leads nowhere), then the question, then the name card, then the look at the room
-            if (joining) return;
+            if (joining || finding) return;
             if (over()) { itsWay(); return; }
             var c = client();
             if (matchRunning(c)) { closeAll(); runningNotice(); return; }
@@ -478,6 +523,79 @@
                 busy(false);
                 if (res && res.ok) joined('room ' + rules.codeText(res.code)); else if (res) refused(res, false);
             }), function (go) { function start() { busy(true); go(); } if (needsAsk(c)) askLeave(c, null, start); else start(); }) || '';
+        }
+
+        // ---- Quick join: the best open room, by one look at the list and the page's probe (the old room goes when the new one welcomes the page) ----------------------------------------------------------------
+        function look1(done) {                             // a look for a press (one of less than a second ago is as good)
+            if (loaded && lastLook && now() - lastLook < FLOOR_MS) { done(); return; }
+            lastLook = now();
+            if (typeof win.fetch !== 'function') { settle(null); done(); return; }
+            look().then(function (data) { settle(data); done(); });
+        }
+        function stopFinding() { finding = false; joinSeq++; try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ } }
+        function lookLine(n) { return 'Looking through ' + n + (n === 1 ? ' open game' : ' open games') + ' for the best one.'; }
+        function findingCard(mine, n, opener) {
+            card({ mark: 'dots', title: TEXT.finding, lines: [n ? lookLine(n) : TEXT.looking], bar: 'busy', acts: [{ text: TEXT.cancel, cls: 'gstay', back: true, wait: true }], opener: opener,
+                onClose: function () { if (mine === joinSeq) stopFinding(); } });
+        }
+        function nobody(off, opener) {                             // nothing to join, or every room was filled meanwhile: Host one! is Quick host
+            var c = client(), mine = c && c.room && c.room.lobby;
+            finding = false;
+            card({ mark: 'shadow', stack: true, title: off ? TEXT.off : TEXT.emptyTitle, lines: [TEXT.noneLine], acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: quickHost }, { text: TEXT.notNow, cls: 'gstay', back: true, before: mine ? TEXT.noneYours : TEXT.noneNew }], focus: 0, opener: opener });
+        }
+        function welcomed(row) {                           // the page is in the room: the card says so, and the Room opens by itself or at a press
+            finding = false;
+            var seen = { code: row.code, host: row.host, map: row.map, mapKey: row.mapKey, mapName: row.mapName, people: row.people + 1, bots: row.bots, free: row.free - 1, size: row.size };
+            dropCard(); told.textContent = 'Joined ' + possessive(row.host) + ' room.';
+            card({ mark: 'check', title: 'Joined ' + possessive(row.host) + ' room', row: seen, after: [TEXT.roomOpening], bar: 'fill', acts: [{ text: TEXT.goRoom, cls: 'gyes' }], focus: 0, timer: JOINED_MS, onClose: function () { if (!gone) ctl.show('room', 'push'); } });
+        }
+        function tries(cands, mine) {                      // up to three rooms, one after the other (a room that is gone, full or started is a reason for the next)
+            var n = Math.min(TRIES_MAX, cands.length), k = 0;
+            function next() {
+                if (mine !== joinSeq) return;
+                if (k >= n) { var back = dialog && dialog.opener; dropCard(); nobody(false, back); return; }
+                var row = cands[k++];
+                if (dialog && dialog.bar) dialog.bar.firstChild.style.width = Math.round(100 * k / (n + 1)) + '%';
+                page.join(row.code, page.name(), guard(function (res) {
+                    if (mine !== joinSeq) return;
+                    if (res && res.ok) { welcomed(row); return; }
+                    if (res && (res.kind === 'version' || res.kind === 'silent')) {       // (every room would say the same; a newer version has been said by the page, with its reload)
+                        var words = res.kind === 'silent' ? TEXT.silent : '';
+                        finding = false; dropCard();
+                        if (words) notice('silent', words, 'warn', []);
+                        return;
+                    }
+                    later(guard(next), Math.round(random() * TRY_GAP_MS));
+                }));
+            }
+            next();
+        }
+        function quickJoin() {
+            if (finding) return;
+            if (joining) { stillJoining(); return; }
+            if (over()) { itsWay(); return; }
+            var c = client();
+            if (matchRunning(c)) { closeAll(); runningNotice(); return; }
+            var opener = parts.quickJoin, mine;
+            finding = true; mine = ++joinSeq; told.textContent = '';
+            findingCard(mine, 0, opener);
+            look1(guard(function () {
+                if (mine !== joinSeq) return;
+                var cands = visibleRows(), c2 = client();
+                if (!cands.length) { dropCard(); nobody(off, opener); return; }
+                function go() { findingCard(mine, cands.length, opener); tries(cands, mine); }
+                if (needsAsk(c2)) {                      // (the question is about the best room)
+                    dropCard();
+                    askLeave(c2, cands[0], go, { best: true, opener: opener });
+                    dialog.onClose = function () { if (mine === joinSeq) stopFinding(); };
+                } else { dialog.lines[0].textContent = lookLine(cands.length); tries(cands, mine); }
+            }));
+        }
+        function leaving(go, opener) {                     // Leave room: a room with other people in it is asked about first (alone: at once); true says that it asked
+            var c = client();
+            if (gone || !c || !c.room || !c.room.lobby || !others(c).length) return false;
+            askLeave(c, null, go, { yes: TEXT.leaveRoom, opener: opener });
+            return true;
         }
 
         // ---- the looks at GET /lobbies ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -535,7 +653,8 @@
         parts.pill.hidden = true;
         parts.games.addEventListener('click', guard(function () { if (isOpen) closeList(true); else openList(); }));
         parts.quickHost.addEventListener('click', guard(quickHost));
-        enable(parts.games); enable(parts.quickHost);
+        parts.quickJoin.addEventListener('click', guard(quickJoin));
+        enable(parts.games); enable(parts.quickHost); enable(parts.quickJoin);
         doc.addEventListener('click', guard(function (e) {         // a press anywhere else puts the list away (seen in the capture phase: before the buttons of the question card and of a Join that is on its way change anything, and take themselves out of the page)
             var t = e && e.target;
             if (!isOpen || dialog || joining || !t) return;
@@ -561,22 +680,22 @@
             schedule();
         }
         function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more (the page is frozen: it is on its way to the game, or it is stuck and says so)
-            closeAll(); clearNotice(); gone = true;
+            gone = true; closeAll(); clearNotice();
             [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer].forEach(function (t) { if (t !== null) cancel(t); });
             pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = null;
         }
         function stalled(words) {                          // the hand-off did not come in 15 s (Home takes presses again, the page's room is still frozen): the buttons that need the page's room say why they do not work
-            [parts.quickHost, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });
+            [parts.quickHost, parts.quickJoin, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });
             hint = words; paintVis();
         }
         function inert(on) { [strip, pop].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a dialog of the page, or the hand-off, is over this part: it takes no key or tap)
         sync();
         poll();
         return {
-            sync: guard(sync), shown: guard(shown), opening: opening, stalled: stalled, inert: inert, poll: poll,
+            sync: guard(sync), shown: guard(shown), leaving: leaving, opening: opening, stalled: stalled, inert: inert, poll: poll,
             state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind }; }
         };
     }
 
-    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, delayOf: delayOf, countText: countText, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
+    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
 });

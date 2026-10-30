@@ -569,6 +569,19 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     tap(joinOf(rowsOf(env)[0]));
     check('Join while START waits: "Your match is running." and no second client', stripText(env) === 'Your match is running.' && env.sockets.length === 1 && leaves(own) === 0 && popOf(env).hidden === true);
 }
+{   // a match of this browser that is still running (the Rejoin strip is up): Join and Join by code answer as Quick host does
+    const stored = { 'ants.name': 'Maya', 'ants.rejoin.k7m2xq.1': JSON.stringify({ k: hex(KEY), s: 'wss://play.test/ws', t: Date.now() }) };
+    const env = await withList(null, { stored });
+    await openGames(env);
+    tap(joinOf(rowsOf(env)[0]));
+    check('Join in the list while a match of yours is still running (the Rejoin strip is up): "Your match is running." with a Rejoin button, the list put away, and no second client', stripText(env) === 'Your match is running.' && textOf(stripButtons(env)[0]) === 'Rejoin' && textOf(stripButtons(env)[1]) === 'OK' && env.sockets.length === 0 && popOf(env).hidden === true && !dialogOf(env));
+    tap(stripButtons(env)[0]);
+    check('... and Rejoin is the strip\'s own: the tab goes to the match', env.assigned.length === 1 && /[?&]room=k7m2xq&seat=1/.test(env.assigned[0]));
+    const typed = await withList(null, { stored });
+    await openGames(typed);
+    first(popOf(typed), 'joinbox').children[0].value = 'abc234'; tap(first(popOf(typed), 'gcgo'));
+    check('Join by code while a match of yours is still running: the same words and the Rejoin button, no name card, no second client, the list put away', stripText(typed) === 'Your match is running.' && textOf(stripButtons(typed)[0]) === 'Rejoin' && typed.$('name-step').hidden && typed.sockets.length === 0 && popOf(typed).hidden === true);
+}
 {   // Join by code: the page checks the code, the name card follows, then the second client
     const env = await withList();
     const own = myRoom(env, ['Maya']);
